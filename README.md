@@ -1,4 +1,3 @@
-
 # Software maintenance situation
 
 Current maintainer [Daniel Lublin](https://lublin.se)
@@ -22,123 +21,89 @@ parity with desktop Mumble, support for various hardware accessories,
 general usability, and new features.
 
 Until there is a new maintainer with time on their hands you cannot
-expect new features, or even the continued existance of a usable
+expect new features, or even the continued existence of a usable
 Mumble app for Android.
 
 # Mumla
 
-Mumla is a fork and continuation of
-[Plumble](https://github.com/acomminos/Plumble), a robust GPLv3 Mumble
-client for Android originally written by Andrew Comminos. It uses the
-the [Humla](https://gitlab.com/quite/humla) protocol implementation
-(forked from Comminos's
-[Jumble](https://github.com/acomminos/Jumble)).
+Mumla is a [Mumble](https://www.mumble.info/) voice-chat client for Android
+(GPLv3). It is a fork and continuation of
+[Plumble](https://github.com/acomminos/Plumble) by Andrew Comminos and ships
+its own protocol/audio library, Humla (a fork of Comminos's Jumble), in
+`libraries/humla`.
 
-Mumla should run on Android 5.0 (Lollipop, "L", SDK/API 21) and later.
+Mumla runs on Android 12 (API 31) and later. It is available
+[on F-Droid](https://f-droid.org/packages/se.lublin.mumla/) and on Google
+Play; there is a small [landing page](https://mumla-app.gitlab.io/).
 
-Mumla is available [on
-F-Droid](https://f-droid.org/packages/se.lublin.mumla/).
+## Building
 
-There is a small [landing page](https://mumla-app.gitlab.io/).
+The supported development environment is the Nix flake in this repository.
+With [Nix](https://nixos.org/) installed and flakes enabled:
 
-## FAQs -- Frequently Asked Questions
-
-### Action that my user has permission for does not show up in overflow menu
-
-Question: The Mumble server I use has an ACL that should give my user
-(or a group it's in) permission to carry out a specific action (like
-"Move"). Why doesn't Mumla show this action in the overflow menu
-(three dots) for a channel or user?
-
-Answer: Try to disconnect and then reconnect to the server. The
-decision to show a menu item depending on whether the user has the
-required permission is done upon connecting, when the UI is set up. It
-is *not* updated on the fly if permissions change while connected.
-
-## Translations
-
-If you want to help out translating Mumla, the project is [on
-Weblate](https://hosted.weblate.org/engage/mumla/) -- thanks for
-gratis hosting of our libre project!
-
-## Repository submodules
-
-Note that this Mumla git repository has submodule(s). You either need
-to clone it using `git clone --recursive`, or you need to get the
-submodule(s) in place after cloning:
-
-    git submodule update --init --recursive
-
-## Building on GNU/Linux
-
-Building is verified to work using JDK 21. So you typically want to
-set and export the JAVA_HOME environment variable like `export
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk`.
-
-The Android SDK need to be specified as usual, for example by setting
-`ANDROID_SDK_ROOT`, or writing it to local.properties as `echo
->local.properties sdk.dir=/home/user/Android/Sdk`
-
-    git submodule update --init --recursive
-
-    ./gradlew assembleDebug
-
-If you get an error running out of Java heap space, try raising the
--Xmx in `./gradle.properties`.
-
-### Development environment (Nix)
-
-A reproducible development environment is provided via [Nix flakes](https://nixos.wiki/wiki/Flakes).
-With `nix` installed and flakes enabled, simply enter the development shell:
-
+    git clone --recursive https://gitlab.com/quite/mumla.git
+    cd mumla
     nix develop
 
-This sets up:
-- JDK 21
-- Android SDK (API levels 36, 35) with build tools (36.0.0, 35.0.0)
-- Android NDK 26.1.10909125
-- CMake, ninja, meson, and other build tools
-- All required environment variables (ANDROID_HOME, ANDROID_NDK_HOME, JAVA_HOME, etc.)
+The shell provides JDK 21, the Android SDK (platform 36, build-tools 36.1.0),
+NDK 29.0.14206865, SDK CMake 4.1.2, meson/ninja and `git`. Inside it:
 
-Inside the devshell, you can build the project as usual:
+    ./gradlew assembleFossDebug      # F-Droid flavor
+    ./gradlew assembleGoogDebug      # Google Play flavor (Play Billing)
+    ./gradlew test                   # unit tests of every module (JVM, Robolectric)
+    ./gradlew lint
 
-    ./gradlew assembleDebug      # Build the app
-    ./gradlew :libraries:humla:assembleDebug  # Build just the library with NDK
-    ./gradlew :libraries:humla:testDebugUnitTest  # Run humla unit tests
-    ./gradlew testFossDebugUnitTest  # Run app unit tests
-    ./gradlew assembleFossDebug      # Build the FOSS variant
+If you cloned without `--recursive`, run `git submodule update --init --recursive`
+first. `libraries/humla` is an ordinary directory in this repository, not a
+submodule; the submodules are the third-party native codec sources (opus,
+speex, speexdsp, CELT) under `libraries/humla/src/main/cpp/third_party/`,
+built for `arm64-v8a`, `armeabi-v7a` and `x86_64` via CMake with hand-written
+JNI glue.
 
-For direnv integration (automatic environment loading on cd), ensure [direnv](https://direnv.net/)
-is installed and run `direnv allow` in the project root.
+[direnv](https://direnv.net/) users can `direnv allow` to enter the shell
+automatically.
 
-### Notes on NDK
+If you get an error running out of Java heap space, try raising the `-Xmx` in
+`gradle.properties`.
 
-The NDK is the toolchain used for building the native code (C/C++) of
-Humla. We specify the version needed using `ndkVersion` in
-`libraries/humla/build.gradle`.
+## Repository layout
 
-We currently use Android Gradle Plugin (AGP) version 8.x, which should
-come bundled with NDK 25.1.8937393 that we currently use. It is
-typically installed in a directory in `~/Android/Sdk/ndk/`. Using
-newer NDK might give build errors. See also:
-https://developer.android.com/studio/projects/install-ndk
+- `app/` — the Android application (`se.lublin.mumla`), product flavors
+  `foss`, `goog`, `donation`, `beta`.
+- `libraries/humla/` — the Mumble protocol implementation and audio pipeline
+  (`se.lublin.humla`); `src/Mumble.proto` is compiled to Java at build time
+  (nothing generated is checked in), crypto uses BouncyCastle, and
+  `src/main/cpp/CMakeLists.txt` builds the native codecs and their JNI glue.
+- `docs/superpowers/` — the ongoing modernization specification and plans.
+- `NOTICE.md` — third-party components and licenses.
 
-If Android Studio does not automatically install the mentioned version
-of the NDK in the mentioned directory, then you may be able to get it
-installed by using the SDK Manager:
+## Contributing
 
-- Click SDK Tools tab.
-- Check "Show Package Details"
-- In the list view, expand "NDK (Side by side)"
-- Check 25.1.8937393
-- Click OK
+- **Tests first.** Every behavior change starts with a failing JVM test
+  (JUnit 4, Robolectric for Android classes, MockK, Google Truth,
+  `kotlinx-coroutines-test`); native code stays a thin JNI pass-through and
+  the Kotlin side is tested against fakes.
+  `./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest lint`
+  must be green.
+- **Kotlin.** New files are Kotlin; a Java file you change substantially is
+  converted first, as its own commit.
+- **Conventional Commits**, in English: `feat:`, `fix:`, `refactor:`,
+  `build:`, `test:`, `docs:`, `chore:`, optional scope such as `fix(humla):`,
+  imperative subject of at most 72 characters, no trailers.
+- **Strings** go to `app/src/main/res/values/strings.xml`; translations are
+  handled on [Weblate](https://hosted.weblate.org/engage/mumla/) — please do
+  not edit the translated resource files directly.
+- Work is currently organized in streams described in
+  `docs/superpowers/specs/2026-09-19-mumla-modernization.md`; check the
+  ownership table there before touching shared files.
 
-### Container image
+## FAQ
 
-I'm also maintaining a container image that is used to build Mumla in
-[.gitlab-ci.yml](.gitlab-ci.yml). Source at
-https://gitlab.com/quite/android-sdk-ndk
+**An action my user has permission for does not show up in the overflow menu.**
+Disconnect and reconnect. Menu items are decided from the permissions known
+when the UI was set up and are not updated while connected.
 
 ## License
 
-Mumla's [LICENSE](LICENSE) is GNU GPL v3.
+GNU GPL v3, see [LICENSE](LICENSE). Third-party notices are in
+[NOTICE.md](NOTICE.md).
