@@ -132,6 +132,18 @@ class SettingsTest {
     }
 
     @Test
+    fun `adding a news version does not mutate the set already handed out`() {
+        settings.addNewsShownVersions(mutableListOf("3.6.0"))
+        val handedOut = settings.getNewsShownVersions()
+
+        settings.addNewsShownVersions(mutableListOf("3.7.0"))
+
+        // SharedPreferences.getStringSet documents that the returned set must not be modified;
+        // addNewsShownVersions copies it before adding, and this pins that it keeps doing so.
+        assertThat(handedOut).containsExactly("3.6.0")
+    }
+
+    @Test
     fun `push to talk button is shown unless hidden`() {
         assertThat(settings.isPushToTalkButtonShown()).isTrue()
         prefs.edit().putBoolean("hidePtt", true).commit()
