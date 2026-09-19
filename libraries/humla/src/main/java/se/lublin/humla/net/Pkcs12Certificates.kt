@@ -30,10 +30,18 @@ import java.security.cert.CertificateException
  * Reads PKCS#12 client certificates: the ones Mumble writes (unencrypted keyBag and certBag,
  * MAC over the empty password) and the ones [HumlaCertificateGenerator] writes.
  *
- * Always uses BouncyCastle's own PKCS#12 implementation (passed as a provider instance, no
- * global registration) because Android's stripped-down "BC" provider rejects plain keyBags.
+ * The bundled BouncyCastle provider is passed explicitly rather than registered globally, so the
+ * parse is always done by the BouncyCastle version this app ships instead of whatever the device
+ * ROM happens to provide under the name "BC", and the result does not depend on the order in
+ * which providers were registered.
  */
 object Pkcs12Certificates {
+
+    /**
+     * Constructing a provider registers on the order of a thousand algorithm entries, and this
+     * runs on every connection attempt and every certificate import, so keep one around.
+     */
+    private val PROVIDER = BouncyCastleProvider()
 
     @JvmStatic
     @Throws(KeyStoreException::class, IOException::class, NoSuchAlgorithmException::class, CertificateException::class)
@@ -43,7 +51,7 @@ object Pkcs12Certificates {
     @JvmStatic
     @Throws(KeyStoreException::class, IOException::class, NoSuchAlgorithmException::class, CertificateException::class)
     fun load(input: InputStream, password: CharArray): KeyStore {
-        val store = KeyStore.getInstance("PKCS12", BouncyCastleProvider())
+        val store = KeyStore.getInstance("PKCS12", PROVIDER)
         store.load(input, password)
         return store
     }

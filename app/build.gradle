@@ -116,11 +116,12 @@ android {
 
     packaging {
         resources {
-            // bcprov, bcpkix and bcutil each ship a META-INF/LICENSE.md. The three files are
-            // byte-identical (sha256 0e01f154...e5fd, the MIT License text for The Legion of the
-            // Bouncy Castle Inc.), so packaging one copy still carries the full notice the MIT
-            // licence requires; excluding it outright would not.
-            pickFirsts += 'META-INF/LICENSE.md'
+            // bcprov, bcpkix and bcutil each ship a META-INF/LICENSE.md (today all three are the
+            // byte-identical MIT License text for The Legion of the Bouncy Castle Inc.). Merge
+            // rather than pick one: merging concatenates the copies, so if a future BouncyCastle
+            // release diverges in one jar -- an added third-party attribution, say -- that notice
+            // still ships. Picking the first copy would drop it silently, on a green build.
+            merges += 'META-INF/LICENSE.md'
         }
     }
 

@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import org.bouncycastle.asn1.ASN1Encoding
 import org.bouncycastle.asn1.DERBMPString
 import org.bouncycastle.asn1.DEROctetString
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
@@ -11,13 +12,17 @@ import org.bouncycastle.cert.X509v3CertificateBuilder
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
+import org.bouncycastle.pkcs.PKCS12PfxPdu
 import org.bouncycastle.pkcs.PKCS12PfxPduBuilder
 import org.bouncycastle.pkcs.PKCS12SafeBag
 import org.bouncycastle.pkcs.PKCS12SafeBagBuilder
+import org.bouncycastle.pkcs.PKCS12SafeBagFactory
 import org.bouncycastle.pkcs.jcajce.JcaPKCS12SafeBagBuilder
 import org.bouncycastle.pkcs.jcajce.JcePKCS12MacCalculatorBuilder
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.math.BigInteger
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -32,8 +37,10 @@ class Pkcs12CertificatesTest {
     fun `loads a mumble style pkcs12 whose private key sits in an unencrypted keyBag`() {
         val keyPair = rsaKeyPair()
         val cert = selfSigned(keyPair, "CN=Mumble Test")
+        val bytes = mumbleStylePkcs12(keyPair, cert)
+        assertIsUnencryptedKeyBagShape(bytes)
 
-        val store = Pkcs12Certificates.load(mumbleStylePkcs12(keyPair, cert), null)
+        val store = Pkcs12Certificates.load(bytes, null)
 
         val alias = store.aliases().toList().single()
         assertThat(store.isKeyEntry(alias)).isTrue()
@@ -64,6 +71,47 @@ class Pkcs12CertificatesTest {
         val viaEmpty = Pkcs12Certificates.load(bytes, "")
 
         assertThat(viaNull.aliases().toList()).isEqualTo(viaEmpty.aliases().toList())
+    }
+
+    @Test
+    fun `a wrong password is rejected instead of yielding a half loaded keystore`() {
+        val keyPair = rsaKeyPair()
+        val bytes = mumbleStylePkcs12(keyPair, selfSigned(keyPair, "CN=Mumble Test"))
+
+        val thrown = assertThrows(IOException::class.java) {
+            Pkcs12Certificates.load(bytes, "not the password")
+        }
+
+        assertThat(thrown).hasMessageThat().contains("mac invalid")
+    }
+
+    @Test
+    fun `a corrupted file is rejected instead of yielding a half loaded keystore`() {
+        val keyPair = rsaKeyPair()
+        val bytes = mumbleStylePkcs12(keyPair, selfSigned(keyPair, "CN=Mumble Test"))
+        // Flip a bit inside the authenticated safe, well past the outer ASN.1 headers, so the
+        // structure still parses and it is the MAC that catches the damage.
+        val corrupted = bytes.copyOf().also { it[it.size / 2] = (it[it.size / 2].toInt() xor 0xFF).toByte() }
+
+        val thrown = assertThrows(IOException::class.java) { Pkcs12Certificates.load(corrupted, null) }
+
+        assertThat(thrown).hasMessageThat().contains("mac invalid")
+    }
+
+    /**
+     * Pins the fixture itself: if a future BouncyCastle changed what [PKCS12SafeBagBuilder] or
+     * [PKCS12PfxPduBuilder] emit by default, the load test above would keep passing while
+     * silently no longer covering the shape Mumble writes.
+     */
+    private fun assertIsUnencryptedKeyBagShape(bytes: ByteArray) {
+        val pfx = PKCS12PfxPdu(bytes)
+        val bagTypes = pfx.contentInfos.flatMap { PKCS12SafeBagFactory(it).safeBags.toList() }
+            .map { it.type }
+        assertThat(bagTypes).contains(PKCSObjectIdentifiers.keyBag)
+        assertThat(bagTypes).doesNotContain(PKCSObjectIdentifiers.pkcs8ShroudedKeyBag)
+        assertThat(bagTypes).contains(PKCSObjectIdentifiers.certBag)
+        assertThat(pfx.contentInfos.map { it.contentType })
+            .doesNotContain(PKCSObjectIdentifiers.encryptedData)
     }
 
     private fun rsaKeyPair(): KeyPair =
