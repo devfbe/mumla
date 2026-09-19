@@ -18,6 +18,7 @@
 package se.lublin.mumla.service
 
 import se.lublin.humla.model.IMessage
+import se.lublin.mumla.chat.ChatContent
 
 /** A general chat message, either a text message from a user or an informational notice. */
 interface IChatMessage {
@@ -27,6 +28,9 @@ interface IChatMessage {
     /** Unix timestamp in milliseconds when the message was received. */
     val receivedTime: Long
 
+    /** Parsed [body], filled in once by the chat UI (stream D) and cached here; null until parsed. */
+    var content: ChatContent?
+
     /** Calls the visitor with the concrete message type. */
     fun accept(visitor: Visitor)
 
@@ -34,12 +38,14 @@ interface IChatMessage {
     class TextMessage(val message: IMessage) : IChatMessage {
         override val body: String get() = message.message
         override val receivedTime: Long get() = message.receivedTime
+        @Volatile override var content: ChatContent? = null
         override fun accept(visitor: Visitor) = visitor.visit(this)
     }
 
     /** An informational message about the server or client state. */
     class InfoMessage(val type: Type, override val body: String) : IChatMessage {
         override val receivedTime: Long = System.currentTimeMillis()
+        @Volatile override var content: ChatContent? = null
         override fun accept(visitor: Visitor) = visitor.visit(this)
 
         enum class Type { INFO, WARNING, ERROR }
