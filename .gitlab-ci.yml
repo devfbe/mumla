@@ -8,7 +8,13 @@ variables:
   DEVSHELL: ".#devShells.x86_64-linux.default"
 
 cache:
-  key: ${CI_PROJECT_ID}-nix-gradle
+  # Scoped per branch: four modernization streams run CI concurrently and a single shared key
+  # makes them overwrite each other's Gradle and Nix caches on every push. A new branch starts
+  # from the default branch's cache, or from the old shared key if that does not exist yet.
+  key: ${CI_PROJECT_ID}-${CI_COMMIT_REF_SLUG}-nix-gradle
+  fallback_keys:
+    - ${CI_PROJECT_ID}-${CI_DEFAULT_BRANCH}-nix-gradle
+    - ${CI_PROJECT_ID}-nix-gradle
   paths:
     - .gradle/caches/
     - .gradle/wrapper/
