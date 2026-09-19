@@ -13,3 +13,6 @@
 [submodule "libraries/humla/src/main/cpp/third_party/speexdsp"]
 	path = libraries/humla/src/main/cpp/third_party/speexdsp
 	url = https://github.com/xiph/speexdsp
+[submodule "libraries/humla/src/main/cpp/third_party/rnnoise"]
+	path = libraries/humla/src/main/cpp/third_party/rnnoise
+	url = https://github.com/xiph/rnnoise

@@ -20,3 +20,4 @@ following third-party components. Every entry is GPLv3-compatible.
 | speex (codec) | 1.2.1 | BSD-3-Clause | https://github.com/xiph/speex |
 | speexdsp (resampler, preprocessor, jitter buffer) | 1.2.1 | BSD-3-Clause | https://github.com/xiph/speexdsp |
 | CELT | 0.7.1, 0.11.1 | BSD-3-Clause | https://gitlab.com/quite/celt |
+| RNNoise | 0.2 | BSD-3-Clause — the submodule's own `COPYING` is the 3-clause BSD text (Jean-Marc Valin; Amazon; Mozilla; Xiph.Org Foundation; Mark Borgerding) | https://github.com/xiph/rnnoise — the pinned model weights (`rnnoise_data-0b50c45`, embedded as `libraries/humla/src/main/cpp/rnnoise/model/weights_blob.bin`) are the ones upstream's own `download_model.sh` fetches from media.xiph.org; they carry no separate license file and the project README describes them as RNNoise files kept out of git only for size, so the same `COPYING` covers them. |
