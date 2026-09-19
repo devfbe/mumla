@@ -15,20 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-buildscript {
-    repositories {
-        mavenCentral()
-        google()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.13.2'
-    }
-}
-apply plugin: 'com.android.application'
-
-repositories {
-    mavenCentral()
-    google()
+plugins {
+    alias(libs.plugins.android.application)
 }
 
 def signingFile = file 'signing.gradle'
@@ -36,10 +24,14 @@ if (signingFile.exists()) apply from: signingFile
 def signingBetaFile = file 'signing-beta.gradle'
 if (signingBetaFile.exists()) apply from: signingBetaFile
 
-allprojects {
-    tasks.withType(JavaCompile) {
-        // TODO include deprecations at some point, but currently they are *many*
-        options.compilerArgs << "-Xlint:all" << "-Xlint:-deprecation" << "-Xlint:-dep-ann"
+tasks.withType(JavaCompile).configureEach {
+    // TODO include deprecations at some point, but currently they are *many*
+    options.compilerArgs << "-Xlint:all" << "-Xlint:-deprecation" << "-Xlint:-dep-ann"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
@@ -48,15 +40,14 @@ android {
     compileSdk = 36
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_21
-        targetCompatibility JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     base {
         archivesName = "mumla"
     }
 
-    // gradle8: Need to enable this when defaultConfig below contains some custom BuildConfig
     buildFeatures {
         buildConfig = true
     }
@@ -67,39 +58,37 @@ android {
     }.standardOutput.asText.get().trim()
 
     defaultConfig {
-        minSdkVersion 21
-        targetSdk 36
+        minSdk = 31
+        targetSdk = 36
 
-        applicationId "se.lublin.mumla"
+        applicationId = "se.lublin.mumla"
         // Remember: app_news_items_vX_Y_Z in src/main/res/values/strings.xml
         // and NEWS_ITEMS in src/main/res/java/se/lublin/mumla/app/DialogUtils.java
         //     code:XYYZZbb (bb for build)
-        versionCode 3070300
-        versionName gitDescribe
+        versionCode = 3070300
+        versionName = gitDescribe
 
         buildConfigField "long", "TIMESTAMP", System.currentTimeMillis() + "L"
         buildConfigField "String", "VERSIONTAG", "\"" + gitDescribe.split("-")[0] + "\""
-
-        testInstrumentationRunner "android.test.InstrumentationTestRunner"
     }
 
-    flavorDimensions "release"
+    flavorDimensions += ["release"]
     productFlavors {
         goog {
-            dimension "release"
-            applicationId "se.lublin.mumla"
+            dimension = "release"
+            applicationId = "se.lublin.mumla"
         }
         foss {
-            dimension "release"
-            applicationId "se.lublin.mumla"
+            dimension = "release"
+            applicationId = "se.lublin.mumla"
         }
         donation {
-            dimension "release"
-            applicationId "se.lublin.mumla.donation"
+            dimension = "release"
+            applicationId = "se.lublin.mumla.donation"
         }
         beta {
-            dimension "release"
-            applicationId "se.lublin.mumla.beta"
+            dimension = "release"
+            applicationId = "se.lublin.mumla.beta"
         }
     }
 
@@ -116,7 +105,7 @@ android {
             }
         }
         debug {
-            versionNameSuffix "-debug"
+            versionNameSuffix = "-debug"
             if (android.hasProperty("signingConfigs")) {
                 if (signingConfigs.hasProperty("beta")) {
                     signingConfig = signingConfigs.beta
@@ -124,38 +113,57 @@ android {
             }
         }
     }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            all {
+                // Robolectric's FileDescriptor interceptor reaches jdk.internal.access.SharedSecrets,
+                // which JDK 21 does not export to the unnamed module; SDK 36's
+                // ApplicationSharedMemory goes through it, so without this every Robolectric test
+                // dies in setUpApplicationState.
+                jvmArgs '--add-opens=java.base/jdk.internal.access=ALL-UNNAMED'
+            }
+        }
+    }
+
     lint {
         abortOnError = true
-        // InvalidPackage is spongycastle-related
+        // InvalidPackage: the crypto provider references javax.naming / java.awt classes that
+        // Android does not ship and that are never reached at runtime.
         disable 'InvalidPackage', 'MissingTranslation'
         explainIssues = true
         ignoreWarnings = false
         quiet = false
     }
-    // betas may be released every minute
-    // TODO? dynamic stuff, have to rebuild a lot
-    applicationVariants.all { variant ->
-        if (variant.flavorName == "beta") {
-            variant.outputs.each { output ->
-                output.versionCodeOverride = System.currentTimeSeconds() / 60
-            }
+}
+
+// betas may be released every minute
+androidComponents {
+    onVariants(selector().withFlavor("release", "beta")) { variant ->
+        variant.outputs.each { output ->
+            output.versionCode.set((int) (System.currentTimeMillis() / 60000L))
         }
     }
-
 }
 
 dependencies {
     implementation project(":libraries:humla")
-    implementation 'androidx.appcompat:appcompat:1.7.1'
-    implementation 'androidx.cardview:cardview:1.0.0'
-    implementation 'androidx.documentfile:documentfile:1.1.0'
-    implementation 'androidx.fragment:fragment:1.8.9'
-    implementation 'androidx.recyclerview:recyclerview:1.4.0'
-    implementation 'androidx.exifinterface:exifinterface:1.4.2'
-    implementation 'com.google.android.material:material:1.13.0'
-    implementation 'androidx.preference:preference:1.2.1'
-    implementation 'org.jsoup:jsoup:1.13.1'
-    implementation 'info.guardianproject.netcipher:netcipher:2.1.0'
+    implementation libs.kotlinx.coroutines.android
+    implementation libs.androidx.appcompat
+    implementation libs.androidx.activity
+    implementation libs.androidx.cardview
+    implementation libs.androidx.core.ktx
+    implementation libs.androidx.documentfile
+    implementation libs.androidx.fragment
+    implementation libs.androidx.recyclerview
+    implementation libs.androidx.exifinterface
+    implementation libs.material
+    implementation libs.androidx.preference
+    implementation libs.jsoup
+    implementation libs.netcipher
 
-    googImplementation 'com.android.billingclient:billing:7.1.1'
+    googImplementation libs.billing
+
+    testImplementation libs.bundles.unit.test
 }

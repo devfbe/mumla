@@ -15,45 +15,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform
-
-buildscript {
-    repositories {
-        mavenCentral()
-        google()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.13.2'
-    }
-}
-apply plugin: 'com.android.library'
-
-repositories {
-    mavenCentral()
-    google()
+plugins {
+    alias(libs.plugins.android.library)
 }
 
-dependencies {
-    api 'com.google.protobuf:protobuf-java:3.11.4'
-    // Stock Spongycastle 1.51 from Maven Central. The former libs/humla-spongycastle fork
-    // (PKCS#12 plain keyBag support for Mumble certificates) is gone; Task 7 of the
-    // foundation plan replaces all of this with BouncyCastle, which reads those files.
-    api 'com.madgag.spongycastle:core:1.51.0.0'
-    api 'com.madgag.spongycastle:prov:1.51.0.0'
-    api 'com.madgag.spongycastle:pkix:1.51.0.0'
-
-    implementation 'com.googlecode.javacpp:javacpp:0.7'
-    implementation 'org.jetbrains:annotations:18.0.0'
-    implementation 'org.minidns:minidns-hla:0.3.4'
-    implementation 'org.minidns:minidns-android21:0.3.4'
-    implementation 'com.google.guava:guava:28.2-android'
-    testImplementation 'junit:junit:4.13.2'
+tasks.withType(JavaCompile).configureEach {
+    // TODO include deprecations at some point, but currently they are *many*
+    options.compilerArgs << "-Xlint:all" << "-Xlint:-deprecation" << "-Xlint:-dep-ann"
 }
 
-allprojects {
-    tasks.withType(JavaCompile) {
-        // TODO include deprecations at some point, but currently they are *many*
-        options.compilerArgs << "-Xlint:all" << "-Xlint:-deprecation" << "-Xlint:-dep-ann"
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
@@ -62,53 +35,68 @@ android {
 
     compileSdk = 36
     ndkVersion = '26.1.10909125'
-    //buildToolsVersion '29.0.3'
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_21
-        targetCompatibility JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
-    sourceSets.main.jniLibs.srcDir 'src/main/libs/'
-    sourceSets.main.jni.srcDirs = [] // Disable NDK build support until it supports multiple modules.
+    // ndk-build output (until the CMake migration)
+    sourceSets.main.jniLibs.srcDirs += ['src/main/libs']
 
-    // Need to enable this when defaultConfig below contains some custom BuildConfig
     buildFeatures {
         buildConfig = true
     }
 
     defaultConfig {
-        testApplicationId "se.lublin.humla.test"
-        testInstrumentationRunner "android.test.InstrumentationTestRunner"
-        minSdkVersion 21
-        targetSdk 36
-
-//        ndk {
-//            abiFilters "armeabi", "armeabi-v7a", "x86"
-//            stl "gnustl_static"
-//            cFlags "-I\$(LOCAL_PATH)/speex/include/ -I\$(LOCAL_PATH)/celt-0.11.0-src/include/ -I\$(LOCAL_PATH)/celt-0.7.0-src/include/ -I\$(LOCAL_PATH)/opus/include -D__EMX__ -DUSE_KISS_FFT -DFIXED_POINT -DEXPORT='' -DHAVE_CONFIG_H -fvisibility=hidden -DOPUS_BUILD -DVAR_ARRAYS -Wno-traditional -DFIXED_POINT"
-//        }
+        minSdk = 31
+        testApplicationId = "se.lublin.humla.test"
     }
 
-    // Trigger NDK build on java compilation task.
-    task ndkBuild(type: Exec) {
-        def ndkExe = "$project.android.ndkDirectory/ndk-build"
-        if (DefaultNativePlatform.getCurrentOperatingSystem().isWindows()) {
-          ndkExe += '.cmd'
+    testOptions {
+        targetSdk = 36
+        unitTests {
+            includeAndroidResources = true
+            all {
+                // See app/build.gradle: Robolectric needs jdk.internal.access opened on JDK 21.
+                jvmArgs '--add-opens=java.base/jdk.internal.access=ALL-UNNAMED'
+            }
         }
-        commandLine ndkExe, '-C', file('src/main/jni/').absolutePath
-    }
-
-    tasks.withType(JavaCompile) {
-        compileTask -> compileTask.dependsOn ndkBuild
     }
 
     lint {
+        targetSdk = 36
         abortOnError = true
-        // InvalidPackage is spongycastle-related
+        // InvalidPackage: see app/build.gradle
         disable 'InvalidPackage', 'MissingTranslation'
         explainIssues = true
         ignoreWarnings = false
         quiet = false
     }
+}
+
+// Trigger ndk-build before anything is compiled or packaged (removed by the CMake migration).
+def ndkDirectory = androidComponents.sdkComponents.ndkDirectory
+tasks.register('ndkBuild', Exec) {
+    def jniDir = file('src/main/jni').absolutePath
+    doFirst {
+        commandLine "${ndkDirectory.get().asFile.absolutePath}/ndk-build", '-C', jniDir
+    }
+}
+tasks.named('preBuild') { dependsOn 'ndkBuild' }
+
+dependencies {
+    api libs.protobuf.java
+    api libs.spongycastle.core
+    api libs.spongycastle.prov
+    api libs.spongycastle.pkix
+
+    implementation libs.kotlinx.coroutines.android
+    implementation libs.javacpp
+    implementation libs.jetbrains.annotations
+    implementation libs.minidns.hla
+    implementation libs.minidns.android21
+    implementation libs.guava
+
+    testImplementation libs.bundles.unit.test
 }
