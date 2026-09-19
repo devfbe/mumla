@@ -5,6 +5,7 @@ import org.bouncycastle.asn1.ASN1Encoding
 import org.bouncycastle.asn1.DERBMPString
 import org.bouncycastle.asn1.DEROctetString
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers
+import org.bouncycastle.asn1.pkcs.Pfx
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
@@ -59,6 +60,39 @@ class Pkcs12CertificatesTest {
 
         assertThat(store.getCertificate("Humla Key").encoded).isEqualTo(generated.encoded)
         assertThat(store.getKey("Humla Key", CharArray(0))).isInstanceOf(RSAPrivateKey::class.java)
+    }
+
+    /**
+     * BouncyCastle 1.86 raised its PKCS#12 defaults to NIST levels: a MAC at 1,200,000 iterations
+     * and an encrypted certificate bag at 600,000. Deriving those costs the better part of a
+     * second per store and per load on a desktop, and several seconds on a phone -- once on every
+     * connection, on the thread that calls connect(). The key is kept with an empty password in
+     * the app's private database, so the iterations buy nothing against any realistic attacker.
+     *
+     * This pins the counts so a future BouncyCastle bump cannot quietly put them back.
+     */
+    @Test
+    fun `a generated certificate uses a cheap iteration count`() {
+        val out = ByteArrayOutputStream()
+        HumlaCertificateGenerator.generateCertificate(out)
+        val bytes = out.toByteArray()
+
+        assertThat(Pfx.getInstance(bytes).macData.iterationCount.toInt()).isEqualTo(2048)
+        // No encrypted bag at all: nothing else can carry a key derivation.
+        assertThat(PKCS12PfxPdu(bytes).contentInfos.map { it.contentType })
+            .doesNotContain(PKCSObjectIdentifiers.encryptedData)
+    }
+
+    /**
+     * The generated store must keep the shape [Pkcs12Certificates] and Mumble itself read: an
+     * unencrypted keyBag and certBag, both tagged with the alias the rest of the app looks up.
+     */
+    @Test
+    fun `a generated certificate has the same shape as a mumble written one`() {
+        val out = ByteArrayOutputStream()
+        HumlaCertificateGenerator.generateCertificate(out)
+
+        assertIsUnencryptedKeyBagShape(out.toByteArray())
     }
 
     @Test
