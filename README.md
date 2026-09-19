@@ -79,14 +79,7 @@ The Android SDK need to be specified as usual, for example by setting
 `ANDROID_SDK_ROOT`, or writing it to local.properties as `echo
 >local.properties sdk.dir=/home/user/Android/Sdk`
 
-TODO: humla-spongycastle should be built as a sub-project of Humla's
-Gradle, but currently isn't.
-
     git submodule update --init --recursive
-
-    pushd libraries/humla/libs/humla-spongycastle
-    ../../gradlew jar
-    popd
 
     ./gradlew assembleDebug
 
