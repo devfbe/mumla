@@ -15,30 +15,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.util;
+package se.lublin.mumla.util
 
-import android.text.TextUtils;
+import java.net.URI
 
-import java.net.URI;
-
-public class HtmlUtils {
-    /**
-     * Tries to get the link's hostname, returns `null` if not a valid URL.
-     * @param link link to get the hostname of
-     * @return String?
-     */
-    public static String getHostnameFromLink(String link) {
-        // Cheap pre-check
-        if (link.contains("://")) {
-            try {
-                URI maybeURI = URI.create(link);
-                if (!TextUtils.isEmpty(maybeURI.getHost())) {
-                    return maybeURI.getHost();
-                }
-            } catch (IllegalArgumentException e) {
-                // not a valid URI
-            }
+object HtmlUtils {
+    /** Tries to get the link's hostname, returns null if not a valid URL. */
+    @JvmStatic
+    fun getHostnameFromLink(link: String): String? {
+        if (!link.contains("://")) return null
+        return try {
+            URI.create(link).host?.takeIf { it.isNotEmpty() }
+        } catch (e: IllegalArgumentException) {
+            null
         }
-        return null;
     }
 }
