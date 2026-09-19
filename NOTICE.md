@@ -13,7 +13,7 @@ following third-party components. Every entry is GPLv3-compatible.
 | MiniDNS | 1.0.5 | LGPL-2.1-or-later / Apache-2.0 / WTFPL (tri-licensed) | https://github.com/MiniDNS/minidns |
 | NetCipher | 2.1.0 | Apache-2.0 | https://github.com/guardianproject/NetCipher — upstream has had no release since 2.1.0 (2021) and no commits since 2020-12; kept because no maintained replacement provides `OrbotHelper`. Re-evaluate when Tor integration is next touched. |
 | protobuf-java (runtime) and protoc (build only) | 4.36.2 | BSD-3-Clause | https://github.com/protocolbuffers/protobuf |
-| Spongycastle | 1.51.0.0 | MIT (Bouncy Castle license) | https://rtyley.github.io/spongycastle/ — currently in use; a later task migrates to BouncyCastle |
+| Bouncy Castle (bcprov-jdk18on, bcpkix-jdk18on, and bcutil-jdk18on pulled in by bcpkix) | 1.86 | MIT (Bouncy Castle Licence) — the artifacts ship `META-INF/LICENSE.md` containing the MIT License text | https://www.bouncycastle.org/ |
 | JetBrains annotations | 26.1.0 | Apache-2.0 | https://github.com/JetBrains/java-annotations |
 | Google Play Billing Library | 9.1.0 | Android SDK License (proprietary; `goog` flavor only, not shipped in the F-Droid `foss` build) | https://developer.android.com/google/play/billing |
 | opus | 1.1-beta | BSD-3-Clause | https://github.com/xiph/opus |

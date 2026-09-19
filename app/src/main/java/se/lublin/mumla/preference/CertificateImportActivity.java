@@ -30,8 +30,6 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import org.spongycastle.jce.provider.BouncyCastleProvider;
-
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -42,6 +40,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.util.UUID;
 
+import se.lublin.humla.net.Pkcs12Certificates;
 import se.lublin.mumla.R;
 import se.lublin.mumla.db.MumlaDatabase;
 import se.lublin.mumla.db.MumlaSQLiteDatabase;
@@ -101,8 +100,7 @@ public class CertificateImportActivity extends AppCompatActivity {
     private void storeKeystore(final char[] password, final String fileName, final InputStream input) {
         KeyStore keyStore;
         try {
-            keyStore = KeyStore.getInstance("PKCS12", new BouncyCastleProvider());
-            keyStore.load(input, password);
+            keyStore = Pkcs12Certificates.load(input, password);
         } catch (CertificateException e) {
             // A problem occurred when reading the stream; interpret this as a password being
             // required. Request a password from the user and reattempt decryption.

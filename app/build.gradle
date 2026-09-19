@@ -114,6 +114,16 @@ android {
         }
     }
 
+    packaging {
+        resources {
+            // bcprov, bcpkix and bcutil each ship a META-INF/LICENSE.md. The three files are
+            // byte-identical (sha256 0e01f154...e5fd, the MIT License text for The Legion of the
+            // Bouncy Castle Inc.), so packaging one copy still carries the full notice the MIT
+            // licence requires; excluding it outright would not.
+            pickFirsts += 'META-INF/LICENSE.md'
+        }
+    }
+
     testOptions {
         unitTests {
             includeAndroidResources = true

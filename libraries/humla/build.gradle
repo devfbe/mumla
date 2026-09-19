@@ -123,9 +123,8 @@ tasks.named('preBuild') { dependsOn 'ndkBuild' }
 
 dependencies {
     api libs.protobuf.java
-    api libs.spongycastle.core
-    api libs.spongycastle.prov
-    api libs.spongycastle.pkix
+    api libs.bouncycastle.prov
+    api libs.bouncycastle.pkix
 
     implementation libs.kotlinx.coroutines.android
     implementation libs.androidx.annotation

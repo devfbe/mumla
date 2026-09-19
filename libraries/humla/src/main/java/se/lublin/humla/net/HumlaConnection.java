@@ -25,9 +25,6 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 
-import org.spongycastle.jce.provider.BouncyCastleProvider;
-
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.nio.ByteBuffer;
@@ -515,10 +512,7 @@ public class HumlaConnection implements HumlaTCP.TCPConnectionListener, HumlaUDP
         try {
             KeyStore keyStore = null;
             if(mCertificate != null) {
-                keyStore = KeyStore.getInstance("PKCS12", new BouncyCastleProvider());
-                ByteArrayInputStream inputStream = new ByteArrayInputStream(mCertificate);
-                keyStore.load(inputStream, mCertificatePassword != null ?
-                        mCertificatePassword.toCharArray() : new char[0]);
+                keyStore = Pkcs12Certificates.load(mCertificate, mCertificatePassword);
             }
 
             return new HumlaSSLSocketFactory(keyStore, mCertificatePassword, mTrustStorePath,
@@ -541,17 +535,17 @@ public class HumlaConnection implements HumlaTCP.TCPConnectionListener, HumlaUDP
         } catch (NoSuchAlgorithmException e) {
                 /*
                  * This will actually NEVER occur.
-                 * We use Spongy Castle to provide the algorithm and provider implementations.
+                 * We use BouncyCastle to provide the algorithm and provider implementations.
                  * There's no platform dependency.
                  */
-            throw new RuntimeException("We use Spongy Castle- what? ", e);
+            throw new RuntimeException("We use BouncyCastle- what? ", e);
         } catch (NoSuchProviderException e) {
                 /*
                  * This will actually NEVER occur.
-                 * We use Spongy Castle to provide the algorithm and provider implementations.
+                 * We use BouncyCastle to provide the algorithm and provider implementations.
                  * There's no platform dependency.
                  */
-            throw new RuntimeException("We use Spongy Castle- what? ", e);
+            throw new RuntimeException("We use BouncyCastle- what? ", e);
         }
     }
 

@@ -25,7 +25,7 @@ billing = "9.1.0"
 
 protobuf = "4.36.2"
 protobuf-plugin = "0.10.0"
-spongycastle = "1.51.0.0"
+bouncycastle = "1.86"
 javacpp = "0.7"
 jetbrains-annotations = "26.1.0"
 minidns = "1.0.5"
@@ -57,9 +57,8 @@ billing = { module = "com.android.billingclient:billing", version.ref = "billing
 
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
-spongycastle-core = { module = "com.madgag.spongycastle:core", version.ref = "spongycastle" }
-spongycastle-prov = { module = "com.madgag.spongycastle:prov", version.ref = "spongycastle" }
-spongycastle-pkix = { module = "com.madgag.spongycastle:pkix", version.ref = "spongycastle" }
+bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 javacpp = { module = "com.googlecode.javacpp:javacpp", version.ref = "javacpp" }
 jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }
 minidns-hla = { module = "org.minidns:minidns-hla", version.ref = "minidns" }
