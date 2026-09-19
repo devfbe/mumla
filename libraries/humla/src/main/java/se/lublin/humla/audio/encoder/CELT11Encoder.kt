@@ -17,36 +17,35 @@
 
 package se.lublin.humla.audio.encoder
 
-import com.googlecode.javacpp.IntPointer
-import com.googlecode.javacpp.Pointer
 import java.nio.BufferOverflowException
 import java.nio.BufferUnderflowException
-import se.lublin.humla.audio.javacpp.CELT11
+import se.lublin.humla.audio.native.Celt11Api
+import se.lublin.humla.audio.native.Celt11Native
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.PacketBuffer
 
-class CELT11Encoder @Throws(NativeAudioException::class) constructor(
+class CELT11Encoder @JvmOverloads @Throws(NativeAudioException::class) constructor(
     sampleRate: Int,
     channels: Int,
     private val framesPerPacket: Int,
+    private val api: Celt11Api = Celt11Native,
 ) : IEncoder {
     private val bufferSize = sampleRate / 800
     private val buffer = Array(framesPerPacket) { ByteArray(bufferSize) }
     private var bufferedFrames = 0
 
-    private val state: Pointer
+    private val state: Long
 
     init {
-        val error = IntPointer(1)
-        error.put(0)
-        state = CELT11.celt_encoder_create(sampleRate, channels, error)
-        if (error.get() < 0) throw NativeAudioException("CELT 0.11.0 encoder initialization failed with error: " + error.get())
+        val error = intArrayOf(0)
+        state = api.encoderCreate(sampleRate, channels, error)
+        if (error[0] < 0) throw NativeAudioException("CELT 0.11.0 encoder initialization failed with error: ${error[0]}")
     }
 
     @Throws(NativeAudioException::class)
     override fun encode(input: ShortArray, inputSize: Int): Int {
         if (bufferedFrames >= framesPerPacket) throw BufferOverflowException()
-        val result = CELT11.celt_encode(state, input, inputSize, buffer[bufferedFrames], bufferSize)
+        val result = api.encode(state, input, inputSize, buffer[bufferedFrames], bufferSize)
         if (result < 0) throw NativeAudioException("CELT 0.11.0 encoding failed with error: $result")
         bufferedFrames++
         return result
@@ -74,7 +73,5 @@ class CELT11Encoder @Throws(NativeAudioException::class) constructor(
         // The CELT 0.11 encoder has no partial-packet flush; kept as before.
     }
 
-    override fun destroy() {
-        CELT11.celt_encoder_destroy(state)
-    }
+    override fun destroy() = api.encoderDestroy(state)
 }

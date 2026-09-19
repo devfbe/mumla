@@ -17,49 +17,45 @@
 
 package se.lublin.humla.audio.encoder
 
-import com.googlecode.javacpp.IntPointer
 import java.nio.BufferUnderflowException
-import se.lublin.humla.audio.javacpp.Speex
+import se.lublin.humla.audio.native.SpeexPreprocessApi
+import se.lublin.humla.audio.native.SpeexPreprocessNative
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.PacketBuffer
 
-class PreprocessingEncoder(
+class PreprocessingEncoder @JvmOverloads constructor(
     private var encoder: IEncoder,
     frameSize: Int,
     sampleRate: Int,
+    private val api: SpeexPreprocessApi = SpeexPreprocessNative,
 ) : IEncoder {
-    private val preprocessor = Speex.SpeexPreprocessState(frameSize, sampleRate)
-    private var destroyed = false
+    private val state: Long = api.init(frameSize, sampleRate)
 
     init {
-        val arg = IntPointer(1)
-        arg.put(0)
-        preprocessor.control(Speex.SpeexPreprocessState.SPEEX_PREPROCESS_SET_VAD, arg)
-        arg.put(1)
-        preprocessor.control(Speex.SpeexPreprocessState.SPEEX_PREPROCESS_SET_AGC, arg)
-        preprocessor.control(Speex.SpeexPreprocessState.SPEEX_PREPROCESS_SET_DENOISE, arg)
-        preprocessor.control(Speex.SpeexPreprocessState.SPEEX_PREPROCESS_SET_DEREVERB, arg)
-        arg.put(30000)
-        preprocessor.control(Speex.SpeexPreprocessState.SPEEX_PREPROCESS_SET_AGC_TARGET, arg)
-        // Increase VAD difficulty. NOTE: the request id is GET_PROB_START, as in the Java
-        // original; stream B (spec B9) corrects this to SET_PROB_START.
-        arg.put(99)
-        preprocessor.control(Speex.SpeexPreprocessState.SPEEX_PREPROCESS_GET_PROB_START, arg)
+        val arg = intArrayOf(0)
+        api.ctlInt(state, SpeexPreprocessNative.SPEEX_PREPROCESS_SET_VAD, arg)
+        arg[0] = 1
+        api.ctlInt(state, SpeexPreprocessNative.SPEEX_PREPROCESS_SET_AGC, arg)
+        api.ctlInt(state, SpeexPreprocessNative.SPEEX_PREPROCESS_SET_DENOISE, arg)
+        api.ctlInt(state, SpeexPreprocessNative.SPEEX_PREPROCESS_SET_DEREVERB, arg)
+        arg[0] = 30000
+        api.ctlInt(state, SpeexPreprocessNative.SPEEX_PREPROCESS_SET_AGC_TARGET, arg)
+        // Increase VAD difficulty. NOTE: request id is GET_PROB_START as in the original;
+        // stream B (spec B9) corrects this to SET_PROB_START.
+        arg[0] = 99
+        api.ctlInt(state, SpeexPreprocessNative.SPEEX_PREPROCESS_GET_PROB_START, arg)
     }
 
     @Throws(NativeAudioException::class)
     override fun encode(input: ShortArray, inputSize: Int): Int {
-        preprocessor.preprocess(input)
+        api.run(state, input)
         return encoder.encode(input, inputSize)
     }
 
     override fun getBufferedFrames(): Int = encoder.getBufferedFrames()
-
     override fun isReady(): Boolean = encoder.isReady()
-
     @Throws(BufferUnderflowException::class)
     override fun getEncodedData(packetBuffer: PacketBuffer) = encoder.getEncodedData(packetBuffer)
-
     @Throws(NativeAudioException::class)
     override fun terminate() = encoder.terminate()
 
@@ -69,9 +65,7 @@ class PreprocessingEncoder(
     }
 
     override fun destroy() {
-        if (destroyed) return
-        destroyed = true
-        preprocessor.destroy()
+        api.destroy(state)
         encoder.destroy()
     }
 }

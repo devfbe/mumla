@@ -17,22 +17,23 @@
 
 package se.lublin.humla.audio.encoder
 
-import com.googlecode.javacpp.IntPointer
-import com.googlecode.javacpp.Pointer
 import java.nio.BufferOverflowException
 import java.nio.BufferUnderflowException
 import kotlin.math.min
-import se.lublin.humla.audio.javacpp.CELT7
+import se.lublin.humla.audio.native.Celt7Api
+import se.lublin.humla.audio.native.Celt7Native
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.protocol.AudioHandler
 
-class CELT7Encoder @Throws(NativeAudioException::class) constructor(
+class CELT7Encoder @JvmOverloads @Throws(NativeAudioException::class) constructor(
     sampleRate: Int,
     frameSize: Int,
     channels: Int,
     private val framesPerPacket: Int,
     bitrate: Int,
     maxBufferSize: Int,
+    private val api: Celt7Api = Celt7Native,
 ) : IEncoder {
     private val bufferSize = min(maxBufferSize, bitrate / 800)
     private val buffer = Array(framesPerPacket) { ByteArray(bufferSize) }
@@ -40,24 +41,23 @@ class CELT7Encoder @Throws(NativeAudioException::class) constructor(
     private var bufferedFrames = 0
     private var ready = false
 
-    private val mode: Pointer
-    private val state: Pointer
+    private val mode: Long
+    private val state: Long
 
     init {
-        val error = IntPointer(1)
-        error.put(0)
-        mode = CELT7.celt_mode_create(sampleRate, frameSize, error)
-        if (error.get() < 0) throw NativeAudioException("CELT 0.7.0 encoder initialization failed with error: " + error.get())
-        state = CELT7.celt_encoder_create(mode, channels, error)
-        if (error.get() < 0) throw NativeAudioException("CELT 0.7.0 encoder initialization failed with error: " + error.get())
-        CELT7.celt_encoder_ctl(state, CELT7.CELT_SET_PREDICTION_REQUEST, 0)
-        CELT7.celt_encoder_ctl(state, CELT7.CELT_SET_VBR_RATE_REQUEST, bitrate)
+        val error = intArrayOf(0)
+        mode = api.modeCreate(sampleRate, frameSize, error)
+        if (error[0] < 0) throw NativeAudioException("CELT 0.7.0 encoder initialization failed with error: ${error[0]}")
+        state = api.encoderCreate(mode, channels, error)
+        if (error[0] < 0) throw NativeAudioException("CELT 0.7.0 encoder initialization failed with error: ${error[0]}")
+        api.encoderCtlInt(state, Celt7Native.CELT_SET_PREDICTION_REQUEST, 0)
+        api.encoderCtlInt(state, Celt7Native.CELT_SET_VBR_RATE_REQUEST, bitrate)
     }
 
     @Throws(NativeAudioException::class)
     override fun encode(input: ShortArray, inputSize: Int): Int {
         if (bufferedFrames >= framesPerPacket) throw BufferOverflowException()
-        val result = CELT7.celt_encode(state, input, null, buffer[bufferedFrames], bufferSize)
+        val result = api.encode(state, input, buffer[bufferedFrames], bufferSize)
         if (result < 0) throw NativeAudioException("CELT 0.7.0 encoding failed with error: $result")
         packetLengths[bufferedFrames] = result
         bufferedFrames++
@@ -90,7 +90,19 @@ class CELT7Encoder @Throws(NativeAudioException::class) constructor(
     }
 
     override fun destroy() {
-        CELT7.celt_encoder_destroy(state)
-        CELT7.celt_mode_destroy(mode)
+        api.encoderDestroy(state)
+        api.modeDestroy(mode)
+    }
+
+    companion object {
+        /** The CELT 0.7 bitstream version Mumla announces in `Authenticate.celt_versions`. */
+        @JvmStatic
+        fun getBitstreamVersion(): Int {
+            val mode = Celt7Native.modeCreate(AudioHandler.SAMPLE_RATE, AudioHandler.FRAME_SIZE, null)
+            val version = intArrayOf(0)
+            Celt7Native.modeInfo(mode, Celt7Native.CELT_GET_BITSTREAM_VERSION, version)
+            Celt7Native.modeDestroy(mode)
+            return version[0]
+        }
     }
 }

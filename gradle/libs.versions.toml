@@ -26,7 +26,6 @@ billing = "9.1.0"
 protobuf = "4.36.2"
 protobuf-plugin = "0.10.0"
 bouncycastle = "1.86"
-javacpp = "0.7"
 jetbrains-annotations = "26.1.0"
 minidns = "1.0.5"
 
@@ -59,7 +58,6 @@ protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "p
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
-javacpp = { module = "com.googlecode.javacpp:javacpp", version.ref = "javacpp" }
 jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }
 minidns-hla = { module = "org.minidns:minidns-hla", version.ref = "minidns" }
 minidns-android21 = { module = "org.minidns:minidns-android21", version.ref = "minidns" }

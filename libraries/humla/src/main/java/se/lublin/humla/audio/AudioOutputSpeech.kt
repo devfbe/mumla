@@ -17,7 +17,6 @@
 
 package se.lublin.humla.audio
 
-import com.googlecode.javacpp.IntPointer
 import java.nio.BufferOverflowException
 import java.nio.BufferUnderflowException
 import java.nio.ByteBuffer
@@ -27,10 +26,10 @@ import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.ceil
 import kotlin.math.sin
-import se.lublin.humla.audio.javacpp.CELT11
-import se.lublin.humla.audio.javacpp.CELT7
-import se.lublin.humla.audio.javacpp.Opus
-import se.lublin.humla.audio.javacpp.Speex
+import se.lublin.humla.audio.native.OpusDecoderApi
+import se.lublin.humla.audio.native.OpusDecoderNative
+import se.lublin.humla.audio.native.SpeexJitterApi
+import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
@@ -38,12 +37,20 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.protocol.AudioHandler
 
-/** Decodes one user's incoming voice stream through a jitter buffer into float PCM. */
-class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
+/**
+ * Decodes one user's incoming voice stream through a jitter buffer into float PCM.
+ *
+ * [opusApi] and [jitterApi] are the seams JVM tests use to drive the Opus path without native
+ * libraries; they default to the `*Native` objects, which load their `.so` on first touch. The
+ * CELT and Speex decoders keep their own defaults, so only the Opus codec is testable this way.
+ */
+class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) constructor(
     private val user: User,
     private val codec: HumlaUDPMessageType,
     private var requestedSamples: Int,
     private val talkStateListener: TalkStateListener,
+    private val opusApi: OpusDecoderApi = OpusDecoderNative,
+    jitterApi: SpeexJitterApi = SpeexJitterNative,
 ) : Callable<AudioOutputSpeech.Result> {
 
     fun interface TalkStateListener {
@@ -51,7 +58,7 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
     }
 
     private val decoder: IDecoder
-    private val jitterBuffer: Speex.JitterBuffer
+    private val jitterBuffer: SpeexJitterBuffer
     private val jitterLock = Any()
     private var audioBufferSize = AudioHandler.FRAME_SIZE
 
@@ -67,17 +74,16 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
     private var bufferFilled = 0
     private var lastConsume = 0
     private var ucFlags = 0
-    private val avail = IntPointer(1)
 
     init {
         decoder = when (codec) {
             HumlaUDPMessageType.UDPVoiceOpus -> {
                 audioBufferSize *= 12
-                Opus.OpusDecoder(AudioHandler.SAMPLE_RATE, 1)
+                OpusDecoder(AudioHandler.SAMPLE_RATE, 1, opusApi)
             }
-            HumlaUDPMessageType.UDPVoiceCELTBeta -> CELT11.CELT11Decoder(AudioHandler.SAMPLE_RATE, 1)
-            HumlaUDPMessageType.UDPVoiceCELTAlpha -> CELT7.CELT7Decoder(AudioHandler.SAMPLE_RATE, AudioHandler.FRAME_SIZE, 1)
-            HumlaUDPMessageType.UDPVoiceSpeex -> Speex.SpeexDecoder()
+            HumlaUDPMessageType.UDPVoiceCELTBeta -> CELT11Decoder(AudioHandler.SAMPLE_RATE, 1)
+            HumlaUDPMessageType.UDPVoiceCELTAlpha -> CELT7Decoder(AudioHandler.SAMPLE_RATE, AudioHandler.FRAME_SIZE, 1)
+            HumlaUDPMessageType.UDPVoiceSpeex -> SpeexDecoder()
             else -> throw NativeAudioException("No decoder for codec $codec")
         }
 
@@ -93,10 +99,8 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
             fadeOut[AudioHandler.FRAME_SIZE - i - 1] = v
         }
 
-        jitterBuffer = Speex.JitterBuffer(AudioHandler.FRAME_SIZE)
-        val margin = IntPointer(1)
-        margin.put(10 * AudioHandler.FRAME_SIZE)
-        jitterBuffer.control(Speex.JitterBuffer.JITTER_BUFFER_SET_MARGIN, margin)
+        jitterBuffer = SpeexJitterBuffer(AudioHandler.FRAME_SIZE, jitterApi)
+        jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_SET_MARGIN, 10 * AudioHandler.FRAME_SIZE)
     }
 
     fun addFrameToBuffer(pb: PacketBuffer, flags: Byte, seq: Int) {
@@ -111,8 +115,8 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
                     if (size > 0) {
                         val data = pb.dataBlock(size)
                         if (data.size != size) return
-                        val frameCount = Opus.opus_packet_get_nb_frames(data, size)
-                        samples = frameCount * Opus.opus_packet_get_samples_per_frame(data, AudioHandler.SAMPLE_RATE)
+                        val frameCount = opusApi.packetGetNbFrames(data, size)
+                        samples = frameCount * opusApi.packetGetSamplesPerFrame(data, AudioHandler.SAMPLE_RATE)
                     } else {
                         return
                     }
@@ -132,8 +136,7 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
 
                 val size = pb.left()
                 val data = pb.dataBlock(size)
-                val packet = Speex.JitterBufferPacket(data, size, AudioHandler.FRAME_SIZE * seq, samples, 0, flags.toInt())
-                jitterBuffer.put(packet)
+                jitterBuffer.put(data, size, AudioHandler.FRAME_SIZE * seq, samples, 0, flags.toInt())
             } catch (e: BufferOverflowException) {
                 e.printStackTrace()
             }
@@ -160,13 +163,10 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
             if (!lastAlive) {
                 Arrays.fill(out, 0f)
             } else {
-                avail.put(0)
-                val ts = synchronized(jitterLock) {
-                    val t = jitterBuffer.pointerTimestamp
-                    jitterBuffer.control(Speex.JitterBuffer.JITTER_BUFFER_GET_AVAILABLE_COUNT, avail)
-                    t
+                val (ts, availPackets) = synchronized(jitterLock) {
+                    jitterBuffer.pointerTimestamp to
+                        jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT, 0).toFloat()
                 }
-                val availPackets = avail.get().toFloat()
 
                 // Make sure that we have enough packets in the jitter buffer before we even begin
                 // decoding, based on the average # of packets available. Prevents a metallic
@@ -186,13 +186,11 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
                 }
 
                 if (frames.isEmpty()) {
-                    val packet = ByteBuffer.allocateDirect(4096)
-                    val jbp = Speex.JitterBufferPacket(packet, 4096, 0, 0, 0, 0)
-                    val result = synchronized(jitterLock) { jitterBuffer.get(jbp, null) }
+                    val packetBytes = ByteArray(4096)
+                    val jbp = synchronized(jitterLock) { jitterBuffer.get(packetBytes, AudioHandler.FRAME_SIZE) }
 
-                    if (result == Speex.JitterBuffer.JITTER_BUFFER_OK) {
-                        packet.limit(jbp.length)
-                        val pb = PacketBuffer(packet)
+                    if (jbp.status == SpeexJitterNative.JITTER_BUFFER_OK) {
+                        val pb = PacketBuffer(packetBytes, jbp.length)
 
                         missCount = 0
                         ucFlags = jbp.userData
@@ -227,7 +225,7 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
                             user.averageAvailable = user.averageAvailable * 0.99f
                         }
                     } else {
-                        synchronized(jitterLock) { jitterBuffer.updateDelay(jbp, null) }
+                        synchronized(jitterLock) { jitterBuffer.updateDelay() }
                         missCount++
                         if (missCount > 10) nextAlive = false
                     }
@@ -238,7 +236,7 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
                         val data = frames.poll()
                         decodedSamples = decoder.decodeFloat(data, data.limit(), out, audioBufferSize)
                         if (frames.isEmpty()) {
-                            synchronized(jitterLock) { jitterBuffer.updateDelay(null, IntPointer(1)) }
+                            synchronized(jitterLock) { jitterBuffer.updateDelay() }
                         }
                         if (frames.isEmpty() && hasTerminator) nextAlive = false
                     } else {

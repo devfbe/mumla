@@ -18,34 +18,32 @@
 package se.lublin.humla.audio.encoder
 
 import java.nio.BufferUnderflowException
-import se.lublin.humla.audio.javacpp.Speex
+import se.lublin.humla.audio.native.SpeexResamplerApi
+import se.lublin.humla.audio.native.SpeexResamplerNative
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.PacketBuffer
 
-class ResamplingEncoder(
+class ResamplingEncoder @JvmOverloads constructor(
     private var encoder: IEncoder,
     channels: Int,
     inputSampleRate: Int,
     private val targetFrameSize: Int,
     targetSampleRate: Int,
+    private val api: SpeexResamplerApi = SpeexResamplerNative,
 ) : IEncoder {
     private val resampleBuffer = ShortArray(targetFrameSize)
-    private val resampler = Speex.SpeexResampler(channels, inputSampleRate, targetSampleRate, SPEEX_RESAMPLE_QUALITY)
-    private var destroyed = false
+    private val state: Long = api.init(channels, inputSampleRate, targetSampleRate, SPEEX_RESAMPLE_QUALITY, null)
 
     @Throws(NativeAudioException::class)
     override fun encode(input: ShortArray, inputSize: Int): Int {
-        resampler.resample(input, resampleBuffer)
+        api.processInt(state, 0, input, intArrayOf(input.size), resampleBuffer, intArrayOf(resampleBuffer.size))
         return encoder.encode(resampleBuffer, targetFrameSize)
     }
 
     override fun getBufferedFrames(): Int = encoder.getBufferedFrames()
-
     override fun isReady(): Boolean = encoder.isReady()
-
     @Throws(BufferUnderflowException::class)
     override fun getEncodedData(packetBuffer: PacketBuffer) = encoder.getEncodedData(packetBuffer)
-
     @Throws(NativeAudioException::class)
     override fun terminate() = encoder.terminate()
 
@@ -55,9 +53,7 @@ class ResamplingEncoder(
     }
 
     override fun destroy() {
-        if (destroyed) return
-        destroyed = true
-        resampler.destroy()
+        api.destroy(state)
         encoder.destroy()
     }
 

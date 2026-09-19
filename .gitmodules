@@ -1,12 +1,15 @@
 [submodule "libraries/humla/src/main/jni/opus"]
-	path = libraries/humla/src/main/jni/opus
+	path = libraries/humla/src/main/cpp/third_party/opus
 	url = https://github.com/xiph/opus
-[submodule "libraries/humla/src/main/jni/speex"]
-	path = libraries/humla/src/main/jni/speex
-	url = https://github.com/xiph/speex
 [submodule "celt-0.7.0"]
-	path = libraries/humla/src/main/jni/celt-0.7.0-src
+	path = libraries/humla/src/main/cpp/third_party/celt-0.7.0
 	url = https://gitlab.com/quite/celt.git
 [submodule "celt-0.11.0"]
-	path = libraries/humla/src/main/jni/celt-0.11.0-src
+	path = libraries/humla/src/main/cpp/third_party/celt-0.11.0
 	url = https://gitlab.com/quite/celt.git
+[submodule "libraries/humla/src/main/cpp/third_party/speex"]
+	path = libraries/humla/src/main/cpp/third_party/speex
+	url = https://github.com/xiph/speex
+[submodule "libraries/humla/src/main/cpp/third_party/speexdsp"]
+	path = libraries/humla/src/main/cpp/third_party/speexdsp
+	url = https://github.com/xiph/speexdsp

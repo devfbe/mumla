@@ -8,8 +8,7 @@ build/
 local.properties
 
 # Native
-src/main/libs/
-src/main/obj/
+.cxx/
 
 # Java
 *.class

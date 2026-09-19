@@ -42,9 +42,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
-    // ndk-build output (until the CMake migration)
-    sourceSets.main.jniLibs.srcDirs += ['src/main/libs']
-
     sourceSets {
         main {
             proto {
@@ -59,9 +56,28 @@ android {
         buildConfig = true
     }
 
+    externalNativeBuild {
+        cmake {
+            path = file('src/main/cpp/CMakeLists.txt')
+            version = '3.22.1'
+        }
+    }
+
     defaultConfig {
         minSdk = 31
         testApplicationId = "se.lublin.humla.test"
+
+        ndk {
+            abiFilters += ['arm64-v8a', 'armeabi-v7a', 'x86_64']
+        }
+        externalNativeBuild {
+            cmake {
+                // Static libc++: every humla_*.so is self-contained, exports only C JNI
+                // entry points and shares no C++ objects or exceptions across libraries,
+                // so the NDK's warning about duplicated libc++ state does not apply.
+                arguments += ['-DANDROID_STL=c++_static']
+            }
+        }
     }
 
     testOptions {
@@ -111,16 +127,6 @@ protobuf {
     }
 }
 
-// Trigger ndk-build before anything is compiled or packaged (removed by the CMake migration).
-def ndkDirectory = androidComponents.sdkComponents.ndkDirectory
-tasks.register('ndkBuild', Exec) {
-    def jniDir = file('src/main/jni').absolutePath
-    doFirst {
-        commandLine "${ndkDirectory.get().asFile.absolutePath}/ndk-build", '-C', jniDir
-    }
-}
-tasks.named('preBuild') { dependsOn 'ndkBuild' }
-
 dependencies {
     api libs.protobuf.java
     api libs.bouncycastle.prov
@@ -128,7 +134,6 @@ dependencies {
 
     implementation libs.kotlinx.coroutines.android
     implementation libs.androidx.annotation
-    implementation libs.javacpp
     implementation libs.jetbrains.annotations
     implementation libs.minidns.hla
     implementation libs.minidns.android21
