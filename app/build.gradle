@@ -38,7 +38,8 @@ java {
 android {
     namespace = 'se.lublin.mumla'
     compileSdk = 36
-    buildToolsVersion = '36.1.0'
+    // Single-sourced from gradle.properties; see the comment there.
+    buildToolsVersion = providers.gradleProperty('buildToolsVersion').get()
     // Single-sourced from gradle.properties; must match libraries/humla's ndkVersion, which reads
     // the same property. Without it AGP looks for its own default NDK, which the dev shell does
     // not install, and stripFoss*DebugSymbols silently packages the humla_*.so files unstripped.

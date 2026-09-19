@@ -17,22 +17,24 @@
           };
         };
 
-        # Single source for the NDK version pin within this file: Nix cannot read
-        # gradle.properties, so this literal and the one in gradle.properties (read by both
+        # Single source for the Android toolchain version pins within this file: Nix cannot read
+        # gradle.properties, so these literals and the ones in gradle.properties (read by both
         # libraries/humla/build.gradle and app/build.gradle) must be kept in sync by hand. Every
-        # other flake.nix reference to the NDK version goes through this binding.
+        # other flake.nix reference to these versions goes through these bindings.
         ndkVersion = "29.0.14206865";
+        buildToolsVersion = "36.1.0";
+        cmakeVersion = "4.1.2";
 
         # Android SDK configuration
         androidSdk = pkgs.androidenv.composeAndroidPackages {
-          buildToolsVersions = [ "36.1.0" ];
+          buildToolsVersions = [ buildToolsVersion ];
           platformVersions = [ "36" ];
           includeEmulator = false;
           includeSystemImages = false;
           includeSources = false;
           includeNDK = true;
           ndkVersions = [ ndkVersion ];
-          cmakeVersions = [ "4.1.2" ];
+          cmakeVersions = [ cmakeVersion ];
         };
 
         # Java/JDK 21
@@ -66,7 +68,7 @@
           export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
 
           # AAPT2 override for NixOS compatibility
-          export GRADLE_OPTS="-Dorg.gradle.project.android.aapt2FromMavenOverride=$ANDROID_HOME/build-tools/36.1.0/aapt2"
+          export GRADLE_OPTS="-Dorg.gradle.project.android.aapt2FromMavenOverride=$ANDROID_HOME/build-tools/${buildToolsVersion}/aapt2"
 
           echo "Android development environment loaded"
           echo "  ANDROID_HOME: $ANDROID_HOME"

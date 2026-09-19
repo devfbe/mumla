@@ -26,25 +26,45 @@ plugins {
     alias(libs.plugins.protobuf) apply false
 }
 
-// Fail fast, at configuration time, if :app and :libraries:humla ever resolve different NDK
-// versions. Both read `ndkVersion` from the same gradle.properties entry, so this should never
-// fire -- it exists to catch a future hardcoded override that reintroduces the drift. AGP has no
-// "fail if native libraries were not stripped" switch: a drifted ndkVersion between modules
-// degrades silently to an "Unable to strip library" warning and ships an unstripped .so instead
-// of failing the build (this exact failure mode was found and fixed in Task 9, at a cost of
-// 4.8 MB of APK). Checking the resolved NDK version is preferred here over inspecting the
-// packaged libraries for stripped-ness: that would mean binding this check to AGP's internal
-// intermediate output layout (or its Variant API artifacts), which is exactly the kind of
-// AGP-version-coupled detail likely to break on the next AGP bump, whereas comparing two
-// already-resolved `ndkVersion` strings is a one-line, always-evaluated check that targets the
-// root cause -- the drifted string -- rather than a downstream symptom of it.
+// Fail fast, at configuration time, if :app and :libraries:humla ever stop resolving the same
+// toolchain versions, or if either one stops reading them from gradle.properties. Both modules
+// read `ndkVersion`, `buildToolsVersion` and `cmakeVersion` from the same gradle.properties
+// entries, so this should never fire -- it exists to catch a future hardcoded override that
+// reintroduces the drift. AGP has no "fail if native libraries were not stripped" switch: a
+// drifted ndkVersion between modules degrades silently to an "Unable to strip library" warning
+// and ships an unstripped .so instead of failing the build (this exact failure mode was found and
+// fixed in Task 9, at a cost of 4.8 MB of APK). Checking the resolved version strings is
+// preferred here over inspecting the packaged libraries for stripped-ness: that would mean
+// binding this check to AGP's internal intermediate output layout (or its Variant API artifacts),
+// which is exactly the kind of AGP-version-coupled detail likely to break on the next AGP bump,
+// whereas comparing already-resolved strings is a one-line, always-evaluated check that targets
+// the root cause -- the drifted string -- rather than a downstream symptom of it.
+//
+// The cmake version only exists in :libraries:humla, so there is no second module to compare it
+// against; it is checked against the property instead, which catches the same mistake.
 gradle.projectsEvaluated {
-    def appNdk = project(':app').android.ndkVersion
-    def humlaNdk = project(':libraries:humla').android.ndkVersion
-    if (appNdk != humlaNdk) {
+    def app = project(':app').android
+    def humla = project(':libraries:humla').android
+
+    ['ndkVersion', 'buildToolsVersion'].each { name ->
+        def expected = providers.gradleProperty(name).get()
+        [app: app, 'libraries:humla': humla].each { moduleName, extension ->
+            def resolved = extension."$name"
+            if (resolved != expected) {
+                throw new GradleException(
+                    "Toolchain version drift: :${moduleName} resolves ${name} '${resolved}' but " +
+                    "gradle.properties says '${expected}'. Both modules must read the property."
+                )
+            }
+        }
+    }
+
+    def expectedCmake = providers.gradleProperty('cmakeVersion').get()
+    def resolvedCmake = humla.externalNativeBuild.cmake.version
+    if (resolvedCmake != expectedCmake) {
         throw new GradleException(
-            "NDK version drift: :app resolves ndkVersion '${appNdk}' but :libraries:humla " +
-            "resolves '${humlaNdk}'. Both must read the same 'ndkVersion' from gradle.properties."
+            "Toolchain version drift: :libraries:humla resolves cmakeVersion '${resolvedCmake}' " +
+            "but gradle.properties says '${expectedCmake}'."
         )
     }
 }
