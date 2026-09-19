@@ -25,12 +25,12 @@
           includeSystemImages = false;
           includeSources = false;
           includeNDK = true;
-          ndkVersions = [ "27.0.11902837" ];
+          ndkVersions = [ "26.1.10909125" ];
           cmakeVersions = [ "3.22.1" ];
         };
 
         # Java/JDK 21
-        jdk = pkgs.temurin-jdk-21;
+        jdk = pkgs.jdk21;
 
         # Python and build tools
         python = pkgs.python3;
@@ -54,7 +54,7 @@
         shellHook = ''
           export ANDROID_HOME="${androidSdk.androidsdk}/libexec/android-sdk"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.0.11902837"
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
           export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
           export JAVA_HOME="${jdk}"
           export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
