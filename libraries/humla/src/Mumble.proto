@@ -1,5 +1,5 @@
 // This is src/Mumble.proto from the Mumble repository at 1.3.1-rc1 (branch 1.3.x).
-// Going to compile to java classes using protoc from libprotoc 3.11.4.
+// Java classes are generated at build time (protobuf-gradle-plugin, see libraries/humla/build.gradle).
 // NOTE: java compile options added at the bottom of this file.
 //
 // Copyright 2005-2019 The Mumble Developers. All rights reserved.
