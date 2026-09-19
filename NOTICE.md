@@ -13,10 +13,10 @@ following third-party components. Every entry is GPLv3-compatible.
 | MiniDNS | 1.0.5 | LGPL-2.1-or-later / Apache-2.0 / WTFPL (tri-licensed) | https://github.com/MiniDNS/minidns |
 | NetCipher | 2.1.0 | Apache-2.0 | https://github.com/guardianproject/NetCipher — upstream has had no release since 2.1.0 (2021) and no commits since 2020-12; kept because no maintained replacement provides `OrbotHelper`. Re-evaluate when Tor integration is next touched. |
 | protobuf-java | 3.11.4 | BSD-3-Clause | https://github.com/protocolbuffers/protobuf |
-| Spongycastle | 1.51.0.0 | MIT (Bouncy Castle license) | https://rtyley.github.io/spongycastle/ — replaced by BouncyCastle in this branch |
+| Spongycastle | 1.51.0.0 | MIT (Bouncy Castle license) | https://rtyley.github.io/spongycastle/ — currently in use; a later task migrates to BouncyCastle |
 | JetBrains annotations | 26.1.0 | Apache-2.0 | https://github.com/JetBrains/java-annotations |
 | Google Play Billing Library | 9.1.0 | Android SDK License (proprietary; `goog` flavor only, not shipped in the F-Droid `foss` build) | https://developer.android.com/google/play/billing |
-| opus | 1.1 | BSD-3-Clause | https://github.com/xiph/opus |
-| speex (codec + dsp, pre-split tree) | 1.2beta2+ | BSD-3-Clause | https://github.com/xiph/speex |
+| opus | 1.1-beta | BSD-3-Clause | https://github.com/xiph/opus |
+| speex (codec + dsp, pre-split tree) | 1.2rc1 | BSD-3-Clause | https://github.com/xiph/speex |
 | CELT | 0.7.1, 0.11.1 | BSD-3-Clause | https://gitlab.com/quite/celt |
-| JavaCPP | 0.7 | Apache-2.0 | https://github.com/bytedeco/javacpp — removed by the CMake migration |
+| JavaCPP | 0.7 | Apache-2.0 | https://github.com/bytedeco/javacpp — currently in use; a later task removes it as part of the CMake migration |
