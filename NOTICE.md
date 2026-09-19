@@ -19,4 +19,4 @@ following third-party components. Every entry is GPLv3-compatible.
 | opus | 1.1-beta | BSD-3-Clause | https://github.com/xiph/opus |
 | speex (codec + dsp, pre-split tree) | 1.2rc1 | BSD-3-Clause | https://github.com/xiph/speex |
 | CELT | 0.7.1, 0.11.1 | BSD-3-Clause | https://gitlab.com/quite/celt |
-| JavaCPP | 0.7 | Apache-2.0 | https://github.com/bytedeco/javacpp — currently in use; a later task removes it as part of the CMake migration |
+| JavaCPP | 0.7 | GPLv2 with Classpath exception | https://github.com/bytedeco/javacpp — currently in use; a later task removes it as part of the CMake migration. The Classpath Exception is what makes this GPLv3-compatible (it permits linking with independently-licensed modules); plain GPLv2 would not be. |
