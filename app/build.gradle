@@ -38,10 +38,11 @@ java {
 android {
     namespace = 'se.lublin.mumla'
     compileSdk = 36
-    // Must match libraries/humla's ndkVersion. Without it AGP looks for its own default NDK,
-    // which the dev shell does not install, and stripFoss*DebugSymbols silently packages the
-    // humla_*.so files unstripped.
-    ndkVersion = '26.1.10909125'
+    buildToolsVersion = '36.1.0'
+    // Single-sourced from gradle.properties; must match libraries/humla's ndkVersion, which reads
+    // the same property. Without it AGP looks for its own default NDK, which the dev shell does
+    // not install, and stripFoss*DebugSymbols silently packages the humla_*.so files unstripped.
+    ndkVersion = providers.gradleProperty('ndkVersion').get()
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21

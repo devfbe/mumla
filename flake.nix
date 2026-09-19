@@ -17,16 +17,22 @@
           };
         };
 
+        # Single source for the NDK version pin within this file: Nix cannot read
+        # gradle.properties, so this literal and the one in gradle.properties (read by both
+        # libraries/humla/build.gradle and app/build.gradle) must be kept in sync by hand. Every
+        # other flake.nix reference to the NDK version goes through this binding.
+        ndkVersion = "29.0.14206865";
+
         # Android SDK configuration
         androidSdk = pkgs.androidenv.composeAndroidPackages {
-          buildToolsVersions = [ "36.0.0" "35.0.0" ];
-          platformVersions = [ "36" "35" ];
+          buildToolsVersions = [ "36.1.0" ];
+          platformVersions = [ "36" ];
           includeEmulator = false;
           includeSystemImages = false;
           includeSources = false;
           includeNDK = true;
-          ndkVersions = [ "26.1.10909125" ];
-          cmakeVersions = [ "3.22.1" ];
+          ndkVersions = [ ndkVersion ];
+          cmakeVersions = [ "4.1.2" ];
         };
 
         # Java/JDK 21
@@ -54,13 +60,13 @@
         shellHook = ''
           export ANDROID_HOME="${androidSdk.androidsdk}/libexec/android-sdk"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/${ndkVersion}"
           export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
           export JAVA_HOME="${jdk}"
           export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
 
           # AAPT2 override for NixOS compatibility
-          export GRADLE_OPTS="-Dorg.gradle.project.android.aapt2FromMavenOverride=$ANDROID_HOME/build-tools/36.0.0/aapt2"
+          export GRADLE_OPTS="-Dorg.gradle.project.android.aapt2FromMavenOverride=$ANDROID_HOME/build-tools/36.1.0/aapt2"
 
           echo "Android development environment loaded"
           echo "  ANDROID_HOME: $ANDROID_HOME"

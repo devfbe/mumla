@@ -35,7 +35,10 @@ android {
     namespace = 'se.lublin.humla'
 
     compileSdk = 36
-    ndkVersion = '26.1.10909125'
+    buildToolsVersion = '36.1.0'
+    // Single-sourced from gradle.properties; see the comment there for why drift here is
+    // dangerous (silently unstripped native libraries, not a build failure).
+    ndkVersion = providers.gradleProperty('ndkVersion').get()
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
@@ -59,7 +62,7 @@ android {
     externalNativeBuild {
         cmake {
             path = file('src/main/cpp/CMakeLists.txt')
-            version = '3.22.1'
+            version = '4.1.2'
         }
     }
 
