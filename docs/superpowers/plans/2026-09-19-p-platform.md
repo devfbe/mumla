@@ -86,8 +86,8 @@ Verification of the code this plan was written against (all paths exist on branc
 | `app/src/main/java/se/lublin/mumla/channel/ChannelListFragment.java:144-150, 202-212, 233-251, 305-343` | Bluetooth SCO receiver, register/unregister, `onPrepareOptionsMenu` checked state, `menu_bluetooth` toggle |
 | `app/src/main/java/se/lublin/mumla/channel/ChannelFragment.java:211, 377` | `new ChannelListFragment()` — the fragment is constructed directly, so the Kotlin class keeps name and package |
 | `app/src/main/java/se/lublin/mumla/channel/ChatTargetProvider.java:24-39` | `ChatTargetProvider` is an interface; its nested `class ChatTarget` (constructors `(IChannel)`, `(IUser)`) is therefore implicitly static |
-| `app/src/main/java/se/lublin/mumla/preference/GeneralSettingsFragment.java:12-21` | `onCreatePreferences` (settings screen that hosts the new Bluetooth checkbox); `MumlaPreferenceFragment.java:14-66` base class |
-| `app/src/main/java/se/lublin/mumla/preference/SettingsActivity.java:12-62` | hosts preference fragments in `R.id.settings_container`; used to host `GeneralSettingsFragment` under Robolectric |
+| `app/src/main/java/se/lublin/mumla/preference/GeneralSettingsFragment.java:12-21` | `onCreatePreferences` (settings screen that hosts the new Bluetooth checkbox), `USE_TOR_KEY`; `MumlaPreferenceFragment.java:14-67` base class |
+| `app/src/main/java/se/lublin/mumla/preference/SettingsActivity.java:12-62` | hosts preference fragments in `R.id.settings_container` (`:40`, `:54`) and instantiates them by class name (`:48-49`); used to host `GeneralSettingsFragment` under Robolectric |
 | `app/src/main/res/xml/preference_headers.xml:6` | `app:fragment="se.lublin.mumla.preference.GeneralSettingsFragment"` — class name must survive the conversion |
 | `app/src/main/java/se/lublin/mumla/service/MumlaService.java:119-160, 291-319, 326-350, 352-389, 414-496, 606-634` | observer, `onCreate`, `onDestroy`, `onConnectionSynchronized`, `onSharedPreferenceChanged`, `onTalkKeyDown/Up` |
 | `app/src/main/java/se/lublin/mumla/service/IMumlaService.java:10-30` | `onTalkKeyDown()`, `onTalkKeyUp()` |
@@ -1394,7 +1394,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** The ListPreference entry values must be exactly the enum's prefValues, in the same order. */
+/**
+ * The ListPreference entry values must be exactly the prefValues of [MediaButtonAction], in the
+ * same order; they are spelled out literally here so that the assertion cannot mirror the enum.
+ */
 @RunWith(RobolectricTestRunner::class)
 class MediaButtonActionResourcesTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
@@ -1404,7 +1407,6 @@ class MediaButtonActionResourcesTest {
         val values = context.resources.getStringArray(R.array.mediaButtonActionValues).toList()
 
         assertThat(values).containsExactly("none", "auto", "mute").inOrder()
-        assertThat(values).isEqualTo(MediaButtonAction.entries.map { it.prefValue })
     }
 
     @Test
@@ -1499,7 +1501,7 @@ git commit -m "feat: add headset button action preference"
 
 **Interfaces:**
 - Consumes (unchanged Java neighbours): `HumlaServiceFragment` (`getService()`, `onServiceBound`, `getServiceObserver`), `ChannelListAdapter(Context, IHumlaService, MumlaDatabase, FragmentManager, boolean, boolean)` with `setOnChannelClickListener`, `setOnUserClickListener`, `setService`, `updateChannels`, `updateUserStates(IUser, RecyclerView)`, `getChannelPosition`, `getUserPosition`, `setShowChannelUserCount`; `ChatTargetProvider`, `ChatTargetProvider.ChatTarget`, `ChatTargetActionModeCallback`; `ChannelSearchProvider.INTENT_DATA_CHANNEL/USER`; `DatabaseProvider`; `Settings`.
-- Produces: the same public surface `ChannelListFragment` (`scrollToChannel(Int)`, `scrollToUser(Int)`), instantiated reflectively by `ChannelFragment`'s pager adapter — the class name and package stay the same.
+- Produces: the same public surface `ChannelListFragment` (`scrollToChannel(Int)`, `scrollToUser(Int)`), constructed directly by `ChannelFragment` (`new ChannelListFragment()`, `ChannelFragment.java:211, 377`), so the class name and package stay the same.
 
 This is a behavior-preserving conversion: the Bluetooth menu still calls `session.enableBluetoothSco()/disableBluetoothSco()` and reads `usingBluetoothSco()`; Task 7 changes that. Two API-floor clean-ups are made while touching the file, as the global constraints require: the `Build.VERSION.SDK_INT >= UPSIDE_DOWN_CAKE` branch for `registerReceiver` is replaced by `ContextCompat.registerReceiver(..., RECEIVER_NOT_EXPORTED)` (single code path, also silences lint `UnspecifiedRegisterReceiverFlag`), and the unused imports go.
 
@@ -1858,7 +1860,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
             // Dismiss action mode if double pressed. FIXME: use list view selection instead?
             actionMode?.finish()
         } else {
-            val cb = object : ChatTargetActionModeCallback(targetProvider, targetProvider.ChatTarget(channel)) {
+            val cb = object : ChatTargetActionModeCallback(targetProvider, ChatTargetProvider.ChatTarget(channel)) {
                 override fun onDestroyActionMode(actionMode: ActionMode) {
                     super.onDestroyActionMode(actionMode)
                     this@ChannelListFragment.actionMode = null
@@ -1874,7 +1876,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
             // Dismiss action mode if double pressed. FIXME: use list view selection instead?
             actionMode?.finish()
         } else {
-            val cb = object : ChatTargetActionModeCallback(targetProvider, targetProvider.ChatTarget(user)) {
+            val cb = object : ChatTargetActionModeCallback(targetProvider, ChatTargetProvider.ChatTarget(user)) {
                 override fun onDestroyActionMode(actionMode: ActionMode) {
                     super.onDestroyActionMode(actionMode)
                     this@ChannelListFragment.actionMode = null
@@ -1897,7 +1899,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 ```
 
 Notes for the converter:
-- `ChatTargetProvider.ChatTarget` is a non-static inner class of the `ChatTargetProvider` interface (`ChatTargetProvider.java:29-47`); in Kotlin it is constructed as `targetProvider.ChatTarget(channel)`.
+- `ChatTargetProvider` is an **interface** (`ChatTargetProvider.java:24`), so its nested `public class ChatTarget` (`:29-47`) is implicitly `static` — it has no enclosing instance. In Kotlin it is therefore constructed as `ChatTargetProvider.ChatTarget(channel)`, **not** `targetProvider.ChatTarget(channel)` (the latter does not compile).
 - `ChatTargetActionModeCallback` is a Java class with the two-argument constructor `(ChatTargetProvider, ChatTargetProvider.ChatTarget)` and an overridable `onDestroyActionMode(ActionMode)`.
 - `ChannelListAdapter`'s constructor takes `(Context, IHumlaService, MumlaDatabase, FragmentManager, boolean, boolean)` (`ChannelListAdapter.java:84`).
 - `service` inside the fragment is `HumlaServiceFragment.getService(): IMumlaService` seen as a Kotlin property.
@@ -1929,17 +1931,23 @@ git commit -m "refactor: convert ChannelListFragment to kotlin"
 **Files:**
 - Create: `app/src/main/java/se/lublin/mumla/channel/BluetoothScoToggle.kt`
 - Modify: `app/src/main/java/se/lublin/mumla/channel/ChannelListFragment.kt` (from Task 6: menu toggle, checked state, permission launcher, drop the SCO broadcast receiver)
+- Delete: `app/src/main/java/se/lublin/mumla/preference/GeneralSettingsFragment.java`
+- Create: `app/src/main/java/se/lublin/mumla/preference/GeneralSettingsFragment.kt` (converted, then the `pref_bluetooth_sco` permission gate)
 - Modify: `app/src/main/res/xml/settings_general.xml` (checkbox in `controls_settings`), `app/src/main/res/values/preference.xml`, `app/src/main/res/values/strings.xml`
 - Modify: `app/src/main/java/se/lublin/mumla/service/MumlaService.java:352-389` (`onConnectionSynchronized`), `:414-496` (`onSharedPreferenceChanged`) — stream A file, two hooks (see "Cross-stream touches")
 - Test: `app/src/test/java/se/lublin/mumla/channel/BluetoothScoToggleTest.kt`
+- Test: `app/src/test/java/se/lublin/mumla/preference/GeneralSettingsBluetoothTest.kt`
 
 **Interfaces:**
-- Consumes: `Settings.isBluetoothScoEnabled()/setBluetoothScoEnabled()`, `Settings.PREF_BLUETOOTH_SCO` (Task 1); `HumlaService.enableBluetoothSco()/disableBluetoothSco()` (public, `HumlaService.java:914-929`); `HumlaService.isSynchronized()` (`HumlaService.java:340`).
+- Consumes: `Settings.isBluetoothScoEnabled()/setBluetoothScoEnabled()`, `Settings.PREF_BLUETOOTH_SCO` (Task 1); `HumlaService.enableBluetoothSco()/disableBluetoothSco()` (public, `HumlaService.java:914-929`); `HumlaService.isSynchronized()` (`HumlaService.java:340`); `MumlaPreferenceFragment` (`MumlaPreferenceFragment.java:14-67`), `SettingsActivity` with `R.id.settings_container` (`SettingsActivity.java:12-62`).
 - Produces:
-  - `class BluetoothScoToggle(context: Context, settings: Settings)` with `sealed interface Result { Enabled; Disabled; PermissionNeeded }`, `fun toggle(): Result`, `fun onPermissionResult(granted: Boolean): Boolean`, `val isEnabled: Boolean`, `companion fun hasPermission(context: Context): Boolean`.
-  - `MumlaService` applies the preference: on synchronization and on every change of `pref_bluetooth_sco` while synchronized.
+  - `class BluetoothScoToggle(context: Context, settings: Settings)` with `sealed interface Result { Enabled; Disabled; PermissionNeeded }`, `fun request(enabled: Boolean): Result`, `fun toggle(): Result`, `fun onPermissionResult(granted: Boolean): Boolean`, `val isEnabled: Boolean`, `companion fun hasPermission(context: Context): Boolean`, `companion fun shouldRouteToBluetooth(context: Context, settings: Settings): Boolean`.
+  - `GeneralSettingsFragment` in Kotlin, same class name and package (`preference_headers.xml:6` names it by string), with a `Preference.OnPreferenceChangeListener` on `pref_bluetooth_sco`.
+  - `MumlaService` applies the preference through `BluetoothScoToggle.shouldRouteToBluetooth(this, mSettings)`: on synchronization and on every change of `pref_bluetooth_sco` while synchronized.
 
-Design: the preference is the single source of truth. The action-bar item and the settings checkbox both write `pref_bluetooth_sco`; `MumlaService` observes the preference and calls `enableBluetoothSco()`/`disableBluetoothSco()` (which in stream A's design set `bluetoothScoWanted`; today they start/stop SCO directly, so the plan is green both before and after A lands). Turning the toggle on without `BLUETOOTH_CONNECT` first requests the permission and only persists `true` once granted, so SCO is never attempted without the permission. On connect the service also checks the permission so a preference set on a device that later revoked it does not try to route audio.
+Design: the preference is the single source of truth. The action-bar item and the settings checkbox both go through `BluetoothScoToggle.request(...)` before `pref_bluetooth_sco` is written; `MumlaService` observes the preference and calls `enableBluetoothSco()`/`disableBluetoothSco()` (which in stream A's design set `bluetoothScoWanted`; today they start/stop SCO directly, so the plan is green both before and after A lands). Turning it on without `BLUETOOTH_CONNECT` first requests the permission and only persists `true` once granted — on **both** paths, the menu item and the settings checkbox — so spec P3 ("the permission is requested before SCO is used") holds wherever the user flips it, and the user never ends up with a checked box that silently does nothing. On connect the service re-checks through `shouldRouteToBluetooth`, so a preference set on a device that later revoked the permission does not try to route audio.
+
+Why `shouldRouteToBluetooth` is a companion function tested on its own rather than through a service-level Robolectric test: hook S4 lives in `MumlaService.onConnectionSynchronized`, which starts by calling `super.onConnectionSynchronized()` (`HumlaService.java:367-398`) and that returns early unless `mConnection.isConnected()` and `mModelHandler != null`, then acquires the wake lock and builds an `AudioHandler` over the native audio stack. Getting there under `Robolectric.buildService(MumlaService::class.java)` would first mean surviving `HumlaService.onCreate` (wake lock, `BluetoothScoReceiver` registration, `AndroidUsingLinkProperties.setup`) and `MumlaService.onCreate` (`MumlaOverlay`, `MumlaHotCorner`, `TextToSpeech`), and then faking a synchronized `HumlaConnection` — there is no JVM seam that reaches the hook. So the decision is extracted into a pure function that S4 and S5 both call, and that function is what `BluetoothScoToggleTest` pins down; what is left in the service is one `if` per hook with no logic of its own.
 
 - [ ] **Step 1: Write the failing toggle test**
 
@@ -2032,6 +2040,55 @@ class BluetoothScoToggleTest {
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         assertThat(BluetoothScoToggle.hasPermission(app)).isTrue()
     }
+
+    @Test
+    fun requestingOnWithoutPermissionDoesNotPersistEither() {
+        shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+
+        val result = toggle.request(enabled = true)
+
+        assertThat(result).isEqualTo(BluetoothScoToggle.Result.PermissionNeeded)
+        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+    }
+
+    @Test
+    fun requestingOffAlwaysPersistsFalse() {
+        settings.setBluetoothScoEnabled(true)
+        shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+
+        val result = toggle.request(enabled = false)
+
+        assertThat(result).isEqualTo(BluetoothScoToggle.Result.Disabled)
+        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+    }
+
+    // shouldRouteToBluetooth is the decision the MumlaService hooks S4/S5 make on every
+    // (re)connection; HumlaService.onConnectionDisconnected stops SCO on every disconnect
+    // (HumlaService.java:433), including the ones auto-reconnect recovers from, so this is
+    // the "Bluetooth survives a reconnect" behavior of spec §6.
+
+    @Test
+    fun routesToBluetoothWhenEnabledAndPermitted() {
+        settings.setBluetoothScoEnabled(true)
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+
+        assertThat(BluetoothScoToggle.shouldRouteToBluetooth(app, settings)).isTrue()
+    }
+
+    @Test
+    fun doesNotRouteToBluetoothWhenThePermissionWasRevoked() {
+        settings.setBluetoothScoEnabled(true)
+        shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+
+        assertThat(BluetoothScoToggle.shouldRouteToBluetooth(app, settings)).isFalse()
+    }
+
+    @Test
+    fun doesNotRouteToBluetoothWhenThePreferenceIsOff() {
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+
+        assertThat(BluetoothScoToggle.shouldRouteToBluetooth(app, settings)).isFalse()
+    }
 }
 ```
 
@@ -2054,9 +2111,10 @@ import androidx.core.content.ContextCompat
 import se.lublin.mumla.Settings
 
 /**
- * Decision logic behind the "Bluetooth" action-bar item (spec P2/P3): the item writes the
- * persistent preference [Settings.PREF_BLUETOOTH_SCO]; the service applies it. Turning it on
- * requires BLUETOOTH_CONNECT, which the caller requests when [Result.PermissionNeeded] comes back.
+ * Decision logic behind the "Bluetooth" action-bar item and the "Bluetooth headset" settings
+ * checkbox (spec P2/P3): both write the persistent preference [Settings.PREF_BLUETOOTH_SCO];
+ * the service applies it. Turning it on requires BLUETOOTH_CONNECT, which the caller requests
+ * when [Result.PermissionNeeded] comes back.
  */
 class BluetoothScoToggle(
     private val context: Context,
@@ -2071,8 +2129,12 @@ class BluetoothScoToggle(
     val isEnabled: Boolean
         get() = settings.isBluetoothScoEnabled()
 
-    fun toggle(): Result {
-        if (settings.isBluetoothScoEnabled()) {
+    /**
+     * Move the preference to [enabled]. Turning it off always succeeds; turning it on persists
+     * nothing unless BLUETOOTH_CONNECT is already granted.
+     */
+    fun request(enabled: Boolean): Result {
+        if (!enabled) {
             settings.setBluetoothScoEnabled(false)
             return Result.Disabled
         }
@@ -2082,6 +2144,8 @@ class BluetoothScoToggle(
         settings.setBluetoothScoEnabled(true)
         return Result.Enabled
     }
+
+    fun toggle(): Result = request(!settings.isBluetoothScoEnabled())
 
     /** @return the new enabled state after the permission dialog. */
     fun onPermissionResult(granted: Boolean): Boolean {
@@ -2096,6 +2160,15 @@ class BluetoothScoToggle(
         fun hasPermission(context: Context): Boolean =
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
                 PackageManager.PERMISSION_GRANTED
+
+        /**
+         * Whether the service should route voice through a Bluetooth headset right now.
+         * Called by MumlaService on synchronization (hook S4) and whenever the preference
+         * changes while synchronized (hook S5).
+         */
+        @JvmStatic
+        fun shouldRouteToBluetooth(context: Context, settings: Settings): Boolean =
+            settings.isBluetoothScoEnabled() && hasPermission(context)
     }
 }
 ```
@@ -2103,9 +2176,9 @@ class BluetoothScoToggle(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.channel.BluetoothScoToggleTest'`
-Expected: `BUILD SUCCESSFUL`, 6 tests passed.
+Expected: `BUILD SUCCESSFUL`, 11 tests passed.
 
-- [ ] **Step 5: Wire the fragment to the toggle**
+- [ ] **Step 5: Wire the channel list fragment to the toggle**
 
 Edit `app/src/main/java/se/lublin/mumla/channel/ChannelListFragment.kt` (Task 6 version):
 
@@ -2203,9 +2276,209 @@ Append to `app/src/main/res/values/strings.xml` after `grant_perm_draw_over_apps
     <string name="grant_perm_bluetooth">Please grant the Nearby devices (Bluetooth) permission to use a Bluetooth headset.</string>
 ```
 
-Turning the checkbox on from the settings screen does not go through `BluetoothScoToggle`, so the service-side permission check (Step 7) is what protects that path; the summary tells the user which permission is needed.
+The checkbox is wired to `BluetoothScoToggle` in Steps 7–11 so that ticking it also asks for `BLUETOOTH_CONNECT`. Until then a tick in the settings screen persists `true` without ever asking, and the service then silently refuses to route audio — that gap is what the test in Step 8 pins down.
 
-- [ ] **Step 7: Apply the preference in MumlaService (stream A file, two hooks)**
+- [ ] **Step 7: Convert GeneralSettingsFragment to Kotlin**
+
+`GeneralSettingsFragment` is the Java file that hosts the new checkbox and is about to gain the permission gate, so the global constraint applies: convert it first, in its own commit, behavior-preserving. `preference_headers.xml:6` names the class by string (`app:fragment="se.lublin.mumla.preference.GeneralSettingsFragment"`) and `SettingsActivity` instantiates it via `Class.forName(...).newInstance()` (`SettingsActivity.java:48-49`), so the class name, package and no-argument constructor must survive.
+
+Create `app/src/main/java/se/lublin/mumla/preference/GeneralSettingsFragment.kt`:
+
+```kotlin
+package se.lublin.mumla.preference
+
+import android.os.Bundle
+import androidx.preference.Preference
+import info.guardianproject.netcipher.proxy.OrbotHelper
+import se.lublin.mumla.R
+
+class GeneralSettingsFragment : MumlaPreferenceFragment() {
+
+    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        setPreferencesFromResource(R.xml.settings_general, rootKey)
+
+        val useOrbotPreference: Preference = requireNotNull(preferenceScreen.findPreference(USE_TOR_KEY))
+        useOrbotPreference.isEnabled = OrbotHelper.isOrbotInstalled(requireContext())
+    }
+
+    private companion object {
+        const val USE_TOR_KEY = "useTor"
+    }
+}
+```
+
+```bash
+cd /home/becker/git/mumla && git rm -q app/src/main/java/se/lublin/mumla/preference/GeneralSettingsFragment.java
+```
+
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
+Expected: `BUILD SUCCESSFUL`. If the compiler reports a nullability mismatch on `onCreatePreferences`, match the Java signature of `PreferenceFragmentCompat` at the AndroidX version F4 set — do not change the base class.
+
+```bash
+cd /home/becker/git/mumla
+git add app/src/main/java/se/lublin/mumla/preference/GeneralSettingsFragment.kt
+git commit -m "refactor: convert GeneralSettingsFragment to kotlin"
+```
+
+- [ ] **Step 8: Write the failing settings-screen test**
+
+Spec P3 requires `BLUETOOTH_CONNECT` to be requested before SCO is used. The action-bar path does that since Step 5; this test pins the settings-screen path, where ticking the box would otherwise persist `true` without ever asking, leaving a checked toggle that the service silently refuses to act on.
+
+Create `app/src/test/java/se/lublin/mumla/preference/GeneralSettingsBluetoothTest.kt`:
+
+```kotlin
+package se.lublin.mumla.preference
+
+import android.Manifest
+import android.app.Application
+import androidx.preference.CheckBoxPreference
+import androidx.preference.PreferenceManager
+import androidx.test.core.app.ApplicationProvider
+import com.google.common.truth.Truth.assertThat
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import se.lublin.mumla.R
+import se.lublin.mumla.Settings
+
+@RunWith(RobolectricTestRunner::class)
+class GeneralSettingsBluetoothTest {
+    private lateinit var activity: SettingsActivity
+    private lateinit var fragment: GeneralSettingsFragment
+    private lateinit var settings: Settings
+
+    @Before
+    fun setUp() {
+        val app: Application = ApplicationProvider.getApplicationContext()
+        PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
+        settings = Settings.getInstance(app)
+
+        activity = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
+        fragment = GeneralSettingsFragment()
+        activity.supportFragmentManager.beginTransaction()
+            .replace(R.id.settings_container, fragment)
+            .commitNow()
+    }
+
+    private fun bluetoothCheckBox(): CheckBoxPreference =
+        requireNotNull(fragment.findPreference(Settings.PREF_BLUETOOTH_SCO))
+
+    @Test
+    fun tickingTheBoxWithoutPermissionAsksForItAndLeavesTheBoxUnchecked() {
+        shadowOf(activity).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        val checkBox = bluetoothCheckBox()
+
+        val accepted = checkBox.callChangeListener(true)
+
+        assertThat(accepted).isFalse()
+        assertThat(checkBox.isChecked).isFalse()
+        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(shadowOf(activity).lastRequestedPermission.requestedPermissions.toList())
+            .contains(Manifest.permission.BLUETOOTH_CONNECT)
+    }
+
+    @Test
+    fun tickingTheBoxWithPermissionPersistsIt() {
+        shadowOf(activity).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        val checkBox = bluetoothCheckBox()
+
+        val accepted = checkBox.callChangeListener(true)
+
+        assertThat(accepted).isTrue()
+        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+    }
+
+    @Test
+    fun untickingTheBoxNeverAsksForThePermission() {
+        settings.setBluetoothScoEnabled(true)
+        shadowOf(activity).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        val checkBox = bluetoothCheckBox()
+
+        val accepted = checkBox.callChangeListener(false)
+
+        assertThat(accepted).isTrue()
+        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+    }
+}
+```
+
+- [ ] **Step 9: Run the test to verify it fails**
+
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.preference.GeneralSettingsBluetoothTest'`
+Expected: 3 tests, all FAIL. `Preference.callChangeListener(value)` returns `true` when no listener is set and never writes anything itself (the write is `CheckBoxPreference.setChecked`), so on the un-wired fragment:
+
+| Test | Fails on |
+|---|---|
+| `tickingTheBoxWithoutPermissionAsksForItAndLeavesTheBoxUnchecked` | first assertion: `accepted` is `true`, so nothing stops the tick and no permission is requested |
+| `tickingTheBoxWithPermissionPersistsIt` | second assertion: `isBluetoothScoEnabled()` is still `false` — no listener wrote the preference |
+| `untickingTheBoxNeverAsksForThePermission` | second assertion: `isBluetoothScoEnabled()` is still `true` for the same reason |
+
+Two fallbacks, in case the host environment differs from what this plan assumes:
+
+- If `Robolectric.buildActivity(SettingsActivity::class.java).setup()` cannot host the fragment on the Robolectric version F3 pinned (missing theme, `R.id.settings_container` not inflated), use `androidx.fragment.app.testing.FragmentScenario.launchInContainer(GeneralSettingsFragment::class.java, themeResId = R.style.Theme_Mumla)` and reach the activity through `scenario.onFragment { it.requireActivity() }`; the assertions stay the same.
+- The `lastRequestedPermission` assertion relies on `ActivityResultRegistry` routing `ActivityResultContracts.RequestPermission` through `ActivityCompat.requestPermissions` on the host activity, which `ShadowActivity` records. If that assertion alone fails (the other three hold), drop just that line: the first three assertions — listener returns `false`, box unchecked, preference not persisted — are the behavioral contract, and the launch is then covered by inspection.
+
+Do not drop the test as a whole — the settings path is the one spec P3 currently leaves open.
+
+- [ ] **Step 10: Wire the checkbox to the toggle**
+
+In `app/src/main/java/se/lublin/mumla/preference/GeneralSettingsFragment.kt` add the imports:
+
+```kotlin
+import android.Manifest
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.preference.CheckBoxPreference
+import se.lublin.mumla.Settings
+import se.lublin.mumla.channel.BluetoothScoToggle
+```
+
+Add the properties and the listener to the class body:
+
+```kotlin
+    private lateinit var bluetoothToggle: BluetoothScoToggle
+
+    private val bluetoothPermissionRequester: ActivityResultLauncher<String> =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val enabled = bluetoothToggle.onPermissionResult(granted)
+            findPreference<CheckBoxPreference>(Settings.PREF_BLUETOOTH_SCO)?.isChecked = enabled
+            if (!enabled) {
+                Toast.makeText(requireContext(), R.string.grant_perm_bluetooth, Toast.LENGTH_LONG).show()
+            }
+        }
+```
+
+and at the end of `onCreatePreferences`, after the Orbot line:
+
+```kotlin
+        bluetoothToggle = BluetoothScoToggle(
+            requireContext().applicationContext, Settings.getInstance(requireContext()),
+        )
+        val bluetoothPreference: CheckBoxPreference =
+            requireNotNull(preferenceScreen.findPreference(Settings.PREF_BLUETOOTH_SCO))
+        bluetoothPreference.setOnPreferenceChangeListener { _, newValue ->
+            when (bluetoothToggle.request(newValue as Boolean)) {
+                BluetoothScoToggle.Result.Enabled, BluetoothScoToggle.Result.Disabled -> true
+                BluetoothScoToggle.Result.PermissionNeeded -> {
+                    bluetoothPermissionRequester.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    false // do not persist or tick the box until the permission is granted
+                }
+            }
+        }
+```
+
+`BluetoothScoToggle.request(...)` writes the preference itself, and returning `true` from the listener lets the preference framework write the same value again — harmless, and it keeps the checkbox's own state in sync.
+
+- [ ] **Step 11: Run the test to verify it passes**
+
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.preference.GeneralSettingsBluetoothTest'`
+Expected: `BUILD SUCCESSFUL`, 3 tests passed.
+
+- [ ] **Step 12: Apply the preference in MumlaService (stream A file, two hooks)**
 
 In `app/src/main/java/se/lublin/mumla/service/MumlaService.java`:
 
@@ -2218,8 +2491,9 @@ import se.lublin.mumla.channel.BluetoothScoToggle;
 In `onConnectionSynchronized()` after the proximity-sensor block (line 388, before the closing brace):
 
 ```java
-        // Stream P: Bluetooth headset is a persistent preference (spec P2).
-        if (mSettings.isBluetoothScoEnabled() && BluetoothScoToggle.hasPermission(this)) {
+        // Stream P: Bluetooth headset is a persistent preference (spec P2). HumlaService
+        // stops SCO on every disconnect, so this is also what restores it after a reconnect.
+        if (BluetoothScoToggle.shouldRouteToBluetooth(this, mSettings)) {
             enableBluetoothSco();
         }
 ```
@@ -2229,7 +2503,7 @@ In `onSharedPreferenceChanged()` add a case to the `switch (key)` before `case S
 ```java
             case Settings.PREF_BLUETOOTH_SCO:
                 if (isSynchronized()) {
-                    if (mSettings.isBluetoothScoEnabled() && BluetoothScoToggle.hasPermission(this)) {
+                    if (BluetoothScoToggle.shouldRouteToBluetooth(this, mSettings)) {
                         enableBluetoothSco();
                     } else {
                         disableBluetoothSco();
@@ -2238,14 +2512,14 @@ In `onSharedPreferenceChanged()` add a case to the `switch (key)` before `case S
                 break;
 ```
 
-- [ ] **Step 8: Build, run all tests, commit**
+- [ ] **Step 13: Build, run all tests, commit**
 
 Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
 Expected: `BUILD SUCCESSFUL`.
 
 ```bash
 cd /home/becker/git/mumla
-git add app/src/main/java/se/lublin/mumla/channel/BluetoothScoToggle.kt app/src/main/java/se/lublin/mumla/channel/ChannelListFragment.kt app/src/main/java/se/lublin/mumla/service/MumlaService.java app/src/main/res/xml/settings_general.xml app/src/main/res/values/preference.xml app/src/main/res/values/strings.xml app/src/test/java/se/lublin/mumla/channel/BluetoothScoToggleTest.kt
+git add app/src/main/java/se/lublin/mumla/channel/BluetoothScoToggle.kt app/src/main/java/se/lublin/mumla/channel/ChannelListFragment.kt app/src/main/java/se/lublin/mumla/preference/GeneralSettingsFragment.kt app/src/main/java/se/lublin/mumla/service/MumlaService.java app/src/main/res/xml/settings_general.xml app/src/main/res/values/preference.xml app/src/main/res/values/strings.xml app/src/test/java/se/lublin/mumla/channel/BluetoothScoToggleTest.kt app/src/test/java/se/lublin/mumla/preference/GeneralSettingsBluetoothTest.kt
 git commit -m "feat: persist bluetooth headset setting and request bluetooth permission"
 ```
 
@@ -3319,10 +3593,11 @@ In `onCreate`, right after `settings = Settings.getInstance(this)`:
         })
 ```
 
-Replace the beginning of `connectToServerWithPerm()` (everything from `if (ContextCompat.checkSelfPermission(...RECORD_AUDIO)` through the end of the `POST_NOTIFICATIONS` block) with:
+In `connectToServerWithPerm()` replace exactly the permission preamble: everything from the line `if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=` up to, **but not including**, the line `val server = serverPendingPerm`. That preamble is the `RECORD_AUDIO` `if` block plus the `Build.VERSION.SDK_INT >= TIRAMISU` / `POST_NOTIFICATIONS` block of the Task 8 file. Everything from `val server = serverPendingPerm` to the end of the method (the already-connected dialog, the Tor pre-check and `ServerConnectTask(this, db).execute(server)`) stays exactly as Task 8 wrote it.
+
+The replacement preamble is:
 
 ```kotlin
-    fun connectToServerWithPerm() {
         when (val step = permissionFlow.nextStep()) {
             is ConnectPermissionFlow.Step.RequestRecordAudio -> {
                 if (step.showRationale) {
@@ -3338,10 +3613,9 @@ Replace the beginning of `connectToServerWithPerm()` (everything from `if (Conte
             }
             ConnectPermissionFlow.Step.Proceed -> Unit
         }
-
-        val server = serverPendingPerm
-        // ... the rest of the method is unchanged from Task 8 ...
 ```
+
+so that the method reads `fun connectToServerWithPerm() {` → the `when` above → `val server = serverPendingPerm` → unchanged remainder.
 
 Add the rationale dialog next to `showFirstRunGuide()`:
 
@@ -3591,8 +3865,8 @@ git commit -m "feat: offer battery optimization exemption after first connection
 | S1 | 4 | field block after `mReconnectNotification` (`:77`) | 2 | `private MumlaMediaSession mMediaSession;` |
 | S2 | 4 | `onCreate()` after `mTalkReceiver = new TalkBroadcastReceiver(this);` (`:318`) | 2 | `mMediaSession = new MumlaMediaSession(this, new HumlaMediaKeyTarget(this), mSettings); mMediaSession.attach(this);` |
 | S3 | 4 | `onDestroy()` before `unregisterObserver(mObserver);` (`:345`) | 1 | `mMediaSession.detach(this);` |
-| S4 | 7 | `onConnectionSynchronized()` end (`:388`) | 4 | apply `pref_bluetooth_sco` (+ permission check) via `enableBluetoothSco()` |
-| S5 | 7 | `onSharedPreferenceChanged()` new `case Settings.PREF_BLUETOOTH_SCO` (`:476`) | 9 | enable/disable SCO while synchronized |
+| S4 | 7 | `onConnectionSynchronized()` end (`:388`) | 5 | `if (BluetoothScoToggle.shouldRouteToBluetooth(this, mSettings)) enableBluetoothSco();` — also the reconnect fix, since `HumlaService.onConnectionDisconnected` stops SCO on every disconnect (`HumlaService.java:433`) |
+| S5 | 7 | `onSharedPreferenceChanged()` new `case Settings.PREF_BLUETOOTH_SCO` (`:476`) | 9 | enable/disable SCO while synchronized, same decision function |
 | — | 7 | imports | 1 | `import se.lublin.mumla.channel.BluetoothScoToggle;` |
 
 `MumlaActivity` is owned by stream P; the touch points inside it, for reviewers:
@@ -3610,7 +3884,7 @@ git commit -m "feat: offer battery optimization exemption after first connection
 |---|---|---|---|
 | `gradle/libs.versions.toml` (F) | 4 | +2 (`androidx-media = "1.8.0"` version + library alias) | `MediaSessionCompat` lives in `androidx.media:media`; the spec mandates `MediaSessionCompat` (P1) |
 | `app/build.gradle` (F) | 4 | +1 (`implementation libs.androidx.media`) | same |
-| `app/src/main/java/se/lublin/mumla/service/MumlaService.java` (A) | 4, 7 | S1–S5 above, 19 lines total, ≤ 10 per hook | session lifecycle and Bluetooth preference must be applied by the service, which owns the connection |
+| `app/src/main/java/se/lublin/mumla/service/MumlaService.java` (A) | 4, 7 | S1–S5 above plus one import, 20 lines total, ≤ 10 per hook | session lifecycle and Bluetooth preference must be applied by the service, which owns the connection; the decision behind S4/S5 lives in `BluetoothScoToggle.shouldRouteToBluetooth` and is tested there |
 | `app/src/main/java/se/lublin/mumla/service/MumlaConnectionNotification.java:188` (A) — **recommended, not done by P** | 2 | 1 (`FOREGROUND_SERVICE_TYPE_MICROPHONE \| FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK`) | the manifest now declares both types; passing both at `startForeground` lets Android keep delivering media buttons to a backgrounded app on API 34+. The declared superset is valid without it, so P's build stays green either way; stream A applies it when it rewrites `startForeground` (A6). |
 | `libraries/humla/src/main/AndroidManifest.xml:26-32` (F/A) — **recommended, not done by P** | 2 | 1 (`android:exported="false"` on `.HumlaService`) | the merged manifest still exports `se.lublin.humla.HumlaService` with an intent-filter for `se.lublin.humla.ACTION_CONNECT`; Mumla starts only `MumlaService` explicitly. Out of P's ownership; flagged for the audit. |
 
@@ -3626,12 +3900,12 @@ git commit -m "feat: offer battery optimization exemption after first connection
 ## Self-review against the spec
 
 - **P1** MediaSession push-to-talk: Tasks 3, 4 (session active while connected, `HEADSETHOOK`/`MEDIA_PLAY_PAUSE`/AVRCP `PLAY`/`PAUSE`, PTT toggle in PTT mode, mute otherwise), Task 5 (configurable in settings), screen-off delivery via active session with `STATE_PLAYING` + `mediaPlayback` service type (Task 2). ✔
-- **P2** Bluetooth as persistent setting `pref_bluetooth_sco` default off, menu toggle writes the preference, initialized on connect: Tasks 1, 7 (hooks S4/S5). ✔
-- **P3** `BLUETOOTH_CONNECT` before SCO (Task 7), `POST_NOTIFICATIONS` flow kept and `RECORD_AUDIO` rationale (Task 9). ✔
+- **P2** Bluetooth as persistent setting `pref_bluetooth_sco` default off, menu toggle and settings checkbox write the preference, initialized on connect and re-applied on every change: Tasks 1, 7 (hooks S4/S5, decision tested as `BluetoothScoToggle.shouldRouteToBluetooth`, which is also the spec §6 "Bluetooth survives a reconnect" case). ✔
+- **P3** `BLUETOOTH_CONNECT` requested before SCO on **both** entry points — action-bar item and settings checkbox (Task 7, Steps 5 and 8–11) — `POST_NOTIFICATIONS` flow kept and `RECORD_AUDIO` rationale (Task 9). ✔
 - **P4** battery exemption offered once, dismissable, after the first successful connection via `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`: Task 10 (+ permission in Task 2). ✔
 - **P5** manifest `foregroundServiceType="microphone|mediaPlayback"`, `exported` audit, legacy `BLUETOOTH` removed: Task 2. ✔
-- **Global constraints**: all new files Kotlin; both non-trivially modified Java files converted first as their own `refactor:` commits (Tasks 6, 8); no new `AsyncTask`/`Thread`; every behavior change test-first on the JVM; commit messages are trailer-free Conventional Commits; each task ends with the green gate; API < 31 branches deleted in the touched files (`registerReceiver` SDK branch, `requestLegacyExternalStorage`, `BROADCAST_CLOSE_SYSTEM_DIALOGS` permission); `androidx.media` is Apache-2.0 (a first-party AndroidX artifact, not a third-party component for `NOTICE.md`).
-- **Type consistency** (names used across tasks): `Settings.PREF_BLUETOOTH_SCO`/`isBluetoothScoEnabled()`/`setBluetoothScoEnabled()`, `Settings.PREF_MEDIA_BUTTON_ACTION`/`getMediaButtonAction()`, `Settings.isBatteryOptimizationAsked()`/`setBatteryOptimizationAsked()` (Task 1 → 3, 4, 7, 10); `MediaKeyTarget`, `MediaKeyHandler.onKeyEvent(KeyEvent)`, `HumlaMediaKeyTarget(IHumlaService)` (Task 3 → 4); `MumlaMediaSession.attach/detach/activate/deactivate/isActive/sessionToken/callback` (Task 4 → hooks S1–S3); `BluetoothScoToggle.toggle()/onPermissionResult()/isEnabled/hasPermission()` and `Result.Enabled/Disabled/PermissionNeeded` (Task 7 → S4/S5); `ConnectPermissionFlow.Step.RequestRecordAudio(showRationale)/RequestPostNotifications/Proceed`, `postNotificationsAsked` (Task 9); `BatteryOptimizationPrompt.shouldOffer()/markOffered()/requestIntent()/fallbackIntent()` (Task 10).
+- **Global constraints**: all new files Kotlin; all three non-trivially modified Java files converted first as their own `refactor:` commits (`ChannelListFragment` Task 6, `GeneralSettingsFragment` Task 7 Step 7, `MumlaActivity` Task 8); no new `AsyncTask`/`Thread`; every behavior change test-first on the JVM; commit messages are trailer-free Conventional Commits; each task ends with the green gate; API < 31 branches deleted in the touched files (`registerReceiver` SDK branch, `requestLegacyExternalStorage`, `BROADCAST_CLOSE_SYSTEM_DIALOGS` permission); `androidx.media` is Apache-2.0 (a first-party AndroidX artifact, not a third-party component for `NOTICE.md`).
+- **Type consistency** (names used across tasks): `Settings.PREF_BLUETOOTH_SCO`/`isBluetoothScoEnabled()`/`setBluetoothScoEnabled()`, `Settings.PREF_MEDIA_BUTTON_ACTION`/`getMediaButtonAction()`, `Settings.isBatteryOptimizationAsked()`/`setBatteryOptimizationAsked()` (Task 1 → 3, 4, 7, 10); `MediaKeyTarget`, `MediaKeyHandler.onKeyEvent(KeyEvent)`, `HumlaMediaKeyTarget(IHumlaService)` (Task 3 → 4); `MumlaMediaSession.attach/detach/activate/deactivate/isActive/sessionToken/callback` (Task 4 → hooks S1–S3); `BluetoothScoToggle.request(enabled)/toggle()/onPermissionResult(granted)/isEnabled/hasPermission(context)/shouldRouteToBluetooth(context, settings)` and `Result.Enabled/Disabled/PermissionNeeded` (Task 7 → `ChannelListFragment`, `GeneralSettingsFragment`, S4/S5); `ConnectPermissionFlow.Step.RequestRecordAudio(showRationale)/RequestPostNotifications/Proceed`, `postNotificationsAsked` (Task 9); `BatteryOptimizationPrompt.shouldOffer()/markOffered()/requestIntent()/fallbackIntent()` (Task 10).
 
 ## Open questions
 

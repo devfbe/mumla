@@ -6,7 +6,7 @@
 
 **Architecture:** The `libraries/humla` git submodule is inlined into the main repository (F2); the build moves to Gradle 9.7.1 / AGP 9.4.1 with a version catalog and AGP's built-in Kotlin (F3); dependencies are updated, guava removed and protobuf generated at build time (F4); Spongycastle is replaced by stock BouncyCastle behind one small `Pkcs12Certificates` loader (F5); the ndk-build/javacpp native layer is replaced by one `CMakeLists.txt`, hand-written JNI and Kotlin `external fun` wrappers with fakeable interfaces (F6); CI runs inside the Nix dev shell (F7); the README is rewritten (F8).
 
-**Tech Stack:** Gradle 9.7.1, AGP 9.4.1 (built-in Kotlin, KGP 2.4.20 on the build classpath), JDK 21, Android SDK 36, NDK 29.0.14206865, SDK CMake 4.1.2, build-tools 36.1.0, JUnit 4.13.2, Robolectric 4.17, MockK 1.14.11, Truth 1.4.5, kotlinx-coroutines 1.11.0, BouncyCastle 1.86, protobuf 4.36.2 (+ protobuf-gradle-plugin 0.10.0), opus 1.6.1, speex 1.2.1, speexdsp 1.2.1, CELT 0.7.1 / 0.11.1.
+**Tech Stack:** Gradle 9.7.1, AGP 9.4.1 (built-in Kotlin — the Kotlin compiler is the one AGP bundles, no separate KGP on the build classpath), JDK 21, Android SDK 36, NDK 29.0.14206865, SDK CMake 4.1.2, build-tools 36.1.0, JUnit 4.13.2, Robolectric 4.17, MockK 1.14.11, Truth 1.4.5, kotlinx-coroutines 1.11.0, BouncyCastle 1.86, protobuf 4.36.2 (+ protobuf-gradle-plugin 0.10.0), opus 1.6.1, speex 1.2.1, speexdsp 1.2.1, CELT 0.7.1 / 0.11.1.
 
 **Spec:** `/home/becker/git/mumla/docs/superpowers/specs/2026-09-19-mumla-modernization.md` (§2 global constraints, §3.1 stream F, §5 ordering, §6 acceptance). The spec wins over this plan wherever they disagree.
 
@@ -71,7 +71,8 @@ Copied verbatim from the spec §2; every task's requirements implicitly include 
 
 - All paths are relative to `/home/becker/git/mumla` unless absolute.
 - `GRADLE` below means `cd /home/becker/git/mumla && nix develop --command ./gradlew`.
-- The **green gate** is `GRADLE assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`; every task's last verification step runs it.
+- The **green gate** is `GRADLE assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug`; every task's last verification step runs it.
+- Lint is part of the gate **from Task 2 on** (Task 1 still builds the old AGP 8.13 / minSdk 21 tree and only moves files around). Both modules already set `lint { abortOnError = true }` and `.gitlab-ci.yml` has its `lintDebug` job commented out, so Task 2 is the first task that has to make lint pass; every later task then fixes only the findings it creates itself instead of piling them up for F7.
 - Kotlin test sources live under `src/test/java/` (AGP's built-in Kotlin compiles `.kt` files in the `java` source directory, so no extra source set configuration is needed); Kotlin main sources likewise go under `src/main/java/`.
 - Test names use backticks; run a single test class with `--tests 'fully.qualified.ClassName'`.
 - Versions were verified on 2026-09-19 (see "Version research" at the end of this plan for URLs and findings).
@@ -81,7 +82,7 @@ Copied verbatim from the spec §2; every task's requirements implicitly include 
 | Path | Responsibility |
 |---|---|
 | `gradle/libs.versions.toml` | single source of truth for plugin and dependency versions |
-| `settings.gradle`, `build.gradle`, `gradle.properties` | root build wiring (plugin management, KGP bump, JVM args) |
+| `settings.gradle`, `build.gradle`, `gradle.properties` | root build wiring (plugin management, AGP aliases, JVM args) |
 | `app/build.gradle`, `libraries/humla/build.gradle` | module builds (AGP 9 DSL, test options, CMake, protobuf) |
 | `app/src/main/java/se/lublin/mumla/Settings.kt` | app preferences facade (replaces `Settings.java`) |
 | `app/src/main/java/se/lublin/mumla/preference/CertificateExportActivity.kt` | certificate export via SAF only |
@@ -91,7 +92,7 @@ Copied verbatim from the spec §2; every task's requirements implicitly include 
 | `libraries/humla/src/main/cpp/third_party/{opus,speex,speexdsp,celt-0.7.0,celt-0.11.0}` | git submodules at upstream release tags |
 | `libraries/humla/src/main/cpp/celt-0.7.0-build/config.h`, `.../celt-0.11.0-build/config.h` | the pre-generated autoconf headers (moved from `src/main/jni`) |
 | `libraries/humla/src/main/java/se/lublin/humla/audio/native/*.kt` | `external fun` wrappers + fakeable `*Api` interfaces |
-| `libraries/humla/src/main/java/se/lublin/humla/audio/{OpusDecoder,CELT7Decoder,CELT11Decoder,SpeexDecoder,SpeexJitterBuffer}.kt` | Kotlin codec objects used by `AudioOutputSpeech.kt` |
+| `libraries/humla/src/main/java/se/lublin/humla/audio/{PacketBytes,OpusDecoder,CELT7Decoder,CELT11Decoder,SpeexDecoder,SpeexJitterBuffer}.kt` | packet-copy helper and the Kotlin codec objects used by `AudioOutputSpeech.kt` |
 | `libraries/humla/src/main/java/se/lublin/humla/audio/encoder/*.kt` | Kotlin encoders (converted from Java) |
 | `NOTICE.md`, `README.md`, `.gitlab-ci.yml`, `flake.nix` | licensing, docs, CI, dev shell |
 
@@ -107,8 +108,24 @@ Every hook below is the minimum needed to keep the build green; the owning strea
 | `app/src/main/java/se/lublin/mumla/app/MumlaActivity.java` (P) | 67 | Task 7 | `import org.spongycastle.util.encoders.Hex` → `org.bouncycastle.util.encoders.Hex` (1 line) |
 | `libraries/humla/src/main/java/se/lublin/humla/HumlaService.java` (A) | 49, 356 | Task 9 | `CELT7.getBitstreamVersion()` → `CELT7Encoder.getBitstreamVersion()` (Java cannot import a package named `native`, so the Kotlin facade lives on the encoder) (2 lines) |
 | `app/src/goog/java/se/lublin/mumla/app/StartupAction.java` (unowned, goog flavor only) | 207–216 | Task 5 | Play Billing 9 changed `ProductDetailsResponseListener` to deliver a `QueryProductDetailsResult` (≈4 lines) |
+| `libraries/humla/src/main/java/se/lublin/humla/audio/encoder/{OpusEncoder,CELT7Encoder,CELT11Encoder,PreprocessingEncoder,ResamplingEncoder}.java` (B) | whole files | Task 8 | deleted and re-created as `.kt` with identical Java-visible constructors and methods: F6 puts the native wrappers in the package `se.lublin.humla.audio.native`, which Java cannot even name (`native` is a keyword) |
+| `libraries/humla/src/main/java/se/lublin/humla/audio/AudioOutputSpeech.java` (B) | whole file | Task 8 | same reason; re-created as `AudioOutputSpeech.kt`, same Java-visible API (`AudioOutput.java` compiles unchanged) |
+| `libraries/humla/src/main/java/se/lublin/humla/audio/javacpp/{Opus,Speex,CELT7,CELT11}.java` (B) | whole files | Task 9 | javacpp is removed (spec §2); replaced by `audio/native/*.kt` and `audio/{PacketBytes,OpusDecoder,CELT7Decoder,CELT11Decoder,SpeexDecoder,SpeexJitterBuffer}.kt` |
+| `libraries/humla/src/main/java/se/lublin/humla/audio/encoder/*.kt`, `audio/AudioOutputSpeech.kt` (B) | whole files | Task 9 | rewired from javacpp to the `*Api`/`*Native` wrappers; every constructor gains a trailing `@JvmOverloads` `api` parameter |
+| `libraries/humla/src/main/cpp/**` (B after Foundation) | new files | Task 9 | spec §3 gives F the initial `CMakeLists.txt`; the five `jni_*.cpp` files and the third-party submodules come with it |
+| `libraries/humla/src/main/java/se/lublin/humla/audio/AudioInput.java` (B) | 47, 79 | Task 2 | lint `MissingPermission`: two `@RequiresPermission(RECORD_AUDIO)` annotations plus imports (4 lines) |
+| `libraries/humla/src/main/java/se/lublin/humla/protocol/AudioHandler.java` (B) | 132 | Task 2 | lint `MissingPermission`: refuse to build the input when RECORD_AUDIO is not granted, which ends the annotation chain (6 lines) |
+| `app/src/main/java/se/lublin/mumla/db/MumlaSQLiteDatabase.java` (A) | 190–195 | Task 2 | lint `Range`: `getColumnIndex` → `getColumnIndexOrThrow` (6 lines) |
+| `app/src/main/java/se/lublin/mumla/service/MumlaService.java` (A) | 376–380 | Task 2 | lint `UnspecifiedRegisterReceiverFlag`: one `ContextCompat.registerReceiver(…, RECEIVER_EXPORTED)` replaces the `SDK_INT` branch (5 lines) |
+| `app/src/main/java/se/lublin/mumla/service/MumlaConnectionNotification.java` (A) | 108–112 | Task 2 | same, with `RECEIVER_NOT_EXPORTED` (5 lines) |
+| `app/src/main/java/se/lublin/mumla/service/MumlaReconnectNotification.java` (A) | 85–89, 135 | Task 2 | same, plus a POST_NOTIFICATIONS guard before `notify` (lint `MissingPermission`) (9 lines) |
+| `app/src/main/java/se/lublin/mumla/service/MumlaMessageNotification.java` (D) | 107 | Task 2 | lint `MissingPermission`: POST_NOTIFICATIONS guard before `notify` (5 lines) |
+| `app/src/main/AndroidManifest.xml` (P) | 33 | Task 2 | lint `ProtectedPermissions`: delete `BROADCAST_CLOSE_SYSTEM_DIALOGS`, whose only sender is unreachable at minSdk 31 (1 line) |
+| `app/src/main/res/layout*/` (D/P) | 14 attributes in 10 files | Task 2 | lint `UseAppTint`: `android:tint` → `app:tint` on AppCompat image views |
 
-Not touched by this stream although they contain `SDK_INT` checks below 31 (their owners delete them when they touch the files): `libraries/humla/.../net/HumlaTCP.java:85` (A), `app/.../service/MumlaService.java:531,537` (A), `app/.../service/MumlaHotCorner.java:60,99` (P), `app/.../service/MumlaOverlay.java:198` (P), `app/.../service/Mumla*Notification.java` (A/D), `app/.../channel/ChannelChatFragment.java:182` (D), `app/.../app/MumlaActivity.java:573` (P).
+Stream B branches from the post-F8 commit, so B1, B2, B9 and B11 are written against the handed-over Kotlin files — `PreprocessingEncoder.kt` with a `SpeexPreprocessApi` seam rather than `PreprocessingEncoder.java` with `Speex.SpeexPreprocessState`, `AudioOutputSpeech.kt`, `audio/native/*.kt` — not against the Java files listed above.
+
+Not touched by this stream at those lines, although they contain `SDK_INT` checks below 31 (their owners delete them when they touch the files; where a file appears in the table above, this stream edits it only at the lines named there): `libraries/humla/.../net/HumlaTCP.java:85` (A), `app/.../service/MumlaService.java:531,537` (A), `app/.../service/MumlaHotCorner.java:60,99` (P), `app/.../service/MumlaOverlay.java:198` (P), `app/.../service/Mumla*Notification.java` (A/D), `app/.../channel/ChannelChatFragment.java:182` (D), `app/.../app/MumlaActivity.java:573` (P).
 
 ---
 
@@ -118,7 +135,7 @@ Not touched by this stream although they contain `SDK_INT` checks below 31 (thei
 - Delete: `.gitmodules` entry `libraries/humla`, `.git/modules/libraries/humla`
 - Create (copied tree): `libraries/humla/**` (ordinary files, no `.git`)
 - Delete inside the copy: `libraries/humla/.gitmodules`, `libraries/humla/.gitlab-ci.yml`, `libraries/humla/gradlew`, `libraries/humla/gradlew.bat`, `libraries/humla/gradle/`, `libraries/humla/libs/`
-- Modify: `libraries/humla/build.gradle:36-43` (spongycastle jars), `.gitlab-ci.yml:27-36`
+- Modify: `libraries/humla/build.gradle:37-43` (spongycastle jars), `.gitlab-ci.yml:24-35`
 - Re-add as submodules of the main repo: `libraries/humla/src/main/jni/opus`, `.../speex`, `.../celt-0.7.0-src`, `.../celt-0.11.0-src`
 
 **Interfaces:**
@@ -148,13 +165,14 @@ Expected (exactly these SHAs; the plan hard-codes them below):
 `git archive` writes only tracked blobs of the given commit; gitlinks (submodules) and the `.git` file are not part of the archive.
 
 ```bash
+set -eu
 cd /home/becker/git/mumla
 SCRATCH=/tmp/claude-1000/-home-becker-git-mumla/humla-inline
 rm -rf "$SCRATCH" && mkdir -p "$SCRATCH"
 git -C libraries/humla archive --format=tar HEAD | tar -x -C "$SCRATCH"
-ls "$SCRATCH"
+ls -a "$SCRATCH"
 ```
-Expected: `LICENSE README.md build.gradle gradle gradlew gradlew.bat protobuf-update-and-compile.sh src tools .gitignore .gitlab-ci.yml .gitmodules` (no `libs/`, no `src/main/jni/opus` etc.).
+Expected: `. .. .gitignore .gitlab-ci.yml .gitmodules LICENSE README.md build.gradle gradle gradlew gradlew.bat protobuf-update-and-compile.sh src tools` (no `libs/`, no `src/main/jni/opus` etc.).
 
 - [ ] **Step 3: Remove the submodule from the main repository**
 
@@ -171,7 +189,12 @@ Expected: `.gitmodules` is empty (still tracked, shown as ` M .gitmodules`), `D 
 - [ ] **Step 4: Put the exported tree in place and drop humla's own repo scaffolding**
 
 ```bash
+set -eu
 cd /home/becker/git/mumla
+# Each step runs in its own shell, so SCRATCH is assigned again here (it must never be empty:
+# `cp -a /. libraries/humla/` would copy the whole root filesystem into the repository).
+SCRATCH=/tmp/claude-1000/-home-becker-git-mumla/humla-inline
+test -f "$SCRATCH/build.gradle"
 mkdir -p libraries/humla
 cp -a "$SCRATCH"/. libraries/humla/
 rm -f  libraries/humla/.gitmodules libraries/humla/.gitlab-ci.yml libraries/humla/gradlew libraries/humla/gradlew.bat
@@ -210,11 +233,11 @@ Expected `.gitmodules` (four entries):
 	path = libraries/humla/src/main/jni/celt-0.11.0-src
 	url = https://gitlab.com/quite/celt.git
 ```
-Expected `git submodule status` shows the four SHAs from step 1 (the two celt names avoid registering the same URL under two identical default names).
+Expected `git submodule status` shows the four SHAs from step 1. The explicit `--name celt-0.7.0` / `--name celt-0.11.0` keep the `.git/modules/` directories short and stable: a submodule's *name* defaults to its path, and Task 9 moves both paths, which would otherwise leave the cached repositories under the old deep `libraries/humla/src/main/jni/…` names.
 
 - [ ] **Step 6: Replace the locally built spongycastle jars with the Maven artifacts**
 
-In `libraries/humla/build.gradle` replace lines 36–43:
+In `libraries/humla/build.gradle` replace lines 37–43 (line 36 is `dependencies {` and stays):
 ```groovy
     api 'com.google.protobuf:protobuf-java:3.11.4'
     api 'com.madgag.spongycastle:core:1.51.0.0'
@@ -237,7 +260,7 @@ with:
 
 - [ ] **Step 7: Stop CI from building humla-spongycastle**
 
-Replace the `assembleDebug` job in `.gitlab-ci.yml` (lines 27–36) with:
+Replace the `assembleDebug` job in `.gitlab-ci.yml` (lines 24–35, from `assembleDebug:` through `expire_in: 3 months`) with:
 ```yaml
 assembleDebug:
   stage: build
@@ -262,26 +285,31 @@ Expected: `BUILD SUCCESSFUL`; `ls libraries/humla/src/main/libs/arm64-v8a` lists
 cd /home/becker/git/mumla
 git add -A .gitmodules .gitlab-ci.yml libraries/humla
 git status --short | grep -v '^A\|^M\|^D\|^R' ; # expected: no output (nothing untracked left behind)
-git commit -m "build: inline humla library into main repo" -m "libraries/humla is now an ordinary directory; opus, speex and the two celt trees are submodules of this repository at the same commits as before. The humla-spongycastle fork is dropped in favour of the stock 1.51.0.0 Maven artifacts until BouncyCastle lands."
+git commit -m "build: inline humla library into main repo" -m "libraries/humla is now an ordinary directory; opus, speex and the two celt trees are submodules of this repository at the same commits as before. The humla-spongycastle fork is dropped in favour of the stock 1.51.0.0 Maven artifacts until BouncyCastle lands.
+
+Known regression: importing a Mumble-generated .p12 certificate does not work between this commit and the BouncyCastle migration, because stock Spongycastle 1.51 cannot read an unencrypted PKCS#12 keyBag."
 ```
 
 ---
 
-### Task 2: F3 (part 1) — Gradle 9.7.1, AGP 9.4.1, version catalog, Kotlin, test infrastructure
+### Task 2: F3 (part 1) — Gradle 9.7.1, AGP 9.4.1, version catalog, Kotlin, test infrastructure, lint
 
 **Files:**
 - Modify: `gradle/wrapper/gradle-wrapper.properties:3`
 - Create: `gradle/libs.versions.toml`
 - Rewrite: `settings.gradle`, `build.gradle`, `gradle.properties`, `app/build.gradle`, `libraries/humla/build.gradle`
-- Create: `libraries/humla/src/test/java/se/lublin/humla/model/ServerParcelTest.kt`
+- Create: `libraries/humla/src/test/java/se/lublin/humla/model/ServerParcelTest.kt`, `app/src/test/java/se/lublin/mumla/AppResourcesSmokeTest.kt`
+- Modify (lint, steps 13–16): `libraries/humla/src/main/java/se/lublin/humla/audio/AudioInput.java:47,79`, `libraries/humla/src/main/java/se/lublin/humla/protocol/AudioHandler.java:132`, `app/src/main/java/se/lublin/mumla/db/MumlaSQLiteDatabase.java:190-195`, `app/src/main/java/se/lublin/mumla/service/MumlaService.java:376-380`, `app/src/main/java/se/lublin/mumla/service/MumlaConnectionNotification.java:108-112`, `app/src/main/java/se/lublin/mumla/service/MumlaReconnectNotification.java:85-89,135`, `app/src/main/java/se/lublin/mumla/service/MumlaMessageNotification.java:107`, `app/src/main/AndroidManifest.xml:33`, fourteen `android:tint` attributes in ten files under `app/src/main/res/layout*/`
 
 **Interfaces:**
 - Consumes: Task 1 layout.
-- Produces: version catalog accessors used by every later task (`libs.plugins.android.application`, `libs.plugins.android.library`, `libs.kotlin.gradle.plugin`, `libs.bundles.unit.test`, `libs.kotlinx.coroutines.android`, one accessor per dependency listed below); `testOptions.unitTests.includeAndroidResources = true` in both modules; Robolectric runnable from `src/test/java` in both modules; `minSdk = 31`.
+- Produces: version catalog accessors used by every later task (`libs.plugins.android.application`, `libs.plugins.android.library`, `libs.bundles.unit.test`, `libs.kotlinx.coroutines.android`, one accessor per dependency listed below); `testOptions.unitTests.includeAndroidResources = true` in both modules; Robolectric runnable from `src/test/java` in both modules; `minSdk = 31`; a lint-clean tree, so that every later task only has to keep its own lint findings at zero.
 
-Design notes (verified, see Version research): AGP 9.x ships **built-in Kotlin** and refuses `org.jetbrains.kotlin.android`; the Kotlin compiler version is whatever KGP is on the build classpath (AGP depends on KGP ≥ 2.2.10), so the "Kotlin Gradle plugin (latest)" requirement is met by putting `org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.20` on the root `buildscript` classpath without applying it. `jvmTarget` follows `compileOptions.targetCompatibility` (21). AGP 9's new DSL removed `applicationVariants`, `minSdkVersion`, `flavorDimensions "x"` and `android.ndkDirectory`; the rewrites below use `androidComponents`, `minSdk =`, `flavorDimensions += [...]`, and `androidComponents.sdkComponents.ndkDirectory`. The Windows branch of the old `ndkBuild` task is dropped (the Nix dev shell is the supported environment and Task 9 deletes ndk-build anyway).
+Design notes (verified, see Version research): AGP 9.x ships **built-in Kotlin** and refuses `org.jetbrains.kotlin.android`. The Kotlin compiler is the KGP that AGP itself resolves on the plugin classpath of the module applying `com.android.application` / `com.android.library` (AGP 9.4.1 depends on KGP ≥ 2.2.10). Spec F3 asks for "Kotlin Gradle plugin (latest)"; with AGP 9 that is **not** something a build chooses by adding a `kotlin-gradle-plugin` coordinate to the root `buildscript { }` classpath — that is a different resolution scope from the plugin classpath, so the entry is at best a no-op and at worst puts two KGPs on the build classpath. Google documents `kotlin { compilerOptions { … } }` as the configuration surface for built-in Kotlin instead (developer.android.com/build/migrate-to-built-in-kotlin). This plan therefore uses AGP 9.4.1's built-in Kotlin unmodified, records which KGP that actually is (step 10), and leaves `kotlin { compilerOptions { languageVersion = … } }` as the documented lever for any later stream that needs a newer language level. `jvmTarget` follows `compileOptions.targetCompatibility` (21). AGP 9's new DSL removed `applicationVariants`, `minSdkVersion`, `flavorDimensions "x"` and `android.ndkDirectory`; the rewrites below use `androidComponents`, `minSdk =`, `flavorDimensions += [...]`, and `androidComponents.sdkComponents.ndkDirectory`. The Windows branch of the old `ndkBuild` task is dropped (the Nix dev shell is the supported environment and Task 9 deletes ndk-build anyway).
 
-- [ ] **Step 1: Write the failing Robolectric smoke test for humla**
+- [ ] **Step 1: Write one failing Robolectric smoke test per module**
+
+Spec F3 wants "one passing Robolectric smoke test per module", so both modules get one here — the humla one exercises a real Android class, the app one proves that `includeAndroidResources = true` really hands the merged resources to unit tests.
 
 Create `libraries/humla/src/test/java/se/lublin/humla/model/ServerParcelTest.kt`:
 ```kotlin
@@ -317,10 +345,43 @@ class ServerParcelTest {
 }
 ```
 
-- [ ] **Step 2: Run it to see it fail for the right reason**
+Create `app/src/test/java/se/lublin/mumla/AppResourcesSmokeTest.kt`:
+```kotlin
+package se.lublin.mumla
 
-Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.model.ServerParcelTest'`
-Expected: FAIL — the humla module has no Kotlin support yet, so Gradle reports either "Unresolved reference" errors or that the `.kt` file was not compiled (no such test class). Either way: red.
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.google.common.truth.Truth.assertThat
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+/**
+ * Proves that Robolectric runs in the app module and that
+ * `testOptions.unitTests.includeAndroidResources = true` is in effect: without merged
+ * resources, resolving a string resource fails instead of returning its value.
+ */
+@RunWith(RobolectricTestRunner::class)
+class AppResourcesSmokeTest {
+
+    @Test
+    fun `the app module's merged resources are available to unit tests`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        assertThat(context.packageName).isEqualTo("se.lublin.mumla")
+        assertThat(context.getString(R.string.app_name)).isEqualTo("Mumla")
+    }
+}
+```
+
+- [ ] **Step 2: Run both to see them fail for the right reason**
+
+Run:
+```bash
+cd /home/becker/git/mumla
+nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.model.ServerParcelTest'
+nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.AppResourcesSmokeTest'
+```
+Expected: both FAIL — neither module has Kotlin support yet, so Gradle reports either "Unresolved reference" errors or that the `.kt` file was not compiled (no such test class). Either way: red.
 
 - [ ] **Step 3: Update the Gradle wrapper**
 
@@ -334,8 +395,9 @@ distributionUrl=https\://services.gradle.org/distributions/gradle-9.7.1-bin.zip
 Create `gradle/libs.versions.toml` (dependency versions here are the *current* ones; Task 5 bumps them):
 ```toml
 [versions]
+# The Kotlin compiler is AGP's built-in Kotlin, so there is no `kotlin` version here and no
+# kotlin-gradle-plugin entry: see the design notes above.
 agp = "9.4.1"
-kotlin = "2.4.20"
 coroutines = "1.11.0"
 
 androidx-appcompat = "1.7.1"
@@ -366,7 +428,6 @@ truth = "1.4.5"
 androidx-test-core = "1.7.0"
 
 [libraries]
-kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 
@@ -436,20 +497,11 @@ include ':libraries:humla', ':app'
 
 Replace everything after the GPL header with:
 ```groovy
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        // AGP 9 compiles Kotlin itself ("built-in Kotlin") and depends on KGP >= 2.2.10 at
-        // runtime. Putting a newer KGP on the build classpath makes Gradle's conflict
-        // resolution select it, which is how the Kotlin compiler version is chosen.
-        // Do NOT apply org.jetbrains.kotlin.android anywhere - AGP 9 rejects it.
-        classpath libs.kotlin.gradle.plugin
-    }
-}
-
+// AGP 9 compiles Kotlin itself ("built-in Kotlin"): the Kotlin compiler comes from the KGP that
+// AGP resolves on the plugin classpath, so there is no buildscript { } block and no
+// kotlin-gradle-plugin dependency here. Do NOT apply org.jetbrains.kotlin.android anywhere -
+// AGP 9 rejects it. To change the Kotlin language level, use kotlin { compilerOptions { ... } }
+// in the module that needs it.
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.library) apply false
@@ -705,26 +757,147 @@ dependencies {
 }
 ```
 
-- [ ] **Step 10: Regenerate the wrapper scripts with the new Gradle and run the smoke test**
+- [ ] **Step 10: Regenerate the wrapper scripts, run both smoke tests and record the Kotlin version**
 
 Run:
 ```bash
 cd /home/becker/git/mumla && nix develop --command ./gradlew wrapper --gradle-version 9.7.1 --distribution-type bin
 nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.model.ServerParcelTest'
+nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.AppResourcesSmokeTest'
+nix develop --command ./gradlew :libraries:humla:buildEnvironment | grep -i 'kotlin-gradle-plugin'
 ```
-Expected: the wrapper task succeeds (updates `gradle/wrapper/gradle-wrapper.jar` and `gradlew`); the test run prints `BUILD SUCCESSFUL` with 1 test passed. Also `grep -c 'Kotlin' libraries/humla/build/tmp/kotlin-classes -r >/dev/null` is not needed; the passing Kotlin test proves built-in Kotlin works.
+Expected: the wrapper task succeeds (updates `gradle/wrapper/gradle-wrapper.jar` and `gradlew`); each test run prints `BUILD SUCCESSFUL` with 1 test passed — a compiling and passing `.kt` test is what proves built-in Kotlin works. The `buildEnvironment` grep must print **exactly one** `org.jetbrains.kotlin:kotlin-gradle-plugin:<version>` coordinate, pulled in by `com.android.tools.build:gradle:9.4.1`, with `<version>` at least `2.2.10`. Two different versions, or none, means the built-in Kotlin wiring is wrong — stop and fix it before continuing.
 
-- [ ] **Step 11: Run the green gate**
+- [ ] **Step 11: Run the build-and-test gate**
 
 Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
-Expected: `BUILD SUCCESSFUL`; the existing humla JUnit-3 style tests (`ModelTest`, `MixerTest`, `URLParserTest`, `WhisperTargetListTest`) still run under the JUnit 4 runner and pass.
+Expected: `BUILD SUCCESSFUL`; the existing humla JUnit-3 style tests (`ModelTest`, `MixerTest`, `URLParserTest`, `WhisperTargetListTest`) still run under the JUnit 4 runner and pass. (Lint is not part of the gate yet — steps 13–16 make it pass and add it.)
 
 - [ ] **Step 12: Commit**
 
 ```bash
 cd /home/becker/git/mumla
-git add gradle/libs.versions.toml gradle/wrapper gradlew gradlew.bat settings.gradle build.gradle gradle.properties app/build.gradle libraries/humla/build.gradle libraries/humla/src/test/java/se/lublin/humla/model/ServerParcelTest.kt
-git commit -m "build: move to gradle 9.7.1, agp 9.4.1, version catalog and kotlin" -m "minSdk 31, Java/Kotlin 21 toolchain, built-in Kotlin with KGP 2.4.20 on the build classpath, no Jetifier, non-transitive R classes, JUnit 4 + Robolectric + MockK + Truth + coroutines-test in both modules, first Robolectric test in humla."
+git add gradle/libs.versions.toml gradle/wrapper gradlew gradlew.bat settings.gradle build.gradle gradle.properties app/build.gradle libraries/humla/build.gradle libraries/humla/src/test/java/se/lublin/humla/model/ServerParcelTest.kt app/src/test/java/se/lublin/mumla/AppResourcesSmokeTest.kt
+git commit -m "build: move to gradle 9.7.1, agp 9.4.1, version catalog and kotlin" -m "minSdk 31, Java/Kotlin 21 toolchain, AGP's built-in Kotlin compiler with no separate KGP on the build classpath, no Jetifier, non-transitive R classes, JUnit 4 + Robolectric + MockK + Truth + coroutines-test in both modules, one Robolectric smoke test per module."
+```
+
+- [ ] **Step 13: Run lint for the first time and compare against the recorded baseline**
+
+Both modules already carry `lint { abortOnError = true }`, but `.gitlab-ci.yml` has its `lintDebug` job commented out, so lint has not gated anything for a long time. Run it now:
+
+```bash
+cd /home/becker/git/mumla
+nix develop --command ./gradlew --console=plain :app:lintFossDebug :libraries:humla:lintDebug --continue
+```
+
+Expected: FAIL. The baseline measured on this repository on 2026-09-19 (before this task's changes) is **30 errors**, and every one of them is listed in step 14:
+
+| Module | Check | Count | Where |
+|---|---|---|---|
+| humla | `MissingPermission` | 2 | `audio/AudioInput.java:87` (`new AudioRecord(...)`) |
+| app | `Range` | 6 | `db/MumlaSQLiteDatabase.java:190-195` (`getColumnIndex` may return -1) |
+| app | `UseAppTint` | 14 | `android:tint` on AppCompat image views in 10 layout files |
+| app | `UnspecifiedRegisterReceiverFlag` | 3 | `service/MumlaService.java:379`, `service/MumlaConnectionNotification.java:111`, `service/MumlaReconnectNotification.java:88` |
+| app | `MissingPermission` | 2 | `service/MumlaMessageNotification.java:107`, `service/MumlaReconnectNotification.java:135` (`notify` without POST_NOTIFICATIONS) |
+| app | `ProtectedPermissions` | 1 | `AndroidManifest.xml:33` (`BROADCAST_CLOSE_SYSTEM_DIALOGS`) |
+| app | `MissingQuantity` | 2 | `res/values-cs/strings.xml:5,10` (Czech `many` plural) |
+
+Warnings (11 in humla, 312 in app) do not fail the build and are left alone. AGP 9's lint is newer than the one that produced this table, so it may report findings that are not listed: fix each of those at its source too, and if the fix is in a file another stream owns, keep it to the smallest change that removes the finding and add a row to **Cross-stream touches**. The full reports are written to `app/build/intermediates/lint_intermediate_text_report/fossDebug/lintReportFossDebug/lint-results-fossDebug.txt` and the humla equivalent.
+
+- [ ] **Step 14: Fix every error**
+
+The humla module declares no androidx dependency today, so first add one. In `gradle/libs.versions.toml` add `androidx-annotation = "1.8.1"` under `[versions]` — the version the app module already resolves transitively, so it changes nothing that is on the classpath — and `androidx-annotation = { module = "androidx.annotation:annotation", version.ref = "androidx-annotation" }` under `[libraries]`; in `libraries/humla/build.gradle` add `implementation libs.androidx.annotation` next to the other `implementation` lines. It is deliberately pinned to what the graph already contains, so this adds a declaration and not a new artifact; re-check it whenever AndroidX is next bumped.
+
+`libraries/humla/src/main/java/se/lublin/humla/audio/AudioInput.java` — add `import android.Manifest;` and `import androidx.annotation.RequiresPermission;`, then annotate both the constructor and the factory so the requirement is declared where the platform call happens:
+```java
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
+    public AudioInput(AudioInputListener listener, int audioSource, int targetSampleRate,
+```
+```java
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
+    private static AudioRecord setupAudioRecord(int sampleRate, int audioSource) throws AudioInitializationException {
+```
+
+`libraries/humla/src/main/java/se/lublin/humla/protocol/AudioHandler.java` — the chain ends here, where a `Context` is available. Replace line 132
+```java
+        mInput = new AudioInput(this, mAudioSource, mSampleRate, mEchoCancellationMethod);
+```
+with
+```java
+        if (mContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new AudioInitializationException("RECORD_AUDIO permission not granted");
+        }
+        mInput = new AudioInput(this, mAudioSource, mSampleRate, mEchoCancellationMethod);
+```
+and add the imports `android.Manifest` and `android.content.pm.PackageManager`. `Context.checkSelfPermission` exists since API 23, so no compat class and no androidx.core dependency is needed. An explicit `checkSelfPermission` guard in the calling method is what satisfies lint's `@RequiresPermission` analysis, and it turns a later `SecurityException` into the `AudioException` that `HumlaService` already handles.
+
+`app/src/main/java/se/lublin/mumla/db/MumlaSQLiteDatabase.java` — in lines 190–195 replace every `c.getColumnIndex(X)` with `c.getColumnIndexOrThrow(X)`; the columns are all in the `SELECT`, so the throw never fires and the index can no longer be -1.
+
+`app/src/main/java/se/lublin/mumla/service/MumlaService.java` — replace lines 376–380
+```java
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            registerReceiver(mTalkReceiver, new IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK), RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(mTalkReceiver, new IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK));
+        }
+```
+with
+```java
+        ContextCompat.registerReceiver(this, mTalkReceiver,
+                new IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK), ContextCompat.RECEIVER_EXPORTED);
+```
+(`RECEIVER_EXPORTED` is deliberate: `se.lublin.mumla.action.TALK` is the documented way other apps toggle talking.) Add `import androidx.core.content.ContextCompat;`.
+
+`app/src/main/java/se/lublin/mumla/service/MumlaConnectionNotification.java` — replace lines 108–112 (the `if/else` inside the `try`) with
+```java
+            ContextCompat.registerReceiver(mService, mNotificationReceiver, filter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED);
+```
+and `app/src/main/java/se/lublin/mumla/service/MumlaReconnectNotification.java` lines 85–89 with
+```java
+            ContextCompat.registerReceiver(mContext, mNotificationReceiver, filter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED);
+```
+(both receivers only listen to this app's own `b_*` actions). Add `import androidx.core.content.ContextCompat;` to both and drop the now-unused `android.os.Build` import where it becomes unused.
+
+`app/src/main/java/se/lublin/mumla/service/MumlaMessageNotification.java` — replace line 107 `manager.notify(NOTIFICATION_ID, notification);` with
+```java
+        if (ContextCompat.checkSelfPermission(mContext, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) {
+            manager.notify(NOTIFICATION_ID, notification);
+        }
+```
+and the same guard around `nmc.notify(NOTIFICATION_ID, builder.build());` in `MumlaReconnectNotification.java:135`; add the imports `android.Manifest`, `android.content.pm.PackageManager` and `androidx.core.content.ContextCompat` (the app module already depends on androidx.core). Posting a notification the user has refused is a no-op anyway, so this only makes the existing behavior explicit; stream P owns asking for the permission (P3).
+
+`app/src/main/AndroidManifest.xml` — delete line 33
+```xml
+    <uses-permission android:name="android.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS" />
+```
+It is a signature permission a normal app never gets, and its only user is `MumlaService.onOverlayToggled`'s `if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S)` branch, which is unreachable at minSdk 31 (stream A deletes that branch when it next touches the file).
+
+Layouts — replace `android:tint` with `app:tint` on the fourteen AppCompat image views lint names, all under `app/src/main/res/`: `layout/channel_row.xml:34,61,71`, `layout/channel_user_row.xml:65`, `layout/fragment_channel.xml:61`, `layout-sw600dp/fragment_channel.xml:84`, `layout-sw720dp/fragment_channel.xml:83`, `layout/fragment_chat.xml:76`, `layout/fragment_tokens.xml:56`, `layout/public_server_list_row.xml:123,143`, `layout/server_list_row.xml:123,143`, `layout/token_row.xml:40`. Every one of those files already declares `xmlns:app` (they use `app:srcCompat`), so this is a pure attribute rename.
+
+`app/build.gradle` — in the `lint { }` block, below the existing `disable` line, add
+```groovy
+        // Plural forms in translated resources belong to Weblate; spec section 2 forbids editing
+        // translation files, so this check reports but does not fail the build. It stays enabled
+        // for the English source, where it would be a real error we can fix.
+        warning 'MissingQuantity'
+```
+
+- [ ] **Step 15: Run lint and the full green gate**
+
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug`
+Expected: `BUILD SUCCESSFUL`; both lint runs report 0 errors. From here on this command is the green gate for every task.
+
+- [ ] **Step 16: Commit the lint fixes separately**
+
+```bash
+cd /home/becker/git/mumla
+git add -A app/src libraries/humla/src app/build.gradle
+git add gradle/libs.versions.toml libraries/humla/build.gradle
+git commit -m "fix(lint): resolve the errors that block abortOnError" -m "Lint had not gated a build for a long time (the CI job was commented out) and reported 30 errors: missing RECORD_AUDIO/POST_NOTIFICATIONS declarations, getColumnIndex without OrThrow, registerReceiver without an exported flag, a signature-only permission and android:tint on AppCompat views. MissingQuantity is downgraded to a warning because it only fires in Weblate-managed translations."
 ```
 
 ---
@@ -1070,10 +1243,10 @@ class Settings private constructor(context: Context) {
     fun getNewsShownVersions(): Set<String> =
         preferences.getStringSet(PREF_NEWS_SHOWN_VERSIONS, HashSet())!!
 
-    fun addNewsShownVersions(versions: List<String?>) {
+    fun addNewsShownVersions(versions: List<String>) {
         // Copy: getStringSet docs state that the returned set must not be modified.
         val shownVersions = HashSet(preferences.getStringSet(PREF_NEWS_SHOWN_VERSIONS, HashSet())!!)
-        val added = shownVersions.addAll(versions.filterNot { it.isNullOrEmpty() }.map { it!! })
+        val added = shownVersions.addAll(versions.filter { it.isNotEmpty() })
         if (added) {
             preferences.edit().putStringSet(PREF_NEWS_SHOWN_VERSIONS, shownVersions).apply()
         }
@@ -1209,7 +1382,7 @@ class Settings private constructor(context: Context) {
 
 - [ ] **Step 4: Run the tests and the green gate**
 
-Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.SettingsTest' && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.SettingsTest' && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug`
 Expected: 15 tests pass; `BUILD SUCCESSFUL` (all Java callers — `MumlaActivity`, `MumlaService`, fragments, `CertificateGenerateActivity`, … — compile unchanged against the Kotlin class).
 
 - [ ] **Step 5: Commit**
@@ -1235,6 +1408,8 @@ git commit -m "refactor: convert Settings to kotlin" -m "Same Java-visible API; 
 - Produces: nothing other streams use.
 
 `CertificateExportActivity.java:101` branches on `SDK_INT >= R`; the `else` branch (`saveCertificateClassic`, `onRequestPermissionsResult`, `WRITE_EXTERNAL_STORAGE`, `Environment.getExternalStorageDirectory()`) cannot run on API 31+. Convert first (own commit), then delete the dead branch and give the SAF request a proper MIME type.
+
+Only the MIME type is covered by a test. Robolectric runs at SDK 36, so the `SDK_INT >= R` branch is taken whether or not the legacy code is still there — deleting it is unreachable-code removal, proven by compilation and by the `minSdk = 31` floor, not by a test.
 
 - [ ] **Step 1: Convert to Kotlin (faithful, legacy branch included)**
 
@@ -1411,7 +1586,7 @@ git add -A app/src/main/java/se/lublin/mumla/preference
 git commit -m "refactor: convert CertificateExportActivity to kotlin"
 ```
 
-- [ ] **Step 3: Write the failing test for the SAF-only export**
+- [ ] **Step 3: Write the failing test for the PKCS#12 MIME type**
 
 Create `app/src/test/java/se/lublin/mumla/preference/CertificateExportActivityTest.kt`:
 ```kotlin
@@ -1453,7 +1628,7 @@ class CertificateExportActivityTest {
 - [ ] **Step 4: Run it to see it fail**
 
 Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.preference.CertificateExportActivityTest'`
-Expected: FAIL at `intent.type`: `expected: application/x-pkcs12 but was: null` (the deprecated no-arg `CreateDocument()` sets no MIME type).
+Expected: FAIL at `intent.type`: `expected: application/x-pkcs12 but was: */*` (androidx.activity's deprecated no-arg `CreateDocument()` delegates to `this("*/*")` and `createIntent` calls `setType(mimeType)`, so the wildcard type is what the intent carries).
 
 - [ ] **Step 5: Delete the legacy branch and set the MIME type**
 
@@ -1475,7 +1650,7 @@ In `CertificateExportActivity.kt`:
 
 - [ ] **Step 6: Run the test and the green gate**
 
-Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.preference.CertificateExportActivityTest' && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :app:testFossDebugUnitTest --tests 'se.lublin.mumla.preference.CertificateExportActivityTest' && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug`
 Expected: PASS; `BUILD SUCCESSFUL`. (`R.string.grant_perm_storage` stays in `strings.xml`; translation files are Weblate's.)
 
 - [ ] **Step 7: Commit**
@@ -1539,6 +1714,8 @@ with
 
 - [ ] **Step 3: Adapt the goog flavor to Play Billing 9**
 
+`StartupAction.java` stays Java. The Global Constraint converts a Java file that a task changes *non-trivially*; this is a six-line adaptation of a single call site in the `goog`-only flavor (one lambda parameter, one statement, two imports) with no logic change, so it falls under the "more than a few lines" threshold. Stream P converts the file if it ever reshapes it.
+
 In `app/src/goog/java/se/lublin/mumla/app/StartupAction.java` replace lines 207–216
 ```java
         billingClient.queryProductDetailsAsync(params, (queryResult, productDetails) -> {
@@ -1578,7 +1755,8 @@ following third-party components. Every entry is GPLv3-compatible.
 
 | Component | Version | License | Source |
 |---|---|---|---|
-| Kotlin, kotlinx-coroutines | 2.4.20 / 1.11.0 | Apache-2.0 | https://github.com/JetBrains/kotlin |
+| Kotlin standard library and compiler | bundled with AGP 9.4.1 (built-in Kotlin; `agp` in `gradle/libs.versions.toml`) | Apache-2.0 | https://github.com/JetBrains/kotlin |
+| kotlinx-coroutines | 1.11.0 | Apache-2.0 | https://github.com/Kotlin/kotlinx.coroutines |
 | AndroidX (appcompat, activity, core, fragment, preference, recyclerview, cardview, documentfile, exifinterface) | see `gradle/libs.versions.toml` | Apache-2.0 | https://developer.android.com/jetpack |
 | Material Components for Android | 1.14.0 | Apache-2.0 | https://github.com/material-components/material-components-android |
 | jsoup | 1.23.2 | MIT | https://jsoup.org |
@@ -1720,7 +1898,7 @@ and change the generated header line `// Going to compile to java classes using 
 
 - [ ] **Step 5: Run the test, then the green gate**
 
-Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.protobuf.MumbleProtoTest' && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.protobuf.MumbleProtoTest' && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug`
 Expected: PASS; `BUILD SUCCESSFUL`; `ls libraries/humla/build/generated/source/proto/debug/java/se/lublin/humla/protobuf/Mumble.java` exists; `git status` shows no generated file under `src/`.
 
 - [ ] **Step 6: Update `NOTICE.md`**
@@ -1753,7 +1931,7 @@ git commit -m "build(humla): generate protobuf classes with protoc 4.36.2 at bui
 - Consumes: bcprov-jdk18on / bcpkix-jdk18on 1.86.
 - Produces: `object Pkcs12Certificates { @JvmStatic fun load(pkcs12: ByteArray, password: String?): KeyStore; @JvmStatic fun load(input: InputStream, password: CharArray): KeyStore }` — the one entry point for reading client certificates (stream A's `HumlaConnection` and the import activity call it).
 
-Research result: stock BouncyCastle's `PKCS12KeyStoreSpi.engineLoad` handles `keyBag` inside an unencrypted `data` ContentInfo (`prov/.../PKCS12KeyStoreSpi.java` on `main`, the `else if (b.getBagId().equals(keyBag)) processKeyBag(b)` branch under `c[i].getContentType().equals(data)`), i.e. the same thing the Spongycastle fork patched in 2014. The test below builds a byte-for-byte Mumble-style file (unencrypted keyBag + certBag with `friendlyName`/`localKeyId` attributes, SHA-1 MAC over the empty password, mirroring `PKCS12_create("", "Mumble Identity", pkey, x509, certs, -1, -1, 0, 0, 0)` in Mumble's `src/mumble/Cert.cpp:548`) and proves it loads. If — and only if — that test fails with BouncyCastle 1.86, implement the fallback the spec describes inside `Pkcs12Certificates.load` (parse the `Pfx` with `org.bouncycastle.pkcs.PKCS12PfxPdu`, iterate `getContentInfos()`, collect `keyBag` `PrivateKeyInfo` and `certBag` entries, and populate an in-memory `KeyStore.getInstance("PKCS12", provider)` with `setKeyEntry`); the plan does not expect this branch to be needed.
+Research result: stock BouncyCastle's `PKCS12KeyStoreSpi.engineLoad` handles `keyBag` inside an unencrypted `data` ContentInfo (`prov/.../PKCS12KeyStoreSpi.java` on `main`, the `else if (b.getBagId().equals(keyBag)) processKeyBag(b)` branch under `c[i].getContentType().equals(data)`), i.e. the same thing the Spongycastle fork patched in 2014. The test below builds a byte-for-byte Mumble-style file (unencrypted keyBag + certBag with `friendlyName`/`localKeyId` attributes, SHA-1 MAC over the empty password, mirroring `PKCS12_create("", "Mumble Identity", pkey, x509, certs, -1, -1, 0, 0, 0)` in Mumble's `src/mumble/Cert.cpp:548`) and proves it loads. Spec F5 makes a minimal Kotlin PKCS#12 reader conditional on stock BouncyCastle *not* handling that shape. It does handle it — verified against `bcgit/bc-java` `main`, `prov/src/main/java/org/bouncycastle/jcajce/provider/keystore/pkcs12/PKCS12KeyStoreSpi.java`, where `engineLoad` dispatches `else if (b.getBagId().equals(keyBag)) { processKeyBag(b); }` under the unencrypted `data` ContentInfo (see Version research) — so the fallback reader is **out of scope for this plan** and no step implements it. If the first test in step 2 nevertheless fails inside `KeyStore.load`, stop: that invalidates the premise of this task, and the fallback has to be planned as its own task (spec F5) rather than improvised here.
 
 Global provider registration: `HumlaService` installs the provider at position 1 for "creating and managing PKCS #12 certificates". With Spongycastle the provider name was `SC`; BouncyCastle's is `BC`, which Android already registers, so `Security.insertProviderAt(new BouncyCastleProvider(), 1)` would return −1 and do nothing. Every crypto call site already passes the provider instance explicitly (`KeyStore.getInstance("PKCS12", provider)`, `JcaContentSignerBuilder.setProvider`, `JcaX509CertificateConverter.setProvider`); `MumlaTrustStore` uses the platform `BKS`, TLS uses the platform key/trust managers. The static block is therefore removed rather than changed to a `removeProvider("BC")` dance that would swap Android's own crypto out from under the platform.
 
@@ -1934,6 +2112,8 @@ object Pkcs12Certificates {
 
 - [ ] **Step 5: Move the remaining code from Spongycastle to BouncyCastle**
 
+All four Java files below keep their language. Every edit is a package rename in an import line (plus, in `HumlaService`, the deletion of a four-line static block and in `HumlaConnection`/`CertificateImportActivity` the replacement of a `KeyStore.getInstance` pair by one call); none of them is the "more than a few lines" non-trivial change that the Global Constraint converts to Kotlin first. `HumlaCertificateGenerator.java` in particular changes nine import lines and one comment and no code at all.
+
 `libraries/humla/src/main/java/se/lublin/humla/net/HumlaCertificateGenerator.java`: replace lines 20–28
 ```java
 import org.spongycastle.asn1.x500.X500Name;
@@ -1992,10 +2172,8 @@ Delete `libraries/humla/tools/mkp12.sh` (`git rm`).
 
 - [ ] **Step 6: Run the tests and the green gate**
 
-Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.net.Pkcs12CertificatesTest' && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.net.Pkcs12CertificatesTest' && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug`
 Expected: 3 tests PASS; `BUILD SUCCESSFUL`; `grep -rn spongycastle app/src libraries/humla/src gradle build.gradle app/build.gradle libraries/humla/build.gradle` prints nothing.
-
-If the first test fails inside `KeyStore.load` (e.g. `IOException: ... keyBag`), implement the fallback described in the task preamble inside `Pkcs12Certificates.load(InputStream, CharArray)` — catch the `IOException`, re-parse with `PKCS12PfxPdu(bytes)`, and fill a fresh in-memory PKCS#12 store — and keep the same three tests as the gate.
 
 - [ ] **Step 7: Update `NOTICE.md`**
 
@@ -2021,7 +2199,7 @@ git commit -m "refactor: replace spongycastle with bouncycastle" -m "Stock Bounc
 - Consumes: `IEncoder` (Java, unchanged), `IDecoder` (Java, unchanged), `IAudioMixerSource<T> { T getSamples(); int getNumSamples(); }`, `PacketBuffer`, `User.getSession()/getAverageAvailable()/setAverageAvailable(float)`, `AudioHandler.SAMPLE_RATE = 48000`, `AudioHandler.FRAME_SIZE = 480`, the javacpp classes `Opus`, `Speex`, `CELT7`, `CELT11` (deleted in Task 9).
 - Produces: identical Java-visible constructors and methods, so `AudioHandler.java` (`new CELT7Encoder(SAMPLE_RATE, FRAME_SIZE, 1, mFramesPerPacket, mBitrate, MAX_BUFFER_SIZE)`, `new CELT11Encoder(SAMPLE_RATE, 1, mFramesPerPacket)`, `new OpusEncoder(SAMPLE_RATE, 1, FRAME_SIZE, mFramesPerPacket, mBitrate, MAX_BUFFER_SIZE)`, `new PreprocessingEncoder(encoder, FRAME_SIZE, SAMPLE_RATE)`, `new ResamplingEncoder(encoder, 1, rate, FRAME_SIZE, SAMPLE_RATE)`) and `AudioOutput.java` (`new AudioOutputSpeech(user, messageType, mBufferSize, this)`, `AudioOutputSpeech.TalkStateListener`, `AudioOutputSpeech.Result`, `result.isAlive()`, `result.getSpeechOutput()`, `speech.getUser()`, `speech.getSession()`, `speech.getCodec()`, `speech.destroy()`, `speech.addFrameToBuffer(...)`, `speech.setRequestedSamples(int)`) compile unchanged.
 
-These six files are the only Java users of the javacpp bindings besides `HumlaService:356`. Java cannot even name the target package `se.lublin.humla.audio.native` (`native` is a Java keyword), so they must be Kotlin before Task 9 rewires them. This task is a pure conversion — no behavior change — and one commit. The only intentional deviation: `AudioOutputSpeech`'s codec `switch` had no `default` (an unsupported codec left the decoder `null` and crashed with an NPE on first decode); the Kotlin `when` throws `NativeAudioException` from the constructor, which `AudioOutput` already catches.
+These six files belong to stream B (`audio/**`), and this task deletes and re-creates all of them; they are listed in **Cross-stream touches** for that reason. They are also the only Java users of the javacpp bindings besides `HumlaService:356`. Java cannot even name the target package `se.lublin.humla.audio.native` (`native` is a Java keyword), so they must be Kotlin before Task 9 rewires them. This task is a pure conversion — no behavior change — and one commit. The only intentional deviation: `AudioOutputSpeech`'s codec `switch` had no `default` (an unsupported codec left the decoder `null` and crashed with an NPE on first decode); the Kotlin `when` throws `NativeAudioException` from the constructor, which `AudioOutput` already catches.
 
 - [ ] **Step 1: Convert `OpusEncoder`**
 
@@ -2699,7 +2877,7 @@ class AudioOutputSpeech @Throws(NativeAudioException::class) constructor(
 
 - [ ] **Step 7: Build, run existing tests, commit**
 
-Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug`
 Expected: `BUILD SUCCESSFUL` (`AudioHandler.java` and `AudioOutput.java` compile against the Kotlin classes unchanged).
 ```bash
 cd /home/becker/git/mumla
@@ -2720,7 +2898,7 @@ git commit -m "refactor(humla): convert audio encoders and AudioOutputSpeech to 
 - Create: `libraries/humla/src/main/java/se/lublin/humla/audio/native/{OpusEncoderNative,OpusDecoderNative,SpeexPreprocessNative,SpeexResamplerNative,SpeexJitterNative,SpeexDecoderNative,Celt7Native,Celt11Native}.kt`
 - Create: `libraries/humla/src/main/java/se/lublin/humla/audio/{PacketBytes,OpusDecoder,CELT7Decoder,CELT11Decoder,SpeexDecoder,SpeexJitterBuffer}.kt`
 - Modify: the five encoder `.kt` files and `AudioOutputSpeech.kt` from Task 8
-- Create tests: `libraries/humla/src/test/java/se/lublin/humla/audio/encoder/{RecordingEncoder,OpusEncoderTest,CELT7EncoderTest,CELT11EncoderTest,PreprocessingEncoderTest,ResamplingEncoderTest}.kt`
+- Create tests: `libraries/humla/src/test/java/se/lublin/humla/audio/encoder/{RecordingEncoder,OpusEncoderTest,CELT7EncoderTest,CELT11EncoderTest,PreprocessingEncoderTest,ResamplingEncoderTest}.kt`, `libraries/humla/src/test/java/se/lublin/humla/audio/{FakeJitter,SpeexJitterBufferTest,SpeexDecoderTest,AudioOutputSpeechTest}.kt`
 - Modify: `libraries/humla/build.gradle`, `gradle/libs.versions.toml` (drop javacpp), `libraries/humla/.gitignore`, `.gitmodules` (via git), `NOTICE.md`
 - Modify (cross-stream hook): `libraries/humla/src/main/java/se/lublin/humla/HumlaService.java:49,356`
 
@@ -2728,14 +2906,19 @@ git commit -m "refactor(humla): convert audio encoders and AudioOutputSpeech to 
 - Consumes: Task 8's Kotlin call sites; upstream opus CMake (`add_subdirectory`, options `OPUS_BUILD_SHARED_LIBRARY`, `OPUS_FIXED_POINT`, `OPUS_BUILD_PROGRAMS`, `OPUS_BUILD_TESTING`, `OPUS_INSTALL_*`; DNN/DRED/OSCE all default OFF in 1.6.1 so no model files are needed); speex 1.2.1 and speexdsp 1.2.1 source lists from their `Makefile.am`; the pre-generated celt `config.h` files.
 - Produces (used by stream B): package `se.lublin.humla.audio.native` with one fakeable interface + one `object` per library: `OpusEncoderApi`/`OpusEncoderNative`, `OpusDecoderApi`/`OpusDecoderNative`, `SpeexPreprocessApi`/`SpeexPreprocessNative`, `SpeexResamplerApi`/`SpeexResamplerNative`, `SpeexJitterApi`/`SpeexJitterNative`, `SpeexDecoderApi`/`SpeexDecoderNative`, `Celt7Api`/`Celt7Native`, `Celt11Api`/`Celt11Native` (exact signatures below); shared libraries `libhumla_opus.so`, `libhumla_speex.so`, `libhumla_speexdsp.so`, `libhumla_celt7.so`, `libhumla_celt11.so`; `CELT7Encoder.getBitstreamVersion()` (Java-callable); every encoder/decoder constructor takes an optional trailing `api` parameter (`@JvmOverloads`) so tests inject fakes.
 
+  Each `*Native` object calls `System.loadLibrary` in its `init`, so a JVM unit test must **always** pass an `*Api` fake explicitly and never fall through to the default argument — touching the object on a JVM without the `.so` throws `UnsatisfiedLinkError`. Referencing the request-code constants is safe: they are `const val` and the compiler inlines them, so no class is loaded.
+
+Stream B branches from the post-F8 commit and receives this whole area in Kotlin: `audio/encoder/*.kt`, `AudioOutputSpeech.kt`, the new `audio/native/*.kt` seams and the Kotlin decoders. B1, B2, B9 and B11 are therefore written against `PreprocessingEncoder.kt` + `SpeexPreprocessApi`, not `PreprocessingEncoder.java` + `Speex.SpeexPreprocessState`; `audio/javacpp/` no longer exists.
+
 Design decisions:
 - **Five shared libraries, not one.** CELT 0.7 and 0.11 export identical symbol names (`celt_encode`, …) and speex 1.2.1 and speexdsp 1.2.1 both carry `kiss_fft.c`; linking them into one `.so` would collide. Each library keeps its own JNI file and is loaded by the Kotlin objects that need it (`System.loadLibrary` is idempotent).
-- **speex is split into the two upstream release tags.** The spec's global constraint requires third-party native sources at *release tags*; the current speex commit `a6d05eb` is an untagged 2008 snapshot of the pre-split tree, so the choice between "keep" and "split" is settled by that constraint, not by whether the old tree still compiles.
+- **speex is split into the two upstream release tags.** Spec F6 phrases the split as conditional ("if the old combined tree cannot build with the new NDK, otherwise keep and note"), but spec §2 states unconditionally that the third-party native sources are "git submodules of the main repo pointing at upstream release tags", and the current speex commit `a6d05eb` is an untagged 2008 snapshot of the pre-split tree. §2 therefore settles it, and the F6 condition cannot be evaluated at this point in the sequence anyway: the dev shell still ships NDK 26 here (Task 10 is what installs NDK 29), and this task deletes `src/main/jni` in step 7, so there is no ordering in which "build the old tree with NDK 29" could be a step of this plan.
 - **Compile definitions are the ones ndk-build used** (`__EMX__ FIXED_POINT USE_KISS_FFT EXPORT=` for speex/speexdsp — `__EMX__` selects the plain `short/int` typedefs in `speex_types.h`/`speexdsp_types.h`, which still exist in 1.2.1, so no `configure` step is needed; `HAVE_CONFIG_H` + the checked-in `config.h` + `-fvisibility=hidden` for celt; fixed-point opus), so codec behavior is unchanged.
 - **Buffers cross JNI as Java arrays.** The old `IDecoder` contract passes `ByteBuffer` slices of *heap* buffers (`PacketBuffer.bufferBlock`), which have no direct address; the Kotlin decoders copy the ≤ 1 KB frame into a `ByteArray` (`PacketBytes.copy`) and JNI pins arrays. The one safety change: `jni_speex.cpp` decodes into a buffer of the codec's real frame size and copies at most `out.size` samples (the javacpp binding let speex write 640 UWB samples into a 480-element array).
 - **No host-side ctest targets.** Every JNI function is a one-line pass-through; the Kotlin logic on top is tested against fakes (this task), which is the second option the spec allows.
+- **`ANDROID_STL=c++_static` is safe here.** The NDK warns against static libc++ because duplicated global state breaks when C++ objects, exceptions or `std::` containers cross a library boundary. Nothing crosses here: each of the five `.so` files is self-contained, exports only `Java_…` C functions, and the only C++ the JNI sources use is `new`/`delete[]` in `jni_speex.cpp` and `std::min`. The linker keeps just those pieces, so the size cost is negligible and no libc++ state is shared.
 
-- [ ] **Step 1: Write the failing encoder tests**
+- [ ] **Step 1: Write the failing tests for the encoders, the decoders and the jitter buffer**
 
 Create `libraries/humla/src/test/java/se/lublin/humla/audio/encoder/RecordingEncoder.kt`:
 ```kotlin
@@ -2774,7 +2957,6 @@ import se.lublin.humla.net.PacketBuffer
 class OpusEncoderTest {
 
     private class FakeOpus : OpusEncoderApi {
-        val ctlCalls = mutableListOf<Pair<Int, Int>>()
         val encodedFrameSizes = mutableListOf<Int>()
         override fun create(sampleRate: Int, channels: Int, application: Int, error: IntArray): Long {
             error[0] = 0
@@ -2785,10 +2967,7 @@ class OpusEncoderTest {
             out[0] = 0x11; out[1] = 0x22; out[2] = 0x33
             return 3
         }
-        override fun ctlSetInt(state: Long, request: Int, value: Int): Int {
-            ctlCalls += request to value
-            return 0
-        }
+        override fun ctlSetInt(state: Long, request: Int, value: Int): Int = 0
         override fun ctlGetInt(state: Long, request: Int, value: IntArray): Int {
             value[0] = 40000
             return 0
@@ -2830,13 +3009,6 @@ class OpusEncoderTest {
         assertThat(pb.readLong()).isEqualTo(3L or (1L shl 13)) // 8195: two-byte varint 0xA0 0x03
         assertThat(pb.dataBlock(3)).isEqualTo(byteArrayOf(0x11, 0x22, 0x33))
     }
-
-    @Test
-    fun `construction disables vbr and applies the bitrate`() {
-        val fake = FakeOpus()
-        OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
-        assertThat(fake.ctlCalls).containsExactly(4006 to 0, 4002 to 40000).inOrder()
-    }
 }
 ```
 
@@ -2857,7 +3029,7 @@ class CELT7EncoderTest {
             return 1L
         }
         override fun modeInfo(mode: Long, request: Int, value: IntArray): Int {
-            value[0] = if (request == 2000) 0x8000000b.toInt() else -1
+            value[0] = 0
             return 0
         }
         override fun modeDestroy(mode: Long) {}
@@ -2891,13 +3063,9 @@ class CELT7EncoderTest {
         assertThat(pb.dataBlock(12)).isEqualTo(byteArrayOf(0x85.toByte(), 1, 2, 3, 4, 5, 0x05, 1, 2, 3, 4, 5))
         assertThat(encoder.isReady()).isFalse()
     }
-
-    @Test
-    fun `bitstream version is read with the CELT_GET_BITSTREAM_VERSION mode request`() {
-        assertThat(CELT7Encoder.bitstreamVersion(FakeCelt7())).isEqualTo(0x8000000b.toInt())
-    }
 }
 ```
+`CELT7Encoder.getBitstreamVersion()` gets no test: it creates a mode, reads one constant out of it and destroys it again, so a test against a fake could only restate that pass-through. Its one consumer, `HumlaService.addCeltVersions`, belongs to stream A.
 
 Create `CELT11EncoderTest.kt`:
 ```kotlin
@@ -2953,7 +3121,6 @@ import se.lublin.humla.audio.native.SpeexPreprocessApi
 class PreprocessingEncoderTest {
 
     private class FakePreprocess : SpeexPreprocessApi {
-        val ctl = mutableListOf<Pair<Int, Int>>()
         var runs = 0
         override fun init(frameSize: Int, sampleRate: Int): Long = 5L
         override fun run(state: Long, frame: ShortArray): Int {
@@ -2961,10 +3128,7 @@ class PreprocessingEncoderTest {
             for (i in frame.indices) frame[i] = (frame[i] / 2).toShort()
             return 1
         }
-        override fun ctlInt(state: Long, request: Int, value: IntArray): Int {
-            ctl += request to value[0]
-            return 0
-        }
+        override fun ctlInt(state: Long, request: Int, value: IntArray): Int = 0
         override fun destroy(state: Long) {}
     }
 
@@ -2980,16 +3144,9 @@ class PreprocessingEncoderTest {
         assertThat(inner.received.single().toList().distinct()).containsExactly(500.toShort())
         assertThat(inner.receivedSizes).containsExactly(480)
     }
-
-    @Test
-    fun `construction configures the speex preprocessor exactly as before`() {
-        val fake = FakePreprocess()
-        PreprocessingEncoder(RecordingEncoder(), 480, 48000, fake)
-        // SET_VAD 0, SET_AGC 1, SET_DENOISE 1, SET_DEREVERB 1, SET_AGC_TARGET 30000, GET_PROB_START 99 (sic, B9 fixes)
-        assertThat(fake.ctl).containsExactly(4 to 0, 2 to 1, 0 to 1, 8 to 1, 46 to 30000, 15 to 99).inOrder()
-    }
 }
 ```
+The constructor's six `ctl` calls get no test. Asserting the exact request/value sequence would only restate the constructor body, and spec B9 deliberately changes that sequence (`GET_PROB_START` → `SET_PROB_START`, AGC calls dropped), so such a test would exist only to be deleted by stream B.
 
 Create `ResamplingEncoderTest.kt`:
 ```kotlin
@@ -3036,10 +3193,229 @@ class ResamplingEncoderTest {
 }
 ```
 
+Create `libraries/humla/src/test/java/se/lublin/humla/audio/FakeJitter.kt` (used by `SpeexJitterBufferTest` and `AudioOutputSpeechTest`; package `se.lublin.humla.audio`):
+```kotlin
+package se.lublin.humla.audio
+
+import se.lublin.humla.audio.native.SpeexJitterApi
+import se.lublin.humla.audio.native.SpeexJitterNative
+
+/** Records what [SpeexJitterBuffer] sends to libspeexdsp and replays a scripted `get`. */
+class FakeJitter : SpeexJitterApi {
+    /** One entry per `put`, as `[length, timestamp, span, sequence, userData]`. */
+    val puts = mutableListOf<List<Int>>()
+    var lastPutData: ByteArray? = null
+    /** Recorded `ctl` requests as `request to value`. */
+    val ctlCalls = mutableListOf<Pair<Int, Int>>()
+    /** The value the next `ctl` writes back into its in/out argument. */
+    var ctlResult = 0
+    var nextStatus = SpeexJitterNative.JITTER_BUFFER_MISSING
+    var nextPacket = ByteArray(0)
+    /** `[length, timestamp, span, sequence, userData]` the next `get` reports. */
+    var nextMeta = intArrayOf(0, 0, 0, 0, 0)
+    var ticks = 0
+    var updateDelayCalls = 0
+    var destroyed = false
+
+    override fun init(stepSize: Int): Long = 1L
+    override fun destroy(handle: Long) {
+        destroyed = true
+    }
+    override fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int) {
+        lastPutData = data.copyOf()
+        puts += listOf(len, timestamp, span, sequence, userData)
+    }
+    override fun get(handle: Long, out: ByteArray, desiredSpan: Int, meta: IntArray): Int {
+        nextPacket.copyInto(out, 0, 0, minOf(nextPacket.size, out.size))
+        nextMeta.copyInto(meta)
+        return nextStatus
+    }
+    override fun pointerTimestamp(handle: Long): Int = 0
+    override fun tick(handle: Long) {
+        ticks++
+    }
+    override fun ctl(handle: Long, request: Int, value: IntArray): Int {
+        ctlCalls += request to value[0]
+        value[0] = ctlResult
+        return 0
+    }
+    override fun updateDelay(handle: Long): Int {
+        updateDelayCalls++
+        return 0
+    }
+}
+```
+
+Create `libraries/humla/src/test/java/se/lublin/humla/audio/SpeexJitterBufferTest.kt`:
+```kotlin
+package se.lublin.humla.audio
+
+import com.google.common.truth.Truth.assertThat
+import org.junit.Test
+import se.lublin.humla.audio.native.SpeexJitterNative
+
+class SpeexJitterBufferTest {
+
+    @Test
+    fun `get takes the packet length and user data out of the meta array`() {
+        val fake = FakeJitter()
+        fake.nextStatus = SpeexJitterNative.JITTER_BUFFER_OK
+        // [length, timestamp, span, sequence, userData] - length is slot 0, userData slot 4
+        fake.nextMeta = intArrayOf(37, 1440, 960, 9, 1)
+
+        val packet = SpeexJitterBuffer(480, fake).get(ByteArray(4096), 480)
+
+        assertThat(packet.status).isEqualTo(SpeexJitterNative.JITTER_BUFFER_OK)
+        assertThat(packet.length).isEqualTo(37)
+        assertThat(packet.userData).isEqualTo(1)
+    }
+
+    @Test
+    fun `control sends the value in and returns what the buffer wrote back`() {
+        val fake = FakeJitter()
+        fake.ctlResult = 3
+        val buffer = SpeexJitterBuffer(480, fake)
+
+        val available = buffer.control(SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT, 0)
+
+        assertThat(available).isEqualTo(3)
+        assertThat(fake.ctlCalls).containsExactly(SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT to 0)
+    }
+}
+```
+
+Create `libraries/humla/src/test/java/se/lublin/humla/audio/SpeexDecoderTest.kt`:
+```kotlin
+package se.lublin.humla.audio
+
+import com.google.common.truth.Truth.assertThat
+import org.junit.Test
+import se.lublin.humla.audio.native.SpeexDecoderApi
+
+class SpeexDecoderTest {
+
+    private class FakeSpeex(private val samples: FloatArray) : SpeexDecoderApi {
+        override fun create(modeId: Int): Long = 1L
+        override fun ctlInt(handle: Long, request: Int, value: Int): Int = 0
+        override fun decodeFloat(handle: Long, data: ByteArray?, len: Int, out: FloatArray): Int {
+            samples.copyInto(out, 0, 0, minOf(samples.size, out.size))
+            return 0
+        }
+        override fun destroy(handle: Long) {}
+    }
+
+    @Test
+    fun `decoded samples are scaled from the 16 bit range into minus one to one`() {
+        val decoder = SpeexDecoder(FakeSpeex(floatArrayOf(32767f, -32767f, 0f, 3276.7f)))
+        val out = FloatArray(4)
+
+        assertThat(decoder.decodeFloat(null, 0, out, 4)).isEqualTo(4)
+
+        assertThat(out[0]).isWithin(1e-5f).of(1f)
+        assertThat(out[1]).isWithin(1e-5f).of(-1f)
+        assertThat(out[2]).isEqualTo(0f)
+        assertThat(out[3]).isWithin(1e-5f).of(0.1f)
+    }
+}
+```
+
+Create `libraries/humla/src/test/java/se/lublin/humla/audio/AudioOutputSpeechTest.kt`:
+```kotlin
+package se.lublin.humla.audio
+
+import com.google.common.truth.Truth.assertThat
+import org.junit.Test
+import se.lublin.humla.audio.native.OpusDecoderApi
+import se.lublin.humla.audio.native.SpeexJitterNative
+import se.lublin.humla.model.TalkState
+import se.lublin.humla.model.User
+import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.protocol.AudioHandler
+
+class AudioOutputSpeechTest {
+
+    private class FakeOpusDecoder(
+        private val nbFrames: Int = 1,
+        private val samplesPerFrame: Int = AudioHandler.FRAME_SIZE,
+    ) : OpusDecoderApi {
+        override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {
+            error[0] = 0
+            return 1L
+        }
+        override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int =
+            AudioHandler.FRAME_SIZE
+        override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int): Int =
+            AudioHandler.FRAME_SIZE
+        override fun destroy(state: Long) {}
+        override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = nbFrames
+        override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int = samplesPerFrame
+    }
+
+    /** One Mumble opus payload: the 13-bit size header, then `payload`. */
+    private fun opusPacket(payload: ByteArray): ByteArray {
+        val pb = PacketBuffer.allocate(payload.size + 4)
+        pb.writeLong(payload.size.toLong())
+        pb.append(payload, payload.size)
+        val length = pb.size()
+        pb.rewind()
+        return pb.dataBlock(length)
+    }
+
+    @Test
+    fun `an opus frame reaches the jitter buffer with its sample count as span`() {
+        val jitter = FakeJitter()
+        val speech = AudioOutputSpeech(
+            User(42, "alice"),
+            HumlaUDPMessageType.UDPVoiceOpus,
+            AudioHandler.FRAME_SIZE,
+            { _, _ -> },
+            FakeOpusDecoder(nbFrames = 2, samplesPerFrame = 480),
+            jitter,
+        )
+        val packet = opusPacket(byteArrayOf(0x41, 0x42, 0x43))
+
+        speech.addFrameToBuffer(PacketBuffer(packet, packet.size), 0, 7)
+
+        // [length, timestamp, span, sequence, userData]: the whole packet, FRAME_SIZE * seq,
+        // frames * samplesPerFrame, a sequence of 0 and the message flags as user data.
+        assertThat(jitter.puts).containsExactly(listOf(4, AudioHandler.FRAME_SIZE * 7, 2 * 480, 0, 0))
+        assertThat(jitter.lastPutData).isEqualTo(packet)
+    }
+
+    @Test
+    fun `a decoded packet reports the talk state carried in its user data`() {
+        val packet = opusPacket(byteArrayOf(0x41, 0x42, 0x43))
+        val jitter = FakeJitter().apply {
+            nextStatus = SpeexJitterNative.JITTER_BUFFER_OK
+            nextPacket = packet
+            nextMeta = intArrayOf(packet.size, 0, 480, 0, 1) // userData 1 = shouting
+            ctlResult = 3                                    // three packets available
+        }
+        val states = mutableListOf<Pair<Int, TalkState>>()
+        val speech = AudioOutputSpeech(
+            User(42, "alice"),
+            HumlaUDPMessageType.UDPVoiceOpus,
+            AudioHandler.FRAME_SIZE,
+            { session, state -> states += session to state },
+            FakeOpusDecoder(),
+            jitter,
+        )
+
+        val result = speech.call()
+
+        assertThat(states).containsExactly(42 to TalkState.SHOUTING)
+        assertThat(result.isAlive()).isTrue()
+        assertThat(result.getNumSamples()).isEqualTo(AudioHandler.FRAME_SIZE)
+        assertThat(jitter.ticks).isEqualTo(1)
+    }
+}
+```
+
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.audio.encoder.*'`
-Expected: FAIL to compile: `Unresolved reference: se.lublin.humla.audio.native` (and the extra constructor arguments).
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.audio.*'`
+Expected: FAIL to compile: `Unresolved reference: se.lublin.humla.audio.native` (and the extra constructor arguments, `SpeexJitterBuffer`, `SpeexDecoder` and the `AudioOutputSpeech` api parameters).
 
 - [ ] **Step 3: Create the `native` package (interfaces + `external` objects)**
 
@@ -3544,9 +3920,9 @@ class SpeexJitterBuffer @JvmOverloads constructor(
 
 - [ ] **Step 5: Rewire the encoders and `AudioOutputSpeech` to the wrappers**
 
-Replace the five encoder files from Task 8 with these versions (only the native access changes):
+Replace the six files from Task 8 with the versions below. They are given in full: only the native access and the new `api` parameters change, but an executor must not have to diff them against Task 8 to reconstruct them.
 
-`OpusEncoder.kt` — replace the imports and the state handling:
+`libraries/humla/src/main/java/se/lublin/humla/audio/encoder/OpusEncoder.kt` (every file of this step carries the GPL header block written out in full in Task 3 Step 3):
 ```kotlin
 package se.lublin.humla.audio.encoder
 
@@ -3584,9 +3960,19 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
         api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_VBR_REQUEST, 0)
         api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_BITRATE_REQUEST, bitrate)
     }
-```
-then keep `encode`, `getBufferedFrames`, `isReady`, `getEncodedData`, `terminate` exactly as in Task 8 and replace `encodePacket`, `getBitrate`, `destroy` with:
-```kotlin
+
+    @Throws(NativeAudioException::class)
+    override fun encode(input: ShortArray, inputSize: Int): Int {
+        if (bufferedFrames >= framesPerPacket) throw BufferOverflowException()
+        if (inputSize != frameSize) {
+            throw IllegalArgumentException("This Opus encoder implementation requires a constant frame size.")
+        }
+        terminated = false
+        System.arraycopy(input, 0, audioBuffer, frameSize * bufferedFrames, frameSize)
+        bufferedFrames++
+        return if (bufferedFrames == framesPerPacket) encodePacket() else 0
+    }
+
     @Throws(NativeAudioException::class)
     private fun encodePacket(): Int {
         if (bufferedFrames < framesPerPacket) {
@@ -3600,6 +3986,31 @@ then keep `encode`, `getBufferedFrames`, `isReady`, `getEncodedData`, `terminate
         return result
     }
 
+    override fun getBufferedFrames(): Int = bufferedFrames
+
+    override fun isReady(): Boolean = encodedLength > 0
+
+    @Throws(BufferUnderflowException::class)
+    override fun getEncodedData(packetBuffer: PacketBuffer) {
+        if (!isReady()) throw BufferUnderflowException()
+        var size = encodedLength
+        if (terminated) size = size or (1 shl 13)
+        packetBuffer.writeLong(size.toLong())
+        packetBuffer.append(buffer, encodedLength)
+        bufferedFrames = 0
+        encodedLength = 0
+        terminated = false
+    }
+
+    @Throws(NativeAudioException::class)
+    override fun terminate() {
+        terminated = true
+        if (bufferedFrames > 0 && !isReady()) {
+            // Perform encode operation on remaining audio if available.
+            encodePacket()
+        }
+    }
+
     fun getBitrate(): Int {
         val value = intArrayOf(0)
         api.ctlGetInt(state, OpusEncoderNative.OPUS_GET_BITRATE_REQUEST, value)
@@ -3607,10 +4018,22 @@ then keep `encode`, `getBufferedFrames`, `isReady`, `getEncodedData`, `terminate
     }
 
     override fun destroy() = api.destroy(state)
+}
 ```
 
-`CELT7Encoder.kt` — imports become `java.nio.BufferOverflowException`, `java.nio.BufferUnderflowException`, `kotlin.math.min`, `se.lublin.humla.audio.native.Celt7Api`, `se.lublin.humla.audio.native.Celt7Native`, `se.lublin.humla.exception.NativeAudioException`, `se.lublin.humla.net.PacketBuffer`, `se.lublin.humla.protocol.AudioHandler`; the header, init, encode, destroy and a new companion:
+`libraries/humla/src/main/java/se/lublin/humla/audio/encoder/CELT7Encoder.kt`:
 ```kotlin
+package se.lublin.humla.audio.encoder
+
+import java.nio.BufferOverflowException
+import java.nio.BufferUnderflowException
+import kotlin.math.min
+import se.lublin.humla.audio.native.Celt7Api
+import se.lublin.humla.audio.native.Celt7Native
+import se.lublin.humla.exception.NativeAudioException
+import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.protocol.AudioHandler
+
 class CELT7Encoder @JvmOverloads @Throws(NativeAudioException::class) constructor(
     sampleRate: Int,
     frameSize: Int,
@@ -3650,7 +4073,29 @@ class CELT7Encoder @JvmOverloads @Throws(NativeAudioException::class) constructo
         return result
     }
 
-    // getBufferedFrames, isReady, getEncodedData, terminate: unchanged from Task 8
+    override fun getBufferedFrames(): Int = bufferedFrames
+
+    override fun isReady(): Boolean = ready && bufferedFrames > 0
+
+    @Throws(BufferUnderflowException::class)
+    override fun getEncodedData(packetBuffer: PacketBuffer) {
+        if (!ready) throw BufferUnderflowException()
+        for (x in 0 until bufferedFrames) {
+            val frame = buffer[x]
+            val length = packetLengths[x]
+            var head = length
+            if (x < bufferedFrames - 1) head = head or 0x80
+            packetBuffer.append(head.toLong())
+            packetBuffer.append(frame, length)
+        }
+        bufferedFrames = 0
+        ready = false
+    }
+
+    @Throws(NativeAudioException::class)
+    override fun terminate() {
+        ready = true
+    }
 
     override fun destroy() {
         api.encoderDestroy(state)
@@ -3660,21 +4105,28 @@ class CELT7Encoder @JvmOverloads @Throws(NativeAudioException::class) constructo
     companion object {
         /** The CELT 0.7 bitstream version Mumla announces in `Authenticate.celt_versions`. */
         @JvmStatic
-        fun getBitstreamVersion(): Int = bitstreamVersion(Celt7Native)
-
-        internal fun bitstreamVersion(api: Celt7Api): Int {
-            val mode = api.modeCreate(AudioHandler.SAMPLE_RATE, AudioHandler.FRAME_SIZE, null)
+        fun getBitstreamVersion(): Int {
+            val mode = Celt7Native.modeCreate(AudioHandler.SAMPLE_RATE, AudioHandler.FRAME_SIZE, null)
             val version = intArrayOf(0)
-            api.modeInfo(mode, Celt7Native.CELT_GET_BITSTREAM_VERSION, version)
-            api.modeDestroy(mode)
+            Celt7Native.modeInfo(mode, Celt7Native.CELT_GET_BITSTREAM_VERSION, version)
+            Celt7Native.modeDestroy(mode)
             return version[0]
         }
     }
 }
 ```
 
-`CELT11Encoder.kt`:
+`libraries/humla/src/main/java/se/lublin/humla/audio/encoder/CELT11Encoder.kt`:
 ```kotlin
+package se.lublin.humla.audio.encoder
+
+import java.nio.BufferOverflowException
+import java.nio.BufferUnderflowException
+import se.lublin.humla.audio.native.Celt11Api
+import se.lublin.humla.audio.native.Celt11Native
+import se.lublin.humla.exception.NativeAudioException
+import se.lublin.humla.net.PacketBuffer
+
 class CELT11Encoder @JvmOverloads @Throws(NativeAudioException::class) constructor(
     sampleRate: Int,
     channels: Int,
@@ -3702,14 +4154,33 @@ class CELT11Encoder @JvmOverloads @Throws(NativeAudioException::class) construct
         return result
     }
 
-    // getBufferedFrames, isReady, getEncodedData, terminate: unchanged from Task 8
+    override fun getBufferedFrames(): Int = bufferedFrames
+
+    override fun isReady(): Boolean = bufferedFrames == framesPerPacket
+
+    @Throws(BufferUnderflowException::class)
+    override fun getEncodedData(packetBuffer: PacketBuffer) {
+        if (bufferedFrames < framesPerPacket) throw BufferUnderflowException()
+        for (x in 0 until bufferedFrames) {
+            val frame = buffer[x]
+            var head = frame.size
+            if (x < bufferedFrames - 1) head = head or 0x80
+            packetBuffer.append(head.toLong())
+            packetBuffer.append(frame, frame.size)
+        }
+        bufferedFrames = 0
+    }
+
+    @Throws(NativeAudioException::class)
+    override fun terminate() {
+        // The CELT 0.11 encoder has no partial-packet flush; kept as before.
+    }
 
     override fun destroy() = api.encoderDestroy(state)
 }
 ```
-(imports: `java.nio.BufferOverflowException`, `java.nio.BufferUnderflowException`, `se.lublin.humla.audio.native.Celt11Api`, `se.lublin.humla.audio.native.Celt11Native`, `se.lublin.humla.exception.NativeAudioException`, `se.lublin.humla.net.PacketBuffer`).
 
-`PreprocessingEncoder.kt`:
+`libraries/humla/src/main/java/se/lublin/humla/audio/encoder/PreprocessingEncoder.kt`:
 ```kotlin
 package se.lublin.humla.audio.encoder
 
@@ -3767,7 +4238,7 @@ class PreprocessingEncoder @JvmOverloads constructor(
 }
 ```
 
-`ResamplingEncoder.kt`:
+`libraries/humla/src/main/java/se/lublin/humla/audio/encoder/ResamplingEncoder.kt`:
 ```kotlin
 package se.lublin.humla.audio.encoder
 
@@ -3817,37 +4288,305 @@ class ResamplingEncoder @JvmOverloads constructor(
 }
 ```
 
-`AudioOutputSpeech.kt` — apply these edits to the Task 8 file:
-1. Imports: delete `com.googlecode.javacpp.IntPointer` and the four `se.lublin.humla.audio.javacpp.*` imports; add `import se.lublin.humla.audio.native.OpusDecoderNative` and `import se.lublin.humla.audio.native.SpeexJitterNative`.
-2. Fields: `private val jitterBuffer: Speex.JitterBuffer` → `private val jitterBuffer: SpeexJitterBuffer`; delete `private val avail = IntPointer(1)`.
-3. `init`: decoder branches become `OpusDecoder(AudioHandler.SAMPLE_RATE, 1)`, `CELT11Decoder(AudioHandler.SAMPLE_RATE, 1)`, `CELT7Decoder(AudioHandler.SAMPLE_RATE, AudioHandler.FRAME_SIZE, 1)`, `SpeexDecoder()`; the last four lines become
-   ```kotlin
-   jitterBuffer = SpeexJitterBuffer(AudioHandler.FRAME_SIZE)
-   jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_SET_MARGIN, 10 * AudioHandler.FRAME_SIZE)
-   ```
-4. `addFrameToBuffer`: `Opus.opus_packet_get_nb_frames(data, size)` → `OpusDecoderNative.packetGetNbFrames(data, size)`; `Opus.opus_packet_get_samples_per_frame(data, AudioHandler.SAMPLE_RATE)` → `OpusDecoderNative.packetGetSamplesPerFrame(data, AudioHandler.SAMPLE_RATE)`; the two lines building and putting the `JitterBufferPacket` become
-   ```kotlin
-   jitterBuffer.put(data, size, AudioHandler.FRAME_SIZE * seq, samples, 0, flags.toInt())
-   ```
-5. `call()`: replace the block from `avail.put(0)` through `val availPackets = ...` with
-   ```kotlin
-   val ts: Int
-   val availPackets: Float
-   synchronized(jitterLock) {
-       ts = jitterBuffer.pointerTimestamp
-       availPackets = jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT, 0).toFloat()
-   }
-   ```
-   replace the block from `val packet = ByteBuffer.allocateDirect(4096)` through `val pb = PacketBuffer(packet)` with
-   ```kotlin
-   val packetBytes = ByteArray(4096)
-   val jbp = synchronized(jitterLock) { jitterBuffer.get(packetBytes, AudioHandler.FRAME_SIZE) }
+`libraries/humla/src/main/java/se/lublin/humla/audio/AudioOutputSpeech.kt`:
+```kotlin
+package se.lublin.humla.audio
 
-   if (jbp.status == SpeexJitterNative.JITTER_BUFFER_OK) {
-       val pb = PacketBuffer(packetBytes, jbp.length)
-   ```
-   replace `synchronized(jitterLock) { jitterBuffer.updateDelay(jbp, null) }` and `synchronized(jitterLock) { jitterBuffer.updateDelay(null, IntPointer(1)) }` with `synchronized(jitterLock) { jitterBuffer.updateDelay() }`.
-   `ucFlags = jbp.userData` stays as written.
+import java.nio.BufferOverflowException
+import java.nio.BufferUnderflowException
+import java.nio.ByteBuffer
+import java.util.Arrays
+import java.util.Queue
+import java.util.concurrent.Callable
+import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.math.ceil
+import kotlin.math.sin
+import se.lublin.humla.audio.native.OpusDecoderApi
+import se.lublin.humla.audio.native.OpusDecoderNative
+import se.lublin.humla.audio.native.SpeexJitterApi
+import se.lublin.humla.audio.native.SpeexJitterNative
+import se.lublin.humla.exception.NativeAudioException
+import se.lublin.humla.model.TalkState
+import se.lublin.humla.model.User
+import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.protocol.AudioHandler
+
+/**
+ * Decodes one user's incoming voice stream through a jitter buffer into float PCM.
+ *
+ * [opusApi] and [jitterApi] are the seams JVM tests use to drive the Opus path without native
+ * libraries; they default to the `*Native` objects, which load their `.so` on first touch. The
+ * CELT and Speex decoders keep their own defaults, so only the Opus codec is testable this way.
+ */
+class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) constructor(
+    private val user: User,
+    private val codec: HumlaUDPMessageType,
+    private var requestedSamples: Int,
+    private val talkStateListener: TalkStateListener,
+    private val opusApi: OpusDecoderApi = OpusDecoderNative,
+    jitterApi: SpeexJitterApi = SpeexJitterNative,
+) : Callable<AudioOutputSpeech.Result> {
+
+    fun interface TalkStateListener {
+        fun onTalkStateUpdated(session: Int, state: TalkState)
+    }
+
+    private val decoder: IDecoder
+    private val jitterBuffer: SpeexJitterBuffer
+    private val jitterLock = Any()
+    private var audioBufferSize = AudioHandler.FRAME_SIZE
+
+    // State-specific
+    private var buffer: FloatArray
+    private val out: FloatArray
+    private val fadeOut = FloatArray(AudioHandler.FRAME_SIZE)
+    private val fadeIn = FloatArray(AudioHandler.FRAME_SIZE)
+    private val frames: Queue<ByteBuffer> = ConcurrentLinkedQueue()
+    private var missCount = 0
+    private var hasTerminator = false
+    private var lastAlive = true
+    private var bufferFilled = 0
+    private var lastConsume = 0
+    private var ucFlags = 0
+
+    init {
+        decoder = when (codec) {
+            HumlaUDPMessageType.UDPVoiceOpus -> {
+                audioBufferSize *= 12
+                OpusDecoder(AudioHandler.SAMPLE_RATE, 1, opusApi)
+            }
+            HumlaUDPMessageType.UDPVoiceCELTBeta -> CELT11Decoder(AudioHandler.SAMPLE_RATE, 1)
+            HumlaUDPMessageType.UDPVoiceCELTAlpha -> CELT7Decoder(AudioHandler.SAMPLE_RATE, AudioHandler.FRAME_SIZE, 1)
+            HumlaUDPMessageType.UDPVoiceSpeex -> SpeexDecoder()
+            else -> throw NativeAudioException("No decoder for codec $codec")
+        }
+
+        // Larger initial buffer so we can save performance by not resizing at runtime.
+        buffer = FloatArray(audioBufferSize * 2)
+        out = FloatArray(audioBufferSize)
+
+        // Sine function to represent fade in/out. Period is FRAME_SIZE.
+        val mul = (Math.PI / (2.0 * AudioHandler.FRAME_SIZE)).toFloat()
+        for (i in 0 until AudioHandler.FRAME_SIZE) {
+            val v = sin((i * mul).toDouble()).toFloat()
+            fadeIn[i] = v
+            fadeOut[AudioHandler.FRAME_SIZE - i - 1] = v
+        }
+
+        jitterBuffer = SpeexJitterBuffer(AudioHandler.FRAME_SIZE, jitterApi)
+        jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_SET_MARGIN, 10 * AudioHandler.FRAME_SIZE)
+    }
+
+    fun addFrameToBuffer(pb: PacketBuffer, flags: Byte, seq: Int) {
+        if (pb.capacity() < 2) return
+
+        synchronized(jitterLock) {
+            try {
+                var samples = 0
+                if (codec == HumlaUDPMessageType.UDPVoiceOpus) {
+                    val header = pb.readLong()
+                    val size = (header and ((1L shl 13) - 1)).toInt()
+                    if (size > 0) {
+                        val data = pb.dataBlock(size)
+                        if (data.size != size) return
+                        val frameCount = opusApi.packetGetNbFrames(data, size)
+                        samples = frameCount * opusApi.packetGetSamplesPerFrame(data, AudioHandler.SAMPLE_RATE)
+                    } else {
+                        return
+                    }
+                } else {
+                    try {
+                        var header: Int
+                        do {
+                            header = pb.next()
+                            samples += AudioHandler.FRAME_SIZE
+                            pb.skip(header and 0x7f)
+                        } while ((header and 0x80) > 0)
+                    } catch (e: BufferUnderflowException) {
+                        // reached end of buffer
+                    }
+                }
+                pb.rewind()
+
+                val size = pb.left()
+                val data = pb.dataBlock(size)
+                jitterBuffer.put(data, size, AudioHandler.FRAME_SIZE * seq, samples, 0, flags.toInt())
+            } catch (e: BufferOverflowException) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    @Throws(Exception::class)
+    override fun call(): Result {
+        if (bufferFilled - lastConsume > 0) {
+            // Shift over the remaining unconsumed data in the buffer.
+            System.arraycopy(buffer, lastConsume, buffer, 0, bufferFilled - lastConsume)
+        }
+        bufferFilled -= lastConsume
+        lastConsume = requestedSamples
+
+        if (bufferFilled >= requestedSamples) return Result(this, lastAlive, buffer, bufferFilled)
+
+        var nextAlive = lastAlive
+
+        while (bufferFilled < requestedSamples) {
+            var decodedSamples = AudioHandler.FRAME_SIZE
+            resizeBuffer(bufferFilled + audioBufferSize)
+
+            if (!lastAlive) {
+                Arrays.fill(out, 0f)
+            } else {
+                val (ts, availPackets) = synchronized(jitterLock) {
+                    jitterBuffer.pointerTimestamp to
+                        jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT, 0).toFloat()
+                }
+
+                // Make sure that we have enough packets in the jitter buffer before we even begin
+                // decoding, based on the average # of packets available. Prevents a metallic
+                // 'twang' when the user starts talking, caused by buffer underrun. The official
+                // Mumble project uses the same technique.
+                if (ts == 0) {
+                    val want = ceil(user.averageAvailable.toDouble()).toInt()
+                    if (availPackets < want) {
+                        missCount++
+                        if (missCount < 20) {
+                            Arrays.fill(out, 0f)
+                            System.arraycopy(out, 0, buffer, bufferFilled, decodedSamples)
+                            bufferFilled += decodedSamples
+                            continue
+                        }
+                    }
+                }
+
+                if (frames.isEmpty()) {
+                    val packetBytes = ByteArray(4096)
+                    val jbp = synchronized(jitterLock) { jitterBuffer.get(packetBytes, AudioHandler.FRAME_SIZE) }
+
+                    if (jbp.status == SpeexJitterNative.JITTER_BUFFER_OK) {
+                        val pb = PacketBuffer(packetBytes, jbp.length)
+
+                        missCount = 0
+                        ucFlags = jbp.userData
+                        hasTerminator = false
+                        try {
+                            if (codec == HumlaUDPMessageType.UDPVoiceOpus) {
+                                val header = pb.readLong()
+                                val size = (header and ((1L shl 13) - 1)).toInt()
+                                hasTerminator = (header and (1L shl 13)) > 0
+                                frames.add(pb.bufferBlock(size))
+                            } else {
+                                var header: Int
+                                do {
+                                    header = pb.next()
+                                    val size = header and 0x7f
+                                    if (header > 0) {
+                                        frames.add(pb.bufferBlock(size))
+                                    } else {
+                                        hasTerminator = true
+                                    }
+                                } while ((header and 0x80) > 0)
+                            }
+                        } catch (e: BufferOverflowException) {
+                            e.printStackTrace()
+                        } catch (e: BufferUnderflowException) {
+                            e.printStackTrace()
+                        }
+
+                        if (availPackets >= user.averageAvailable) {
+                            user.averageAvailable = availPackets
+                        } else {
+                            user.averageAvailable = user.averageAvailable * 0.99f
+                        }
+                    } else {
+                        synchronized(jitterLock) { jitterBuffer.updateDelay() }
+                        missCount++
+                        if (missCount > 10) nextAlive = false
+                    }
+                }
+
+                try {
+                    if (!frames.isEmpty()) {
+                        val data = frames.poll()
+                        decodedSamples = decoder.decodeFloat(data, data.limit(), out, audioBufferSize)
+                        if (frames.isEmpty()) {
+                            synchronized(jitterLock) { jitterBuffer.updateDelay() }
+                        }
+                        if (frames.isEmpty() && hasTerminator) nextAlive = false
+                    } else {
+                        decodedSamples = decoder.decodeFloat(null, 0, out, AudioHandler.FRAME_SIZE)
+                    }
+                } catch (e: NativeAudioException) {
+                    e.printStackTrace()
+                    decodedSamples = AudioHandler.FRAME_SIZE
+                }
+
+                if (!nextAlive) {
+                    for (i in 0 until AudioHandler.FRAME_SIZE) out[i] *= fadeOut[i]
+                } else if (ts == 0) {
+                    for (i in 0 until AudioHandler.FRAME_SIZE) out[i] *= fadeIn[i]
+                }
+
+                synchronized(jitterLock) {
+                    repeat(decodedSamples / AudioHandler.FRAME_SIZE) { jitterBuffer.tick() }
+                }
+            }
+
+            System.arraycopy(out, 0, buffer, bufferFilled, decodedSamples)
+            bufferFilled += decodedSamples
+        }
+
+        if (!nextAlive) ucFlags = 0xFF
+
+        val talkState = when (ucFlags) {
+            0 -> TalkState.TALKING
+            1 -> TalkState.SHOUTING
+            0xFF -> TalkState.PASSIVE
+            else -> TalkState.WHISPERING
+        }
+        talkStateListener.onTalkStateUpdated(user.session, talkState)
+
+        val tmp = lastAlive
+        lastAlive = nextAlive
+        return Result(this, tmp, buffer, requestedSamples)
+    }
+
+    private fun resizeBuffer(newSize: Int) {
+        if (newSize > buffer.size) buffer = Arrays.copyOf(buffer, newSize)
+    }
+
+    /** Sets the preferred number of samples to return when the callable is executed. */
+    fun setRequestedSamples(samples: Int) {
+        requestedSamples = samples
+    }
+
+    fun getCodec(): HumlaUDPMessageType = codec
+
+    fun getUser(): User = user
+
+    fun getSession(): Int = user.session
+
+    /** Cleans up all native resources linked to this instance. MUST be called eventually. */
+    fun destroy() {
+        decoder.destroy()
+        jitterBuffer.destroy()
+    }
+
+    /** The outcome of a decoding pass. */
+    class Result internal constructor(
+        private val speechOutput: AudioOutputSpeech,
+        private val alive: Boolean,
+        private val samples: FloatArray,
+        private val numSamples: Int,
+    ) : IAudioMixerSource<FloatArray> {
+        fun getSpeechOutput(): AudioOutputSpeech = speechOutput
+        fun isAlive(): Boolean = alive
+        override fun getSamples(): FloatArray = samples
+        override fun getNumSamples(): Int = numSamples
+    }
+}
+```
 
 - [ ] **Step 6: Write the JNI layer**
 
@@ -4474,6 +5213,9 @@ target_link_options(humla_celt11 PRIVATE ${HUMLA_LINK_OPTIONS})
         }
         externalNativeBuild {
             cmake {
+                // Static libc++: every humla_*.so is self-contained, exports only C JNI
+                // entry points and shares no C++ objects or exceptions across libraries,
+                // so the NDK's warning about duplicated libc++ state does not apply.
                 arguments += ['-DANDROID_STL=c++_static']
             }
         }
@@ -4493,15 +5235,15 @@ target_link_options(humla_celt11 PRIVATE ${HUMLA_LINK_OPTIONS})
 
 `libraries/humla/src/main/java/se/lublin/humla/HumlaService.java`: line 49 `import se.lublin.humla.audio.javacpp.CELT7;` → `import se.lublin.humla.audio.encoder.CELT7Encoder;`; line 356 `auth.addCeltVersions(CELT7.getBitstreamVersion());` → `auth.addCeltVersions(CELT7Encoder.getBitstreamVersion());`.
 
-- [ ] **Step 11: Run the encoder tests, then the green gate, then inspect the APK**
+- [ ] **Step 11: Run the audio tests, then the green gate, then inspect the APK**
 
 Run:
 ```bash
-cd /home/becker/git/mumla && nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.audio.encoder.*'
-nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest
+cd /home/becker/git/mumla && nix develop --command ./gradlew :libraries:humla:testDebugUnitTest --tests 'se.lublin.humla.audio.*'
+nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug
 unzip -l app/build/outputs/apk/foss/debug/app-foss-debug.apk | grep -E 'lib/(arm64-v8a|armeabi-v7a|x86_64)/libhumla_' | sort
 ```
-Expected: 9 encoder tests PASS; `BUILD SUCCESSFUL`; 15 lines listing `libhumla_celt11.so libhumla_celt7.so libhumla_opus.so libhumla_speex.so libhumla_speexdsp.so` for each of the three ABIs; `grep -rn "javacpp\|ndk-build\|Android.mk" --include='*.gradle' --include='*.java' --include='*.kt' --include='*.mk' . | grep -v /build/` prints nothing.
+Expected: 11 tests PASS (6 encoder, 2 jitter buffer, 1 speex decoder, 2 AudioOutputSpeech); `BUILD SUCCESSFUL`; 15 lines listing `libhumla_celt11.so libhumla_celt7.so libhumla_opus.so libhumla_speex.so libhumla_speexdsp.so` for each of the three ABIs; `grep -rn "javacpp\|ndk-build\|Android.mk" --include='*.gradle' --include='*.java' --include='*.kt' --include='*.mk' . | grep -v /build/` prints nothing.
 
 If the opus subproject fails to configure on `armeabi-v7a` because of its runtime CPU detection (`OPUS_MAY_HAVE_NEON`), add `set(OPUS_DISABLE_INTRINSICS ON CACHE BOOL "" FORCE)` above the `add_subdirectory` line (the ndk-build flavor never used intrinsics either).
 
@@ -4522,7 +5264,7 @@ git commit -m "build(humla): build native codecs with cmake and hand-written jni
 ### Task 10: F6 (part 3) — NDK 29.0.14206865, SDK CMake 4.1.2, build-tools 36.1.0
 
 **Files:**
-- Modify: `flake.nix:22-29,54-63`, `libraries/humla/build.gradle`, `app/build.gradle`
+- Modify: `flake.nix:21-30,54-63`, `libraries/humla/build.gradle`, `app/build.gradle`
 
 **Interfaces:**
 - Consumes: the pinned nixpkgs revision in `flake.lock` (`e554fab72f81915600f3f449b786fd9af40439a5`), whose `androidenv/repo.json` lists `ndk 29.0.14206865`, `cmake 4.1.2` and `build-tools 36.1.0` (verified; no `nix flake update` is needed).
@@ -4530,7 +5272,7 @@ git commit -m "build(humla): build native codecs with cmake and hand-written jni
 
 - [ ] **Step 1: Update `flake.nix`**
 
-Replace lines 22–29 with:
+Replace lines 21–30 — the whole `androidSdk = …;` binding, from `androidSdk = pkgs.androidenv.composeAndroidPackages {` through its closing `};` — with:
 ```nix
         androidSdk = pkgs.androidenv.composeAndroidPackages {
           buildToolsVersions = [ "36.1.0" ];
@@ -4552,7 +5294,7 @@ and in the `shellHook` change `export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.1
 
 - [ ] **Step 3: Rebuild the dev shell and run the green gate**
 
-Run: `cd /home/becker/git/mumla && nix develop --command bash -c 'ls $ANDROID_HOME/ndk $ANDROID_HOME/cmake $ANDROID_HOME/build-tools' && nix develop --command ./gradlew clean assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
+Run: `cd /home/becker/git/mumla && nix develop --command bash -c 'ls $ANDROID_HOME/ndk $ANDROID_HOME/cmake $ANDROID_HOME/build-tools' && nix develop --command ./gradlew clean assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug`
 Expected: `29.0.14206865`, `4.1.2`, `36.1.0` listed; `BUILD SUCCESSFUL`; `grep -o 'cmake/[0-9.]*' libraries/humla/.cxx/*/*/arm64-v8a/build.ninja | head -1` reports `cmake/4.1.2`.
 
 - [ ] **Step 4: Commit**
@@ -4560,7 +5302,7 @@ Expected: `29.0.14206865`, `4.1.2`, `36.1.0` listed; `BUILD SUCCESSFUL`; `grep -
 ```bash
 cd /home/becker/git/mumla
 git add flake.nix libraries/humla/build.gradle app/build.gradle
-git commit -m "build: bump ndk to 29.0.14206865, sdk cmake to 4.1.2 and build-tools to 36.1.0"
+git commit -m "build: bump ndk, sdk cmake and build-tools" -m "NDK 29.0.14206865, SDK CMake 4.1.2 and build-tools 36.1.0, in flake.nix and in both module build files."
 ```
 
 ---
@@ -4572,12 +5314,14 @@ git commit -m "build: bump ndk to 29.0.14206865, sdk cmake to 4.1.2 and build-to
 
 **Interfaces:**
 - Consumes: `flake.nix` dev shell (`devShells.x86_64-linux.default`), `git` inside the shell (for `git describe`), submodules.
-- Produces: one `build` job running `nix develop --command ./gradlew assembleFossDebug test lint`, caching `~/.gradle` (relocated into the project) and a file-backed Nix binary cache of the dev shell closure.
+- Produces: one `build` job running `nix develop --command ./gradlew assembleFossDebug assembleGoogDebug test lint` — spec §6's acceptance command verbatim — caching `~/.gradle` (relocated into the project) and a file-backed Nix binary cache of the dev shell closure.
 
-- [ ] **Step 1: Verify lint is green locally first**
+- [ ] **Step 1: Confirm the acceptance command is green locally**
 
-Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew lint`
-Expected: `BUILD SUCCESSFUL`. If lint reports errors, fix each finding at its source (never disable a check) before continuing; warnings do not fail the build.
+Lint has been part of the green gate since Task 2 (which fixed the 30 errors it reported and made `abortOnError` meaningful again), so this is a confirmation, not new work. The one thing the gate does *not* cover is packaging the `goog` flavor, which was last assembled in Task 5.
+
+Run: `cd /home/becker/git/mumla && nix develop --command ./gradlew --console=plain assembleFossDebug assembleGoogDebug test lint`
+Expected: `BUILD SUCCESSFUL`. Warnings do not fail the build; errors are fixed at their source (never by disabling a check).
 
 - [ ] **Step 2: Write `.gitlab-ci.yml`**
 
@@ -4610,7 +5354,7 @@ build:
         --substituters "file://$CI_PROJECT_DIR/.nix-cache https://cache.nixos.org"
         "$DEVSHELL"
   script:
-    - nix develop "$DEVSHELL" --command ./gradlew --console=plain assembleFossDebug test lint
+    - nix develop "$DEVSHELL" --command ./gradlew --console=plain assembleFossDebug assembleGoogDebug test lint
   after_script:
     # Export the dev shell closure so the next pipeline does not rebuild the SDK/NDK.
     - nix copy --to "file://$CI_PROJECT_DIR/.nix-cache" "$DEVSHELL" || true
@@ -4631,16 +5375,16 @@ Run:
 ```bash
 cd /home/becker/git/mumla && export NIX_CONFIG="experimental-features = nix-command flakes"
 nix build --out-link /tmp/claude-1000/-home-becker-git-mumla/devshell ".#devShells.x86_64-linux.default"
-nix develop ".#devShells.x86_64-linux.default" --command ./gradlew --console=plain assembleFossDebug test lint
+nix develop ".#devShells.x86_64-linux.default" --command ./gradlew --console=plain assembleFossDebug assembleGoogDebug test lint
 ```
-Expected: both succeed (`BUILD SUCCESSFUL`). `test` runs the unit tests of every flavor's debug variant (AGP 9 only creates unit tests for the tested build type).
+Expected: both succeed (`BUILD SUCCESSFUL`). This is spec §6's acceptance command, so CI and the acceptance criterion are the same command. `test` runs the unit tests of every flavor's debug variant (AGP 9 only creates unit tests for the tested build type).
 
 - [ ] **Step 4: Commit**
 
 ```bash
 cd /home/becker/git/mumla
 git add .gitlab-ci.yml
-git commit -m "ci: build, test and lint inside the nix dev shell" -m "Uses the nixos/nix image, caches the Gradle home and a file-backed binary cache of the dev shell closure."
+git commit -m "build(ci): build, test and lint inside the nix dev shell" -m "Uses the nixos/nix image, runs the acceptance command from section 6 of the spec, and caches the Gradle home plus a file-backed binary cache of the dev shell closure."
 ```
 
 ---
@@ -4734,7 +5478,7 @@ GNU GPL v3, see [LICENSE](LICENSE). Third-party notices are in
 
 - [ ] **Step 2: Remove the stale humla README and verify**
 
-Run: `cd /home/becker/git/mumla && git rm -q libraries/humla/README.md && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
+Run: `cd /home/becker/git/mumla && git rm -q libraries/humla/README.md && nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest :app:lintFossDebug :libraries:humla:lintDebug`
 Expected: `BUILD SUCCESSFUL`.
 
 - [ ] **Step 3: Commit**
@@ -4749,9 +5493,10 @@ git commit -m "docs: rewrite README for the nix dev shell and contribution rules
 
 ## Self-review against the spec
 
-- F2 → Task 1 (inline, keep licenses, re-register four submodules at the same commits, delete humla-spongycastle, exact commit message). F3 → Tasks 2 and 3 (Gradle/Kotlin/catalog/minSdk/toolchain/nonTransitiveRClass/no Jetifier; test stack; one Robolectric smoke test per module — `ServerParcelTest` in humla, `SettingsTest` in app; `Settings.kt` with mapping tests). F4 → Tasks 5 and 6 (latest stable AndroidX/material/jsoup/billing/minidns; netcipher kept + noted; guava dropped; protobuf plugin, no checked-in `Mumble.java`). F5 → Task 7 (BouncyCastle, Mumble-style fixture generated in the test, fallback path described). F6 → Tasks 8, 9, 10 (CMake, hand-written JNI, the eight `*Native` objects with the spec's names, Java call sites adapted, opus latest tag, speex split to release tags, NDK/CMake/build-tools bump in `flake.nix` and `libraries/humla/build.gradle`). F7 → Task 11. F8 → Task 12. The "delete API < 31 paths in files you touch" rule → Task 4 (`CertificateExportActivity`); other guarded files are owned by A/D/P and listed under Cross-stream touches.
-- §6 acceptance items owned by F after Task 12: no `javacpp`, `spongycastle`, `guava`, `ndk-build` left in the tree (Task 9 step 11 greps); `NOTICE.md` lists opus, speex, speexdsp, celt, BouncyCastle, minidns, jsoup, netcipher (rnnoise and webrtc-audio-processing are added by stream B).
-- Type consistency: `Pkcs12Certificates.load(ByteArray, String?)` / `load(InputStream, CharArray)` are used with those exact shapes in `HumlaConnection` and `CertificateImportActivity`; the `*Api` signatures in Task 9 step 3 match their JNI counterparts in step 6 (argument order, array in/out parameters) and their fakes in step 1; `SpeexJitterBuffer.get` returns `Packet(status, length, userData)` as consumed in `AudioOutputSpeech`.
+- F2 → Task 1 (inline, keep licenses, re-register four submodules at the same commits, delete humla-spongycastle, exact commit message). F3 → Tasks 2 and 3 (Gradle/catalog/minSdk/toolchain/nonTransitiveRClass/no Jetifier; AGP 9's built-in Kotlin instead of a separately declared `kotlin-android`/KGP, which AGP 9 rejects — see the Task 2 design notes; test stack; one Robolectric smoke test per module, `ServerParcelTest` in humla and `AppResourcesSmokeTest` in app, both inside Task 2; `Settings.kt` with mapping tests). Task 2 also makes `lint` pass for the first time in its own `fix(lint):` commit and adds it to the green gate, so "lint runs with abortOnError = true" holds from there to the end of the stream. F4 → Tasks 5 and 6 (latest stable AndroidX/material/jsoup/billing/minidns; netcipher kept + noted; guava dropped; protobuf plugin, no checked-in `Mumble.java`). F5 → Task 7 (BouncyCastle, Mumble-style fixture generated in the test). The one F5 clause this plan does *not* carry is the conditional "if not, implement a minimal Kotlin PKCS#12 reader": stock BouncyCastle 1.86 does read the unencrypted keyBag (verified against `bcgit/bc-java` `main`), so the condition is false and Task 7 says so explicitly instead of carrying an unexecutable branch; if the fixture test ever fails, that reader becomes its own task. F6 → Tasks 8, 9, 10 (CMake, hand-written JNI, the eight `*Native` objects with the spec's names, Java call sites adapted, opus latest tag, speex split to release tags, NDK/CMake/build-tools bump in `flake.nix` and `libraries/humla/build.gradle`). F7 → Task 11. F8 → Task 12. The "delete API < 31 paths in files you touch" rule → Task 4 (`CertificateExportActivity`); other guarded files are owned by A/D/P and listed under Cross-stream touches.
+- §6 acceptance items owned by F after Task 12: `./gradlew assembleFossDebug assembleGoogDebug test lint` is exactly what Task 11 runs locally and in CI; no `javacpp`, `spongycastle`, `guava`, `ndk-build` left in the tree (Task 9 step 11 greps); `NOTICE.md` lists opus, speex, speexdsp, celt, BouncyCastle, minidns, jsoup, netcipher (rnnoise and webrtc-audio-processing are added by stream B).
+- Cross-stream: the table above lists every file this stream touches that another stream owns, including the six audio files Task 8 rewrites in Kotlin, the javacpp package and `src/main/cpp/**` (Task 9), and the nine files Task 2 touches to clear lint. Stream B's plan must be written against the Kotlin files and the `*Api` seams, not against the Java originals.
+- Type consistency: `Pkcs12Certificates.load(ByteArray, String?)` / `load(InputStream, CharArray)` are used with those exact shapes in `HumlaConnection` and `CertificateImportActivity`; the `*Api` signatures in Task 9 step 3 match their JNI counterparts in step 6 (argument order, array in/out parameters) and their fakes in step 1; `SpeexJitterBuffer.get` returns `Packet(status, length, userData)` as consumed in `AudioOutputSpeech` and asserted in `SpeexJitterBufferTest`; `AudioOutputSpeech`'s two extra constructor parameters are `opusApi: OpusDecoderApi` and `jitterApi: SpeexJitterApi`, in that order, in the class, in `AudioOutputSpeechTest` and in the Task 9 Files list.
 
 ## Version research (2026-09-19)
 
@@ -4760,7 +5505,7 @@ git commit -m "docs: rewrite README for the nix dev shell and contribution rules
 | Gradle current | 9.7.1 | https://services.gradle.org/versions/current |
 | AGP latest stable | 9.4.1 (9.5.0-alpha06 is the newest pre-release) | https://dl.google.com/dl/android/maven2/com/android/tools/build/group-index.xml |
 | AGP 9.4 requirements | min Gradle 9.6.0, JDK 17, build-tools ≥ 36.0.0; AGP 9.0+ has built-in Kotlin (runtime dependency on KGP 2.2.10, `org.jetbrains.kotlin.android` must not be applied, `android.builtInKotlin`/`android.newDsl` default true, `applicationVariants` removed → `androidComponents.onVariants`, `jvmTarget` follows `compileOptions.targetCompatibility`) | https://developer.android.com/build/releases/gradle-plugin, https://developer.android.com/build/releases/agp-9-0-0-release-notes, https://developer.android.com/build/migrate-to-built-in-kotlin |
-| Kotlin Gradle plugin | 2.4.20; supports Gradle 7.6.3–9.7.0 and AGP ≥ 8.5.2 | https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/maven-metadata.xml, https://kotlinlang.org/docs/gradle-configure-project.html |
+| Kotlin Gradle plugin | not declared by this build. The standalone KGP is at 2.4.20 and supports Gradle 7.6.3–9.7.0, which is *older* than the 9.7.1 wrapper this plan pins — another reason not to force it onto the classpath. AGP 9.4.1 brings its own (≥ 2.2.10); Task 2 step 10 verifies which one. | https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/maven-metadata.xml, https://kotlinlang.org/docs/gradle-configure-project.html, https://developer.android.com/build/migrate-to-built-in-kotlin |
 | kotlinx-coroutines (android, test) | 1.11.0 | Maven Central metadata |
 | Robolectric | 4.17 (release notes list SDK 36 support) | https://api.github.com/repos/robolectric/robolectric/releases/latest |
 | MockK / Truth / JUnit | 1.14.11 / 1.4.5 / 4.13.2 | Maven Central metadata |
