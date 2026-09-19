@@ -243,19 +243,29 @@ class HumlaCallbacksTest {
         assertThat((0 until total).firstOrNull { observer.messages[it] != "m$it" }).isNull()
     }
 
+    /** Records how deeply observer callbacks nest inside one another. */
+    private class NestingObserver(private val onOuter: () -> Unit) : HumlaObserver() {
+        val messages = mutableListOf<String>()
+        var maxDepth = 0
+        private var depth = 0
+
+        override fun onLogInfo(message: String) {
+            depth++
+            maxDepth = maxOf(maxDepth, depth)
+            messages += message
+            if (message == "outer") onOuter()
+            depth--
+        }
+    }
+
     /**
-     * Case 3 and case 4: an event raised from inside an observer callback goes to the back of the
-     * queue instead of recursing, so the batch already accepted is delivered first.
+     * Case 3 and case 4, queued path: while a drain is running, an event raised from inside a
+     * callback goes to the back of the queue instead of recursing, so the batch already accepted
+     * is delivered first and the stack does not grow.
      */
     @Test
-    fun anEventRaisedFromWithinACallbackIsDeliveredAfterTheCurrentBatch() {
-        val observer = object : HumlaObserver() {
-            val messages = mutableListOf<String>()
-            override fun onLogInfo(message: String) {
-                messages += message
-                if (message == "outer") callbacks.onLogInfo("inner")
-            }
-        }
+    fun anEventRaisedFromWithinAQueuedCallbackIsDeliveredAfterTheCurrentBatch() {
+        val observer = NestingObserver { callbacks.onLogInfo("inner") }
         callbacks.registerObserver(observer)
 
         thread {
@@ -265,6 +275,51 @@ class HumlaCallbacksTest {
         mainLooper.idle()
 
         assertThat(observer.messages).containsExactly("outer", "tail", "inner").inOrder()
+        assertThat(observer.maxDepth).isEqualTo(1) // appended, never nested
+    }
+
+    /**
+     * Pins the inline path's re-entrancy, which the queued path deliberately does not share: an
+     * event raised from inside an inline callback is delivered inline too, nested inside the outer
+     * fan-out, so the stack grows by one frame per level. This is the legacy Java behaviour that
+     * the service relies on for its own synchronous state changes, and the only path production
+     * uses today. A change to the fast path must fail here deliberately, not silently.
+     */
+    @Test
+    fun anEventRaisedFromWithinAnInlineCallbackRecursesInsteadOfQueueing() {
+        val observer = NestingObserver { callbacks.onLogInfo("inner") }
+        callbacks.registerObserver(observer)
+
+        callbacks.onLogInfo("outer") // main thread, empty queue: the inline fast path
+
+        assertThat(observer.maxDepth).isEqualTo(2) // nested inside "outer", not appended after it
+        assertThat(observer.messages).containsExactly("outer", "inner").inOrder()
+        assertThat(mainLooper.isIdle).isTrue() // nothing was ever posted to the looper
+    }
+
+    /**
+     * Case 1: an observer may unregister from inside its own callback, on the delivery thread. It
+     * then receives nothing from any later fan-out. Whether it sees the remainder of its own
+     * fan-out is unspecified, so this pins only the guarantee the contract actually makes.
+     */
+    @Test
+    fun anObserverMayUnregisterFromInsideItsOwnCallback() {
+        val staying = RecordingObserver()
+        val leaving = object : HumlaObserver() {
+            val messages = mutableListOf<String>()
+            override fun onLogInfo(message: String) {
+                messages += message
+                callbacks.unregisterObserver(this)
+            }
+        }
+        callbacks.registerObserver(staying)
+        callbacks.registerObserver(leaving)
+
+        thread { repeat(5) { callbacks.onLogInfo("m$it") } }.join()
+        mainLooper.idle()
+
+        assertThat(leaving.messages).containsExactly("m0")
+        assertThat(staying.messages).isEqualTo((0 until 5).map { "m$it" })
     }
 
     /**

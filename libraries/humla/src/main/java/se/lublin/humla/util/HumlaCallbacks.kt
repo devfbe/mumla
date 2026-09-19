@@ -26,6 +26,9 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /**
+ * A composite wrapper around Humla observers to easily broadcast to each observer.
+ * Created by andrew on 12/07/14.
+ *
  * Fan-out of [IHumlaObserver] events to registered observers, delivered on the thread of
  * [handler] (the main thread in production).
  *
@@ -39,16 +42,33 @@ import java.util.concurrent.ConcurrentHashMap
  * - Every [IHumlaObserver] method, [registerObserver] and [unregisterObserver] may be called from
  *   any thread, concurrently.
  * - Observer callbacks always run on [handler]'s thread, one at a time, never concurrently.
- * - Events are delivered in the order they were accepted. An event raised from inside a callback
- *   is appended to the queue rather than recursing, so it lands after the events already accepted.
- * - Fan-out reads the live registration set, so an observer that unregisters on [handler]'s own
- *   thread is guaranteed to receive nothing afterwards, including events already queued. An
- *   observer that unregisters from another thread may still see an event whose fan-out is already
- *   in progress.
+ * - Events are delivered in the order they were accepted.
+ * - Re-entrancy differs between the two paths, deliberately:
+ *   - **Queued path.** An event raised from inside a callback that the drain is running is
+ *     appended to the queue, because a drain is scheduled. It lands after the events already
+ *     accepted, and the stack does not grow.
+ *   - **Inline path.** An event raised from inside a callback that was delivered inline is itself
+ *     delivered inline, nested inside the outer fan-out: the inner event reaches every observer
+ *     before the outer one has finished reaching all of them, and each nesting level costs a stack
+ *     frame. This is what the Java implementation did and what the service relies on for its own
+ *     synchronous state changes, so it is preserved on purpose. An observer that re-raises
+ *     unconditionally from the handler thread will recurse until the stack overflows, exactly as
+ *     before.
+ * - Fan-out reads the live registration set, so an observer that calls [unregisterObserver] on
+ *   [handler]'s own thread receives nothing from any fan-out that starts afterwards, including
+ *   fan-outs for events already queued. Whether it still sees the remainder of a fan-out already
+ *   in flight - its own, when it unregisters from inside its callback - is unspecified: the
+ *   concurrent set's iterator is weakly consistent. An observer that unregisters from any other
+ *   thread gets only that weaker guarantee.
  * - No event is dropped: an event accepted while an observer unregisters is still delivered to
  *   every observer that is registered when its turn comes, and a slice that ends early - because
  *   a callback threw, or because the looper refused the re-post - leaves the queue intact and
  *   re-arms the drain.
+ *
+ * Kotlin makes this class and its members final, where the Java original was subclassable. That
+ * narrowing is intentional: nothing in the tree subclasses [HumlaCallbacks], and the dispatch
+ * invariants above depend on [registerObserver], [unregisterObserver] and the 19 event methods not
+ * being overridden. Open it again only with those invariants in mind.
  */
 class HumlaCallbacks @JvmOverloads constructor(
     private val handler: Handler = Handler(Looper.getMainLooper()),
@@ -64,11 +84,19 @@ class HumlaCallbacks @JvmOverloads constructor(
             val start = System.nanoTime()
             var delivered = 0
             try {
-                // The first event of a slice always runs, so the drain cannot stall.
-                while (delivered < MAX_EVENTS_PER_SLICE && System.nanoTime() - start < SLICE_BUDGET_NANOS) {
+                // The budget is tested only after an event has been delivered, so a slice that
+                // reaches a non-empty queue always makes progress. Testing it first would let a
+                // descheduling longer than the budget (a GC pause, a throttled core) produce a
+                // slice that delivers nothing and re-posts, which is churn rather than progress.
+                while (true) {
                     val event = synchronized(lock) { queue.removeFirstOrNull() } ?: break
                     deliver(event)
                     delivered++
+                    if (delivered >= MAX_EVENTS_PER_SLICE ||
+                        System.nanoTime() - start >= SLICE_BUDGET_NANOS
+                    ) {
+                        break
+                    }
                 }
             } finally {
                 // Also runs when an observer threw: the rest of the queue keeps its turn. Clearing
