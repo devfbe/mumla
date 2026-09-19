@@ -18,7 +18,14 @@ class AppResourcesSmokeTest {
     @Test
     fun `the app module's merged resources are available to unit tests`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        assertThat(context.packageName).isEqualTo("se.lublin.mumla")
-        assertThat(context.getString(R.string.app_name)).isEqualTo("Mumla")
+        // The applicationId varies per flavor (foss/goog: se.lublin.mumla, beta/donation:
+        // se.lublin.mumla.beta/.donation), so this compares against the variant's own
+        // BuildConfig rather than a literal, to hold for all of them.
+        assertThat(context.packageName).isEqualTo(BuildConfig.APPLICATION_ID)
+        // app_name is also overridden per flavor (beta: "Mumla Beta", donation: "Mumla*"), so
+        // this keeps a real claim -- resolution returned actual branded text, not an empty
+        // string or a resource-not-found failure -- without pinning a value that only two of
+        // the four flavors share.
+        assertThat(context.getString(R.string.app_name)).startsWith("Mumla")
     }
 }
