@@ -17,26 +17,18 @@
 
 package se.lublin.mumla.preference
 
-import android.Manifest
 import android.content.DialogInterface
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.BufferedOutputStream
-import java.io.File
 import java.io.FileNotFoundException
-import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import se.lublin.mumla.R
@@ -49,9 +41,8 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
     private lateinit var database: MumlaDatabase
     private lateinit var certificates: List<DatabaseCertificate>
 
-    @Suppress("DEPRECATION")
     private val documentCreator: ActivityResultLauncher<String> =
-        registerForActivityResult(CreateDocument(), ::onDocumentCreated)
+        registerForActivityResult(CreateDocument("application/x-pkcs12"), ::onDocumentCreated)
     private var certificatePending: DatabaseCertificate? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,12 +65,8 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
 
     override fun onClick(dialog: DialogInterface?, which: Int) {
         val certificate = certificates[which]
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            certificatePending = certificate
-            documentCreator.launch(certificate.name)
-        } else {
-            saveCertificateClassic(certificate)
-        }
+        certificatePending = certificate
+        documentCreator.launch(certificate.name)
     }
 
     private fun onDocumentCreated(uri: Uri?) {
@@ -97,56 +84,6 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
             Log.w(TAG, "No pending certificate after user picked output file")
         }
         finish()
-    }
-
-    private fun saveCertificateClassic(certificate: DatabaseCertificate) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE
-            )
-            certificatePending = certificate
-            return
-        }
-        if (Environment.getExternalStorageState() != Environment.MEDIA_MOUNTED) {
-            showErrorDialog(R.string.externalStorageUnavailable)
-            return
-        }
-        @Suppress("DEPRECATION")
-        val storageDirectory = Environment.getExternalStorageDirectory()
-        val mumlaDirectory = File(storageDirectory, EXTERNAL_STORAGE_DIR)
-        if (!mumlaDirectory.exists() && !mumlaDirectory.mkdir()) {
-            showErrorDialog(R.string.externalStorageUnavailable)
-            return
-        }
-        val outputFile = File(mumlaDirectory, certificate.name)
-        val fos = try {
-            FileOutputStream(outputFile)
-        } catch (e: FileNotFoundException) {
-            showErrorDialog(R.string.externalStorageUnavailable)
-            return
-        }
-        writeCertificate(fos, certificate, outputFile.absolutePath)
-        finish()
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                val pending = certificatePending
-                if (pending != null) {
-                    saveCertificateClassic(pending)
-                } else {
-                    Log.w(TAG, "No pending certificate after permission was granted")
-                }
-            } else {
-                Toast.makeText(this, getString(R.string.grant_perm_storage), Toast.LENGTH_LONG).show()
-            }
-            certificatePending = null
-        }
     }
 
     private fun writeCertificate(fos: OutputStream?, cert: DatabaseCertificate, path: String) {
@@ -169,8 +106,5 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
 
     companion object {
         private val TAG = CertificateExportActivity::class.java.name
-        /** The name of the directory to export to on external storage. */
-        private const val EXTERNAL_STORAGE_DIR = "Mumla"
-        private const val PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE = 2
     }
 }
