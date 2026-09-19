@@ -51,7 +51,8 @@ NDK 29.0.14206865, SDK CMake 4.1.2, meson/ninja and `git`. Inside it:
     ./gradlew assembleFossDebug      # F-Droid flavor
     ./gradlew assembleGoogDebug      # Google Play flavor (Play Billing)
     ./gradlew test                   # unit tests of every module (JVM, Robolectric)
-    ./gradlew lint
+    ./gradlew lintFossDebug lintGoogDebug lintDonationDebug lintBetaDebug \
+              :libraries:humla:lintDebug
 
 If you cloned without `--recursive`, run `git submodule update --init --recursive`
 first. `libraries/humla` is an ordinary directory in this repository, not a
@@ -83,8 +84,11 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
   (JUnit 4, Robolectric for Android classes, MockK, Google Truth,
   `kotlinx-coroutines-test`); native code stays a thin JNI pass-through and
   the Kotlin side is tested against fakes.
-  `./gradlew assembleFossDebug assembleGoogDebug test lint` (CI's acceptance
-  command, both product flavors and both modules) must be green.
+  `./gradlew assembleFossDebug assembleGoogDebug test lintFossDebug
+  lintGoogDebug lintDonationDebug lintBetaDebug :libraries:humla:lintDebug`
+  (CI's acceptance command, verbatim: all four product flavors and both
+  modules) must be green. The bare `lint` task only covers `betaDebug`, so
+  every flavor is named.
 - **Kotlin.** New files are Kotlin; a Java file you change substantially is
   converted first, as its own commit.
 - **Conventional Commits**, in English: `feat:`, `fix:`, `refactor:`,
