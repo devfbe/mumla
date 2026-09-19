@@ -17,11 +17,10 @@
 
 package se.lublin.humla.model;
 
+import android.net.InetAddresses;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Log;
-
-import com.google.common.net.InetAddresses;
 
 import org.minidns.hla.ResolverApi;
 import org.minidns.hla.SrvResolverResult;
@@ -184,7 +183,7 @@ public class Server implements Parcelable {
             return;
         }
         // skip also IP addresses and Tor Onion Services (a pseudo-TLD)
-        if (InetAddresses.isInetAddress(mHost)
+        if (InetAddresses.isNumericAddress(mHost)
                 || mHost.endsWith(".onion")) {
             mResolvedHost = mHost;
             mResolvedPort = Constants.DEFAULT_PORT;

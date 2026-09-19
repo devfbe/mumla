@@ -97,7 +97,6 @@ dependencies {
     implementation libs.jetbrains.annotations
     implementation libs.minidns.hla
     implementation libs.minidns.android21
-    implementation libs.guava
 
     testImplementation libs.bundles.unit.test
 }

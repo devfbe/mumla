@@ -20,12 +20,14 @@ import com.android.billingclient.api.BillingFlowParams;
 import com.android.billingclient.api.BillingFlowParams.ProductDetailsParams;
 import com.android.billingclient.api.BillingResult;
 import com.android.billingclient.api.PendingPurchasesParams;
+import com.android.billingclient.api.ProductDetails;
 import com.android.billingclient.api.Purchase;
 import com.android.billingclient.api.QueryProductDetailsParams;
 import com.android.billingclient.api.QueryPurchasesParams;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 import se.lublin.mumla.R;
@@ -204,7 +206,8 @@ public class StartupAction implements IStartupAction {
                                 .setProductType(INAPP)
                                 .build()))
                 .build();
-        billingClient.queryProductDetailsAsync(params, (queryResult, productDetails) -> {
+        billingClient.queryProductDetailsAsync(params, (queryResult, detailsResult) -> {
+            List<ProductDetails> productDetails = detailsResult.getProductDetailsList();
             if ((queryResult.getResponseCode() != OK) || productDetails.isEmpty()) {
                 showToast(activity, String.format("Failed to query product details: %s (code %d)", queryResult.getDebugMessage(), queryResult.getResponseCode()));
                 return;
