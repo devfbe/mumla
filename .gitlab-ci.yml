@@ -32,6 +32,14 @@ build:
         --substituters "file://$CI_PROJECT_DIR/.nix-cache https://cache.nixos.org"
         "$DEVSHELL"
   script:
+    # Host-side ctest for the native C code under src/main/cpp. No Gradle task compiles that
+    # code for the host, so without these three lines the only direct test of native code in
+    # the repo never runs anywhere. Kept deliberately plain -- configure, build, run; ctest's
+    # non-zero exit fails the job. Native code added later belongs in the same tests/ directory
+    # and is picked up here for free; do not add a second mechanism.
+    - nix develop "$DEVSHELL" --command cmake -S libraries/humla/src/main/cpp/tests -B build/native-tests -G Ninja
+    - nix develop "$DEVSHELL" --command cmake --build build/native-tests
+    - nix develop "$DEVSHELL" --command ctest --test-dir build/native-tests --output-on-failure
     # Every lint variant is named explicitly: the bare `lint` task resolves to :app:lintBetaDebug
     # only, which would leave foss (the F-Droid ship target), goog and donation unlinted even
     # though each has its own source set.
