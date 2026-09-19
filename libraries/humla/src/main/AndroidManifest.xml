@@ -34,6 +34,11 @@
       constant HumlaService checks in onStartCommand, so no external caller could have
       relied on them working.
     -->
-    <application android:allowBackup="false" />
+    <!--
+      No <application> element: backup posture (android:allowBackup, android:dataExtractionRules)
+      is owned by the app module's manifest, since a single boolean/resource attribute can only
+      have one value in the merged manifest. Declaring allowBackup here as well risked a stale
+      value silently overriding, or conflicting with, the app module's.
+    -->
 
 </manifest>

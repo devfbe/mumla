@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  All of the app's private storage (the server list, the saved server passwords and access
+  tokens, and the client certificate's PKCS#12 blob) lives together in one SQLite file
+  (databases/mumble.db, see MumlaSQLiteDatabase). Auto Backup excludes at file granularity, so
+  keeping the favourites list while dropping the secrets in the same file is not possible without
+  a custom backup agent. Instead: exclude everything from the cloud backup that Android would
+  otherwise upload to the user's Google account, but allow the local, user-initiated
+  device-to-device transfer to carry everything, including the certificate identity, when someone
+  moves to a new phone. Nothing here is ever uploaded off-device; a local transfer was never the
+  threat this audit was about.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <!-- No exclusions: everything (server list, tokens, certificate identity, settings)
+             is carried over a local device-to-device transfer. -->
+    </device-transfer>
+</data-extraction-rules>
