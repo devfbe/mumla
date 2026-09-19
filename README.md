@@ -93,6 +93,31 @@ Gradle, but currently isn't.
 If you get an error running out of Java heap space, try raising the
 -Xmx in `./gradle.properties`.
 
+### Development environment (Nix)
+
+A reproducible development environment is provided via [Nix flakes](https://nixos.wiki/wiki/Flakes).
+With `nix` installed and flakes enabled, simply enter the development shell:
+
+    nix develop
+
+This sets up:
+- JDK 21
+- Android SDK (API levels 36, 35) with build tools (36.0.0, 35.0.0)
+- Android NDK 26.1.10909125
+- CMake, ninja, meson, and other build tools
+- All required environment variables (ANDROID_HOME, ANDROID_NDK_HOME, JAVA_HOME, etc.)
+
+Inside the devshell, you can build the project as usual:
+
+    ./gradlew assembleDebug      # Build the app
+    ./gradlew :libraries:humla:assembleDebug  # Build just the library with NDK
+    ./gradlew :libraries:humla:testDebugUnitTest  # Run humla unit tests
+    ./gradlew testFossDebugUnitTest  # Run app unit tests
+    ./gradlew assembleFossDebug      # Build the FOSS variant
+
+For direnv integration (automatic environment loading on cd), ensure [direnv](https://direnv.net/)
+is installed and run `direnv allow` in the project root.
+
 ### Notes on NDK
 
 The NDK is the toolchain used for building the native code (C/C++) of
