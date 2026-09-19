@@ -19,4 +19,36 @@ class HtmlUtilsTest {
     fun hostnameIsNullForMalformedUri() {
         assertThat(HtmlUtils.getHostnameFromLink("http://exa mple.org/")).isNull()
     }
+
+    @Test
+    fun percentDecodeDecodesEscapesButKeepsPlus() {
+        assertThat(HtmlUtils.percentDecode("a%2Fb%3D+c")).isEqualTo("a/b=+c")
+    }
+
+    @Test
+    fun percentDecodeDecodesUtf8Sequences() {
+        assertThat(HtmlUtils.percentDecode("%C3%A4")).isEqualTo("ä")
+    }
+
+    @Test
+    fun percentDecodeLeavesDanglingPercentAlone() {
+        assertThat(HtmlUtils.percentDecode("100%")).isEqualTo("100%")
+        assertThat(HtmlUtils.percentDecode("%zz")).isEqualTo("%zz")
+    }
+
+    @Test
+    fun percentDecodeKeepsNonAsciiLiterals() {
+        assertThat(HtmlUtils.percentDecode("😀%20x")).isEqualTo("😀 x")
+    }
+
+    @Test
+    fun markupWrapsLinksAndConvertsNewlines() {
+        assertThat(HtmlUtils.markupOutgoingMessage("see https://a.org/x\nnow"))
+            .isEqualTo("see <a href=\"https://a.org/x\">https://a.org/x</a><br>now")
+    }
+
+    @Test
+    fun markupLeavesPlainTextUntouched() {
+        assertThat(HtmlUtils.markupOutgoingMessage("hello")).isEqualTo("hello")
+    }
 }
