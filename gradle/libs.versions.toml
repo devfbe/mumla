@@ -23,7 +23,8 @@ jsoup = "1.23.2"
 netcipher = "2.1.0"
 billing = "9.1.0"
 
-protobuf = "3.11.4"
+protobuf = "4.36.2"
+protobuf-plugin = "0.10.0"
 spongycastle = "1.51.0.0"
 javacpp = "0.7"
 jetbrains-annotations = "26.1.0"
@@ -55,6 +56,7 @@ netcipher = { module = "info.guardianproject.netcipher:netcipher", version.ref =
 billing = { module = "com.android.billingclient:billing", version.ref = "billing" }
 
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 spongycastle-core = { module = "com.madgag.spongycastle:core", version.ref = "spongycastle" }
 spongycastle-prov = { module = "com.madgag.spongycastle:prov", version.ref = "spongycastle" }
 spongycastle-pkix = { module = "com.madgag.spongycastle:pkix", version.ref = "spongycastle" }
@@ -75,3 +77,4 @@ unit-test = ["junit", "robolectric", "mockk", "truth", "kotlinx-coroutines-test"
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }

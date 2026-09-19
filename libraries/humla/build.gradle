@@ -17,6 +17,7 @@
 
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.protobuf)
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -43,6 +44,16 @@ android {
 
     // ndk-build output (until the CMake migration)
     sourceSets.main.jniLibs.srcDirs += ['src/main/libs']
+
+    sourceSets {
+        main {
+            proto {
+                // Mumble.proto lives next to src/main, not in the plugin's default src/main/proto
+                srcDir 'src'
+                include '*.proto'
+            }
+        }
+    }
 
     buildFeatures {
         buildConfig = true
@@ -72,6 +83,19 @@ android {
         explainIssues = true
         ignoreWarnings = false
         quiet = false
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = libs.protobuf.protoc.get().toString()   // com.google.protobuf:protoc:4.36.2
+    }
+    generateProtoTasks {
+        all().configureEach { task ->
+            task.builtins {
+                java { }
+            }
+        }
     }
 }
 

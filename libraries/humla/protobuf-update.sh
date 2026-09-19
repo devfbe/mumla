@@ -1,8 +1,6 @@
 #!/bin/sh
 set -eu
 
-protoc=$(protoc --version)
-
 mumblerepo=../mumble
 protof=src/Mumble.proto
 
@@ -14,7 +12,7 @@ cd "$cwd"
 
 cat <<EOF >"$protof"
 // This is $protof from the Mumble repository at $describe (branch $branch).
-// Going to compile to java classes using protoc from ${protoc}.
+// Java classes are generated at build time (protobuf-gradle-plugin, see libraries/humla/build.gradle).
 // NOTE: java compile options added at the bottom of this file.
 //
 EOF
@@ -27,6 +25,5 @@ option java_outer_classname = "Mumble";
 option java_multiple_files = false;
 EOF
 
-protoc --java_out=src/main/java "$protof"
-
-git diff --stat src/main/java/ "$protof"
+echo "Updated $protof; the Java classes are generated at build time by the protobuf Gradle plugin."
+git diff --stat "$protof"
