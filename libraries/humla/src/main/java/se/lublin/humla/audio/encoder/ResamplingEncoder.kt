@@ -31,6 +31,7 @@ class ResamplingEncoder(
 ) : IEncoder {
     private val resampleBuffer = ShortArray(targetFrameSize)
     private val resampler = Speex.SpeexResampler(channels, inputSampleRate, targetSampleRate, SPEEX_RESAMPLE_QUALITY)
+    private var destroyed = false
 
     @Throws(NativeAudioException::class)
     override fun encode(input: ShortArray, inputSize: Int): Int {
@@ -54,6 +55,8 @@ class ResamplingEncoder(
     }
 
     override fun destroy() {
+        if (destroyed) return
+        destroyed = true
         resampler.destroy()
         encoder.destroy()
     }

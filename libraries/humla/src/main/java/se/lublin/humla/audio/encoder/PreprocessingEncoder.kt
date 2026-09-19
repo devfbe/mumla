@@ -29,6 +29,7 @@ class PreprocessingEncoder(
     sampleRate: Int,
 ) : IEncoder {
     private val preprocessor = Speex.SpeexPreprocessState(frameSize, sampleRate)
+    private var destroyed = false
 
     init {
         val arg = IntPointer(1)
@@ -68,6 +69,8 @@ class PreprocessingEncoder(
     }
 
     override fun destroy() {
+        if (destroyed) return
+        destroyed = true
         preprocessor.destroy()
         encoder.destroy()
     }

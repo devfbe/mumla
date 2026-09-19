@@ -25,7 +25,7 @@ import se.lublin.humla.audio.javacpp.CELT11
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.PacketBuffer
 
-class CELT11Encoder(
+class CELT11Encoder @Throws(NativeAudioException::class) constructor(
     sampleRate: Int,
     channels: Int,
     private val framesPerPacket: Int,
