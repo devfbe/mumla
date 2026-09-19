@@ -1,0 +1,313 @@
+# Mumla Modernization — Master Specification
+
+Date: 2026-09-19. Branch: `modernization` (integration branch; never commit on `master`).
+
+This document is the binding authority for all implementation plans under
+`docs/superpowers/plans/`. Where a plan and this spec disagree, the spec wins.
+
+## 1. Goals
+
+Turn Mumla (Android Mumble client, GPLv3) into a reliable, modern voice client:
+
+1. Fix the user-reported bugs with their root causes, not symptoms: Bluetooth SCO
+   lost after reconnect; "App not responding"; microphone silent while the screen
+   is off; voice activation triggered by background noise.
+2. Rebuild the capture pipeline: noise suppression (RNNoise), echo cancellation
+   for speaker use (WebRTC audio processing), a sane voice activity detector.
+3. Modernize the chat: image thumbnails, tap-to-view, RecyclerView.
+4. Move Humla (the protocol/audio library) off the main thread and give it an
+   explicit session state machine.
+5. Bring build, dependencies, tests and platform compliance up to date.
+
+Non-goals: new Mumble protocol features, Wear/Auto, redesign of the visual style,
+keeping support for Android below the new minimum.
+
+## 2. Global constraints (apply to every task in every plan)
+
+- **Android floor:** `minSdk = 31`, `targetSdk = 36`, `compileSdk = 36`. Delete
+  code paths that only exist for API < 31 when you touch the file that contains them.
+- **Language:** all new files are Kotlin. A Java file that a task modifies in a
+  non-trivial way (more than a few lines) is converted to Kotlin in that task,
+  before the behavior change, as its own commit (`refactor: convert X to kotlin`).
+  Generated protobuf code stays Java.
+- **Concurrency:** Kotlin coroutines (`kotlinx-coroutines-android`). No new
+  `AsyncTask`, no new bare `Thread` except where the audio path needs a
+  dedicated real-time thread (capture and playback loops).
+- **TDD is mandatory:** for every behavior change write the failing test first,
+  run it and see it fail, then implement, then see it pass. Tests run on the JVM:
+  JUnit 4 + Robolectric (Android framework classes) + MockK + Google Truth +
+  `kotlinx-coroutines-test`. No instrumentation tests are required; design seams
+  (interfaces, fakes) so that logic is testable without a device or native libs.
+  Native code (C/C++) gets host-side unit tests where practical (CMake `ctest`
+  targets built for the host), otherwise the JNI layer stays a thin pass-through
+  and the Kotlin side is tested against a fake.
+- **Commits:** Conventional Commits, English, one commit per logical unit
+  (`feat:`, `fix:`, `refactor:`, `test:`, `build:`, `docs:`, `chore:`), optional
+  scope in parentheses (`fix(humla):`), imperative subject ≤ 72 chars, optional body.
+  **No trailers of any kind** — no `Co-Authored-By`, no `Claude-Session`, no
+  `Signed-off-by`.
+- **Humla lives in the main repo.** The `libraries/humla` git submodule is
+  inlined (Foundation stream). After that, `libraries/humla` is an ordinary
+  directory; third-party native sources (opus, speex, celt, rnnoise,
+  webrtc-audio-processing) are git submodules of the main repo pointing at
+  upstream release tags.
+- **Native build:** CMake via AGP `externalNativeBuild`, one `CMakeLists.txt`
+  under `libraries/humla/src/main/cpp/`. `ndk-build`, `Android.mk`,
+  `Application.mk` and the `javacpp` bindings are removed. ABIs:
+  `arm64-v8a`, `armeabi-v7a`, `x86_64`. NDK version `29.0.14206865`, SDK CMake
+  `4.1.2`, build-tools `36.1.0` — set in `flake.nix` (`ndkVersions`,
+  `cmakeVersions`, `buildToolsVersions`) and in `libraries/humla/build.gradle`
+  (`ndkVersion`) by the Foundation stream; the dev shell currently ships NDK
+  26.1.10909125 and is bumped in F6.
+- **Dependencies:** every dependency at its latest stable release at the time
+  of the task. Spongycastle is replaced by BouncyCastle (`org.bouncycastle:bcprov-jdk18on`,
+  `bcpkix-jdk18on`). `javacpp`, `guava` are removed. `protobuf-java` is updated and
+  `Mumble.java` regenerated from `libraries/humla/src/Mumble.proto` with the matching
+  `protoc` (use the `protobuf-gradle-plugin`, do not check in generated code).
+- **Licensing:** only GPLv3-compatible dependencies (BSD, MIT, Apache-2.0, LGPL).
+  RNNoise (BSD-3) and WebRTC audio processing (BSD-3) qualify. Add each new
+  third-party component to `NOTICE.md` at the repo root.
+- **Build must stay green:** `nix develop --command ./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest`
+  passes at the end of every task. Lint runs with `abortOnError = true`; do not
+  disable lint checks to get green, fix the finding.
+- **Do not break the protocol:** wire behavior toward Mumble servers (TCP/UDP
+  messages, crypt state, codec negotiation, CELT/Speex legacy support) is preserved.
+- **User-facing strings** go to `res/values/strings.xml` / `preference.xml`
+  (English source). Do not edit translation files; Weblate handles them.
+
+## 3. Streams
+
+Work is split into streams so that they can run in parallel worktrees after the
+Foundation stream has landed. File ownership is exclusive per stream; a task
+that must touch another stream's file records that in its plan and keeps the
+change minimal.
+
+| Stream | Owns |
+|---|---|
+| F Foundation | `build.gradle*`, `settings.gradle`, `gradle.properties`, `flake.nix`, `.gitmodules`, `libraries/humla/build.gradle`, `libraries/humla/src/main/cpp/CMakeLists.txt` (initial), test infrastructure, `Mumble.proto` build, crypto (`net/HumlaSSLSocketFactory`, `net/HumlaCertificateGenerator`, `util/MumlaTrustStore`, `preference/Certificate*Activity`), `NOTICE.md`, `README.md`, `.gitlab-ci.yml` |
+| A Core | `HumlaService`, `net/HumlaConnection`, `net/HumlaTCP`, `net/HumlaUDP`, `net/HumlaNetworkThread`, `net/CryptState`, `protocol/ModelHandler`, `util/HumlaCallbacks`, `service/MumlaService`, `service/MumlaConnectionNotification`, `service/MumlaReconnectNotification`, `model/*`, new `service/ChatMessageLog` (bounded log, D5 acceptance lives here) |
+| B Audio | `protocol/AudioHandler`, `audio/**` (input, output, encoders, input modes, `BluetoothScoReceiver`), `src/main/cpp/**` (after Foundation created it), `preference/AudioSettingsFragment`, `res/xml/settings_audio.xml`, audio keys in `Settings.kt` (additive only) |
+| D Chat & UI | `channel/ChannelChatFragment`, `util/MumbleImageGetter`, `util/BitmapUtils`, `util/HtmlUtils`, `service/IChatMessage`, `service/MumlaMessageNotification`, chat layouts, new image viewer, new `chat/` package |
+| P Platform & controls | `app/MumlaActivity` (permissions, MediaSession wiring), `channel/ChannelListFragment` (Bluetooth menu), new `service/MumlaMediaSession`, non-audio keys in `Settings.kt` (additive only), `res/xml/settings_general.xml`, `AndroidManifest.xml`, battery-optimization dialog |
+
+Rules for shared files: `Settings.java` is converted to `Settings.kt` by
+Foundation (F3); streams B and P only add keys and accessors. `MumlaService`
+belongs to A; streams D and P may add hooks of at most ~10 lines each (a call
+into their own new class) and must list that in their plan. A task never edits
+a file another stream owns beyond such a hook.
+
+### 3.1 Stream F — Foundation (sequential, lands first)
+
+F1. Nix dev shell (done by a separate agent): JDK 21, Android SDK 36, NDK, CMake, meson/ninja.
+F2. Inline the `libraries/humla` submodule into the repo (copy tree, drop `.git`,
+    keep license headers, re-register `opus`, `speex`, `celt-0.7.0-src`,
+    `celt-0.11.0-src` as submodules of the main repo at the same commits, delete the
+    `libs/humla-spongycastle` submodule). Commit `build: inline humla library into main repo`.
+F3. Gradle modernization: Kotlin Gradle plugin (latest), `kotlin-android`, version
+    catalog `gradle/libs.versions.toml`, minSdk 31, Java/Kotlin toolchain 21,
+    `android.nonTransitiveRClass`, remove Jetifier. Test infra: JUnit 4, Robolectric,
+    MockK, Truth, coroutines-test, `testOptions.unitTests.isIncludeAndroidResources = true`;
+    one passing Robolectric smoke test per module proves the setup. Convert
+    `app/.../Settings.java` to `Settings.kt` (same public API) with tests for the
+    threshold/enum mappings, so later streams only add keys.
+F4. Dependencies: AndroidX/material latest; jsoup latest; netcipher latest (or
+    evaluate replacement `info.guardianproject.netcipher` is unmaintained — if no
+    maintained release exists, keep and note in `NOTICE.md`); billing latest;
+    minidns latest; drop guava (replace the few usages with Kotlin stdlib);
+    protobuf via `protobuf-gradle-plugin` with `protoc` from Maven, remove checked-in
+    `Mumble.java`.
+F5. Spongycastle → BouncyCastle. The custom "PKCS12 keybag" patch in
+    `libs/humla-spongycastle` exists to read Mumble's unencrypted PKCS#12
+    certificates; the task must test that importing such a certificate
+    (`libraries/humla/src/test/resources/` fixture generated in the test) still works
+    with stock BouncyCastle, and if not, implement a minimal Kotlin PKCS#12 reader for
+    the unencrypted keybag case.
+F6. Native build to CMake: build opus, speex (codec + dsp), celt 0.7 and 0.11 via
+    `externalNativeBuild`, hand-written JNI (`src/main/cpp/jni_*.cpp`) replacing
+    javacpp; Kotlin `external fun` wrappers in `se.lublin.humla.audio.native`
+    (`OpusEncoderNative`, `OpusDecoderNative`, `SpeexPreprocessNative`,
+    `SpeexResamplerNative`, `SpeexJitterNative`, `SpeexDecoderNative`,
+    `Celt7Native`, `Celt11Native`). Existing Java call sites are adapted with no
+    behavior change. Update opus to the latest release tag; speex to the latest
+    `speex` + `speexdsp` release tags (two submodules) if the old combined tree
+    cannot build with the new NDK, otherwise keep and note.
+F7. CI: `.gitlab-ci.yml` runs `nix develop --command ./gradlew assembleFossDebug test lint`
+    on a Nix image (`nixos/nix`), caches `~/.gradle` and the Nix store.
+F8. `README.md`: replace the "maintenance situation" preamble with a short
+    project description, dev-shell instructions, and a "Contributing" section
+    (TDD, conventional commits).
+
+### 3.2 Stream A — Core (Humla threading, session state, reconnect, foreground)
+
+Root causes (from the analysis): every TCP/UDP packet is posted to the main
+looper; audio teardown joins threads on the main thread; a disconnect tears
+down foreground status, wake lock, SCO and audio even when an auto-reconnect
+follows; errors are swallowed.
+
+A1. **Protocol thread.** `HumlaConnection` dispatches parsing, `ModelHandler`
+    and audio packet routing on a dedicated `HandlerThread("humla-protocol")`
+    (or a single-threaded coroutine dispatcher). Observer callbacks
+    (`IHumlaObserver`) are delivered on the main thread via `HumlaCallbacks`.
+    Model objects (`Channel`, `User`) become immutable snapshots or are guarded;
+    the UI reads through `IHumlaSession` which returns snapshots.
+    Test: a fake `HumlaTCP` feeding 5 000 `ChannelState` messages must not block
+    a main-looper task for more than 16 ms (Robolectric paused looper).
+A2. **Audio lifecycle thread.** `AudioHandler` creation/shutdown runs on a
+    `HandlerThread("humla-audio-control")`; `HumlaService.onConnectionDisconnected`,
+    `onBluetoothSco*` and `configureExtras` post to it and never join on the main thread.
+A3. **Session state machine.** `SessionState`: `Disconnected`, `Connecting`,
+    `Connected`, `ConnectionLost(reconnectIn)`, `Reconnecting`. A `ConnectionLost`
+    transition with auto-reconnect keeps: foreground status (notification text
+    changes to "Connection lost – reconnecting…"), the partial wake lock, the
+    `bluetoothScoWanted` flag, and the user's mute/deafen state. Only `Disconnected`
+    releases them. Reconnect uses exponential backoff 2 s → 30 s with jitter,
+    capped at 10 attempts unless connectivity changes.
+A4. **Bluetooth SCO desired state.** `bluetoothScoWanted` is set only by
+    `enableBluetoothSco()` / `disableBluetoothSco()`; after `Connected` the
+    service restarts SCO if wanted. On API 31+ use
+    `AudioManager.setCommunicationDevice` with the first `TYPE_BLUETOOTH_SCO`
+    device instead of `startBluetoothSco`; `usingBluetoothSco()` reports the
+    wanted state, a separate `isBluetoothScoActive()` reports the actual state.
+A5. **UDP recovery.** On `onUDPConnectionError` set `usingUdp = false` so outgoing
+    voice tunnels over TCP, then restart the UDP thread with backoff; the
+    UDP-vs-TCP decision uses deltas over a 20 s window instead of cumulative
+    good counters; a missing UDP ping reply for 15 s switches to TCP.
+A6. **Foreground service robustness.** `startForeground` is wrapped; on
+    `ForegroundServiceStartNotAllowedException`/`SecurityException` the service
+    logs, emits a `ConnectionWarning` to the chat log and shows the reconnect
+    notification instead of crashing. `MumlaService` calls `startForeground`
+    once in `Connecting` and keeps it through `ConnectionLost`.
+A7. **Half-duplex runtime change** carries the transmit mode in the extras bundle.
+A8. **Errors are surfaced.** Decoder creation failure, UDP failure, and
+    microphone silencing (from stream B) reach the chat log as warnings.
+
+### 3.3 Stream B — Audio pipeline
+
+B1. **Pipeline order.** `AudioInput` (AudioRecord, 48 kHz preferred, fallback
+    sample rates) → resampler to 48 kHz (only if needed) → `CapturePreprocessor`
+    (see B2) on **every** frame → `VoiceActivityDetector` → amplitude boost →
+    encoder. Preprocessing is not gated on the talking state.
+B2. **`CapturePreprocessor` interface** with implementations selectable in
+    settings: `None`, `Speex` (denoise, configurable suppression dB, VAD
+    probability via `SPEEX_PREPROCESS_GET_PROB`, no AGC calls), `RNNoise`
+    (48 kHz/480-sample frames, returns VAD probability), `WebRtcApm`
+    (NS + AEC3 + AGC2 + high-pass, VAD from level). Composition rule: WebRTC APM
+    (when enabled for echo cancellation) runs first, then RNNoise; the VAD
+    probability comes from the last stage that provides one.
+B3. **Echo cancellation via WebRTC APM.** Vendor `webrtc-audio-processing`
+    (freedesktop, latest release tag) as a submodule under
+    `libraries/humla/src/main/cpp/third_party/webrtc-audio-processing`, built
+    by a meson cross-build step invoked from CMake (`ExternalProject`) or a
+    CMake port of its file list — the plan decides after checking the upstream
+    build files. The playback path feeds the far-end signal
+    (`AudioOutput` mixed frames) to `WebRtcApm.analyzeReverseStream` on every
+    played frame. Settings: "Echo cancellation: None / Android / WebRTC".
+B4. **RNNoise.** Submodule `xiph/rnnoise` at the latest release tag; the model
+    weights file is checked in (or fetched by a documented, pinned CMake step —
+    plan decides, reproducibility required). Settings: "Noise suppression:
+    None / Light (Speex) / Strong (RNNoise)".
+B5. **Voice activity detection.** `VoiceActivityDetector` with modes
+    `Amplitude` (existing dBFS logic, kept for devices where models fail) and
+    `Probability` (uses preprocessor VAD probability). Both use start/stop
+    hysteresis (`startThreshold`, `stopThreshold`, `holdTimeMs`). Defaults:
+    start 0.6, stop 0.3, hold 250 ms for `Probability`; existing single slider
+    maps to start with stop = start − 0.15 for `Amplitude`.
+B6. **Android audiofx.** `NoiseSuppressor` and `AutomaticGainControl` attached to
+    the `AudioRecord` session when the user selects them (settings toggles),
+    following the existing `AcousticEchoCanceler` pattern; `VOICE_COMMUNICATION`
+    source and `MODE_IN_COMMUNICATION` whenever any effect or WebRTC AEC is active.
+B7. **Silence detection.** `AudioInput` registers an `AudioRecordingCallback`;
+    on `isClientSilenced()` it reports `CaptureState.Silenced` to `AudioHandler`,
+    which surfaces a warning (stream A8) and retries capture after 2 s.
+B8. **Thread safety of AudioOutput/AudioInput.** `mPacketLock` uses try/finally;
+    the output loop waits on a predicate with a 100 ms timeout; `running` flags are
+    `@Volatile`; `stop()` calls `AudioRecord.stop()` before `join(2000)`; a join
+    timeout logs and releases anyway.
+B9. **Speex preprocessor correctness.** Remove AGC calls (fixed-point build has
+    no AGC), fix `GET_PROB_START` → `SET_PROB_START`, expose
+    `noiseSuppressDb` (−15/−25/−35), correct the preference summary text.
+B10. **Settings UI.** Audio settings get a live input meter (`InputLevelMeterPreference`)
+    showing the current level and the start/stop thresholds while the settings
+    screen is open (uses a short-lived `AudioRecord` on a background thread,
+    released on pause); a "Test" toggle plays back your own voice after
+    processing (loopback) so users can hear the effect.
+B11. **Bluetooth SCO input.** When SCO is active, capture runs at the device's
+    SCO rate and is resampled to 48 kHz; RNNoise/Speex run after resampling.
+
+### 3.4 Stream D — Chat and images
+
+D1. **Chat list on RecyclerView** with `ListAdapter` + `DiffUtil`, view types
+    `TextMessage`, `InfoMessage`, `ImageMessage`. HTML bodies are parsed once
+    per message (off the main thread, cached in the message model) into a
+    `ChatContent` sealed class (`Text(spanned)`, `Image(source, textBefore, textAfter)`).
+D2. **Image loading.** `ChatImageLoader` (Kotlin, coroutines) decodes `data:`
+    URIs and http(s) URLs with `inJustDecodeBounds` + `inSampleSize` to a
+    thumbnail bound (max 240 dp wide, 240 dp tall), `LruCache` sized to 1/8 of
+    max heap keyed by SHA-1 of the source, `HttpURLConnection` with 5 s connect
+    / 10 s read timeouts and a 5 MB cap, error results cached. No network or
+    decoding on the main thread; `StrictMode.permitAll` is deleted.
+D3. **Tap-to-view.** Tapping an image opens `ImageViewerDialogFragment`
+    (fullscreen, black background, pinch-zoom via `subsampling-scale-image-view`
+    or an in-repo `ZoomImageView` — plan decides, prefer the in-repo view if it
+    stays under ~150 lines), decoding the full image for the screen size on a
+    background thread; a share action exports via `FileProvider`.
+D4. **Sending images** decodes on a background thread with `ImageDecoder`
+    (API 28+) and target sample size; UI shows a progress state.
+D5. `MumlaMessageNotification` strips images to "[image]" and truncates lines
+    (the bounded message log itself is stream A's `ChatMessageLog`, 500 entries,
+    oldest dropped).
+D6. **Notification inline reply** (`RemoteInput`) sends to the current channel.
+
+### 3.5 Stream P — Platform and controls
+
+P1. **MediaSession push-to-talk.** `MumlaMediaSession` (`MediaSessionCompat`)
+    active while connected; `KEYCODE_HEADSETHOOK`, `MEDIA_PLAY_PAUSE` and the
+    Bluetooth AVRCP equivalents toggle PTT (in PTT mode) or mute (in VAD mode),
+    configurable in settings; works with the screen off.
+P2. **Bluetooth as persistent setting** (`pref_bluetooth_sco`, default off),
+    the menu toggle writes the preference; stream A's `bluetoothScoWanted` is
+    initialized from it on connect.
+P3. **Runtime permissions:** `BLUETOOTH_CONNECT` requested before SCO is used;
+    `POST_NOTIFICATIONS` flow kept; `RECORD_AUDIO` rationale dialog.
+P4. **Battery optimization exemption** offered once (dismissable) after the
+    first successful connection, via `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`.
+P5. **Manifest:** `foregroundServiceType="microphone|mediaPlayback"`,
+    `android:exported` audit, remove obsolete permissions (`BLUETOOTH` legacy).
+
+## 4. Interfaces between streams
+
+- `IHumlaSession` (A) gains: `isBluetoothScoActive(): Boolean`,
+  `sessionState: StateFlow<SessionState>`, `messageLog` unchanged.
+- `AudioHandler.Builder` (B) gains: `setNoiseSuppression(mode)`,
+  `setEchoCancellation(mode)`, `setVadConfig(VadConfig)`, `setAudioEffects(ns, agc)`.
+  `HumlaService.configureExtras` (A) maps new `EXTRAS_*` keys to them; the keys
+  are defined in `HumlaService` by stream A with the exact names
+  `EXTRAS_NOISE_SUPPRESSION`, `EXTRAS_ECHO_CANCELLATION`, `EXTRAS_VAD_MODE`,
+  `EXTRAS_VAD_START`, `EXTRAS_VAD_STOP`, `EXTRAS_VAD_HOLD_MS`,
+  `EXTRAS_ANDROID_NS`, `EXTRAS_ANDROID_AGC`, `EXTRAS_BLUETOOTH_WANTED`.
+- `AudioHandler` (B) exposes `captureState: StateFlow<CaptureState>`
+  (`Active`, `Silenced`, `Error(msg)`); `HumlaService` (A) forwards `Silenced`
+  and `Error` to `onLogWarning`.
+- `AudioHandler.shutdown()` (B) is safe to call from any thread and returns
+  within 3 s worst case; stream A calls it only from the audio-control thread.
+- Stream D consumes `IChatMessage` unchanged; stream A must not change its shape.
+
+## 5. Ordering and integration
+
+1. F1–F8 sequentially on `modernization` (F1 first, F2 next, then F3, F4, F5, F6, F7, F8).
+2. A, B, D, P in parallel worktrees branched from the post-F8 commit
+   (`wt/core`, `wt/audio`, `wt/chat`, `wt/platform`).
+3. Integration order: A → B → P → D, each rebased on the integration head,
+   full build + tests + lint green after every merge.
+4. Final whole-branch review, one fix wave, done.
+
+## 6. Acceptance (end state)
+
+- All four user-reported symptoms have a regression test that fails on the
+  old code path and passes now (Bluetooth after reconnect, no main-thread join
+  in disconnect, foreground kept across reconnect, VAD on preprocessed signal).
+- `./gradlew assembleFossDebug assembleGoogDebug test lint` green in `nix develop`.
+- No `javacpp`, `spongycastle`, `guava`, `AsyncTask`, `StrictMode.permitAll`,
+  `ndk-build` left in the tree.
+- `NOTICE.md` lists opus, speex, speexdsp, celt, rnnoise, webrtc-audio-processing,
+  BouncyCastle, minidns, jsoup, netcipher with licenses.
