@@ -217,7 +217,19 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         setCodec(mCodec);
     }
 
+    /**
+     * Replaces the encoder. Takes mEncoderLock itself, so that destroying the old encoder cannot
+     * race encode() or shutdown(), which hold the same lock. messageCodecVersion() already held it
+     * around its call; initialize() and recreateEncoder() did not. The lock is reentrant, so the
+     * existing nesting in messageCodecVersion() is unaffected.
+     */
     public void setCodec(HumlaUDPMessageType codec) throws NativeAudioException {
+        synchronized (mEncoderLock) {
+            setCodecLocked(codec);
+        }
+    }
+
+    private void setCodecLocked(HumlaUDPMessageType codec) throws NativeAudioException {
         mCodec = codec;
 
         if (mEncoder != null) {
