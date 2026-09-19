@@ -6,6 +6,7 @@ coroutines = "1.11.0"
 
 androidx-appcompat = "1.7.1"
 androidx-activity = "1.13.0"
+androidx-annotation = "1.8.1"
 androidx-cardview = "1.0.0"
 androidx-core = "1.18.0"
 androidx-documentfile = "1.1.0"
@@ -37,6 +38,7 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
 androidx-activity = { module = "androidx.activity:activity", version.ref = "androidx-activity" }
+androidx-annotation = { module = "androidx.annotation:annotation", version.ref = "androidx-annotation" }
 androidx-cardview = { module = "androidx.cardview:cardview", version.ref = "androidx-cardview" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "androidx-documentfile" }

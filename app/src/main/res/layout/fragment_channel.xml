@@ -58,7 +58,7 @@
             android:layout_width="24dp"
             android:layout_height="match_parent"
             app:srcCompat="@drawable/ic_action_delete_dark"
-            android:tint="?android:textColorPrimaryInverse"
+            app:tint="?android:textColorPrimaryInverse"
             android:layout_gravity="center_vertical|end"
             android:background="?attr/selectableItemBackgroundBorderless"/>
 

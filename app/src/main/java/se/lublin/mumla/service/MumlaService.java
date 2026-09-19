@@ -32,6 +32,7 @@ import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.widget.Toast;
 
+import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import org.jsoup.Jsoup;
@@ -373,11 +374,8 @@ public class MumlaService extends HumlaService implements
             setSelfMuteDeafState(mSettings.isMuted(), mSettings.isDeafened());
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            registerReceiver(mTalkReceiver, new IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK), RECEIVER_EXPORTED);
-        } else {
-            registerReceiver(mTalkReceiver, new IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK));
-        }
+        ContextCompat.registerReceiver(this, mTalkReceiver,
+                new IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK), ContextCompat.RECEIVER_EXPORTED);
 
         if (mSettings.isHotCornerEnabled()) {
             mHotCorner.setShown(true);
@@ -526,12 +524,8 @@ public class MumlaService extends HumlaService implements
 
     @Override
     public void onOverlayToggled() {
-        // Ditch notification shade/panel to make overlay presence/permission request visible.
-        // But on Android 12 that's no longer allowed.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            Intent close = new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
-            getApplicationContext().sendBroadcast(close);
-        }
+        // Ditching the notification shade/panel to make the overlay permission request visible
+        // used to happen here; Android 12 (API 31, our minSdk) no longer allows it.
 
         if (!mChannelOverlay.isShown()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

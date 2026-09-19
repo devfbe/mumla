@@ -17,10 +17,13 @@
 
 package se.lublin.humla.audio;
 
+import android.Manifest;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.audiofx.AcousticEchoCanceler;
 import android.util.Log;
+
+import androidx.annotation.RequiresPermission;
 
 import se.lublin.humla.exception.AudioInitializationException;
 import se.lublin.humla.exception.NativeAudioException;
@@ -44,6 +47,7 @@ public class AudioInput implements Runnable {
     private Thread mRecordThread;
     private boolean mRecording;
 
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     public AudioInput(AudioInputListener listener, int audioSource, int targetSampleRate,
                       String echoCancellationMethod)
             throws NativeAudioException, AudioInitializationException {
@@ -76,6 +80,7 @@ public class AudioInput implements Runnable {
         mFrameSize = (sampleRate * AudioHandler.FRAME_SIZE) / AudioHandler.SAMPLE_RATE;
     }
 
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     private static AudioRecord setupAudioRecord(int sampleRate, int audioSource) throws AudioInitializationException {
         int minBufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO,
                                                                 AudioFormat.ENCODING_PCM_16BIT);

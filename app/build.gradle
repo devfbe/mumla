@@ -132,6 +132,10 @@ android {
         // InvalidPackage: the crypto provider references javax.naming / java.awt classes that
         // Android does not ship and that are never reached at runtime.
         disable 'InvalidPackage', 'MissingTranslation'
+        // Plural forms in translated resources belong to Weblate; spec section 2 forbids editing
+        // translation files, so this check reports but does not fail the build. It stays enabled
+        // for the English source, where it would be a real error we can fix.
+        warning 'MissingQuantity'
         explainIssues = true
         ignoreWarnings = false
         quiet = false

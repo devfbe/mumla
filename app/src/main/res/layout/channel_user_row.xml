@@ -62,6 +62,6 @@
         custom:srcCompat="@drawable/ic_more_vert_black_24dp"
         android:layout_gravity="center"
         android:paddingLeft="8dp"
-        android:tint="?android:textColorSecondary"
+        custom:tint="?android:textColorSecondary"
         android:background="?attr/selectableItemBackgroundBorderless"/>
 </LinearLayout>

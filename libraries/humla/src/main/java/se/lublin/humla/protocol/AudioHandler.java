@@ -17,7 +17,9 @@
 
 package se.lublin.humla.protocol;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.media.MediaRecorder;
 import android.util.Log;
@@ -129,6 +131,10 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         }
         mAudioSource = actualSource;
 
+        if (mContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new AudioInitializationException("RECORD_AUDIO permission not granted");
+        }
         mInput = new AudioInput(this, mAudioSource, mSampleRate, mEchoCancellationMethod);
         mOutput = new AudioOutput(mOutputListener);
     }

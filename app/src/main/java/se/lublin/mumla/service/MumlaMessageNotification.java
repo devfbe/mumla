@@ -20,16 +20,19 @@ package se.lublin.mumla.service;
 import static android.app.PendingIntent.FLAG_CANCEL_CURRENT;
 import static android.app.PendingIntent.FLAG_IMMUTABLE;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -104,7 +107,10 @@ public class MumlaMessageNotification {
 
         final NotificationManagerCompat manager = NotificationManagerCompat.from(mContext);
         Notification notification = builder.build();
-        manager.notify(NOTIFICATION_ID, notification);
+        if (ContextCompat.checkSelfPermission(mContext, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) {
+            manager.notify(NOTIFICATION_ID, notification);
+        }
     }
 
     /**

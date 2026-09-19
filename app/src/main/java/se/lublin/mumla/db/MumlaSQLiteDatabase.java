@@ -187,12 +187,12 @@ public class MumlaSQLiteDatabase extends SQLiteOpenHelper implements MumlaDataba
 
         c.moveToFirst();
         while (!c.isAfterLast()) {
-            Server server = new Server(c.getInt(c.getColumnIndex(SERVER_ID)),
-                    c.getString(c.getColumnIndex(SERVER_NAME)),
-                    c.getString(c.getColumnIndex(SERVER_HOST)),
-                    c.getInt(c.getColumnIndex(SERVER_PORT)),
-                    c.getString(c.getColumnIndex(SERVER_USERNAME)),
-                    c.getString(c.getColumnIndex(SERVER_PASSWORD)));
+            Server server = new Server(c.getInt(c.getColumnIndexOrThrow(SERVER_ID)),
+                    c.getString(c.getColumnIndexOrThrow(SERVER_NAME)),
+                    c.getString(c.getColumnIndexOrThrow(SERVER_HOST)),
+                    c.getInt(c.getColumnIndexOrThrow(SERVER_PORT)),
+                    c.getString(c.getColumnIndexOrThrow(SERVER_USERNAME)),
+                    c.getString(c.getColumnIndexOrThrow(SERVER_PASSWORD)));
             servers.add(server);
             c.moveToNext();
         }
