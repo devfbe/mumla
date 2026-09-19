@@ -20,7 +20,10 @@ class ResamplingEncoderTest {
             outLen[0] = n
             return 0
         }
-        override fun destroy(state: Long) {}
+        var destroys = 0
+        override fun destroy(state: Long) {
+            destroys++
+        }
     }
 
     @Test
@@ -37,5 +40,19 @@ class ResamplingEncoderTest {
         assertThat(received[0]).isEqualTo(0.toShort())
         assertThat(received[479]).isEqualTo(159.toShort())
         assertThat(inner.receivedSizes).containsExactly(480)
+    }
+
+    @Test
+    fun `destroy releases the native state only once`() {
+        val inner = RecordingEncoder()
+        val fake = FakeResampler()
+        val encoder = ResamplingEncoder(inner, 1, 16000, 480, 48000, fake)
+
+        encoder.destroy()
+        encoder.destroy()
+
+        // A second speex_resampler_destroy on the same raw pointer is a native double free.
+        assertThat(fake.destroys).isEqualTo(1)
+        assertThat(inner.destroyed).isTrue()
     }
 }

@@ -27,7 +27,8 @@ class CELT11Decoder @JvmOverloads @Throws(NativeAudioException::class) construct
     channels: Int,
     private val api: Celt11Api = Celt11Native,
 ) : IDecoder {
-    private val state: Long
+    private var state: Long
+    private var destroyed = false
 
     init {
         val error = intArrayOf(0)
@@ -49,5 +50,10 @@ class CELT11Decoder @JvmOverloads @Throws(NativeAudioException::class) construct
         return frameSize
     }
 
-    override fun destroy() = api.decoderDestroy(state)
+    override fun destroy() {
+        if (destroyed) return
+        destroyed = true
+        api.decoderDestroy(state)
+        state = 0L
+    }
 }

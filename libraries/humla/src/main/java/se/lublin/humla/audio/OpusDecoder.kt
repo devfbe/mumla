@@ -27,7 +27,8 @@ class OpusDecoder @JvmOverloads @Throws(NativeAudioException::class) constructor
     channels: Int,
     private val api: OpusDecoderApi = OpusDecoderNative,
 ) : IDecoder {
-    private val state: Long
+    private var state: Long
+    private var destroyed = false
 
     init {
         val error = intArrayOf(0)
@@ -49,5 +50,10 @@ class OpusDecoder @JvmOverloads @Throws(NativeAudioException::class) constructor
         return result
     }
 
-    override fun destroy() = api.destroy(state)
+    override fun destroy() {
+        if (destroyed) return
+        destroyed = true
+        api.destroy(state)
+        state = 0L
+    }
 }

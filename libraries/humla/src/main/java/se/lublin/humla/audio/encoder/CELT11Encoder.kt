@@ -34,7 +34,8 @@ class CELT11Encoder @JvmOverloads @Throws(NativeAudioException::class) construct
     private val buffer = Array(framesPerPacket) { ByteArray(bufferSize) }
     private var bufferedFrames = 0
 
-    private val state: Long
+    private var state: Long
+    private var destroyed = false
 
     init {
         val error = intArrayOf(0)
@@ -73,5 +74,10 @@ class CELT11Encoder @JvmOverloads @Throws(NativeAudioException::class) construct
         // The CELT 0.11 encoder has no partial-packet flush; kept as before.
     }
 
-    override fun destroy() = api.encoderDestroy(state)
+    override fun destroy() {
+        if (destroyed) return
+        destroyed = true
+        api.encoderDestroy(state)
+        state = 0L
+    }
 }

@@ -16,12 +16,27 @@ struct SpeexDecoderHandle {
 
 extern "C" {
 
+// Returns 0 on failure; the Kotlin wrapper turns that into a NativeAudioException. Without the
+// frame-size check a failed query would leave frameSize at 0, and the next speex_decode would
+// write a whole mode frame into a zero-length buffer - the very overrun this file exists to stop.
 JNIEXPORT jlong JNICALL SD(create)(JNIEnv*, jobject, jint modeId) {
+    const SpeexMode* speexMode = speex_lib_get_mode(modeId);
+    if (speexMode == nullptr) return 0;
     auto* h = new SpeexDecoderHandle();
-    h->state = speex_decoder_init(speex_lib_get_mode(modeId));
+    h->state = speex_decoder_init(speexMode);
+    if (h->state == nullptr) {
+        delete h;
+        return 0;
+    }
     speex_bits_init(&h->bits);
     spx_int32_t frameSize = 0;
     speex_decoder_ctl(h->state, SPEEX_GET_FRAME_SIZE, &frameSize);
+    if (frameSize <= 0) {
+        speex_decoder_destroy(h->state);
+        speex_bits_destroy(&h->bits);
+        delete h;
+        return 0;
+    }
     h->frameSize = frameSize;
     h->frame = new float[frameSize];
     return toHandle(h);

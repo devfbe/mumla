@@ -28,7 +28,8 @@ class SpeexJitterBuffer @JvmOverloads constructor(
     /** Result of [get]: [status] is a `JITTER_BUFFER_*` code; [length] and [userData] come from the packet. */
     class Packet(val status: Int, val length: Int, val userData: Int)
 
-    private val handle: Long = api.init(stepSize)
+    private var handle: Long = api.init(stepSize)
+    private var destroyed = false
     private val meta = IntArray(5)
     private val scratch = IntArray(1)
 
@@ -54,5 +55,10 @@ class SpeexJitterBuffer @JvmOverloads constructor(
 
     fun tick() = api.tick(handle)
 
-    fun destroy() = api.destroy(handle)
+    fun destroy() {
+        if (destroyed) return
+        destroyed = true
+        api.destroy(handle)
+        handle = 0L
+    }
 }

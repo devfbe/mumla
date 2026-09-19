@@ -41,8 +41,9 @@ class CELT7Encoder @JvmOverloads @Throws(NativeAudioException::class) constructo
     private var bufferedFrames = 0
     private var ready = false
 
-    private val mode: Long
-    private val state: Long
+    private var mode: Long
+    private var state: Long
+    private var destroyed = false
 
     init {
         val error = intArrayOf(0)
@@ -90,8 +91,12 @@ class CELT7Encoder @JvmOverloads @Throws(NativeAudioException::class) constructo
     }
 
     override fun destroy() {
+        if (destroyed) return
+        destroyed = true
         api.encoderDestroy(state)
         api.modeDestroy(mode)
+        state = 0L
+        mode = 0L
     }
 
     companion object {

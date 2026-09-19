@@ -29,7 +29,8 @@ class PreprocessingEncoder @JvmOverloads constructor(
     sampleRate: Int,
     private val api: SpeexPreprocessApi = SpeexPreprocessNative,
 ) : IEncoder {
-    private val state: Long = api.init(frameSize, sampleRate)
+    private var state: Long = api.init(frameSize, sampleRate)
+    private var destroyed = false
 
     init {
         val arg = intArrayOf(0)
@@ -65,7 +66,10 @@ class PreprocessingEncoder @JvmOverloads constructor(
     }
 
     override fun destroy() {
+        if (destroyed) return
+        destroyed = true
         api.destroy(state)
+        state = 0L
         encoder.destroy()
     }
 }

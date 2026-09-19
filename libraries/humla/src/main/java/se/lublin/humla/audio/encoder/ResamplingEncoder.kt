@@ -32,7 +32,8 @@ class ResamplingEncoder @JvmOverloads constructor(
     private val api: SpeexResamplerApi = SpeexResamplerNative,
 ) : IEncoder {
     private val resampleBuffer = ShortArray(targetFrameSize)
-    private val state: Long = api.init(channels, inputSampleRate, targetSampleRate, SPEEX_RESAMPLE_QUALITY, null)
+    private var state: Long = api.init(channels, inputSampleRate, targetSampleRate, SPEEX_RESAMPLE_QUALITY, null)
+    private var destroyed = false
 
     @Throws(NativeAudioException::class)
     override fun encode(input: ShortArray, inputSize: Int): Int {
@@ -53,7 +54,10 @@ class ResamplingEncoder @JvmOverloads constructor(
     }
 
     override fun destroy() {
+        if (destroyed) return
+        destroyed = true
         api.destroy(state)
+        state = 0L
         encoder.destroy()
     }
 

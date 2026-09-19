@@ -28,8 +28,9 @@ class CELT7Decoder @JvmOverloads @Throws(NativeAudioException::class) constructo
     channels: Int,
     private val api: Celt7Api = Celt7Native,
 ) : IDecoder {
-    private val mode: Long
-    private val state: Long
+    private var mode: Long
+    private var state: Long
+    private var destroyed = false
 
     init {
         val error = intArrayOf(0)
@@ -54,7 +55,11 @@ class CELT7Decoder @JvmOverloads @Throws(NativeAudioException::class) constructo
     }
 
     override fun destroy() {
+        if (destroyed) return
+        destroyed = true
         api.decoderDestroy(state)
         api.modeDestroy(mode)
+        state = 0L
+        mode = 0L
     }
 }

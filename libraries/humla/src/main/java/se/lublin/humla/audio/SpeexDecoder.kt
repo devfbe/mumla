@@ -22,12 +22,15 @@ import se.lublin.humla.audio.native.SpeexDecoderApi
 import se.lublin.humla.audio.native.SpeexDecoderNative
 import se.lublin.humla.exception.NativeAudioException
 
-class SpeexDecoder @JvmOverloads constructor(
+class SpeexDecoder @JvmOverloads @Throws(NativeAudioException::class) constructor(
     private val api: SpeexDecoderApi = SpeexDecoderNative,
 ) : IDecoder {
-    private val handle: Long = api.create(SpeexDecoderNative.SPEEX_MODEID_UWB)
+    private var handle: Long = api.create(SpeexDecoderNative.SPEEX_MODEID_UWB)
+    private var destroyed = false
 
     init {
+        // create returns 0 when the mode is unknown or reports a non-positive frame size.
+        if (handle == 0L) throw NativeAudioException("Speex decoder initialization failed")
         api.ctlInt(handle, SpeexDecoderNative.SPEEX_SET_ENH, 1)
     }
 
@@ -48,5 +51,10 @@ class SpeexDecoder @JvmOverloads constructor(
         return frameSize
     }
 
-    override fun destroy() = api.destroy(handle)
+    override fun destroy() {
+        if (destroyed) return
+        destroyed = true
+        api.destroy(handle)
+        handle = 0L
+    }
 }

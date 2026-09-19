@@ -42,7 +42,8 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
     private var encodedLength = 0
     private var terminated = false
 
-    private val state: Long
+    private var state: Long
+    private var destroyed = false
 
     init {
         val error = intArrayOf(0)
@@ -108,5 +109,10 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
         return value[0]
     }
 
-    override fun destroy() = api.destroy(state)
+    override fun destroy() {
+        if (destroyed) return
+        destroyed = true
+        api.destroy(state)
+        state = 0L
+    }
 }

@@ -15,7 +15,10 @@ class PreprocessingEncoderTest {
             return 1
         }
         override fun ctlInt(state: Long, request: Int, value: IntArray): Int = 0
-        override fun destroy(state: Long) {}
+        var destroys = 0
+        override fun destroy(state: Long) {
+            destroys++
+        }
     }
 
     @Test
@@ -29,5 +32,19 @@ class PreprocessingEncoderTest {
         assertThat(fake.runs).isEqualTo(1)
         assertThat(inner.received.single().toList().distinct()).containsExactly(500.toShort())
         assertThat(inner.receivedSizes).containsExactly(480)
+    }
+
+    @Test
+    fun `destroy releases the native state only once`() {
+        val inner = RecordingEncoder()
+        val fake = FakePreprocess()
+        val encoder = PreprocessingEncoder(inner, 480, 48000, fake)
+
+        encoder.destroy()
+        encoder.destroy()
+
+        // A second speex_preprocess_state_destroy on the same raw pointer is a native double free.
+        assertThat(fake.destroys).isEqualTo(1)
+        assertThat(inner.destroyed).isTrue()
     }
 }
