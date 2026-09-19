@@ -1,11 +1,15 @@
 [versions]
-# The Kotlin compiler is AGP's built-in Kotlin, so there is no `kotlin` version here and no
-# kotlin-gradle-plugin entry: see the design notes above.
+# Kotlin is compiled by AGP's built-in Kotlin support: the compiler is the Kotlin Gradle plugin
+# that AGP itself resolves (2.2.10 via AGP 9.4.1), so this catalog declares no `kotlin` version and
+# no kotlin-gradle-plugin. Adding one would put a second KGP on the build classpath.
+# Use `kotlin { compilerOptions { ... } }` in a module to change the Kotlin language level.
 agp = "9.4.1"
 coroutines = "1.11.0"
 
 androidx-appcompat = "1.7.1"
 androidx-activity = "1.13.0"
+# Pinned low on purpose: humla alone compiles against 1.8.1, which is all @RequiresPermission
+# needs, while the app's full graph resolves it up to 1.9.1 anyway. (Current stable is 1.10.0.)
 androidx-annotation = "1.8.1"
 androidx-cardview = "1.0.0"
 androidx-core = "1.18.0"

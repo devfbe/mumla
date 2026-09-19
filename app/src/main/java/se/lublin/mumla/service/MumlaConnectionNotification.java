@@ -130,22 +130,17 @@ public class MumlaConnectionNotification {
      * Called to update/create the service's foreground Mumla notification.
      */
     private Notification createNotification() {
-        String channelId = "";
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            channelId = "connected_channel";
-            String channelName = mService.getString(R.string.connected);
-            NotificationChannel chan = new NotificationChannel(channelId, channelName,
-                    NotificationManager.IMPORTANCE_DEFAULT);
-            NotificationManager manager = mService.getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(chan);
-        }
+        String channelId = "connected_channel";
+        String channelName = mService.getString(R.string.connected);
+        NotificationChannel chan = new NotificationChannel(channelId, channelName,
+                NotificationManager.IMPORTANCE_DEFAULT);
+        NotificationManager manager = mService.getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(chan);
+
         NotificationCompat.Builder builder =
                 new NotificationCompat.Builder(mService, channelId);
 
-        // app name is always displayed in notification on >= O
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
-            builder.setContentTitle(mService.getString(R.string.app_name));
-        }
+        // The app name is always displayed in the notification, so no content title is set here.
         builder.setContentText(mCustomContentText);
         builder.setSmallIcon(R.drawable.ic_stat_notify);
         builder.setPriority(NotificationCompat.PRIORITY_DEFAULT);

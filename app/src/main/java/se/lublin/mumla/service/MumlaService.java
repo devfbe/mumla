@@ -24,7 +24,6 @@ import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -528,15 +527,13 @@ public class MumlaService extends HumlaService implements
         // used to happen here; Android 12 (API 31, our minSdk) no longer allows it.
 
         if (!mChannelOverlay.isShown()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (!android.provider.Settings.canDrawOverlays(getApplicationContext())) {
-                    Intent showSetting = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:" + getPackageName()));
-                    showSetting.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(showSetting);
-                    Toast.makeText(this, R.string.grant_perm_draw_over_apps, Toast.LENGTH_LONG).show();
-                    return;
-                }
+            if (!android.provider.Settings.canDrawOverlays(getApplicationContext())) {
+                Intent showSetting = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                showSetting.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(showSetting);
+                Toast.makeText(this, R.string.grant_perm_draw_over_apps, Toast.LENGTH_LONG).show();
+                return;
             }
             mChannelOverlay.show();
         } else {

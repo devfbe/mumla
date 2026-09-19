@@ -29,7 +29,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -91,16 +90,14 @@ public class MumlaReconnectNotification {
             e.printStackTrace();
         }
 
-        String channelId = "";
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            channelId = "reconnecting_channel";
-            // TODO this is not used
-            String channelName = "Reconnecting";
-            NotificationChannel chan = new NotificationChannel(channelId, channelName,
-                    NotificationManager.IMPORTANCE_DEFAULT);
-            NotificationManager manager = mContext.getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(chan);
-        }
+        String channelId = "reconnecting_channel";
+        // TODO this is not used
+        String channelName = "Reconnecting";
+        NotificationChannel chan = new NotificationChannel(channelId, channelName,
+                NotificationManager.IMPORTANCE_DEFAULT);
+        NotificationManager manager = mContext.getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(chan);
+
         NotificationCompat.Builder builder =
                 new NotificationCompat.Builder(mContext, channelId);
 
