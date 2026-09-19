@@ -25,6 +25,9 @@ humla_rnnoise *humla_rnnoise_create(void) {
     return h;
 }
 
+/* h and frame are preconditions (see humla_rnnoise.h): both are dereferenced unconditionally,
+   unlike humla_rnnoise_destroy, which tolerates NULL. Task 3's JNI is the only caller and
+   guarantees both. */
 float humla_rnnoise_process(humla_rnnoise *h, int16_t *frame) {
     for (int i = 0; i < HUMLA_RNNOISE_FRAME_SIZE; i++) h->in[i] = (float)frame[i];
     float p = rnnoise_process_frame(h->st, h->out, h->in);

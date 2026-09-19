@@ -36,7 +36,12 @@ int main(void) {
         humla_rnnoise_process(h, frame);
         if (n >= 50) { in_e += ie; out_e += energy(frame, HUMLA_RNNOISE_FRAME_SIZE); }
     }
-    CHECK(out_e < in_e / 2.0, "stationary white noise is attenuated by at least 3 dB");
+    /* Measured on the host: 82.9 dB (input energy 2.74e8, output 1.4) -- RNNoise gates
+       stationary white noise almost completely. 20 dB is the threshold so that this fails on a
+       badly degraded model and not only on a no-op, while still leaving ~63 dB of headroom for
+       architecture-dependent DSP differences. */
+    printf("noise attenuation: %.1f dB\n", 10.0 * log10(in_e / out_e));
+    CHECK(out_e * 100.0 < in_e, "stationary white noise is attenuated by at least 20 dB");
 
     humla_rnnoise_destroy(h);
 
@@ -61,9 +66,17 @@ int main(void) {
     humla_rnnoise_destroy(a);
     humla_rnnoise_destroy(b);
 
-    /* Teardown must be safe to repeat: rnnoise_model_free() would fclose() an uninitialised
-       FILE* on a buffer-backed model, which only crashes intermittently. 200 cycles make it
-       reproducible under ctest (and under valgrind, if available). */
+    /* Repeated teardown. What this loop actually catches is a hard double free or a corrupted
+       allocator state, which glibc aborts on immediately, plus -- in the sanitized ctest entry
+       (see tests/CMakeLists.txt) -- any per-cycle leak of the model or the denoise state.
+       It does NOT catch the rnnoise_model_free() trap documented in humla_rnnoise_destroy:
+       that is a read of an uninitialised FILE*, and a plain build leaves it to whatever the
+       allocator happened to leave behind. Mutation-tested: a wrapper changed to call
+       rnnoise_model_free() passes this loop 60 times out of 60 in a plain build, and fails 5
+       times out of 5 under -fsanitize=address, which fills fresh heap with 0xbe and so turns
+       the garbage FILE* into a deterministic SEGV inside fclose() -- at the first destroy
+       above, without needing this loop at all. The loop is kept for the double-free and leak
+       cases; the sanitized entry is what guards the uninitialised read. */
     for (int n = 0; n < 200; n++) {
         humla_rnnoise *cycle = humla_rnnoise_create();
         CHECK(cycle != NULL, "create succeeds on every cycle");

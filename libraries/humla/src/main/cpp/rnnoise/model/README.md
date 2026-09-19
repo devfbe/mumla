@@ -23,7 +23,14 @@ arrays are compiled out, and embed the binary weight blob instead:
   (`configure.ac:81-87`, `--enable-dnn-debug-float` defaults to `no`); it drops
   the seven float duplicates of the int8-quantised `conv2`/`gru*` weight
   matrices, which exist only for debugging. Without it the blob is 5 530 816
-  bytes and does not match the hash above. `write_weights.c` serialises the
+  bytes and does not match the hash above — and, more importantly, it is not the
+  same network. `compute_linear_` (`src/nnet_arch.h:138-140`) tests
+  `linear->float_weights != NULL` *before* the int8 path, and `linear_init`
+  loads the float arrays whenever the blob offers them
+  (`src/parse_lpcnet_weights.c:154-165`, via `opt_array_check`). A blob dumped
+  without this flag therefore silently runs `conv2` and `gru1`-`gru3` through
+  float arithmetic instead of the quantised path upstream ships by default. This
+  flag is a correctness setting, not a size setting. `write_weights.c` serialises the
   arrays field by field into a fully initialised, padding-free 64-byte
   `WeightHead` (`src/nnet.h:54-61`, `celt_assert(sizeof(h) == WEIGHT_BLOCK_SIZE)`),
   so the output is byte-identical regardless of compiler or optimisation level
