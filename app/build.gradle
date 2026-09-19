@@ -122,6 +122,15 @@ android {
 
     packaging {
         resources {
+            // protobuf-java ships the 12 well-known-type sources (any.proto, descriptor.proto
+            // and friends, about 120 KB) as Java resources under this directory, which holds
+            // nothing else -- the generated classes live under com/google/protobuf and carry
+            // their descriptors in bytecode, so nothing at runtime reads a .proto file. The
+            // companion fix in libraries/humla/build.gradle keeps our own Mumble.proto out of the
+            // APK; this keeps the vendored ones out. The pattern is anchored with a leading
+            // slash, which is what AGP matches against the archive entry path; without it the
+            // entries still ship.
+            excludes += '/google/protobuf/**'
             // bcprov, bcpkix and bcutil each ship a META-INF/LICENSE.md (today all three are the
             // byte-identical MIT License text for The Legion of the Bouncy Castle Inc.). Merge
             // rather than pick one: merging concatenates the copies, so if a future BouncyCastle
