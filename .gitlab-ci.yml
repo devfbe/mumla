@@ -25,9 +25,6 @@ assembleDebug:
   stage: build
   script:
     # ANDROID_SDK_ROOT is already set in the android-sdk-ndk container image.
-    - pushd libraries/humla/libs/humla-spongycastle
-    - ../../gradlew jar
-    - popd
     - ./gradlew assembleDebug
   artifacts:
     paths:

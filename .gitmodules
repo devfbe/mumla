@@ -1,3 +1,12 @@
-[submodule "libraries/humla"]
-	path = libraries/humla
-	url = https://gitlab.com/quite/humla.git
+[submodule "libraries/humla/src/main/jni/opus"]
+	path = libraries/humla/src/main/jni/opus
+	url = https://github.com/xiph/opus
+[submodule "libraries/humla/src/main/jni/speex"]
+	path = libraries/humla/src/main/jni/speex
+	url = https://github.com/xiph/speex
+[submodule "celt-0.7.0"]
+	path = libraries/humla/src/main/jni/celt-0.7.0-src
+	url = https://gitlab.com/quite/celt.git
+[submodule "celt-0.11.0"]
+	path = libraries/humla/src/main/jni/celt-0.11.0-src
+	url = https://gitlab.com/quite/celt.git
