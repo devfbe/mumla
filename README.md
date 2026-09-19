@@ -61,7 +61,7 @@ built for `arm64-v8a`, `armeabi-v7a` and `x86_64` via CMake with hand-written
 JNI glue.
 
 [direnv](https://direnv.net/) users can `direnv allow` to enter the shell
-automatically.
+automatically. The same shell is what CI uses (`.gitlab-ci.yml`).
 
 If you get an error running out of Java heap space, try raising the `-Xmx` in
 `gradle.properties`.
@@ -83,8 +83,8 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
   (JUnit 4, Robolectric for Android classes, MockK, Google Truth,
   `kotlinx-coroutines-test`); native code stays a thin JNI pass-through and
   the Kotlin side is tested against fakes.
-  `./gradlew assembleFossDebug testFossDebugUnitTest :libraries:humla:testDebugUnitTest lint`
-  must be green.
+  `./gradlew assembleFossDebug assembleGoogDebug test lint` (CI's acceptance
+  command, both product flavors and both modules) must be green.
 - **Kotlin.** New files are Kotlin; a Java file you change substantially is
   converted first, as its own commit.
 - **Conventional Commits**, in English: `feat:`, `fix:`, `refactor:`,

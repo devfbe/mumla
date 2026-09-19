@@ -1,42 +1,41 @@
-image: docker.io/quite/android-sdk-ndk:10
+# Builds and tests Mumla inside the Nix dev shell defined by flake.nix.
+image: nixos/nix:latest
 
 variables:
-  # get those pesky submodules
   GIT_SUBMODULE_STRATEGY: recursive
-
-before_script:
-  - export GRADLE_USER_HOME=$(pwd)/.gradle
-  - chmod +x ./gradlew
+  NIX_CONFIG: "experimental-features = nix-command flakes"
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+  DEVSHELL: ".#devShells.x86_64-linux.default"
 
 cache:
-  key: ${CI_PROJECT_ID}
+  key: ${CI_PROJECT_ID}-nix-gradle
   paths:
-  - .gradle/
+    - .gradle/caches/
+    - .gradle/wrapper/
+    - .nix-cache/
 
 stages:
   - build
 
-# lintDebug:
-#   stage: build
-#   script:
-#     - ./gradlew -Pci --console=plain -PbuildDir=lint :app:lintDebug
-
-assembleDebug:
+build:
   stage: build
+  before_script:
+    - mkdir -p .nix-cache .gradle
+    # Realise the dev shell, preferring the file-backed cache restored by GitLab over cache.nixos.org.
+    - nix build --print-build-logs --out-link .devshell
+        --substituters "file://$CI_PROJECT_DIR/.nix-cache https://cache.nixos.org"
+        "$DEVSHELL"
   script:
-    # ANDROID_SDK_ROOT is already set in the android-sdk-ndk container image.
-    - ./gradlew assembleDebug
+    - nix develop "$DEVSHELL" --command ./gradlew --console=plain assembleFossDebug assembleGoogDebug test lint
+  after_script:
+    # Export the dev shell closure so the next pipeline does not rebuild the SDK/NDK.
+    - nix copy --to "file://$CI_PROJECT_DIR/.nix-cache" "$DEVSHELL" || true
   artifacts:
+    when: always
     paths:
-    - app/build/outputs/apk/
+      - app/build/outputs/apk/
+      - app/build/reports/
+      - libraries/humla/build/reports/
+      - app/build/test-results/
+      - libraries/humla/build/test-results/
     expire_in: 3 months
-
-# debugTests:
-#   stage: test
-#   script:
-#     - ./gradlew -Pci --console=plain :app:testDebugUnitTest
-
-# coverageTests:
-#   stage: test
-#   script:
-#     - ./gradlew -Pci --console=plain jacocoTestReport coveralls
