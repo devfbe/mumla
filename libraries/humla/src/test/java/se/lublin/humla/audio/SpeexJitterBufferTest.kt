@@ -31,4 +31,16 @@ class SpeexJitterBufferTest {
         assertThat(available).isEqualTo(3)
         assertThat(fake.ctlCalls).containsExactly(SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT to 0)
     }
+
+    @Test
+    fun `destroy releases the native handle only once`() {
+        val fake = FakeJitter()
+        val buffer = SpeexJitterBuffer(480, fake)
+
+        buffer.destroy()
+        buffer.destroy()
+
+        // A second jitter_buffer_destroy on the same raw pointer is a native double free.
+        assertThat(fake.destroys).isEqualTo(1)
+    }
 }

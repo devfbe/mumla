@@ -18,11 +18,12 @@ class FakeJitter : SpeexJitterApi {
     var nextMeta = intArrayOf(0, 0, 0, 0, 0)
     var ticks = 0
     var updateDelayCalls = 0
-    var destroyed = false
+    /** Counts `jitter_buffer_destroy` calls: a second one on the same handle is a double free. */
+    var destroys = 0
 
     override fun init(stepSize: Int): Long = 1L
     override fun destroy(handle: Long) {
-        destroyed = true
+        destroys++
     }
     override fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int) {
         lastPutData = data.copyOf()

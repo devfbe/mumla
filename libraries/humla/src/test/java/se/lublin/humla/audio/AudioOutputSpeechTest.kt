@@ -16,6 +16,7 @@ class AudioOutputSpeechTest {
         private val nbFrames: Int = 1,
         private val samplesPerFrame: Int = AudioHandler.FRAME_SIZE,
     ) : OpusDecoderApi {
+        var destroys = 0
         override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {
             error[0] = 0
             return 1L
@@ -24,7 +25,9 @@ class AudioOutputSpeechTest {
             AudioHandler.FRAME_SIZE
         override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int): Int =
             AudioHandler.FRAME_SIZE
-        override fun destroy(state: Long) {}
+        override fun destroy(state: Long) {
+            destroys++
+        }
         override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = nbFrames
         override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int = samplesPerFrame
     }
@@ -85,5 +88,27 @@ class AudioOutputSpeechTest {
         assertThat(result.isAlive()).isTrue()
         assertThat(result.getNumSamples()).isEqualTo(AudioHandler.FRAME_SIZE)
         assertThat(jitter.ticks).isEqualTo(1)
+    }
+
+    @Test
+    fun `destroy releases the decoder and the jitter buffer only once`() {
+        val jitter = FakeJitter()
+        val opus = FakeOpusDecoder()
+        val speech = AudioOutputSpeech(
+            User(42, "alice"),
+            HumlaUDPMessageType.UDPVoiceOpus,
+            AudioHandler.FRAME_SIZE,
+            { _, _ -> },
+            opus,
+            jitter,
+        )
+
+        speech.destroy()
+        speech.destroy()
+
+        // AudioOutputSpeech has no guard of its own: it relies on the ones in OpusDecoder and
+        // SpeexJitterBuffer, so it is the pair that has to stay idempotent.
+        assertThat(opus.destroys).isEqualTo(1)
+        assertThat(jitter.destroys).isEqualTo(1)
     }
 }

@@ -9,6 +9,7 @@ class OpusEncoderTest {
 
     private class FakeOpus : OpusEncoderApi {
         val encodedFrameSizes = mutableListOf<Int>()
+        var destroys = 0
         override fun create(sampleRate: Int, channels: Int, application: Int, error: IntArray): Long {
             error[0] = 0
             return 42L
@@ -23,7 +24,9 @@ class OpusEncoderTest {
             value[0] = 40000
             return 0
         }
-        override fun destroy(state: Long) {}
+        override fun destroy(state: Long) {
+            destroys++
+        }
     }
 
     @Test
@@ -59,5 +62,17 @@ class OpusEncoderTest {
         pb.rewind()
         assertThat(pb.readLong()).isEqualTo(3L or (1L shl 13)) // 8195: two-byte varint 0xA0 0x03
         assertThat(pb.dataBlock(3)).isEqualTo(byteArrayOf(0x11, 0x22, 0x33))
+    }
+
+    @Test
+    fun `destroy releases the native encoder only once`() {
+        val fake = FakeOpus()
+        val encoder = OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
+
+        encoder.destroy()
+        encoder.destroy()
+
+        // A second opus_encoder_destroy on the same raw pointer is a native double free.
+        assertThat(fake.destroys).isEqualTo(1)
     }
 }

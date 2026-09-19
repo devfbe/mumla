@@ -8,12 +8,15 @@ import se.lublin.humla.net.PacketBuffer
 class CELT11EncoderTest {
 
     private class FakeCelt11 : Celt11Api {
+        var encoderDestroys = 0
         override fun encoderCreate(sampleRate: Int, channels: Int, error: IntArray): Long {
             error[0] = 0
             return 7L
         }
         override fun encode(state: Long, pcm: ShortArray, frameSize: Int, out: ByteArray, maxBytes: Int): Int = maxBytes
-        override fun encoderDestroy(state: Long) {}
+        override fun encoderDestroy(state: Long) {
+            encoderDestroys++
+        }
         override fun decoderCreate(sampleRate: Int, channels: Int, error: IntArray): Long = 8L
         override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int): Int = frameSize
         override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int): Int = frameSize
@@ -35,5 +38,17 @@ class CELT11EncoderTest {
         val bytes = pb.dataBlock(122)
         assertThat(bytes[0]).isEqualTo(0xBC.toByte())  // 60 | 0x80: more frames follow
         assertThat(bytes[61]).isEqualTo(0x3C.toByte()) // 60: last frame
+    }
+
+    @Test
+    fun `destroy releases the native encoder only once`() {
+        val fake = FakeCelt11()
+        val encoder = CELT11Encoder(48000, 1, 2, fake)
+
+        encoder.destroy()
+        encoder.destroy()
+
+        // A second celt_encoder_destroy on the same raw pointer is a native double free.
+        assertThat(fake.encoderDestroys).isEqualTo(1)
     }
 }
