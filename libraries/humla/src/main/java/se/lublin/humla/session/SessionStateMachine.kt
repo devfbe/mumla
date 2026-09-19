@@ -7,8 +7,10 @@ import se.lublin.humla.util.HumlaException
 import kotlin.random.Random
 
 /**
- * Pure transition logic for [SessionState]. Not thread-safe: the owning service drives it from
- * the main thread only. Timers and sockets live in the service; this class only decides.
+ * Pure transition logic for [SessionState]. Not thread-safe: it must be driven from a single
+ * thread the owner designates (a service's protocol or audio-control thread, not necessarily
+ * the main thread) — any thread that only observes should collect [state] instead of calling a
+ * mutator. Timers and sockets live outside this class; it only decides.
  */
 class SessionStateMachine(
     private val policy: ReconnectPolicy = ReconnectPolicy(),
@@ -36,7 +38,7 @@ class SessionStateMachine(
 
     /** ServerSync arrived. Only valid while an attempt is in flight. */
     fun synchronized(): Boolean = when (current) {
-        SessionState.Connecting, SessionState.Reconnecting -> {
+        SessionState.Connecting, is SessionState.Reconnecting -> {
             attempt = 0
             mutableState.value = SessionState.Connected
             true
@@ -68,8 +70,8 @@ class SessionStateMachine(
 
     /** The backoff timer fired: start the reconnect attempt. */
     fun reconnectTimerFired(): Boolean {
-        if (current !is SessionState.ConnectionLost) return false
-        mutableState.value = SessionState.Reconnecting
+        val lostState = current as? SessionState.ConnectionLost ?: return false
+        mutableState.value = SessionState.Reconnecting(lostState.error)
         return true
     }
 
@@ -85,7 +87,7 @@ class SessionStateMachine(
     fun cancelReconnect(): Boolean {
         val error = when (val state = current) {
             is SessionState.ConnectionLost -> state.error
-            SessionState.Reconnecting -> null
+            is SessionState.Reconnecting -> state.error
             else -> return false
         }
         attempt = 0

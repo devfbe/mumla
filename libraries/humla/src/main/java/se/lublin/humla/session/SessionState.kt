@@ -27,8 +27,10 @@ sealed class SessionState {
     /** The session dropped; an automatic reconnect fires in [reconnectInMillis]. */
     data class ConnectionLost(val reconnectInMillis: Long, val attempt: Int, val error: HumlaException?) : SessionState()
 
-    /** An automatic reconnect attempt is in progress. */
-    object Reconnecting : SessionState() {
-        override fun toString(): String = "Reconnecting"
-    }
+    /**
+     * An automatic reconnect attempt is in progress. [error] is carried forward from the
+     * [ConnectionLost] state that preceded it, so cancelling here surfaces the same reason to
+     * the UI that cancelling one state earlier would.
+     */
+    data class Reconnecting(val error: HumlaException?) : SessionState()
 }

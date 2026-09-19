@@ -53,7 +53,7 @@ class SessionStateMachineTest {
         bringToConnected()
         machine.lost(autoReconnect = true, error = error)
         assertThat(machine.reconnectTimerFired()).isTrue()
-        assertThat(machine.current).isEqualTo(SessionState.Reconnecting)
+        assertThat(machine.current).isEqualTo(SessionState.Reconnecting(error))
         assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(4_000L, 2, error))
     }
 
@@ -119,6 +119,15 @@ class SessionStateMachineTest {
     }
 
     @Test
+    fun cancelReconnectFromReconnectingAlsoKeepsTheErrorForTheUi() {
+        bringToConnected()
+        machine.lost(autoReconnect = true, error = error)
+        assertThat(machine.reconnectTimerFired()).isTrue()
+        assertThat(machine.cancelReconnect()).isTrue()
+        assertThat(machine.current).isEqualTo(SessionState.Disconnected(error))
+    }
+
+    @Test
     fun manualConnectFromConnectionLostStartsAFreshSession() {
         bringToConnected()
         machine.lost(autoReconnect = true, error = error)
@@ -133,6 +142,14 @@ class SessionStateMachineTest {
         assertThat(machine.disconnectRequested()).isTrue()
         assertThat(machine.current).isEqualTo(SessionState.Disconnected(null))
         assertThat(machine.disconnectRequested()).isFalse()
+    }
+
+    @Test
+    fun lossWhileConnectingSharesTheSamePathAsLossWhileConnected() {
+        assertThat(machine.connectRequested()).isTrue()
+        assertThat(machine.current).isEqualTo(SessionState.Connecting)
+        assertThat(machine.lost(autoReconnect = true, error = error))
+            .isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))
     }
 
     @Test
