@@ -397,7 +397,11 @@ away in a method the diff never went near, and under the narrower reading it nev
 entered the list. Consequence, measured: all eleven tests in that class were
 driving a button the fragment had set to `GONE`, and only worked because the test
 helper dispatched touches directly, bypassing hit-testing. The unit is the file the
-test class hosts. A test class that never
+test class hosts. The unit is **every input the file
+branches on**, not only the ones that look like settings: the round that missed
+the fourth corner above had read "setting" as "Preference", and the two inputs
+that mattered were constructor parameters of a data class — which reach the file
+by exactly the path the user operates. A test class that never
 writes a preference the file reads is testing exactly one configuration, and the
 sweep will confirm whatever that configuration does.
 
@@ -442,12 +446,22 @@ had survived mutation for exactly this reason, invisible everywhere except in th
 window where the audio thread is still handing over frames. That is the window
 that matters.
 
-**Mutate a compound condition clause by clause.** `if (a && b && c)` is three
-guards wearing one pair of brackets, and removing the whole condition kills a test
-while removing `b` alone may not. A sweep that treats the `if` as one unit reports
-a clean result over a passenger. Done properly on one file here: 8 of 8
-sub-clauses each killed a test on their own, which is the statement worth making —
-not "the condition is covered".
+**Mutate a compound condition clause by clause — and know what that does not
+prove.** `if (a && b && c)` is three guards wearing one pair of brackets, and
+removing the whole condition kills a test while removing `b` alone may not. A
+sweep that treats the `if` as one unit reports a clean result over a passenger.
+Done properly on one file here: 8 of 8 sub-clauses each killed a test on their
+own.
+
+**But clause-wise mutation and input-space coverage are orthogonal, and reading
+the first as if it covered the second has already cost a round.** A clause sweep
+proves every clause carries weight; it proves **nothing about the operator that
+joins them**. `||` mutated to `xor` survived a file whose clause sweep was
+complete, because over three of the four corners of a two-boolean input space the
+two operators agree — and the test class never wrote the fourth corner. For a
+compound condition over k booleans the requirement is **2^k inputs, not k
+mutations**. The consequence in that case: a user who switched on both Android
+audio effects got neither, silently.
 
 And the tool: do not run the suite once. **Mutate each guard on its own and
 require exactly one test to go red.** Here that costs about eleven seconds a run.
@@ -513,13 +527,21 @@ and reported as passing. They are repo-wide, not stream-specific.
   here burned twenty minutes before anyone noticed. Pass `--timeout` to `ctest`,
   and treat a sweep that produces no output as a result to investigate rather than
   a run to repeat.
-- **A naive SARIF reader counts ten lint errors this project does not have.**
-  `MissingQuantity` is demoted to `warning` in the module's own config, but the
-  *rule default* in the SARIF stays `error`. A script that falls back to the rule
-  default reports ten errors per app variant. Read the `level` on each result, not
-  the rule. Two rounds have reported lint numbers taken this way; the numbers
-  happened to be right because `abortOnError = true` and the build passed, which is
-  the stronger signal to use in the first place.
+- **Read a SARIF result's *effective* level, and trust the build's exit status more.**
+  An earlier version of this entry said to read each result's `level` rather than
+  the rule default. That is **wrong as a general rule, and it was measured**: in
+  `lint-results-fossDebug.sarif`, **10 of 325 results carry a `level` field at
+  all**, and they are exactly the `MissingQuantity` hits the module's own config
+  demotes. Every other result omits `level` and inherits from
+  `rules[ruleId].defaultConfiguration.level`. A counter that reads `result.level`
+  with a "warning" fallback therefore reports **0 errors for a build lint fails** —
+  demonstrated by deleting an unused string, which produced 23 `ExtraTranslation`
+  results, none of them carrying a `level`, rule default `error`, `Lint found 23
+  errors`, build aborted. The correct formulation is **effective level =
+  `result.level` if present, otherwise the rule's default** — and the gradle task's
+  exit status stays the real gate. Earlier rounds' "0 errors" claims are safe
+  because those builds passed, but the method they cite would not have caught a
+  regression.
 - **Robolectric's gesture constants are fixtures, not Android.**
   `ShadowViewConfiguration` hard-codes touch slop 16, paging touch slop 32 and
   double-tap slop 100 at density 1.0, and the 170 px minimum scaling span sits
@@ -709,20 +731,36 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `getItem(position)` read two *different* snapshots — a user leaving between them
   is an `IndexOutOfBoundsException`. That was equally racy before the guarded model
   and copy-on-read does not fix it; the adapter has to hold one snapshot.
-- **Two facts the model now guarantees, for everyone who reads it (A, binding).**
-  These were settled in task 5 and would otherwise live only in a gitignored
-  ledger. (a) **The observer queue is bounded and folding**, so "nothing is ever
-  dropped" — task 2's contract — is no longer true: refresh events for one subject
-  fold in place, and the three tree-shape events may be dropped oldest-first when
-  the queue is over its bound, though never the newest of them and never at the
-  hands of an undroppable event. An observer must therefore treat a model event as
-  "read this again", never as a delta it accumulates. (b) **The channel tree is
-  finite and acyclic by construction**: `ModelHandler` refuses a `ChannelState`
-  whose parent is the channel itself or one of its descendants, and one that would
-  sit deeper than 256 below the root. The channel keeps its name and its place in
-  the map and simply has no parent — the same state as one whose parent frame has
-  not arrived yet. That is one guard at the frame boundary instead of a depth check
-  at every read, and it is why recursive walks of the tree need none.
+- **Two model facts, both corrected after measurement (A, binding).** I wrote the
+  first version of this entry from a task report and both halves were wrong. The
+  measured truth:
+  (a) **The observer queue is *not* bounded.** Trimming now runs only when the
+  arriving event is itself droppable — which fixed a real starvation bug, but means
+  the ceiling is `#undroppable + 1` and nothing bounds `#undroppable`. Twelve of
+  the nineteen observer events are undroppable, and two of them are bulk traffic
+  during a sync: a 5 000-user server produces **at least 10 000** of them
+  (`onUserConnected` plus an `onLogInfo` per user). Measured consequence: the
+  trim scan is no longer capped either — **2.1 ms inside one `dispatch()` while
+  holding the lock** in the real sync ordering, and **100 µs per enqueue in the
+  steady state against 0.2 µs before**, on a lock the protocol thread shares with
+  the audio thread. What *is* bounded is the population of the three tree-shape
+  events. A second, absolute ceiling is still owed, and until it exists the honest
+  statement is: **bounded in droppable events, unbounded in total, and the newest
+  tree-shape event is never dropped.** An observer must still treat a model event
+  as "read this again", never as a delta it accumulates.
+  (b) **A rejected parent is permanent, not "the same as one that has not arrived
+  yet".** `ModelHandler` refuses a `ChannelState` whose parent is the channel
+  itself or one of its descendants, or that would sit deeper than 256 below the
+  root — and that part is right, cheap (measured: 3.1 ms across a whole
+  5 000-frame sync even in the worst shape the guard permits, because the walk is
+  upward and depth-capped, not a subtree walk) and correctly placed at the one
+  bottleneck. But the channel is then parentless, `ChannelListAdapter` only ever
+  walks downward from the root channels, and nothing in the app iterates the
+  channel map — so **the channel and every user in it disappear from the list for
+  good**, with a `Log.w` as the only trace. The server does not resend that frame.
+  Ruling: attach a rejected channel to the **root** instead of leaving it
+  parentless. The tree stays finite and acyclic, and the channel stays visible in
+  the wrong place rather than invisibly absent.
 
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
