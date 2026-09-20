@@ -29,6 +29,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 /**
@@ -433,6 +434,32 @@ class HumlaConnectionProtocolThreadTest {
         inTheTeardownWindow(tcp) { connection.resyncCryptState() }
 
         assertThat(tcp.sent).containsExactlyElementsIn(sentBefore).inOrder()
+    }
+
+    /**
+     * [HumlaConnection.isSynchronized] from the disconnect onwards. The teardown used to clear
+     * `synchronizedWithServer` as well, and the two masked each other exactly as 4.04 describes:
+     * removing either one alone left the suite green, removing both left [HumlaConnection]
+     * reporting a finished session as synchronized for the life of the object - which is
+     * `HumlaService.logInfo` writing into the chat log of a session that has ended, `getSession`
+     * handing out the dead session id, and `getAudioHandler`/`getModelHandler` returning null
+     * instead of throwing NotSynchronizedException.
+     *
+     * The window is the one that matters: the teardown is queued but has not run, so the flag the
+     * handshake set is still there and only the composition with `disconnectRequested` can answer.
+     */
+    @Test
+    fun aSynchronizedConnectionIsNotSynchronizedFromTheDisconnectOnwards() {
+        val tcp = connectAndEstablish()
+        synchronize(tcp)
+        assertThat(connection.isSynchronized).isTrue()
+        val insideTheWindow = AtomicReference<Boolean>()
+
+        inTheTeardownWindow(tcp) { insideTheWindow.set(connection.isSynchronized) }
+
+        assertThat(insideTheWindow.get()).isFalse()
+        assertThat(connection.isSynchronized).isFalse()
+        assertThrows(NotSynchronizedException::class.java) { connection.getSession() }
     }
 
     /**
