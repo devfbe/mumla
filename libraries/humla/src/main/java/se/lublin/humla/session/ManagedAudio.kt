@@ -83,8 +83,30 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
         params: AudioSessionParams,
         encodeListener: AudioHandler.AudioEncodeListener,
         outputListener: AudioOutput.AudioOutputListener,
-    ): ManagedAudio {
-        val handler = AudioHandler.Builder()
+    ): ManagedAudio = AudioHandlerAdapter(
+        builder(context, logger, config, params, encodeListener, outputListener)
+            .initialize(params.self, params.maxBandwidth, params.codec, params.targetId),
+    )
+
+    /**
+     * The config-to-builder mapping, split off from `initialize` so that a JVM test can read it
+     * back. `initialize` opens a microphone and starts the capture and playback threads, so nothing
+     * behind it is reachable without a device - and while these fifteen calls sat on the far side of
+     * it, fourteen of them were unpinned: swapping `targetBitrate` for `inputSampleRate`, dropping
+     * `setAudioStream` or `setInputMode`, and reading `halfDuplexRequested` instead of `halfDuplex`
+     * each left the whole suite green (measured).
+     *
+     * Stream B extends the chain here.
+     */
+    internal fun builder(
+        context: Context,
+        logger: HumlaLogger,
+        config: AudioConfig,
+        params: AudioSessionParams,
+        encodeListener: AudioHandler.AudioEncodeListener,
+        outputListener: AudioOutput.AudioOutputListener,
+    ): AudioHandler.Builder =
+        AudioHandler.Builder()
             .setContext(context)
             .setLogger(logger)
             .setAudioStream(config.audioStream)
@@ -104,9 +126,6 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
             // .setEchoCancellation(config.echoCancellationMode)
             // .setVadConfig(VadConfig(config.vadMode, config.vadStart, config.vadStop, config.vadHoldMs))
             // .setAudioEffects(config.androidNoiseSuppressor, config.androidAgc)
-            .initialize(params.self, params.maxBandwidth, params.codec, params.targetId)
-        return AudioHandlerAdapter(handler)
-    }
 }
 
 /** Dresses an [AudioHandler] as a [ManagedAudio]; every member but the warning channel delegates. */

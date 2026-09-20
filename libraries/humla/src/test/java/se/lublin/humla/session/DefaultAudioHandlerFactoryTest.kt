@@ -1,6 +1,7 @@
 package se.lublin.humla.session
 
 import android.media.AudioManager
+import android.media.MediaRecorder
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
@@ -15,6 +16,8 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.testutil.SilentLogger
 import android.content.Context
+import se.lublin.humla.Constants
+import java.lang.reflect.Modifier
 
 /**
  * The real factory needs a microphone, so what a JVM test can reach is the part of
@@ -68,5 +71,73 @@ class DefaultAudioHandlerFactoryTest {
             create(AudioConfig(legacyEchoCancellationMethod = "none", echoCancellationMode = "system"))
         }
         assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
+    }
+
+    /**
+     * Enumerated from `AudioHandler.Builder`'s own fields rather than written out, so a setter
+     * stream B adds and forgets to wire fails here the moment the field exists (spec 4.04: pin the
+     * set, not the member). Every value below is distinct from every other and from the Java
+     * default, so a cross-wiring is visible and not only an omission.
+     */
+    @Test
+    fun everyBuilderFieldIsSetFromTheConfigAndTheSessionParams() {
+        val inputMode = ContinuousInputMode()
+        val config = AudioConfig(
+            audioStream = AudioManager.STREAM_ALARM,
+            audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            inputSampleRate = 16_000,
+            targetBitrate = 24_000,
+            targetFramesPerPacket = 4,
+            amplitudeBoost = 2.5f,
+            transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+            halfDuplexRequested = true,
+            preprocessorEnabled = true,
+            legacyEchoCancellationMethod = "speex",
+            bluetoothActive = true,
+        )
+
+        val builder = factory.builder(
+            context, SilentLogger, config, params.copy(inputMode = inputMode),
+            encodeListener, outputListener,
+        )
+
+        val expected = mapOf(
+            "mContext" to context,
+            "mLogger" to SilentLogger,
+            "mAudioStream" to AudioManager.STREAM_ALARM,
+            "mAudioSource" to MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            "mInputSampleRate" to 16_000,
+            "mTargetBitrate" to 24_000,
+            "mTargetFramesPerPacket" to 4,
+            "mAmplitudeBoost" to 2.5f,
+            "mBluetoothEnabled" to true,
+            "mHalfDuplexEnabled" to true,
+            "mPreprocessorEnabled" to true,
+            "mEchoCancellationMethod" to "speex",
+            "mInputMode" to inputMode,
+            "mEncodeListener" to encodeListener,
+            "mTalkingListener" to outputListener,
+        )
+        val declared = AudioHandler.Builder::class.java.declaredFields
+            .filterNot { Modifier.isStatic(it.modifiers) || it.isSynthetic }
+        assertThat(declared.map { it.name }).containsExactlyElementsIn(expected.keys)
+        for (field in declared) {
+            field.isAccessible = true
+            assertThat(field.get(builder)).isEqualTo(expected.getValue(field.name))
+        }
+    }
+
+    /** Half duplex reaches the builder through the rule, not as the raw request (spec A7). */
+    @Test
+    fun halfDuplexReachesTheBuilderThroughTheRule() {
+        val requestedButNotPushToTalk = AudioConfig(
+            halfDuplexRequested = true, transmitMode = Constants.TRANSMIT_VOICE_ACTIVITY,
+        )
+        val builder = factory.builder(
+            context, SilentLogger, requestedButNotPushToTalk, params, encodeListener, outputListener,
+        )
+        val field = AudioHandler.Builder::class.java.getDeclaredField("mHalfDuplexEnabled")
+        field.isAccessible = true
+        assertThat(field.get(builder)).isEqualTo(false)
     }
 }
