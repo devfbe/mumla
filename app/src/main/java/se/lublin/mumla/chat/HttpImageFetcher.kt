@@ -27,9 +27,11 @@ fun interface ImageFetcher {
  *
  *  * **Scheme.** Only `http` and `https` with a non-empty host are fetched. Everything else —
  *    `file:`, `javascript:`, `content:`, `ftp:`, `jar:`, a scheme-relative `//host/x`, a bare path,
- *    or an authority without a host such as `http://@:8080/x` — is refused up front with
- *    [ImageError.UNSUPPORTED], before any connection object is created, so nothing is ever opened,
- *    let alone read. This is the second half of the guarantee that [ImageSource.parse] starts:
+ *    or an authority that names no host such as `http://@:8080/x` or `http://a@b@c/x` — is refused
+ *    up front with [ImageError.UNSUPPORTED], before any connection object is created, so nothing is
+ *    ever opened, let alone read. "Names no host" means what [URL] makes of the authority, not what
+ *    [URI] does; [supportedUrl] explains why the difference is the whole point. This is the second
+ *    half of the guarantee that [ImageSource.parse] starts:
  *    `ChatContentParser` deliberately passes the raw `src` through, and [ImageSource.parse] matches
  *    the scheme prefix case-insensitively, which folds some exotic characters together (`httpſ://`
  *    matches `https://`). The scheme check here is the authoritative one.
@@ -119,6 +121,17 @@ class HttpImageFetcher(
     /**
      * Parses [url] and accepts it only if it is an absolute http(s) URL with a non-empty host.
      * Purely syntactic: it opens nothing, so an unsupported source costs no I/O at all.
+     *
+     * The host is judged on the [URL] that is about to be opened, never on the [URI] it came from,
+     * because the two parsers disagree about the very same authority. `URI.getHost()` is null for
+     * anything registry-based (`my_host.invalid`, a non-ASCII name) although those really do name a
+     * host, while `URLStreamHandler.parseURL` gives up on server-based parsing entirely once the
+     * authority holds more than one `@` and leaves `getHost()` empty — for `http://a@b@c/x` the URI
+     * side sees the host `c` and the URL side sees nothing. An empty host is not inert: it resolves
+     * to localhost, so such a URL opens a socket to 127.0.0.1:80 (443 for https) with no DNS lookup
+     * at all, and [ImageSource.parse] classifies it as `Remote`, so one chat message is enough.
+     * Asking the chosen URL makes it structurally impossible for the gate and the connection to
+     * disagree, which matching a second hand-written parse against the platform's never was.
      */
     private fun supportedUrl(url: String): URL {
         val uri = try {
@@ -129,32 +142,15 @@ class HttpImageFetcher(
         }
         val scheme = uri.scheme?.lowercase(Locale.ROOT)
         if (scheme != "http" && scheme != "https") throw ImageFetchException(ImageError.UNSUPPORTED)
-        if (!hasHost(uri)) throw ImageFetchException(ImageError.UNSUPPORTED)
-        return try {
+        val target = try {
             uri.toURL()
         } catch (e: MalformedURLException) {
             throw ImageFetchException(ImageError.UNSUPPORTED, e)
         } catch (e: IllegalArgumentException) {
             throw ImageFetchException(ImageError.UNSUPPORTED, e)
         }
-    }
-
-    /**
-     * True when [uri] really names a host. `getHost()` is null for a registry-based authority (an
-     * underscore in the name, say), which is still a host, so the authority is inspected by hand in
-     * that case — the presence of an authority is not enough, because `@`, `user@` and `@:8080` are
-     * authorities without a host and the platform HTTP stack throws unchecked exceptions on them.
-     */
-    private fun hasHost(uri: URI): Boolean {
-        if (!uri.host.isNullOrEmpty()) return true
-        val authority = uri.authority ?: return false
-        val afterUserInfo = authority.substringAfterLast('@')
-        val host = if (afterUserInfo.startsWith("[")) {
-            afterUserInfo.substringBefore(']')
-        } else {
-            afterUserInfo.substringBefore(':')
-        }
-        return host.isNotEmpty() && host != "["
+        if (target.host.isNullOrEmpty()) throw ImageFetchException(ImageError.UNSUPPORTED)
+        return target
     }
 
     /** The socket read timeout, never longer than what is left of the total budget. */

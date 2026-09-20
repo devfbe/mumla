@@ -8,10 +8,20 @@ import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import java.io.IOException
+import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.ProxySelector
 import java.net.ServerSocket
+import java.net.SocketAddress
+import java.net.URI
+import java.net.URL
+import java.net.URLConnection
+import java.net.URLStreamHandler
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 class HttpImageFetcherTest {
@@ -325,27 +335,102 @@ class HttpImageFetcherTest {
         assertThat(elapsedMs).isLessThan(5_000)
     }
 
+    /**
+     * Authorities that name no host in the only sense that counts: the URL that would actually be
+     * opened has an empty `getHost()`. Two parsers read these differently — `URI.getHost()` is null
+     * for every one of them, and splitting the authority by hand finds a "host" in the ones with
+     * more than one `@` — while `URLStreamHandler.parseURL` refuses server-based parsing outright
+     * and leaves the host empty. An empty host resolves to localhost, so opening one of these would
+     * connect to 127.0.0.1 (port 80, or 443 for https) with no DNS lookup at all.
+     */
+    private fun hostlessAuthorityUrls(port: Int) = listOf(
+        "http://@:$port/a.png",
+        "http://user:pass@:$port/a.png",
+        "http://@/a.png",
+        "http://user@/a.png",
+        "https://@:443/a.png",
+        "http://:8080/a.png",
+        "http://a@b@c/a.png",
+        "http://@@host/a.png",
+        "https://a@b@c/a.png",
+        "http://a@b@127.0.0.1:8080/x",
+    )
+
     @Test
     fun anAuthorityWithoutAHostIsUnsupportedAndThrowsNothingUnchecked() {
         // The platform HTTP stack throws a StringIndexOutOfBoundsException on these, which would
         // escape fetch() as an unchecked exception; assertThrows(ImageFetchException) pins that it
-        // does not, and expectError pins that they are refused before any connection is made.
-        val port = server.address.port
-        listOf(
-            "http://@:$port/a.png",
-            "http://user:pass@:$port/a.png",
-            "http://@/a.png",
-            "http://user@/a.png",
-            "https://@:443/a.png",
-            "http://:8080/a.png",
-        ).forEach { expectError(it, ImageError.UNSUPPORTED) }
+        // does not. It pins the reported error and nothing more — that no connection is opened is
+        // a separate claim, and aHostlessAuthorityOpensNoConnectionAtAll is what proves it.
+        hostlessAuthorityUrls(server.address.port).forEach { expectError(it, ImageError.UNSUPPORTED) }
+    }
+
+    @Test(timeout = 60_000)
+    fun aHostlessAuthorityOpensNoConnectionAtAll() {
+        // An error code says nothing about whether a socket was opened, and for these authorities
+        // that is the whole question: the connection would go to loopback. So route every outgoing
+        // connection of this JVM through a trap socket on loopback and count what arrives there.
+        val trap = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
+        closeables += trap
+        val arrived = AtomicInteger()
+        Thread {
+            while (true) {
+                val accepted = try { trap.accept() } catch (e: Exception) { return@Thread }
+                closeables += accepted
+                arrived.incrementAndGet()
+            }
+        }.apply { isDaemon = true }.start()
+
+        val trapProxy = Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", trap.localPort))
+        val previous = ProxySelector.getDefault()
+        ProxySelector.setDefault(object : ProxySelector() {
+            override fun select(uri: URI): List<Proxy> = listOf(trapProxy)
+            override fun connectFailed(uri: URI, sa: SocketAddress, e: IOException) = Unit
+        })
+        try {
+            val fetcher = HttpImageFetcher(connectTimeoutMs = 1_000, readTimeoutMs = 1_000, totalTimeoutMs = 2_000)
+            // Control first: without it a count of zero below would also be what a broken trap
+            // looks like. The trap never answers, so this fetch can only fail — that is fine.
+            assertThrows(ImageFetchException::class.java) { fetcher.fetch(url("/a.png")) }
+            assertWithMessage("the trap must see the control connection").that(arrived.get()).isAtLeast(1)
+
+            arrived.set(0)
+            val outcomes = hostlessAuthorityUrls(server.address.port).associateWith {
+                runCatching { fetcher.fetch(it) }.exceptionOrNull()
+            }
+            // The count is asserted before the error codes: the code is the weaker claim, and a
+            // failure here is the one worth reading.
+            assertWithMessage("connections opened for hostless authorities %s", outcomes.keys)
+                .that(arrived.get()).isEqualTo(0)
+            outcomes.forEach { (target, thrown) ->
+                assertWithMessage("error for <%s>", target)
+                    .that((thrown as? ImageFetchException)?.error).isEqualTo(ImageError.UNSUPPORTED)
+            }
+        } finally {
+            ProxySelector.setDefault(previous)
+        }
     }
 
     @Test
-    fun aRegistryBasedAuthorityStillReachesTheNetwork() {
-        // An underscore makes URI.getHost() null, but it is a host: the gate must let it past and
-        // the failure must come from the network (unknown host), not from the classifier.
-        expectError("http://my_host.invalid/a.png", ImageError.NETWORK, HttpImageFetcher(connectTimeoutMs = 2_000))
+    fun anAuthorityThatDoesNameAHostIsNotRefusedByTheGate() {
+        // Every one of these names a host in a shape the hand-written gate had to special-case: a
+        // registry-based name (URI.getHost() is null for it), a non-ASCII one, a bracketed IPv6
+        // literal with and without userinfo, an empty port, a fully qualified name. The gate must
+        // let them through; what the network then makes of them is not this test's business.
+        val fetcher = HttpImageFetcher(connectTimeoutMs = 2_000, readTimeoutMs = 2_000, totalTimeoutMs = 6_000)
+        listOf(
+            "http://my_host.invalid/a.png",
+            "http://\u65e5\u672c.invalid/a.png",
+            "http://[::1]:1/a.png",
+            "http://@[::1]:1/a.png",
+            "http://host.invalid:/a.png",
+            "http://example.invalid./a.png",
+        ).forEach {
+            val e = assertThrows("expected a non-UNSUPPORTED failure for <$it>", ImageFetchException::class.java) {
+                fetcher.fetch(it)
+            }
+            assertWithMessage("error for <%s>", it).that(e.error).isNotEqualTo(ImageError.UNSUPPORTED)
+        }
     }
 
     @Test
