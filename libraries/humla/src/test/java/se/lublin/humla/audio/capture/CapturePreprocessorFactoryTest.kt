@@ -63,12 +63,20 @@ class CapturePreprocessorFactoryTest {
         assertThat(chain.farEndSink).isNull()
     }
 
+    /**
+     * The stronger half of the pair above, and the three assertions are deliberately the same
+     * strength. Each fake records the **attempt**, before its own failure check, so `0`/`null`
+     * here means "the factory never asked", not "it asked and the fake said no" -- which is the
+     * difference a `created` counter incremented after the check cannot express. Measured: a
+     * factory that builds an RNNoise stage for NONE and throws it away keeps
+     * `none and none is the no-op stage itself` green and dies **only** here.
+     */
     @Test
     fun `an off chain creates no native state at all`() {
         factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.NONE)
 
-        assertThat(rnnoise.created).isEqualTo(0)
-        assertThat(speex.created).isEqualTo(0)
+        assertThat(rnnoise.createAttempts).isEqualTo(0)
+        assertThat(speex.createdWith).isNull()
         assertThat(apm.createdWith).isNull()
     }
 
@@ -153,15 +161,17 @@ class CapturePreprocessorFactoryTest {
     /**
      * The configuration the APM is built with, pinned in one place because it is a decision and
      * not an implementation detail -- see [WebRtcApmConfig.FOR_ECHO_CANCELLATION], which carries
-     * the two open questions that come with it (the APM's own noise suppression runs alongside or
-     * instead of the one the user chose, and AGC2 runs ahead of the external suppressor).
+     * the decision and its two effects (AGC2 is the only automatic gain control inside the capture
+     * chain today, and the level [LevelToProbability] reads is measured after NS and AGC2, so
+     * turning NS off moved it).
      *
      * **Written out rather than compared against the constant**, and that is the whole point of
      * the test. Asserting `isEqualTo(WebRtcApmConfig.FOR_ECHO_CANCELLATION)` puts the value being
-     * tested on both sides: flipping `noiseSuppression` to false in the constant then changes what
-     * the APM is built with *and* what this expects, and the test stays green. Measured -- that
-     * exact mutation survived a sweep in this form and dies in this one. A decision belongs in a
-     * literal here even though it duplicates five fields.
+     * tested on both sides: flipping `noiseSuppression` in the constant then changes what the APM
+     * is built with *and* what this expects, and the test stays green. Measured twice -- that
+     * exact mutation survived a sweep in the tautological form, and the decision to turn NS off
+     * turned this test red in this form, before the production line was touched. A decision
+     * belongs in a literal here even though it duplicates four fields.
      */
     @Test
     fun `the apm is built for echo cancellation at 48 kHz`() {
@@ -170,8 +180,7 @@ class CapturePreprocessorFactoryTest {
         assertThat(apm.createdWith).isEqualTo(
             48000 to WebRtcApmConfig(
                 echoCancellation = true,
-                noiseSuppression = true,
-                noiseSuppressionLevel = 2,
+                noiseSuppression = false,
                 gainControl = true,
                 highPass = true,
             )

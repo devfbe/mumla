@@ -23,49 +23,60 @@ import se.lublin.humla.audio.native.WebRtcApmApi
  * How the APM is configured for one chain.
  *
  * This is a capture-side value object, not a second declaration of the native interface: spec §4.1
- * rules that `WebRtcApmApi` is task 3's, in `se.lublin.humla.audio.native`, and it takes the six
+ * rules that `WebRtcApmApi` is task 3's, in `se.lublin.humla.audio.native`, and it takes its six
  * parameters flat. This type exists so the factory's decision travels as one named value that a
- * test can compare, instead of as six positional booleans nobody can read at the call site.
+ * test can compare, instead of as positional booleans nobody can read at the call site.
+ *
+ * It holds **four** flags where the bridge takes six parameters. The sample rate is the stage's,
+ * not the chain's; and the noise-suppression *level* is deliberately absent -- see
+ * [WebRtcApmPreprocessor.UNUSED_NOISE_SUPPRESSION_LEVEL].
  */
 data class WebRtcApmConfig(
     val echoCancellation: Boolean,
     val noiseSuppression: Boolean,
-    /** 0 low, 1 moderate, 2 high, 3 very high. Out-of-range values are clamped by the bridge. */
-    val noiseSuppressionLevel: Int = DEFAULT_NOISE_SUPPRESSION_LEVEL,
     val gainControl: Boolean,
     val highPass: Boolean = true,
 ) {
     companion object {
-        const val DEFAULT_NOISE_SUPPRESSION_LEVEL = 2
-
         /**
          * What `CapturePreprocessorFactory` builds the APM with when echo cancellation is set to
          * WEBRTC -- which is the only way the APM enters a chain, because the noise-suppression
          * setting offers None, Speex and RNNoise and never this.
          *
-         * It follows spec B2 to the letter ("`WebRtcApm` (NS + AEC3 + AGC2 + high-pass, VAD from
-         * level)"), and two consequences of that come with it. **Both are open questions for the
-         * settings tasks rather than defects of this stage, and neither is visible in the audio
-         * without measuring**:
+         * **AEC3, AGC2 and the high-pass are on, and the APM's own noise suppression is off**
+         * (spec §4.1, decided). B2 used to read "NS + AEC3 + AGC2 + high-pass" and this stage
+         * implemented that literally; the second half of the consequence settled it. With the user
+         * on Speex or RNNoise, two noise suppressors ran cascaded -- RNNoise's model is speech plus
+         * additive noise, and pre-suppressed audio is not the input it was trained on -- and with
+         * the user on **None** the APM suppressed noise anyway, which is a switch that does not do
+         * what it says. This project has spent its length removing exactly those.
          *
-         * - **The noise suppressor runs twice** when the user also picked Speex or RNNoise, and it
-         *   runs *at all* when the user picked None. Two cascaded suppressors over-cut speech, and
-         *   "noise suppression: None" that still suppresses noise is a setting that does not mean
-         *   what it says. The one-line alternative is to derive `noiseSuppression` from the noise
-         *   mode here; it is not taken unasked because spec B2 names the APM's own NS explicitly.
-         * - **The gain control runs ahead of the external suppressor.** AGC2 sits inside the APM,
-         *   after AEC3's filter, so it does not disturb the canceller (that is the whole reason for
-         *   the chain order -- see `ChainedPreprocessor`). But RNNoise was trained on speech plus
-         *   additive noise at natural levels, and what reaches it is now a signal whose level is
-         *   being chased frame by frame. Measure before shipping both on.
+         * Two things follow, and neither is cosmetic:
          *
-         * AGC2 is also the only automatic gain control this project has: speex's is dead code in a
-         * fixed-point build (spec §4.1), so turning this off removes gain control rather than
-         * moving it somewhere else.
+         * - **AGC2 stays on, and it is the only *automatic* gain control inside the capture chain,
+         *   today.** Speex's is dead code in a fixed-point build (spec §4.1). Both qualifiers
+         *   carry weight: `AudioHandler.java:454-458` applies `mAmplitudeBoost` on the capture path
+         *   right now, and spec B6 requires Android's `AutomaticGainControl` as a settings toggle,
+         *   so "the only gain control left in the project" would be false in two directions.
+         * - **The VAD window moves.** `humla_apm.cpp:88-91` measures `last_level_dbfs` on the
+         *   **processed** frame, i.e. after NS and AGC2. With NS off every non-speech frame
+         *   measures louder, and with noise suppression NONE and echo cancellation WEBRTC
+         *   [LevelToProbability] is the only opinion in the chain -- which is what task 7 gates
+         *   transmission on. Re-checking that -50/-20 dBFS window against the new levels is task
+         *   7's, and it is in the ledger so it is not met as a surprise.
+         *
+         * The echo canceller loses nothing by it: `humla_apm.cpp:59-71` configures
+         * `echo_canceller` and `noise_suppression` as **separate submodules**, and the
+         * residual-echo suppressor sits inside EchoCanceller3.
+         *
+         * Each of the four flags going the other way turns
+         * `CapturePreprocessorFactoryTest.the apm is built for echo cancellation at 48 kHz` red,
+         * because that test writes the value out instead of comparing against this constant.
+         * Measured: the `noiseSuppression = true` this replaced does exactly that.
          */
         val FOR_ECHO_CANCELLATION = WebRtcApmConfig(
             echoCancellation = true,
-            noiseSuppression = true,
+            noiseSuppression = false,
             gainControl = true,
         )
     }
@@ -80,6 +91,11 @@ data class WebRtcApmConfig(
  * only opinion in the chain, so task 7 receives a number that looks like RNNoise's and is not one.
  * A threshold tuned against a speech model does not transfer, and the two do not even fail the
  * same way -- a quiet talker in a quiet room is speech to RNNoise and silence to this.
+ *
+ * **These two constants are not yet tuned against the levels this chain now produces.** The APM
+ * measures `last_level_dbfs` on the *processed* frame (`humla_apm.cpp:88-91`) and its own noise
+ * suppressor is off (spec §4.1), so every non-speech frame measures louder than it did while B2
+ * still said "NS + AEC3". Task 7 owns the re-check; the ledger carries it.
  */
 object LevelToProbability {
     /** At or below this level the stage reports no voice at all. */
@@ -93,8 +109,10 @@ object LevelToProbability {
 }
 
 /**
- * The WebRTC APM as one capture stage (spec B3): AEC3, noise suppression, AGC2 and a high-pass
- * filter on the near-end path, and the far-end signal on [analyzeReverseStream].
+ * The WebRTC APM as one capture stage (spec B3): AEC3, AGC2 and a high-pass filter on the near-end
+ * path, and the far-end signal on [analyzeReverseStream]. Its **own noise suppressor is off** in
+ * the one configuration this project builds -- see [WebRtcApmConfig.FOR_ECHO_CANCELLATION], which
+ * carries the decision and its two effects.
  *
  * ### Two audio threads, one lock
  *
@@ -117,7 +135,9 @@ object LevelToProbability {
  *
  * One `java.lang.Float` box per frame for the probability, as for [RnnoisePreprocessor]; spec §4.1
  * decided to pay it and `CaptureThreadAllocationTest` measures it cold and hot. The far-end path
- * allocates nothing at all.
+ * measures **below 8.0 B per call** -- half the smallest object the JVM can allocate, which is
+ * what the instrument can separate from zero; `CaptureThreadAllocationTest.HALF_AN_OBJECT` states
+ * why "nothing at all" is not a claim a heap-delta measurement can make.
  *
  * `humla_apm_set_stream_delay_ms` is deliberately not bridged, so there is no entry point here for
  * it: AEC3 estimates the delay itself and feeding it the true delay moved the residual echo by
@@ -132,7 +152,7 @@ class WebRtcApmPreprocessor(
         sampleRate,
         config.echoCancellation,
         config.noiseSuppression,
-        config.noiseSuppressionLevel,
+        UNUSED_NOISE_SUPPRESSION_LEVEL,
         config.gainControl,
         config.highPass,
     ),
@@ -152,10 +172,19 @@ class WebRtcApmPreprocessor(
 
     /**
      * Far-end frames the APM refused. This is the counter that has no alternative: the reverse
-     * stream returns nothing to its caller, so a reference frame the APM would not take -- a
-     * chunker built for the wrong frame size is how that happens -- costs about 21 dB of echo
-     * cancellation without one call anywhere returning an error. It stays at 0 for a released
-     * stage, because a released stage has nothing to report; it is simply gone.
+     * stream returns nothing to its caller, so a reference frame the APM would not take costs
+     * about 21 dB of ERLE without one call anywhere returning an error.
+     *
+     * **It only sees frames that are too short, and that is one of the two directions a chunker
+     * can be wrong in.** `jni_webrtc_apm.cpp:55` refuses on `GetArrayLength(frame) <
+     * humla_apm_frame_size(apm)`; a frame that is too *long* is accepted, and
+     * `humla_apm.cpp:101` reads exactly `num_frames()` samples out of it and drops the tail
+     * silently. So a chunker built for 960 samples against a 480-sample APM is precisely the
+     * lossy case this counter is supposed to expose, and it stays at 0 throughout. The visible
+     * half is the undersized chunker; the oversized one has no observable at this layer at all.
+     *
+     * It also stays at 0 for a released stage, because a released stage has nothing to report; it
+     * is simply gone.
      */
     @Volatile
     var rejectedFarEndFrames: Int = 0
@@ -180,5 +209,21 @@ class WebRtcApmPreprocessor(
 
     companion object {
         const val DEFAULT_SAMPLE_RATE = 48000
+
+        /**
+         * `humla_apm_create` takes a noise-suppression level whatever the suppressor's state, so
+         * *something* has to be passed. It is deliberately **not** a field of [WebRtcApmConfig]:
+         * the APM's own suppressor is off for good (spec §4.1), and `humla_apm.cpp:62-70` clamps
+         * this value into `NoiseSuppression::Level` and hands it to a submodule `ApplyConfig`
+         * then leaves unbuilt. A config field that reaches webrtc and changes nothing is the same
+         * lying switch the decision above removed, one layer down.
+         *
+         * **Unpinnable, and measured rather than asserted** (spec 4.05: check that a mutation
+         * changes what the code *does* before recording a survivor). The one mutation that would
+         * distinguish it is `0` -> `3`; it survives the whole module, and it survives because it
+         * is a no-op. Whoever turns the APM's suppressor back on puts the level back in the
+         * config in the same edit, with a test that reads it.
+         */
+        private const val UNUSED_NOISE_SUPPRESSION_LEVEL = 0
     }
 }

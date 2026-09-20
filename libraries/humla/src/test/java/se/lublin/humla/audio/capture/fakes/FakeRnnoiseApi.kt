@@ -44,6 +44,15 @@ class FakeRnnoiseApi(
     var created = 0
         private set
 
+    /**
+     * Every call to [create], including the ones that answered 0. [created] cannot distinguish
+     * "never asked" from "asked and refused", and a test that wants to prove no native state was
+     * even *attempted* needs that difference -- the same one `FakeWebRtcApmApi.createdWith` and
+     * `FakeSpeexPreprocessApi.createdWith` give for free by recording before the failure check.
+     */
+    var createAttempts = 0
+        private set
+
     var destroyed = 0
         private set
 
@@ -51,6 +60,7 @@ class FakeRnnoiseApi(
     val processedLengths = mutableListOf<Int>()
 
     override fun create(): Long {
+        createAttempts++
         if (failCreate) return 0L
         created++
         return HANDLE

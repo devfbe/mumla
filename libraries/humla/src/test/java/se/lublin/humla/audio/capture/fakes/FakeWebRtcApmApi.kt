@@ -36,10 +36,13 @@ import se.lublin.humla.audio.native.WebRtcApmApi
  * - [lastCaptureLevelDbfs] counts its reads, so a stage that reads the level of a frame the APM
  *   refused is visible here rather than only in the number it returns.
  *
- * [createdWith] reassembles the six flat parameters back into a [WebRtcApmConfig] so a test can
- * compare one value. That only pins the *positional* mapping when the booleans it compares
- * differ -- see `WebRtcApmPreprocessorTest`, which passes two configs chosen so that every pair
- * of the four booleans differs in at least one of them.
+ * [createdWith] reassembles the flat parameters back into a sample rate and a [WebRtcApmConfig]
+ * so a test can compare one value. That only pins the *positional* mapping when the booleans it
+ * compares differ -- see `WebRtcApmPreprocessorTest`, which passes two configs chosen so that
+ * every pair of the four booleans differs in at least one of them. The two `Int` parameters are
+ * covered by the sample rate alone: `noiseSuppressionLevel` is not part of the config (see
+ * `WebRtcApmPreprocessor.UNUSED_NOISE_SUPPRESSION_LEVEL`), so a call that swapped the two would
+ * report a rate of 0 here and fail.
  */
 class FakeWebRtcApmApi(
     var levelDbfs: Float = -100f,
@@ -75,7 +78,7 @@ class FakeWebRtcApmApi(
         highPass: Boolean,
     ): Long {
         createdWith = sampleRate to WebRtcApmConfig(
-            echoCancellation, noiseSuppression, noiseSuppressionLevel, gainControl, highPass,
+            echoCancellation, noiseSuppression, gainControl, highPass,
         )
         if (failCreate || sampleRate !in SUPPORTED_RATES) return 0L
         frameSize = sampleRate / 100

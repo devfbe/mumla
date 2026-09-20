@@ -43,14 +43,12 @@ class WebRtcApmPreprocessorTest {
         val ONE = WebRtcApmConfig(
             echoCancellation = true,
             noiseSuppression = false,
-            noiseSuppressionLevel = 1,
             gainControl = true,
             highPass = false,
         )
         val OTHER = WebRtcApmConfig(
             echoCancellation = true,
             noiseSuppression = true,
-            noiseSuppressionLevel = 3,
             gainControl = false,
             highPass = false,
         )
