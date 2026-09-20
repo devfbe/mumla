@@ -1,0 +1,18 @@
+=== M45 : the wake-up removed: PTT never unblocks ===
+M45      KILLED    tests=199 failed=1 38s se.lublin.humla.audio.inputmode.ToggleInputModeTest.waitForInput blocks while off and wakes when toggled on
+=== M46 : waitForInput never blocks ===
+M46      KILLED    tests=199 failed=1 29s se.lublin.humla.audio.inputmode.ToggleInputModeTest.waitForInput blocks while off and wakes when toggled on
+=== M47 : PTT transmits regardless of the button ===
+M47      KILLED    tests=199 failed=1 15s se.lublin.humla.audio.inputmode.ToggleInputModeTest.transmits only while toggled on, ignoring audio and probability
+=== M48 : the diagnostic call he deliberately left unpinned ===
+M48      SURVIVED  tests=199 failed=0 20s 
+=== M49 : the InterruptedException arm removed: is the shutdown interrupt path pinned at all? ===
+M49      SURVIVED  tests=199 failed=0 19s 
+=== M50 : waitForInput stops taking the lock ===
+M50      KILLED    tests=199 failed=1 21s se.lublin.humla.audio.inputmode.ToggleInputModeTest.waitForInput blocks while off and wakes when toggled on
+=== M51 : continuous mode stops transmitting ===
+M51      KILLED    tests=199 failed=1 27s se.lublin.humla.audio.inputmode.ToggleInputModeTest.continuous mode always transmits
+=== M52 : the getter HumlaService:927 exposes to the UI ===
+M52      KILLED    tests=199 failed=1 17s se.lublin.humla.audio.inputmode.ToggleInputModeTest.transmits only while toggled on, ignoring audio and probability
+=== M53 : toggle stops toggling (it has no production caller at all) ===
+M53      KILLED    tests=199 failed=1 47s se.lublin.humla.audio.inputmode.ToggleInputModeTest.transmits only while toggled on, ignoring audio and probability

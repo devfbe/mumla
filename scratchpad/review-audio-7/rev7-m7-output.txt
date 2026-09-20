@@ -1,0 +1,54 @@
+=== 1. non-speech processed level vs input level (NS off = shipped config) ===
+character           in_dBFS      NSoff       NSon       diff
+lowpass noise        -70.22     -56.99     -75.12     +18.14
+lowpass noise        -60.23     -47.08     -65.13     +18.05
+lowpass noise        -55.23     -47.09     -60.13     +13.04
+lowpass noise        -50.23     -47.00     -55.12      +8.12
+lowpass noise        -45.23     -46.99     -50.12      +3.13
+lowpass noise        -40.23     -41.99     -45.12      +3.13
+lowpass noise        -35.23     -36.99     -40.88      +3.89
+lowpass noise        -30.23     -31.99     -37.27      +5.27
+
+white noise          -70.00     -55.29     -71.50     +16.21
+white noise          -60.01     -47.80     -61.97     +14.17
+white noise          -55.01     -47.80     -57.01      +9.22
+white noise          -50.01     -47.80     -51.89      +4.09
+white noise          -45.01     -45.30     -48.26      +2.96
+white noise          -40.01     -40.30     -48.10      +7.80
+white noise          -35.01     -35.30     -47.94     +12.64
+white noise          -30.01     -30.30     -46.24     +15.94
+
+hum+hiss             -70.00     -59.04     -78.08     +19.04
+hum+hiss             -60.01     -49.05     -68.11     +19.06
+hum+hiss             -55.01     -45.31     -64.84     +19.53
+hum+hiss             -50.01     -45.07     -60.75     +15.68
+hum+hiss             -45.01     -45.07     -55.99     +10.92
+hum+hiss             -40.01     -43.83     -51.23      +7.40
+hum+hiss             -35.01     -39.05     -44.36      +5.31
+hum+hiss             -30.01     -34.05     -40.58      +6.53
+
+=== 2. AGC2 removed, to decompose the cap from the suppressor ===
+character           in_dBFS      NSoff       NSon       diff
+lowpass, AGC2 off    -70.22     -71.98     -93.13     +21.15
+lowpass, AGC2 off    -60.23     -61.99     -80.09     +18.10
+lowpass, AGC2 off    -55.23     -56.99     -75.11     +18.12
+lowpass, AGC2 off    -50.23     -51.99     -70.12     +18.13
+lowpass, AGC2 off    -45.23     -46.99     -65.12     +18.13
+lowpass, AGC2 off    -40.23     -41.99     -60.12     +18.13
+lowpass, AGC2 off    -35.23     -36.99     -55.12     +18.13
+lowpass, AGC2 off    -30.23     -31.99     -50.12     +18.13
+
+=== 3. speech-shaped signal: level and LevelToProbability ===
+            in_dBFS      NSoff       NSon |    p_off     p_on | windows p(NSoff)
+speech       -52.01     -36.70     -32.62 |    0.443    0.579 | -50/-20=0.443  -45/-20=0.332  -45/-25=0.415
+speech       -47.01     -36.70     -32.51 |    0.443    0.583 | -50/-20=0.443  -45/-20=0.332  -45/-25=0.415
+speech       -42.01     -36.71     -32.38 |    0.443    0.587 | -50/-20=0.443  -45/-20=0.332  -45/-25=0.415
+speech       -37.01     -36.70     -32.37 |    0.443    0.588 | -50/-20=0.443  -45/-20=0.332  -45/-25=0.415
+speech       -32.01     -32.22     -32.47 |    0.593    0.584 | -50/-20=0.593  -45/-20=0.511  -45/-25=0.639
+
+=== 4. the floor itself, and what each window reads it as ===
+measured non-speech floor (NS off, AGC2 on): -47.09 dBFS
+  -50/-20 window reads it as 0.0971
+  -45/-20 window reads it as 0.0000
+  -45/-25 window reads it as 0.0000
+EXIT=0

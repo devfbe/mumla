@@ -1,0 +1,198 @@
+[
+ {
+  "id": "M24",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "} ?: AMPLITUDE",
+  "new": "} ?: PROBABILITY",
+  "why": "the plan's fallback restored; does a test state the migration decision?"
+ },
+ {
+  "id": "M25",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "it.preferenceValue == value",
+  "new": "it.name == value",
+  "why": "on-disk spelling replaced by the enum name"
+ },
+ {
+  "id": "M26",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "AMPLITUDE(\"amplitude\")",
+  "new": "AMPLITUDE(\"amp\")",
+  "why": "on-disk value misspelt in the writing direction"
+ },
+ {
+  "id": "M27",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "require(startThreshold in 0f..1f)",
+  "new": "require(startThreshold <= 1f)",
+  "why": "lower bound of the start check dropped (the structurally masked survivor)"
+ },
+ {
+  "id": "M28",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "require(startThreshold in 0f..1f)",
+  "new": "require(startThreshold >= 0f)",
+  "why": "upper bound of the start check dropped"
+ },
+ {
+  "id": "M29",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "require(stopThreshold in 0f..startThreshold)",
+  "new": "require(stopThreshold <= startThreshold)",
+  "why": "lower bound of the stop check dropped (the second survivor)"
+ },
+ {
+  "id": "M30",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "require(stopThreshold in 0f..startThreshold)",
+  "new": "require(stopThreshold >= 0f)",
+  "why": "upper bound of the stop check dropped"
+ },
+ {
+  "id": "M31",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "{ \"startThreshold out of range: $startThreshold\" }",
+  "new": "{ \"stopThreshold out of range: $startThreshold\" }",
+  "why": "the two messages made indistinguishable -- does startsWith really separate them?"
+ },
+ {
+  "id": "M32",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "require(holdTimeMs >= 0)",
+  "new": "require(holdTimeMs >= -1000)",
+  "why": "hold-time lower bound weakened"
+ },
+ {
+  "id": "M33",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "const val AMPLITUDE_HYSTERESIS = 0.15f",
+  "new": "const val AMPLITUDE_HYSTERESIS = 0.25f",
+  "why": "B5's documented 0.15 hysteresis changed"
+ },
+ {
+  "id": "M34",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "(start - AMPLITUDE_HYSTERESIS).coerceIn(0f, start)",
+  "new": "(start - AMPLITUDE_HYSTERESIS)",
+  "why": "stop clamp removed: a low slider makes stop negative -> mic latches on"
+ },
+ {
+  "id": "M35",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "val start = threshold.coerceIn(0f, 1f)",
+  "new": "val start = threshold",
+  "why": "slider clamp removed: an out-of-range preference now throws at the user"
+ },
+ {
+  "id": "M36",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "fun probability(start: Float = 0.6f, stop: Float = 0.3f",
+  "new": "fun probability(start: Float = 0.5f, stop: Float = 0.3f",
+  "why": "B5 default start changed"
+ },
+ {
+  "id": "M37",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "fun probability(start: Float = 0.6f, stop: Float = 0.3f",
+  "new": "fun probability(start: Float = 0.6f, stop: Float = 0.2f",
+  "why": "B5 default stop changed"
+ },
+ {
+  "id": "M38",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/capture/VadConfig.kt",
+  "old": "const val DEFAULT_HOLD_MS = 250L",
+  "new": "const val DEFAULT_HOLD_MS = 200L",
+  "why": "B5 default hold changed"
+ },
+ {
+  "id": "M39",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ActivityInputMode.kt",
+  "old": "if (current.mode == VadMode.AMPLITUDE) {",
+  "new": "if (true) {",
+  "why": "the deliberate probability-mode no-op removed"
+ },
+ {
+  "id": "M40",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ActivityInputMode.kt",
+  "old": "if (current.mode == VadMode.AMPLITUDE) {",
+  "new": "if (false) {",
+  "why": "setThreshold does nothing at all"
+ },
+ {
+  "id": "M41",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ActivityInputMode.kt",
+  "old": "VadConfig.amplitude(threshold, current.holdTimeMs)",
+  "new": "VadConfig.amplitude(threshold)",
+  "why": "plan defect 5: the slider resets the user's hold time"
+ },
+ {
+  "id": "M42",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ActivityInputMode.kt",
+  "old": "detector.isVoice(pcm, length, vadProbability)",
+  "new": "detector.isVoice(pcm, length, null)",
+  "why": "the probability never reaches the detector"
+ },
+ {
+  "id": "M43",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ActivityInputMode.kt",
+  "old": "detector.isVoice(pcm, length, vadProbability)",
+  "new": "detector.isVoice(pcm, pcm.size, vadProbability)",
+  "why": "length replaced by the array size"
+ },
+ {
+  "id": "M44",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ToggleInputMode.kt",
+  "old": "    @Volatile\n    private var inputOn = false",
+  "new": "    private var inputOn = false",
+  "why": "the publication the reflection test pins"
+ },
+ {
+  "id": "M45",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ToggleInputMode.kt",
+  "old": "                toggleCondition.signalAll()",
+  "new": "                ",
+  "why": "the wake-up removed: PTT never unblocks"
+ },
+ {
+  "id": "M46",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ToggleInputMode.kt",
+  "old": "            if (!inputOn) {",
+  "new": "            if (false) {",
+  "why": "waitForInput never blocks"
+ },
+ {
+  "id": "M47",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ToggleInputMode.kt",
+  "old": "Boolean = inputOn",
+  "new": "Boolean = true",
+  "why": "PTT transmits regardless of the button"
+ },
+ {
+  "id": "M48",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ToggleInputMode.kt",
+  "old": "        Log.v(TAG, \"PTT: Suspending audio input.\")\n",
+  "new": "",
+  "why": "the diagnostic call he deliberately left unpinned"
+ },
+ {
+  "id": "M49",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ToggleInputMode.kt",
+  "old": "                try {\n                    toggleCondition.await()\n                } catch (e: InterruptedException) {\n                    Log.w(TAG, \"Blocking for PTT interrupted, likely due to input thread shutdown.\")\n                }",
+  "new": "                toggleCondition.await()",
+  "why": "the InterruptedException arm removed: is shutdown's interrupt path pinned at all?"
+ },
+ {
+  "id": "M50",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ToggleInputMode.kt",
+  "old": "toggleLock.withLock {\n            if (!inputOn) {",
+  "new": "run {\n            if (!inputOn) {",
+  "why": "waitForInput stops taking the lock"
+ },
+ {
+  "id": "M51",
+  "file": "libraries/humla/src/main/java/se/lublin/humla/audio/inputmode/ContinuousInputMode.kt",
+  "old": "vadProbability: Float?): Boolean = true",
+  "new": "vadProbability: Float?): Boolean = false",
+  "why": "continuous mode stops transmitting"
+ }
+]

@@ -1,0 +1,42 @@
+=== A. floor stability vs settling time (lowpass noise, NS off) ===
+      in  settle500 settle1500 settle3000
+     -60     -47.08     -47.05     -47.14
+     -55     -47.09     -47.06     -47.15
+     -50     -47.00     -46.97     -47.07
+
+=== B. does the difference cross zero above -45 dBFS in? (settle 1500) ===
+character        in      NSoff       NSon       diff
+lowpass      -45.21     -46.96     -50.15      +3.19
+lowpass      -42.21     -43.96     -47.15      +3.18
+lowpass      -40.21     -41.96     -45.38      +3.42
+lowpass      -38.21     -39.96     -45.32      +5.36
+lowpass      -35.21     -36.96     -45.28      +8.32
+lowpass      -32.21     -33.96     -45.28     +11.32
+lowpass      -30.21     -31.96     -45.28     +13.32
+lowpass      -25.21     -26.96     -45.05     +18.08
+lowpass      -20.21     -21.96     -40.15     +18.19
+  -> minimum difference for lowpass: +3.18 dB at -42.2 dBFS in  (never negative)
+
+white        -45.01     -45.30     -48.79      +3.49
+white        -42.01     -42.30     -48.77      +6.47
+white        -40.01     -40.30     -48.74      +8.44
+white        -38.01     -38.30     -48.74     +10.45
+white        -35.01     -35.30     -48.69     +13.39
+white        -32.01     -32.30     -48.19     +15.89
+white        -30.01     -30.30     -46.10     +15.80
+white        -25.01     -25.30     -40.74     +15.45
+white        -20.01     -20.30     -36.54     +16.24
+  -> minimum difference for white: +3.49 dB at -45.0 dBFS in  (never negative)
+
+pinkish      -44.95     -45.28     -50.33      +5.05
+pinkish      -41.95     -42.28     -49.23      +6.96
+pinkish      -39.95     -40.28     -46.99      +6.71
+pinkish      -37.95     -38.28     -46.98      +8.70
+pinkish      -34.95     -35.28     -46.87     +11.59
+pinkish      -31.95     -32.28     -46.87     +14.60
+pinkish      -29.95     -30.28     -46.81     +16.53
+pinkish      -24.95     -25.28     -41.94     +16.66
+pinkish      -19.95     -20.28     -36.45     +16.17
+  -> minimum difference for pinkish: +5.05 dB at -45.0 dBFS in  (never negative)
+
+EXIT=0
