@@ -24,6 +24,12 @@ interface MediaKeyTarget {
      * accessor throws. Task 4 calls it when it gives up the media session (disconnect, the action
      * switching to NONE, service teardown), so that a talking state the user switched on by headset
      * with the screen off cannot survive into the next connection. Must never throw.
+     *
+     * Beware: wiring this to a disconnect alone does *not* close that hole. HumlaService sets its
+     * connection state before it fires onDisconnected, and both [isConnected] and the session
+     * accessor read that same field, so by the time the observer runs this is a no-op by contract.
+     * The reset that survives an auto-reconnect has to happen on connect. See the Task 4
+     * obligations in the stream ledger.
      */
     fun stopTalking()
 
