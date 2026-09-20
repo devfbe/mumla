@@ -15,7 +15,13 @@ object BoundedBitmapDecoder {
      * A non-positive [width] or [height] means the header could not be read; there is nothing to
      * sample, so the answer is 1.
      *
-     * @throws IllegalArgumentException if [maxWidth] or [maxHeight] is not positive.
+     * @throws IllegalArgumentException if [maxWidth] or [maxHeight] is not positive. This is load
+     *   bearing, not tidiness: a *negative* bound makes the doubling loop below never terminate.
+     *   Measured on the JVM for (1000, 500, 240, -1): `fit` is -0.002, so every halving stays above
+     *   it; `sample` doubles to 2^30, then overflows to `Int.MIN_VALUE`, then to 0, and from there
+     *   `1f / 0` is `+Infinity`, which is `>= fit` forever. A zero bound does terminate, but with
+     *   2^30 as the sample size. So what this rejects is a hung decoding thread, not merely an
+     *   absurd return value.
      */
     fun sampleSizeFor(width: Int, height: Int, maxWidth: Int, maxHeight: Int): Int {
         requirePositiveBounds(maxWidth, maxHeight)

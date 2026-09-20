@@ -66,6 +66,12 @@ class BoundedBitmapDecoderTest {
         assertThat(BoundedBitmapDecoder.sampleSizeFor(-1, -1, 240, 240)).isEqualTo(1)
     }
 
+    /**
+     * Not a taste question: with a negative bound the doubling loop never terminates. `fit` goes
+     * negative, `sample` overflows to Int.MIN_VALUE and then to 0, and `1f / 0` stays `>= fit`
+     * forever — measured on the JVM for (1000, 500, 240, -1), aborted after 200 iterations. This
+     * check is what stands between a bad bound and a hung decoding thread.
+     */
     @Test
     fun nonPositiveBoundsAreRejectedBySampleSizeFor() {
         assertThat(
