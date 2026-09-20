@@ -331,6 +331,23 @@ class HumlaConnectionProtocolThreadTest {
         assertThat(transports.tcps).hasSize(1)
     }
 
+    /**
+     * The other half of the single-use guard, and the only one a test can reach: a disconnect that
+     * arrives before the connection was ever started must still refuse a later connect(). Without
+     * it connect() would queue its work on a looper that is already quitting and the caller would
+     * wait in Connecting for a callback that never comes.
+     */
+    @Test
+    fun connectingAfterADisconnectThatPrecededItThrows() {
+        connection.disconnect()
+
+        val thrown = assertThrows(IllegalStateException::class.java) { connection.connect(server) }
+
+        assertThat(thrown).hasMessageThat().contains("single-use")
+        assertThat(transports.tcps).isEmpty()
+        assertThat(listener.disconnects).isEmpty() // nothing was started, so there is nothing to report
+    }
+
     @Test
     fun anUnusedConnectionStartsNoProtocolThread() {
         val unused = HumlaConnection(RecordingConnectionListener(), FakeTransports())
