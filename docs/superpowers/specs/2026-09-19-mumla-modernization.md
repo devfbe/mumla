@@ -367,7 +367,16 @@ guard that had already survived its own mutation. The survivor was the map of th
 hole.
 
 The mechanical form, cheap enough to do every time: **for every setting or mode
-the file reads, grep the test class for a write of it.** A test class that never
+the file reads, grep the test class for a write of it.** Enumerate from the
+*production file*, before looking at the diff — not from what the change made
+relevant. The round that wrote this rule then failed it on the next pass, and
+diagnosed itself: it swept the settings its own fix had touched, found the one the
+cancel branch reads, and stopped. The setting that mattered was read fifty lines
+away in a method the diff never went near, and under the narrower reading it never
+entered the list. Consequence, measured: all eleven tests in that class were
+driving a button the fragment had set to `GONE`, and only worked because the test
+helper dispatched touches directly, bypassing hit-testing. The unit is the file the
+test class hosts. A test class that never
 writes a preference the file reads is testing exactly one configuration, and the
 sweep will confirm whatever that configuration does.
 
