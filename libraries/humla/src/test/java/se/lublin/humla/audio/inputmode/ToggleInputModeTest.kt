@@ -71,6 +71,49 @@ class ToggleInputModeTest {
         assertThat(returned.await(5, TimeUnit.SECONDS)).isTrue()
     }
 
+    /**
+     * **The `catch (InterruptedException)` around `await()` is not a log line, it is a control-flow
+     * arm**, and pinning it is what this test is for. Its effect is to swallow the exception so
+     * that [ToggleInputMode.waitForInput] **returns**; the `Log.w` inside it is incidental. Deleting
+     * the `try`/`catch` and leaving a bare `await()` used to survive the whole suite.
+     *
+     * What it costs, read off the chain rather than guessed: `AudioInput.mRecordThread` runs
+     * `AudioInput.run()`, which calls `onAudioInputReceived` (`:207`), which reaches
+     * `AudioHandler:488` and `waitForInput()` -- so `await()` parks the **recording** thread.
+     * `AudioInput.stopRecording()` (`:144-152`) clears `mRecording`, then `interrupt()`s that
+     * thread, then `join()`s it. Without the catch the `InterruptedException` leaves `waitForInput`,
+     * leaves `onAudioInputReceived`, leaves the `while (mRecording)` loop, and the thread dies
+     * **before `mAudioRecord.stop()` at `:213`**. The user-visible result: shutting down in push to
+     * talk with the button not held leaves the `AudioRecord` running and the microphone indicator
+     * lit. `AudioInput.java:203`'s comment ("we want to always cleanly shutdown") names exactly the
+     * property this arm holds.
+     *
+     * Written against [Thread.State.WAITING] for the same reason the test above is: a latch that
+     * has not counted down does not distinguish "blocked" from "never scheduled".
+     */
+    @Test
+    fun `waitForInput returns when the waiting thread is interrupted`() {
+        val mode = ToggleInputMode()
+        val entered = CountDownLatch(1)
+        val returned = CountDownLatch(1)
+        val thread = Thread {
+            entered.countDown()
+            mode.waitForInput()
+            returned.countDown()
+        }
+        thread.start()
+
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue()
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (thread.state != Thread.State.WAITING && System.nanoTime() - deadline < 0) Thread.yield()
+        assertThat(thread.state).isEqualTo(Thread.State.WAITING)
+
+        // Transmission stays off: the only thing that releases this thread is the interrupt.
+        thread.interrupt()
+        assertThat(returned.await(5, TimeUnit.SECONDS)).isTrue()
+        assertThat(mode.isTalkingOn()).isFalse()
+    }
+
     /** The other half of the contract: while transmission is on, it must not block at all. */
     @Test
     fun `waitForInput returns immediately while toggled on`() {
