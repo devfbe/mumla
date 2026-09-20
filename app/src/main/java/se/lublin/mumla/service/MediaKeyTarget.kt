@@ -15,6 +15,18 @@ interface MediaKeyTarget {
 
     fun setTalking(talking: Boolean)
 
+    /**
+     * Force talking off, unconditionally and without reading [isTalking] first.
+     *
+     * Separate from `setTalking(false)` on purpose. [setTalking] actuates a live session and the
+     * handler only reaches it behind an [isConnected] check; this is a lifecycle reset that must be
+     * safe to call from *any* state, including a disconnected one, where the underlying session
+     * accessor throws. Task 4 calls it when it gives up the media session (disconnect, the action
+     * switching to NONE, service teardown), so that a talking state the user switched on by headset
+     * with the screen off cannot survive into the next connection. Must never throw.
+     */
+    fun stopTalking()
+
     /** Flip self-mute; deafen is cleared when unmuting, kept when muting (as the mute menu item does). */
     fun toggleSelfMute()
 }

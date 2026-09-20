@@ -29,6 +29,10 @@ class MediaKeyHandlerTest {
             this.talking = talking
         }
 
+        override fun stopTalking() {
+            talking = false
+        }
+
         override fun toggleSelfMute() {
             muteToggles++
         }
