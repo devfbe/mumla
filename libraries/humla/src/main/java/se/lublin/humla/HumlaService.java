@@ -141,9 +141,13 @@ public class HumlaService extends Service implements IHumlaService, IHumlaSessio
     private Handler mHandler;
     private HumlaCallbacks mCallbacks;
 
-    private HumlaConnection mConnection;
+    // volatile: both are written on the main thread and read from the protocol thread, which now
+    // calls logInfo/logWarning through ModelHandler. Without it a protocol-thread reader can see a
+    // stale mConnection -- including the previous connection's -- or a null mModelHandler that the
+    // main thread has already replaced.
+    private volatile HumlaConnection mConnection;
     private ConnectionState mConnectionState;
-    private ModelHandler mModelHandler;
+    private volatile ModelHandler mModelHandler;
     private AudioHandler mAudioHandler;
     private BluetoothScoReceiver mBluetoothReceiver;
 
@@ -279,6 +283,10 @@ public class HumlaService extends Service implements IHumlaService, IHumlaSessio
     @Override
     public void onDestroy() {
         super.onDestroy();
+        // The protocol thread is non-daemon and only HumlaConnection.disconnect() quits its looper,
+        // so a service destroyed while connected left "humla-protocol" running -- with the socket,
+        // both transports and everything its queue still referenced -- for the life of the process.
+        disconnect();
         try {
             unregisterReceiver(mBluetoothReceiver);
         } catch (IllegalArgumentException e) {
