@@ -16,8 +16,12 @@ import androidx.core.os.BundleCompat
  *
  * The arithmetic lives in [ZoomState]; this class is the thin layer that turns gestures and layout
  * into calls on it. It keeps no gesture-scoped state of its own -- no "dragging" flag, no anchor
- * point, no pending focus -- which is why a cancelled gesture (an incoming call, the screen going
- * off, a parent view stealing the touch) cannot leave anything behind: there is nothing to leave.
+ * point, no pending focus. That is *not* the same as there being no gesture-scoped state: the two
+ * detectors it borrows keep plenty, and only they can unwind it. `GestureDetector.mIsDoubleTapping`
+ * is cleared by an ACTION_UP or by `cancel()` and by nothing else -- not by a fresh ACTION_DOWN --
+ * so an ACTION_CANCEL that does not reach it leaves every later drag routed to `onDoubleTapEvent`
+ * instead of `onScroll`, i.e. dead. Forwarding every event to both detectors, cancels included, is
+ * therefore load-bearing and is pinned as such.
  * Every path that changes the state ends in [applyState], so the invariant "what is on screen is
  * the clamped state" holds after every single event.
  *

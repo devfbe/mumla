@@ -272,12 +272,11 @@ class ZoomImageViewTest {
      * A cancelled gesture -- an incoming call, the screen going off, a parent stealing the touch --
      * leaves the image where it was, and the gesture after it pans by its own travel.
      *
-     * Deliberately *not* named "the cancel is handled", because it is not: measured, swallowing
-     * ACTION_CANCEL in onTouchEvent so that it never reaches either detector leaves this whole
-     * class green. There is no observable that tells the two apart, because the view keeps no
-     * gesture-scoped state to unwind and GestureDetector re-bases its focus on the next ACTION_DOWN
-     * anyway. That absence is the design; this test pins its consequence, which is what can be
-     * broken -- by anyone who later adds an anchor field and forgets to clear it.
+     * This one case cannot tell a forwarded ACTION_CANCEL from a swallowed one, and that is not a
+     * property of the design: cancelling *mid-drag* happens to be recoverable, because a plain
+     * ACTION_DOWN re-bases GestureDetector's focus anyway. The cases that are not recoverable are
+     * [aCancelDuringADoubleTapDoesNotDeafenTheNextDrag] and its vertical twin, which is where the
+     * forwarding is actually pinned.
      */
     @Test
     fun aCancelledGestureDoesNotMoveTheImageAndTheNextOneStartsFresh() {
@@ -296,6 +295,58 @@ class ZoomImageViewTest {
         view.touch(MotionEvent.ACTION_UP, 2040, 320f, 100f)
 
         assertThat(view.state).isEqualTo(ZoomState(2f, 70f, 0f))
+    }
+
+    /**
+     * ACTION_CANCEL arriving *during* a double-tap, which is the one the view cannot shrug off.
+     *
+     * `GestureDetector.mIsDoubleTapping` is cleared only by `cancel()` or by an ACTION_UP; a fresh
+     * ACTION_DOWN does not clear it. Swallow the cancel and the flag stays set for the rest of the
+     * view's life, so every following ACTION_MOVE is routed to `onDoubleTapEvent` instead of
+     * `onScroll` -- the next drag, and every drag after it, moves nothing at all.
+     *
+     * The image is big enough that its zoom ceiling is the full 5x, so the
+     * double-tap lands on 2.5 and the pan that follows stays inside the slack: nothing here is
+     * asserted downstream of a clamp.
+     */
+    @Test
+    fun aCancelDuringADoubleTapDoesNotDeafenTheNextDrag() {
+        val view = viewWith(2000, 2000)
+
+        view.touch(MotionEvent.ACTION_DOWN, 1000, 100f, 100f)
+        view.touch(MotionEvent.ACTION_UP, 1020, 100f, 100f)
+        view.touch(MotionEvent.ACTION_DOWN, 1080, 100f, 100f) // onDoubleTap fires here
+        assertThat(view.state).isEqualTo(ZoomState(2.5f, 150f, 150f))
+        view.touch(MotionEvent.ACTION_CANCEL, 1100, 100f, 100f)
+
+        view.touch(MotionEvent.ACTION_DOWN, 2000, 100f, 100f)
+        view.touch(MotionEvent.ACTION_MOVE, 2020, 200f, 100f)
+        view.touch(MotionEvent.ACTION_UP, 2040, 200f, 100f)
+
+        assertThat(view.state).isEqualTo(ZoomState(2.5f, 250f, 150f))
+    }
+
+    /**
+     * The same history, dragged *down* instead of right. Split from the horizontal case on purpose:
+     * with `isQuickScaleEnabled` left on, this is the one that came out as a zoom rather than as a
+     * dead drag, because `ScaleGestureDetector.mAnchoredScaleMode` is reset only by an UP or a
+     * CANCEL and a vertical drag is exactly what drives it. The scale is asserted as well as the
+     * offset, so re-enabling quick scale without forwarding the cancel is caught too.
+     */
+    @Test
+    fun aCancelDuringADoubleTapDoesNotTurnTheNextDragIntoAZoom() {
+        val view = viewWith(2000, 2000)
+
+        view.touch(MotionEvent.ACTION_DOWN, 1000, 100f, 100f)
+        view.touch(MotionEvent.ACTION_UP, 1020, 100f, 100f)
+        view.touch(MotionEvent.ACTION_DOWN, 1080, 100f, 100f)
+        view.touch(MotionEvent.ACTION_CANCEL, 1100, 100f, 100f)
+
+        view.touch(MotionEvent.ACTION_DOWN, 2000, 100f, 100f)
+        view.touch(MotionEvent.ACTION_MOVE, 2020, 100f, 220f)
+        view.touch(MotionEvent.ACTION_UP, 2040, 100f, 220f)
+
+        assertThat(view.state).isEqualTo(ZoomState(2.5f, 150f, 270f))
     }
 
     /**
