@@ -57,6 +57,17 @@ import se.lublin.humla.util.MessageFormatter;
 public class ModelHandler extends HumlaTCPMessageListener.Stub {
     private static final String TAG = ModelHandler.class.getName();
 
+    /**
+     * How far below the root a channel may be placed. The server picks every parent id, so the
+     * depth of the tree is server-controlled, and every walk over it recurses once per level -
+     * {@link Channel#getSubchannelUserCount()} from {@code ChannelListAdapter} (:438) and
+     * {@code constructNodes} (:450) both do, on the main thread, where {@code updateChannels()}
+     * catches {@code IllegalStateException} and nothing else. A chain of a few thousand channels
+     * is enough to turn that into a {@code StackOverflowError}, which no catch in the tree stops.
+     * 256 is far beyond any real tree and far below any stack.
+     */
+    public static final int MAX_CHANNEL_DEPTH = 256;
+
     private final Context mContext;
     private final Map<Integer, Channel> mChannels;
     private final Map<Integer, User> mUsers;
@@ -113,6 +124,45 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         return channel;
     }
 
+    /**
+     * Whether {@code channel} may be hung under {@code parent}, which is the one thing a
+     * {@code ChannelState} frame can ask for that the model cannot represent. Both refusals leave
+     * the channel where it is - named, in the map, and reachable, with no parent if it never had
+     * one, which is the same state as a channel whose parent has not arrived yet.
+     *
+     * <p>A refused parent is a tree that is wrong in one place. An accepted one is a process that
+     * dies: the walk over the tree recurses per level and catches nothing that an
+     * {@code Error} passes through.
+     *
+     * <p>Two separate refusals, because they are two separate frames:
+     * <ul>
+     *   <li>{@code parent} is {@code channel} or hangs below it - the frame would make the channel
+     *       its own ancestor. One frame is enough ({@code id == parent}), two are enough for a
+     *       longer knot, and the walk over a tree with a cycle in it never ends.</li>
+     *   <li>{@code parent} already sits {@link #MAX_CHANNEL_DEPTH} below the root. The tree stays
+     *       finite, so the walk terminates, but the recursion runs out of stack long before the
+     *       server runs out of channel ids.</li>
+     * </ul>
+     *
+     * <p>Identity rather than equality: two {@link Channel} objects with the same id are equal, and
+     * the question here is about the objects that are actually linked together.
+     */
+    private boolean mayHang(Channel channel, Channel parent) {
+        int depth = 0;
+        for(Channel above = parent; above != null; above = above.getParent()) {
+            if(above == channel) {
+                Log.w(TAG, "refusing to make channel " + channel.getId() + " its own ancestor");
+                return false;
+            }
+            if(++depth > MAX_CHANNEL_DEPTH) {
+                Log.w(TAG, "refusing to hang channel " + channel.getId() + " deeper than "
+                        + MAX_CHANNEL_DEPTH);
+                return false;
+            }
+        }
+        return true;
+    }
+
     public Map<Integer, Channel> getChannels() {
         return Collections.unmodifiableMap(mChannels);
     }
@@ -140,7 +190,6 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             return;
 
         Channel channel = mChannels.get(msg.getChannelId());
-        Channel parent = mChannels.get(msg.getParent());
 
         final boolean newChannel = channel == null;
 
@@ -161,12 +210,19 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             // humla-protocol thread, which installs no uncaught-exception handler. A stub is what
             // this class already does for an unknown channel on the user path: the real
             // ChannelState lands on the same object later and fills in its name.
+            //
+            // The lookup belongs here and not above the block that creates the channel: a frame
+            // whose channel id IS its parent id would miss there, and createStubChannel would then
+            // put a fresh nameless channel over the one this frame has just named and announced.
+            Channel parent = mChannels.get(msg.getParent());
             if(parent == null) parent = createStubChannel(msg.getParent());
-            Channel oldParent = channel.getParent();
-            channel.setParent(parent);
-            parent.addSubchannel(channel);
-            if(oldParent != null) {
-                oldParent.removeSubchannel(channel);
+            if(mayHang(channel, parent)) {
+                Channel oldParent = channel.getParent();
+                channel.setParent(parent);
+                parent.addSubchannel(channel);
+                if(oldParent != null) {
+                    oldParent.removeSubchannel(channel);
+                }
             }
         }
 
