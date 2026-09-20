@@ -1336,6 +1336,34 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   preference — otherwise the UI has two truths again, which is the defect class this
   whole project has been removing.
 
+- **Measured: where the context actually goes, and what was done about it (process).**
+  Across 135 subagent runs, 5.13 M tokens of tool output: **Bash 87.5 %, Read 11.6 %**.
+  Inside Bash the split is **reading source with `sed`/`cat` 73.6 %**, grep 10 %, git
+  9.5 %, and **Gradle only 6.5 %** — the build runs, which were assumed to dominate,
+  are the smallest real line. Broken down by what is being read, as a share of *all*
+  tool output: **Kotlin/Java source 28 %**, **the spec, ledgers, briefs and plans
+  together 18 %**, C/C++ 3.5 %. Whole source files are read whole only 1.6 % of the
+  time; the 1 378 source reads average ~260 lines, i.e. they are already contiguous
+  reading, which is what finds a guard standing in front of a call.
+  Two things follow. A symbol-level retrieval tool addresses ~31 % and would
+  realistically save 10–15 %, against carrying its schemas in every agent context, a
+  Kotlin language server, a `compile_commands.json` the Gradle/NDK build does not
+  emit — and a new way to see a method body without what guards it, which is this
+  project's own worst failure class. **Not adopted**; the honest test, if it is ever
+  wanted, is one task with and one without, compared on tool tokens.
+  The 18 % in documents is free to reclaim and was: each stream's ledger is now split
+  into **`contracts.md`** (every contract, obligation to a later task, cross-stream
+  report and open item with an owner — 14–18 KB, mandatory reading) and
+  **`progress.md`** (measurements, fix rounds, reasoning — 35–75 KB and growing, read
+  by `grep`/`sed` only, never whole). Dispatches name `contracts.md`. New obligations
+  go in **both**: the requirement in the first, the measurement behind it in the second.
+  And **core task 9 was split**: its brief alone was 93.5 KB, which is not merely
+  expensive but badly shaped — a faithful Kotlin conversion guarded by characterization
+  tests and a behaviour change are two different review questions. **9a** is
+  characterization plus conversion with no behaviour change (46 KB); **9b** is the
+  wiring (52 KB), and there every characterization test that goes red is a behaviour
+  change to justify or a defect. Core therefore has 13 tasks, not 12.
+
 - **Never point a dispatch at a plan file — point it at the brief (process, mine).**
   The per-task brief is a **byte-identical extract** of that task's plan section, so
   naming the plan as well is pure redundancy with a 100 000-token downside: the core
