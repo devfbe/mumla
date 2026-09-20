@@ -158,6 +158,12 @@ class HumlaUDP @JvmOverloads constructor(
             // window is one cached DNS lookup plus a socket creation wide, a voice frame held back
             // over it would be played late anyway, and dropping before encrypt() keeps a connection
             // that never opens from accumulating packets nobody will ever send.
+            //
+            // The old route also cost more than a late frame: encrypt() consumes an OCB2 sequence
+            // number when it is called, so every packet queued here and sent late - or never -
+            // punched a hole in the sequence the server's replay window expects. And the window is
+            // nearly unreachable in practice anyway, because the isValid check above only passes
+            // once the server's CryptSetup has arrived, which is well after the socket is up.
             Log.w(TAG, "Tried to send UDP message without an active connection.")
             return
         }

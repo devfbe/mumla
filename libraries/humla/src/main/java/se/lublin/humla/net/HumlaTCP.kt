@@ -117,7 +117,9 @@ class HumlaTCP @JvmOverloads constructor(
             readExecutor = reader
             reader.execute(::readLoop)
         } catch (e: Throwable) {
-            // The read loop never started, so its finally will not release the transport.
+            // The read loop never started, so its finally will not release the transport. Untested:
+            // reaching this needs the executor construction itself to fail, which takes an
+            // injectable executor factory - a seam not worth adding for it. Do not assume coverage.
             running = false
             inUse.set(false)
             throw e
@@ -177,7 +179,16 @@ class HumlaTCP @JvmOverloads constructor(
             }
             // Drop the streams, not just close them: on a reconnect the new send executor is live
             // from connect() on, while these fields are only replaced after the new handshake, so a
-            // send in between would otherwise go to the closed streams of the connection just ended.
+            // send in between would otherwise be written into the connection that just ended. The
+            // message is lost either way - those streams were closed three lines up, so on a real
+            // socket the write throws an IOException the send thread swallows. What this buys is
+            // not writing into a dead stream at all, and not keeping the previous connection's
+            // streams reachable from a live transport.
+            //
+            // It frees no socket buffers: [socket] still points at them and is deliberately left
+            // set, because disconnect() closes it from the send thread and can get there after this
+            // block has run. So socket != null does not mean "connected" - it is the one field here
+            // that outlives its connection, and that asymmetry to input/output is on purpose.
             input = null
             output = null
             running = false
@@ -225,6 +236,11 @@ class HumlaTCP @JvmOverloads constructor(
      * The named exit for a send that finds no stream - before the handshake, or after the read loop
      * ended. Dropping is the only option left on the send thread: there is nowhere to write and
      * nobody to throw at, so say it out loud rather than lose the message silently.
+     *
+     * Untested, and only half of what leads here is pinned:
+     * aSendBetweenTwoConnectionsDoesNotReachThePreviousConnectionsStream covers that output is
+     * null after a connection ended, not that this line runs or what it says. Do not read coverage
+     * of the one as coverage of the other.
      */
     private fun logNoStream(messageType: HumlaTCPMessageType) {
         Log.w(TAG, "Dropping $messageType, the TCP connection has no stream")
@@ -253,6 +269,12 @@ class HumlaTCP @JvmOverloads constructor(
         // Only a callback that was actually queued consumes the token: post() returns false once
         // the handler's looper has quit, and a report dropped there must not suppress the read
         // loop's own attempt, or nobody reports the disconnect at all.
+        //
+        // Handing the token back is not a retry - whoever lost the compareAndSet above has already
+        // given up and returned. That is harmless for exactly one reason: Handler.post fails only
+        // on a looper that has quit, and a looper never comes back, so the attempt a retry would
+        // have made was doomed too. Anything that could make post() fail transiently would turn
+        // this into a lost disconnect.
         if (!deliver { disconnectDelivered.set(true); it.onTCPConnectionDisconnect() }) disconnectReported.set(false)
     }
 

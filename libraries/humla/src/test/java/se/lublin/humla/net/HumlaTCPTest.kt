@@ -460,6 +460,9 @@ class HumlaTCPTest {
      * the new handshake - the new send executor is already running - sendMessage still found the old
      * output. On a real socket that is an IOException swallowed by the send thread, so the message
      * would simply vanish; the fake here keeps the bytes instead, which is what makes it visible.
+     * What the fix buys is therefore not a delivered message - it is lost either way - but that no
+     * send reaches into a dead stream and that a live transport holds no reference to the streams
+     * of the connection it has finished with.
      */
     @Test
     fun aSendBetweenTwoConnectionsDoesNotReachThePreviousConnectionsStream() {
