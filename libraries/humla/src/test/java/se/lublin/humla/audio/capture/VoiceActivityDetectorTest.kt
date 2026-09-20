@@ -33,7 +33,23 @@ class VoiceActivityDetectorTest {
         // rms 3277 -> 20*log10(3277/32768) = -20.0 dB -> 1 + (-20/96) = 0.7917
         assertThat(VoiceActivityDetector.amplitudeScore(constant(3277), 480)).isWithin(0.002f).of(0.792f)
         assertThat(VoiceActivityDetector.amplitudeScore(constant(32767), 480)).isWithin(0.001f).of(1.0f)
-        assertThat(VoiceActivityDetector.amplitudeScore(constant(0), 480)).isLessThan(0f)
+        // Digital silence, and the value is finite because of the `+1` the sum starts from:
+        // without it the logarithm of zero would make this -Infinity, which is a level meter with
+        // nothing to draw and a score no threshold can be set against.
+        assertThat(VoiceActivityDetector.amplitudeScore(constant(0), 480)).isWithin(0.001f).of(-0.220f)
+    }
+
+    /**
+     * `AudioRecord.read` can return 0 and `AudioHandler:430` passes that count straight to the
+     * input mode. The legacy formula answers `sqrt(1.0 / 0)` = infinity for it, i.e. a score above
+     * every threshold, so an empty read transmitted as though it were the loudest possible speech.
+     */
+    @Test
+    fun `an empty frame is not voice`() {
+        assertThat(VoiceActivityDetector.amplitudeScore(ShortArray(480), 0)).isEqualTo(VoiceActivityDetector.NO_SIGNAL)
+        assertThat(VoiceActivityDetector.NO_SIGNAL).isLessThan(0f)
+        assertThat(detector(VadConfig.amplitude(0f)).isVoice(ShortArray(480) { 32767 }, 0, null)).isFalse()
+        assertThat(detector(VadConfig.probability(holdTimeMs = 0)).isVoice(ShortArray(480), 0, null)).isFalse()
     }
 
     /**

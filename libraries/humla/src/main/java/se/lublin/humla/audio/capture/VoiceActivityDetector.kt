@@ -97,12 +97,26 @@ class VoiceActivityDetector(
          * gain-controlled frame, and the same slider position then means a different level. That
          * is a migration consequence of B1, not of this function, and it belongs in the settings
          * copy; it is in the ledger.
+         *
+         * **The empty frame is the one case the legacy formula got backwards.** `AudioRecord.read`
+         * can return 0, and `AudioHandler:430` passes that count straight through. With no
+         * samples, `sqrt(1.0 / 0)` is positive infinity and the score comes out **above every
+         * threshold**, so a read that returned nothing was transmitted as loud speech. Both the
+         * Java original and the plan's listing do this. It returns [NO_SIGNAL] instead.
          */
         fun amplitudeScore(pcm: ShortArray, length: Int): Float {
+            if (length <= 0) return NO_SIGNAL
             var sum = 1.0
             for (i in 0 until length) sum += pcm[i].toDouble() * pcm[i].toDouble()
             val rms = sqrt(sum / length)
             return (1.0 + 20.0 * log10(rms / 32768.0) / 96.0).toFloat()
         }
+
+        /**
+         * What [amplitudeScore] answers for a frame with no samples in it: below every threshold
+         * [VadConfig] can hold, since those are in [0, 1], and finite -- spec B10's input level
+         * meter has to draw this value, and a negative infinity is not a pixel.
+         */
+        const val NO_SIGNAL = -1f
     }
 }
