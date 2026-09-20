@@ -88,11 +88,24 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     private var chatAdapter: ChatAdapter? = null
     private val messages = mutableListOf<IChatMessage>()
 
-    private val imagePicker = registerForActivityResult(GetContent()) { uri: Uri? ->
+    private val imagePicker = registerForActivityResult(GetContent(), ::onImagePickResult)
+
+    private val readPermissionRequester = registerForActivityResult(RequestPermission(), ::onReadPermissionResult)
+
+    /**
+     * Method references rather than lambdas, and named rather than inline, because these two are
+     * the far end of a seam no test can otherwise reach: an `ActivityResultLauncher` is driven by
+     * the framework, so the bodies below are only reachable through the registry.
+     *
+     * Cancelling the picker is an ordinary outcome and arrives as a null uri.
+     */
+    @VisibleForTesting
+    internal fun onImagePickResult(uri: Uri?) {
         if (uri != null) onImagePicked(uri)
     }
 
-    private val readPermissionRequester = registerForActivityResult(RequestPermission()) { granted ->
+    @VisibleForTesting
+    internal fun onReadPermissionResult(granted: Boolean) {
         if (granted) {
             imagePicker.launch(IMAGE_MIME)
         } else {
@@ -326,7 +339,8 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         }
     }
 
-    private fun onImagePicked(uri: Uri) {
+    @VisibleForTesting
+    internal fun onImagePicked(uri: Uri) {
         val service = getService() ?: return
         if (!service.isConnected) return
         imageProgress.visibility = View.VISIBLE

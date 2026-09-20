@@ -3,8 +3,15 @@ package se.lublin.mumla.channel
 import android.content.DialogInterface
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
 import android.os.Looper
+import android.os.SystemClock
+import android.view.Gravity
 import android.view.MenuItem
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.inputmethod.EditorInfo
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -32,7 +39,9 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
+import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IChannel
@@ -48,6 +57,8 @@ import se.lublin.mumla.chat.ChatImageLoader
 import se.lublin.mumla.chat.ChatImageLoaders
 import se.lublin.mumla.chat.ImageResult
 import se.lublin.mumla.chat.ImageViewerDialogFragment
+import se.lublin.mumla.chat.OutgoingImagePreparer
+import se.lublin.mumla.chat.TestImages
 import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.util.HumlaServiceFragment
@@ -601,13 +612,17 @@ class ChannelChatFragmentTest {
         every { session.serverSettings } returns settings(0)
         every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
         launch()
-        fragment.confirmImage(smallBitmap())
+        val bitmap = smallBitmap()
+        fragment.confirmImage(bitmap)
         idle()
         val dialog = latestDialog()
         assertThat(dialog.isShowing).isTrue()
         val preview = dialog.window!!.decorView.firstImageView()
         assertThat(preview).isNotNull()
-        assertThat(preview!!.contentDescription.toString())
+        // The one property the four below never checked: that the dialog shows the picked image at
+        // all. Removing `setImageBitmap` left this test green, which is a cover that did not exist.
+        assertThat((preview!!.drawable as BitmapDrawable).bitmap).isSameInstanceAs(bitmap)
+        assertThat(preview.contentDescription.toString())
             .isEqualTo(activity.getString(R.string.image_confirm_send))
         assertThat(preview.adjustViewBounds).isTrue()
         assertThat(preview.scaleType).isEqualTo(ImageView.ScaleType.FIT_CENTER)
@@ -773,5 +788,344 @@ class ChannelChatFragmentTest {
         } finally {
             ChatImageLoaders.setForTests(null)
         }
+    }
+
+
+    // ---- the seams: what the fragment hands the adapter, driven through a real row -----------
+
+    /**
+     * Lays the host out for real. `performClick()` ignores `isEnabled` and a touch delivered
+     * straight at a child ignores its visibility — the filter is in the parent — and an unattached
+     * view puts its click into the `HandlerActionQueue` while `post()` still returns true. So the
+     * row tests below enter at the `RecyclerView` on a measured, laid-out window.
+     */
+    private fun layOutHost() {
+        val root = activity.findViewById<View>(android.R.id.content)
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY),
+        )
+        root.layout(0, 0, 1080, 1920)
+    }
+
+    /** A loader that answers `Ready` without suspending, so a bound row really has a bitmap. */
+    private fun installThumbnailLoader(bitmap: Bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)):
+        Pair<ChatImageLoader, MutableList<Triple<String, Int, Int>>> {
+        val asked = mutableListOf<Triple<String, Int, Int>>()
+        val loader = mockk<ChatImageLoader>()
+        coEvery { loader.loadThumbnail(any(), any(), any()) } answers {
+            asked += Triple(firstArg(), secondArg(), thirdArg())
+            ImageResult.Ready(bitmap)
+        }
+        ChatImageLoaders.setForTests(loader)
+        return loader to asked
+    }
+
+    private fun imageMessage(src: String = "data:image/png;base64,AAAA", trailing: String = "") =
+        info("<img src=\"$src\"/>$trailing")
+
+    /** Enters at [root] with the coordinates of [target]'s centre, the way a finger does. */
+    private fun tapThrough(root: View, target: View) {
+        var x = target.width / 2f
+        var y = target.height / 2f
+        var v: View = target
+        while (v !== root) {
+            x += v.left
+            y += v.top
+            v = v.parent as View
+        }
+        val now = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
+        val up = MotionEvent.obtain(now, now + 10, MotionEvent.ACTION_UP, x, y, 0)
+        root.dispatchTouchEvent(down)
+        root.dispatchTouchEvent(up)
+        down.recycle()
+        up.recycle()
+        idle()
+    }
+
+    /**
+     * I1: the seam this whole task exists for. Both ends were pinned — `ChatAdapter` calls
+     * `onImageClicked` on a tap, and `openImageViewer` opens exactly one viewer — and the wire
+     * between them was not: replacing `onImageClicked = ::openImageViewer` with `{ }` left all 432
+     * tests green while tapping a picture did nothing at all.
+     */
+    @Test
+    fun tappingAPictureInTheLogOpensTheViewerOnIt() {
+        installThumbnailLoader()
+        try {
+            log += imageMessage("data:image/png;base64,TAPPED")
+            launch()
+            drain { itemCount() == 1 }
+            layOutHost()
+            val row = list.getChildAt(0)
+            assertThat(row).isNotNull()
+            val image = row.findViewById<ImageView>(R.id.list_chat_item_image)
+            assertThat(image.visibility).isEqualTo(View.VISIBLE)
+            assertThat(image.width).isGreaterThan(0)
+
+            tapThrough(list, image)
+
+            val viewer = fragment.parentFragmentManager
+                .findFragmentByTag(ImageViewerDialogFragment.TAG) as ImageViewerDialogFragment
+            assertThat(viewer.requireArguments().getString("source"))
+                .isEqualTo("data:image/png;base64,TAPPED")
+        } finally {
+            ChatImageLoaders.setForTests(null)
+        }
+    }
+
+    /**
+     * I3: the other constructor seam, and the same shape as `NO_SESSION = -1` one level up.
+     * `sessionId()` is pinned four ways and the adapter is pinned to align on it, but that the
+     * fragment *supplies* it was read back by nothing: `selfSessionId = { NO_SESSION }` survived,
+     * and every message you sent yourself would render left-aligned, as if somebody else had.
+     *
+     * The fixture carries both actors, because a fake whose session id is a constant cannot
+     * express the difference the branch is about.
+     */
+    @Test
+    fun yourOwnMessagesAreAlignedToYourSideAndOtherPeoplesAreNot() {
+        every { session.sessionId } returns 7
+        log += IChatMessage.TextMessage(Message(7, "Me", emptyList(), emptyList(), emptyList(), "mine"))
+        log += IChatMessage.TextMessage(Message(9, "Ann", emptyList(), emptyList(), emptyList(), "theirs"))
+        launch()
+        drain { itemCount() == 2 }
+        layOutHost()
+        val adapter = list.adapter as ChatAdapter
+        val mine = adapter.createViewHolder(list, ChatAdapter.TYPE_TEXT)
+        adapter.bindViewHolder(mine, 0)
+        val theirs = adapter.createViewHolder(list, ChatAdapter.TYPE_TEXT)
+        adapter.bindViewHolder(theirs, 1)
+        // Masked: LinearLayout.setGravity ORs a vertical gravity in, so the raw int carries bits
+        // this claim is not about.
+        assertThat(mine.box.gravity and Gravity.HORIZONTAL_GRAVITY_MASK).isEqualTo(Gravity.RIGHT)
+        assertThat(theirs.box.gravity and Gravity.HORIZONTAL_GRAVITY_MASK).isEqualTo(Gravity.LEFT)
+    }
+
+    /** The bounds the fragment measures out of `chat_thumbnail_max` are what the loader is asked for. */
+    @Test
+    fun theThumbnailIsAskedForAtTheDimensionResourcesBound() {
+        val (_, asked) = installThumbnailLoader()
+        try {
+            log += imageMessage()
+            launch()
+            drain { itemCount() == 1 }
+            layOutHost()
+            val expected = activity.resources.getDimensionPixelSize(R.dimen.chat_thumbnail_max)
+            assertThat(expected).isGreaterThan(0)
+            assertThat(asked).isNotEmpty()
+            assertThat(asked.first().second).isEqualTo(expected)
+            assertThat(asked.first().third).isEqualTo(expected)
+        } finally {
+            ChatImageLoaders.setForTests(null)
+        }
+    }
+
+    /** The parser the fragment builds carries the localised stand-in for a second picture. */
+    @Test
+    fun aSecondPictureInOneMessageIsWrittenOutAsThePlaceholder() {
+        installThumbnailLoader()
+        try {
+            log += info("<img src=\"data:image/png;base64,AAAA\"/>tail<img src=\"data:image/png;base64,BBBB\"/>")
+            launch()
+            drain { itemCount() == 1 }
+            layOutHost()
+            val adapter = list.adapter as ChatAdapter
+            val holder = adapter.createViewHolder(list, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
+            adapter.bindViewHolder(holder, 0)
+            assertThat(holder.textAfter.text.toString())
+                .contains(activity.getString(R.string.chat_image_placeholder))
+        } finally {
+            ChatImageLoaders.setForTests(null)
+        }
+    }
+
+
+    // ---- I2: pick -> prepare -> confirm, which had no test at all ---------------------------
+
+    private fun registerImage(uri: Uri, bytes: ByteArray) {
+        shadowOf(activity.contentResolver).registerInputStreamSupplier(uri) {
+            java.io.ByteArrayInputStream(bytes)
+        }
+    }
+
+    /**
+     * Granting the storage permission must open the picker. The mutation that flips this — `if
+     * (granted)` to `if (!granted)` — is the one that matters: on Android 12 the user who says yes
+     * would get "Permission denied to read storage" and never see a picker at all.
+     */
+    @Test
+    @Config(sdk = [31])
+    fun grantingTheStoragePermissionOpensThePicker() {
+        launch()
+        fragment.onReadPermissionResult(true)
+        idle()
+        assertThat(startedAction()).isEqualTo(Intent.ACTION_GET_CONTENT)
+        assertThat(ShadowToast.getLatestToast()).isNull()
+    }
+
+    @Test
+    @Config(sdk = [31])
+    fun refusingTheStoragePermissionSaysSoAndOpensNothing() {
+        launch()
+        fragment.onReadPermissionResult(false)
+        idle()
+        assertThat(ShadowToast.getTextOfLatestToast())
+            .isEqualTo(activity.getString(R.string.permission_denied_storage))
+        assertThat(startedAction()).isNull()
+    }
+
+    /** Cancelling the picker is an ordinary outcome: no spinner, no dialog, no complaint. */
+    @Test
+    fun cancellingThePickerDoesNothing() {
+        launch()
+        fragment.onImagePickResult(null)
+        idle()
+        assertThat(progress.visibility).isEqualTo(View.GONE)
+        assertThat(ShadowDialog.getLatestDialog()).isNull()
+        assertThat(ShadowToast.getLatestToast()).isNull()
+    }
+
+    /**
+     * The whole outgoing path end to end, over the real `OutgoingImagePreparer` and a real JPEG:
+     * picked uri, spinner up, decoded to the outgoing bounds off the main thread, confirmation
+     * showing that very bitmap, spinner down.
+     *
+     * `@GraphicsMode(NATIVE)` for this test alone: the preparer decodes with `ImageDecoder`, which
+     * Robolectric's legacy graphics does not implement. Its neighbours do not need it and it is
+     * slower, which is why it is per test.
+     */
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aPickedPhotoIsPreparedAndShownForConfirmation() {
+        launch()
+        val uri = Uri.parse("content://se.lublin.mumla.test/photo.jpg")
+        registerImage(uri, TestImages.jpeg(1200, 900))
+        fragment.onImagePickResult(uri)
+        assertThat(progress.visibility).isEqualTo(View.VISIBLE)
+        drain { ShadowDialog.getLatestDialog() != null }
+        idle()
+        assertThat(progress.visibility).isEqualTo(View.GONE)
+
+        val preview = latestDialog().window!!.decorView.firstImageView()!!
+        val shown = (preview.drawable as BitmapDrawable).bitmap
+        // Decoded straight to the outgoing bounds, not to the photo's own size: 1200 x 900 is
+        // bounded by its height, so 533 x 400 rather than 1200 x 900 or 600 x 450.
+        assertThat(shown.width).isEqualTo(533)
+        assertThat(shown.height).isEqualTo(OutgoingImagePreparer.MAX_HEIGHT)
+    }
+
+    /** ...and a uri that is not an image is reported rather than shown. */
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aPickedFileThatIsNotAnImageIsReportedAndOpensNoDialog() {
+        launch()
+        val uri = Uri.parse("content://se.lublin.mumla.test/notes.txt")
+        registerImage(uri, "definitely not an image".toByteArray())
+        fragment.onImagePickResult(uri)
+        drain { ShadowToast.getLatestToast() != null }
+        assertThat(ShadowToast.getTextOfLatestToast())
+            .isEqualTo(activity.getString(R.string.image_decode_failed))
+        assertThat(ShadowDialog.getLatestDialog()).isNull()
+        assertThat(progress.visibility).isEqualTo(View.GONE)
+    }
+
+    /** A picked image with no session behind it never reaches the decoder. */
+    @Test
+    fun aPickedImageWithNoSessionIsDroppedBeforeAnythingIsDecoded() {
+        launch()
+        activity.bound = null
+        fragment.onImagePickResult(Uri.parse("content://se.lublin.mumla.test/x.jpg"))
+        idle()
+        assertThat(progress.visibility).isEqualTo(View.GONE)
+        assertThat(ShadowDialog.getLatestDialog()).isNull()
+    }
+
+    @Test
+    fun aPickedImageWhileDisconnectedIsDroppedBeforeAnythingIsDecoded() {
+        launch()
+        disconnect()
+        fragment.onImagePickResult(Uri.parse("content://se.lublin.mumla.test/x.jpg"))
+        idle()
+        assertThat(progress.visibility).isEqualTo(View.GONE)
+        assertThat(ShadowDialog.getLatestDialog()).isNull()
+    }
+
+
+    // ---- the rest of the effect pass, run to exhaustion --------------------------------------
+
+    /** The spinner is the only sign that the encode is running; it has to be up while it is. */
+    @Test
+    fun theSpinnerIsUpWhileAnImageIsBeingEncoded() {
+        every { session.serverSettings } returns settings(0)
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        launch()
+        assertThat(progress.visibility).isEqualTo(View.GONE)
+        fragment.sendImage(smallBitmap())
+        assertThat(progress.visibility).isEqualTo(View.VISIBLE)
+        drain { progress.visibility == View.GONE }
+    }
+
+    /** An image no quality rung fits is said out loud, not swallowed. */
+    @Test
+    fun anImageThatCannotBeMadeToFitSaysSo() {
+        every { session.serverSettings } returns settings(10)
+        launch()
+        fragment.sendImage(smallBitmap())
+        drain { ShadowToast.getLatestToast() != null }
+        assertThat(ShadowToast.getTextOfLatestToast())
+            .isEqualTo(activity.getString(R.string.image_too_large))
+    }
+
+    /** The newest message is the one you are meant to be looking at. */
+    @Test
+    fun theListIsScrolledToTheNewestMessage() {
+        repeat(40) { log += info("m$it") }
+        launch()
+        drain { itemCount() == 40 }
+        layOutHost()
+        idle()
+        val lm = list.layoutManager as LinearLayoutManager
+        assertThat(lm.findLastVisibleItemPosition()).isEqualTo(39)
+    }
+
+    /** Without this the clear-chat item never reaches onCreateOptionsMenu at all. */
+    @Test
+    fun theFragmentAsksForItsOwnMenu() {
+        launch()
+        @Suppress("DEPRECATION")
+        assertThat(fragment.hasOptionsMenu()).isTrue()
+    }
+
+    /**
+     * A hardware Enter sends. `TextView.doKeyDown` offers `KEYCODE_ENTER` to the editor action
+     * listener as `IME_NULL` **with the key event**, before it would insert a newline — which is
+     * why the listener tests for the event and not only for the action id. Driven with a real key
+     * event for that reason: `onEditorAction(id)` hands the listener a null event and would take
+     * the other branch, so it would report this as working while a keyboard did nothing.
+     */
+    @Test
+    fun aHardwareEnterInTheEditorSendsTheMessage() {
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        launch()
+        layOutHost()
+        editor.requestFocus()
+        editor.setText("typed")
+        editor.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+        idle()
+        verify { session.sendChannelTextMessage(any(), eq("typed"), any()) }
+        assertThat(editor.text.toString()).isEmpty()
+    }
+
+    /** ...and a soft action that is not Enter does not, which is the other side of that clause. */
+    @Test
+    fun aSoftImeActionWithoutAKeyEventDoesNotSend() {
+        launch()
+        editor.setText("typed")
+        editor.onEditorAction(EditorInfo.IME_ACTION_SEND)
+        idle()
+        verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
+        assertThat(editor.text.toString()).isEqualTo("typed")
     }
 }
