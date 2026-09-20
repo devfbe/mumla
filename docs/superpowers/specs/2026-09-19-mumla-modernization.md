@@ -653,6 +653,20 @@ it.** The same author who spelled out "2^k inputs, not k mutations" in a test's 
 and satisfied it exactly for one compound condition, left the four-corner gap open on
 the predicate he had just opened up two files away. A rule is a grep, not a habit.
 
+**A measured number without the history that produced it is not reproducible, and the
+disagreement it settles may be settled for the wrong reason.** An implementer overruled a
+ruling of mine with "two switches with your condition, none without it". The reviewer set
+out to reproduce it, predicted he could not, and **the measurement refuted his prediction**
+— but only on a history one lost first ping-reply away from the one the ledger described.
+On the history as written, *both* conditions give zero, because the trim makes "a full
+window has accumulated" and "twenty seconds have passed" coincide at exactly the moment
+the timeout first comes due; the ruling would have been a no-op there. The implementer's
+case stands, and for a better reason than he gave: his condition is **robust against the
+offset between the first ping and the first sample**, which production does not control.
+So: **write the history next to the number.** A number that survives only on the history
+its author had in mind is a claim about that author, not about the code — and the right
+reason, found by the person who tried to refute it, is worth more than the number.
+
 **A mutation sweep inherits the blind spots of the fixture set.** It measures
 whether the tests can *see* a change; it cannot tell you that a branch's
 discriminating input never appears in any test at all. Fifty-six mutants, all
@@ -750,6 +764,29 @@ and reported as passing. They are repo-wide, not stream-specific.
   is fine (12 s, 152 characters of output). And the right form is an index loop that
   reports the **first** diverging index — `diverges at sample %s` — which costs
   nothing and says more.
+- **The graphics mode decides which claims are even expressible, and it cuts both ways.**
+  Measured on the outgoing-image path, same code, both modes:
+  - **Orientation only exists under NATIVE.** An eight-orientation JPEG read through
+    `ImageDecoder` reports `60x40` for orientations 1–4 and **`40x60` for 5–8** under
+    `@GraphicsMode(NATIVE)`, and **`60x40` for all eight** under legacy, whose
+    `ShadowImageDecoder` reads width, height and MIME from the header and nothing else.
+    A legacy suite cannot see a double rotation — which is what the brief here
+    prescribed, and it would have turned every rotated photo a half turn.
+  - **Memory claims invert under legacy.** Legacy's decoder produces the **full-size**
+    bitmap and scales afterwards, so a legacy suite measuring "one allocation the size
+    of what is kept" measures the opposite of the truth.
+  - **And the tool for counting allocations does not exist under NATIVE.**
+    `shadowOf(bitmap).getCreatedFromBitmap()` works under legacy
+    (`ShadowLegacyBitmap`) and throws **`UnsupportedOperationException`** under NATIVE
+    (`ShadowNativeBitmap`). So a suite that needs NATIVE for correctness cannot use the
+    allocation-counting instrument, and any obligation written in terms of it is
+    impossible for that suite — as one in this project's own ledger was. State the
+    substitution and why it was forced; do not let it look like a weaker test chosen
+    freely.
+  The rule: **pick the graphics mode from the dimension under test, then say which
+  assertions that choice makes unwritable.** Per-test where the neighbours do not need
+  it, whole-suite where every corner does — the cost measured here was 3.23 s plus
+  1.04 s for 35 tests, far less than feared.
 - **Under Robolectric's legacy graphics, `BitmapFactory` decodes anything.** Hand it
   arbitrary bytes and it returns a `Bitmap` rather than null, so the corner "these
   bytes do not decode" — exactly the one a `yes, decoding can fail` comment is
@@ -859,6 +896,29 @@ and reported as passing. They are repo-wide, not stream-specific.
   delta. `ShadowBitmapFactory` also invents a 100x100 bitmap for undecodable bytes
   unless `setAllowInvalidImageData(false)` is set, and `@Config(shadows = [...])`
   that replaces the shadow silently drops that switch.
+- **`MenuItem.isChecked` answers whether the CHECKED flag is set, not whether the item
+  can draw a tick.** `MenuItemImpl.setChecked` and `isChecked` store and return that flag
+  **independently of CHECKABLE**, so nine assertions of the form
+  `assertThat(item.isChecked).isTrue()` against one menu item all stayed green with
+  `android:checkable="true"` deleted from it -- an item that shows no tick at all, which
+  was the confirmation the whole feature exists to give. Same family as 4.04's sweep-by-
+  effect case (state written into an object you do not own and read back through an
+  accessor that ignores the dimension you changed), except here the accessor sits on the
+  same object, which is what makes it convincing. The assertion that reads the dimension is
+  `isCheckable`, and it belongs in a test of its own: behind an `isChecked` assertion it is
+  shadowed and the mutation never reaches it.
+- **Gradle's default unit-test worker heap is 512m, and the whole module shares one
+  worker.** Robolectric keeps the framework resources of every `@Config(sdk = ...)` it has
+  loaded, so the cost grows with the **suite**, not with the test that pays it. Measured
+  here: at 226 tests the module's multi-SDK class died eight times with
+  `OutOfMemoryError: Failed to load android-all-instrumented-13` in the full run and passed
+  on its own in 18 s -- and which class dies depends on execution order, so the red tests
+  name the wrong file and a bisect blames the wrong diff. Two consequences. Raise
+  `maxHeapSize` in `testOptions.unitTests.all` (1g here) instead of chasing the class that
+  reported it; and make any mutation harness treat `OutOfMemoryError` or
+  `instrument ASSERTION FAILED` in the output as **no verdict at all**, because a partial
+  result set with failures in it reads exactly like a killed mutant -- the same inversion as
+  the daemon-stopped and stdout-only cases above.
 
 ### 4.1 Binding constraints discovered during execution
 
@@ -1337,6 +1397,43 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   platform is stricter than its own annotations, and removes a behaviour regression nobody
   decided to make. "Absent from the annotation database" is not "never throws anywhere",
   which is exactly why the call is wrapped rather than trusted.
+  **Discharged in the task 7 fix round.** `shouldRouteToBluetooth` is deleted rather than
+  pinned to `true` -- a gate that is always open is a gate somebody writes back in -- and
+  `MumlaService` reads `Settings.isBluetoothScoEnabled()` directly. `onPermissionAnswered()`
+  takes **no parameter**, so the gate is not merely open but unrepresentable, and both halves
+  are pinned by mutation: putting `&& hasPermission(...)` back at either service hook dies,
+  and emptying `onPermissionAnswered()` dies. The wrap is
+  `MumlaService.applyBluetoothSco(boolean)`, which latches so the chat log says it once and
+  not once per auto-reconnect.
+
+- **Put a restore where nothing can throw in front of it (P task 7 fix round).**
+  `MumlaService.onConnectionSynchronized` rebuilt the Bluetooth route as its **last**
+  statement, behind `registerReceiver`, `mHotCorner.setShown(true)` and
+  `setProximitySensorOn(true)`. `WindowManager.addView` and the proximity wake lock can both
+  throw, and anything that throws in front of the restore skips it and reproduces the exact
+  complaint the task exists to close -- reconnected, and no headset. No triggering case was
+  found in the field (the hot corner checks `canDrawOverlays` and returns early), so this is
+  an ordering fix and not a live defect; the point is that the ordering costs nothing and
+  the failure mode is the feature's own. General form: **when a hook both restores state and
+  starts optional machinery, the restore goes first** -- and the test that pins it drives one
+  of the later steps into a throw and reads the restore back, which is an ordering assertion
+  a call-count assertion cannot make.
+
+- **A PNG carrying an `eXIf` orientation stops being rotated on the send path (D, task 10,
+  accepted).** The old path read `ExifInterface` and rotated by hand; the new one lets
+  `ImageDecoder` rotate, and the PNG codec does not honour `eXIf`. So that one case
+  regresses. Accepted, because the alternative is worse: rotating by hand on top of a
+  decoder that may already have rotated needs **a second source of truth for orientation
+  and no way to tell which one already acted**. The review sharpened this correctly — for
+  the four axis-swapping orientations the decoder's action *is* detectable by comparing
+  `info.size` against the container header, but it is **not** detectable for 180° or a
+  flip, and a partial orientation fix is worse than none. Cameras emit JPEG/HEIF, the case
+  is pinned by a test so a Skia change goes red rather than silent, and it is disclosed
+  here rather than in a commit body. **Correction to how this was reported:** an
+  over-long image message is **not** silently dropped — Murmur answers
+  `PERM_DENIED_TYPE(TextTooLong)`, `ModelHandler` maps it to *"Denied: Text message too
+  long."* and `MumlaActivity` shows a dialog. The defect was real; the stated symptom was
+  not. A wrong-sounding dialog for a picture is still a defect, and it belongs to D task 11.
 
 - **The Bluetooth wish has exactly one carrier, and it is the preference (P task 7 /
   A task 8, binding).** After P7 the wish lives in `pref_bluetooth_sco` on disk and
@@ -1353,6 +1450,43 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   caller was the menu path P7 deleted), so whoever displays the wish reads the
   preference — otherwise the UI has two truths again, which is the defect class this
   whole project has been removing.
+
+- **Six concurrent agents saturate this machine; the wall-clock lever has a ceiling (measured).**
+  Reported from inside a run: **load 12–18 with 12 parallel Gradle processes from four
+  other worktrees**, and a mutation run that takes **53 s alone took up to 12 minutes**.
+  The sweep process was **killed twice** by memory pressure and left the tree mutated.
+  So the earlier conclusion — "the lever is more concurrent agents, not faster builds" —
+  has a limit, and it is around **four to five**, not eight. Past it, every agent's
+  mutation sweep slows down together and the failure mode is not slowness but a killed
+  sweep leaving a deliberately broken guard on disk.
+  Two rules follow, both paid for:
+  1. **Commit before mutating.** A harness that cleans up with `git checkout --` will
+     take uncommitted production changes with it — it did. The harness must refuse to
+     start on a dirty tree, be resumable, and restart itself after a kill.
+  2. **A process name needs an agent-unique marker, exactly like the scratchpad folder.**
+     `pgrep -f sweep.py` matched **another agent's** sweep, so the wait loop watched the
+     wrong process and returned early. Name it `sweep-<task>.py`, as the scratchpad
+     subfolder already is.
+
+- **Never run a mutation sweep in a worktree another agent commits from (process, mine).**
+  A mutation sweep *edits production files* — that is what it is. If a second agent is
+  committing from the same worktree, a `git add -A` pulls a deliberately broken guard
+  into a commit, and it looks green because the sweep restores the file a second later.
+  This nearly happened: a reviewer's task-notification said "stopped with background
+  work of its own still running", I read it as finished, and dispatched the fix round
+  into the same worktree. The reviewer caught it afterwards and verified line by line
+  that nothing of its sweep survived — the repaired trim intact, `||` not turned into
+  `xor`, the warning map not swapped, its calibration marker and probe file gone.
+  What actually prevented it was a rule written for an unrelated reason: **`git add`
+  path-scoped, never `-A`**, introduced after an implementer tore a production change
+  apart from its RED. Two rules now carry the weight:
+  1. **A review runs in a detached worktree at the commit under review**, never in the
+     stream's own worktree. This was adopted for wall-clock — two agents per stream —
+     and turns out to be the safety property as well.
+  2. **"Agent finished" means it delivered its report**, not that a notification fired.
+     A notification that says background work is still running is not a completion, and
+     an agent that stops twice without reporting is stuck, not done — look in its
+     worktree (one command) before dispatching anything that writes there.
 
 - **Measured: the Gradle knobs do not work, so the lever is fewer invocations (process).**
   Paired runs on one machine, `:libraries:humla:testDebugUnitTest`: `maxParallelForks`
