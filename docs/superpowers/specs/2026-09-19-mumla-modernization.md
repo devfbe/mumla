@@ -513,13 +513,21 @@ and reported as passing. They are repo-wide, not stream-specific.
   here burned twenty minutes before anyone noticed. Pass `--timeout` to `ctest`,
   and treat a sweep that produces no output as a result to investigate rather than
   a run to repeat.
-- **A naive SARIF reader counts ten lint errors this project does not have.**
-  `MissingQuantity` is demoted to `warning` in the module's own config, but the
-  *rule default* in the SARIF stays `error`. A script that falls back to the rule
-  default reports ten errors per app variant. Read the `level` on each result, not
-  the rule. Two rounds have reported lint numbers taken this way; the numbers
-  happened to be right because `abortOnError = true` and the build passed, which is
-  the stronger signal to use in the first place.
+- **Read a SARIF result's *effective* level, and trust the build's exit status more.**
+  An earlier version of this entry said to read each result's `level` rather than
+  the rule default. That is **wrong as a general rule, and it was measured**: in
+  `lint-results-fossDebug.sarif`, **10 of 325 results carry a `level` field at
+  all**, and they are exactly the `MissingQuantity` hits the module's own config
+  demotes. Every other result omits `level` and inherits from
+  `rules[ruleId].defaultConfiguration.level`. A counter that reads `result.level`
+  with a "warning" fallback therefore reports **0 errors for a build lint fails** —
+  demonstrated by deleting an unused string, which produced 23 `ExtraTranslation`
+  results, none of them carrying a `level`, rule default `error`, `Lint found 23
+  errors`, build aborted. The correct formulation is **effective level =
+  `result.level` if present, otherwise the rule's default** — and the gradle task's
+  exit status stays the real gate. Earlier rounds' "0 errors" claims are safe
+  because those builds passed, but the method they cite would not have caught a
+  regression.
 - **Robolectric's gesture constants are fixtures, not Android.**
   `ShadowViewConfiguration` hard-codes touch slop 16, paging touch slop 32 and
   double-tap slop 100 at density 1.0, and the 170 px minimum scaling span sits
