@@ -387,6 +387,20 @@ and reported as passing. They are repo-wide, not stream-specific.
   even when that very thread did the work. This was found only because the
   measured runtime did not fit the claim. Strip the ` @coroutine#` suffix before
   comparing, in every thread assertion.
+- **Robolectric's gesture constants are fixtures, not Android.**
+  `ShadowViewConfiguration` hard-codes touch slop 16, paging touch slop 32 and
+  double-tap slop 100 at density 1.0, and the 170 px minimum scaling span sits
+  behind the `robolectric.useRealMinScalingSpan` switch. On a real 3x device the
+  touch slop is about 24 px, the span slop about 48, and `config_min_scaling_span`
+  is a physical 27 mm. `ShadowGestureDetector` and `ShadowScaleGestureDetector` do
+  exist and are in the path — they delegate the logic to the real class by
+  reflector but can override `scaleFactor` and the focus. So the real AOSP logic
+  runs, over emulated constants, through a shadow. Two consequences measured here:
+  the first `onScale` after `onScaleBegin` always reports factor exactly 1.0 and
+  re-bases the span, and a naive synthetic pinch of 180 to 200 px therefore
+  produces no zoom at all — once because the 20 px change is under the span slop,
+  and again because the first callback is 1.0. A test asserting "scale > 1" from a
+  small synthetic pinch gets a mystery or, worse, a vacuous pass.
 - **Robolectric does not implement `inJustDecodeBounds`.** Its
   `ShadowBitmapFactory.create` allocates the full bitmap for the bounds pass, so a
   heap-delta measurement of a decode path measures the opposite of what it claims
@@ -441,6 +455,36 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   the path newly reachable from `onDestroy()` as well. This is an unmet acceptance
   item, not an observation, and it is the second half of the "not responding" root
   cause -- task 4 fixed the first half by moving parsing off main.
+- **Decide the zoom ceiling against the decoder, not by taste (D, tasks 7 and 8).**
+  `MAX_SCALE = 5` came from the plan and nobody checked it against what the
+  decoder produces. The chain, read out of the code: the viewer calls
+  `loadFull(source, screenWidth, screenHeight)`, `BoundedBitmapDecoder.decode`
+  ends on `BitmapUtils.resizeKeepingAspect`, and that never enlarges — so the
+  decoded bitmap is exactly view-sized on the limiting axis, `fitScale` is 1.0,
+  and **every zoom past the fit is pure upscaling**: at 5x one source pixel covers
+  twenty-five screen pixels. The same bound is what the task-7 brief cites for not
+  needing tile subsampling, so the decision was made without following its own
+  consequence. Two knobs that have to move together: decode at K x screen for the
+  full-screen viewer (1080x2340 ARGB_8888: K=1 is 10.1 MB, **K=2 is 40.4 MB**,
+  K=3 is 91 MB, K=5 is 253 MB — against the 128 MiB `heapgrowthlimit` floor
+  measured in task 6 and the `maxMemory()/8` cache, **K=2 is the largest
+  defensible**), and derive the ceiling per image rather than fixing it:
+  `maxScale = (1f / fitScale).coerceIn(2f, 5f)`, i.e. zoom until one source pixel
+  is one screen pixel, but at least 2x so a small image stays inspectable and at
+  most 5x so a tiny one does not become mush. That cannot live in `ZoomState`'s
+  `init require`, because a state valid for one image would be invalid for
+  another; it belongs in `scaledBy`'s `coerceIn`, with only a generous absolute
+  limit left in the constructor. **Lowering `MAX_SCALE` makes a stored 5x crash on
+  the next rotation unless the restore path coerces instead of requiring.**
+- **Pin the viewer's two restore conditions where the viewer is (D, task 8).**
+  `ZoomImageView` saves nothing without an `android:id`, and any placeholder with
+  an intrinsic size spends the restored zoom so the real image arriving afterwards
+  counts as a second image and resets to the fit (a `ColorDrawable`, intrinsic −1,
+  does not). Both measured. The plan's layout and dialog already satisfy them, but
+  they are written down only in another file's KDoc, and the task-8 brief mentions
+  neither "placeholder" nor "restore". One test in the dialog's own suite using
+  `scenario.recreate()` twice pins both conditions and the two-rotation case.
+
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
   owner of the cap, but the Stream A plan's task 6 is UDP recovery and does not
