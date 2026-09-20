@@ -40,6 +40,9 @@ class MumlaMediaSessionTest {
         override fun setTalking(talking: Boolean) { this.talking = talking }
         override fun stopTalking() {
             stopTalkingCalls++
+            // The same early exit HumlaMediaKeyTarget has. Without it this fake can do something
+            // the production target cannot, and a test asserting it would be measuring the fake.
+            if (!isConnected) return
             talking = false
         }
         override fun toggleSelfMute() = Unit
@@ -89,7 +92,11 @@ class MumlaMediaSessionTest {
 
         val state = mediaSession.playbackState!!
         assertThat(state.state).isEqualTo(PlaybackStateCompat.STATE_PLAYING)
+        // PLAY and PAUSE are advertised next to PLAY_PAUSE because AVRCP headsets that track
+        // their own play state send those two keycodes instead of the combined one.
         assertThat(state.actions and PlaybackStateCompat.ACTION_PLAY_PAUSE).isNotEqualTo(0L)
+        assertThat(state.actions and PlaybackStateCompat.ACTION_PLAY).isNotEqualTo(0L)
+        assertThat(state.actions and PlaybackStateCompat.ACTION_PAUSE).isNotEqualTo(0L)
     }
 
     @Test
@@ -327,6 +334,80 @@ class MumlaMediaSessionTest {
         assertThat(mediaSession.isActive).isTrue()
         assertThat(mediaSession.sessionToken).isEqualTo(token)
         assertThat(target.stopTalkingCalls).isEqualTo(0)
+        assertThat(target.isTalking).isTrue()
+    }
+
+    /**
+     * A [MediaSessionCompat] is a handle on a session registered with the system, and `release()`
+     * is the only thing that hands it back. Were it dropped instead, every connect/disconnect
+     * cycle and every switch to NONE would leave a live session behind, still advertising
+     * STATE_PLAYING and still taking play/pause away from every other app -- the exact damage this
+     * class exists to prevent. Nothing above the class can see it, because `isActive` and
+     * `sessionToken` read off the very reference that was dropped, so the session is handed in
+     * through the factory and the release is asserted on it.
+     */
+    @Test
+    fun givingUpTheSessionHandsItBackToTheSystem() {
+        val handedOut = mockk<MediaSessionCompat>(relaxed = true)
+        val owner = MumlaMediaSession(context, target, Settings.getInstance(context)) { _, _ ->
+            handedOut
+        }
+        owner.activate()
+
+        owner.deactivate()
+
+        verify(exactly = 1) { handedOut.release() }
+    }
+
+    /**
+     * The same question one object further out: the main looper holds our posted observer
+     * callbacks, and `detach` is the only place that can hand them back. `onConnected` arrives on
+     * the protocol thread and is posted; `MumlaService.onDestroy` runs `detach` on main. A post
+     * still queued at that moment would build a session *after* the only code that could release
+     * it has run -- a live STATE_PLAYING session with no reference left anywhere.
+     */
+    @Test
+    fun aConnectStillQueuedAtDetachDoesNotOutliveIt() {
+        var built = 0
+        var observer: IHumlaObserver? = null
+        val owner = MumlaMediaSession(context, target, Settings.getInstance(context)) { c, tag ->
+            built++
+            MediaSessionCompat(c, tag)
+        }
+        val service = serviceCapturing { observer = it }
+        owner.attach(service)
+        val worker = Thread { observer!!.onConnected() }
+        worker.start()
+        worker.join()
+
+        owner.detach(service)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertThat(built).isEqualTo(0)
+        assertThat(owner.sessionToken).isNull()
+    }
+
+    /**
+     * What `stopTalking` reaches on the main path, stated with its scope rather than as a promise.
+     * `HumlaMediaKeyTarget.stopTalking` returns immediately while the service is disconnected, and
+     * `mConnectionState` is already DISCONNECTED before `onDisconnected` fires (spec 4.1) -- so on
+     * `onDisconnected -> deactivate -> releaseSession` the talking state is *not* cleared here.
+     * The fake carries the same early exit, so no test in this file can claim a reach the
+     * production target does not have. Closing this window is stream A's job, in
+     * `HumlaService.onConnectionDisconnected`.
+     */
+    @Test
+    fun onDisconnectedTheTalkingStateIsLeftToStreamA() {
+        var observer: IHumlaObserver? = null
+        mediaSession.attach(serviceCapturing { observer = it })
+        observer!!.onConnected()
+        target.setTalking(true)
+
+        target.isConnected = false // as HumlaService already has it when onDisconnected fires
+        observer!!.onDisconnected(null)
+
+        assertThat(mediaSession.isActive).isFalse()
+        assertThat(target.stopTalkingCalls).isEqualTo(1)
         assertThat(target.isTalking).isTrue()
     }
 

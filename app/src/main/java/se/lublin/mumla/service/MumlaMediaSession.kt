@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.view.KeyEvent
@@ -26,15 +27,26 @@ import se.lublin.mumla.Settings
  * All state is confined to the main thread: [attach], [detach], [activate], [deactivate] and the
  * properties must be called there; the Humla observer posts to the main looper if needed.
  */
-class MumlaMediaSession(
+class MumlaMediaSession @JvmOverloads constructor(
     private val context: Context,
     private val target: MediaKeyTarget,
     private val settings: Settings,
+    /**
+     * The seam that makes the held session observable. [MediaSessionCompat] is a handle on a
+     * session registered with the system and [MediaSessionCompat.release] is the only thing that
+     * gives it back, but nothing above this class can see whether that happened: [isActive] and
+     * [sessionToken] both read off the reference, so dropping the reference looks exactly like
+     * releasing it. A test that wants to assert the release has to be handed the session.
+     */
+    private val sessionFactory: (Context, String) -> MediaSessionCompat = ::MediaSessionCompat,
 ) {
     private val handler = MediaKeyHandler(settings, target)
     private val mainHandler = Handler(Looper.getMainLooper())
     private var session: MediaSessionCompat? = null
     private var connected = false
+
+    /** Identifies this instance's posts on [mainHandler] so [detach] can drop just those. */
+    private val OBSERVER_POSTS = Any()
 
     /** Public for tests; the framework calls it on [mainHandler]. */
     val callback: MediaSessionCompat.Callback = object : MediaSessionCompat.Callback() {
@@ -89,6 +101,13 @@ class MumlaMediaSession(
         service.unregisterObserver(observer)
         PreferenceManager.getDefaultSharedPreferences(context)
             .unregisterOnSharedPreferenceChangeListener(preferenceListener)
+        // The main looper is holding state of ours too: every observer callback [onMain] posted
+        // and has not run yet. Unregistering stops new ones, not queued ones, and a queued
+        // onConnected running after this point would build a session after the only code that
+        // could release it has finished -- so it is dropped here, by the token it was posted
+        // under. Scoped to that token on purpose: [mainHandler] is also the handler the framework
+        // dispatches media buttons on, and those are not ours to cancel.
+        mainHandler.removeCallbacksAndMessages(OBSERVER_POSTS)
         deactivate()
     }
 
@@ -111,7 +130,12 @@ class MumlaMediaSession(
 
     private fun ensureSession() {
         if (session != null) return
-        session = MediaSessionCompat(context, TAG).apply {
+        session = sessionFactory(context, TAG).apply {
+            // Not mutation-tested, and it cannot be: dropping the handler makes
+            // MediaSessionCompat build its own from the calling thread's looper, and under
+            // Robolectric the calling thread *is* the main looper, so the two are the same
+            // object. It is passed explicitly because in production this runs on whatever thread
+            // the Humla observer fired on.
             setCallback(callback, mainHandler)
             setPlaybackState(
                 PlaybackStateCompat.Builder()
@@ -142,21 +166,33 @@ class MumlaMediaSession(
      * releases nothing must not reach into a talking state this class never set, and the pair
      * onDisconnected/onDestroy makes that the common case rather than a corner one.
      *
-     * This covers "the session went away" and "the user switched media keys off". It does *not*
-     * cover the reconnect: [MediaKeyTarget.stopTalking] is a no-op once the connection state has
-     * flipped, which it has before any observer runs. That hole is closed in HumlaService itself
-     * (stream A, spec 4.1), not here.
+     * Scope, because the bare sentence would promise more than it delivers:
+     * [MediaKeyTarget.stopTalking] is a no-op once the connection state has flipped, and
+     * `mConnectionState` is DISCONNECTED before any observer runs (spec 4.1). So this reaches the
+     * talking state in exactly the two cases where we are still connected while giving the session
+     * up -- the user switching the action to NONE, and onDestroy on a live connection. On the
+     * disconnect itself, and on the reconnect after it, it reaches nothing; that hole is closed in
+     * HumlaService (stream A, spec 4.1), not here.
      */
     private fun releaseSession() {
         val released = session ?: return
-        released.isActive = false
+        // No `isActive = false` before this. Measured against androidx.media 1.8.0:
+        // MediaSessionCompat.setActive is nothing but MediaSession.setActive, which moves the
+        // record inside the system's priority stack, while release() takes the record out of that
+        // stack altogether -- and release() does not call setActive itself. In-process there is no
+        // reader either, since the reference is dropped on the next line. It named no observable
+        // that release() does not already cover (spec 4.04), so it is gone rather than pinned.
         released.release()
         session = null
         target.stopTalking()
     }
 
     private fun onMain(block: () -> Unit) {
-        if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+        } else {
+            mainHandler.postAtTime(block, OBSERVER_POSTS, SystemClock.uptimeMillis())
+        }
     }
 
     private companion object {
