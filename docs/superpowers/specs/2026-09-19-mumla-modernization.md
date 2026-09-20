@@ -731,20 +731,36 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `getItem(position)` read two *different* snapshots — a user leaving between them
   is an `IndexOutOfBoundsException`. That was equally racy before the guarded model
   and copy-on-read does not fix it; the adapter has to hold one snapshot.
-- **Two facts the model now guarantees, for everyone who reads it (A, binding).**
-  These were settled in task 5 and would otherwise live only in a gitignored
-  ledger. (a) **The observer queue is bounded and folding**, so "nothing is ever
-  dropped" — task 2's contract — is no longer true: refresh events for one subject
-  fold in place, and the three tree-shape events may be dropped oldest-first when
-  the queue is over its bound, though never the newest of them and never at the
-  hands of an undroppable event. An observer must therefore treat a model event as
-  "read this again", never as a delta it accumulates. (b) **The channel tree is
-  finite and acyclic by construction**: `ModelHandler` refuses a `ChannelState`
-  whose parent is the channel itself or one of its descendants, and one that would
-  sit deeper than 256 below the root. The channel keeps its name and its place in
-  the map and simply has no parent — the same state as one whose parent frame has
-  not arrived yet. That is one guard at the frame boundary instead of a depth check
-  at every read, and it is why recursive walks of the tree need none.
+- **Two model facts, both corrected after measurement (A, binding).** I wrote the
+  first version of this entry from a task report and both halves were wrong. The
+  measured truth:
+  (a) **The observer queue is *not* bounded.** Trimming now runs only when the
+  arriving event is itself droppable — which fixed a real starvation bug, but means
+  the ceiling is `#undroppable + 1` and nothing bounds `#undroppable`. Twelve of
+  the nineteen observer events are undroppable, and two of them are bulk traffic
+  during a sync: a 5 000-user server produces **at least 10 000** of them
+  (`onUserConnected` plus an `onLogInfo` per user). Measured consequence: the
+  trim scan is no longer capped either — **2.1 ms inside one `dispatch()` while
+  holding the lock** in the real sync ordering, and **100 µs per enqueue in the
+  steady state against 0.2 µs before**, on a lock the protocol thread shares with
+  the audio thread. What *is* bounded is the population of the three tree-shape
+  events. A second, absolute ceiling is still owed, and until it exists the honest
+  statement is: **bounded in droppable events, unbounded in total, and the newest
+  tree-shape event is never dropped.** An observer must still treat a model event
+  as "read this again", never as a delta it accumulates.
+  (b) **A rejected parent is permanent, not "the same as one that has not arrived
+  yet".** `ModelHandler` refuses a `ChannelState` whose parent is the channel
+  itself or one of its descendants, or that would sit deeper than 256 below the
+  root — and that part is right, cheap (measured: 3.1 ms across a whole
+  5 000-frame sync even in the worst shape the guard permits, because the walk is
+  upward and depth-capped, not a subtree walk) and correctly placed at the one
+  bottleneck. But the channel is then parentless, `ChannelListAdapter` only ever
+  walks downward from the root channels, and nothing in the app iterates the
+  channel map — so **the channel and every user in it disappear from the list for
+  good**, with a `Log.w` as the only trace. The server does not resend that frame.
+  Ruling: attach a rejected channel to the **root** instead of leaving it
+  parentless. The tree stays finite and acyclic, and the channel stays visible in
+  the wrong place rather than invisibly absent.
 
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
