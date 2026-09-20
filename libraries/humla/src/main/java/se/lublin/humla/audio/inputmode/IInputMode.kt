@@ -15,27 +15,25 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.audio.inputmode;
+package se.lublin.humla.audio.inputmode
 
-/**
- * A talk state engine, providing information regarding when it is appropriate to send audio.
- * Created by andrew on 13/02/16.
- */
-public interface IInputMode {
+/** A talk state engine, providing information regarding when it is appropriate to send audio. */
+interface IInputMode {
     /**
      * Called when new input is received from the audio recording thread.
+     *
      * @param pcm PCM data.
-     * @param length The number of shorts in the PCM data.
+     * @param length the number of shorts in the PCM data.
      * @return true if the input should be transmitted.
      */
-    boolean shouldTransmit(short[] pcm, int length);
+    fun shouldTransmit(pcm: ShortArray, length: Int): Boolean
 
     /**
-     * Called before any audio processing to wait for a change in input availability.
-     * For example, a push to talk implementation will block the audio input thread until the
-     * button has been activated. Other implementations may do nothing.
+     * Called before any audio processing to wait for a change in input availability. For example,
+     * a push to talk implementation will block the audio input thread until the button has been
+     * activated. Other implementations may do nothing.
      *
-     * This function should return immediately when shouldTransmit is returning true.
+     * This function must return immediately while [shouldTransmit] is returning true.
      */
-    void waitForInput();
+    fun waitForInput()
 }
