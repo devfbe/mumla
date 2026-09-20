@@ -25,6 +25,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.capture.fakes.FakeCaptureSource
@@ -283,13 +284,14 @@ class AudioInputTest {
         val audioInput = start(source, joinTimeoutMs = 200)
         waitUntil("the capture thread started") { "start" in source.events }
 
-        val started = System.nanoTime()
         val exited = audioInput.stopRecording()
-        val elapsedMs = (System.nanoTime() - started) / 1_000_000
 
         assertThat(exited).isFalse()
-        assertThat(elapsedMs).isLessThan(1000)
         assertThat(audioInput.isRecording()).isFalse()
+        // It came back while the capture thread was still inside the read, which is the whole
+        // claim. A wall-clock bound would say it too and is the flake spec 4.05 warns about: at
+        // five times the join timeout it still fired once, under the load of a mutation sweep.
+        assertThat(source.events.count { it == "stop" }).isEqualTo(1)
     }
 
     /** Nothing to join is not a failure to join. */
@@ -300,6 +302,25 @@ class AudioInputTest {
 
         assertThat(audioInput.stopRecording()).isTrue()
         assertThat(audioInput.stopRecording()).isTrue()
+    }
+
+    /**
+     * Once the thread is joined the field is cleared, so a second stop is the same no-op as
+     * stopping something that never ran. Keeping the dead thread would make every later
+     * `stopRecording` stop the source again -- harmless on a fake, a second `AudioRecord.stop()`
+     * on a device.
+     */
+    @Test
+    fun `stopping twice does not touch the source a second time`() {
+        val source = FakeCaptureSource()
+        val audioInput = start(source)
+        waitUntil("the capture thread started") { "start" in source.events }
+        assertThat(audioInput.stopRecording()).isTrue()
+        val afterFirst = source.events.toList()
+
+        assertThat(audioInput.stopRecording()).isTrue()
+
+        assertThat(source.events).containsExactlyElementsIn(afterFirst).inOrder()
     }
 
     /**
@@ -361,18 +382,23 @@ class AudioInputTest {
     }
 
     /**
-     * A read racing a shutdown answers a negative code because the recorder is gone, which is not
-     * news: `AudioHandler` forwards every [CaptureState.Error] to the chat log (stream A8), so
-     * reporting this one means an error toast on every normal disconnect.
+     * A read that was already in flight when we stopped answers a negative code, because the
+     * recorder was taken away underneath it. That is not news: `AudioHandler` forwards every
+     * [CaptureState.Error] to the chat log (stream A8), so reporting it means a warning on every
+     * normal disconnect.
+     *
+     * The fixture is the whole test. Until [FakeCaptureSource] could answer a **negative** code
+     * after [FakeCaptureSource.stop] -- it answered 0, like a recorder that was stopped politely --
+     * this corner did not exist in any fixture, and the guard survived its mutation with all 296
+     * tests green (spec 4.04: a sweep inherits the blind spots of the fixture set).
      */
     @Test
-    fun `a read error after recording was stopped is not reported`() {
-        val source = FakeCaptureSource()
+    fun `a read that fails while we are stopping is not reported`() {
+        val source = FakeCaptureSource(codeAfterStop = AndroidAudioRecordSource.ERROR_RELEASED)
         val audioInput = start(source)
         waitUntil("the capture thread started") { "start" in source.events }
 
-        audioInput.shutdown()
-        Thread.sleep(50)
+        assertThat(audioInput.stopRecording()).isTrue()
 
         assertThat(states).isEmpty()
     }

@@ -38,6 +38,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * - **Reads ignore thread interrupts.** A native `AudioRecord.read` does; only `stop()` (or an
  *   error) ends one. A fake that returned on an interrupt would let `AudioInput.stopRecording`
  *   pass its test with the `source.stop()` call deleted.
+ * - **[codeAfterStop] is what an in-flight read answers once [stop] has run**, because a real one
+ *   can come back with a negative code rather than with 0 when the recorder is taken away
+ *   underneath it. Without it the corner "a read failed while we were already stopping" is
+ *   unreachable, and the guard that exists for exactly that corner survives every mutation.
  * - **[sampleRate] throws once [release] has run**, because `AudioRecord`'s accessors do. Without
  *   that, "the rate is cached, not read off a released recorder" is not a statement any test in
  *   this module can distinguish -- and the Java original's `getSampleRate()` dereferenced a field
@@ -48,6 +52,7 @@ class FakeCaptureSource(
     script: List<Read> = emptyList(),
     private val hangAfterStopMs: Long = 0,
     private val failStart: Boolean = false,
+    private val codeAfterStop: Int = 0,
 ) : PcmCaptureSource {
     /** One scripted answer from [read]. */
     sealed interface Read {
@@ -104,7 +109,7 @@ class FakeCaptureSource(
                     is Read.Code -> return next.value
                     null -> if (stopped) {
                         hangIgnoringInterrupts()
-                        return 0
+                        return codeAfterStop
                     }
                 }
             } catch (e: InterruptedException) {
