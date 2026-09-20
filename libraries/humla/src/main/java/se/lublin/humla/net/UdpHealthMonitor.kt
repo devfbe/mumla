@@ -42,6 +42,20 @@ package se.lublin.humla.net
  * it on evidence it already had. Two state changes inside one window are always a fault of the
  * procedure, never a state of the network.
  *
+ * **What the lockout costs, and it is paid in one direction more than the other.** It locks out the
+ * *reversal*, so a link that dies in the instant it was restored keeps the voice on UDP until the
+ * window is up. Measured against the shipped monitor (20 s window, 15 s ping timeout) on a history
+ * whose ping replies sit at the start of the window and stop there: the switch back to TCP is taken
+ * at 40 s with the lockout and at 25 s with the line deleted - **three TCP pings, 15 s, of voice
+ * that only goes one way**. It is a delay and not a loss: the lockout expires and the switch is
+ * taken at the first ping afterwards. It is also bounded by one window and scenario-dependent -
+ * four other histories in the same probe paid nothing, because the window trim had not yet rolled
+ * past the traffic that justified the restore and neither arm was decidable either way, so the trim
+ * was already charging what the lockout would have.
+ * [UdpHealthMonitorTest.aSwitchIsDelayedByAWholeWindowWhenTheLinkDiesRightAfterARestoration] is
+ * that measurement, and it is the second direction of one guard: the first,
+ * aDecisionIsNotReversedWithinOneWindowOfTakingIt, only ever drove restore-after-switch.
+ *
  * Two properties of the window that are scoped rather than guaranteed, both measured:
  *
  * - **The effective window widens across a gap in the TCP pings.** The head is kept until the

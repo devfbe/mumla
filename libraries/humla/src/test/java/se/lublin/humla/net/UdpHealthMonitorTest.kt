@@ -216,6 +216,35 @@ class UdpHealthMonitorTest {
     }
 
     /**
+     * The other direction of the same lockout, and the one that costs the user something: a link
+     * restored on evidence that sits at the start of the window, and dead from that instant on.
+     * The ping-timeout arm is decidable at 25 s - the trim has rolled the window past the two
+     * replies, so `carriesBothWays` is false and the last reply is 23 s old - and the lockout holds
+     * it until 40 s. Measured both ways: with the lockout line deleted the same history switches at
+     * 25 s, so the price is three TCP pings of one-way voice, and it is a delay rather than a loss.
+     *
+     * Written because the class doc named the rule and never its price, and because
+     * aDecisionIsNotReversedWithinOneWindowOfTakingIt drives only restore-after-switch: one guard,
+     * two directions, and the second had no test.
+     */
+    @Test
+    fun aSwitchIsDelayedByAWholeWindowWhenTheLinkDiesRightAfterARestoration() {
+        monitor.onUdpPingSent(seconds(0))
+        monitor.onUdpPingReply(seconds(1))
+        monitor.onUdpPingReply(seconds(2))
+        assertThat(monitor.onTcpPing(seconds(0), 0, 0, usingUdp = false)).isEqualTo(Decision.KEEP)
+        for (t in 5L..15L step 5) monitor.onTcpPing(seconds(t), 2, 2, usingUdp = false)
+        assertThat(monitor.onTcpPing(seconds(20), 2, 2, usingUdp = false)).isEqualTo(Decision.RESTORE_UDP)
+
+        // The link is dead from 20 s on: the counters stand still and no reply comes back.
+        assertThat(monitor.onTcpPing(seconds(25), 2, 2, usingUdp = true)).isEqualTo(Decision.KEEP)
+        assertThat(monitor.onTcpPing(seconds(30), 2, 2, usingUdp = true)).isEqualTo(Decision.KEEP)
+        assertThat(monitor.onTcpPing(seconds(35), 2, 2, usingUdp = true)).isEqualTo(Decision.KEEP)
+        assertThat(monitor.onTcpPing(seconds(40), 2, 2, usingUdp = true))
+            .isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
+    }
+
+    /**
      * The reply, not the first send, is what the timeout counts from once one has arrived. The
      * brief's test above cannot tell the two apart: its reply lands one second after the send, so
      * both references cross 15 s at the same ping. Here they cross ten seconds apart.
