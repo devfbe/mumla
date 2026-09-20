@@ -84,9 +84,17 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
         encodeListener: AudioHandler.AudioEncodeListener,
         outputListener: AudioOutput.AudioOutputListener,
     ): ManagedAudio = AudioHandlerAdapter(
-        builder(context, logger, config, params, encodeListener, outputListener)
-            .initialize(params.self, params.maxBandwidth, params.codec, params.targetId),
+        initialize(builder(context, logger, config, params, encodeListener, outputListener), params),
     )
+
+    /**
+     * The four per-session arguments, separated for the same reason as [builder]: on the far side
+     * of this call there is a microphone. `self` carries the session id that every voice packet is
+     * stamped with, so a wrong one is not a degraded pipeline but somebody else's audio.
+     */
+    @Throws(AudioException::class)
+    internal fun initialize(builder: AudioHandler.Builder, params: AudioSessionParams): AudioHandler =
+        builder.initialize(params.self, params.maxBandwidth, params.codec, params.targetId)
 
     /**
      * The config-to-builder mapping, split off from `initialize` so that a JVM test can read it

@@ -4,6 +4,8 @@ import android.media.AudioManager
 import android.media.MediaRecorder
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -124,6 +126,55 @@ class DefaultAudioHandlerFactoryTest {
         for (field in declared) {
             field.isAccessible = true
             assertThat(field.get(builder)).isEqualTo(expected.getValue(field.name))
+        }
+    }
+
+    /**
+     * The three boolean fields cannot all be distinct inside one fixture, so the fixture above
+     * cannot tell them apart - measured: reading `preprocessorEnabled` into `setBluetoothEnabled`
+     * survived it, because both were true there. Three patterns, chosen so that every pair differs
+     * in at least one of them. This is spec 4.04's fixture rule, applied to a test of my own.
+     */
+    @Test
+    fun theThreeBooleanBuilderFieldsAreNotInterchangeable() {
+        fun booleansOf(config: AudioConfig): Triple<Any?, Any?, Any?> {
+            val b = factory.builder(context, SilentLogger, config, params, encodeListener, outputListener)
+            fun read(name: String) =
+                AudioHandler.Builder::class.java.getDeclaredField(name).apply { isAccessible = true }.get(b)
+            return Triple(read("mBluetoothEnabled"), read("mPreprocessorEnabled"), read("mHalfDuplexEnabled"))
+        }
+
+        assertThat(
+            booleansOf(
+                AudioConfig(
+                    bluetoothActive = true, preprocessorEnabled = false,
+                    halfDuplexRequested = true, transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+                ),
+            ),
+        ).isEqualTo(Triple(true, false, true))
+        assertThat(
+            booleansOf(AudioConfig(bluetoothActive = false, preprocessorEnabled = true, halfDuplexRequested = false)),
+        ).isEqualTo(Triple(false, true, false))
+        assertThat(
+            booleansOf(
+                AudioConfig(
+                    bluetoothActive = true, preprocessorEnabled = false,
+                    halfDuplexRequested = false, transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+                ),
+            ),
+        ).isEqualTo(Triple(true, false, false))
+    }
+
+    /** The per-session arguments, which are the session identity and not just a setting. */
+    @Test
+    fun theSessionParamsAreWhatInitializeIsCalledWith() {
+        val builder = mockk<AudioHandler.Builder>(relaxed = true)
+        val session = params.copy(self = User(9, "someone"), maxBandwidth = 48_000, targetId = 3)
+
+        factory.initialize(builder, session)
+
+        verify(exactly = 1) {
+            builder.initialize(session.self, 48_000, HumlaUDPMessageType.UDPVoiceOpus, 3)
         }
     }
 
