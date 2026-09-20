@@ -610,7 +610,14 @@ class HumlaConnection @JvmOverloads constructor(
         disconnectRequested = true
         if (protocolThread.isAlive) {
             protocolHandler.post {
-                protocolHandler.removeCallbacks(pingRunnable)
+                // No removeCallbacks(pingRunnable) here. It was measured against its neighbours
+                // rather than on its own: deleting it alone leaves the suite green, deleting
+                // sendTCPMessage's `if (!isConnected) return` alone is KILLED(2), and deleting both
+                // is KILLED(2) - the same two tests and no more, so the two never masked each other
+                // and this one carried no observable of its own even with its neighbour gone. Two
+                // further mechanisms decide the same thing from the other direction:
+                // quitProtocolThread's quitSafely drops a delayed post that is not yet due, and
+                // sendUDPMessage's own isConnected check is pinned by Task 4.
                 tcp?.disconnect()
                 tcp = null
                 udp?.disconnect()
