@@ -16,22 +16,32 @@
  */
 package se.lublin.humla.model
 
-import java.util.Collections
-
+/**
+ * A channel of the server tree. Mutated on the protocol thread and read from the main thread (and
+ * from the binder thread `ChannelSearchProvider` runs on), so scalar fields are volatile, list
+ * mutations are synchronized and list reads return snapshots (spec A1, "guarded model").
+ *
+ * What a reader gets is a snapshot of one list, not of the tree: a channel can exist while its
+ * subchannels are still arriving, and that is deliberate. The alternative - a tree-wide lock held
+ * across a `ChannelState` frame - would make the protocol thread wait on every list read the UI
+ * takes, which is the cost task 4 exists to avoid. The UI already redraws on the next
+ * `onChannelAdded`, so a half-built subtree is a frame late, not wrong.
+ */
 class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false) : IChannel, Comparable<Channel> {
-    private var mId = id
-    private var mPosition = 0
-    private var mTemporary = temporary
-    private var mParent: Channel? = null
-    private var mName: String? = null
-    private var mDescription: String? = null
-    private var mDescriptionHash: ByteArray? = null
-    private val mSubchannels = ArrayList<Channel>()
-    private val mUsers = ArrayList<User>()
-    private val mLinks = ArrayList<Channel>()
-    private var mPermissions = 0
+    @Volatile private var mId = id
+    @Volatile private var mPosition = 0
+    @Volatile private var mTemporary = temporary
+    @Volatile private var mParent: Channel? = null
+    @Volatile private var mName: String? = null
+    @Volatile private var mDescription: String? = null
+    @Volatile private var mDescriptionHash: ByteArray? = null
+    @Volatile private var mPermissions = 0
+    private val mSubchannels = ArrayList<Channel>() // guarded by this
+    private val mUsers = ArrayList<User>() // guarded by this
+    private val mLinks = ArrayList<Channel>() // guarded by this
 
     /** @see User.setChannel */
+    @Synchronized
     internal fun addUser(user: User) {
         for (i in mUsers.indices) {
             if (user.compareTo(mUsers[i]) <= 0) {
@@ -43,11 +53,13 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     }
 
     /** @see User.setChannel */
+    @Synchronized
     internal fun removeUser(user: User) {
         mUsers.remove(user)
     }
 
-    override fun getUsers(): List<User> = Collections.unmodifiableList(mUsers)
+    @Synchronized
+    override fun getUsers(): List<User> = ArrayList(mUsers)
 
     override fun getId(): Int = mId
 
@@ -91,13 +103,15 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
         mDescriptionHash = descriptionHash
     }
 
-    override fun getSubchannels(): List<Channel> = Collections.unmodifiableList(mSubchannels)
+    @Synchronized
+    override fun getSubchannels(): List<Channel> = ArrayList(mSubchannels)
 
     /**
      * Inserts [channel] at its sorted position. A null channel is ignored: the server can name a
      * parent or a link we have no `ChannelState` for yet, and [ModelHandler] passes the lookup
      * result straight through.
      */
+    @Synchronized
     fun addSubchannel(channel: Channel?) {
         if (channel == null) return
         for (i in mSubchannels.indices) {
@@ -109,13 +123,16 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
         mSubchannels.add(channel)
     }
 
+    @Synchronized
     fun removeSubchannel(channel: Channel?) {
         if (channel != null) mSubchannels.remove(channel)
     }
 
-    override fun getLinks(): List<Channel> = Collections.unmodifiableList(mLinks)
+    @Synchronized
+    override fun getLinks(): List<Channel> = ArrayList(mLinks)
 
     /** @see addSubchannel for why a null channel is ignored rather than rejected. */
+    @Synchronized
     fun addLink(channel: Channel?) {
         if (channel == null) return
         for (i in mLinks.indices) {
@@ -127,23 +144,48 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
         mLinks.add(channel)
     }
 
+    @Synchronized
     fun removeLink(channel: Channel?) {
         if (channel != null) mLinks.remove(channel)
     }
 
-    fun clearLinks() {
+    /**
+     * Replaces the whole link set in one step, ignoring channels we have no `ChannelState` for yet.
+     *
+     * This exists instead of a `clearLinks()` the caller follows with N `addLink` calls, because
+     * that sequence made the emptied list visible to the main thread: `ChannelListAdapter`
+     * italicises a channel that is linked to ours (`:167`, `:172`), so a re-announced link set made
+     * the italics blink off and on. It is also the only shape of the operation a test can hold to
+     * account - the window in a `clear()` that another thread can observe is a few nanoseconds
+     * wide, while a half-rebuilt list lasts as long as the rebuild.
+     *
+     * The nested [addLink] calls re-enter this object's monitor, which is what keeps the rebuild
+     * atomic for every reader.
+     */
+    @Synchronized
+    fun setLinks(links: Collection<Channel?>) {
         mLinks.clear()
+        for (link in links) addLink(link)
     }
 
     /**
-     * Recursively fetches the subchannel user count.
+     * Recursively fetches the subchannel user count, holding one channel's lock at a time: the
+     * subchannels are copied under the lock and the recursion happens outside it, so no thread ever
+     * holds two channel locks at once. Nothing else in this class nests two locks, so no test can
+     * tell this apart from a plain `@Synchronized` today - it is here so that a later member that
+     * does take a second lock cannot turn this into a lock-order inversion.
+     *
      * FIXME: is it necessary to cache this?
      * @return The sum of users in this channel and its subchannels.
      */
     override fun getSubchannelUserCount(): Int {
-        var userCount = mUsers.size
-        for (sub in mSubchannels) userCount += sub.getSubchannelUserCount()
-        return userCount
+        val direct: Int
+        val subchannels: List<Channel>
+        synchronized(this) {
+            direct = mUsers.size
+            subchannels = ArrayList(mSubchannels)
+        }
+        return direct + subchannels.sumOf { it.getSubchannelUserCount() }
     }
 
     override fun getPermissions(): Int = mPermissions

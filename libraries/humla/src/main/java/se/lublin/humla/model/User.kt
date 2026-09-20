@@ -18,40 +18,45 @@ package se.lublin.humla.model
 
 import com.google.protobuf.ByteString
 
+/**
+ * A user of the server tree. Mutated on the protocol and audio threads and read from the main
+ * thread, so every field is volatile (spec A1, "guarded model"). A user owns no list; the list it
+ * appears in belongs to its [Channel].
+ */
 class User @JvmOverloads constructor(session: Int = 0, name: String? = null) : IUser, Comparable<User> {
-    private var mSession = session
-    private var mId = -1
-    private var mName: String? = name
-    private var mComment: String? = null
-    private var mCommentHash: ByteString? = null
-    private var mTexture: ByteString? = null
-    private var mTextureHash: ByteString? = null
-    private var mHash: String? = null
+    @Volatile private var mSession = session
+    @Volatile private var mId = -1
+    @Volatile private var mName: String? = name
+    @Volatile private var mComment: String? = null
+    @Volatile private var mCommentHash: ByteString? = null
+    @Volatile private var mTexture: ByteString? = null
+    @Volatile private var mTextureHash: ByteString? = null
+    @Volatile private var mHash: String? = null
 
-    private var mMuted = false
-    private var mDeafened = false
-    private var mSuppressed = false
+    @Volatile private var mMuted = false
+    @Volatile private var mDeafened = false
+    @Volatile private var mSuppressed = false
 
-    private var mSelfMuted = false
-    private var mSelfDeafened = false
+    @Volatile private var mSelfMuted = false
+    @Volatile private var mSelfDeafened = false
 
-    private var mPrioritySpeaker = false
-    private var mRecording = false
+    @Volatile private var mPrioritySpeaker = false
+    @Volatile private var mRecording = false
 
-    private var mChannel: Channel? = null
+    @Volatile private var mChannel: Channel? = null
 
-    private var mTalkState: TalkState = TalkState.PASSIVE
+    @Volatile private var mTalkState: TalkState = TalkState.PASSIVE
 
     // Local state
-    private var mLocalMuted = false
-    private var mLocalIgnored = false
+    @Volatile private var mLocalMuted = false
+    @Volatile private var mLocalIgnored = false
 
     /**
      * The number of samples normally available from the user. A Kotlin property rather than a
      * getter/setter pair because `AudioOutputSpeech` (Kotlin) reads and writes it as one; the
      * Java-visible names are unchanged.
      */
-    var averageAvailable = 0f
+    @Volatile var averageAvailable = 0f
 
     override fun getSession(): Int = mSession
 
@@ -175,7 +180,8 @@ class User @JvmOverloads constructor(session: Int = 0, name: String? = null) : I
         return mSession == (other as User).mSession
     }
 
-    override fun hashCode(): Int = mId
+    /** The session, consistent with [equals]. The user id is -1 until the server assigns one. */
+    override fun hashCode(): Int = mSession
 
     /**
      * Orders case-insensitively by name, with nameless users first. The Java original dereferenced

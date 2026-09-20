@@ -24,9 +24,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import se.lublin.humla.R;
 import se.lublin.humla.model.Channel;
@@ -54,16 +54,25 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
     private final List<Integer> mLocalIgnoreHistory;
     private final IHumlaObserver mObserver;
     private final HumlaLogger mLogger;
-    private ServerSettings mServerSettings;
-    private int mPermissions;
-    private int mSession;
+    // Written on the protocol thread, read from the main thread through IHumlaSession:
+    // getServerSettings() (HumlaService:1243) and getPermissions() (:928). An unsafely published
+    // ServerSettings reference can be seen half-initialised. mSession is protocol-thread-only
+    // today; it is volatile so that the class has one rule rather than two, and
+    // GuardedModelVisibilityTest keeps the rule from rotting.
+    private volatile ServerSettings mServerSettings;
+    private volatile int mPermissions;
+    private volatile int mSession;
 
     public ModelHandler(Context context, IHumlaObserver observer, HumlaLogger logger,
                         @Nullable List<Integer> localMuteHistory,
                         @Nullable List<Integer> localIgnoreHistory) {
         mContext = context;
-        mChannels = new HashMap<Integer, Channel>();
-        mUsers = new HashMap<Integer, User>();
+        // ConcurrentHashMap, not HashMap: getChannel()/getUser() are called from the main thread
+        // while the protocol thread puts, and a HashMap read during a rehash returns null for a
+        // key that is present (measured: 20 rounds out of 20). getChannel() returning a spurious
+        // null makes ChannelListAdapter.updateChannels() skip a root channel silently.
+        mChannels = new ConcurrentHashMap<Integer, Channel>();
+        mUsers = new ConcurrentHashMap<Integer, User>();
         mLocalMuteHistory = localMuteHistory;
         mLocalIgnoreHistory = localIgnoreHistory;
         mObserver = observer;
@@ -156,14 +165,16 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         }
 
         if(msg.getLinksCount() > 0) {
-            channel.clearLinks();
+            List<Channel> links = new ArrayList<Channel>(msg.getLinksCount());
             for(int link : msg.getLinksList()) {
-                Channel linked = mChannels.get(link);
-                channel.addLink(linked);
+                links.add(mChannels.get(link));
                 // Don't add this channel to the other channel's link list- this update occurs on
                 // server synchronization, and we will get a message for the other channels' links
-                // laster.
+                // later.
             }
+            // One replacement rather than a clear followed by adds: the main thread must not see
+            // the emptied list in between.
+            channel.setLinks(links);
         }
 
         if(msg.getLinksRemoveCount() > 0) {
