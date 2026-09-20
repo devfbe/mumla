@@ -36,12 +36,17 @@ class ChainedPreprocessorTest {
     }
 
     /**
-     * The order is the caller's, both ways round. The test above alone is also passed by a chain
-     * that reverses or sorts the list it is given, because there the caller's order and the
-     * arithmetic happen to agree; this one is the same chain with the stages swapped, so a chain
-     * that imposes an order of its own gets (x+1)*2 wrong in exactly one of the two.
+     * The same two stages the other way round, so the pass is not an artefact of one arithmetic.
      *
-     * It matters because the order is semantics, not taste: see the class KDoc on why echo
+     * It is honestly the weaker of the two, and the comment that used to stand here said the
+     * opposite: it claimed the test above alone is "also passed by a chain that reverses or sorts
+     * the list". Measured -- `stages.toTypedArray().reversedArray()` turns **three** tests red,
+     * the test above among them. On a two-stage chain every reordering this class could commit
+     * shows up in the first test as well, so nothing kills this one alone. It is a second sample,
+     * not a second pin, and calling it a second pin is what would let a later reader delete the
+     * first one.
+     *
+     * The order is semantics rather than taste either way: see the class KDoc on why echo
      * cancellation has to run before noise suppression.
      */
     @Test
