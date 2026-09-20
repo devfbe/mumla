@@ -1,6 +1,7 @@
 package se.lublin.mumla.chat
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import com.google.common.truth.Truth.assertThat
@@ -15,6 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.GraphicsMode
+import se.lublin.mumla.util.BitmapUtils
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -139,16 +141,74 @@ class OutgoingImagePreparerTest {
      */
     @Test
     fun theTargetSizeIsTheSameFitBitmapUtilsWouldHaveProduced() {
-        for ((width, height) in listOf(1200 to 800, 800 to 1200, 100 to 50, 600 to 400, 3000 to 1, 1 to 3000, 4000 to 3000)) {
+        val sizes = listOf(
+            1200 to 800, 800 to 1200, 100 to 50, 600 to 400, 600 to 399, 599 to 400,
+            600 to 31, 53 to 400, 3000 to 1, 1 to 3000, 4000 to 3000, 601 to 400, 600 to 401,
+        )
+        for ((width, height) in sizes) {
             val bounded = OutgoingImagePreparer.boundedSize(width, height, 600, 400)
-            val resized = se.lublin.mumla.util.BitmapUtils.resizeKeepingAspect(
-                android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888),
+            val resized = BitmapUtils.resizeKeepingAspect(
+                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888),
                 600,
                 400,
             )
             assertThat("${width}x$height -> ${bounded.width}x${bounded.height}")
                 .isEqualTo("${width}x$height -> ${resized.width}x${resized.height}")
         }
+    }
+
+    /**
+     * An image touching exactly one bound is inside both of them and must come back untouched.
+     * Falling through to the general fit instead looks harmless — the arithmetic aims at the same
+     * size — but it runs the ratio through a float divide, and that is where Task 5 found the old
+     * `<` bound handing back a 240x99 copy of a 240x100 image.
+     *
+     * The sizes here are not arbitrary and 600x399 is not enough. Enumerated for these bounds, a
+     * strict `width <` costs a pixel for **16** of the 400 possible heights and a strict `height <`
+     * for **30** of the 600 possible widths; the rest come back identical either way. 600x31 and
+     * 53x400 are the smallest member of each of those two sets, so each of the two clauses has a
+     * fixture that actually is its corner rather than one that merely looks like it.
+     */
+    @Test
+    fun anImageTouchingOnlyOneBoundIsLeftAlone() {
+        for ((width, height) in listOf(600 to 399, 599 to 400, 600 to 31, 53 to 400)) {
+            val bitmap = preparer.decode(TestImages.png(width, height))!!
+            assertThat("${width}x$height -> ${bitmap.width}x${bitmap.height}")
+                .isEqualTo("${width}x$height -> ${width}x$height")
+        }
+    }
+
+    /**
+     * The other side of that bound: one pixel over on either axis is out, and gets fitted.
+     */
+    @Test
+    fun onePixelOverEitherBoundIsFitted() {
+        val wide = preparer.decode(TestImages.png(601, 400))!!
+        assertThat("${wide.width}x${wide.height}").isEqualTo("600x399")
+
+        val tall = preparer.decode(TestImages.png(600, 401))!!
+        assertThat("${tall.width}x${tall.height}").isEqualTo("598x400")
+    }
+
+    /**
+     * The whole point of the change, in one number. A 4000x3000 photo is 48 000 000 bytes decoded
+     * whole, and the path this replaces decoded exactly that and then copied it again for the
+     * rotation before fitting it. Here the decoder is asked for the fitted size up front, so the
+     * bitmap that comes back is the only one this path allocates — 852 800 bytes, a factor of 56
+     * against the first of the old path's two full-size copies.
+     *
+     * What this test can and cannot say: it reads the size of the bitmap that was produced. The
+     * codec's own sampled intermediate lives inside Skia and no assertion here reaches it; from
+     * `ImageDecoder::setTargetSize` it is `computeSampleSize`'s result, which is within a factor of
+     * two of the target per axis. A heap delta would not help — §4.05 — and this class allocates no
+     * Java bitmap besides the returned one, which is the stronger statement anyway.
+     */
+    @Test
+    fun aTwelveMegapixelPhotoCostsOneBitmapTheSizeOfWhatIsKept() {
+        val bitmap = preparer.decode(TestImages.jpeg(4000, 3000))!!
+        assertThat("${bitmap.width}x${bitmap.height}").isEqualTo("533x400")
+        assertThat(bitmap.byteCount).isEqualTo(533 * 400 * 4)
+        assertThat(bitmap.byteCount.toLong() * 56).isLessThan(4000L * 3000L * 4L)
     }
 
     // ---- orientation: the platform decoder owns it ------------------------------------------
@@ -264,6 +324,28 @@ class OutgoingImagePreparerTest {
         assertThat(bitmap.height).isEqualTo(400)
         // The path this replaces opened the URI twice: once for the EXIF, once for the decode.
         assertThat(opens.get()).isEqualTo(1)
+    }
+
+    /**
+     * The stream is closed, not merely read to the end. Nothing else in this class reads that back,
+     * which is exactly why it is written down: a file descriptor left open on a content provider is
+     * invisible until there are enough of them.
+     */
+    @Test
+    fun prepareClosesTheStreamItOpened() = runTest {
+        val uri = uri("closed")
+        var closed = false
+        shadowOf(context.contentResolver).registerInputStreamSupplier(uri) {
+            object : ByteArrayInputStream(TestImages.png(100, 50)) {
+                override fun close() {
+                    closed = true
+                    super.close()
+                }
+            }
+        }
+
+        assertThat(preparer.prepare(uri)).isNotNull()
+        assertThat(closed).isTrue()
     }
 
     @Test

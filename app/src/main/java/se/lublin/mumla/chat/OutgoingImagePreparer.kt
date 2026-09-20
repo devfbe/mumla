@@ -44,6 +44,11 @@ class OutgoingImagePreparer(
     /**
      * Taken from the application context: [prepare] outlives the tap that started it, and a
      * resolver held from an Activity or Fragment context would hold that context with it.
+     *
+     * Unpinned, and the mutation that would pin it was run: replacing this with
+     * `context.contentResolver` changes no test, because under Robolectric the application *is*
+     * the context every test passes and the two expressions are the same object. It is not a
+     * behavioural line — it decides what this object keeps alive, not what it returns.
      */
     private val resolver: ContentResolver = context.applicationContext.contentResolver
 
@@ -57,6 +62,9 @@ class OutgoingImagePreparer(
      * letting someone pick a file, not exceptional ones.
      */
     suspend fun prepare(uri: Uri): Bitmap? {
+        // Optimisation, not a guard: bytes that could not be read would decode to null anyway
+        // (`decode(ByteArray(0))` is pinned), so this only saves a dispatch and a decoder. Measured:
+        // replacing `return null` with an empty array leaves all 34 tests green.
         val bytes = withContext(ioDispatcher) { read(uri) } ?: return null
         return withContext(decodeDispatcher) { decode(bytes) }
     }
@@ -72,9 +80,10 @@ class OutgoingImagePreparer(
      */
     private fun read(uri: Uri): ByteArray? =
         try {
-            // The null arm is the platform's documented @Nullable return. Robolectric's resolver
-            // cannot produce it — a supplier returning null falls through to a non-null stream —
-            // so it is the one branch in this file with no test behind it.
+            // The null arm is the platform's documented @Nullable return, and it is the one branch
+            // in this file no test reaches: Robolectric's resolver cannot produce it, because a
+            // registered supplier answering null falls through to a non-null stream. The mutation
+            // that would pin it (`?.` to `!!`) was run and left all 34 tests green.
             resolver.openInputStream(uri)?.use { it.readBytes() }
         } catch (e: IOException) {
             null
@@ -90,9 +99,14 @@ class OutgoingImagePreparer(
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
                 val target = boundedSize(info.size.width, info.size.height, maxWidth, maxHeight)
                 decoder.setTargetSize(target.width, target.height)
-                // Without this the decoder returns a HARDWARE bitmap (jni/ImageDecoder.cpp: the
-                // default allocator plus a non-mutable result is the hardware case), which the JPEG
-                // encoder has to read back from the GPU once per quality rung.
+                // Without this the decoder returns a HARDWARE bitmap on a device
+                // (`libs/hwui/jni/ImageDecoder.cpp`: `isHardware` is the default allocator together
+                // with a non-mutable result), which the JPEG encoder then reads back from the GPU
+                // once per quality rung, and which `getPixels` refuses outright.
+                // Unpinned and measured: deleting this line leaves all 34 tests green, because
+                // Robolectric has no GPU and hands back a software bitmap either way. Asserting
+                // `config != HARDWARE` here would pass with or without the line, which is a cover
+                // that does not exist rather than a test.
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
         } catch (e: IOException) {

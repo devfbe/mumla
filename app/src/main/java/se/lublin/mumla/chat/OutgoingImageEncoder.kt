@@ -68,6 +68,11 @@ object OutgoingImageEncoder {
             if (bitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream)) {
                 val jpeg = stream.toByteArray()
                 val html = imageHtml(jpeg)
+                // Three of the four corners of this two-boolean condition are written as tests; the
+                // fourth cannot exist. "No limit" means `maxMessageLength <= 0`, and `html` is never
+                // shorter than the 35 characters of markup around the payload, so "no limit and
+                // also fits" has no input. Measured: `||` mutated to `xor`, which differs on that
+                // corner alone, leaves all 34 tests green, while `&&` fails 7.
                 if (maxMessageLength <= 0 || html.length <= maxMessageLength) return jpeg to html
             }
             quality -= QUALITY_STEP
