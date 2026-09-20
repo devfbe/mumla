@@ -23,6 +23,15 @@ package se.lublin.humla.audio.native
  * Split into an interface so the capture-pipeline adapters can be unit-tested against a fake
  * without loading a native library.
  *
+ * **A handle may only be passed back to the object that issued it.** 0 is always safe, and
+ * [destroy] additionally refuses any value this library did not hand out, but [frameSize],
+ * [processCapture], [processRender] and [lastCaptureLevelDbfs] do not: they run on the audio
+ * threads, cannot afford the lock that check needs, and dereference whatever they are given. A
+ * [RnnoiseNative] handle (a different library with its own handle table), a field read before it
+ * was assigned, or two arguments swapped in an adapter is therefore a type-confused dereference
+ * or a segmentation fault in native code, with no Java stack trace. Keep each handle in one field
+ * of one owner.
+ *
  * **The two streams have to be fed in a fixed relation.** For every 10 ms tick:
  *
  * ```

@@ -21,11 +21,29 @@
  *     handle has to stay safe to dereference, which it cannot be if the cell it points at can
  *     come back as a different object. The cost is one heap cell per create() -- tens of bytes
  *     over an app's lifetime, since these objects are created per audio session, not per frame.
- *     Every cell stays reachable from the table, so LeakSanitizer does not report them.
+ *     Every cell stays reachable from the table, so LeakSanitizer does not report them. That
+ *     last part cuts both ways: nothing here bounds or reports the number of cells, and because
+ *     they stay reachable LSan will not either. A create() that ran away -- once per codec
+ *     switch, or worse per frame, instead of once per session -- would be invisible to every
+ *     check this repository has. The number to watch is calls to add(), not bytes.
  *
- * What this does NOT do is make release() safe to call *concurrently* with a process() call that
- * is already inside the native object. Closing that would mean either a lock on the audio path
- * or reference counting on every frame, and the audio thread in this app must not block. The
+ * What the table does NOT validate is the handle get() is given. release() checks membership in
+ * cells_ under the mutex before dereferencing, so a stale, mangled or foreign jlong is refused.
+ * get() runs on the audio thread, cannot take that mutex, and therefore dereferences whatever it
+ * is handed. The caller contract is consequently stricter than release() alone suggests:
+ *
+ *     A handle may only be passed back to the bridge that issued it.
+ *
+ * Each bridge has its own HandleTable in its own .so, so the RNNoise handle given to the APM
+ * bridge is a valid pointer to the wrong kind of cell -- a type-confused dereference that returns
+ * plausible nonsense -- and an invented or uninitialised jlong is a segmentation fault with no
+ * Java stack trace. The reachable ways to get there are a swapped argument in an adapter and a
+ * field read before it is assigned; both are Kotlin-side mistakes that no native check can catch
+ * without a lock or a side table on the audio path.
+ *
+ * What this does NOT do either is make release() safe to call *concurrently* with a process()
+ * call that is already inside the native object. Closing that would mean either a lock on the
+ * audio path or reference counting on every frame, and the audio thread must not block. The
  * contract therefore remains: whoever owns the handle stops feeding frames before releasing it.
  * The difference is that getting it slightly wrong -- releasing while a frame is queued, or
  * releasing twice -- is now an error code rather than heap corruption.
@@ -68,22 +86,31 @@ class HandleTable {
     }
 
     /** The object behind handle, or nullptr if the handle is 0 or has been released.
-     *  Lock-free; safe to call from the audio thread. */
+     *  Lock-free; safe to call from the audio thread.
+     *
+     *  handle MUST be 0 or a handle THIS table handed out. Unlike release() below, this does not
+     *  check membership -- it dereferences the value as a Cell*. See the caller contract in the
+     *  file comment. */
     void* get(jlong handle) const noexcept {
         if (handle == 0) return nullptr;
         return reinterpret_cast<const Cell*>(handle)->object.load(std::memory_order_acquire);
     }
 
     /** Takes the object out of the cell. Returns it to exactly one caller; every other call for
-     *  the same handle, and any handle this table did not hand out, returns nullptr. */
+     *  the same handle, and any handle this table did not hand out, returns nullptr.
+     *
+     *  This is the only entry point that validates its handle, because it is the only one that
+     *  can afford the mutex; get() cannot. */
     void* release(jlong handle) noexcept {
         if (handle == 0) return nullptr;
         Cell* cell = reinterpret_cast<Cell*>(handle);
         try {
             std::lock_guard<std::mutex> lock(mutex_);
             // Membership is checked before the cell is dereferenced, so a handle that never came
-            // from add() -- a stale jlong, a value mangled on the Kotlin side -- is rejected
-            // instead of being treated as a pointer.
+            // from THIS table -- a stale jlong, a value mangled on the Kotlin side, the other
+            // bridge's handle -- is rejected here instead of being treated as a pointer. This
+            // guard protects release() only: get() runs on the audio thread and cannot take the
+            // mutex, so it dereferences whatever it is given. See the file comment.
             if (cells_.find(cell) == cells_.end()) return nullptr;
         } catch (...) {
             return nullptr;
