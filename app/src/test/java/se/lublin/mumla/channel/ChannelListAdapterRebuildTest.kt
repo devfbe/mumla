@@ -2,6 +2,7 @@ package se.lublin.mumla.channel
 
 import android.content.Context
 import android.os.Bundle
+import android.graphics.Typeface
 import android.os.Looper
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -479,6 +480,37 @@ class ChannelListAdapterRebuildTest {
 
         user.selfDeafened = true
         assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_deafened)
+    }
+
+    /**
+     * The channel name carries two independent marks: bold for the channel we are in, italic for
+     * a channel linked with it -- and our own channel is italic too once it has any link.
+     */
+    @Test
+    fun theChannelNameIsBoldForOursAndItalicForALinkedOne() {
+        val (root, ids) = smallTree()
+        val ours = ids.getValue(2)
+        val linked = ids.getValue(1)
+        val adapter = adapterOver(root, ids)
+        every { session.sessionChannel } returns ours
+
+        assertThat(nameStyleOf(adapter, 2)).isEqualTo(Typeface.BOLD)
+        assertThat(nameStyleOf(adapter, 1)).isEqualTo(Typeface.NORMAL)
+
+        ours.addLink(linked)
+        linked.addLink(ours)
+
+        assertThat(nameStyleOf(adapter, 2)).isEqualTo(Typeface.BOLD_ITALIC)
+        assertThat(nameStyleOf(adapter, 1)).isEqualTo(Typeface.ITALIC)
+    }
+
+    private fun nameStyleOf(adapter: ChannelListAdapter, channelId: Int): Int {
+        val position = adapter.getChannelPosition(channelId)
+        val parent = recyclerView()
+        val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(position))
+        adapter.onBindViewHolder(holder, position)
+        return holder.itemView.findViewById<android.widget.TextView>(R.id.channel_row_name)
+            .typeface?.style ?: Typeface.NORMAL
     }
 
     private fun talkStateDrawableOf(adapter: ChannelListAdapter): Int {

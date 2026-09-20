@@ -149,7 +149,10 @@ class ChannelListAdapter(
 
             cvh.channelName.text = channel.name
 
-            var nameTypeface = Typeface.NORMAL
+            // Named flags rather than `or`: Typeface's styles are an @IntDef that lint refuses to
+            // see combined, and BOLD_ITALIC is the constant for the one combination that exists.
+            var bold = false
+            var italic = false
             val service = humlaService
             if (service != null && service.isConnected) {
                 val session = service.HumlaSession()
@@ -160,20 +163,29 @@ class ChannelListAdapter(
                     Log.d(TAG, "exception in onBindViewHolder: $e")
                 }
                 if (ourChan != null) {
+                    val links = channel.links
                     if (channel == ourChan) {
-                        nameTypeface = nameTypeface or Typeface.BOLD
+                        bold = true
                         // Always italicize our current channel if it has a link.
-                        if (channel.links.isNotEmpty()) {
-                            nameTypeface = nameTypeface or Typeface.ITALIC
+                        if (links.isNotEmpty()) {
+                            italic = true
                         }
                     }
                     // Italicize channels in a link with our current channel.
-                    if (channel.links.contains(ourChan)) {
-                        nameTypeface = nameTypeface or Typeface.ITALIC
+                    if (links.contains(ourChan)) {
+                        italic = true
                     }
                 }
             }
-            cvh.channelName.setTypeface(null, nameTypeface)
+            cvh.channelName.setTypeface(
+                null,
+                when {
+                    bold && italic -> Typeface.BOLD_ITALIC
+                    bold -> Typeface.BOLD
+                    italic -> Typeface.ITALIC
+                    else -> Typeface.NORMAL
+                },
+            )
 
             if (showChannelUserCount) {
                 cvh.channelUserCount.visibility = View.VISIBLE

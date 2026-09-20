@@ -29,7 +29,12 @@ class FakeChannel(
 
     private val users = mutableListOf<IUser>()
     private val subchannels = mutableListOf<FakeChannel>()
+    private val links = mutableListOf<IChannel>()
     private var parent: FakeChannel? = null
+
+    fun addLink(channel: IChannel) {
+        links.add(channel)
+    }
 
     fun addSubchannel(child: FakeChannel): FakeChannel {
         subchannels.add(child)
@@ -76,7 +81,7 @@ class FakeChannel(
         return count
     }
 
-    override fun getLinks(): List<IChannel> = emptyList()
+    override fun getLinks(): List<IChannel> = links
     override fun getPermissions(): Int = 0
 
     override fun equals(other: Any?): Boolean = other is FakeChannel && other.id == id
