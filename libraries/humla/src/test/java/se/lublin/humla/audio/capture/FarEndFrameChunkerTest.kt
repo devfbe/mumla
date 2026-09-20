@@ -34,17 +34,25 @@ import se.lublin.humla.audio.capture.fakes.RecordingFarEndSink
  * one of them is silent: every call still returns 0. The same is true one layer up here. A chunker
  * that drops a remainder, repeats a sample or reorders two frames produces a reference stream that
  * is *almost* the playback signal, and nothing above this file can tell. So the load-bearing test
- * is not the two hand-written cases; it is the one that pushes 4 096 buffers of pseudo-random
+ * is not the two hand-written cases; it is the one that pushes [PUSHES] buffers of pseudo-random
  * length, reassembles every delivered frame and compares the result against the source stream.
- * That is the JVM's version of the 21 dB measurement:
- * any misalignment at all is a mismatch, rather than a number that has to be far enough from
- * another number.
+ * That is the JVM's version of the 21 dB measurement: any misalignment at all is a mismatch,
+ * rather than a number that has to be far enough from another number.
  */
 class FarEndFrameChunkerTest {
     private companion object {
         /** Long enough that a misalignment cannot hide: about 1 000 frames, against the 700 the
          *  native AEC3 measurement needed before a swapped reference separated from a correct one. */
         const val PUSHES = 1_024
+
+        /**
+         * The largest push the production caller can make, in frames. `AudioOutput` sizes its mix
+         * buffer `minOf(minBufferSizeSamples, AudioHandler.FRAME_SIZE * 12)`, so a push is
+         * anywhere from 0 to 12 frames -- enumerated from the caller rather than from what looked
+         * like enough. The sweep used to stop at 2, which closes at most two frames per push and
+         * never exercises the loop body more than twice.
+         */
+        const val MAX_PUSH_FRAMES = 12
     }
 
     private val sink = RecordingFarEndSink()
@@ -102,23 +110,40 @@ class FarEndFrameChunkerTest {
     }
 
     /**
-     * The measurement. 4 096 pushes of pseudo-random length reassembled into one stream: every
+     * The measurement. [PUSHES] pushes of pseudo-random length reassembled into one stream: every
      * complete frame that could be built must have been delivered, in order, sample for sample,
      * and the remainder must still be waiting rather than lost or guessed at.
      *
-     * A dropped remainder, a repeated sample, a swapped pair of frames and an off-by-one in the
-     * copy length all break this and none of them break the two hand-written cases above.
+     * Measured, this seed and this configuration: **1 024 pushes, 3 019 317 samples, 6 290 frames
+     * delivered, 117 samples still pending.**
+     *
+     * **What the sweep is worth, measured rather than asserted.** Five mutations of
+     * `FarEndFrameChunker`, each applied and reverted on its own:
+     *
+     * | mutation                                             | tests red                        |
+     * |------------------------------------------------------|----------------------------------|
+     * | `available = minOf(length, samples.size)` -> `samples.size` | **1 -- this test alone**  |
+     * | `filled = 0` at the end of `push` (remainder dropped) | 3 -- this test and 2 hand cases  |
+     * | copy destination `filled` -> `0`                     | 3 -- this test and 2 hand cases  |
+     * | `while (offset < available)` -> `available - 1`      | 2 -- this test and 1 hand case   |
+     * | `analyzeReverseStream(pending)` -> `pending.copyOf()`| 1 -- `the same buffer is reused` |
+     *
+     * So the honest claim is not "four mutations, none of which the hand cases catch". It is:
+     * **exactly one of the five dies here and nowhere else**, three die here *and* at a hand case,
+     * and the fifth is about a different guard altogether. One is enough -- the length trim is the
+     * production caller's own bug class -- and this test is also the only one that reports *where*
+     * a divergence starts.
      */
     @Test
     fun `the delivered stream is the pushed stream, sample for sample, over random buffer sizes`() {
         val frameSize = 480
         val chunker = FarEndFrameChunker(frameSize, sink)
         val random = Random(20260920L)
-        val pushed = ShortArray(PUSHES * (2 * frameSize + 1))
+        val pushed = ShortArray(PUSHES * (MAX_PUSH_FRAMES * frameSize + 1))
         var pushedCount = 0
 
         repeat(PUSHES) {
-            val length = random.nextInt(2 * frameSize + 1)
+            val length = random.nextInt(MAX_PUSH_FRAMES * frameSize + 1)
             val buffer = ShortArray(length + random.nextInt(8)) { random.nextInt().toShort() }
             System.arraycopy(buffer, 0, pushed, pushedCount, length)
             pushedCount += length
@@ -131,11 +156,18 @@ class FarEndFrameChunkerTest {
         assertWithMessage("the chunker delivered %s samples of %s pushed", delivered, pushedCount)
             .that(delivered).isEqualTo(pushedCount / frameSize * frameSize)
 
-        // Index by index, reporting the first divergence. Handing two ~500 000-element lists to
-        // isEqualTo instead is a test that does not fail so much as stop: Truth renders both in
-        // the failure message, and the run that measured it hit the suite timeout with no output
-        // at all -- which is spec 4.05's "a removed guard can hang the suite instead of failing
-        // it", in a test rather than in a native bridge.
+        // Index by index, reporting the first divergence, because the obvious form is expensive
+        // in a way that is worth writing down. Measured here, both arms on the same machine:
+        // handing the two ~3 000 000-element sample lists to isEqualTo and introducing one
+        // single-sample divergence makes this test take **273 s** and emit a **43 MB** failure
+        // message -- against 0.1 s for this test and about 12 s for the whole module green.
+        // Truth renders both sequences, and that message then goes into the XML, the HTML report
+        // and the CI log.
+        //
+        // An earlier revision of this comment said the naive form "hit the suite timeout with no
+        // output at all". That is corrected: it does fail, with output, and under a per-test
+        // timeout shorter than 273 s it would be reported as a timeout rather than as the
+        // mismatch it is. The cost is real; the hang was not measured.
         var firstDivergence = -1
         var index = 0
         for (frame in sink.frames) {
@@ -179,7 +211,11 @@ class FarEndFrameChunkerTest {
         FarEndFrameChunker(4, sink).push(ShortArray(12), 12)
 
         assertThat(sink.buffers).hasSize(3)
-        assertThat(sink.buffers.distinct()).hasSize(1)
+        assertWithMessage(
+            "reference identity, not contents: `distinct()` on ShortArray compares by identity, " +
+                "which is the axis this pins -- three equal-but-separate arrays would fail here " +
+                "and no assertion about the samples could tell them apart"
+        ).that(sink.buffers.distinct()).hasSize(1)
     }
 
     /**

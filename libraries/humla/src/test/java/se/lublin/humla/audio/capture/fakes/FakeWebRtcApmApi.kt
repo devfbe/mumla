@@ -49,6 +49,13 @@ class FakeWebRtcApmApi(
     var captureError: Int = 0,
     var renderError: Int = 0,
     private val onCapture: (ShortArray) -> Unit = {},
+    /**
+     * Called for every far-end frame the bridge accepts. Its reason for existing is the *relation*
+     * between the two streams: [onCapture] and this one can write into one list, and the order
+     * that list ends up in is the only place the "render before the capture frame that carries its
+     * echo" rule is observable from Kotlin at all.
+     */
+    private val onRender: (ShortArray) -> Unit = {},
 ) : WebRtcApmApi {
     var failCreate = false
 
@@ -102,6 +109,7 @@ class FakeWebRtcApmApi(
         check(handle == HANDLE) { "unknown apm handle $handle" }
         if (frame.size < frameSize) return SHORT_FRAME
         renderFrames += frame.copyOf()
+        onRender(frame)
         return renderError
     }
 

@@ -36,8 +36,11 @@ package se.lublin.humla.audio.capture
  *
  * ### The copy is not an inefficiency
  *
- * [pending] is one buffer for the life of the chunker, so the playback thread allocates nothing
- * per frame. It is also never bypassed: handing the caller's own array to the sink when a push
+ * [pending] is one buffer for the life of the chunker, so [push] holds no allocation of its own.
+ * `CaptureThreadAllocationTest` measures it at **under 8.0 B per call** -- half the smallest
+ * object the JVM can allocate, which is the closest a heap-delta measurement gets to zero, and
+ * the reason "allocates nothing at all" is not a claim this file makes. It is also never
+ * bypassed: handing the caller's own array to the sink when a push
  * happens to be an exact multiple of [frameSize] would save a copy and put the APM's render-side
  * processing -- which **may modify the frame in place** -- into the buffer that is on its way to
  * the speaker.

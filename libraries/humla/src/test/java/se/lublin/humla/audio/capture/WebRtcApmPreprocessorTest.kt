@@ -29,6 +29,9 @@ class WebRtcApmPreprocessorTest {
     private companion object {
         const val FRAME = 480
 
+        /** Ten 10 ms ticks: long enough that a one-tick offset cannot land on the same answer. */
+        const val TICKS = 10
+
         /**
          * Two configs, not one, and these two rather than any two.
          *
@@ -246,6 +249,67 @@ class WebRtcApmPreprocessorTest {
     }
 
     // ------------------------------------------------------------------ handle ownership
+
+    // ------------------------------------------------------------- the two streams, in sequence
+
+    /**
+     * The one relation the rest of this file cannot see. Every other test drives one stream at a
+     * time, so the *content* of each direction is pinned and the **order between them** is not --
+     * and that order is the third of the three ways task 2 measured the reference signal being
+     * ruined ("fed 200 ms late", -0.63 dB residual against -22.32 dB, `tests/test_apm.c`). All
+     * three are silent: every call returns 0.
+     *
+     * What is in scope here and what is not. Who calls whom per tick is the *caller's* -- the
+     * playback thread pushes, the capture thread processes, and wiring them is task 10's. What
+     * this pins is that the stage adds nothing of its own in between: given the calls in the
+     * right order, the bridge sees them in the same order, in the same tick, with the far-end
+     * frame of tick n and not of tick n-1. A stage that buffered one far-end frame and forwarded
+     * it on the next tick would satisfy every other test in this file.
+     *
+     * Driven through a real [FarEndFrameChunker] rather than by calling the sink directly,
+     * because the chunker is what stands between the playback buffer and this frame in
+     * production, and an exact-multiple push is the case where it is closest to being skippable.
+     *
+     * **What it is worth, and what it is not.** Two mutations of `onFarEndFrame`, measured:
+     *
+     * | mutation                                                  | tests red |
+     * |-----------------------------------------------------------|-----------|
+     * | defer the frame one tick through a copy                    | 4 -- this test, `far-end frames are forwarded to the reverse stream`, `a far-end frame the apm refuses is counted rather than dropped in silence`, `CaptureThreadAllocationTest` |
+     * | forward the previous tick's samples in this tick's slot, allocation-free | 2 -- this test and `far-end frames are forwarded to the reverse stream` |
+     *
+     * So this is **not** the unique killer of either, and saying otherwise would be the thing
+     * §4.04 warns about. The reason is structural: this stage cannot get the *relation* wrong
+     * without also getting the far-end *content* wrong, and the content is already pinned. What
+     * this adds is that it is the only test in the module that drives both entry points
+     * **alternately**, so a later change that batches, queues or re-orders the two streams has
+     * something to break. The relation that is genuinely unpinned -- who calls whom per tick --
+     * belongs to whoever wires the playback thread to the capture thread, i.e. task 10, and it is
+     * in the ledger under that owner.
+     */
+    @Test
+    fun `each tick reaches the bridge as its far-end frame and then its near-end frame`() {
+        val order = mutableListOf<String>()
+        val api = FakeWebRtcApmApi(
+            onCapture = { order += "capture" },
+            onRender = { order += "render" },
+        )
+        val stage = WebRtcApmPreprocessor(api, WebRtcApmConfig.FOR_ECHO_CANCELLATION)
+        val chunker = FarEndFrameChunker(FRAME, stage)
+
+        repeat(TICKS) { tick ->
+            chunker.push(ShortArray(FRAME) { tick.toShort() }, FRAME)
+            stage.process(ShortArray(FRAME))
+        }
+
+        assertWithMessage("every tick is one far-end frame and then the near-end frame carrying its echo")
+            .that(order)
+            .containsExactlyElementsIn(List(TICKS) { listOf("render", "capture") }.flatten())
+            .inOrder()
+        assertWithMessage("tick n's reference frame, not tick n-1's: AEC3 absorbs one frame of slack and no more")
+            .that(api.renderFrames.map { it[0].toInt() })
+            .containsExactlyElementsIn(List(TICKS) { it })
+            .inOrder()
+    }
 
     /**
      * The walk `SingleHandleStageTest` asks every stage to repeat in its own suite. This is the
