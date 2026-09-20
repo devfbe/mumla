@@ -11,6 +11,7 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
 import java.io.FilterInputStream
+import java.io.IOException
 import java.io.InputStream
 
 @RunWith(RobolectricTestRunner::class)
@@ -53,9 +54,18 @@ class TcpFrameReaderTest {
         assertThat(next.data).isEmpty()
     }
 
+    /** Both bytes of the type are there, the stream ends inside the length field. */
     @Test
-    fun truncatedStreamThrowsEof() {
+    fun endOfStreamInsideTheLengthFieldThrowsEof() {
         val input = DataInputStream(ByteArrayInputStream(byteArrayOf(0, 7)))
+
+        assertThrows(EOFException::class.java) { HumlaTCP.readFrame(input) }
+    }
+
+    /** The stream ends after a single byte, halfway through the type field. */
+    @Test
+    fun endOfStreamInsideTheTypeFieldThrowsEof() {
+        val input = DataInputStream(ByteArrayInputStream(byteArrayOf(0)))
 
         assertThrows(EOFException::class.java) { HumlaTCP.readFrame(input) }
     }
@@ -109,5 +119,48 @@ class TcpFrameReaderTest {
 
         assertThat(read.type).isEqualTo(last)
         assertThat(read.data).isEqualTo(byteArrayOf(5))
+    }
+
+    private fun header(type: Int, length: Int): ByteArray {
+        val bytes = ByteArrayOutputStream()
+        DataOutputStream(bytes).apply { writeShort(type); writeInt(length) }
+        return bytes.toByteArray()
+    }
+
+    /**
+     * A hostile or broken server can put anything in the length field. ByteArray(length) throws
+     * NegativeArraySizeException for a negative one, which is not an IOException, so it escaped the
+     * read loop's catch clauses into the default handler - process death on Android, and no
+     * onTCPConnectionFailed, so nothing would have reconnected either.
+     */
+    @Test
+    fun aNegativeLengthIsReportedAsAConnectionErrorRatherThanKillingTheReader() {
+        val input = DataInputStream(ByteArrayInputStream(header(3, -1)))
+
+        val thrown = assertThrows(IOException::class.java) { HumlaTCP.readFrame(input) }
+
+        assertThat(thrown).isNotInstanceOf(EOFException::class.java)
+    }
+
+    /** Mumble frames stay well below 8 MiB; a larger one must be refused before it is allocated. */
+    @Test
+    fun aLengthBeyondTheProtocolMaximumIsRefusedBeforeAllocating() {
+        val input = DataInputStream(ByteArrayInputStream(header(3, 8 * 1024 * 1024 + 1)))
+
+        val thrown = assertThrows(IOException::class.java) { HumlaTCP.readFrame(input) }
+
+        // Not an EOFException: the reader must reject the header, not try to read the payload.
+        assertThat(thrown).isNotInstanceOf(EOFException::class.java)
+    }
+
+    /** The largest frame the protocol allows is still a valid frame. */
+    @Test
+    fun aFrameOfExactlyTheProtocolMaximumIsAccepted() {
+        val payload = ByteArray(8 * 1024 * 1024)
+        val input = stream(frame(3, payload))
+
+        val read = HumlaTCP.readFrame(input)!!
+
+        assertThat(read.data.size).isEqualTo(payload.size)
     }
 }

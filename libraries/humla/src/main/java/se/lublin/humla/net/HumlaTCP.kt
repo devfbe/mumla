@@ -250,16 +250,26 @@ class HumlaTCP @JvmOverloads constructor(
     companion object {
         private val TAG = HumlaTCP::class.java.name
 
+        /** Largest frame the Mumble protocol allows; anything above it is a broken peer. */
+        private const val MAX_FRAME_LENGTH = 8 * 1024 * 1024
+
         /**
          * Reads one frame: int16 type, int32 length, payload. Returns null (payload consumed) for
-         * a type this client does not know, so the stream stays in sync. Lifted verbatim out of the
-         * Java read loop.
+         * a type this client does not know, so the stream stays in sync. Lifted out of the Java
+         * read loop, with the length field validated before it is used to allocate.
          */
         @JvmStatic
         @Throws(IOException::class)
         fun readFrame(input: DataInputStream): TcpFrame? {
             val messageType = input.readShort().toInt()
             val length = input.readInt()
+            // The peer controls this field. Allocating on it unchecked turns a negative value into
+            // a NegativeArraySizeException and a huge one into an OutOfMemoryError - neither is an
+            // IOException, so both would escape the read loop and take the process down instead of
+            // reporting a connection error the caller can reconnect from.
+            if (length < 0 || length > MAX_FRAME_LENGTH) {
+                throw IOException("Invalid frame length: $length")
+            }
             val data = ByteArray(length)
             input.readFully(data)
             val types = HumlaTCPMessageType.values()
