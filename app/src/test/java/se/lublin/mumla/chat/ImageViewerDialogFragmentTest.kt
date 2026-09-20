@@ -83,15 +83,45 @@ class ImageViewerDialogFragmentTest {
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     /**
-     * A tap that goes in through `View.dispatchTouchEvent`, the way a finger does, and **not**
-     * through `performClick()`: `performClick` calls the listener whatever the view's state is, so
-     * it cannot see a button that production has disabled. That is the shape spec 4.04 records as
-     * having hidden a `GONE` button from eleven tests at once.
+     * A tap that enters at the fragment's **root view** and is routed down to [id] by the ordinary
+     * hit-testing path, at coordinates inside the target's laid-out bounds.
+     *
+     * Three separate things, which the version this replaces ran together under "the way a finger
+     * does":
+     *  * **`isEnabled`.** [View.performClick] calls the listener whatever the view's state is, so
+     *    it cannot see a button production has disabled. Any `dispatchTouchEvent` can: the check
+     *    lives in `View.onTouchEvent`, which returns before `performClick`. The debounce
+     *    assertions here would hold with a tap aimed straight at the button.
+     *  * **Visibility.** That is the part a direct dispatch cannot see, because the filter lives in
+     *    the *parent* (`ViewGroup.canViewReceivePointerEvents`), not in the child. Entering at the
+     *    root is what makes a `GONE` button stop reporting -- and what stops a later test from
+     *    passing while the button it presses is unreachable.
+     *  * **Hit testing.** Coordinates inside the target's bounds, so a button laid out at 0x0
+     *    fails here rather than silently receiving a tap at (0, 0).
+     *
+     * The bounds check below is not decoration either: it is the assertion that the dialog's views
+     * really were measured and laid out, which is what makes the other two meaningful.
      */
-    private fun View.tap() {
+    private fun ImageViewerDialogFragment.tap(id: Int) {
+        val root = requireView()
+        val target = root.findViewById<View>(id)
+        assertThat(target.width).isGreaterThan(0)
+        assertThat(target.height).isGreaterThan(0)
+        var x = target.width / 2f
+        var y = target.height / 2f
+        var view: View = target
+        while (view !== root) {
+            x += view.left
+            y += view.top
+            view = view.parent as View
+        }
         val down = SystemClock.uptimeMillis()
-        dispatchTouchEvent(MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, 0f, 0f, 0))
-        dispatchTouchEvent(MotionEvent.obtain(down, down + 1, MotionEvent.ACTION_UP, 0f, 0f, 0))
+        val downEvent = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, y, 0)
+        val upEvent = MotionEvent.obtain(down, down + 1, MotionEvent.ACTION_UP, x, y, 0)
+        root.dispatchTouchEvent(downEvent)
+        root.dispatchTouchEvent(upEvent)
+        downEvent.recycle()
+        upEvent.recycle()
         idle()
     }
 
@@ -118,7 +148,12 @@ class ImageViewerDialogFragmentTest {
     private fun exportedFile(fragment: ImageViewerDialogFragment, name: String): File =
         File(fragment.requireContext().cacheDir, ImageShareExporter.DIRECTORY + "/" + name)
 
-    /** Robolectric never runs a layout pass for the dialog window, so the view is sized by hand. */
+    /**
+     * Sizes the image view by hand, for determinism rather than for necessity: the dialog's views
+     * *are* measured and laid out (attaching the decor happens inside `performTraversals`, which
+     * measures and lays out in the same pass), but at whatever size the window ends up with. The
+     * assertions below depend on a known 400x400, so it is set here instead of read.
+     */
     private fun ImageViewerDialogFragment.layOutTheImage(side: Int = 400) {
         image().layout(0, 0, side, side)
     }
@@ -179,7 +214,7 @@ class ImageViewerDialogFragmentTest {
         launched { fragment ->
             fragment.ioDispatcher = Dispatchers.Unconfined
             idle()
-            fragment.share().tap()
+            fragment.tap(R.id.image_viewer_share)
 
             val activity: Activity = fragment.requireActivity()
             val chooser = shadowOf(activity).nextStartedActivity
@@ -428,9 +463,9 @@ class ImageViewerDialogFragmentTest {
             fragment.ioDispatcher = exporting
             idle()
 
-            fragment.share().tap()
+            fragment.tap(R.id.image_viewer_share)
             assertThat(fragment.share().isEnabled).isFalse()
-            fragment.share().tap()
+            fragment.tap(R.id.image_viewer_share)
 
             exporting.release()
             idle()
@@ -466,7 +501,7 @@ class ImageViewerDialogFragmentTest {
             served = "not an image at all".toByteArray()
             runBlocking { loader!!.fetchBytes(other) }
 
-            fragment.share().tap()
+            fragment.tap(R.id.image_viewer_share)
 
             val send = sentIntent(fragment)
             assertThat(send.type).isEqualTo("image/png")
@@ -488,7 +523,7 @@ class ImageViewerDialogFragmentTest {
             idle()
             runBlocking { loader!!.fetchBytes(other) }
 
-            fragment.share().tap()
+            fragment.tap(R.id.image_viewer_share)
 
             assertThat(sentIntent(fragment).type).isEqualTo("image/png")
             assertThat(fetched.count { it == source }).isEqualTo(1)
@@ -563,7 +598,7 @@ class ImageViewerDialogFragmentTest {
         launched { fragment ->
             idle()
             assertThat(fragment.dialog?.isShowing).isTrue()
-            fragment.requireView().findViewById<View>(R.id.image_viewer_close).tap()
+            fragment.tap(R.id.image_viewer_close)
             assertThat(fragment.dialog?.isShowing ?: false).isFalse()
         }
     }
@@ -579,11 +614,10 @@ class ImageViewerDialogFragmentTest {
         installLoader(ioDispatcher = parked) { TestImages.png(8, 8) }
         launched { fragment ->
             idle()
-            val close = fragment.requireView().findViewById<View>(R.id.image_viewer_close)
             assertThat(fragment.progress().visibility).isEqualTo(View.VISIBLE)
             assertThat(fragment.dialog?.isShowing).isTrue()
 
-            close.tap()
+            fragment.tap(R.id.image_viewer_close)
 
             assertThat(fragment.dialog?.isShowing ?: false).isFalse()
         }
@@ -607,7 +641,7 @@ class ImageViewerDialogFragmentTest {
             blocking.deleteRecursively()
             blocking.writeBytes(ByteArray(1))
 
-            fragment.share().tap()
+            fragment.tap(R.id.image_viewer_share)
 
             assertThat(ShadowToast.getTextOfLatestToast())
                 .isEqualTo(fragment.getString(R.string.chat_image_load_failed))
