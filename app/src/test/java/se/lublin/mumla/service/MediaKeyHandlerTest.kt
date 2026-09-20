@@ -93,37 +93,81 @@ class MediaKeyHandlerTest {
         assertThat(target.muteToggles).isEqualTo(2)
     }
 
+    /**
+     * One press, one toggle -- and the toggle happens on the DOWN. The platform delivers a press
+     * as a DOWN/UP pair (see [longPressTakenByTheVoiceAssistantDoesNotToggle]), so the UP must be
+     * swallowed, not acted on, or every press would toggle twice and land back where it started.
+     */
     @Test
-    fun actionFiresOnceOnKeyUpOnly() {
-        handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK))
-        assertThat(target.isTalking).isFalse()
+    fun actionFiresOnceOnTheKeyDownOfAPress() {
+        assertThat(handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK)))
+            .isTrue()
+        assertThat(target.isTalking).isTrue()
 
         // a held key repeats ACTION_DOWN; repeats must not toggle
         handler.onKeyEvent(KeyEvent(0L, 0L, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK, 3))
-        assertThat(target.isTalking).isFalse()
-
-        handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK))
         assertThat(target.isTalking).isTrue()
+
+        // the UP belonging to the same press is consumed, but does not toggle back
+        assertThat(handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK)))
+            .isTrue()
+        assertThat(target.isTalking).isTrue()
+        assertThat(target.muteToggles).isEqualTo(0)
     }
 
     @Test
-    fun repeatedKeyUpIsConsumedWithoutToggling() {
-        val repeatedUp = KeyEvent(0L, 0L, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK, 1)
+    fun repeatedKeyDownIsConsumedWithoutToggling() {
+        val repeatedDown = KeyEvent(0L, 0L, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK, 1)
 
-        assertThat(handler.onKeyEvent(repeatedUp)).isTrue()
+        assertThat(handler.onKeyEvent(repeatedDown)).isTrue()
 
         assertThat(target.isTalking).isFalse()
         assertThat(target.muteToggles).isEqualTo(0)
     }
 
+    /**
+     * A canceled event never acts. Measured: nothing canceled reaches us through the media
+     * session, because AOSP's MediaSessionService drops canceled events before it dispatches
+     * them. The check is kept because this class is a pure function of the KeyEvent and a second
+     * feeder is planned -- the foreground Activity path, where canceled events are ordinary --
+     * and because the failure it prevents is an unattended open microphone.
+     */
     @Test
-    fun canceledKeyUpAfterLongPressIsConsumedWithoutToggling() {
-        // The system consumed the long press (voice assistant); the UP arrives with FLAG_CANCELED.
-        val canceledUp = KeyEvent(
-            0L, 0L, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK, 0, 0, 0, 0, KeyEvent.FLAG_CANCELED,
+    fun canceledKeyDownIsConsumedWithoutToggling() {
+        val canceledDown = KeyEvent(
+            0L, 0L, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK, 0, 0, 0, 0,
+            KeyEvent.FLAG_CANCELED,
         )
 
-        assertThat(handler.onKeyEvent(canceledUp)).isTrue()
+        assertThat(handler.onKeyEvent(canceledDown)).isTrue()
+
+        assertThat(target.isTalking).isFalse()
+        assertThat(target.muteToggles).isEqualTo(0)
+    }
+
+    /**
+     * A long press of the headset button belongs to the voice assistant, and the events that
+     * reach us afterwards must not toggle anything.
+     *
+     * This is the sequence the platform really delivers, read out of AOSP API 36
+     * (`MediaSessionService$SessionManagerImpl$KeyEventHandler`): for HEADSETHOOK and
+     * MEDIA_PLAY_PAUSE the service tracks the press itself, so the first DOWN is swallowed, the
+     * long-press DOWN (repeatCount 1, FLAG_LONG_PRESS) starts the assistant and ends the
+     * tracking, and every event after that -- the remaining DOWN repeats and the final UP -- is
+     * dispatched to our session unchanged. That UP carries repeatCount 0 and no FLAG_CANCELED:
+     * handleKeyEventLocked drops canceled events before dispatch, so a canceled event never
+     * arrives at all and cannot be what tells this case apart.
+     */
+    @Test
+    fun longPressTakenByTheVoiceAssistantDoesNotToggle() {
+        val downTime = 1_000L
+        // repeatCount 0 and 1 never reach the app; the service kept them for its own tracking.
+        handler.onKeyEvent(
+            KeyEvent(downTime, downTime + 600, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK, 2),
+        )
+        handler.onKeyEvent(
+            KeyEvent(downTime, downTime + 900, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK, 0),
+        )
 
         assertThat(target.isTalking).isFalse()
         assertThat(target.muteToggles).isEqualTo(0)
