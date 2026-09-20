@@ -346,6 +346,31 @@ Three handles follow from it:
    not at N call sites. One mechanism has one mutation; N guards have N mutations,
    of which N−1 tend to be invisible.
 
+**A surviving guard marks an unexplored dimension, not just an unpinned line.**
+When a condition survives mutation, do not only ask "can I pin this?" — ask **what
+else in this file branches on the same condition, and what am I about to add that
+branches on it?** A survivor says no test distinguishes the two sides of that
+condition, which is a statement about the whole input space, not about one line:
+every other branch on it is untested too, and any branch added on it is untested
+*by construction*.
+
+This cost a critical here. A merge of `ACTION_UP` and `ACTION_CANCEL` passed five
+individual mutations, all killed — because every test in the class ran in
+push-to-talk *hold* mode, where the merge is correct. In toggle mode, where
+`onTalkKeyUp()` **is** the action rather than a release, a cancelled gesture turned
+the microphone on and nothing took it back. The sweep was structurally incapable
+of seeing it: **a mutation sweep measures whether the tests can see a change, not
+whether a branch's discriminating input ever appears in any test.** All five
+mutants were sampled from the correct half of the behaviour space. And the tell
+was two methods below, in code written in the same round: a `!isPushToTalkToggle()`
+guard that had already survived its own mutation. The survivor was the map of the
+hole.
+
+The mechanical form, cheap enough to do every time: **for every setting or mode
+the file reads, grep the test class for a write of it.** A test class that never
+writes a preference the file reads is testing exactly one configuration, and the
+sweep will confirm whatever that configuration does.
+
 **Sweep by field, not by call path.** The three handles above all check a guard
 as it is written. They need the reverse sweep too: for every mutable field, grep
 every write and every read, and ask of each write whether any reader can tell it
