@@ -338,9 +338,16 @@ class HumlaCallbacks @JvmOverloads constructor(
      * Caller holds [lock]. Drops the index entries of an event that has just left [queue], whether
      * it was delivered or discarded.
      *
-     * Leaving a discarded [Policy.Fold] event in [folded] would be the failure that type exists to
-     * make unrepresentable one level down: the next refresh for that subject would fold into an
-     * event nobody holds any more and never be delivered at all.
+     * Leaving a [Policy.Fold] event in [folded] after it has left the queue costs more than the one
+     * refresh that is obvious: the index is keyed by *subject*, so the stale entry matches **every**
+     * later [onChannelStateUpdated]/[onUserStateUpdated] for that channel or user. Each of them
+     * folds into an event nobody holds any more and is never queued at all, so the subject gets no
+     * name, no comment, no mute symbol and no talk state for the rest of the connection, and
+     * `ChannelDescriptionFragment`/`UserCommentFragment` - which unregister on the single refresh
+     * they are waiting for - hang for good. It is the failure [Policy] makes unrepresentable one
+     * level down, and it is pinned from both call sites: see
+     * `HumlaCallbacksBoundTest.aRefreshThatWasDeliveredDoesNotSwallowTheNextOneForItsSubject` for
+     * the drain and `aRefreshTheCeilingDiscardedDoesNotSwallowTheNextOneToo` for [discard].
      *
      * [droppable] is popped rather than searched because every event that leaves the queue and is
      * droppable is [droppable]'s own head. The drain takes the queue's head; both ceilings take the

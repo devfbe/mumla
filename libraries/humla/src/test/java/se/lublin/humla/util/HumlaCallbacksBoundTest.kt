@@ -135,6 +135,65 @@ class HumlaCallbacksBoundTest {
         assertThat(recorder.channelStates).containsExactly("new")
     }
 
+    /**
+     * An event that has left the queue must leave the fold index with it, and the cost of getting
+     * that wrong is not one lost refresh. [HumlaCallbacks] keys the index by subject, so a stale
+     * entry is matched by *every* later refresh for that channel or user: each one folds into an
+     * event nobody holds any more and is never queued at all. The subject would go without a name,
+     * a comment, a mute symbol or a talk state for the rest of the connection, and
+     * `ChannelDescriptionFragment`/`UserCommentFragment`, which unregister on the single refresh
+     * they wait for, would hang for good.
+     *
+     * The two ways out of the queue are two call sites and are pinned separately: the drain takes
+     * the head here, and [aRefreshTheCeilingDiscardedDoesNotSwallowTheNextOneToo] has the absolute
+     * ceiling throw one away. Measured: dropping the fold branch of `forget()` left all 195 tests
+     * in this module green before these two existed, and with them each site fails alone - taking
+     * the index update out of the drain only fails this one ("expected [first, second] but was
+     * [first]"), out of `discard()` only the other ("expected [after] but was []").
+     */
+    @Test
+    fun aRefreshThatWasDeliveredDoesNotSwallowTheNextOneForItsSubject() {
+        val callbacks = HumlaCallbacks()
+        val recorder = Recorder()
+        callbacks.registerObserver(recorder)
+
+        thread { callbacks.onChannelStateUpdated(Channel(1, false).apply { setName("first") }) }.join()
+        mainLooper.idle()
+        assertThat(recorder.channelStates).containsExactly("first")
+
+        // Equal to the first one (same id), so it hits the same fold key - which is the point.
+        thread { callbacks.onChannelStateUpdated(Channel(1, false).apply { setName("second") }) }.join()
+        mainLooper.idle()
+
+        assertThat(recorder.channelStates).containsExactly("first", "second").inOrder()
+    }
+
+    /**
+     * The same, for the event the absolute ceiling throws away rather than delivers. The refresh
+     * below is the oldest thing in the queue and the only thing the ceiling is allowed to take, so
+     * the log flood behind it evicts exactly that one.
+     */
+    @Test
+    fun aRefreshTheCeilingDiscardedDoesNotSwallowTheNextOneToo() {
+        val callbacks = HumlaCallbacks(Handler(Looper.getMainLooper()), 10)
+        val recorder = Recorder()
+        callbacks.registerObserver(recorder)
+
+        thread {
+            callbacks.onChannelStateUpdated(Channel(1, false).apply { setName("evicted") })
+            repeat(callbacks.absoluteCeiling) { callbacks.onLogInfo("m$it") }
+        }.join()
+        mainLooper.idle()
+        // The setup, and not the point: the ceiling took the refresh and nothing else.
+        assertThat(callbacks.droppedEvents).isEqualTo(1)
+        assertThat(recorder.channelStates).isEmpty()
+
+        thread { callbacks.onChannelStateUpdated(Channel(1, false).apply { setName("after") }) }.join()
+        mainLooper.idle()
+
+        assertThat(recorder.channelStates).containsExactly("after")
+    }
+
     @Test
     fun theBoundDropsTheOldestTreeShapeEventAndKeepsTheNewest() {
         val callbacks = HumlaCallbacks(Handler(Looper.getMainLooper()), 10)
