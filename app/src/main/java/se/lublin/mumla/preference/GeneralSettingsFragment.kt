@@ -20,10 +20,14 @@ class GeneralSettingsFragment : MumlaPreferenceFragment() {
     // been created.
     private val bluetoothPermissionRequester: ActivityResultLauncher<String> =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            val enabled = bluetoothToggle.onPermissionResult(granted)
-            findPreference<CheckBoxPreference>(Settings.PREF_BLUETOOTH_SCO)?.isChecked = enabled
-            if (!enabled) {
-                Toast.makeText(requireContext(), R.string.grant_perm_bluetooth, Toast.LENGTH_LONG)
+            // Keep asking, stop gating (spec 4.1). See BluetoothScoToggle for why the answer does
+            // not decide the wish; the box follows the wish, and the toast says what a denial may
+            // cost on a device that enforces more than the annotations declare.
+            bluetoothToggle.onPermissionAnswered()
+            findPreference<CheckBoxPreference>(Settings.PREF_BLUETOOTH_SCO)?.isChecked =
+                bluetoothToggle.isEnabled
+            if (!granted) {
+                Toast.makeText(requireContext(), R.string.bluetooth_perm_denied, Toast.LENGTH_LONG)
                     .show()
             }
         }
@@ -46,8 +50,10 @@ class GeneralSettingsFragment : MumlaPreferenceFragment() {
                 BluetoothScoToggle.Result.Enabled, BluetoothScoToggle.Result.Disabled -> true
                 BluetoothScoToggle.Result.PermissionNeeded -> {
                     bluetoothPermissionRequester.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                    // Refusing the change is what keeps the box empty: the user has a checked
-                    // box or a working headset, never a checked box without one.
+                    // Refusing the change keeps the box empty until the dialog has been answered,
+                    // which is what makes P3's "asked before SCO is used" an ordering and not a
+                    // slogan: the callback above is what writes the wish, and the service starts
+                    // routing off that write.
                     false
                 }
             }

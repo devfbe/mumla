@@ -169,16 +169,17 @@ class GeneralSettingsBluetoothTest {
         assertThat(ShadowToast.getTextOfLatestToast()).isNull()
     }
 
+    /** Keep asking, stop gating (spec 4.1) -- the settings half of the same ruling. */
     @Test
-    fun denyingThePermissionLeavesItOffAndSaysWhatIsMissing() {
+    fun denyingThePermissionStillTurnsItOnAndSaysWhatItMayCost() {
         shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         checkBox().performClick()
 
         answerThePermissionDialog(granted = false)
 
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
-        assertThat(checkBox().isChecked).isFalse()
+        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(checkBox().isChecked).isTrue()
         assertThat(ShadowToast.getTextOfLatestToast())
-            .isEqualTo(app.getString(R.string.grant_perm_bluetooth))
+            .isEqualTo(app.getString(R.string.bluetooth_perm_denied))
     }
 }

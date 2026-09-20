@@ -134,5 +134,5 @@
     <string name="mediaButtonActionAuto">Toggle push-to-talk, or mute in the other transmit modes</string>
     <string name="mediaButtonActionMute">Toggle mute</string>
     <string name="bluetoothSco">Bluetooth headset</string>
-    <string name="bluetoothScoSum">Send and receive voice through a connected Bluetooth headset while you are connected to a server. This stays on across a dropped connection and is restored when the server is reconnected. Needs the Nearby devices permission.</string>
+    <string name="bluetoothScoSum">Send and receive voice through a connected Bluetooth headset while you are connected to a server. This stays on across a dropped connection and is restored when the server is reconnected. Asks for the Nearby devices permission; some devices will not route audio to a headset without it.</string>
 </resources>

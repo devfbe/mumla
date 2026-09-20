@@ -139,15 +139,19 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     // created.
     private val bluetoothPermissionRequester: ActivityResultLauncher<String> =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (!bluetoothToggle.onPermissionResult(granted)) {
+            // Keep asking, stop gating (spec 4.1): the dialog was raised because P3 asks for it,
+            // but its answer is about the permission, not about what the user wants, so the wish
+            // is stored either way. The toast says what a denial may cost on a device that
+            // enforces more than the platform's own annotations declare.
+            bluetoothToggle.onPermissionAnswered()
+            if (!granted) {
                 Toast.makeText(
-                    requireContext(), R.string.grant_perm_bluetooth, Toast.LENGTH_LONG,
+                    requireContext(), R.string.bluetooth_perm_denied, Toast.LENGTH_LONG,
                 ).show()
             }
-            // No invalidateOptionsMenu() here. A grant writes the preference, and that already
-            // arrives at onSharedPreferenceChanged below and redraws the item; a denial writes
-            // nothing and leaves an item that was never ticked. Deleting the call alone kept the
-            // whole suite green -- it was a second guard over the observable the first one holds.
+            // No invalidateOptionsMenu() here. The wish is written above, and that arrives at
+            // onSharedPreferenceChanged below and redraws the item. Deleting the call alone kept
+            // the whole suite green -- it was a second guard over the observable the first holds.
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {

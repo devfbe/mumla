@@ -16,6 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.audio.BluetoothScoReceiver
 import se.lublin.humla.net.HumlaConnection
+import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 
 /**
@@ -49,15 +50,24 @@ class MumlaServiceBluetoothTest {
         private var starts = 0
         private var stops = 0
 
+        /**
+         * An OEM that enforces `BLUETOOTH_CONNECT` on `android.media` although the platform's own
+         * annotation database declares it on `android.bluetooth.*` only. Absent from the database
+         * is not "never thrown anywhere", which is the whole reason the call is wrapped.
+         */
+        var refuses = false
+
         fun startCount(): Int = starts
         fun stopCount(): Int = stops
 
         override fun startBluetoothSco() {
             starts++
+            if (refuses) throw SecurityException("Need BLUETOOTH_CONNECT permission")
         }
 
         override fun stopBluetoothSco() {
             stops++
+            if (refuses) throw SecurityException("Need BLUETOOTH_CONNECT permission")
         }
     }
 
@@ -93,6 +103,12 @@ class MumlaServiceBluetoothTest {
 
     private fun preferences() = PreferenceManager.getDefaultSharedPreferences(app)
 
+    /** The chat log, which is where the service reports what the user has to act on. */
+    private fun warnings(): List<String> =
+        service.messageLog.filterIsInstance<IChatMessage.InfoMessage>()
+            .filter { it.type == IChatMessage.InfoMessage.Type.WARNING }
+            .map { it.body }
+
     @Test
     fun synchronizingTurnsTheHeadsetBackOnWhenItWasAskedFor() {
         settings.setBluetoothScoEnabled(true)
@@ -114,15 +130,68 @@ class MumlaServiceBluetoothTest {
         assertThat(receiver.startCount()).isEqualTo(0)
     }
 
+    /**
+     * Keep asking, stop gating -- the ruling in spec 4.1. The permission is still requested at
+     * both places the user can flip the switch, because P3 says so and because the store listing
+     * has carried the Nearby-devices entry since task 2; but a denial is an answer about the
+     * permission, not about what the user wants. Measured against the SDK's own annotation
+     * database: of 26 annotated `AudioManager` members exactly four carry a `RequiresPermission`
+     * and `startBluetoothSco()` is not among them, and `BLUETOOTH_CONNECT` appears on 136
+     * members, none of them in `android.media`. Gating here took a working headset away from
+     * every user who tapped "deny", and before this task the item asked for nothing at all.
+     */
     @Test
-    fun synchronizingDoesNotRouteAWishWhosePermissionWasRevoked() {
+    fun synchronizingRoutesTheStoredWishEvenWithoutThePermission() {
         settings.setBluetoothScoEnabled(true)
         shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         connect()
 
         service.onConnectionSynchronized()
 
-        assertThat(receiver.startCount()).isEqualTo(0)
+        assertThat(receiver.startCount()).isEqualTo(1)
+    }
+
+    /**
+     * And the other side of the wrap: the platform is allowed to be stricter than its own
+     * annotations, so the call is caught rather than trusted. Once in the chat log, not once per
+     * reconnection -- the hook runs on every synchronization and auto-reconnect can run it a lot.
+     */
+    @Test
+    fun aDeviceThatRefusesScoIsReportedOnceAndDoesNotTakeTheServiceDown() {
+        settings.setBluetoothScoEnabled(true)
+        shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        receiver.refuses = true
+        connect()
+
+        service.onConnectionSynchronized()
+        service.onConnectionSynchronized()
+
+        assertThat(receiver.startCount()).isEqualTo(2)
+        assertThat(warnings()).containsExactly(app.getString(R.string.bluetooth_sco_refused))
+    }
+
+    @Test
+    fun aDeviceThatRefusesToStopScoDoesNotTakeTheServiceDownEither() {
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        settings.setBluetoothScoEnabled(true)
+        connect()
+        receiver.refuses = true
+
+        settings.setBluetoothScoEnabled(false)
+
+        assertThat(receiver.stopCount()).isEqualTo(1)
+        assertThat(warnings()).containsExactly(app.getString(R.string.bluetooth_sco_refused))
+    }
+
+    @Test
+    fun routingThatSucceedsSaysNothingInTheChatLog() {
+        settings.setBluetoothScoEnabled(true)
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        connect()
+
+        service.onConnectionSynchronized()
+
+        assertThat(warnings()).isEmpty()
     }
 
     // The four tests below never call onSharedPreferenceChanged themselves. MumlaService
@@ -154,14 +223,14 @@ class MumlaServiceBluetoothTest {
     }
 
     @Test
-    fun aWishWhosePermissionIsGoneStopsTheHeadsetRatherThanStartingIt() {
+    fun aWishWithoutThePermissionStartsTheHeadsetAnyway() {
         shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         connect()
 
         settings.setBluetoothScoEnabled(true)
 
-        assertThat(receiver.startCount()).isEqualTo(0)
-        assertThat(receiver.stopCount()).isEqualTo(1)
+        assertThat(receiver.startCount()).isEqualTo(1)
+        assertThat(receiver.stopCount()).isEqualTo(0)
     }
 
     @Test

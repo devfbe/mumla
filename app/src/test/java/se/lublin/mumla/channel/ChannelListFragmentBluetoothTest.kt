@@ -245,17 +245,48 @@ class ChannelListFragmentBluetoothTest {
         assertThat(prepared().isChecked).isTrue()
     }
 
+    /**
+     * Keep asking, stop gating (spec 4.1). The dialog is still raised -- P3 asks for it and the
+     * store listing has advertised the Nearby-devices entry since task 2 -- but the answer it
+     * gives is about the permission, not about what the user wants, and the media API the
+     * routing goes through carries no permission requirement in the platform's own annotation
+     * database. So the wish lands either way, the item ticks, and the toast says what a denial
+     * may cost on a device that enforces more than the annotations declare.
+     */
     @Test
-    fun denyingThePermissionLeavesTheWishOffAndSaysWhatIsMissing() {
+    fun denyingThePermissionStillStoresTheWishAndSaysWhatItMayCost() {
         shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         tapBluetooth()
+        val before = activity.invalidationCount()
 
         answerThePermissionDialog(granted = false)
 
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(prepared().isChecked).isTrue()
+        assertThat(activity.invalidationCount()).isGreaterThan(before)
         assertThat(ShadowToast.getTextOfLatestToast())
-            .isEqualTo(app.getString(R.string.grant_perm_bluetooth))
-        assertThat(prepared().isChecked).isFalse()
+            .isEqualTo(app.getString(R.string.bluetooth_perm_denied))
+    }
+
+    /**
+     * M2 from the review. Once the permission has been revoked behind the app's back the item
+     * needs two taps to recover and the first one switches the wish *off* -- that the item shows
+     * the wish and not the effective state is deliberate and is pinned by
+     * `theItemShowsTheStoredWishAndNotTheLiveScoState`. What was undecided was whether the second
+     * tap gets the user anywhere at all. Under the ruling it does, whatever the dialog answers.
+     */
+    @Test
+    fun theItemRecoversInTwoTapsAfterThePermissionWasRevoked() {
+        settings.setBluetoothScoEnabled(true)
+        shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+
+        assertThat(tapBluetooth().isChecked).isFalse()
+
+        tapBluetooth()
+        answerThePermissionDialog(granted = false)
+
+        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(prepared().isChecked).isTrue()
     }
 
     @Test

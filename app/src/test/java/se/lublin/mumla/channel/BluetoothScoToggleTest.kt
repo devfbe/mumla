@@ -19,12 +19,18 @@ import se.lublin.mumla.Settings
  * including the ones auto-reconnect recovers from, and nothing ever started it again. That is
  * the user's original complaint, and this class holds the half of the fix that is a setting.
  *
- * Both inputs this file branches on are swept over their full space rather than sampled:
- * `request` and `shouldRouteToBluetooth` each read two booleans, so each gets four corners
- * (spec 4.04: a clause sweep says nothing about the operator joining the clauses -- 2^k inputs,
- * not k mutations). Neither input comes from a hand-written fake: the preference is a real
- * `Settings` over Robolectric's SharedPreferences and the grant state is Robolectric's own
- * package manager, and every test writes both of them.
+ * The one input this file branches on is swept over its full space rather than sampled:
+ * `request` reads two booleans, so it gets four corners (spec 4.04: a clause sweep says nothing
+ * about the operator joining the clauses -- 2^k inputs, not k mutations). Neither input comes
+ * from a hand-written fake: the preference is a real `Settings` over Robolectric's
+ * SharedPreferences and the grant state is Robolectric's own package manager, and every test
+ * writes both of them.
+ *
+ * `shouldRouteToBluetooth` used to live here with four corners of its own, and is gone: under the
+ * ruling in spec 4.1 the routing follows the wish alone, so the second dimension no longer
+ * exists. It was deleted rather than pinned to `true` -- a gate that is always open is a gate
+ * somebody writes back in (4.04: removing state beats adding a guard). What the service reads now
+ * is `Settings.isBluetoothScoEnabled()`, pinned in `MumlaServiceBluetoothTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 class BluetoothScoToggleTest {
@@ -120,41 +126,26 @@ class BluetoothScoToggleTest {
         assertThat(settings.isBluetoothScoEnabled()).isFalse()
     }
 
-    // --- onPermissionResult(granted) ---
+    // --- onPermissionAnswered() ---
 
     @Test
-    fun aGrantedResultTurnsItOn() {
+    fun answeringTheDialogStoresTheWishThatRaisedIt() {
         deny()
         toggle.toggle()
+        assertThat(settings.isBluetoothScoEnabled()).isFalse()
 
-        val enabled = toggle.onPermissionResult(granted = true)
+        toggle.onPermissionAnswered()
 
-        assertThat(enabled).isTrue()
         assertThat(settings.isBluetoothScoEnabled()).isTrue()
     }
 
     @Test
-    fun aDeniedResultLeavesItOff() {
-        deny()
-        toggle.toggle()
+    fun answeringTheDialogTwiceLeavesItOn() {
+        // Idempotent, because the launcher can deliver a result the process death of an earlier
+        // request left pending, on top of the one the current tap asked for.
+        toggle.onPermissionAnswered()
+        toggle.onPermissionAnswered()
 
-        val enabled = toggle.onPermissionResult(granted = false)
-
-        assertThat(enabled).isFalse()
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
-    }
-
-    @Test
-    fun aDeniedResultDoesNotClearAWishThatIsAlreadyStored() {
-        // The answer is "the new enabled state", not "was it granted": a denial must not reach
-        // into the preference and switch off something the user asked for. Without this corner
-        // `return settings.isBluetoothScoEnabled()` and `return granted` are indistinguishable,
-        // and so are `if (granted) set(true)` and `set(granted)`.
-        settings.setBluetoothScoEnabled(true)
-
-        val enabled = toggle.onPermissionResult(granted = false)
-
-        assertThat(enabled).isTrue()
         assertThat(settings.isBluetoothScoEnabled()).isTrue()
     }
 
@@ -176,41 +167,5 @@ class BluetoothScoToggleTest {
 
         grant()
         assertThat(BluetoothScoToggle.hasPermission(app)).isTrue()
-    }
-
-    // --- shouldRouteToBluetooth: all four corners of (wanted, permitted) ---
-    //
-    // This is the decision MumlaService makes on every (re)connection and on every change of the
-    // preference while connected. The service hook has no logic of its own, so this is where the
-    // "Bluetooth survives a reconnect" behaviour of spec section 6 is pinned.
-
-    @Test
-    fun routesWhenWantedAndPermitted() {
-        settings.setBluetoothScoEnabled(true)
-        grant()
-
-        assertThat(BluetoothScoToggle.shouldRouteToBluetooth(app, settings)).isTrue()
-    }
-
-    @Test
-    fun doesNotRouteWhenThePermissionWasRevoked() {
-        settings.setBluetoothScoEnabled(true)
-        deny()
-
-        assertThat(BluetoothScoToggle.shouldRouteToBluetooth(app, settings)).isFalse()
-    }
-
-    @Test
-    fun doesNotRouteWhenTheWishIsOffEvenThoughItCould() {
-        grant()
-
-        assertThat(BluetoothScoToggle.shouldRouteToBluetooth(app, settings)).isFalse()
-    }
-
-    @Test
-    fun doesNotRouteWhenNeitherHolds() {
-        deny()
-
-        assertThat(BluetoothScoToggle.shouldRouteToBluetooth(app, settings)).isFalse()
     }
 }

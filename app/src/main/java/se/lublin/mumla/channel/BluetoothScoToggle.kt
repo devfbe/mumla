@@ -32,11 +32,27 @@ import se.lublin.mumla.Settings
  * `HumlaService.onConnectionDisconnected` on every drop, auto-reconnect included, and was never
  * re-established -- so a state that lives only in the audio stack cannot answer "did the user ask
  * for a headset?". The preference can, which is why it is the single source of truth and why
- * [shouldRouteToBluetooth] is re-evaluated on every synchronization rather than remembered.
+ * `MumlaService` re-reads it on every synchronization rather than remembering anything.
  *
- * Turning it on needs `BLUETOOTH_CONNECT`; [Result.PermissionNeeded] tells the caller to ask, and
- * nothing is persisted until [onPermissionResult] says it was granted. Turning it off never needs
- * anything -- a user who revoked the permission must still be able to switch the wish off.
+ * Turning it on raises the `BLUETOOTH_CONNECT` dialog first: [Result.PermissionNeeded] tells the
+ * caller to ask, and the wish is written once the dialog has been answered, by
+ * [onPermissionAnswered] -- whatever the answer was. That is the ruling in spec 4.1, *keep
+ * asking, stop gating*. The permission is requested because spec P3 requires it before SCO is
+ * used and because the store listing has carried the Nearby-devices entry since task 2; it is not
+ * a precondition of the routing, because the platform's own annotation database does not make it
+ * one: of 26 annotated `AudioManager` members exactly four carry a `RequiresPermission` and
+ * `startBluetoothSco()` is not among them, and of the 136 members annotated with
+ * `BLUETOOTH_CONNECT` none is in `android.media`. The same holds for `setCommunicationDevice`,
+ * which stream A's task 8 migrates to. Refusing to route without it would take a working headset
+ * away from everyone who taps "deny" -- and before this task the item asked for nothing at all.
+ *
+ * What the permission is still good for is the devices where the platform is stricter than its
+ * own annotations. "Absent from the annotation database" is not "never throws anywhere", so the
+ * caller of `enableBluetoothSco()` wraps it and reports a `SecurityException` in the chat log
+ * rather than trusting this.
+ *
+ * Turning it off never needs anything -- a user who revoked the permission must still be able to
+ * switch the wish off.
  */
 class BluetoothScoToggle(
     private val context: Context,
@@ -70,17 +86,15 @@ class BluetoothScoToggle(
     fun toggle(): Result = request(!settings.isBluetoothScoEnabled())
 
     /**
-     * Fold the outcome of the permission dialog into the preference.
+     * The permission dialog has been answered, so store the wish that raised it.
      *
-     * @return the wish as it stands afterwards. A denial changes nothing: it is an answer about
-     *   the permission, not about what the user wants, and [shouldRouteToBluetooth] already keeps
-     *   an unpermitted wish from reaching the audio stack.
+     * It takes no answer, and that is the point: nothing about the wish depends on one. A
+     * parameter here would be a gate waiting to be written back in, and the gate is what the
+     * ruling removed. The caller still has the answer from the launcher and uses it to say what
+     * a denial may cost.
      */
-    fun onPermissionResult(granted: Boolean): Boolean {
-        if (granted) {
-            settings.setBluetoothScoEnabled(true)
-        }
-        return settings.isBluetoothScoEnabled()
+    fun onPermissionAnswered() {
+        settings.setBluetoothScoEnabled(true)
     }
 
     companion object {
@@ -88,14 +102,5 @@ class BluetoothScoToggle(
         fun hasPermission(context: Context): Boolean =
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
                 PackageManager.PERMISSION_GRANTED
-
-        /**
-         * Whether the service should route voice through a Bluetooth headset right now: the user
-         * wants it *and* the permission is still there. Called by `MumlaService` on connection
-         * synchronization and on every change of the preference while connected.
-         */
-        @JvmStatic
-        fun shouldRouteToBluetooth(context: Context, settings: Settings): Boolean =
-            settings.isBluetoothScoEnabled() && hasPermission(context)
     }
 }

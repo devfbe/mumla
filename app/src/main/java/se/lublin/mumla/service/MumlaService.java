@@ -53,7 +53,6 @@ import se.lublin.humla.util.HumlaException;
 import se.lublin.humla.util.HumlaObserver;
 import se.lublin.mumla.R;
 import se.lublin.mumla.Settings;
-import se.lublin.mumla.channel.BluetoothScoToggle;
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver;
 import se.lublin.mumla.util.HtmlUtils;
 
@@ -94,6 +93,8 @@ public class MumlaService extends HumlaService implements
     private boolean mErrorShown;
     private List<IChatMessage> mMessageLog;
     private boolean mSuppressNotifications;
+    /** Set once a device has refused to route SCO, so the chat log says it once and not per reconnect. */
+    private boolean mBluetoothScoRefused;
 
     private TextToSpeech mTTS;
     private TextToSpeech.OnInitListener mTTSInitListener = new TextToSpeech.OnInitListener() {
@@ -398,8 +399,34 @@ public class MumlaService extends HumlaService implements
         // The Bluetooth headset is a stored wish, not a live state (spec P2): SCO is torn down
         // by onConnectionDisconnected on every dropped connection, auto-reconnect included, so
         // this is where it comes back.
-        if (BluetoothScoToggle.shouldRouteToBluetooth(this, mSettings)) {
-            enableBluetoothSco();
+        if (mSettings.isBluetoothScoEnabled()) {
+            applyBluetoothSco(true);
+        }
+    }
+
+    /**
+     * Start or stop the headset link, and survive a device that enforces BLUETOOTH_CONNECT on
+     * android.media although the platform's own annotation database declares it on
+     * android.bluetooth.* only (spec 4.1: keep asking, stop gating). Absent from the database is
+     * not "never thrown anywhere", so the call is wrapped rather than trusted.
+     *
+     * Reported once per service lifetime: this runs on every synchronization, and auto-reconnect
+     * can run it many times over one broken network. A chat log that repeats the same line after
+     * every reconnect buries the message it is trying to deliver.
+     */
+    private void applyBluetoothSco(boolean wanted) {
+        try {
+            if (wanted) {
+                enableBluetoothSco();
+            } else {
+                disableBluetoothSco();
+            }
+        } catch (SecurityException e) {
+            Log.w(TAG, "bluetooth sco refused by the platform: " + e);
+            if (!mBluetoothScoRefused) {
+                mBluetoothScoRefused = true;
+                logWarning(getString(R.string.bluetooth_sco_refused));
+            }
         }
     }
 
@@ -490,11 +517,7 @@ public class MumlaService extends HumlaService implements
                 break;
             case Settings.PREF_BLUETOOTH_SCO:
                 if (isSynchronized()) {
-                    if (BluetoothScoToggle.shouldRouteToBluetooth(this, mSettings)) {
-                        enableBluetoothSco();
-                    } else {
-                        disableBluetoothSco();
-                    }
+                    applyBluetoothSco(mSettings.isBluetoothScoEnabled());
                 }
                 break;
             case Settings.PREF_CERT_ID:
