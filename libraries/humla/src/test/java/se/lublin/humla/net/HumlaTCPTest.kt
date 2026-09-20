@@ -4,6 +4,7 @@ import android.net.SSLCertificateSocketFactory
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.Message
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
@@ -87,6 +88,19 @@ class HumlaTCPTest {
     private class Reading(source: InputStream, private val entered: CountDownLatch) : FilterInputStream(source) {
         override fun read(): Int { entered.countDown(); return super.read() }
         override fun read(b: ByteArray, off: Int, len: Int): Int { entered.countDown(); return super.read(b, off, len) }
+    }
+
+    /**
+     * Delivers for real, but runs [beforeQueueing] with the running post count first - at the one
+     * instruction post() has between reading disconnectReported and handing the callback to the
+     * handler. Handler.post is final, so the hook sits on the funnel every post goes through.
+     */
+    private class HookedHandler(looper: Looper, private val beforeQueueing: (Int) -> Unit) : Handler(looper) {
+        private val posts = AtomicInteger()
+        override fun sendMessageAtTime(msg: Message, uptimeMillis: Long): Boolean {
+            beforeQueueing(posts.incrementAndGet())
+            return super.sendMessageAtTime(msg, uptimeMillis)
+        }
     }
 
     private fun frame(type: HumlaTCPMessageType, payload: ByteArray = ByteArray(0)): ByteArray {
@@ -337,6 +351,56 @@ class HumlaTCPTest {
         awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
         assertThat(attempts.get()).isEqualTo(2)
         assertThat(listener.disconnects.get()).isEqualTo(2)
+    }
+
+    /**
+     * "Terminal" has to be decided when the callback is delivered, not when it is queued: post()
+     * reads disconnectReported and hands the callback to the handler as two separate steps, and a
+     * consumer calling disconnect() in between gets its terminal callback queued first, with the
+     * frame landing behind it. That is the same walk into a torn-down consumer as
+     * aFrameCompletingAfterTheDisconnectIsNotDelivered, only through a window two instructions
+     * wide - reproduced here exactly, by disconnecting from inside the frame's own post.
+     *
+     * Robolectric's main looper is paused, so nothing runs until the test idles it: the delivery
+     * order below is exactly the order the transport handed the callbacks over in.
+     */
+    @Test
+    fun aFrameQueuedWhileTheDisconnectRunsIsStillNotDelivered() {
+        val reading = CountDownLatch(1)
+        val queuedEstablished = CountDownLatch(1)
+        val toClient = PipedOutputStream()
+        val fromServer = Reading(PipedInputStream(toClient, 4096), reading)
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socket.inputStream } returns fromServer
+        every { socket.outputStream } returns ByteArrayOutputStream()
+        every { socketFactory.createSocket(any(), any()) } returns socket
+        mockkStatic(SSLCertificateSocketFactory::class)
+        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
+        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
+        lateinit var transport: HumlaTCP
+        // Post 1 is onTCPConnectionEstablished, post 2 the frame, post 3 the disconnect the hook
+        // itself triggers - after the frame passed the check in post(), before it is queued.
+        val handler = HookedHandler(Looper.getMainLooper()) { post ->
+            when (post) {
+                1 -> queuedEstablished.countDown()
+                2 -> transport.disconnect()
+            }
+        }
+        transport = newTransport(handler)
+
+        transport.connect("example.invalid", 64738, false)
+        assertThat(queuedEstablished.await(5, TimeUnit.SECONDS)).isTrue()
+        assertThat(reading.await(5, TimeUnit.SECONDS)).isTrue() // the read thread is inside readFrame
+        toClient.write(frame(HumlaTCPMessageType.Ping))
+        toClient.flush()
+
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        shadowOf(Looper.getMainLooper()).idle()
+        val main = Looper.getMainLooper().thread.name
+        assertThat(listener.next()).isEqualTo("established" to main)
+        assertThat(listener.next()).isEqualTo("disconnect" to main)
+        assertThat(listener.events).isEmpty() // the frame was queued behind the disconnect, not delivered
+        assertThat(listener.disconnects.get()).isEqualTo(1)
     }
 
     /**

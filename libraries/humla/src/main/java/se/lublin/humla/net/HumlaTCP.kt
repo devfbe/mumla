@@ -53,7 +53,9 @@ class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
  * onTCPConnectionDisconnect is delivered exactly once per [connect]: either by [disconnect], so the
  * caller hears about its own request immediately even while the read thread is still stuck in a
  * connect that has no timeout, or by the read loop when it ends on its own. It is also terminal -
- * no callback of this connection follows it, however far the read thread still has to unwind.
+ * no callback of this connection follows it, however far the read thread still has to unwind. That
+ * is decided when a callback is delivered, not when it is queued, so it holds for one that was
+ * already on its way when the disconnect happened.
  */
 class HumlaTCP @JvmOverloads constructor(
     private val socketFactory: HumlaSSLSocketFactory,
@@ -71,6 +73,14 @@ class HumlaTCP @JvmOverloads constructor(
     @Volatile private var running = false
     @Volatile private var connected = false
     private val disconnectReported = AtomicBoolean(true)
+
+    /**
+     * Set by the disconnect callback itself, on the callback handler, so [post] can tell a callback
+     * queued before the disconnect from one queued after it. [disconnectReported] cannot answer
+     * that: it flips when the disconnect is *queued*, and the failure report of a connect that
+     * never came up is queued before it and still has to be delivered.
+     */
+    private val disconnectDelivered = AtomicBoolean(false)
 
     /**
      * Held from [connect] until the read loop has fully unwound - which is later than [running]
@@ -97,6 +107,7 @@ class HumlaTCP @JvmOverloads constructor(
             this.port = port
             this.useTor = useTor
             disconnectReported.set(false)
+            disconnectDelivered.set(false)
             running = true
             sendExecutor = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-send") }
             // Publish the executor before handing the read loop to it: the loop's finally shuts it
@@ -242,7 +253,7 @@ class HumlaTCP @JvmOverloads constructor(
         // Only a callback that was actually queued consumes the token: post() returns false once
         // the handler's looper has quit, and a report dropped there must not suppress the read
         // loop's own attempt, or nobody reports the disconnect at all.
-        if (!deliver { it.onTCPConnectionDisconnect() }) disconnectReported.set(false)
+        if (!deliver { disconnectDelivered.set(true); it.onTCPConnectionDisconnect() }) disconnectReported.set(false)
     }
 
     private fun enqueueSend(block: () -> Unit) {
@@ -271,10 +282,18 @@ class HumlaTCP @JvmOverloads constructor(
      * parks inside readFrame and cannot see a disconnect that happens meanwhile, so a frame - or a
      * late onTCPConnectionEstablished - can still complete afterwards. The consumer has torn its
      * message handlers down by then, so anything arriving behind the disconnect is dropped here.
+     *
+     * The check below only skips work: what decides is [disconnectDelivered], read inside the
+     * posted runnable. Reading the flag and queueing the callback are two steps, and a disconnect()
+     * running to completion between them would queue the terminal callback first and this one
+     * behind it. Deciding at delivery - the handler is FIFO, so this callback ran before the
+     * disconnect or it did not - is what makes "terminal" hold literally rather than almost always.
+     * The disconnect report itself does not come through here; it goes straight to [deliver], or it
+     * would suppress itself.
      */
     private fun post(block: (TCPConnectionListener) -> Unit) {
         if (disconnectReported.get()) return
-        deliver(block)
+        deliver { if (!disconnectDelivered.get()) block(it) }
     }
 
     /** Returns true if the callback was queued on the handler. */
