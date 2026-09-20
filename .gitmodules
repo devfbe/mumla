@@ -16,3 +16,9 @@
 [submodule "libraries/humla/src/main/cpp/third_party/rnnoise"]
 	path = libraries/humla/src/main/cpp/third_party/rnnoise
 	url = https://github.com/xiph/rnnoise
+[submodule "libraries/humla/src/main/cpp/third_party/webrtc-audio-processing"]
+	path = libraries/humla/src/main/cpp/third_party/webrtc-audio-processing
+	url = https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing.git
+[submodule "libraries/humla/src/main/cpp/third_party/abseil-cpp"]
+	path = libraries/humla/src/main/cpp/third_party/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git

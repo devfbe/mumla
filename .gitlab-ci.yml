@@ -43,6 +43,13 @@ build:
     # green having run half of what it claims. HUMLA_REQUIRE_SANITIZERS (read by the tests'
     # CMakeLists) turns that into a configure error here, and --no-tests=error turns "ctest
     # matched no tests at all" into a failure rather than a pass.
+    #
+    # Both the plain and the sanitized tests run on every push. Measured when webrtc audio
+    # processing was added: the directory is 330 ninja edges, of which the sanitized half is 19
+    # -- it reuses the uninstrumented upstream objects and recompiles only the wrappers.
+    # Splitting it into `ctest -L plain` here and a scheduled `ctest -L sanitized` would save
+    # about 6% and give up the coverage on every push, so it is not worth doing. The labels
+    # exist should that ratio ever change.
     - nix develop "$DEVSHELL" --command env HUMLA_REQUIRE_SANITIZERS=1
         cmake -S libraries/humla/src/main/cpp/tests -B build/native-tests -G Ninja
     - nix develop "$DEVSHELL" --command cmake --build build/native-tests

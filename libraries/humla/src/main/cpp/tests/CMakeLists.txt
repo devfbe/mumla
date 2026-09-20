@@ -19,8 +19,8 @@ enable_testing()
 # meant to run, configuration fails instead of quietly shrinking.
 #
 # Configure-time failure rather than an expected-test-count assertion in CI, because a count has
-# to be edited in .gitlab-ci.yml every time a test is added here, and an assertion that is
-# routinely edited to match reality stops being an assertion.
+# to be edited in .gitlab-ci.yml every time a test is added here (this change alone adds two
+# entries), and an assertion that is routinely edited to match reality stops being an assertion.
 # The check below cannot drift from the guard it protects: it reads the same variable the guard
 # does. The other half of the fix lives in .gitlab-ci.yml, where ctest runs with
 # --no-tests=error so that a label selecting nothing fails instead of passing.
@@ -104,4 +104,55 @@ if(HUMLA_HAVE_SANITIZERS)
   target_link_libraries(test_rnnoise_asan PRIVATE humla_rnnoise_asan m)
 
   humla_add_labelled_test(rnnoise_sanitized test_rnnoise_asan sanitized)
+endif()
+
+# ---------------------------------------------------------------- webrtc audio processing
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../webrtc_apm ${CMAKE_BINARY_DIR}/webrtc_apm)
+
+# test_apm.c is C on purpose (see its header comment): it is the proof that humla_apm.h is valid
+# C and that the wrapper's symbols really have C linkage. CMake would therefore pick the C
+# driver to link it, which cannot resolve the C++ runtime that humla_apm and webrtc pull in, so
+# the link step is switched to the C++ driver explicitly.
+add_executable(test_apm test_apm.c)
+set_target_properties(test_apm PROPERTIES LINKER_LANGUAGE CXX)
+target_link_libraries(test_apm PRIVATE humla_apm m)
+humla_add_labelled_test(apm test_apm plain)
+
+if(HUMLA_HAVE_SANITIZERS)
+  # Only the wrapper is instrumented by default, not the ~200 upstream translation units:
+  # rebuilding those under ASan dominates the whole directory's build time (numbers in the task
+  # report), and the bug class this repository keeps hitting -- a handle used after free, a
+  # frame buffer written past its end across the JNI boundary -- lives in humla_apm.cpp and in
+  # its caller, not in upstream's DSP. ASan still sees every allocation humla_apm makes and
+  # every access the test performs, because the malloc interceptors are process-wide; what it
+  # cannot see is accesses made inside the uninstrumented upstream objects. Configure with
+  # -DHUMLA_SANITIZE_WEBRTC=ON when a suspected fault points in there.
+  option(HUMLA_SANITIZE_WEBRTC "Also instrument the vendored webrtc sources" OFF)
+
+  if(HUMLA_SANITIZE_WEBRTC)
+    get_target_property(HUMLA_APM_ASAN_SOURCES humla_apm SOURCES)
+  else()
+    set(HUMLA_APM_ASAN_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../webrtc_apm/humla_apm.cpp)
+  endif()
+
+  add_library(humla_apm_asan STATIC ${HUMLA_APM_ASAN_SOURCES})
+  # humla_apm_buildflags is the same INTERFACE target the real library uses, so the include
+  # dirs, the compile definitions and the abseil dependency cannot drift between the two.
+  target_link_libraries(humla_apm_asan PRIVATE humla_apm_buildflags)
+  target_include_directories(humla_apm_asan PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../webrtc_apm)
+  target_compile_options(humla_apm_asan PRIVATE
+      ${HUMLA_SAN_FLAGS} -fvisibility=hidden -Wno-deprecated-declarations)
+  target_link_options(humla_apm_asan PUBLIC -fsanitize=address,undefined)
+  if(NOT HUMLA_SANITIZE_WEBRTC)
+    # The uninstrumented upstream objects still have to come from somewhere. humla_apm.cpp is
+    # in both archives; the instrumented one is listed first so its definitions win.
+    target_link_libraries(humla_apm_asan PUBLIC humla_apm)
+  endif()
+
+  add_executable(test_apm_asan test_apm.c)
+  set_target_properties(test_apm_asan PROPERTIES LINKER_LANGUAGE CXX)
+  target_compile_options(test_apm_asan PRIVATE ${HUMLA_SAN_FLAGS})
+  target_link_libraries(test_apm_asan PRIVATE humla_apm_asan m)
+
+  humla_add_labelled_test(apm_sanitized test_apm_asan sanitized)
 endif()
