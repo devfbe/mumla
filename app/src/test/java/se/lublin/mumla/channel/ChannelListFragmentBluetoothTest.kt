@@ -36,8 +36,11 @@ import se.lublin.mumla.util.HumlaServiceProvider
  * The action-bar "Bluetooth" item, which is where the user's complaint starts: it used to call
  * `enableBluetoothSco()` on the live session and remember nothing, so the next dropped connection
  * -- `HumlaService.onConnectionDisconnected` stops SCO on every one of them -- took the headset
- * away and no reconnect brought it back. It also predates `BLUETOOTH_CONNECT` and never asked for
- * it, which on API 31 and up is a `SecurityException` waiting behind a menu tap.
+ * away and no reconnect brought it back. It also never asked for `BLUETOOTH_CONNECT`, which spec
+ * P3 requires before SCO is used and which the store listing has advertised as a Nearby-devices
+ * entry since task 2 -- note that it is *not* a crash today: the SDK annotation database puts no
+ * permission requirement on `AudioManager.startBluetoothSco()` at all (only `android.bluetooth.*`
+ * carries `BLUETOOTH_CONNECT`), so the gap was a promise to the user, not a SecurityException.
  *
  * What the item shows and what it writes are both the persistent preference now, so this class
  * pins the item against the stored wish rather than against the audio stack.
