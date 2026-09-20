@@ -38,7 +38,16 @@ import java.lang.management.ManagementFactory
 class CaptureThreadAllocationTest {
     private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
 
-    /** Allocates nothing itself, so what a chain of these measures is the chain. */
+    /**
+     * Allocates nothing itself, so what a chain of these measures is the chain.
+     *
+     * Note what that excludes, because 0.000 B here is easy to read as more than it is: the
+     * probability is a **pre-boxed** `Float?` held in a field, so returning it allocates nothing.
+     * A stage that *computes* a probability boxes 16 B per frame, which is a real cost this
+     * measurement deliberately does not contain -- spec §4.1 decided to pay it (about 4.8 KB/s for
+     * three stages) and says why. What is measured here is the skeleton: the chain, the lock, and
+     * the two entry points.
+     */
     private class SilentStage(private val probability: Float?) : CapturePreprocessor {
         var frames = 0
             private set
