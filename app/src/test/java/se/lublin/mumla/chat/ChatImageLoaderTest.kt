@@ -113,6 +113,11 @@ class ChatImageLoaderTest {
     /**
      * The classic RecyclerView failure: a row scrolls away and its job is cancelled while another
      * row is waiting on the very same fetch. The waiter must not be dragged down with it.
+     *
+     * Three callers, not two, and the survivors are compared **by identity**. `fetched` alone cannot
+     * tell this apart from a `shared` that never shares: the second fetch of the same source is
+     * served from the `lastBytes` memo, so it never reaches the fetcher and never shows up in that
+     * list. The same instance coming out of two separate awaits is what says one job produced it.
      */
     @Test
     fun cancellingOneCallerDoesNotCancelAnotherWaitingOnTheSameFetch() = runTest {
@@ -124,7 +129,8 @@ class ChatImageLoaderTest {
         val l = ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, work, Dispatchers.Unconfined, clock::get)
         val scrolledAway = async { l.loadThumbnail(url, 240, 240) }
         val stillVisible = async { l.loadThumbnail(url, 240, 240) }
-        runCurrent() // both are registered as waiters; the fetch is parked on `work`
+        val alsoStillVisible = async { l.loadThumbnail(url, 240, 240) }
+        runCurrent() // all three are registered as waiters; the fetch is parked on `work`
         assertThat(fetched).isEmpty()
 
         scrolledAway.cancel()
@@ -132,19 +138,31 @@ class ChatImageLoaderTest {
         work.scheduler.advanceUntilIdle()
         advanceUntilIdle()
 
-        assertThat(stillVisible.await()).isInstanceOf(ImageResult.Ready::class.java)
+        val survivor = stillVisible.await()
+        assertThat(survivor).isInstanceOf(ImageResult.Ready::class.java)
+        assertThat(alsoStillVisible.await()).isSameInstanceAs(survivor)
         assertThat(fetched).containsExactly(url)
     }
 
-    /** The other half: when the last caller is gone, the download must not run on regardless. */
+    /**
+     * The other half: when the last caller is gone, the download must not run on regardless.
+     *
+     * Two callers, so that "the last" means the last of several and the waiter count has to be a
+     * count rather than a flag. Losing the first one may not abandon anything; losing the second
+     * must. An empty `fetched` is a negative, so this half leans on the test above for the evidence
+     * that there was one shared job here at all.
+     */
     @Test
     fun cancellingTheLastCallerAbandonsTheFetch() = runTest {
         val work = StandardTestDispatcher(TestCoroutineScheduler())
         val l = ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, work, Dispatchers.Unconfined, clock::get)
         val scrolledAway = async { l.loadThumbnail(url, 240, 240) }
+        val alsoScrolledAway = async { l.loadThumbnail(url, 240, 240) }
         runCurrent()
 
         scrolledAway.cancel()
+        runCurrent()
+        alsoScrolledAway.cancel()
         runCurrent()
         work.scheduler.advanceUntilIdle()
 
