@@ -1014,7 +1014,43 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `AutomaticGainControl` as a settings toggle** — a binding sibling requirement the
   unqualified sentence contradicted. The high-pass helps the canceller and costs
   nothing.
-  **Second consequence, and it is not cosmetic: the VAD threshold moves.**
+  **Second consequence, measured in task 7 against the real APM, and it is not the
+  one this entry first predicted (B, binding).** 800 frames per point, read after
+  5 s of settling, three non-speech characters plus a speech-shaped signal:
+  - **The non-speech floor is now pinned rather than merely louder.** With the
+    APM's suppressor off, webrtc's own `AdaptiveDigital::max_output_noise_level_dbfs
+    = -50` binds, and a non-speech frame settles at **−45.0 dBFS whatever the input**
+    (−44.97 / −44.98 / −44.98 / −44.67 for low-passed noise at −60/−55/−50/−45 in).
+    With NS on it *tracked* the input: −61.9 / −56.6 / −51.1 / −45.6.
+  - **"Every non-speech frame measures louder" is false along the input-level axis.**
+    The shift is **+16.9 dB at −70 and −60 dBFS in, +11.7 at −55, +6.1 at −50,
+    +0.95 at −45, −0.42 at −35, −1.31 at −30** — above about −45 dBFS in it measures
+    *quieter*. It is the cap clamping, not a uniform offset. (Decomposed with AGC2
+    removed the offset *is* uniform, +13…+17 dB, and it hits speech as hard as noise:
+    the APM's suppressor attenuates broadband here, it does not separate.)
+  - **What actually moved is the headroom for speech**, by about the 4.9 dB of
+    effective SNR the suppressor used to hand AGC2: the same input now yields a
+    probability **0.16 lower — 0.608 → 0.443**. Under NS it sat *just* over B5's
+    start of 0.6; it is now under it.
+  - **The live defect is at the bottom of the window, not the top.**
+    `LevelToProbability.SILENCE_DBFS = −50` is below anything the chain now
+    produces: `fromDbfs` never returns less than **0.167**, so **any stop threshold
+    below 0.167 can never be crossed and the detector would never release**. B5's
+    default stop of 0.3 clears it by 4.0 dB of level; a task-12 slider does not.
+  **Ruling.** Move `SILENCE_DBFS` to **−45**, the measured floor, so silence reads
+  0.000 again and every stop threshold stays reachable — that number follows from
+  webrtc's own constant, not from a fixture. **Leave `FULL_DBFS` at −20.** The top
+  of the window cannot be calibrated from a synthetic signal: the stand-in used here
+  has 8.3 dB SNR where a real talker in a real room has 15–30, and under *either*
+  candidate window that stand-in fails to reach 0.6. The sentence that nobody had
+  written down and that is now binding: **"0.6" is not a loudness, it is a demand
+  for about 13 dB of SNR above the floor.** Whether 13 dB is the right demand is a
+  question for a real talker, which makes it **a QA item with hardware, owner B task
+  13** — the live input meter and loopback test is the instrument that can answer it.
+  The test that reports the current numbers already exists
+  (`VoiceActivityDetectorTest.the probability defaults sit at these dBFS levels on
+  the apm window`), so moving the window or the defaults names the new numbers.
+  **First consequence, as originally written:**
   `humla_apm.cpp:88-91` measures `last_level_dbfs` on the **processed** frame, i.e.
   after NS and AGC2. With NS off, every non-speech frame measures louder — and in
   the configuration NS=`NONE` + echo=`WEBRTC`, `LevelToProbability` (−50…−20 dBFS)
