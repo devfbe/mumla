@@ -574,6 +574,13 @@ line, run the suite, and only then write the comment, with the result in it.**
 
 Two things make it easier to believe, and both are about granularity:
 
+- **A pinned *call site* lends the whole function an air of coverage — the same
+  thing one level up.** Measured: swapping a refused-parent fallback back for
+  "leave it parentless" turned three tests red, so at call-site granularity the
+  function looked covered. **Every single branch inside it could be deleted with
+  the suite green** — including the one whose KDoc called its failure "the one
+  thing worse than ignoring that frame". So the granularity to sweep at is not the
+  call, and not the function: it is the **branch**.
 - **A pinned sibling branch lends the whole function an air of coverage.** The
   mutation granularity one reaches for is the function. `forget()` is one `when`
   with two arms; the droppable arm is obviously load-bearing and obviously pinned,
@@ -593,6 +600,53 @@ shadowed ratio assertion surfaced **while a mutation was already running for
 another reason** — an output that was being read anyway produced it, not judgement.
 The unpinned arm needed a mutation nothing else in the round would have produced.
 Findings that cost nothing do not tell you the sweep is working.
+
+**A guard whose premise is false is invisible from both sides, and the answer is to
+delete it and pin the premise.** Mutation testing asks whether removing a line
+turns a test red. It cannot distinguish "nothing reads this line" from "this line
+never did anything", and the second case also refuses to be pinned: an attempt to
+write the test goes red against correct production code. Measured here on
+`state != newState.constantState` in a talk-state repaint — the icons are layer
+lists, and `LayerDrawable.getConstantState()` hands back its **own state, freshly
+copied per instance**, so two lookups of the same resource never share one. The
+comparison was true on every call; the guard had never once suppressed a repaint.
+The move is not to pin it and not to leave it: **delete it** (behaviour-identical,
+and it removed a latent dereference with it) and write the premise down as its own
+test — *two lookups of one icon never share a constant state* — so that a framework
+or resource change turns that red instead of silently giving the dead guard a job.
+Note the order this is discovered in: the tell was that **writing the pinning test
+produced a RED against correct code**. A test you cannot write is evidence about
+the production line, not about your scaffolding.
+
+**Sweep the fakes' outputs as well as the production file's inputs.** The
+enumeration recipes point at the production file, and a dimension can be closed off
+by the **test double** instead: the fake returns a constant, so every corner behind
+that input is unreachable and the enumeration never notices, because the production
+file does branch on it. Here `FakeUser.getTexture()` was a constant `null` — so
+avatars, a whole dimension, had never been rendered in a test, and the branch's
+success case had never run. This is the third instance of the same shape (a mock
+returning a constant `emptyList()`, a fake that could not express a null user, this
+one), which makes it a rule rather than an anecdote: **for every input the
+production file branches on, name the fake that produces it and check it can
+produce more than one value.**
+
+**A mutation sweep inherits the blind spots of the fixture set.** It measures
+whether the tests can *see* a change; it cannot tell you that a branch's
+discriminating input never appears in any test at all. Fifty-six mutants, all
+killed — and every one of them had been sampled from one half of a two-boolean
+input space, because every image fixture in the suite was an `InfoMessage` and none
+was the `TextMessage` that a user sending a picture actually produces. The corner
+that was missing was the feature's main use case, and the mutation that breaks it
+survived all 27 tests.
+The tell is the one §4.04 already gives — enumerate the corners **from the
+production file** — but this is the case where the enumeration has to reach the
+**fixtures**: for each corner, name the fixture that *is* that corner, not the
+parameter that could be set to it.
+And the method for reporting one, because it separates two very different things:
+**write the test, run it on HEAD, then run it under the mutation.** Passing on HEAD
+and failing under the mutation proves a pure coverage hole. Failing on HEAD would
+have proved a live defect. Saying which one it is costs one extra run and is the
+difference between "the evidence is missing" and "the app is broken".
 
 ### 4.05 Testing hazards that have already produced a false green
 
@@ -657,6 +711,81 @@ and reported as passing. They are repo-wide, not stream-specific.
   here burned twenty minutes before anyone noticed. Pass `--timeout` to `ctest`,
   and treat a sweep that produces no output as a result to investigate rather than
   a run to repeat.
+- **A naive sequence assertion over hundreds of thousands of elements is expensive
+  enough to look like a hang — and that is a different entry from the one above.**
+  The `ctest` case above is a real hang. This one was written here as one and was
+  not; it was measured twice, in two streams, and both readings say the same thing.
+  Two ~3 000 000-element `List<Short>` handed to `isEqualTo` with a **single** sample
+  differing: **273 s and a 43 MB failure message**, against 0.1 s for that test green
+  and ~12 s for the whole module. (A smaller pairing measured 29 s against a 12–15 s
+  baseline — same shape, same conclusion.) It fails, with output. But under a
+  per-test timeout below that, it becomes a timeout instead of a diagnosis, and the
+  message goes into the XML, the HTML report and the CI log.
+  Two riders, both learned by getting them wrong first. The divergence has to be
+  **content-only**: seed it by changing a count and the cheap size assertion fires
+  ahead of the comparison, the expensive one never runs, and you conclude the form
+  is fine (12 s, 152 characters of output). And the right form is an index loop that
+  reports the **first** diverging index — `diverges at sample %s` — which costs
+  nothing and says more.
+- **Under Robolectric's legacy graphics, `BitmapFactory` decodes anything.** Hand it
+  arbitrary bytes and it returns a `Bitmap` rather than null, so the corner "these
+  bytes do not decode" — exactly the one a `yes, decoding can fail` comment is
+  written over — is **unwritable**, and the attempt goes red against correct code.
+  The success case then passes for the wrong reason. `@GraphicsMode(NATIVE)` on that
+  one test makes it expressible; note it is per-test, because native graphics is
+  slower and not needed by its neighbours. Same family as `inJustDecodeBounds`,
+  which legacy graphics does not implement at all.
+- **`dispatchTouchEvent` on the target view is still not what a finger does — the
+  visibility filter lives in the *parent*.** `performClick()` ignores `isEnabled`
+  entirely (that is the entry below, and it drove eleven tests against an invisible
+  button in one stream). The repair everyone reaches for next — dispatch a touch
+  straight at the view under test — has the **same shape one level up**:
+  `ViewGroup.canViewReceivePointerEvents` is what drops events for a `GONE` child,
+  so a touch delivered directly to that child runs its listener anyway. Measured: a
+  test asserting "a tap on a failed (GONE) row reports nothing" **failed** under
+  direct delivery and passed only when the event entered at the row and was routed
+  down. And routing needs a real window: an **unattached** view puts its click into
+  the `HandlerActionQueue` instead of running it, while `post()` still returns
+  `true`, so the test reads as green either way. So: a real `Activity`,
+  `setContentView`, `measure` and `layout` — or the assertion is about the harness.
+- **Check the harness that reads the results, not just the one that runs them.** A
+  passing JUnit test is a **self-closing** `<testcase/>` element, so a lazy
+  `(.*?)</testcase>` regex attaches the next `<failure>` to the first *passing* test
+  in the file. Measured symptom: the same innocent test reported red under all
+  twenty mutations, and one real survivor hidden among them. Parse the XML with a
+  parser. This is the second harness defect in this project to invert verdicts
+  wholesale — the first read only stdout while Kotlin writes compile errors to
+  stderr — which makes it a class: **before believing a sweep, run one mutation you
+  are certain kills and one you are certain does not, and check the harness reports
+  both correctly.**
+- **A mutation that does not compile reads as a survivor if you only watch stdout.**
+  Kotlin writes compile errors to **stderr**. Three "survivors" in one sweep were
+  mutations the compiler had rejected — `if (false)` had destroyed a smart cast — and
+  the harness, which grepped stdout for compile errors, filed them as unpinned
+  guards. This is §4.04's no-op hazard displaced into the tooling, and it is worth
+  the same suspicion: **re-run a survivor in a form that certainly compiles** (here
+  `cond && System.nanoTime() < 0`) before writing it down. Two riders from the same
+  sweep: an XML mutation must carry enough context to be unique — `layout_height=
+  "wrap_content"` appeared five times in one file — and a **900 s per-run timeout**,
+  because a hung mutant and a killed one look identical from outside.
+- **An assertion is shadowed by any earlier assertion in the same test, and that is
+  how coverage gets mis-attributed.** Same mechanism as an absolute bound placed
+  ahead of a ratio (§4.04), but about *attribution* rather than sensitivity:
+  "this line is already covered by that test" is a claim that the test **reaches**
+  the assertion. Measured: an `android:focusable` attribute was about to be written
+  off as covered by `clickable` — and under the mutation the test failed at the
+  earlier `isClickable` assertion, so the `isFocusable` line never ran. The cover
+  did not exist. Check by running the mutation, not by reading the test.
+- **One Gradle daemon is shared across every worktree in this session, and another
+  agent's `--stop` reads as a passing baseline.** Measured: a mutation batch died on
+  `Gradle build daemon has been stopped: stop command received`, and the harness
+  filed the **baseline** run as a failure — which in a sweep means every mutation
+  after it is recorded as KILLED. Same class as the shared scratchpad that had a
+  mutation script overwritten under a running agent, one level up: it does not
+  corrupt one number, it inverts every verdict in the batch. So: **detect
+  `daemon has been stopped` and re-run rather than record a verdict**, keep tooling
+  in a per-agent subfolder of the scratchpad, and treat a baseline that fails as a
+  reason to stop rather than a data point.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
@@ -1074,7 +1203,12 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   parentless. The tree stays finite and acyclic, and the channel stays visible in
   the wrong place rather than invisibly absent. **Owner: A, task 6**, as a rider —
   it is a few lines in `ModelHandler.java`, no other stream owns that file, and no
-  later brief goes near the frame boundary where the guard sits. The contract
+  later brief goes near the frame boundary where the guard sits. **Status: the
+  fallback was in fact already written in task 5's fix round (`39924e64`), 22
+  commits before task 6 began — but its *inside* was unpinned**, every branch in it
+  deletable with the suite green, which is the pinned-call-site case in §4.04.
+  Task 6 pinned it and removed one branch that decided the same result on the same
+  input as the closing check. The contract
   paragraph in the core ledger that reads *"the same state as a channel whose
   parent frame has not arrived yet"* is **withdrawn**: one heals on the next frame
   and the other never does, which is the whole point.
