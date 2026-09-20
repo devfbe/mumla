@@ -117,6 +117,14 @@ class HumlaConnection @JvmOverloads constructor(
     private val disconnectDelivered = AtomicBoolean(false)
     @Volatile private var connectCalled = false
     @Volatile private var disconnectRequested = false
+
+    /**
+     * Whether the listener has been told the connection ended. Not volatile, and that is the point:
+     * it is written by the disconnect report itself and read by [notifyListener], both inside
+     * runnables on [mainHandler]'s thread, so that one looper's FIFO order is the whole mechanism.
+     * See [notifyListener] for why the decision has to be made there and not at the call site.
+     */
+    private var disconnectReported = false
     @Volatile private var startTimestamp = 0L // Time that the connection was initiated in nanoseconds
     private val cryptState = CryptState()
 
@@ -168,7 +176,7 @@ class HumlaConnection @JvmOverloads constructor(
             serverMaxBandwidth = if (msg.hasMaxBandwidth()) msg.maxBandwidth else -1
             synchronizedWithServer = true
 
-            mainHandler.post { listener.onConnectionSynchronized() }
+            notifyListener { onConnectionSynchronized() }
         }
 
         override fun messageCodecVersion(msg: Mumble.CodecVersion) {
@@ -450,8 +458,8 @@ class HumlaConnection @JvmOverloads constructor(
 
     /**
      * Shuts down networking. Safe from any thread, idempotent, and never blocks on a network
-     * thread. The listener's onConnectionDisconnected is delivered exactly once per connection,
-     * carrying [error] if one was recorded. This object is not reusable afterwards.
+     * thread. The listener's onConnectionDisconnected is delivered exactly once per connection and
+     * last, carrying [error] if one was recorded. This object is not reusable afterwards.
      */
     fun disconnect() {
         // Written before connectCalled is read; see the ordering note in connect().
@@ -491,7 +499,10 @@ class HumlaConnection @JvmOverloads constructor(
         if (!connectCalled) return // nothing was ever started, so there is nothing to report
         if (!disconnectDelivered.compareAndSet(false, true)) return
         val e = lastError
-        mainHandler.post { listener.onConnectionDisconnected(e) }
+        mainHandler.post {
+            disconnectReported = true
+            listener.onConnectionDisconnected(e)
+        }
     }
 
     /** Handles an exception that would cause termination of the connection. Protocol thread. */
@@ -503,7 +514,31 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     private fun warn(warning: ConnectionWarning) {
-        mainHandler.post { listener.onConnectionWarning(warning) }
+        notifyListener { onConnectionWarning(warning) }
+    }
+
+    /**
+     * Queues a listener callback on [mainHandler], and drops it if the disconnect report has
+     * already been delivered. This is what makes [HumlaConnectionListener.onConnectionDisconnected]
+     * terminal and not merely exactly-once.
+     *
+     * The decision is made at delivery and only there. Checking [disconnectRequested] at the call
+     * site cannot decide it: a ServerSync already past every entry guard and inside its handler
+     * posts onConnectionSynchronized after a disconnect() that ran meanwhile has posted the report,
+     * and measured, that is exactly what happened - [established, disconnected, synchronized] on
+     * main. At delivery the looper's FIFO order has already settled the question: this callback was
+     * queued before the report or it was not.
+     *
+     * HumlaTCP needs a per-connection Epoch object for the same promise because it is reused. This
+     * object is single-use, so one flag that is only ever set - never cleared - says the same thing:
+     * a second connection is a second object, with its own flag that starts false.
+     *
+     * A callback whose only effect is a listener notification therefore needs no entry guard of its
+     * own. onTLSHandshakeFailed and onUDPConnectionError are closed here, and a guard on top of
+     * this would be code no test could tell apart from its absence.
+     */
+    private fun notifyListener(callback: HumlaConnectionListener.() -> Unit) {
+        mainHandler.post { if (!disconnectReported) listener.callback() }
     }
 
     /**
@@ -612,11 +647,11 @@ class HumlaConnection @JvmOverloads constructor(
         connected = true
         // Attempt to start the UDP transport once connected.
         if (!shouldForceTCP()) startUdp()
-        mainHandler.post { listener.onConnectionEstablished() }
+        notifyListener { onConnectionEstablished() }
     }
 
     override fun onTLSHandshakeFailed(chain: Array<X509Certificate>) {
-        mainHandler.post { listener.onConnectionHandshakeFailed(chain) }
+        notifyListener { onConnectionHandshakeFailed(chain) }
         // Posted first, so the certificate prompt is queued ahead of the disconnect that follows
         // it; disconnect() posts the report to the same looper.
         disconnect()
@@ -699,7 +734,9 @@ class HumlaConnection @JvmOverloads constructor(
 
         /**
          * Called when the connection was lost, with the error that caused termination, or null if
-         * the disconnect was clean. Exactly once per connection.
+         * the disconnect was clean. Exactly once per connection, and last: no other method of this
+         * interface is called afterwards, including one whose event was already in flight when the
+         * disconnect happened.
          */
         fun onConnectionDisconnected(e: HumlaException?)
 

@@ -27,6 +27,13 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
     val sent = CopyOnWriteArrayList<HumlaTCPMessageType>()
 
     /**
+     * Called from [sendMessage], on whichever thread sends. A test uses it to park the protocol
+     * thread in the middle of a message handler, which is the only way to make the interleaving
+     * "the user disconnected while a handler was still running" a fact rather than a race.
+     */
+    @Volatile var onSend: ((HumlaTCPMessageType) -> Unit)? = null
+
+    /**
      * Whether the terminal callback [disconnect] posts was accepted by the callback handler. False
      * means the looper had already quit and the real transport would have handed its token back,
      * with no second route to report the disconnect from.
@@ -40,8 +47,13 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
         connectHost = host
         connectPort = port
     }
-    override fun sendMessage(message: Message, messageType: HumlaTCPMessageType) { sent += messageType }
-    override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) { sent += messageType }
+    override fun sendMessage(message: Message, messageType: HumlaTCPMessageType) { record(messageType) }
+    override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) { record(messageType) }
+
+    private fun record(messageType: HumlaTCPMessageType) {
+        sent += messageType
+        onSend?.invoke(messageType)
+    }
 
     override fun disconnect() {
         val first = disconnectCalls == 0
@@ -105,6 +117,14 @@ class FakeTransports : HumlaConnection.TransportFactory {
 }
 
 class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
+    /**
+     * One entry per callback, in delivery order. The listener contract calls
+     * onConnectionDisconnected terminal, and "terminal" is a statement about order that a set of
+     * per-callback counters cannot express - which is how a synchronized and a warning delivered
+     * behind the disconnect report both went unnoticed.
+     */
+    val events = CopyOnWriteArrayList<String>()
+
     val established = AtomicInteger()
     val synchronizedCount = AtomicInteger()
     val disconnects = CopyOnWriteArrayList<HumlaException?>()
@@ -120,11 +140,14 @@ class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
 
     val allOnMainLooper: Boolean get() = callbackLoopers.isNotEmpty() && callbackLoopers.all { it == Looper.getMainLooper() }
 
-    override fun onConnectionEstablished() { record(); established.incrementAndGet() }
-    override fun onConnectionSynchronized() { record(); synchronizedCount.incrementAndGet() }
-    override fun onConnectionHandshakeFailed(chain: Array<X509Certificate>) { record(); handshakeFailures += chain }
-    override fun onConnectionDisconnected(e: HumlaException?) { record(); disconnects += e }
-    override fun onConnectionWarning(warning: ConnectionWarning) { record(); warnings += warning }
+    override fun onConnectionEstablished() { record("established"); established.incrementAndGet() }
+    override fun onConnectionSynchronized() { record("synchronized"); synchronizedCount.incrementAndGet() }
+    override fun onConnectionHandshakeFailed(chain: Array<X509Certificate>) { record("handshakeFailed"); handshakeFailures += chain }
+    override fun onConnectionDisconnected(e: HumlaException?) { record("disconnected"); disconnects += e }
+    override fun onConnectionWarning(warning: ConnectionWarning) { record("warning:$warning"); warnings += warning }
 
-    private fun record() { callbackLoopers += Looper.myLooper() }
+    private fun record(event: String) {
+        callbackLoopers += Looper.myLooper()
+        events += event
+    }
 }

@@ -26,6 +26,7 @@ import java.lang.reflect.Method
 import java.security.cert.X509Certificate
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
@@ -491,6 +492,75 @@ class HumlaConnectionProtocolThreadTest {
         assertThat(tcp.sent).containsExactlyElementsIn(sentBefore).inOrder()
         assertThat(transports.udps).hasSize(1)
         assertThat(connection.error).isNull()
+        assertThat(listener.events.last()).isEqualTo("disconnected")
+    }
+
+    /**
+     * Terminality, the half of the listener contract that "exactly once" does not cover. Measured
+     * order on main before this: [established, disconnected, synchronized] - a ServerSync that was
+     * still being handled when disconnect() arrived reported the session as synchronized after it
+     * had ended.
+     *
+     * An entry guard cannot close this. The frame is already past every check and inside the
+     * handler; the decision has to be made where the callbacks are delivered, in the main looper's
+     * own FIFO order, or it holds 99% of the time - which in this project is the expensive state.
+     */
+    @Test
+    fun aServerSyncStillInFlightWhenTheUserDisconnectsIsNotDeliveredBehindTheDisconnect() {
+        val tcp = connectAndEstablish(forceTcp = true)
+        val insideTheHandler = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        // messageServerSync's first act under forced TCP is this send, so it parks the protocol
+        // thread inside the handler, before it posts onConnectionSynchronized.
+        tcp.onSend = { type ->
+            if (type == HumlaTCPMessageType.UDPTunnel) {
+                insideTheHandler.countDown()
+                release.await()
+            }
+        }
+
+        tcp.simulateMessage(
+            HumlaTCPMessageType.ServerSync,
+            Mumble.ServerSync.newBuilder().setSession(7).build().toByteArray()
+        )
+        check(insideTheHandler.await(5, TimeUnit.SECONDS)) { "the ServerSync handler was never reached" }
+
+        connection.disconnect()
+        release.countDown()
+        awaitUntil(description = "teardown ran behind the parked handler") { tcp.disconnectCalls == 1 }
+        mainLooper.idle()
+
+        assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
+        assertThat(listener.synchronizedCount.get()).isEqualTo(0)
+    }
+
+    /**
+     * onTLSHandshakeFailed behind a disconnect: the certificate prompt would open on top of a
+     * session that has already ended.
+     */
+    @Test
+    fun aHandshakeFailureBehindADisconnectPromptsNobody() {
+        val tcp = connectAndEstablish()
+
+        inTheTeardownWindow(tcp) { connection.onTLSHandshakeFailed(emptyArray()) }
+
+        assertThat(listener.handshakeFailures).isEmpty()
+        assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
+    }
+
+    /**
+     * onUDPConnectionError behind a disconnect. Measured order on main before this:
+     * [established, disconnected, warning:UDP_THREAD_FAILED] - "The UDP connection failed..." in
+     * the chat log of a session the user had already left.
+     */
+    @Test
+    fun aUdpErrorBehindADisconnectWarnsNobody() {
+        val tcp = connectAndEstablish()
+
+        inTheTeardownWindow(tcp) { connection.onUDPConnectionError(java.io.IOException("socket closed")) }
+
+        assertThat(listener.warnings).isEmpty()
+        assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
     }
 
     /** Invokes every declared method of both transport listener interfaces on [connection]. */
