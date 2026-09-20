@@ -142,10 +142,10 @@ static void test_rnnoise(Env& env) {
               "rnnoise processFrame with a null array reports an error");
 
         /* The JVM returns NULL from GetShortArrayElements when it cannot allocate the copy. */
-        jnistub::fail_next_get() = true;
+        jnistub::fail_get_after(0);
         CHECK(RN_PROCESS(e, nullptr, h, frame.as<jshortArray>()) < 0.0f,
               "rnnoise survives GetShortArrayElements returning NULL");
-        jnistub::fail_next_get() = false;
+        jnistub::fail_get_never();
         CHECK(jnistub::outstanding_copies() == 0, "no array copy is leaked on the failure path");
     }
 
@@ -228,10 +228,10 @@ static void test_apm_arguments(Env& env) {
               "apm render with a null handle reports an error");
         CHECK(APM_LEVEL(e, nullptr, 0) <= -99.0f, "apm level of a null handle is -100 dBFS");
 
-        jnistub::fail_next_get() = true;
+        jnistub::fail_get_after(0);
         CHECK(APM_CAPTURE(e, nullptr, h, frame.as<jshortArray>()) != 0,
               "apm survives GetShortArrayElements returning NULL");
-        jnistub::fail_next_get() = false;
+        jnistub::fail_get_never();
         CHECK(jnistub::outstanding_copies() == 0, "no array copy is leaked on the failure path");
     }
 

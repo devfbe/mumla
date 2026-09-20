@@ -416,6 +416,78 @@ static void test_preprocess_ctl(Env& env) {
     PP_DESTROY(e, nullptr, st);
 }
 
+/* Get*ArrayElements returns NULL when the JVM cannot allocate the copy. Every entry point in the
+ * bridge that takes an array has to answer an error instead of dereferencing it, and -- the part
+ * that had no test at all -- has to give back anything it is already holding on the way out.
+ *
+ * RS(processInt) is the only function in the file that holds two array copies at once, so it is
+ * the only one with a cleanup path that has something to release. Deleting that whole path
+ *
+ *     if (outPtr == nullptr) { env->ReleaseShortArrayElements(input, inPtr, JNI_ABORT);
+ *                              return RESAMPLER_ERR_ALLOC_FAILED; }
+ *
+ * left all nine ctest entries green before this test existed. */
+static void test_allocation_failure(Env& env) {
+    JNIEnv* e = env.get();
+    Array<jint> err(1);
+    jlong rs = RS_INIT(e, nullptr, 1, 48000, 16000, 3, err.as<jintArray>());
+    jlong pp = PP_INIT(e, nullptr, 640, 48000);
+    jlong jb = JB_INIT(e, nullptr, 480);
+    CHECK(rs != 0 && pp != 0 && jb != 0, "the three states for the allocation-failure run exist");
+    if (rs == 0 || pp == 0 || jb == 0) return;
+
+    {
+        Array<jshort> in(480), out(160);
+        Array<jint> inLen(1), outLen(1);
+        inLen[0] = 480;
+        outLen[0] = 160;
+        jshortArray i = in.as<jshortArray>(), o = out.as<jshortArray>();
+        jintArray il = inLen.as<jintArray>(), ol = outLen.as<jintArray>();
+
+        /* The input copy fails: nothing is held yet. */
+        jnistub::fail_get_after(0);
+        CHECK(RS_PROCESS(e, nullptr, rs, 0, i, il, o, ol) != RESAMPLER_ERR_SUCCESS,
+              "processInt survives the input array copy failing");
+        jnistub::fail_get_never();
+        CHECK(jnistub::outstanding_copies() == 0, "no copy is outstanding after the input failure");
+
+        /* The OUTPUT copy fails, with the input copy already held. This is the leak path. */
+        jnistub::fail_get_after(1);
+        CHECK(RS_PROCESS(e, nullptr, rs, 0, i, il, o, ol) != RESAMPLER_ERR_SUCCESS,
+              "processInt survives the output array copy failing");
+        jnistub::fail_get_never();
+        CHECK(jnistub::outstanding_copies() == 0,
+              "the input copy is released when the output copy fails");
+    }
+    {
+        Array<jshort> frame(640);
+        jnistub::fail_get_after(0);
+        CHECK(PP_RUN(e, nullptr, pp, frame.as<jshortArray>()) < 0,
+              "run survives GetShortArrayElements returning NULL");
+        jnistub::fail_get_never();
+        CHECK(jnistub::outstanding_copies() == 0, "no copy is leaked on the run failure path");
+    }
+    {
+        Array<jbyte> payload(16);
+        jnistub::fail_get_after(0);
+        JB_PUT(e, nullptr, jb, payload.as<jbyteArray>(), 16, 0, 480, 0, 0);
+        jnistub::fail_get_never();
+        CHECK(jnistub::outstanding_copies() == 0, "put survives GetByteArrayElements returning NULL");
+
+        Array<jbyte> out(64);
+        Array<jint> meta(5);
+        jnistub::fail_get_after(0);
+        CHECK(JB_GET(e, nullptr, jb, out.as<jbyteArray>(), 480, meta.as<jintArray>()) != 0,
+              "get survives GetByteArrayElements returning NULL");
+        jnistub::fail_get_never();
+        CHECK(jnistub::outstanding_copies() == 0, "no copy is leaked on the get failure path");
+    }
+
+    RS_DESTROY(e, nullptr, rs);
+    PP_DESTROY(e, nullptr, pp);
+    JB_DESTROY(e, nullptr, jb);
+}
+
 int main() {
     Env env;
     test_preprocessor(env);
@@ -424,6 +496,7 @@ int main() {
     test_jitter(env);
     test_jitter_ctl(env);
     test_preprocess_ctl(env);
+    test_allocation_failure(env);
     CHECK(jnistub::outstanding_copies() == 0, "no array copy is outstanding at the end of the run");
     std::printf("%s\n", failures ? "FAILED" : "OK");
     return failures ? 1 : 0;

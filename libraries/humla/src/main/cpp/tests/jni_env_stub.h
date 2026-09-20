@@ -48,12 +48,21 @@ inline int& outstanding_copies() {
     return n;
 }
 
-/* When set, the next Get*ArrayElements returns NULL, which is what a JVM does when it cannot
- * allocate the copy. The bridges have to survive that without dereferencing it. */
-inline bool& fail_next_get() {
-    static bool fail = false;
-    return fail;
+/* Arms one Get*ArrayElements to return NULL, which is what a JVM does when it cannot allocate the
+ * copy. The bridges have to survive that without dereferencing it and without leaking whatever
+ * they are already holding.
+ *
+ * fail_get_after(0) fails the very next call; fail_get_after(1) lets one succeed and fails the one
+ * after it. The n > 0 form is the one that matters for a bridge that holds two arrays at once:
+ * only the second allocation failing reaches a cleanup path that has something to release, and
+ * arming the first call never gets there. Negative means disarmed, which is also where a
+ * triggered failure leaves it. */
+inline int& gets_until_failure() {
+    static int n = -1;
+    return n;
 }
+inline void fail_get_after(int n) { gets_until_failure() = n; }
+inline void fail_get_never() { gets_until_failure() = -1; }
 
 inline FakeArray* as_array(jarray a) { return reinterpret_cast<FakeArray*>(a); }
 
@@ -73,10 +82,7 @@ inline jsize get_array_length(JNIEnv*, jarray a) { return as_array(a)->length; }
 
 template <typename T>
 inline T* get_elements(JNIEnv*, jarray a, jboolean* isCopy) {
-    if (fail_next_get()) {
-        fail_next_get() = false;
-        return nullptr;
-    }
+    if (gets_until_failure() >= 0 && gets_until_failure()-- == 0) return nullptr;
     FakeArray* fa = as_array(a);
     check_element_type<T>(fa, "Get*ArrayElements");
     /* Exactly length*sizeof(T) bytes: ASan's redzone starts right after the last element. */
