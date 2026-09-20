@@ -1,8 +1,0 @@
-[
- {"id":"CAL-K","file":"libraries/humla/src/main/java/se/lublin/humla/audio/capture/VoiceActivityDetector.kt",
-  "old":"val detected = score >= threshold","new":"val detected = score > threshold",
-  "why":"boundary >= -> > ; `a score exactly on a threshold counts as above it` must fail","expect":"KILLED"},
- {"id":"CAL-S","file":"libraries/humla/src/main/java/se/lublin/humla/audio/capture/VoiceActivityDetector.kt",
-  "old":"if (length <= 0) return NO_SIGNAL","new":"if (length < 1) return NO_SIGNAL",
-  "why":"provably equivalent for Int; must survive or my evaluation is broken","expect":"SURVIVED"}
-]
