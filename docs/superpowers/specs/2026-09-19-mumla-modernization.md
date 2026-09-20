@@ -727,6 +727,31 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `release()` can now block for one native call (~0.3 ms at 48 kHz), so spec §4's
   "shutdown returns within 3 s" has a real dependency where it had a free
   operation.
+- **Drop `SET_VAD` and `SET_PROB_START` from the Speex stage (B, decided).** Both
+  are answered by the library and both are **observably inert for this stage**:
+  `vad_enabled`, `speech_prob_start` and `speech_prob_continue` are read in exactly
+  one place, the hysteresis at `preprocess.c:993-1002`, and that decides only the
+  **return value of `speex_preprocess_run`** — which the stage discards in favour of
+  reading `GET_PROB` directly. Spec B9 names the `GET_PROB_START`→`SET_PROB_START`
+  fix because the legacy code issued a *get* where a *set* was meant; the purpose of
+  that fix was to make the hysteresis work, and this stage does not use the
+  hysteresis. Reading the probability directly is strictly better than configuring a
+  threshold on a value that is thrown away. And the continue half **cannot be set at
+  all** through the bridge's allow list, so speex's hysteresis could only ever be
+  half-configured here. Two configuration calls whose own KDoc explains that nothing
+  observable depends on them are the licence pattern in call form. B9 is satisfied
+  by the direct read; say so where the calls used to be.
+- **Three Speex control calls are dead and must not be reissued (B, measured).**
+  `SET_AGC` (2) and `SET_AGC_TARGET` (46) return −1: the whole block sits behind
+  `#ifndef FIXED_POINT` (`preprocess.c:1057,1193`) and `CMakeLists.txt:108` defines
+  `FIXED_POINT` for this target. `SET_DEREVERB` (8) is answered but sets a field
+  **nothing in `preprocess.c` ever reads**. And `SET_PROB_CONTINUE` (16) is not on
+  the bridge's allow list at all, so it is refused before it reaches speex — the
+  plan's own listing calls it, and the plan's own fake would have recorded the
+  refused call as a *successful* set. Name every request through
+  `SpeexPreprocessNative`'s constants, which the bridge documents its allow list as
+  mirroring: a refused request then has no constant to spell it with and **does not
+  compile**.
 - **Do not throw from the capture thread (B, task 6).** Task 6's planned
   `RnnoisePreprocessor` test requires `process` to throw `IllegalArgumentException`
   on a 441-sample frame. That is an exception once per frame from the audio thread,
