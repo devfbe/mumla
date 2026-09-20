@@ -140,8 +140,10 @@ class SpeexPreprocessorTest {
         }
         assertThat(SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB)
             .containsExactly(-15, -25, -35).inOrder()
-        assertThat(SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB)
-            .isIn(SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB)
+        assertWithMessage(
+            "the default suppression depth is a decision, not a free choice out of the supported " +
+                "set: pinning it with isIn() leaves -15 and -35 green"
+        ).that(SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB).isEqualTo(-25)
     }
 
     @Test
