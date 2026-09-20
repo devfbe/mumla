@@ -45,6 +45,15 @@ import java.io.IOException
  *  - The `ContentResolver` on the receiving side is the one that opens the file, and it does so
  *    after this fragment is gone. Nothing may be deleted on dismissal for that reason.
  *
+ * **Fullscreen is the theme's, and only the theme's.** `Theme.Mumla.ImageViewer` sets
+ * `android:windowIsFloating=false`, which is what makes `PhoneWindow.generateLayout` give the
+ * window `MATCH_PARENT x MATCH_PARENT` instead of `WRAP_CONTENT x WRAP_CONTENT`. There used to be a
+ * `dialog?.window?.setLayout(MATCH_PARENT, MATCH_PARENT)` in `onStart` as well; it ran after
+ * `generateLayout` and was measured to be a no-op in the shipped configuration **and a mask in the
+ * broken one** -- with the theme item flipped to `true` the suite stayed green with that line and
+ * goes red without it. Two guards on one observable, so the one that is also redundant is gone and
+ * `theViewerWindowFillsTheScreen` pins what is left.
+ *
  * **There is deliberately no timeout here**, and a future one would be theatre.
  * `ImageFetcher.fetch` blocks and never observes cancellation, so a `withTimeout` around the load
  * cannot end the wait -- measured on this classpath, `withTimeoutOrNull(200)` around a 2000 ms
@@ -66,11 +75,6 @@ class ImageViewerDialogFragment : DialogFragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         inflater.inflate(R.layout.dialog_image_viewer, container, false)
-
-    override fun onStart() {
-        super.onStart()
-        dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)

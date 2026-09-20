@@ -5,12 +5,16 @@
     spends the restored zoom before the real image arrives. That is why the spinner and the failure
     message are siblings rather than drawables on the image. Both pinned by
     `theZoomSurvivesTwoRecreationsWhileTheImageIsStillLoading`.
+
+    There is deliberately no android:background here. Theme.Mumla.ImageViewer already paints the
+    window black, and a background on this root would be a second full-screen fill of every pixel on
+    every frame: lint's Overdraw, and measurable work under a 40 MB bitmap. Pinned from both sides
+    by `theBlackSurfaceIsTheWindowAndNotASecondLayerInTheLayout`.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@android:color/black">
+    android:layout_height="match_parent">
 
     <se.lublin.mumla.chat.ZoomImageView
         android:id="@+id/image_viewer_image"

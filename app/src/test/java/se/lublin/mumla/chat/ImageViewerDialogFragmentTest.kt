@@ -2,10 +2,13 @@ package se.lublin.mumla.chat
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
 import androidx.fragment.app.testing.FragmentScenario
 import androidx.fragment.app.testing.launchFragment
@@ -345,6 +348,52 @@ class ImageViewerDialogFragmentTest {
                     .isEqualTo(fragment.getString(R.string.chat_image_load_failed))
                 assertThat(fragment.share().isEnabled).isFalse()
                 assertThat(fragment.image().drawable).isNull()
+            }
+        }
+    }
+
+    // --- the window, which is the dimension "fullscreen" actually lives in -----------------------
+
+    /**
+     * The viewer is a *fullscreen* dialog, and "fullscreen" is a property of the **window**, not of
+     * the layout: `dialog_image_viewer.xml` asking for `match_parent` only fills whatever the window
+     * gives it. Four dimensions of this screen were swept -- the load outcomes, the arguments, the
+     * display metrics and the dispatchers -- and this one was never entered at all, which is why the
+     * line that used to sit in `onStart` could be deleted with the whole suite staying green.
+     *
+     * What holds the property up is `android:windowIsFloating=false` in `Theme.Mumla.ImageViewer`:
+     * `PhoneWindow.generateLayout` reads it and calls `setLayout(MATCH_PARENT, MATCH_PARENT)` for a
+     * non-floating window and `setLayout(WRAP_CONTENT, WRAP_CONTENT)` for a floating one. Measured
+     * by mutating the theme item to `true`: this test then reads WRAP_CONTENT (-2).
+     */
+    @Test
+    fun theViewerWindowFillsTheScreen() {
+        installLoader { TestImages.png(8, 8) }
+        launch().use { scenario ->
+            scenario.onFragment { fragment ->
+                idle()
+                val attributes = fragment.dialog!!.window!!.attributes
+                assertThat(attributes.width).isEqualTo(ViewGroup.LayoutParams.MATCH_PARENT)
+                assertThat(attributes.height).isEqualTo(ViewGroup.LayoutParams.MATCH_PARENT)
+            }
+        }
+    }
+
+    /**
+     * The black is the window's, once. A `android:background` on the layout root would paint a
+     * second full-screen layer over a window background that is already black -- lint's `Overdraw`,
+     * and a real extra fill of every pixel on every frame while a 40 MB bitmap is being drawn over
+     * it. This pins which of the two layers is the one that exists.
+     */
+    @Test
+    fun theBlackSurfaceIsTheWindowAndNotASecondLayerInTheLayout() {
+        installLoader { TestImages.png(8, 8) }
+        launch().use { scenario ->
+            scenario.onFragment { fragment ->
+                idle()
+                val window = (fragment.dialog!!.window!!.decorView.background as ColorDrawable).color
+                assertThat(window).isEqualTo(Color.BLACK)
+                assertThat(fragment.requireView().background).isNull()
             }
         }
     }
