@@ -1,11 +1,14 @@
 package se.lublin.humla.net
 
+import android.net.SSLCertificateSocketFactory
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkAll
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -14,7 +17,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.HumlaException
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import java.net.ConnectException
 import java.security.cert.X509Certificate
 import java.util.concurrent.CountDownLatch
@@ -24,11 +33,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLSocket
 
 /**
- * The TLS read loop itself cannot be driven on the JVM: HumlaTCP hands its socket to
+ * Covers the TCP transport's lifecycle: which thread callbacks arrive on, that a failed or aborted
+ * connect reports onTCPConnectionDisconnect exactly once, and that no socket thread outlives the
+ * connection.
+ *
+ * The real read loop is reachable here too: HumlaTCP hands its socket to
  * SSLCertificateSocketFactory.setHostname for SNI, which rejects anything that is not a Conscrypt
- * socket, so no fake ever reaches the handshake. What is testable, and what this covers, is the
- * lifecycle around it: which thread callbacks arrive on, that a failed or aborted connect reports
- * onTCPConnectionDisconnect exactly once, and that no socket thread outlives the connection.
+ * socket, but mockkStatic on that factory replaces the SNI call, and a mocked SSLSocket carrying a
+ * piped stream then drives readFrame and the frame callbacks for real.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaTCPTest {
@@ -54,6 +66,7 @@ class HumlaTCPTest {
     fun tearDown() {
         tcp?.disconnect()
         callbackThread.quitSafely()
+        unmockkAll()
     }
 
     private fun newTransport(handler: Handler? = null) =
@@ -62,6 +75,25 @@ class HumlaTCPTest {
 
     private fun liveThreadNames(prefix: String) =
         Thread.getAllStackTraces().keys.filter { it.isAlive && it.name.startsWith(prefix) }.map { it.name }
+
+    /** Waits until everything already queued on the callback handler has been delivered. */
+    private fun drainCallbacks() {
+        val drained = CountDownLatch(1)
+        Handler(callbackThread.looper).post { drained.countDown() }
+        assertThat(drained.await(5, TimeUnit.SECONDS)).isTrue()
+    }
+
+    /** Counts down as soon as the read thread is inside a blocking read on the socket. */
+    private class Reading(source: InputStream, private val entered: CountDownLatch) : FilterInputStream(source) {
+        override fun read(): Int { entered.countDown(); return super.read() }
+        override fun read(b: ByteArray, off: Int, len: Int): Int { entered.countDown(); return super.read(b, off, len) }
+    }
+
+    private fun frame(type: HumlaTCPMessageType, payload: ByteArray = ByteArray(0)): ByteArray {
+        val bytes = ByteArrayOutputStream()
+        DataOutputStream(bytes).apply { writeShort(type.ordinal); writeInt(payload.size); write(payload) }
+        return bytes.toByteArray()
+    }
 
     @Test
     fun aFailedConnectReportsFailureThenExactlyOneDisconnectOnTheCallbackHandler() {
@@ -188,5 +220,42 @@ class HumlaTCPTest {
 
         assertThat(listener.next().first).isEqualTo("failed")
         awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+    }
+
+    /**
+     * The read loop parks inside readFrame with no idea that a disconnect has happened: disconnect()
+     * reports at once and closes the socket only from the send thread, behind everything queued
+     * there. A frame that completes in that window used to be delivered after
+     * onTCPConnectionDisconnect - by which time HumlaService has released its wake lock, shut the
+     * audio handler down and nulled its handlers, so the late packet walks into a torn-down
+     * consumer. The disconnect callback is terminal: nothing follows it.
+     */
+    @Test
+    fun aFrameCompletingAfterTheDisconnectIsNotDelivered() {
+        val reading = CountDownLatch(1)
+        val toClient = PipedOutputStream()
+        val fromServer = Reading(PipedInputStream(toClient, 4096), reading)
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socket.inputStream } returns fromServer
+        every { socket.outputStream } returns ByteArrayOutputStream()
+        every { socketFactory.createSocket(any(), any()) } returns socket
+        mockkStatic(SSLCertificateSocketFactory::class)
+        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
+        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
+        val transport = newTransport(Handler(callbackThread.looper))
+
+        transport.connect("example.invalid", 64738, false)
+        assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
+        assertThat(reading.await(5, TimeUnit.SECONDS)).isTrue() // the read thread is inside readFrame
+
+        transport.disconnect()
+        assertThat(listener.next()).isEqualTo("disconnect" to "test-tcp-callbacks")
+        toClient.write(frame(HumlaTCPMessageType.Ping)) // the server's answer only lands now
+        toClient.flush()
+
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        drainCallbacks()
+        assertThat(listener.events).isEmpty()
+        assertThat(listener.disconnects.get()).isEqualTo(1)
     }
 }

@@ -35,6 +35,9 @@ interface TcpTransport {
     fun sendMessage(message: Message, messageType: HumlaTCPMessageType)
     fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType)
 
-    /** Closes the socket. The listener's onTCPConnectionDisconnect follows exactly once. */
+    /**
+     * Closes the socket. The listener's onTCPConnectionDisconnect follows exactly once, and it is
+     * the last callback of this connection: no frame still in flight is delivered behind it.
+     */
     fun disconnect()
 }

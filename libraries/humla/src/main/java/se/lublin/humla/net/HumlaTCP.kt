@@ -49,7 +49,8 @@ class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
  *
  * onTCPConnectionDisconnect is delivered exactly once per [connect]: either by [disconnect], so the
  * caller hears about its own request immediately even while the read thread is still stuck in a
- * connect that has no timeout, or by the read loop when it ends on its own.
+ * connect that has no timeout, or by the read loop when it ends on its own. It is also terminal -
+ * no callback of this connection follows it, however far the read thread still has to unwind.
  */
 class HumlaTCP @JvmOverloads constructor(
     private val socketFactory: HumlaSSLSocketFactory,
@@ -197,7 +198,7 @@ class HumlaTCP @JvmOverloads constructor(
 
     /** Posts onTCPConnectionDisconnect if no one has posted it yet for this connect(). */
     private fun postDisconnectOnce() {
-        if (disconnectReported.compareAndSet(false, true)) post { it.onTCPConnectionDisconnect() }
+        if (disconnectReported.compareAndSet(false, true)) deliver { it.onTCPConnectionDisconnect() }
     }
 
     private fun enqueueSend(block: () -> Unit) {
@@ -221,7 +222,18 @@ class HumlaTCP @JvmOverloads constructor(
         post { it.onTCPConnectionFailed(e) }
     }
 
+    /**
+     * Posts a listener callback, unless the disconnect has already been reported. The read thread
+     * parks inside readFrame and cannot see a disconnect that happens meanwhile, so a frame - or a
+     * late onTCPConnectionEstablished - can still complete afterwards. The consumer has torn its
+     * message handlers down by then, so anything arriving behind the disconnect is dropped here.
+     */
     private fun post(block: (TCPConnectionListener) -> Unit) {
+        if (disconnectReported.get()) return
+        deliver(block)
+    }
+
+    private fun deliver(block: (TCPConnectionListener) -> Unit) {
         val l = listener ?: return
         callbackHandler.post { block(l) }
     }
