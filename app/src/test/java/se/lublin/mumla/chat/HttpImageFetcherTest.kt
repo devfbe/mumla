@@ -681,6 +681,8 @@ class HttpImageFetcherTest {
     private companion object {
         private const val SPY_HOST = "spy.invalid"
         private val spyDisconnect = AtomicReference<() -> Unit>({})
+        /** The last connection the fetcher opened through the spy handler, so its settings can be read. */
+        private val spyConnection = AtomicReference<HttpURLConnection?>(null)
         private var spyHandlerInstalled = false
 
         /**
@@ -697,12 +699,41 @@ class HttpImageFetcherTest {
                 else object : URLStreamHandler() {
                     override fun getDefaultPort() = 443
                     override fun openConnection(u: URL): URLConnection =
-                        if (u.host == SPY_HOST) SpyConnection(u, spyDisconnect.get())
+                        if (u.host == SPY_HOST) SpyConnection(u, spyDisconnect.get()).also { spyConnection.set(it) }
                         else throw IOException("no real https connection in unit tests")
                 }
             }
             spyHandlerInstalled = true
         }
+    }
+
+    /**
+     * `totalTimeoutMs` is supposed to bound the call, and the connect phase is not something the
+     * watchdog can shorten — it can only close a connection that already exists. So the connect
+     * timeout has to be clamped to what is left of the budget, exactly as the read timeout is. The
+     * spy connection is the only seam that can be asked what the fetcher actually set, since `fetch`
+     * takes a string and opens the connection itself.
+     */
+    @Test
+    fun theConnectTimeoutIsClampedToWhatIsLeftOfTheTotalBudget() {
+        installSpyHttpsHandler()
+
+        spyConnection.set(null)
+        expectError(
+            "https://$SPY_HOST/a.png", ImageError.NETWORK,
+            HttpImageFetcher(connectTimeoutMs = 10_000, totalTimeoutMs = 500, hostPolicy = HostPolicy.ANY_HOST),
+        )
+        assertWithMessage("connect timeout against a 500 ms total budget")
+            .that(requireNotNull(spyConnection.get()).connectTimeout).isAtMost(500)
+
+        // And the other direction, so the clamp cannot become "always the smaller of nothing".
+        spyConnection.set(null)
+        expectError(
+            "https://$SPY_HOST/a.png", ImageError.NETWORK,
+            HttpImageFetcher(connectTimeoutMs = 3_000, totalTimeoutMs = 60_000, hostPolicy = HostPolicy.ANY_HOST),
+        )
+        assertWithMessage("connect timeout against a 60 s total budget")
+            .that(requireNotNull(spyConnection.get()).connectTimeout).isEqualTo(3_000)
     }
 
     @Test

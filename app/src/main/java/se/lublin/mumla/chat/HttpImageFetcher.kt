@@ -56,12 +56,20 @@ fun interface ImageFetcher {
  *    chunked forever is still cut off at the cap. A body that falls *short* of a declared length is
  *    refused as [ImageError.NETWORK] rather than handed over truncated. The accumulation buffer is
  *    pre-sized from a plausible `Content-Length` and never grows past the cap.
- *  * **Time.** [totalTimeoutMs] bounds the whole call: the socket read timeout is clamped to the
- *    remaining budget before the response is read and again before the body is read, the remaining
- *    budget is checked after every read, and a watchdog closes the connection at the deadline. A
- *    server that dribbles one byte at a time — of the headers or of the body, so that every single
- *    read succeeds and [readTimeoutMs] alone never fires — is stopped by that watchdog. The one
- *    phase the watchdog cannot shorten is the TCP connect itself, which [connectTimeoutMs] bounds.
+ *  * **Time.** [totalTimeoutMs] bounds every phase this class can reach: the connect and read
+ *    timeouts are both clamped to the remaining budget before each use, the remaining budget is
+ *    checked after every read, and a watchdog closes the connection at the deadline. A server that
+ *    dribbles one byte at a time — of the headers or of the body, so that every single read succeeds
+ *    and [readTimeoutMs] alone never fires — is stopped by that watchdog.
+ *
+ *    It does **not** bound name resolution, and saying otherwise would be the more expensive
+ *    mistake. [hostPolicy] resolves the host of the first URL and of every redirect hop;
+ *    `InetAddress.getAllByName` takes no timeout parameter and Android's resolver retries per
+ *    configured server, so one hostile name can block for far longer than the budget and nothing
+ *    here can shorten it. Doing so needs resolution on a thread of its own, which this class
+ *    deliberately does not start. The honest bound on one [fetch] is therefore `totalTimeoutMs`
+ *    **plus up to [MAX_REDIRECTS] + 1 name resolutions**, and [fetch] blocks: it is not cancellable,
+ *    so a caller that must not wait longer needs its own answer to that, not this number.
  */
 class HttpImageFetcher(
     private val connectTimeoutMs: Int = 5_000,
@@ -125,8 +133,10 @@ class HttpImageFetcher(
                 expired.set(true)
                 runCatching { connection.disconnect() }
             }, remainingMs(deadline), TimeUnit.MILLISECONDS)
-            connection.connectTimeout = connectTimeoutMs
-            connection.readTimeout = clampedReadTimeout(deadline)
+            // Both clamped: the watchdog can only close a connection that already exists, so the
+            // connect phase is the total budget's to bound or nobody's.
+            connection.connectTimeout = clamped(connectTimeoutMs, deadline)
+            connection.readTimeout = clamped(readTimeoutMs, deadline)
             connection.instanceFollowRedirects = false
             val code = connection.responseCode
             if (code in 300..399 && code != HttpURLConnection.HTTP_NOT_MODIFIED) {
@@ -137,7 +147,7 @@ class HttpImageFetcher(
             if (expired.get()) throw ImageFetchException(ImageError.TIMEOUT)
             val declared = connection.contentLengthLong
             if (declared > maxBytes) throw ImageFetchException(ImageError.TOO_LARGE)
-            connection.readTimeout = clampedReadTimeout(deadline)
+            connection.readTimeout = clamped(readTimeoutMs, deadline)
             val body = connection.inputStream.use { readCapped(it, deadline, declared) }
             // A connection closed by the watchdog can surface as a plain EOF rather than an error,
             // which would hand the caller a silently truncated image.
@@ -256,9 +266,9 @@ class HttpImageFetcher(
         return target
     }
 
-    /** The socket read timeout, never longer than what is left of the total budget. */
-    private fun clampedReadTimeout(deadline: Long): Int =
-        remainingMs(deadline).coerceAtMost(readTimeoutMs.toLong()).toInt()
+    /** [timeoutMs], never longer than what is left of the total budget. */
+    private fun clamped(timeoutMs: Int, deadline: Long): Int =
+        remainingMs(deadline).coerceAtMost(timeoutMs.toLong()).toInt()
 
     /** What is left of the total budget, clamped to a valid, non-zero timeout. */
     private fun remainingMs(deadline: Long): Long =
