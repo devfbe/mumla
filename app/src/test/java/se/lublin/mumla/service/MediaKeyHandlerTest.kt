@@ -144,11 +144,35 @@ class MediaKeyHandlerTest {
         assertThat(target.muteToggles).isEqualTo(0)
     }
 
+    /**
+     * "Off is off" must hold for every event of a handled key, not only the UP that would act.
+     * The system stops dispatching a gesture once any part of it is claimed, so consuming the DOWN
+     * silently breaks the media button of whatever app the user actually meant to control.
+     */
+    @Test
+    fun noneSettingDoesNotConsumeTheKeyDownEither() {
+        setAction("none")
+
+        assertThat(handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK))).isFalse()
+        assertThat(target.isTalking).isFalse()
+        assertThat(target.muteToggles).isEqualTo(0)
+    }
+
     @Test
     fun ignoredWhileDisconnected() {
         target.isConnected = false
 
         assertThat(handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))).isFalse()
+        assertThat(target.muteToggles).isEqualTo(0)
+    }
+
+    /** Same contract while disconnected: Mumla has no business claiming any part of the gesture. */
+    @Test
+    fun ignoredWhileDisconnectedForKeyDownToo() {
+        target.isConnected = false
+
+        assertThat(handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))).isFalse()
+        assertThat(target.isTalking).isFalse()
         assertThat(target.muteToggles).isEqualTo(0)
     }
 
