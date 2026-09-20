@@ -335,18 +335,25 @@ class ChannelListAdapter(
     }
 
     /**
-     * Update a user's state icon
+     * Repaints one user's state icon in place, without rebuilding the tree. This is the hot path:
+     * every talk-state and every mute/deafen change of every visible user arrives here.
+     *
+     * Only a row the list currently holds is touched; a user who is not laid out has no holder and
+     * nothing happens. There is no "has the icon changed?" guard, because the one that used to
+     * stand here could not answer that question: it compared `Drawable.getConstantState()`, and
+     * the icons are layer lists, whose `LayerState` is per instance and freshly copied by every
+     * `newDrawable()`. Two lookups of the same resource never share one, so the comparison was
+     * true on every call and the guard stopped nothing -- see
+     * `ChannelListAdapterRebuildTest.twoLookupsOfOneTalkStateIconNeverShareAConstantState`, which
+     * pins that premise. A guard that would work has to compare the resource, not the state.
+     *
      * @param user The user to update.
      * @param view The view containing this adapter.
      */
     fun updateUserStates(user: IUser, view: RecyclerView) {
         val itemId = user.session.toLong() or USER_ID_MASK
         val uvh = view.findViewHolderForItemId(itemId) as? UserViewHolder ?: return
-        val newState = getTalkStateDrawable(user)
-        val state = uvh.userTalkHighlight.drawable.current.constantState
-        if (state != null && state != newState.constantState) {
-            uvh.userTalkHighlight.setImageDrawable(newState)
-        }
+        uvh.userTalkHighlight.setImageDrawable(getTalkStateDrawable(user))
     }
 
     private fun getTalkStateDrawable(user: IUser): Drawable {

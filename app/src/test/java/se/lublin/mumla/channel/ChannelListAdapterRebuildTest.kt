@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.os.Looper
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -48,6 +49,12 @@ class ChannelListAdapterRebuildTest {
             setTheme(R.style.Theme_Mumla)
             super.onCreate(savedInstanceState)
         }
+    }
+
+    private companion object {
+        /** Tall enough for every row of [smallTree] to be laid out at once. */
+        const val WIDTH_PX = 1000
+        const val HEIGHT_PX = 4000
     }
 
     private lateinit var context: Context
@@ -549,6 +556,71 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
+     * `updateUserStates` is the most frequently executed code in this adapter -- every talk-state
+     * and every mute/deafen change of every user goes through it, without a rebuild -- and it is
+     * reachable only through a list that has an adapter attached and has been laid out, because
+     * its first statement is `findViewHolderForItemId`. Every test that builds a holder by hand
+     * gets `null` there and measures nothing.
+     */
+    @Test
+    fun aTalkStateUpdateRepaintsTheRowOfTheUserItNames() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        val view = attachedRecyclerView(adapter)
+        val user = ids.getValue(4).getUsers().first() as FakeUser
+
+        assertThat(talkHighlightResIdIn(view, 100))
+            .isEqualTo(R.drawable.outline_circle_talking_off)
+
+        user.state = TalkState.TALKING
+        adapter.updateUserStates(user, view)
+
+        assertThat(talkHighlightResIdIn(view, 100))
+            .isEqualTo(R.drawable.outline_circle_talking_on)
+    }
+
+    /**
+     * Why `updateUserStates` does not compare constant states before it repaints.
+     *
+     * It used to read `state != null && state != newState.constantState`, and both clauses
+     * survived mutation. Measured here: the talk-state icons are layer lists, and
+     * `LayerDrawable.getConstantState()` hands back its own per-instance `LayerState`, a fresh one
+     * per `newDrawable()`. Two lookups of one resource therefore never share a constant state, so
+     * the comparison was true on every call and the guard never once stopped a repaint -- an
+     * equivalent mutant wearing a guard's clothes (spec 4.05). This test is the premise: if a
+     * future resource or framework version does start sharing the state, it goes red and a real
+     * guard becomes writable.
+     */
+    @Test
+    fun twoLookupsOfOneTalkStateIconNeverShareAConstantState() {
+        val res = context.resources
+        val first = ResourcesCompat.getDrawable(res, R.drawable.outline_circle_talking_off, null)!!
+        val second = ResourcesCompat.getDrawable(res, R.drawable.outline_circle_talking_off, null)!!
+
+        assertThat(first.constantState).isNotNull()
+        assertThat(first.constantState).isNotSameInstanceAs(second.constantState)
+    }
+
+    /** A user with no row in this list is not somebody else's row. */
+    @Test
+    fun aTalkStateUpdateForAUserThatIsNotShownRepaintsNothing() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        val view = attachedRecyclerView(adapter)
+        val stranger = FakeUser(999, state = TalkState.TALKING)
+        val before = view.childCount.let { n -> (0 until n).map { view.getChildAt(it) } }
+            .mapNotNull { it.findViewById<android.widget.ImageView>(R.id.user_row_talk_highlight) }
+            .map { it.drawable }
+
+        adapter.updateUserStates(stranger, view)
+
+        val after = view.childCount.let { n -> (0 until n).map { view.getChildAt(it) } }
+            .mapNotNull { it.findViewById<android.widget.ImageView>(R.id.user_row_talk_highlight) }
+            .map { it.drawable }
+        assertThat(after).isEqualTo(before)
+    }
+
+    /**
      * The talk-state icon is a priority list, not a set of independent flags: a user who is both
      * self-muted and server-deafened shows the deafened icon. The order is pinned here because the
      * Kotlin conversion rewrote the if-chain as a `when`.
@@ -657,6 +729,35 @@ class ChannelListAdapterRebuildTest {
 
     private fun recyclerView() =
         RecyclerView(context).apply { layoutManager = LinearLayoutManager(context) }
+
+    /**
+     * A list the adapter is actually attached to, measured and laid out, so that the rows exist as
+     * view holders the adapter can find again. [recyclerView] is a bare parent for
+     * `onCreateViewHolder` and deliberately has no adapter: anything that reaches into the list
+     * itself needs this one instead.
+     */
+    private fun attachedRecyclerView(adapter: ChannelListAdapter): RecyclerView {
+        val view = recyclerView()
+        view.adapter = adapter
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(WIDTH_PX, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT_PX, View.MeasureSpec.EXACTLY),
+        )
+        view.layout(0, 0, WIDTH_PX, HEIGHT_PX)
+        idleMainLooper()
+        return view
+    }
+
+    private fun talkHighlightIn(view: RecyclerView, session: Int): android.widget.ImageView {
+        val itemId = session.toLong() or ChannelListAdapter.USER_ID_MASK
+        val holder = requireNotNull(view.findViewHolderForItemId(itemId)) {
+            "no laid-out row for user $session"
+        }
+        return holder.itemView.findViewById(R.id.user_row_talk_highlight)
+    }
+
+    private fun talkHighlightResIdIn(view: RecyclerView, session: Int): Int =
+        shadowOf(talkHighlightIn(view, session).drawable).createdFromResId
 
     private fun userCountTextAt(
         adapter: ChannelListAdapter,
