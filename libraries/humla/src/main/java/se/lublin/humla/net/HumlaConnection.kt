@@ -44,7 +44,6 @@ import java.security.NoSuchProviderException
 import java.security.UnrecoverableKeyException
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
-import java.util.EnumMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -186,8 +185,9 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var startTimestamp = 0L // Time that the connection was initiated in nanoseconds
     private val cryptState = CryptState()
 
-    /** Protocol thread only; see [warn]. */
-    private val lastWarnedMicros = EnumMap<ConnectionWarning, Long>(ConnectionWarning::class.java)
+    /** The last warning handed to the listener and when; protocol thread only, see [warn]. */
+    private var lastWarning: ConnectionWarning? = null
+    private var lastWarnedMicros = 0L
 
     // Latency
     @Volatile private var udpLatency = 0L
@@ -682,27 +682,43 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     /**
-     * Tells the user something about the connection, at most once per [ConnectionWarning] per
-     * [WARNING_REPEAT_MICROS]. Protocol thread only - all three call sites run there, which is why
-     * the map needs no synchronisation.
+     * Tells the user something about the connection, suppressing a warning that would only repeat
+     * the last line already delivered, for [WARNING_REPEAT_MICROS]. Protocol thread only - all
+     * three call sites run there, which is why the two fields need no synchronisation.
      *
-     * The suppression is not what keeps the route from flapping; [UdpHealthMonitor]'s hysteresis is,
-     * and this is the second line. A decision can be wrong once without the user's chat log paying
-     * for it every five seconds, which is what a real device did: two warnings a minute is the most
-     * a human reading a log learns from one repeated sentence.
+     * **Against the last warning delivered, not against one timestamp per warning type**, and the
+     * difference is the whole point. Every warning this connection raises is a statement about the
+     * voice route, so suppressing one leaves a story standing that the route has moved on from. A
+     * per-type interval does exactly that on a flapping link: measured over 300 s against a monitor
+     * alternating every window, 15 route changes produced 8 chat lines and the log ended on "back
+     * on UDP" while the voice was tunneled over TCP - because the line that would have said so was
+     * suppressed by a UDP_UNAVAILABLE delivered two changes earlier.
      *
-     * Scope of the claim: this de-duplicates by *warning*, not by cause. A second genuine UDP thread
-     * failure inside the interval leaves no line in the log - the route change and the restart both
-     * still happen, and logcat still carries it.
+     * What this shape buys is an invariant rather than a smaller number: **the last warning
+     * delivered is always the last warning raised**, because the only case suppressed is the one in
+     * which the two are the same warning. The user's last line can therefore never contradict the
+     * route. aFlappingLinkNeverLeavesAWarningThatContradictsTheRoute is that invariant, asserted
+     * after every ping; it costs 15 lines instead of 8 on that history, which is one line per state
+     * change and is what [UdpHealthMonitor]'s hysteresis already bounds to one per window.
+     *
+     * What it still de-duplicates is the flood it was written for: a warning repeating itself, the
+     * shape a real device produced when a wrong decision was retaken every five seconds. That case
+     * is untouched - and it de-duplicates by *warning*, not by cause, so a second genuine UDP
+     * thread failure inside the interval leaves no line in the log. The route change and the
+     * restart both still happen, and logcat still carries it.
+     *
+     * One caveat on the word "delivered": [notifyListener] drops anything queued behind a delivered
+     * disconnect report, so after a disconnect nothing reaches the log at all, this included. The
+     * invariant is about a live connection, where it is exact.
      */
     private fun warn(warning: ConnectionWarning) {
         val now = elapsed
-        val last = lastWarnedMicros[warning]
-        if (last != null && now - last < WARNING_REPEAT_MICROS) {
+        if (warning == lastWarning && now - lastWarnedMicros < WARNING_REPEAT_MICROS) {
             Log.d(TAG, "Suppressing a repeat of $warning")
             return
         }
-        lastWarnedMicros[warning] = now
+        lastWarning = warning
+        lastWarnedMicros = now
         notifyListener { onConnectionWarning(warning) }
     }
 
@@ -959,7 +975,10 @@ class HumlaConnection @JvmOverloads constructor(
         private const val PROTOCOL_THREAD_NAME = "humla-protocol"
         private const val PING_INTERVAL_MILLIS = 5_000L
 
-        /** How long an identical [ConnectionWarning] stays suppressed after one was delivered. */
+        /**
+         * How long a [ConnectionWarning] identical to the last one delivered stays suppressed.
+         * A warning that differs from the last one delivered is never suppressed; see [warn].
+         */
         private const val WARNING_REPEAT_MICROS = 60_000_000L
 
         /**

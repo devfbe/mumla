@@ -602,6 +602,78 @@ class HumlaConnectionUdpRecoveryTest {
             .containsExactly(ConnectionWarning.UDP_THREAD_FAILED, ConnectionWarning.UDP_THREAD_FAILED)
     }
 
+    /**
+     * What the de-duplication may not do, and did: leave a chat log whose last line says the
+     * opposite of where the voice is going.
+     *
+     * The history is a link that alternates every window - the shape [UdpHealthMonitor]'s
+     * hysteresis produces for as long as a bursty link lasts, because it bounds the rate of the
+     * changes and not their number. Over 300 s at the shipped 20 s window that is 15 route changes.
+     * Under a per-warning timestamp the interval let 8 of the 15 announcements through and
+     * suppressed the last one, so the log ended on "back on UDP" while the voice was tunneled.
+     * Measured before the change, exactly: 8 lines, last UDP_RESTORED, route TCP.
+     *
+     * The assertion is the invariant rather than the count: **after every ping, the last line the
+     * user can see names the route the connection is on.** It holds by construction once warn()
+     * de-duplicates against the last warning it delivered - a line is suppressed only when it
+     * would repeat what is already the last line - and it cannot hold for a per-warning
+     * timestamp, which suppresses a line because of what came two changes ago.
+     */
+    @Test
+    fun aFlappingLinkNeverLeavesAWarningThatContradictsTheRoute() {
+        // restoreThreshold = -1 restores on any full window, so the monitor alternates on every
+        // ping; the hour-long ping timeout keeps the third arm out of the measurement.
+        val connection = newConnection(
+            UdpHealthMonitor(pingTimeoutMicros = 3_600_000_000L, restoreThreshold = -1)
+        )
+        val tcp = connection.establish()
+        var changes = 0
+        var route = connection.isUsingUdp
+
+        for (t in 0L..300L step 20) {
+            connection.feedPings(listOf(t), tcp)
+            mainLooper.idle()
+            if (connection.isUsingUdp != route) {
+                route = connection.isUsingUdp
+                changes++
+            }
+            val last = listener.warnings.lastOrNull() ?: continue
+            assertThat(last == ConnectionWarning.UDP_RESTORED).isEqualTo(connection.isUsingUdp)
+        }
+
+        assertThat(changes).isEqualTo(15)
+        assertThat(connection.isUsingUdp).isFalse()
+        assertThat(listener.warnings).hasSize(15)
+        assertThat(listener.warnings.last()).isEqualTo(ConnectionWarning.UDP_UNAVAILABLE)
+    }
+
+    /**
+     * The fourth corner of warn()'s two-boolean condition: a *different* warning after the interval
+     * has passed. The flap test above drives the third (different, inside the interval), and
+     * anIdenticalWarningInsideTheSuppressionIntervalIsDeliveredOnce drives the two same-warning
+     * corners. Written because `&&` and `||` agree on three of the four and the class had no test
+     * that wrote the fourth.
+     */
+    @Test
+    fun aDifferentWarningIsDeliveredOnceTheIntervalHasPassedAsWell() {
+        val connection = newConnection(
+            UdpHealthMonitor(pingTimeoutMicros = 3_600_000_000L, restoreThreshold = -1)
+        )
+        val tcp = connection.establish()
+
+        connection.feedPings(listOf(0L, 20L), tcp)
+        mainLooper.idle()
+        assertThat(listener.warnings).containsExactly(ConnectionWarning.UDP_UNAVAILABLE)
+
+        connection.feedPings(listOf(100L), tcp) // 80 s later, so well past the interval
+        mainLooper.idle()
+
+        assertThat(listener.warnings)
+            .containsExactly(ConnectionWarning.UDP_UNAVAILABLE, ConnectionWarning.UDP_RESTORED)
+            .inOrder()
+        assertThat(connection.isUsingUdp).isTrue()
+    }
+
     /** A datagram shaped like voice: it decrypts and it counts, and it tells the monitor nothing. */
     private fun udpVoice(): ByteArray = ByteArray(16).also {
         it[0] = ((HumlaUDPMessageType.UDPVoiceOpus.ordinal shl 5) and 0xFF).toByte()
