@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.DiffUtil
@@ -745,6 +746,31 @@ class ChatAdapterTest {
         assertThat(image.contentDescription.toString())
             .isEqualTo(activity.getString(R.string.chat_image_open))
         assertThat(image.background).isNotNull()
+    }
+
+    @Test
+    fun theImageRowStacksItsPartsAndKeepsTheTextSelectable() = runTest {
+        val row = inflate(R.layout.list_chat_item_image)
+        val box = row.findViewById<LinearLayout>(R.id.list_chat_item_box)
+        // The default for a LinearLayout is HORIZONTAL, which would put the target line, the
+        // caption, the thumbnail, the status and the timestamp side by side in one strip.
+        assertThat(box.orientation).isEqualTo(LinearLayout.VERTICAL)
+        // The plain text row lets a message be selected and copied. Dropping it only around a
+        // picture would be a silent regression against the ListView row this replaces, and one
+        // nothing else here would notice.
+        for (id in intArrayOf(R.id.list_chat_item_text_before, R.id.list_chat_item_text_after)) {
+            assertThat(row.findViewById<TextView>(id).isTextSelectable).isTrue()
+        }
+        // The gap the comment in anEmptyTextAroundAnImageIsHiddenJustLikeAnAbsentOne leans on: a
+        // VISIBLE but empty caption would still cost this much space under the picture.
+        for (id in intArrayOf(
+            R.id.list_chat_item_text_before,
+            R.id.list_chat_item_text_after,
+            R.id.list_chat_item_image,
+        )) {
+            val params = row.findViewById<View>(id).layoutParams as ViewGroup.MarginLayoutParams
+            assertThat(params.bottomMargin).isGreaterThan(0)
+        }
     }
 
     @Test
