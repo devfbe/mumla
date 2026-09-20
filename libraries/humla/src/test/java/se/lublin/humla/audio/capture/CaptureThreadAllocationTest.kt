@@ -21,7 +21,9 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import java.lang.management.ManagementFactory
+import se.lublin.humla.audio.native.RnnoiseApi
 import se.lublin.humla.audio.native.SpeexPreprocessApi
+import se.lublin.humla.audio.native.WebRtcApmApi
 
 /**
  * The capture path runs on the audio thread once every 10 ms. Every byte it allocates there is a
@@ -165,6 +167,124 @@ class CaptureThreadAllocationTest {
     }
 
     /**
+     * Answers like `jni_rnnoise.cpp` and `jni_webrtc_apm.cpp` do and allocate nothing themselves.
+     *
+     * The probabilities and levels cycle through a small primitive table rather than being
+     * constant: a constant would let C2 fold the value and, with it, possibly the box that is the
+     * one thing these two stages are measured for.
+     */
+    private class SilentRnnoiseApi : RnnoiseApi {
+        private var next = 0
+        override fun create(): Long = 1L
+        override fun processFrame(handle: Long, frame: ShortArray): Float =
+            PROBABILITIES[next++ and (PROBABILITIES.size - 1)]
+        override fun destroy(handle: Long) = Unit
+
+        private companion object {
+            val PROBABILITIES = FloatArray(16) { it / 16f }
+        }
+    }
+
+    private class SilentApmApi : WebRtcApmApi {
+        private var next = 0
+        override fun create(
+            sampleRate: Int,
+            echoCancellation: Boolean,
+            noiseSuppression: Boolean,
+            noiseSuppressionLevel: Int,
+            gainControl: Boolean,
+            highPass: Boolean,
+        ): Long = 1L
+        override fun frameSize(handle: Long): Int = FRAME_SIZE
+        override fun processCapture(handle: Long, frame: ShortArray): Int = 0
+        override fun processRender(handle: Long, frame: ShortArray): Int = 0
+        override fun lastCaptureLevelDbfs(handle: Long): Float =
+            LEVELS[next++ and (LEVELS.size - 1)]
+        override fun destroy(handle: Long) = Unit
+
+        private companion object {
+            val LEVELS = FloatArray(16) { -50f + it }
+        }
+    }
+
+    /** Swallows the frame without keeping it, so a chunker measured through it measures itself. */
+    private class SilentFarEndSink : FarEndSink {
+        var frames = 0
+            private set
+
+        override fun analyzeReverseStream(frame: ShortArray) {
+            frames++
+        }
+    }
+
+    /**
+     * The two stages that **compute** a probability, which is the cost the first test in this file
+     * deliberately does not contain and `SpeexPreprocessor` is able to avoid.
+     *
+     * Neither of these can avoid it. RNNoise answers a continuous probability from its model and
+     * the APM answers a continuous level, so there is no finite set of return values to pre-box the
+     * way speex's integer percent allows -- one `java.lang.Float` per frame, 16 B, is the floor
+     * rather than a defect. Spec §4.1 decided to pay it (about 1.6 KB/s per stage on the audio
+     * thread, two to three orders of magnitude below what moves ART's allocation-triggered
+     * collection) rather than trade `Float?` for a primitive with a NaN sentinel.
+     *
+     * So the claim here is **"at most that one box, and nothing else"**, not "nothing": the
+     * threshold is one object plus the same half-object of measurement noise the rest of this file
+     * uses. What it still catches is everything that would be a *second* allocation per frame -- a
+     * scratch array, a captured local, a lambda, a `Pair`, an iterator.
+     *
+     * Both windows are measured, and the hot one is worth reading rather than skipping: the same
+     * C2 escape analysis that made task 5's hot-only measurement a lie is visible here as the box
+     * being partly eliminated, so the hot number lands *below* 16 B without the device doing any
+     * such thing. The far-end path and the chunker have no box to pay and are held to the same
+     * `HALF_AN_OBJECT` as the skeleton.
+     */
+    @Test
+    fun `the rnnoise and apm stages allocate no more than the one accepted box`() {
+        assertThat(threads.isThreadAllocatedMemorySupported).isTrue()
+        assertThat(threads.isThreadAllocatedMemoryEnabled).isTrue()
+
+        val sink = arrayOfNulls<Any>(1)
+        val instrument = hot { sink[0] = ShortArray(FRAME_SIZE) }
+        assertWithMessage("the allocation counter is not counting; every result below would be a false green")
+            .that(instrument).isAtLeast(FRAME_SIZE.toDouble())
+
+        val frame = ShortArray(FRAME_SIZE)
+        val rnnoise = RnnoisePreprocessor(SilentRnnoiseApi())
+        val apm = WebRtcApmPreprocessor(SilentApmApi(), WebRtcApmConfig.FOR_ECHO_CANCELLATION)
+        val farEndSink = SilentFarEndSink()
+        val chunker = FarEndFrameChunker(FRAME_SIZE, farEndSink)
+
+        val rnnoiseCold = cold { rnnoise.process(frame) }
+        val rnnoiseHot = hot { rnnoise.process(frame) }
+        val apmCold = cold { apm.process(frame) }
+        val apmHot = hot { apm.process(frame) }
+        val renderCold = cold { apm.analyzeReverseStream(frame) }
+        val renderHot = hot { apm.analyzeReverseStream(frame) }
+        val chunkerCold = cold { chunker.push(frame, FRAME_SIZE) }
+        val chunkerHot = hot { chunker.push(frame, FRAME_SIZE) }
+
+        println(
+            "allocation per 10 ms frame (cold / hot): instrument baseline ${"%.1f".format(instrument)} B, " +
+                "RnnoisePreprocessor ${"%.3f".format(rnnoiseCold)} / ${"%.3f".format(rnnoiseHot)} B, " +
+                "WebRtcApmPreprocessor capture ${"%.3f".format(apmCold)} / ${"%.3f".format(apmHot)} B, " +
+                "render ${"%.3f".format(renderCold)} / ${"%.3f".format(renderHot)} B, " +
+                "FarEndFrameChunker ${"%.3f".format(chunkerCold)} / ${"%.3f".format(chunkerHot)} B"
+        )
+
+        assertWithMessage("RnnoisePreprocessor.process allocates more than the probability box")
+            .that(maxOf(rnnoiseCold, rnnoiseHot)).isLessThan(ONE_BOXED_FLOAT)
+        assertWithMessage("WebRtcApmPreprocessor.process allocates more than the probability box")
+            .that(maxOf(apmCold, apmHot)).isLessThan(ONE_BOXED_FLOAT)
+        assertWithMessage("WebRtcApmPreprocessor's far-end path allocates on the playback thread")
+            .that(maxOf(renderCold, renderHot)).isLessThan(HALF_AN_OBJECT)
+        assertWithMessage("FarEndFrameChunker.push allocates on the playback thread")
+            .that(maxOf(chunkerCold, chunkerHot)).isLessThan(HALF_AN_OBJECT)
+        assertWithMessage("the chunker must actually have produced frames")
+            .that(farEndSink.frames).isGreaterThan(0)
+    }
+
+    /**
      * Both windows are needed, and the cold one is the load-bearing half.
      *
      * HotSpot's C2 does escape analysis: once the loop is hot it scalar-replaces a short-lived
@@ -231,5 +351,12 @@ class CaptureThreadAllocationTest {
          * produce, is at least 16 B and is caught.
          */
         const val HALF_AN_OBJECT = 8.0
+
+        /**
+         * One `java.lang.Float` (16 B) plus the same measurement floor. The claim it carries is
+         * "at most the one box spec §4.1 accepts, and nothing else on top of it" -- a *second*
+         * per-frame allocation of any kind is at least another 16 B and fails.
+         */
+        const val ONE_BOXED_FLOAT = 16.0 + HALF_AN_OBJECT
     }
 }
