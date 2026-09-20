@@ -292,6 +292,24 @@ P5. **Manifest:** `foregroundServiceType="microphone|mediaPlayback"`,
   within 3 s worst case; stream A calls it only from the audio-control thread.
 - Stream D consumes `IChatMessage` unchanged; stream A must not change its shape.
 
+### 4.0 Decisions the user made during execution
+
+- **Chat images are not fetched automatically any more (D).** The default for
+  `load_images` becomes off, with a per-server "always load on this server"
+  opt-in. Rationale the user was given: with the old default every image URL in
+  every chat message is fetched, so a tracking pixel tells its sender the user's
+  IP address and when they are online. Inline `data:` images keep rendering —
+  they ask nobody for anything, so hiding them would cost privacy nothing and
+  usability a lot. This needs a settings surface and per-server storage; it is
+  its own task. The default itself lives in exactly two places that must move
+  together: `app/src/main/res/xml/settings_general.xml:52`
+  (`android:defaultValue="true"`) and `app/src/main/java/se/lublin/mumla/Settings.kt:274`
+  (`DEFAULT_LOAD_IMAGES`).
+- **APK size is deferred (B).** The two new native libraries add ~8.48 MB
+  uncompressed across three ABIs. The user chose to look at this together with
+  the already-deferred R8 and APK-size work rather than to decide on ABI splits
+  now.
+
 ### 4.1 Binding constraints discovered during execution
 
 These were found by implementers and reviewers after the plans were written. They
