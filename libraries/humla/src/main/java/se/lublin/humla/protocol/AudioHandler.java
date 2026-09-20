@@ -27,12 +27,14 @@ import android.util.Log;
 import se.lublin.humla.R;
 import se.lublin.humla.audio.AudioInput;
 import se.lublin.humla.audio.AudioOutput;
+import se.lublin.humla.audio.capture.CaptureFrame;
+import se.lublin.humla.audio.capture.CapturePipeline;
+import se.lublin.humla.audio.capture.CaptureWiring;
+import se.lublin.humla.audio.capture.NoiseSuppressionMode;
 import se.lublin.humla.audio.encoder.CELT11Encoder;
 import se.lublin.humla.audio.encoder.CELT7Encoder;
 import se.lublin.humla.audio.encoder.IEncoder;
 import se.lublin.humla.audio.encoder.OpusEncoder;
-import se.lublin.humla.audio.encoder.PreprocessingEncoder;
-import se.lublin.humla.audio.encoder.ResamplingEncoder;
 import se.lublin.humla.audio.inputmode.IInputMode;
 import se.lublin.humla.exception.AudioException;
 import se.lublin.humla.exception.AudioInitializationException;
@@ -66,6 +68,11 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private final AudioManager mAudioManager;
     private final AudioInput mInput;
     private final AudioOutput mOutput;
+    /**
+     * Spec B1's capture chain, in front of the encoder rather than inside it. Touched only by the
+     * capture thread in {@link #onAudioInputReceived}, and released in {@link #shutdown()}.
+     */
+    private final CapturePipeline mCapturePipeline;
     private AudioOutput.AudioOutputListener mOutputListener;
     private AudioEncodeListener mEncodeListener;
 
@@ -136,6 +143,16 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             throw new AudioInitializationException("RECORD_AUDIO permission not granted");
         }
         mInput = new AudioInput(this, mAudioSource, mSampleRate, mEchoCancellationMethod);
+        // The existing `preprocessor_enabled` switch keeps its meaning -- "suppress noise" -- and
+        // changes what does the suppressing: RNNoise instead of speex inside the encoder. Echo
+        // cancellation is not configured here: AEC3 needs the far-end reference from AudioOutput,
+        // and without it task 2 measured -0.62 dB of residual echo against -22.32 dB wired
+        // correctly. The platform canceller the user may have chosen is attached to the AudioRecord
+        // session by AudioInput, exactly as before.
+        mCapturePipeline = CaptureWiring.capturePipeline(
+                mInput.getSampleRate(), mInputMode, mAmplitudeBoost,
+                mPreprocessorEnabled ? NoiseSuppressionMode.RNNOISE : NoiseSuppressionMode.NONE,
+                mLogger);
         mOutput = new AudioOutput(mOutputListener);
     }
 
@@ -260,14 +277,9 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
                 return;
         }
 
-        if (mPreprocessorEnabled) {
-            encoder = new PreprocessingEncoder(encoder, FRAME_SIZE, SAMPLE_RATE);
-        }
-
-        if (mInput.getSampleRate() != SAMPLE_RATE) {
-            encoder = new ResamplingEncoder(encoder, 1, mInput.getSampleRate(), FRAME_SIZE, SAMPLE_RATE);
-        }
-
+        // No PreprocessingEncoder and no ResamplingEncoder any more: mCapturePipeline does both,
+        // and before the voice detector rather than after it (spec B1). Wrapping either one here
+        // as well would denoise twice and resample twice.
         mEncoder = encoder;
     }
 
@@ -352,6 +364,9 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         synchronized (mInput) {
             mInput.shutdown();
         }
+        // After the capture thread is joined, because every stage in it is single-threaded and
+        // release() frees native state the loop reaches on every frame.
+        mCapturePipeline.release();
         synchronized (mOutput) {
             mOutput.stopPlaying();
         }
@@ -427,7 +442,13 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
 
     @Override
     public void onAudioInputReceived(short[] frame, int frameSize) {
-        boolean talking = mInputMode.shouldTransmit(frame, frameSize);
+        // Spec B1: resample, preprocess *every* frame, then detect, then boost. The detector now
+        // judges the denoised frame instead of the raw one, which is the whole point -- and it
+        // means the same detection_threshold slider position corresponds to a different level than
+        // it did before. The result object and its samples belong to the pipeline and are valid
+        // only until the next call; they are read here, never kept.
+        CaptureFrame processed = mCapturePipeline.process(frame, frameSize);
+        boolean talking = processed.getTransmit();
         talking &= !mMuted;
 
         if (mTalking ^ talking) {
@@ -449,26 +470,14 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         }
 
         if (talking) {
-            // Boost/reduce amplitude based on user preference
-            // TODO: perhaps amplify to the largest value that does not result in clipping.
-            if (mAmplitudeBoost != 1.0f) {
-                for (int i = 0; i < frameSize; i++) {
-                    // Java only guarantees the bounded preservation of sign in a narrowing
-                    // primitive conversion from float -> int, not float -> int -> short.
-                    float val = frame[i] * mAmplitudeBoost;
-                    if (val > Short.MAX_VALUE) {
-                        val = Short.MAX_VALUE;
-                    } else if (val < Short.MIN_VALUE) {
-                        val = Short.MIN_VALUE;
-                    }
-                    frame[i] = (short) val;
-                }
-            }
-
+            // The pipeline has already applied the amplitude boost, after the detector rather than
+            // before it, so the amplification slider no longer moves the voice-activation
+            // threshold with it. Note the length: the frame the pipeline produced, not the array's
+            // size -- they are equal today and the pipeline is what may change that.
             synchronized (mEncoderLock) {
                 if (mEncoder != null) {
                     try {
-                        mEncoder.encode(frame, frameSize);
+                        mEncoder.encode(processed.getSamples(), processed.getLength());
                         mFrameCounter++;
                     } catch (NativeAudioException e) {
                         e.printStackTrace();

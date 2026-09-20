@@ -25,3 +25,9 @@ local.properties
 
 # Left behind by every Kotlin build.
 .kotlin/
+# Kotlin build-tool session files, written by any gradle run since KGP 2.0.
+.kotlin/
+
+# Shared scratch directory for review/implementation tooling. It lives inside the
+# worktree, so without this line a `git add -A` in any later task commits it.
+scratchpad/

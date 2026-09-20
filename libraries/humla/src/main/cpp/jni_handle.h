@@ -1,4 +1,10 @@
 // Shared helpers for the hand-written JNI bindings. Handles are raw pointers carried as jlong.
+//
+// A raw pointer handle puts the whole lifetime contract on the Kotlin side: release exactly
+// once, and never while another thread is inside the object. jni_native_handle.h wraps a
+// pointer in a cell instead, so that releasing twice is a no-op and using a released handle is
+// an error return rather than heap corruption. The codec bindings still use the raw form; new
+// bindings should not.
 #pragma once
 #include <jni.h>
 #include <cstdint>

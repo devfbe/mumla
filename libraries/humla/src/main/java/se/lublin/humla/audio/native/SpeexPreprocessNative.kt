@@ -17,11 +17,55 @@
 
 package se.lublin.humla.audio.native
 
-/** libspeexdsp preprocessor. State handles are `SpeexPreprocessState*`; `value[0]` is the in/out int argument of `speex_preprocess_ctl`. */
+/**
+ * libspeexdsp preprocessor.
+ *
+ * State handles are opaque. They are not `SpeexPreprocessState*`: `speex_preprocess_run` writes
+ * the frame size the state was CREATED with and libspeexdsp has no ctl to ask a state for it, so
+ * the bridge hands out a small struct holding the state and that frame size, and compares it
+ * against the array's real length in [run].
+ */
 interface SpeexPreprocessApi {
+    /** A new state, or 0 if [frameSize] is not positive or speex could not allocate one. */
     fun init(frameSize: Int, sampleRate: Int): Long
-    /** Runs the preprocessor in place; returns the speex VAD decision (1 = speech). */
+
+    /**
+     * Runs the preprocessor in place; returns the speex VAD decision (1 = speech, 0 = not), or -1
+     * if the frame could not be processed.
+     *
+     * [frame] must hold at least the [frameSize] the state was created with. speex writes that
+     * many samples whatever the array's real length is, so a shorter array is refused with -1
+     * rather than overrun -- this used to be a live crash at ultra-wideband.
+     *
+     * **Do not wrap this in a `Boolean`.** An adapter of the shape `fun run(...): Boolean =
+     * native.run(...) != 0` maps -1 to `true`, i.e. it reports the most confident possible "this
+     * is speech" for the one case where speex never looked at the frame at all. The -1 is not
+     * hypothetical: a capture buffer shorter than the state's frame size produces it, and a
+     * caller that gates transmission on the answer would key the microphone open on a refusal.
+     * Callers must branch on `< 0` before they touch the other two values.
+     */
     fun run(state: Long, frame: ShortArray): Int
+
+    /**
+     * Runs `speex_preprocess_ctl` with `value[0]` as the in/out int argument; returns 0, or -1.
+     *
+     * [request] has to be one of the `SPEEX_PREPROCESS_*` constants on [SpeexPreprocessNative] --
+     * those are the requests the bridge allows through, and any other number is refused with -1
+     * without reaching speex. That is not tidiness: the bridge hands speex the address of a
+     * four-byte int on its own stack frame, and several requests treat that address as something
+     * else entirely. `GET_ECHO_STATE` writes a pointer through it, `SET_ECHO_STATE` keeps it as
+     * one and dereferences it later, and `GET_PSD` writes a whole frame of ints into it.
+     *
+     * A -1 can also mean that libspeexdsp does not implement the request in this build: its AGC
+     * controls (`SPEEX_PREPROCESS_SET_AGC`, `SPEEX_PREPROCESS_SET_AGC_TARGET`) are compiled out of
+     * a fixed-point build, which is what this library is.
+     *
+     * The two are not distinguishable, and deliberately so. `speex_preprocess_ctl` answers -1 for
+     * a request it does not know, this returns its status unchanged, and there is no spare value
+     * left: a code invented here could collide with a future libspeexdsp return. [SpeexJitterApi]
+     * does not have the problem -- `jitter_buffer_ctl` answers -1 while the bridge refuses with
+     * `JITTER_BUFFER_BAD_ARGUMENT` (-2) -- so the two `ctl` entry points really do differ here.
+     */
     fun ctlInt(state: Long, request: Int, value: IntArray): Int
     fun destroy(state: Long)
 }

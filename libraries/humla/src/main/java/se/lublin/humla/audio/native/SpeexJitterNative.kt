@@ -29,14 +29,30 @@ interface SpeexJitterApi {
     fun get(handle: Long, out: ByteArray, desiredSpan: Int, meta: IntArray): Int
     fun pointerTimestamp(handle: Long): Int
     fun tick(handle: Long)
+
+    /**
+     * Runs `jitter_buffer_ctl` with `value[0]` as the in/out int argument.
+     *
+     * [request] has to be one of [SpeexJitterNative.JITTER_BUFFER_SET_MARGIN],
+     * [SpeexJitterNative.JITTER_BUFFER_GET_MARGIN] or
+     * [SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT] -- those are the requests the bridge
+     * allows through, and any other number is refused with `JITTER_BUFFER_BAD_ARGUMENT` without
+     * reaching libspeexdsp. The bridge hands it the address of a four-byte int on its own stack
+     * frame, and `GET_DESTROY_CALLBACK` writes eight bytes through that address while
+     * `SET_DESTROY_CALLBACK` keeps it as the function `jitter_buffer_destroy` later calls.
+     */
     fun ctl(handle: Long, request: Int, value: IntArray): Int
     fun updateDelay(handle: Long): Int
 }
 
 object SpeexJitterNative : SpeexJitterApi {
+    // The first five are statuses [get] returns, the last three are [ctl] requests; only the
+    // requests are on the bridge's allow list.
     const val JITTER_BUFFER_OK = 0
     const val JITTER_BUFFER_MISSING = 1
-    const val JITTER_BUFFER_INCOMPLETE = 2
+
+    /** speexdsp's own name for 2 (`speex_jitter.h:74`); libspeex called it `INCOMPLETE`. */
+    const val JITTER_BUFFER_INSERTION = 2
     const val JITTER_BUFFER_INTERNAL_ERROR = -1
     const val JITTER_BUFFER_BAD_ARGUMENT = -2
     const val JITTER_BUFFER_SET_MARGIN = 0

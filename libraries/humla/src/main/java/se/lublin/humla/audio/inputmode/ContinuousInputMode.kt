@@ -15,20 +15,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.audio.inputmode;
+package se.lublin.humla.audio.inputmode
 
-/**
- * An input mode that always transmits audio.
- * Created by andrew on 13/02/16.
- */
-public class ContinuousInputMode implements IInputMode {
-    @Override
-    public boolean shouldTransmit(short[] pcm, int length) {
-        return true;
-    }
+/** An input mode that always transmits audio. */
+class ContinuousInputMode : IInputMode {
+    override fun shouldTransmit(pcm: ShortArray, length: Int, vadProbability: Float?): Boolean = true
 
-    @Override
-    public void waitForInput() {
-
-    }
+    override fun waitForInput() = Unit
 }

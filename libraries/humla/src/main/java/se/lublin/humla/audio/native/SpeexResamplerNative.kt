@@ -19,8 +19,24 @@ package se.lublin.humla.audio.native
 
 /** libspeexdsp resampler. `inLen[0]`/`outLen[0]` are in/out sample counts as in `speex_resampler_process_int`. */
 interface SpeexResamplerApi {
+    /** A new state, or 0 if [channels] is not positive or speex could not allocate one. `error[0]`
+     *  receives a `RESAMPLER_ERR_*` code when [error] is given and has room for it. */
     fun init(channels: Int, inRate: Int, outRate: Int, quality: Int, error: IntArray?): Long
+
+    /**
+     * Resamples one channel.
+     *
+     * [channelIndex] is an index, not a count: it has to be in `0 until channels` as passed to
+     * [init]. speex uses it to reach three per-channel arrays that were sized for that count and
+     * compares it against nothing, so an index outside the range is refused here with
+     * `RESAMPLER_ERR_INVALID_ARG` rather than passed on as a heap read and write.
+     *
+     * `inLen[0]` and `outLen[0]` are clamped to `input.size` and `out.size` before speex sees
+     * them, and come back as the counts actually consumed and produced.
+     */
     fun processInt(state: Long, channelIndex: Int, input: ShortArray, inLen: IntArray, out: ShortArray, outLen: IntArray): Int
+
+    /** Releases [state]; 0 is a no-op. */
     fun destroy(state: Long)
 }
 
