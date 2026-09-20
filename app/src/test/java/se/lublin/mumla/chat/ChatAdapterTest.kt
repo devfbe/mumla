@@ -491,9 +491,13 @@ class ChatAdapterTest {
 
     @Test
     fun aTapOnARowWhoseImageFailedReportsNothing() = runTest {
-        // Both performClick() and a dispatchTouchEvent aimed straight at the ImageView would
-        // report a tap here: neither consults the view's own visibility. Only the routed touch in
-        // tapRow does, because the parent refuses to hand a GONE child any pointer.
+        // What this pins is the user-facing claim: a row whose picture failed is not tappable.
+        // The mechanism is more than one thing at once and the test does not isolate any of them --
+        // a failed row has no drawable, so it also measures 0x0 and isTransformedTouchPointInView
+        // turns the touch away before visibility is ever consulted. Either would do. The routing in
+        // tapRow still earns its keep: a performClick() would report a tap here whatever the row
+        // looked like, and it is the same routing that anImageRowShowsABoundedThumbnailAndReportsTaps
+        // needs on the other side of the claim.
         remoteBody = "not an image".toByteArray()
         val adapter = adapter()
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))

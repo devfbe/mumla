@@ -67,19 +67,29 @@ import java.util.Date
  * That cost holds **only while the log hands out the same instances**. [DIFF] compares by identity,
  * so a caller that rebuilds its message objects turns every row into a delete plus an insert, and
  * `DiffUtil`'s O((N+M)*D) becomes quadratic: measured 47 ms at 1 000 messages, 236 ms at 5 000 and
- * **4.35 s at 20 000**, on the shared two-thread pool. The message log it is fed from
- * (`MumlaService.mMessageLog`) is an unbounded `ArrayList` that only ever appends, which is what
- * makes the identity callback correct — and what makes this the thing to re-check if that ever
- * changes.
+ * **4.35 s at 20 000**, on the shared two-thread pool. What makes the identity callback correct is
+ * that the log it is fed from (`MumlaService.mMessageLog`) never *edits* a message: it appends
+ * instances and hands the same ones out again. It is not append-only in the wider sense —
+ * `clearMessageLog` empties it and connecting replaces the list — but both of those are a whole
+ * new list of rows, which is the delete-plus-insert case above and correct, if not cheap. Editing a
+ * message in place is the thing to re-check if it ever starts happening.
  *
  * **The log is unbounded, and so is what this holds.** Every parsed body is cached on its message
- * for the life of the connection: measured ~492 bytes of retained `Spanned` per message
- * (9.4 MiB at 20 000 messages), on top of the log itself and on top of
+ * for the life of the connection: a retained-heap delta with a forced GC put this at ~492 bytes of
+ * `Spanned` per message (9.4 MiB at 20 000). That is a reported figure, not an assertion — it was
+ * never checked against an instrumented measurement and no test holds it — but the shape it
+ * describes is real: the cache grows with the log. It sits on top of the log itself and on top of
  * `AsyncListDiffer`'s two list references. Each [submitMessages] also copies the whole log and
  * re-walks it once — O(N) per arriving message, i.e. O(N^2) over a session — though only the copy
  * is charged to the main thread (measured 0.3 us at 200 messages, 7-15 us at 5 000); the walk runs
  * on [parseDispatcher]. Nothing here trims the log; whoever decides to bound it owns
  * `MumlaService`, not this class.
+ *
+ * **What the tests do not run.** Every test here supplies an inline background executor for the
+ * differ and `Dispatchers.Unconfined` for [scope], because determinism needs both. So the shipped
+ * default [differConfig] — and with it the shared two-thread pool measured above — and a [scope]
+ * that really dispatches on the main thread are exercised by no test in this suite. They are
+ * covered by the contract below and by the fragment that supplies them, not by evidence here.
  *
  * @param selfSessionId the local user's session id, used only to decide which side a row is
  *   aligned to. It **must not throw**: the `ListView` adapter this replaces called
@@ -218,11 +228,13 @@ class ChatAdapter(
                     holder.status.setText(R.string.chat_image_load_failed)
                 }
                 // ChatImageLoader returns this for non-positive bounds, i.e. an unmeasured view.
-                // It cannot arise from here — thumbnailPx is a constant handed to the constructor,
-                // not a measured width — so this branch exists for exhaustiveness. Nothing asks
-                // again: there is no later layout pass that would change the answer. Leaving the
-                // empty placeholder is still the right outcome, because reporting a failure would
-                // show an error for an image that is fine, and a Failed would be cached.
+                // Reached when the caller hands a non-positive [thumbnailPx] — nothing here
+                // rejects one, and a test passes 0. What it is never reached by is an unmeasured
+                // view: thumbnailPx is a constructor constant, not a measured width, so there is no
+                // later layout pass that would change the answer and nothing asks again. Leaving
+                // the empty placeholder is
+                // still the right outcome, because reporting a failure would show an error for an
+                // image that is fine, and a Failed would be cached.
                 is ImageResult.Skipped -> Unit
             }
         }
