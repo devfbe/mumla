@@ -1,6 +1,8 @@
 package se.lublin.mumla.channel
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.graphics.Typeface
 import android.os.Looper
@@ -21,13 +23,16 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.GraphicsMode
 import se.lublin.humla.HumlaService
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
+import se.lublin.mumla.drawable.CircleDrawable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
@@ -951,6 +956,78 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
+     * The avatar path, which no test wrote an input for: `getTexture()` was a constant null in the
+     * fake, so all three corners of the passive branch lived behind one input the class never
+     * produced. A user with a decodable texture gets a [CircleDrawable] of it, and a user without
+     * one -- or with bytes that do not decode, which the code comments on and which really
+     * happens -- gets the resting dot.
+     */
+    @Test
+    fun aDecodableTextureBecomesTheUsersAvatarAndAnythingElseIsTheRestingDot() {
+        val (root, ids) = smallTree()
+        val channel = ids.getValue(4)
+
+        channel.removeUser(channel.getUsers().first())
+        channel.addUser(FakeUser(100, texture = pngBytes()))
+        assertThat(talkHighlightDrawableOf(adapterOver(root, ids)))
+            .isInstanceOf(CircleDrawable::class.java)
+
+        channel.removeUser(channel.getUsers().first())
+        channel.addUser(FakeUser(100))
+        assertThat(talkStateDrawableOf(adapterOver(root, ids)))
+            .isEqualTo(R.drawable.outline_circle_talking_off)
+    }
+
+    /**
+     * The third corner, and the one the code has a comment about: a texture that does not decode
+     * falls through to the resting dot rather than to a null drawable. It needs real graphics --
+     * Robolectric's legacy `BitmapFactory` hands back a bitmap for any bytes at all, so under the
+     * class's default mode this branch is unwritable and the assertion above it would pass for
+     * the wrong reason.
+     */
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aTextureThatDoesNotDecodeFallsBackToTheRestingDot() {
+        val (root, ids) = smallTree()
+        val channel = ids.getValue(4)
+        channel.removeUser(channel.getUsers().first())
+        channel.addUser(FakeUser(100, texture = byteArrayOf(1, 2, 3)))
+
+        assertThat(talkStateDrawableOf(adapterOver(root, ids)))
+            .isEqualTo(R.drawable.outline_circle_talking_off)
+    }
+
+    /**
+     * Everything the row reads out of the session can throw the moment the model goes away under
+     * it -- the session is gone, or it is not synchronised yet -- and every one of those reads is
+     * wrapped. None of the three wrappings had a test: a row still has to bind.
+     */
+    @Test
+    fun aSessionThatThrowsMidBindStillProducesARow() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        every { session.sessionChannel } throws IllegalStateException("not synchronized")
+        every { session.sessionId } throws HumlaDisconnectedException("gone")
+
+        assertThat(nameStyleOf(adapter, 2)).isEqualTo(Typeface.NORMAL)
+        assertThat(userNameStyleOf(adapter, 100)).isEqualTo(Typeface.NORMAL)
+    }
+
+    /** And a rebuild that throws mid-walk leaves the list as far as it got, rather than crashing. */
+    @Test
+    fun aModelThatThrowsMidRebuildLeavesTheListStanding() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        idleMainLooper()
+        every { session.getChannel(any()) } throws IllegalStateException("not synchronized")
+
+        adapter.updateChannels()
+        idleMainLooper()
+
+        assertThat(adapter.itemCount).isEqualTo(0)
+    }
+
+    /**
      * The channel name carries two independent marks: bold for the channel we are in, italic for
      * a channel linked with it -- and our own channel is italic too once it has any link.
      */
@@ -981,14 +1058,19 @@ class ChannelListAdapterRebuildTest {
             .typeface?.style ?: Typeface.NORMAL
     }
 
-    private fun talkStateDrawableOf(adapter: ChannelListAdapter): Int {
-        val position = adapter.getUserPosition(100)
-        val parent = recyclerView()
-        val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(position))
-        adapter.onBindViewHolder(holder, position)
-        val drawable = holder.itemView
+    private fun talkStateDrawableOf(adapter: ChannelListAdapter): Int =
+        shadowOf(talkHighlightDrawableOf(adapter)).createdFromResId
+
+    private fun talkHighlightDrawableOf(adapter: ChannelListAdapter): Drawable =
+        rowOf(adapter, adapter.getUserPosition(100))
             .findViewById<android.widget.ImageView>(R.id.user_row_talk_highlight).drawable
-        return shadowOf(drawable).createdFromResId
+
+    /** A four-pixel image, so that the decode has something real to succeed on. */
+    private fun pngBytes(): ByteArray {
+        val bitmap = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)
+        val bytes = java.io.ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes)
+        return bytes.toByteArray()
     }
 
     private fun newcomerBelowRoot(root: FakeChannel, ids: Map<Int, FakeChannel>): FakeChannel {

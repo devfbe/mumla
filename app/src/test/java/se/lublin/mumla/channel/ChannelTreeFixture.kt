@@ -114,8 +114,12 @@ class FakeUser(
     // Backed by a field rather than a `var` for the same reason: `var userId` would generate
     // getUserId(), which is the interface's own accessor (spec 4.05).
     userId: Int = -1,
+    // The user's avatar, as the server sends it: raw bytes that may or may not decode. A `var`
+    // would generate getTexture(), the interface's own accessor (spec 4.05).
+    texture: ByteArray? = null,
 ) : IUser {
     private val registeredUserId: Int = userId
+    private val avatar: ByteArray? = texture
     private var localMuted = false
     private var localIgnored = false
 
@@ -125,7 +129,7 @@ class FakeUser(
     override fun getName(): String = name
     override fun getComment(): String = ""
     override fun getCommentHash(): ByteArray? = null
-    override fun getTexture(): ByteArray? = null
+    override fun getTexture(): ByteArray? = avatar
     override fun getTextureHash(): ByteArray? = null
     override fun getHash(): String = ""
     override fun isMuted(): Boolean = muted
