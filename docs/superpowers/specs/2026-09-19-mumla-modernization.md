@@ -310,6 +310,51 @@ P5. **Manifest:** `foregroundServiceType="microphone|mediaPlayback"`,
   the already-deferred R8 and APK-size work rather than to decide on ABI splits
   now.
 
+### 4.04 What makes a guard real
+
+Sixteen times in this project a protection looked covered and was not. The
+pattern is always the same shape, and this is the rule that catches it
+structurally instead of one instance at a time:
+
+> **A guard is real only when removing *it alone* turns some test red. Two guards
+> protecting the same observable are one guard and a lie.**
+
+It was derived while closing three unpinned guards, and it immediately found a
+seventeenth instance in the fresh fix that derived it: `resyncCryptState` had
+been given both a `disconnectRequested` check and a route through
+`sendTCPMessage`, and each mutation alone stayed green because the two masked
+each other. One was removed.
+
+Three handles follow from it:
+
+1. **Name the observable before writing the guard.** Which observable result does
+   this `if (...) return` change — a byte on the wire, a transport created, a
+   handler called, the value a public getter returns? If none can be named that
+   another guard does not already cover, the guard is an unpinnable branch and
+   must not be written. This is why `onTLSHandshakeFailed`, `onUDPConnectionError`
+   and `onTCPConnectionDisconnect` deliberately have no entry guard: their only
+   effect beyond the listener is an idempotent `disconnect()` or a call already
+   gated elsewhere.
+2. **Pin the set, not the member.** Where the "places" are the methods of an
+   interface, iterate the interface by reflection in the test and demand the
+   property of *every* member, instead of writing the N cases out. A callback a
+   later task adds then fails the test until someone decides what it does behind a
+   disconnect. That is the difference between "nine mutations tried" and "a tenth
+   one cannot exist".
+3. **One bottleneck instead of N entry guards.** Where the promise is about
+   *ordering*, the decision belongs at the delivery point — the consumer's looper —
+   not at N call sites. One mechanism has one mutation; N guards have N mutations,
+   of which N−1 tend to be invisible.
+
+And the tool: do not run the suite once. **Mutate each guard on its own and
+require exactly one test to go red.** Here that costs about eleven seconds a run.
+
+Removing state beats adding a guard. Twice in the same round a guard was replaced
+by deleting the state that made the error expressible: the connection flags were
+given a single writing thread rather than a corrected comment, and the host field
+stopped being cleared on teardown rather than being null-checked — `getByName`
+resolves both `null` and `""` to loopback, so only never resetting it is safe.
+
 ### 4.05 Testing hazards that have already produced a false green
 
 Both were caught in this project, each after a test had been written, reviewed
