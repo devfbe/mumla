@@ -4,11 +4,13 @@ import android.os.Bundle
 import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
@@ -19,6 +21,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.db.DatabaseProvider
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.service.IMumlaService
@@ -58,6 +61,8 @@ class ChannelListFragmentTest {
         override fun addServiceFragment(fragment: HumlaServiceFragment) = Unit
         override fun removeServiceFragment(fragment: HumlaServiceFragment) = Unit
         override fun getDatabase(): MumlaDatabase = db
+
+        fun databaseMock(): MumlaDatabase = db
     }
 
     /** A host that can bind the service but cannot hand out a database. */
@@ -148,6 +153,16 @@ class ChannelListFragmentTest {
         get() = channelView.adapter as ChannelListAdapter
 
     private fun idleMainLooper() = shadowOf(Looper.getMainLooper()).idle()
+
+    private fun countChanges(): () -> Int {
+        var changes = 0
+        listAdapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+            override fun onChanged() {
+                changes++
+            }
+        })
+        return { changes }
+    }
 
     private fun rebind() {
         fragment.setServiceBound(false)
@@ -263,6 +278,67 @@ class ChannelListFragmentTest {
         idleMainLooper()
 
         assertThat(layout.scrolls).isEmpty()
+    }
+
+    /**
+     * The only setting this fragment reads, and it reads it by key: a preference change for
+     * anything else must not reach the adapter. Neither side of that comparison had a test.
+     */
+    @Test
+    fun onlyTheUserCountPreferenceReachesTheAdapter() {
+        val preferences =
+            PreferenceManager.getDefaultSharedPreferences(controller.get())
+        val changes = countChanges()
+
+        fragment.onSharedPreferenceChanged(preferences, "some.other.preference")
+
+        assertThat(changes()).isEqualTo(0)
+
+        fragment.onSharedPreferenceChanged(preferences, Settings.PREF_SHOW_USER_COUNT)
+
+        assertThat(changes()).isEqualTo(1)
+    }
+
+    /**
+     * The fragment is used twice in the same screen -- once over the whole tree and once over the
+     * pinned channels -- and which one it is comes from its own argument. Nothing read that
+     * argument back, so the two instances were one as far as any test could tell.
+     */
+    @Test
+    fun thePinnedArgumentDecidesWhereTheTreeIsRooted() {
+        verify(exactly = 0) { controller.get().databaseMock().getPinnedChannels(any()) }
+
+        val pinnedParent = HostParent()
+        controller.get().supportFragmentManager.beginTransaction()
+            .add(pinnedParent, "pinned-parent").commitNow()
+        val pinned = ChannelListFragment().apply {
+            arguments = Bundle().apply { putBoolean("pinned", true) }
+        }
+        pinnedParent.childFragmentManager.beginTransaction().add(pinned, "pinned-list").commitNow()
+
+        verify(exactly = 1) { controller.get().databaseMock().getPinnedChannels(any()) }
+    }
+
+    /**
+     * A removal reported after we ourselves were disconnected is the report of our own removal,
+     * and the model is no longer in a state worth reading. Both sides had a test only by
+     * accident: nothing read the rebuild back.
+     */
+    @Test
+    fun aRemovalReportedWhileDisconnectedRebuildsNothing() {
+        val changes = countChanges()
+        every { service.isConnected } returns false
+
+        fragment.serviceObserver.onUserRemoved(FakeUser(200), "gone")
+        idleMainLooper()
+
+        assertThat(changes()).isEqualTo(0)
+
+        every { service.isConnected } returns true
+        fragment.serviceObserver.onUserRemoved(FakeUser(200), "gone")
+        idleMainLooper()
+
+        assertThat(changes()).isEqualTo(1)
     }
 
     /**
