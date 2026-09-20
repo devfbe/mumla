@@ -292,6 +292,196 @@ P5. **Manifest:** `foregroundServiceType="microphone|mediaPlayback"`,
   within 3 s worst case; stream A calls it only from the audio-control thread.
 - Stream D consumes `IChatMessage` unchanged; stream A must not change its shape.
 
+### 4.0 Decisions the user made during execution
+
+- **Chat images are not fetched automatically any more (D).** The default for
+  `load_images` becomes off, with a per-server "always load on this server"
+  opt-in. Rationale the user was given: with the old default every image URL in
+  every chat message is fetched, so a tracking pixel tells its sender the user's
+  IP address and when they are online. Inline `data:` images keep rendering —
+  they ask nobody for anything, so hiding them would cost privacy nothing and
+  usability a lot. This needs a settings surface and per-server storage; it is
+  its own task. The default itself lives in exactly two places that must move
+  together: `app/src/main/res/xml/settings_general.xml:52`
+  (`android:defaultValue="true"`) and `app/src/main/java/se/lublin/mumla/Settings.kt:274`
+  (`DEFAULT_LOAD_IMAGES`).
+- **APK size is deferred (B).** The two new native libraries add ~8.48 MB
+  uncompressed across three ABIs. The user chose to look at this together with
+  the already-deferred R8 and APK-size work rather than to decide on ABI splits
+  now.
+
+### 4.04 What makes a guard real
+
+Sixteen times in this project a protection looked covered and was not. The
+pattern is always the same shape, and this is the rule that catches it
+structurally instead of one instance at a time:
+
+> **A guard is real only when removing *it alone* turns some test red. Two guards
+> protecting the same observable are one guard and a lie.**
+
+It was derived while closing three unpinned guards, and it immediately found a
+seventeenth instance in the fresh fix that derived it: `resyncCryptState` had
+been given both a `disconnectRequested` check and a route through
+`sendTCPMessage`, and each mutation alone stayed green because the two masked
+each other. One was removed.
+
+Three handles follow from it:
+
+1. **Name the observable before writing the guard.** Which observable result does
+   this `if (...) return` change — a byte on the wire, a transport created, a
+   handler called, the value a public getter returns? If none can be named that
+   another guard does not already cover, the guard is an unpinnable branch and
+   must not be written. This is why `onTLSHandshakeFailed`, `onUDPConnectionError`
+   and `onTCPConnectionDisconnect` deliberately have no entry guard: their only
+   effect beyond the listener is an idempotent `disconnect()` or a call already
+   gated elsewhere.
+2. **Pin the set, not the member.** Where the "places" are the methods of an
+   interface, iterate the interface by reflection in the test and demand the
+   property of *every* member, instead of writing the N cases out. A callback a
+   later task adds then fails the test until someone decides what it does behind a
+   disconnect. That is the difference between "nine mutations tried" and "a tenth
+   one cannot exist".
+3. **One bottleneck instead of N entry guards.** Where the promise is about
+   *ordering*, the decision belongs at the delivery point — the consumer's looper —
+   not at N call sites. One mechanism has one mutation; N guards have N mutations,
+   of which N−1 tend to be invisible.
+
+And the tool: do not run the suite once. **Mutate each guard on its own and
+require exactly one test to go red.** Here that costs about eleven seconds a run.
+
+Removing state beats adding a guard. Twice in the same round a guard was replaced
+by deleting the state that made the error expressible: the connection flags were
+given a single writing thread rather than a corrected comment, and the host field
+stopped being cleared on teardown rather than being null-checked — `getByName`
+resolves both `null` and `""` to loopback, so only never resetting it is safe.
+
+### 4.05 Testing hazards that have already produced a false green
+
+Both were caught in this project, each after a test had been written, reviewed
+and reported as passing. They are repo-wide, not stream-specific.
+
+- **kotlinx.coroutines renames threads.** While a coroutine runs on a thread, its
+  name becomes `"<name> @coroutine#<n>"`. An assertion of the form
+  `assertThat(threadNames).doesNotContain("mumla-test-caller")` therefore passes
+  even when that very thread did the work. This was found only because the
+  measured runtime did not fit the claim. Strip the ` @coroutine#` suffix before
+  comparing, in every thread assertion.
+- **Robolectric does not implement `inJustDecodeBounds`.** Its
+  `ShadowBitmapFactory.create` allocates the full bitmap for the bounds pass, so a
+  heap-delta measurement of a decode path measures the opposite of what it claims
+  (bounds pass 120 MB allocated against 72 MB for the sampled decode). Measure
+  `byteCount` of the bitmap the path actually produced, or reach the source
+  instance through `shadowOf(bitmap).createdFromBitmap`, and never assert a heap
+  delta. `ShadowBitmapFactory` also invents a 100x100 bitmap for undecodable bytes
+  unless `setAllowInvalidImageData(false)` is set, and `@Config(shadows = [...])`
+  that replaces the shadow silently drops that switch.
+
+### 4.1 Binding constraints discovered during execution
+
+**Check the ownership table before deferring anything.** Three times now work
+has been handed to a task that does not own the file: the observer-queue cap
+went to a task that never opens `HumlaCallbacks.kt`, an unchecked length field
+went to a task that never opens `HumlaTCP.kt`, and `mConnectionState`'s missing
+`@Volatile` was addressed to task 11 (notifications) when task 9 owns
+`HumlaService.java` and already declares that very field volatile in its own
+listing. Each time the sentence read as if the work were scheduled. Name the
+task from the ownership table, not from memory of what a task is about.
+
+These were found by implementers and reviewers after the plans were written. They
+are binding on the tasks named, and they live here rather than in a stream ledger
+because `.superpowers/sdd/` is gitignored — a ledger disappears with its worktree.
+
+- **Close the model race task 4 opened (A, task 5, hard precondition for
+  integration).** Task 4 moved frame parsing off the main looper, which is what it
+  was for — and with it `ModelHandler`, which writes `mChannels`/`mUsers` (plain
+  `HashMap`) and `Channel.mSubchannels`/`mUsers` (plain `ArrayList`). The UI reads
+  those same objects on main: `ChannelListAdapter.updateChannels()` runs from the
+  `onChannelAdded`/`onUserJoinedChannel` observers and iterates `getUsers()`
+  (`:444`) and `getSubchannels()` (`:450`) while the protocol thread is still
+  feeding frames. **Measured: `ConcurrentModificationException` after 158
+  iterations, at frame 835 of 5 000.** `updateChannels()` catches only
+  `IllegalStateException`, so it is not covered. Same root cause, not measured: an
+  unsynchronised `HashMap` read during a `put` resize can return `null` for a key
+  that is present. The user-visible failure is a crash on joining a large server
+  with the channel list open — exactly the moment task 4 exists to speed up. The
+  ownership table already assigns the fix (`ModelHandler.java`: `ConcurrentHashMap`
+  + `volatile`; `Channel`/`User`: copy-on-read lists), so this is a sequencing
+  constraint, not new work: **the branch is not integrable until task 5 lands**,
+  and task 5 takes the measured reproduction above as its acceptance test rather
+  than writing a new one.
+- **Take `AudioHandler.shutdown()` off the main thread (A, tasks 7 and 9).**
+  Section 4 of this spec says `shutdown()` "is safe to call from any thread and
+  returns within 3 s worst case; stream A calls it only from the audio-control
+  thread", and section 6 requires "no main-thread join in disconnect". Neither
+  holds today: `HumlaService.onConnectionDisconnected` (`:447-449`) and
+  `HumlaService.java:534` both call it on main, and it joins the audio threads
+  with no timeout (`AudioHandler.shutdown()` -> `AudioInput.shutdown()` ->
+  `stopRecording()` -> `mRecordThread.join()`, `AudioInput.java:149`). Task 4 made
+  the path newly reachable from `onDestroy()` as well. This is an unmet acceptance
+  item, not an observation, and it is the second half of the "not responding" root
+  cause -- task 4 fixed the first half by moving parsing off main.
+- **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
+  is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
+  owner of the cap, but the Stream A plan's task 6 is UDP recovery and does not
+  own `util/HumlaCallbacks.kt` — after task 2, no task in the plan does. The limit
+  stopped being theoretical with task 4, which is what lets the protocol thread
+  outrun the main thread: measured, a 5 000-channel sync parks 5 000 lambdas in
+  the queue while main is busy, each one retaining a `Channel`. Task 5 takes this
+  on because it is the task that makes `Channel`/`User` reads cheap, so it is
+  already inside the objects the queue retains. A cap needs a policy for what to
+  drop or fold, and events that are pure state refreshes for one user or channel
+  are the ones that coalesce.
+- **One lock across both audio streams (B, tasks 5–6).** The WebRTC APM has two
+  audio threads: `processRender` on the playback thread and `processCapture` on
+  the capture thread. `AudioHandler.java:220-225,467-482` serialises `encode()`
+  and `destroy()` through `mEncoderLock`, which does **not** cover the playback
+  path. The release-versus-in-flight-process window spans `GetArrayLength` *and*
+  `GetShortArrayElements` (`jni_webrtc_apm.cpp:55-58`), i.e. an array copy that
+  can take a GC pause. The adapters must take **one** lock covering both streams
+  and `destroy()` — not two independent adapters.
+- **Native handles are not interchangeable (B, tasks 5–6).** `HandleTable::get()`
+  dereferences without validating; only `release()` checks membership. Passing a
+  handle to the bridge that did not issue it is a segfault or silent nonsense
+  (measured). Adapters must never mix the RNNoise and APM handles.
+- **Reset the toggle input mode on disconnect (A, at or before task 11).**
+  `mInputOn` (`ToggleInputMode.java:52`) is never cleared; `mToggleInputMode` is
+  created once in `HumlaService.onCreate` (`:269`) and lives as long as the
+  service. With stream P's media-key toggle a user can turn transmission on with
+  the screen off, lose the network, and the auto-reconnect resumes transmitting
+  with no key press and no visible indication. It must be cleared **in code** in
+  `HumlaService.onConnectionDisconnected`: an observer-based reset is a no-op
+  there, because `mConnectionState` is set to DISCONNECTED before
+  `mCallbacks.onDisconnected(e)` fires, and both `isConnected()` (`:1112`) and
+  `HumlaSession()` (`:747`) read that field. A reset in `onConnected()` still
+  leaves a window, because `AudioHandler.initialize()` starts the input thread
+  from `onConnectionSynchronized` (`:378-382`), before `onConnected()` (`:392`).
+- **Verify which key action the media-button path delivers before building on it
+  (P, task 4).** `MediaKeyHandler` acts on `ACTION_UP`. `MediaSessionCompat`'s
+  default callback discards everything that is not `ACTION_DOWN`, and Media3
+  ignores `ACTION_UP` before the app sees it. If our path behaves the same, the
+  button does nothing at all and no unit test of that layer can show it. Measure
+  first (log in `onMediaButtonEvent`, `adb shell input keyevent 79` and `85`, plus
+  a real Bluetooth headset — adb alone is not enough, it goes through the input
+  dispatcher rather than the AVRCP stack). If only DOWN arrives, switch to DOWN +
+  `repeatCount == 0` + no `FLAG_CANCELED`, and swallow the matching UP.
+- **Apply the host policy per redirect hop (D, task 6).** `HttpImageFetcher` sets
+  `instanceFollowRedirects = true` and follows same-scheme redirects to any host
+  without re-entering the gate. A loopback/LAN block that sits only in the gate is
+  bypassed by a single 302.
+- **Catch zero-sized bounds before calling the decoder (D, task 6).**
+  `BoundedBitmapDecoder` throws `IllegalArgumentException` on a non-positive
+  bound, and a not-yet-measured view legitimately reports 0 px. Skip the load
+  instead. Do **not** relax the `require`: it is the only thing between a negative
+  bound and a non-terminating loop (measured — the sample size doubles to
+  `Int.MIN_VALUE`, then 0, and `1f/0 = +Inf` keeps the condition true forever).
+- **Prove the send path with `createdFromBitmap`, not with the output size
+  (D, task 10).** `ChannelChatFragment.java:306` decodes full size, rotates into a
+  second full copy, and only then resizes — up to ~96 MB peak for a 12 MP photo.
+  Robolectric does not implement `inJustDecodeBounds`, so a heap delta measures
+  the opposite of what it claims. `shadowOf(bitmap).createdFromBitmap` yields the
+  source instance a scaled bitmap was made from, which makes the chain
+  sample → rotate → fit checkable link by link.
+
 ## 5. Ordering and integration
 
 1. F1–F8 sequentially on `modernization` (F1 first, F2 next, then F3, F4, F5, F6, F7, F8).
