@@ -94,6 +94,13 @@ endif()
 # typedefs visible, and it is a no-op for every source that already includes them -- and it
 # becomes inert the moment a tag containing e9c78dc is available, at which point delete it.
 # C++ only: <cstdint> is not a C header and this target compiles ~50 .c files.
+#
+# Note that this is deliberately broader than upstream's fix: e9c78dc edits two headers, this
+# force-includes <cstdint> into all ~213 C++ translation units. That is what keeps it a one-line
+# build-file change instead of a patch against vendored sources, but it has a cost worth knowing
+# at the next submodule bump -- it would also silently paper over a *different* missing include,
+# anywhere in the tree, for any of the fixed-width types. When the submodule moves, delete this
+# line first and only reinstate it if the build still needs it.
 set(WAP_CSTDINT_FIX $<$<COMPILE_LANGUAGE:CXX>:-include$<SEMICOLON>cstdint>)
 
 set(WAP_ARCH_ARM32 OFF)
@@ -326,6 +333,19 @@ target_compile_definitions(humla_apm_buildflags INTERFACE ${WAP_DEFS})
 target_compile_options(humla_apm_buildflags INTERFACE ${WAP_ARCH_FLAGS} ${WAP_CSTDINT_FIX})
 # meson.build:49-56 absl_dep, narrowed to the abseil headers this tree actually includes
 # (absl/{algorithm/container,base/*,functional/any_invocable,meta/type_traits,strings/*}.h).
+#
+# Upstream names six packages; the two missing here, absl_synchronization and
+# absl_bad_optional_access, are left out on purpose. Nothing in the source set includes their
+# headers directly, and both arrive anyway through abseil's own transitive dependencies, so
+# naming them would restate what abseil's CMake already propagates.
+#
+# Note what has and has not been shown about that. humla_apm is a static library, so the only
+# configuration in which these symbols reach a real linker today is the host test in tests/,
+# which links clean. The Android side does not link them yet at all: webrtc_apm is not in the
+# JNI library's CMakeLists (that is Task 3's hand-off), so the ABI builds only compile it. If an
+# undefined absl::Mutex or absl::bad_optional_access ever appears, it will appear the first time
+# Task 3 links libhumla.so -- add the two targets here then, rather than reaching for
+# -Wl,--start-group.
 target_link_libraries(humla_apm_buildflags INTERFACE
     absl::base absl::strings absl::any_invocable absl::algorithm_container absl::type_traits
     ${WAP_OS_LIBS})
