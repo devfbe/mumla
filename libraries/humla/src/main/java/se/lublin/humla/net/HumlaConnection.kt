@@ -55,20 +55,26 @@ import java.util.concurrent.atomic.AtomicBoolean
  * posted to [mainHandler]. [sendTCPMessage] and [sendUDPMessage] may be called from any thread.
  *
  * Single-use, and that is what keeps its state flags honest. HumlaTCP's class comment asks of every
- * flag: which thread closes its window, and does anything fence that thread in? Most of them have
- * no closing edge at all - [connectCalled], [disconnectRequested], [disconnectDelivered],
- * [exceptionHandled] and [disconnectReported] are set once and never cleared, so there is no window
- * for a late writer to reopen, whichever thread it runs on. A second connection is a second object.
+ * flag: which thread closes its window, and does anything fence that thread in? Here nothing closes
+ * one. [connectCalled], [disconnectRequested], [disconnectDelivered], [exceptionHandled] and
+ * [disconnectReported] are set once and never cleared, so there is no window for a late writer to
+ * reopen, whichever thread it runs on. A second connection is a second object.
  *
- * [connected] and [synchronizedWithServer] do close, and they are HumlaTCP's warning read from the
- * other end: they are *opened* on the protocol thread, and [disconnect] used to close them from
- * whichever thread called it. An opener and a closer on different threads is the same hazard
+ * [connected] and [synchronizedWithServer] used to be the exception, and they were HumlaTCP's
+ * warning read from the other end: they were *opened* on the protocol thread and closed by whichever
+ * thread called [disconnect]. An opener and a closer on different threads is the same hazard
  * mirrored - a disconnect landing between the established callback's guard check and its write one
- * instruction later would have left [connected] set for the life of the object. So [disconnect] is
- * not a writer any more: it sets [disconnectRequested], the closing writes happen in the teardown
- * it queues onto the protocol thread, which that looper always runs after the opener, and
- * [isConnected] and [isSynchronized] read the pair. One writer thread, plus a monotone flag for the
- * caller's edge.
+ * instruction later would have left [connected] set for the life of the object. They are set once
+ * too now: [disconnect] raises [disconnectRequested] and writes neither flag, and [isConnected] and
+ * [isSynchronized] compose the pair with it. The closing writes were deleted rather than explained,
+ * because with the composition in place no reader can tell them from their absence.
+ *
+ * What keeps a *late opener* out is not looper order, and this comment used to claim it was. A
+ * [disconnect] on the main thread and an onTCPConnectionEstablished the read thread posts after it
+ * reach the protocol looper in the order they were queued, which is [teardown, opener] exactly as
+ * often as the other way round. The entry guard in [onTCPConnectionEstablished] is what closes that
+ * window, and [onTCPMessageReceived]'s guard is what closes it for the ServerSync that would
+ * otherwise set the other flag.
  *
  * What the caller's edge does not do is stop a send already past its check. [sendTCPMessage] reads
  * [isConnected], a [disconnect] runs, and the write still goes out: the teardown that drops the
@@ -136,11 +142,12 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var forceTcp = false
     @Volatile private var useTor = false
     /**
-     * Whether the socket is up, and whether the handshake completed. Both are written only on the
-     * protocol thread - opened by the established callback and by ServerSync, closed in the queued
-     * teardown, which the same looper always runs after them. The public predicates [isConnected]
-     * and [isSynchronized] compose them with [disconnectRequested], so a [disconnect] from any
-     * thread closes both at once without becoming a second writer that the opener could race.
+     * Whether the socket came up, and whether the handshake completed. Written only on the protocol
+     * thread and only ever to true, by the established callback and by ServerSync, each behind an
+     * entry guard of its own. Nothing closes them. [isConnected] and [isSynchronized] are their only
+     * readers and compose them with [disconnectRequested], so a [disconnect] from any thread closes
+     * both at once without becoming a second writer that the opener could race - and a write of
+     * false anywhere would be a store no reader can tell from its absence.
      */
     @Volatile private var connected = false
     @Volatile private var synchronizedWithServer = false
@@ -225,13 +232,11 @@ class HumlaConnection @JvmOverloads constructor(
         }
 
         override fun messageReject(msg: Mumble.Reject) {
-            connected = false
             handleFatalException(HumlaException(msg))
         }
 
         override fun messageUserRemove(msg: Mumble.UserRemove) {
             if (msg.session == sessionId) {
-                connected = false
                 handleFatalException(HumlaException(msg))
             }
         }
@@ -504,8 +509,6 @@ class HumlaConnection @JvmOverloads constructor(
         if (protocolThread.isAlive) {
             protocolHandler.post {
                 protocolHandler.removeCallbacks(pingRunnable)
-                connected = false
-                synchronizedWithServer = false
                 tcp?.disconnect()
                 tcp = null
                 udp?.disconnect()
