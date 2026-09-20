@@ -40,9 +40,15 @@ class VoiceActivityDetectorTest {
     }
 
     /**
-     * `AudioRecord.read` can return 0 and `AudioHandler:430` passes that count straight to the
-     * input mode. The legacy formula answers `sqrt(1.0 / 0)` = infinity for it, i.e. a score above
-     * every threshold, so an empty read transmitted as though it were the loudest possible speech.
+     * The legacy formula answers `sqrt(1.0 / 0)` = infinity for a zero-sample frame, i.e. a score
+     * above every threshold: `length == 0` reads as louder than anything.
+     *
+     * **Not as an observed defect -- the sentence this replaces said it was one.**
+     * `AudioInput.java:205-210` is the only call site on this path today and it tests
+     * `shortsRead > 0` before calling, handing over `mFrameSize` rather than the count, so the
+     * infinity is shielded. From B1/B11 on nothing shields it: task 8's `CapturePipeline` passes a
+     * resampler's own output length down, and `AudioHandler:430` -- which does pass a read count
+     * straight through -- is task 11's to replace.
      */
     @Test
     fun `an empty frame is not voice`() {

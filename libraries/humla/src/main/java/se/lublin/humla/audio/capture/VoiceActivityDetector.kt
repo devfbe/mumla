@@ -98,11 +98,18 @@ class VoiceActivityDetector(
          * is a migration consequence of B1, not of this function, and it belongs in the settings
          * copy; it is in the ledger.
          *
-         * **The empty frame is the one case the legacy formula got backwards.** `AudioRecord.read`
-         * can return 0, and `AudioHandler:430` passes that count straight through. With no
-         * samples, `sqrt(1.0 / 0)` is positive infinity and the score comes out **above every
-         * threshold**, so a read that returned nothing was transmitted as loud speech. Both the
-         * Java original and the plan's listing do this. It returns [NO_SIGNAL] instead.
+         * **The empty frame is the one case the legacy formula got backwards.** With no samples,
+         * `sqrt(1.0 / 0)` is positive infinity and the score comes out **above every threshold**:
+         * the formula answers `length == 0` with "louder than anything". Both the Java original
+         * and the plan's listing do this. It returns [NO_SIGNAL] instead.
+         *
+         * **It is not a live defect, and the first version of this paragraph claimed it was.**
+         * `AudioInput.java:205-210` is the only call site on this path today; it tests
+         * `shortsRead > 0` *before* calling and hands over `mFrameSize` rather than the count, so
+         * no zero-sample frame reaches here. What makes the repair right is where B1 and B11 take
+         * it: task 8's `CapturePipeline` passes a resampler's own output length down, and
+         * `AudioHandler:430` -- which does pass a read count straight through -- is task 11's to
+         * replace.
          */
         fun amplitudeScore(pcm: ShortArray, length: Int): Float {
             if (length <= 0) return NO_SIGNAL
