@@ -3,6 +3,7 @@ package se.lublin.mumla.chat
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,6 +22,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowBitmapFactory
+import java.net.InetSocketAddress
 import java.security.MessageDigest
 import java.security.MessageDigestSpi
 import java.security.Provider
@@ -29,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
@@ -367,6 +370,52 @@ class ChatImageLoaderTest {
         assertThat(ChatImageLoader.cacheKey("abc")).isNotEqualTo(ChatImageLoader.cacheKey("abd"))
         // Used as a file name by ImageShareExporter (Task 8), so it must stay filesystem-safe.
         assertThat(ChatImageLoader.cacheKey("a/b?c=d")).matches("[0-9a-f]{40}")
+    }
+
+    /**
+     * `fetcher: ImageFetcher = HttpImageFetcher()` is the single line that gives the process-wide
+     * loader its host policy, its byte cap, its timeouts and its redirect limit, and nothing used to
+     * look at it: replacing it with `ImageFetcher { ByteArray(0) }` left the whole suite green, and
+     * the only test on the real constructor path checked instance identity and never loaded
+     * anything. This is the same argument the fetcher's own
+     * `theDefaultPolicyRefusesTheDevicesOwnNetworkWithoutOpeningAnything` makes one layer down.
+     *
+     * Both ends of the production path are exercised: the default constructor argument, and
+     * `ChatImageLoaders.get`, which is what a chat row actually calls and which brings the real
+     * `Settings` lookup with it. A loopback `<img src>` must be refused without the server ever
+     * being asked — a stub fetcher would report MALFORMED for its empty bytes instead, and a
+     * fetcher wired to `ANY_HOST` would trip the wire.
+     */
+    @Test(timeout = 120_000)
+    fun theRealLoaderIsWiredToTheRealFetcherAndItsHostPolicy() = runBlocking {
+        val reached = AtomicBoolean(false)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/wired.png") { exchange ->
+            reached.set(true)
+            exchange.sendResponseHeaders(200, 0)
+            exchange.close()
+        }
+        server.start()
+        try {
+            val target = "http://127.0.0.1:${server.address.port}/wired.png"
+
+            val fromTheDefaultArgument = ChatImageLoader(externalImagesAllowed = { true })
+                .loadThumbnail(target, 240, 240)
+            val processWide = ChatImageLoaders.get(ApplicationProvider.getApplicationContext())
+                .loadThumbnail(target, 240, 240)
+
+            // The tripwire first: the error code is the weaker claim, and a fetcher wired to
+            // ANY_HOST would fail this one and the codes both.
+            assertWithMessage("a loopback <img src> from a chat message was fetched")
+                .that(reached.get()).isFalse()
+            assertWithMessage("the default constructor argument").that(fromTheDefaultArgument)
+                .isEqualTo(ImageResult.Failed(ImageError.NETWORK))
+            assertWithMessage("ChatImageLoaders.get").that(processWide)
+                .isEqualTo(ImageResult.Failed(ImageError.NETWORK))
+        } finally {
+            server.stop(0)
+        }
+        Unit
     }
 
     @Test

@@ -638,6 +638,21 @@ class HttpImageFetcherTest {
         assertThat(HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/exact"))).isEqualTo(body)
     }
 
+    /**
+     * The *default* cap, not a cap handed in by a test. Every size test above configures maxBytes,
+     * so the 5 MiB default is what the app actually runs with and the only place it is stated.
+     */
+    @Test(timeout = 60_000)
+    fun theDefaultByteCapIsFiveMebibytes() {
+        serve("/over-default", ByteArray(5 * 1024 * 1024 + 1), declaredLength = 0)
+        expectError(url("/over-default"), ImageError.TOO_LARGE)
+
+        val atCap = ByteArray(5 * 1024 * 1024)
+        serve("/at-default", atCap)
+        assertThat(HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(url("/at-default")).size)
+            .isEqualTo(atCap.size)
+    }
+
     @Test
     fun oneByteOverTheCapIsRejectedEvenWhenUndeclared() {
         serve("/justover", ByteArray(1_001), declaredLength = 0)
