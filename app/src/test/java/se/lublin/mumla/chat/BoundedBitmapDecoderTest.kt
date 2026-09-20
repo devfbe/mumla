@@ -150,14 +150,25 @@ class BoundedBitmapDecoderTest {
 
         val bitmap = BoundedBitmapDecoder.decode(TestImages.png(4000, 3000), 240, 240)!!
         assertThat(shadowOf(bitmap).description).contains("inSampleSize=$sample")
-        // 3000 / 16 floors to 187, not 187.5, so the fitted height is 240 / (250/187) = 179.5 -> 179.
+
+        // The bitmap `decode` actually materialised, recovered from the result instead of
+        // recomputed from constants here: createScaledBitmap records the instance it scaled from,
+        // so this is the real peak of the decoding path. It is 48 MB the moment the sampling stops
+        // working, which is the entire reason this class exists.
+        val intermediate = shadowOf(bitmap).createdFromBitmap!!
+        assertThat(intermediate.width).isEqualTo(4000 / sample)
+        assertThat(intermediate.height).isEqualTo(3000 / sample)
+        val unsampledBytes = 4000L * 3000L * 4L  // 48_000_000 B at 4 bytes per ARGB_8888 pixel
+        assertThat(intermediate.byteCount.toLong() * 200).isLessThan(unsampledBytes)
+
+        // 3000/16 is 187.5 and this decoder floors it to 187, which puts the fitted height at
+        // 240 / (250/187) = 179.5 -> 179. The flooring is Robolectric's arithmetic
+        // (`point.y /= inSampleSize`), not a platform promise: a device may hand back 188 for the
+        // same request and then fit to 180. These two numbers pin what the JVM decoder does here;
+        // they are not a claim about what Android returns. A power-of-two sampled image only
+        // approximates its aspect ratio either way.
         assertThat(bitmap.width).isEqualTo(240)
         assertThat(bitmap.height).isEqualTo(179)
-
-        // ARGB_8888, 4 bytes per pixel.
-        val unsampled = 4000L * 3000L * 4L                          // 48_000_000 bytes
-        val intermediate = (4000L / sample) * (3000L / sample) * 4L  //    187_000 bytes
-        assertThat(intermediate * 200).isLessThan(unsampled)
         assertThat(bitmap.byteCount.toLong()).isEqualTo(240L * 179L * 4L)
     }
 
