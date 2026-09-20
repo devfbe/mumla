@@ -667,6 +667,19 @@ So: **write the history next to the number.** A number that survives only on the
 its author had in mind is a claim about that author, not about the code — and the right
 reason, found by the person who tried to refute it, is worth more than the number.
 
+**And it inherits the blind spots of the mutation *selection*, which is the sharper half.**
+"45 mutations, all killed" was a true statement about those 45 and said nothing about the
+file. A reviewer then chose **twelve** of his own — derived from the effect and input
+passes rather than from the diff — and **all twelve survived**. Among them the one line
+that turns a tap into a viewer: replacing it with `{ }` left **all 432 tests green**, which
+is the user's complaint exactly, invisible to the gate.
+The cure is procedural: **derive the mutation list from the passes, not from the diff.**
+A diff-derived list mutates what you were thinking about; the effect pass mutates what the
+file *does*, including the wiring you wrote once and never looked at again. The tell that a
+list is diff-derived is that it is all guards and no seams — constructor arguments, listener
+assignments and one-line delegations are exactly what a diff-derived list omits and what an
+effect pass produces.
+
 **A mutation sweep inherits the blind spots of the fixture set.** It measures
 whether the tests can *see* a change; it cannot tell you that a branch's
 discriminating input never appears in any test at all. Fifty-six mutants, all
