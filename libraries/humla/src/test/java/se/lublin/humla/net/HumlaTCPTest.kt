@@ -92,11 +92,12 @@ class HumlaTCPTest {
 
     /**
      * Delivers for real, but runs [beforeQueueing] with the running post count first - at the one
-     * instruction post() has between reading disconnectReported and handing the callback to the
-     * handler. Handler.post is final, so the hook sits on the funnel every post goes through.
+     * instruction post() has between capturing the epoch and handing the callback to the handler.
+     * Handler.post is final, so the hook sits on the funnel every post goes through. [posts] is the
+     * same count afterwards, so a test can pin how many callbacks the transport handed over.
      */
     private class HookedHandler(looper: Looper, private val beforeQueueing: (Int) -> Unit) : Handler(looper) {
-        private val posts = AtomicInteger()
+        val posts = AtomicInteger()
         override fun sendMessageAtTime(msg: Message, uptimeMillis: Long): Boolean {
             beforeQueueing(posts.incrementAndGet())
             return super.sendMessageAtTime(msg, uptimeMillis)
@@ -379,6 +380,12 @@ class HumlaTCPTest {
      * The token that makes the disconnect exactly-once must only be consumed by a callback that was
      * actually queued, otherwise the one report is dropped on the floor and the read loop, which
      * would have reported it a moment later, stays suppressed: nobody ever reports.
+     *
+     * The fake leaves the runnable unrun, because that is what a quit looper does: post() returning
+     * false means the message was never queued, so the listener hears nothing and the epoch the
+     * runnable would have marked stays untouched. Running it inline instead - and on the calling
+     * thread at that - would have this one test on this path assert a delivery the device never
+     * makes. What it pins is the second attempt; the rest is the transport's real chain.
      */
     @Test
     fun aDisconnectThePostRejectsIsReportedAgainByTheReadLoop() {
@@ -386,8 +393,7 @@ class HumlaTCPTest {
         val handler = mockk<Handler>()
         every { handler.post(any()) } answers {
             attempts.incrementAndGet()
-            firstArg<Runnable>().run() // run inline, so the listener still sees what was attempted
-            false // ... but tell the caller the looper is gone and the message was not queued
+            false // the looper is gone: the message was not queued, so the runnable never runs
         }
         val gate = CountDownLatch(1)
         val socket = mockk<SSLSocket>(relaxed = true)
@@ -401,7 +407,8 @@ class HumlaTCPTest {
         gate.countDown() // the read thread unwinds and finds the report still unclaimed
         awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
         assertThat(attempts.get()).isEqualTo(2)
-        assertThat(listener.disconnects.get()).isEqualTo(2)
+        assertThat(listener.events).isEmpty() // both attempts were refused, so nothing was delivered
+        assertThat(listener.disconnects.get()).isEqualTo(0)
     }
 
     /**
@@ -452,6 +459,9 @@ class HumlaTCPTest {
         assertThat(listener.next()).isEqualTo("disconnect" to main)
         assertThat(listener.events).isEmpty() // the frame was queued behind the disconnect, not delivered
         assertThat(listener.disconnects.get()).isEqualTo(1)
+        // Pins the numbering the hook keys on: an extra post anywhere before the frame would
+        // otherwise shift it silently and leave this test green for the wrong reason.
+        assertThat(handler.posts.get()).isEqualTo(3)
     }
 
     /**
