@@ -1072,7 +1072,12 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   good**, with a `Log.w` as the only trace. The server does not resend that frame.
   Ruling: attach a rejected channel to the **root** instead of leaving it
   parentless. The tree stays finite and acyclic, and the channel stays visible in
-  the wrong place rather than invisibly absent.
+  the wrong place rather than invisibly absent. **Owner: A, task 6**, as a rider —
+  it is a few lines in `ModelHandler.java`, no other stream owns that file, and no
+  later brief goes near the frame boundary where the guard sits. The contract
+  paragraph in the core ledger that reads *"the same state as a channel whose
+  parent frame has not arrived yet"* is **withdrawn**: one heals on the next frame
+  and the other never does, which is the whole point.
 
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
