@@ -138,8 +138,14 @@ class HumlaTCPTest {
             !shadowOf(Looper.getMainLooper()).isIdle
         }
         assertThat(listener.events).isEmpty() // nothing was delivered on the read thread
-        awaitUntil(description = "the transport stopped") { !transport.isRunning }
-        shadowOf(Looper.getMainLooper()).idle()
+        // Wait for the event, not for isRunning: the read loop clears that flag one statement
+        // before it posts the disconnect, so a single idle() keyed on it can run while only the
+        // failure is queued and leave the disconnect sitting in the paused queue for good.
+        awaitUntil(description = "the disconnect reached the main looper") {
+            shadowOf(Looper.getMainLooper()).idle()
+            listener.disconnects.get() == 1
+        }
+        assertThat(transport.isRunning).isFalse()
         val main = Looper.getMainLooper().thread.name
         assertThat(listener.next()).isEqualTo("failed" to main)
         assertThat(listener.next()).isEqualTo("disconnect" to main)
@@ -183,6 +189,7 @@ class HumlaTCPTest {
         assertThat(closed.await(5, TimeUnit.SECONDS)).isTrue()
         awaitUntil(description = "the transport stopped") { !transport.isRunning }
         awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        drainCallbacks() // a barrier, so "nothing else arrived" cannot pass by being early
         assertThat(listener.events).isEmpty()
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
@@ -210,6 +217,7 @@ class HumlaTCPTest {
         }
 
         awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        drainCallbacks() // a barrier, so "nothing else arrived" cannot pass by being early
         assertThat(listener.events).isEmpty() // the read loop did not report a second disconnect
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
