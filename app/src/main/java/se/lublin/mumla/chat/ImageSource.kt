@@ -18,6 +18,12 @@ class ImageFetchException(val error: ImageError, cause: Throwable? = null) : Exc
  * that is not an http(s) URL outright. Both are pinned by tests.
  */
 sealed class ImageSource {
+    /**
+     * Deliberately **not** a data class: [bytes] is an array, so a generated `equals` would compare
+     * by identity anyway and merely look as if it compared by value. Nothing may key a cache or a
+     * deduplication on parsed chat content — the spans inside a parsed message compare by identity
+     * too, so two parses of the same message are never equal.
+     */
     class Data(val bytes: ByteArray) : ImageSource()
     data class Remote(val url: String) : ImageSource()
     object Unsupported : ImageSource()
@@ -27,7 +33,12 @@ sealed class ImageSource {
         private const val BASE64_MARKER = ";base64"
 
         /**
-         * Classifies [source] (trimmed, raw). Percent decoding is applied **only** to `data:` URIs,
+         * Classifies [source] (trimmed, raw). The scheme prefixes are matched case-insensitively,
+         * which folds a few exotic characters onto ASCII ones — `httpſ://x` (U+017F) matches
+         * `https://` and is classified [Remote]. That is safe because [HttpImageFetcher] checks the
+         * scheme again, exactly, before it opens anything; this classifier is not the last word.
+         *
+         * Percent decoding is applied **only** to `data:` URIs,
          * because Mumble clients percent-encode the base64 payload they send. A remote URL is passed
          * through untouched: decoding it would destroy legitimate escapes (`%20` would become a space,
          * which `URI(url)` then rejects, and `%2F` would silently change the path).

@@ -239,8 +239,8 @@ class HttpImageFetcherTest {
         expectError(url("/endless"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 64 * 1024))
     }
 
-    /** A raw server that declares [declared] bytes and then writes [actual] bytes anyway. */
-    private fun rawLyingServer(declared: Int, actual: ByteArray): String {
+    /** Serves one connection by hand, so the response can break the rules the JDK server enforces. */
+    private fun rawServer(respond: (java.io.OutputStream) -> Unit): String {
         val socket = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
         closeables += socket
         Thread {
@@ -254,24 +254,43 @@ class HttpImageFetcherTest {
                         if (b < 0) return@use
                         crlfs = if (b == '\n'.code) crlfs + 1 else if (b == '\r'.code) crlfs else 0
                     }
-                    client.getOutputStream().apply {
-                        write("HTTP/1.1 200 OK\r\nContent-Length: $declared\r\n\r\n".toByteArray())
-                        write(actual)
-                        flush()
-                    }
+                    respond(client.getOutputStream())
                 }
             }
         }.apply { isDaemon = true }.start()
         return "http://127.0.0.1:${socket.localPort}/a.png"
     }
 
+    /** A raw server that declares [declared] bytes and then writes [actual] bytes anyway. */
+    private fun rawLyingServer(declared: Int, actual: ByteArray): String = rawServer { out ->
+        out.write("HTTP/1.1 200 OK\r\nContent-Length: $declared\r\n\r\n".toByteArray())
+        out.write(actual)
+        out.flush()
+    }
+
+    /** Sends the status line and then one header byte every [gapMs]: every read succeeds, forever. */
+    private fun rawHeaderDribbleServer(gapMs: Long = 20): String = rawServer { out ->
+        out.write("HTTP/1.1 200 OK\r\nX-Pad: ".toByteArray())
+        out.flush()
+        val stop = System.nanoTime() + 20_000_000_000L
+        while (System.nanoTime() < stop) {
+            out.write('x'.code)
+            out.flush()
+            Thread.sleep(gapMs)
+        }
+    }
+
     @Test(timeout = 30_000)
     fun aContentLengthThatUnderstatesTheBodyCannotDefeatTheCap() {
         val truthful = ByteArray(10) { it.toByte() }
         val target = rawLyingServer(declared = 10, actual = truthful + ByteArray(512 * 1024) { 0x7F })
-        // The declared length is never trusted as the end of the body: the cap is enforced on the
-        // bytes actually read, so understating Content-Length buys the server nothing.
-        expectError(target, ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 1_000))
+        // Measured on JDK 21: the stream reports EOF once the declared length has been consumed in
+        // small reads, but a single large read overshoots it freely (asking for 16 KiB after a
+        // declared 10 returned 16384 bytes). The fetcher never asks for more than what is left of
+        // the cap, so the 512 KiB tail cannot reach the caller either way.
+        val body = HttpImageFetcher(maxBytes = 1_000).fetch(target)
+        assertWithMessage("body must never exceed the cap").that(body.size).isAtMost(1_000)
+        assertThat(body).isEqualTo(truthful)
     }
 
     /** Sends one byte at a time, slowly, forever: every single read succeeds, the transfer never ends. */
@@ -304,5 +323,69 @@ class HttpImageFetcherTest {
         )
         val elapsedMs = (System.nanoTime() - started) / 1_000_000
         assertThat(elapsedMs).isLessThan(5_000)
+    }
+
+    @Test
+    fun anAuthorityWithoutAHostIsUnsupportedAndThrowsNothingUnchecked() {
+        // The platform HTTP stack throws a StringIndexOutOfBoundsException on these, which would
+        // escape fetch() as an unchecked exception; assertThrows(ImageFetchException) pins that it
+        // does not, and expectError pins that they are refused before any connection is made.
+        val port = server.address.port
+        listOf(
+            "http://@:$port/a.png",
+            "http://user:pass@:$port/a.png",
+            "http://@/a.png",
+            "http://user@/a.png",
+            "https://@:443/a.png",
+            "http://:8080/a.png",
+        ).forEach { expectError(it, ImageError.UNSUPPORTED) }
+    }
+
+    @Test
+    fun aRegistryBasedAuthorityStillReachesTheNetwork() {
+        // An underscore makes URI.getHost() null, but it is a host: the gate must let it past and
+        // the failure must come from the network (unknown host), not from the classifier.
+        expectError("http://my_host.invalid/a.png", ImageError.NETWORK, HttpImageFetcher(connectTimeoutMs = 2_000))
+    }
+
+    @Test
+    fun unicodeCaseFoldingOfTheSchemeIsCaughtHere() {
+        // ImageSource.parse matches prefixes case-insensitively, and '\u017F' uppercases to 'S', so
+        // "httpſ://" classifies as Remote. The exact scheme check here is what stops it.
+        expectError("http\u017F://evil.example/a.png", ImageError.UNSUPPORTED)
+        expectError("HTTP\u017F://evil.example/a.png", ImageError.UNSUPPORTED)
+        expectError("\uFF48\uFF54\uFF54\uFF50://evil.example/a.png", ImageError.UNSUPPORTED)
+        expectError("http\u0455://evil.example/a.png", ImageError.UNSUPPORTED)
+    }
+
+    @Test(timeout = 30_000)
+    fun dribblingResponseHeadersHitTheTotalTimeout() {
+        val target = rawHeaderDribbleServer()
+        val started = System.nanoTime()
+        expectError(target, ImageError.TIMEOUT, HttpImageFetcher(readTimeoutMs = 10_000, totalTimeoutMs = 500))
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertWithMessage("elapsed ms").that(elapsedMs).isLessThan(5_000)
+    }
+
+    @Test
+    fun aBodyExactlyAtTheCapIsStillReturned() {
+        val body = ByteArray(1_000) { it.toByte() }
+        serve("/exact", body)
+        assertThat(HttpImageFetcher(maxBytes = 1_000).fetch(url("/exact"))).isEqualTo(body)
+    }
+
+    @Test
+    fun oneByteOverTheCapIsRejectedEvenWhenUndeclared() {
+        serve("/justover", ByteArray(1_001), declaredLength = 0)
+        expectError(url("/justover"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 1_000))
+    }
+
+    @Test
+    fun nonPositiveTimeoutsAreRejectedByTheConstructor() {
+        // 0 means "no timeout" to the platform, which would silently remove the bound.
+        assertThrows(IllegalArgumentException::class.java) { HttpImageFetcher(readTimeoutMs = 0) }
+        assertThrows(IllegalArgumentException::class.java) { HttpImageFetcher(connectTimeoutMs = 0) }
+        assertThrows(IllegalArgumentException::class.java) { HttpImageFetcher(totalTimeoutMs = 0) }
+        assertThrows(IllegalArgumentException::class.java) { HttpImageFetcher(maxBytes = 0) }
     }
 }

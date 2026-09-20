@@ -146,4 +146,28 @@ class ImageSourceTest {
         assertThat(ImageSource.parse("%66ile:///etc/passwd")).isEqualTo(ImageSource.Unsupported)
         assertThat(ImageSource.parse("https://x/%2E%2E/a.png")).isEqualTo(ImageSource.Remote("https://x/%2E%2E/a.png"))
     }
+
+    @Test
+    fun caseInsensitivePrefixMatchingFoldsSomeUnicodeOntoAscii() {
+        // '\u017F' (long s) uppercases to 'S', so "httpſ://" matches the "https://" prefix and is
+        // classified Remote. Documented, not a hole: HttpImageFetcher checks the scheme exactly and
+        // refuses it (see HttpImageFetcherTest.unicodeCaseFoldingOfTheSchemeIsCaughtHere).
+        assertThat(ImageSource.parse("http\u017F://evil.example/a.png"))
+            .isEqualTo(ImageSource.Remote("http\u017F://evil.example/a.png"))
+    }
+
+    @Test
+    fun lookalikeCharactersThatDoNotCaseFoldAreUnsupported() {
+        // Fullwidth latin, Cyrillic and Greek lookalikes are simply different characters.
+        assertThat(ImageSource.parse("\uFF48\uFF54\uFF54\uFF50://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertThat(ImageSource.parse("http\u0455://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertThat(ImageSource.parse("\u0440ttp://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertThat(ImageSource.parse("d\u0430ta:image/png;base64,YQ==")).isEqualTo(ImageSource.Unsupported)
+    }
+
+    @Test
+    fun authoritiesWithoutAHostStayRemoteAndAreTheFetchersProblem() {
+        assertThat(ImageSource.parse("http://@:8080/a.png")).isEqualTo(ImageSource.Remote("http://@:8080/a.png"))
+        assertThat(ImageSource.parse("http://user:pass@/a.png")).isEqualTo(ImageSource.Remote("http://user:pass@/a.png"))
+    }
 }
