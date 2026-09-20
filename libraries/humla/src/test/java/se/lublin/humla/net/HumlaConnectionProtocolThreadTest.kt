@@ -368,6 +368,10 @@ class HumlaConnectionProtocolThreadTest {
 
         assertThat(thrown).hasMessageThat().contains("single-use")
         assertThat(transports.tcps).isEmpty()
+        // Idled first. The main looper is paused in Robolectric, so without this the assertion
+        // below holds whether or not a phantom disconnect was posted - it would just still be
+        // sitting in the queue. That is how the guard it exists to pin stayed unpinned.
+        mainLooper.idle()
         assertThat(listener.disconnects).isEmpty() // nothing was started, so there is nothing to report
     }
 
