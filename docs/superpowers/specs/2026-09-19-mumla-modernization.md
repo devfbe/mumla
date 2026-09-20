@@ -421,6 +421,22 @@ and reported as passing. They are repo-wide, not stream-specific.
   brief's test listing and once in a fresh test scaffold — so the rule is: a fake
   implementing an interface with explicit accessors backs the value in a private
   field and overrides the accessors, never with a `var`.
+- **A concurrent `ArrayList` write is not always visible to a snapshot reader, and
+  which write it is decides everything.** Measured standalone on x86_64: 2 484
+  concurrent `toArray()` copies taken while another thread does pure tail `add(e)`
+  produced **0 holes, 0 duplicates, 0 exceptions** — the element store is ordered
+  before the size store, so no hole can appear. Switch the writer to the sorted
+  insert `add(i, e)` that real code uses and **5 947 of 5 951** copies contain a
+  **duplicate**, because the tail is shifted right with one `System.arraycopy` and
+  a copy taken mid-shift sees the moved element twice. Removal is the hole
+  producer: `fastRemove` writes `es[size = newSize] = null`, 7 659–11 502 holes per
+  run. So a race test needs **three** damage signals — an exception, a hole, and a
+  duplicate — and the one most likely to be missing is the duplicate. The caveat
+  that goes with this: "invisible on TSO" is exact only for the tail append. When
+  three such guards survived mutation here, the cause was a broken test writer
+  (`i % 2` for the branch and `i % size` for the element, so even indices only
+  ever added and odd ones only ever removed something absent), not the memory
+  model. Check the writer before believing the architecture.
 - **A removed guard can hang the suite instead of failing it.** Deleting a
   `count < 0` check in a native bridge does not produce a red test: `-1` becomes a
   four-billion unsigned count and the library runs. A mutation sweep without a
