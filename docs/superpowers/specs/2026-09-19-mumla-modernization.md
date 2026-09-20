@@ -88,7 +88,7 @@ change minimal.
 | A Core | `HumlaService`, `net/HumlaConnection`, `net/HumlaTCP`, `net/HumlaUDP`, `net/HumlaNetworkThread`, `net/CryptState`, `protocol/ModelHandler`, `util/HumlaCallbacks`, `service/MumlaService`, `service/MumlaConnectionNotification`, `service/MumlaReconnectNotification`, `model/*`, new `service/ChatMessageLog` (bounded log, D5 acceptance lives here) |
 | B Audio | `protocol/AudioHandler`, `audio/**` (input, output, encoders, input modes, `BluetoothScoReceiver`), `src/main/cpp/**` (after Foundation created it), `preference/AudioSettingsFragment`, `res/xml/settings_audio.xml`, audio keys in `Settings.kt` (additive only) |
 | D Chat & UI | `channel/ChannelChatFragment`, `util/MumbleImageGetter`, `util/BitmapUtils`, `util/HtmlUtils`, `service/IChatMessage`, `service/MumlaMessageNotification`, chat layouts, new image viewer, new `chat/` package |
-| P Platform & controls | `app/MumlaActivity` (permissions, MediaSession wiring), `channel/ChannelListFragment` (Bluetooth menu), new `service/MumlaMediaSession`, non-audio keys in `Settings.kt` (additive only), `res/xml/settings_general.xml`, `AndroidManifest.xml`, battery-optimization dialog |
+| P Platform & controls | `app/MumlaActivity` (permissions, MediaSession wiring), `channel/ChannelListFragment` (Bluetooth menu), `channel/ChannelListAdapter` (rebuild coalescing, see 4.1), `channel/ChannelFragment` (talk button), `service/MumlaOverlay` (talk button, see 4.1), new `service/MumlaMediaSession`, non-audio keys in `Settings.kt` (additive only), `res/xml/settings_general.xml`, `AndroidManifest.xml`, battery-optimization dialog |
 
 Rules for shared files: `Settings.java` is converted to `Settings.kt` by
 Foundation (F3); streams B and P only add keys and accessors. `MumlaService`
@@ -346,6 +346,65 @@ Three handles follow from it:
    not at N call sites. One mechanism has one mutation; N guards have N mutations,
    of which N−1 tend to be invisible.
 
+**"No test can distinguish this" is only writable after the mutation that would
+distinguish it has been run.** An unproven unpinnability claim is more expensive
+than none: it replaces the measurement with an assertion and immunises exactly the
+spot that needed measuring. It also has to name **which single mutation** it means.
+Learned the hard way: a KDoc here said "nothing pinnable" about a *lock-nesting*
+detail, and the next reader — its own author — took it as a licence covering the
+whole `synchronized` block and never mutated it. The lock turned out to be
+unpinned and load-bearing; removing it alone threw a `NullPointerException` on the
+main thread in three runs out of three. Same shape as the unscoped "no observable
+found" sentence, except this one stopped its writer from taking the measurement
+that would have refuted it.
+
+**A test-author defect is a defect of the form, not of the site.** Whoever finds
+one greps the file for every other occurrence of the idiom **before committing**,
+rather than repairing the places currently under the nose. Here a broken race
+writer (`i % 2` choosing the branch beside `i % size` choosing the element, so
+even iterations only ever added and odd ones only ever removed something absent)
+was diagnosed correctly, fixed in the two neighbouring tests that looked alike,
+and missed in the third — because the repair followed the shape of the code rather
+than the property. One grep; three rounds.
+
+**A surviving guard marks an unexplored dimension, not just an unpinned line.**
+When a condition survives mutation, do not only ask "can I pin this?" — ask **what
+else in this file branches on the same condition, and what am I about to add that
+branches on it?** A survivor says no test distinguishes the two sides of that
+condition, which is a statement about the whole input space, not about one line:
+every other branch on it is untested too, and any branch added on it is untested
+*by construction*.
+
+This cost a critical here. A merge of `ACTION_UP` and `ACTION_CANCEL` passed five
+individual mutations, all killed — because every test in the class ran in
+push-to-talk *hold* mode, where the merge is correct. In toggle mode, where
+`onTalkKeyUp()` **is** the action rather than a release, a cancelled gesture turned
+the microphone on and nothing took it back. The sweep was structurally incapable
+of seeing it: **a mutation sweep measures whether the tests can see a change, not
+whether a branch's discriminating input ever appears in any test.** All five
+mutants were sampled from the correct half of the behaviour space. And the tell
+was two methods below, in code written in the same round: a `!isPushToTalkToggle()`
+guard that had already survived its own mutation. The survivor was the map of the
+hole.
+
+The mechanical form, cheap enough to do every time: **for every setting or mode
+the file reads, grep the test class for a write of it.** Enumerate from the
+*production file*, before looking at the diff — not from what the change made
+relevant. The round that wrote this rule then failed it on the next pass, and
+diagnosed itself: it swept the settings its own fix had touched, found the one the
+cancel branch reads, and stopped. The setting that mattered was read fifty lines
+away in a method the diff never went near, and under the narrower reading it never
+entered the list. Consequence, measured: all eleven tests in that class were
+driving a button the fragment had set to `GONE`, and only worked because the test
+helper dispatched touches directly, bypassing hit-testing. The unit is the file the
+test class hosts. The unit is **every input the file
+branches on**, not only the ones that look like settings: the round that missed
+the fourth corner above had read "setting" as "Preference", and the two inputs
+that mattered were constructor parameters of a data class — which reach the file
+by exactly the path the user operates. A test class that never
+writes a preference the file reads is testing exactly one configuration, and the
+sweep will confirm whatever that configuration does.
+
 **Sweep by field, not by call path.** The three handles above all check a guard
 as it is written. They need the reverse sweep too: for every mutable field, grep
 every write and every read, and ask of each write whether any reader can tell it
@@ -387,6 +446,23 @@ had survived mutation for exactly this reason, invisible everywhere except in th
 window where the audio thread is still handing over frames. That is the window
 that matters.
 
+**Mutate a compound condition clause by clause — and know what that does not
+prove.** `if (a && b && c)` is three guards wearing one pair of brackets, and
+removing the whole condition kills a test while removing `b` alone may not. A
+sweep that treats the `if` as one unit reports a clean result over a passenger.
+Done properly on one file here: 8 of 8 sub-clauses each killed a test on their
+own.
+
+**But clause-wise mutation and input-space coverage are orthogonal, and reading
+the first as if it covered the second has already cost a round.** A clause sweep
+proves every clause carries weight; it proves **nothing about the operator that
+joins them**. `||` mutated to `xor` survived a file whose clause sweep was
+complete, because over three of the four corners of a two-boolean input space the
+two operators agree — and the test class never wrote the fourth corner. For a
+compound condition over k booleans the requirement is **2^k inputs, not k
+mutations**. The consequence in that case: a user who switched on both Android
+audio effects got neither, silently.
+
 And the tool: do not run the suite once. **Mutate each guard on its own and
 require exactly one test to go red.** Here that costs about eleven seconds a run.
 
@@ -407,6 +483,73 @@ and reported as passing. They are repo-wide, not stream-specific.
   even when that very thread did the work. This was found only because the
   measured runtime did not fit the claim. Strip the ` @coroutine#` suffix before
   comparing, in every thread assertion.
+- **A Kotlin `var` clashes with any `fun getX`/`fun setX` the interface declares.**
+  `override var isTalking` generates `setTalking(Z)V`, which collides with an
+  interface's own `fun setTalking`; `var service` collides with a Java interface's
+  `getService()` the same way. This has now cost three separate rounds — twice in a
+  brief's test listing and once in a fresh test scaffold — so the rule is: a fake
+  implementing an interface with explicit accessors backs the value in a private
+  field and overrides the accessors, never with a `var`.
+- **A concurrent `ArrayList` write is not always visible to a snapshot reader, and
+  which write it is decides everything.** Measured standalone on x86_64: 2 484
+  concurrent `toArray()` copies taken while another thread does pure tail `add(e)`
+  produced **0 holes, 0 duplicates, 0 exceptions** — the element store is ordered
+  before the size store, so no hole can appear. Switch the writer to the sorted
+  insert `add(i, e)` that real code uses and **5 947 of 5 951** copies contain a
+  **duplicate**, because the tail is shifted right with one `System.arraycopy` and
+  a copy taken mid-shift sees the moved element twice. Removal is the hole
+  producer: `fastRemove` writes `es[size = newSize] = null`, 7 659–11 502 holes per
+  run. So a race test needs **three** damage signals — an exception, a hole, and a
+  duplicate — and the one most likely to be missing is the duplicate. The caveat
+  that goes with this: "invisible on TSO" is exact only for the tail append. When
+  three such guards survived mutation here, the cause was a broken test writer
+  (`i % 2` for the branch and `i % size` for the element, so even indices only
+  ever added and odd ones only ever removed something absent), not the memory
+  model. Check the writer before believing the architecture.
+- **`FileProvider` caches its parsed roots per authority for the life of the JVM,
+  and Robolectric gives every test *method* a fresh data directory.** The second
+  method in a class that calls `getUriForFile` is answered by a strategy built for
+  the first method's `cacheDir` and dies with `Failed to find configured root`.
+  Measured: **7 of 13 tests failed, and which ones depended on JUnit's method
+  order** — a perfect "looks covered, isn't" if the six survivors had been the ones
+  under inspection. Clear the static cache by reflection in `@Before`. On a device
+  the directory does not move, so this is a harness fix only.
+- **A hot-window-only allocation measurement is a lie.** HotSpot's C2
+  scalar-replaces the `Iterator` of a `for (x in aList)`, so a chain that really
+  allocates reads **0.000 B** in a warmed-up window and passes. The same code in a
+  cold window reads **32.000 B per frame** — and ART performs no such elimination
+  for an interface iterator, so the hot-only number certifies an allocation the
+  device actually makes. Measure **both** windows, validate the instrument each run
+  against a known allocation (a `ShortArray(480)` is exactly 976.0 B), and assert
+  against half the smallest object the JVM can allocate rather than against zero:
+  one stray JIT-bookkeeping allocation in an 8 000-call window reads as 0.238 B per
+  call and fails an `isEqualTo(0.0)` about one run in nine.
+- **A no-op mutation reads exactly like a proven-unpinnable guard.** Two mutations
+  in one sweep here reported SURVIVED because they changed a storage type or added
+  an unused field without changing behaviour. Both killed once corrected. Before
+  recording a survivor, check that the mutation changes what the code *does*.
+- **A removed guard can hang the suite instead of failing it.** Deleting a
+  `count < 0` check in a native bridge does not produce a red test: `-1` becomes a
+  four-billion unsigned count and the library runs. A mutation sweep without a
+  per-test timeout stalls on the first such mutation and produces nothing — one
+  here burned twenty minutes before anyone noticed. Pass `--timeout` to `ctest`,
+  and treat a sweep that produces no output as a result to investigate rather than
+  a run to repeat.
+- **Read a SARIF result's *effective* level, and trust the build's exit status more.**
+  An earlier version of this entry said to read each result's `level` rather than
+  the rule default. That is **wrong as a general rule, and it was measured**: in
+  `lint-results-fossDebug.sarif`, **10 of 325 results carry a `level` field at
+  all**, and they are exactly the `MissingQuantity` hits the module's own config
+  demotes. Every other result omits `level` and inherits from
+  `rules[ruleId].defaultConfiguration.level`. A counter that reads `result.level`
+  with a "warning" fallback therefore reports **0 errors for a build lint fails** —
+  demonstrated by deleting an unused string, which produced 23 `ExtraTranslation`
+  results, none of them carrying a `level`, rule default `error`, `Lint found 23
+  errors`, build aborted. The correct formulation is **effective level =
+  `result.level` if present, otherwise the rule's default** — and the gradle task's
+  exit status stays the real gate. Earlier rounds' "0 errors" claims are safe
+  because those builds passed, but the method they cite would not have caught a
+  regression.
 - **Robolectric's gesture constants are fixtures, not Android.**
   `ShadowViewConfiguration` hard-codes touch slop 16, paging touch slop 32 and
   double-tap slop 100 at density 1.0, and the 170 px minimum scaling span sits
@@ -475,6 +618,27 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   the path newly reachable from `onDestroy()` as well. This is an unmet acceptance
   item, not an observation, and it is the second half of the "not responding" root
   cause -- task 4 fixed the first half by moving parsing off main.
+- **The decoder must stop holding two bitmaps, before integration (D, binding).**
+  Task 8 measured what the K=2 ruling above did not: `BoundedBitmapDecoder` samples
+  by powers of two and then calls `Bitmap.createScaledBitmap`, so the sampled
+  intermediate **and** the result are alive during that call. Sampling stops as soon
+  as one more halving would undershoot, leaving the intermediate in [1x, 2x) of the
+  target per axis — up to **4x the pixels**, so a **peak of 5x the bitmap that is
+  kept**. Measured with `shadowOf(bitmap).createdFromBitmap`, pinned permanently:
+  final 2 402 640 B, intermediate 9 612 964 B, peak 12 015 604 B, ratio exactly 5.00,
+  and the worst case sits just above a halving boundary.
+  Scaled to a 1080x2340 phone: **K=2 peaks at ~193 MiB**, K=1 at ~48 MiB — against
+  the 128 MiB `heapgrowthlimit` floor this spec itself named as the criterion. So
+  the criterion, applied to the *peak* rather than the retained bitmap, chooses K=1.
+  Reachable from one chat message: a ~4319x9359 image under the 5 MiB fetch cap is
+  about 1.04 bits per pixel, ordinary JPEG territory, and nothing catches
+  `OutOfMemoryError` on the way out.
+  **Ruling: keep K=2 and fix the decoder**, rather than halve the decode and leave a
+  decoder that transiently holds five times what it returns — that is wrong at any
+  K, and task 10's send path will meet the same peak. Decode straight to the target
+  (`inScaled`/`inDensity`/`inTargetDensity`, or `inBitmap` reuse) so the second
+  bitmap never exists; then K=2 costs the 40.4 MB the ruling assumed. This is a
+  precondition for integrating stream D.
 - **Decide the zoom ceiling against the decoder, not by taste (D, tasks 7 and 8).**
   `MAX_SCALE = 5` came from the plan and nobody checked it against what the
   decoder produces. The chain, read out of the code: the viewer calls
@@ -505,6 +669,136 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   neither "placeholder" nor "restore". One test in the dialog's own suite using
   `scenario.recreate()` twice pins both conditions and the two-rotation case.
 
+- **The overlay's talk button has the defect the fragment's just had (P, task 8).**
+  `MumlaOverlay.java:170-181` handles only DOWN and UP, never `ACTION_CANCEL`, and
+  calls `setTalkingState(true/false)` directly. A gesture the system takes away
+  therefore leaves the microphone open — in an overlay window, which nothing
+  pauses. Same shape as the fragment's, worse consequence, and `MumlaOverlay` was
+  in no ownership list either. Note the asymmetry the fragment fix ran into: in
+  hold mode a cancel must release, but in toggle mode `onTalkKeyUp()` *is* the
+  action, so a cancel must do nothing at all. The overlay calls `setTalkingState`
+  directly, so it needs the release unconditionally — but check that against the
+  toggle preference before writing it.
+- **QA must cover a held media-key press, not only a tap (P, tasks 4 and 5).**
+  Acting on DOWN is the right trade, but it has a consequence worth stating to the
+  user: once a press generates key repeats, the system stops tracking it and
+  everything that reaches us — the repeats and the final UP — is swallowed. A
+  button held past the repeat threshold (~400 ms) produces **no toggle at all**.
+  That is a new route to the complaint this whole project started from ("I pressed
+  it and nobody heard me"), so the hardware QA item covers a held press as well as
+  a tap, and task 5's settings copy says *tap, do not hold*.
+
+- **Task 3's shipped native interfaces are authoritative; task 6 does not
+  re-declare them (B, task 6).** Plan §0.4 and the task 6 listing put `RnnoiseApi`
+  and `WebRtcApmApi` in `se.lublin.humla.audio.capture`; task 3 shipped both in
+  `se.lublin.humla.audio.native`. `RnnoiseApi` is identical, so the duplicate would
+  merely be waste. `WebRtcApmApi` is **not**: the shipped one takes flat booleans
+  rather than a config object and carries an extra `frameSize(handle)`. Task 6's
+  planned fake implements neither and would not compile, and `WebRtcApmNative`
+  could not be handed to `WebRtcApmPreprocessor` without a pointless adapter.
+  Ruling: use the shipped interfaces, delete the re-declarations from the plan's
+  listing. Likewise `FarEndSink` is declared in `CapturePreprocessor.kt` by task 4,
+  not in `WebRtcApmPreprocessor.kt` as §0.4 plans — it is half of what the one lock
+  must cover, and splitting the declaration is exactly what makes a stage with two
+  audio threads look like it has one. **Task 6 must not re-declare it.**
+- **`Float?` stays as the per-frame probability return (B, decided).** Measured:
+  every stage that *computes* a probability boxes 16 B per frame, so three stages
+  cost about 4.8 KB/s on the audio thread. Kept anyway. That rate is two to three
+  orders of magnitude below what moves ART's allocation-triggered collection, and
+  the alternative — a primitive with a NaN sentinel — trades a type-system
+  guarantee for a convention every future stage has to remember, in a contract
+  tasks 5 through 8 are already written against. Revisit only if on-device
+  profiling shows dropouts attributable to it; the measurement is in
+  `CaptureThreadAllocationTest` so the number does not have to be rediscovered.
+- **Scope the "release must never overlap" rule to what is not a stage (B, task 11).**
+  Two binding texts now contradict each other. `SingleHandleStage` states that
+  `release()` may overlap a frame in flight and is safe — that is the whole purpose
+  of the one lock, and it is measured. The task 11 plan text says the opposite
+  ("the KDoc **requires** that release() never overlaps") and deliberately leaks
+  native state on a join timeout because of it. Both were true when written; only
+  the second still is, and only for the **resampler**, which is not a
+  `SingleHandleStage`. Rewrite the task 11 text to say so before dispatching it.
+  Leaving both sentences standing is how a later reader concludes that release
+  never overlaps anyway and deletes the lock.
+- **Never call into a preprocessor stage while holding `mEncoderLock` (B, task 11).**
+  The capture thread will hold `mEncoderLock` around `encode()` and the stage lock
+  around `process()`. Nothing takes them in both orders today and nothing may: the
+  inversion is a deadlock between the capture and playback threads. Also note
+  `release()` can now block for one native call (~0.3 ms at 48 kHz), so spec §4's
+  "shutdown returns within 3 s" has a real dependency where it had a free
+  operation.
+- **Do not throw from the capture thread (B, task 6).** Task 6's planned
+  `RnnoisePreprocessor` test requires `process` to throw `IllegalArgumentException`
+  on a 441-sample frame. That is an exception once per frame from the audio thread,
+  and an uncaught one kills the capture thread — the user goes silent with no
+  warning, which is the complaint this project started from. The JNI bridge already
+  refuses a short frame with `-1` without overrunning. Refuse and report; do not
+  throw.
+- **Pin "off is off" by identity, in task 6.** `NoopPreprocessor` is proven to run
+  no code on the frame, but the observable that matters — that the factory returns
+  it for `NONE` rather than a stage constructed with neutral parameters — lives in
+  `CapturePreprocessorFactory`. Assert the *identity* of what the factory returns,
+  not that the output frame is unchanged.
+
+- **`MumlaService` is exported with no permission (A, needs a decision).**
+  `AndroidManifest.xml:84-88`: `android:exported="true"` and no permission
+  attribute, so **any installed app can start or bind the Mumble service**.
+  Pre-existing and possibly deliberate — external clients may rely on it — but it
+  has never been decided, and it sits three lines from the new private
+  `FileProvider` that is carefully locked down. Stream A owns `MumlaService`.
+  Either narrow it (a signature permission, or `exported="false"` if nothing
+  external binds) or write down why it stays open.
+- **Coalesce the adapter's own rebuilds (P, task 6).** With the observer queue
+  bounded, the largest remaining main-thread cost is not in the model any more —
+  it is `ChannelListAdapter.updateChannels()`, which is O(n·depth) and runs *in
+  full* from every model observer event. Measured on a 5 000-channel tree: **637 µs
+  per rebuild on a desktop JVM**, and one large sync still delivers 1 024 of them
+  after the cap, i.e. **roughly three to six seconds of main-thread work on a
+  phone**. The cap cut it fivefold and can cut it no further, because the events
+  that survive are exactly the ones every observer answers with a full rebuild. The
+  fix belongs in the adapter: one posted rebuild per frame instead of one per
+  event. Inside the walk, `getSubchannelUserCount()` dominates — it is recomputed
+  from scratch at every node of every walk, which is what turns an O(n) walk into
+  O(n·depth); the file's own `FIXME: is it necessary to cache this?` is the answer.
+  `ChannelListAdapter` was in no stream's ownership list, which is why this had
+  nobody to go to; it is now Platform's, next to `ChannelListFragment`, and task 6
+  is the task that already opens that neighbourhood.
+  Two more adapter defects found at the same time, same owner: `ChannelAdapter.java:50-60`
+  calls `getUsers()` **three times per bind**, and `getCount()` and
+  `getItem(position)` read two *different* snapshots — a user leaving between them
+  is an `IndexOutOfBoundsException`. That was equally racy before the guarded model
+  and copy-on-read does not fix it; the adapter has to hold one snapshot.
+- **Two model facts, both corrected after measurement (A, binding).** I wrote the
+  first version of this entry from a task report and both halves were wrong. The
+  measured truth:
+  (a) **The observer queue is *not* bounded.** Trimming now runs only when the
+  arriving event is itself droppable — which fixed a real starvation bug, but means
+  the ceiling is `#undroppable + 1` and nothing bounds `#undroppable`. Twelve of
+  the nineteen observer events are undroppable, and two of them are bulk traffic
+  during a sync: a 5 000-user server produces **at least 10 000** of them
+  (`onUserConnected` plus an `onLogInfo` per user). Measured consequence: the
+  trim scan is no longer capped either — **2.1 ms inside one `dispatch()` while
+  holding the lock** in the real sync ordering, and **100 µs per enqueue in the
+  steady state against 0.2 µs before**, on a lock the protocol thread shares with
+  the audio thread. What *is* bounded is the population of the three tree-shape
+  events. A second, absolute ceiling is still owed, and until it exists the honest
+  statement is: **bounded in droppable events, unbounded in total, and the newest
+  tree-shape event is never dropped.** An observer must still treat a model event
+  as "read this again", never as a delta it accumulates.
+  (b) **A rejected parent is permanent, not "the same as one that has not arrived
+  yet".** `ModelHandler` refuses a `ChannelState` whose parent is the channel
+  itself or one of its descendants, or that would sit deeper than 256 below the
+  root — and that part is right, cheap (measured: 3.1 ms across a whole
+  5 000-frame sync even in the worst shape the guard permits, because the walk is
+  upward and depth-capped, not a subtree walk) and correctly placed at the one
+  bottleneck. But the channel is then parentless, `ChannelListAdapter` only ever
+  walks downward from the root channels, and nothing in the app iterates the
+  channel map — so **the channel and every user in it disappear from the list for
+  good**, with a `Log.w` as the only trace. The server does not resend that frame.
+  Ruling: attach a rejected channel to the **root** instead of leaving it
+  parentless. The tree stays finite and acyclic, and the channel stays visible in
+  the wrong place rather than invisibly absent.
+
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
   owner of the cap, but the Stream A plan's task 6 is UDP recovery and does not
@@ -516,7 +810,16 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   already inside the objects the queue retains. A cap needs a policy for what to
   drop or fold, and events that are pure state refreshes for one user or channel
   are the ones that coalesce.
-- **One lock across both audio streams (B, tasks 5–6).** The WebRTC APM has two
+- **One lock across both audio streams (B, task 4 — DISCHARGED).**
+  *Re-addressed and closed.* This entry named tasks 5 and 6, which **cannot**
+  discharge it: they own `SpeexPreprocessor.kt`, `RnnoisePreprocessor.kt` and
+  `WebRtcApmPreprocessor.kt`, three separate files, and the only shape those two
+  tasks can produce on their own is exactly the two-independent-adapters shape
+  this constraint forbids. The owner of the seam is task 4, which built it:
+  `SingleHandleStage` holds one lock and one handle field, every stage extends it
+  and writes no locking at all. Fourth instance of this section's own opening
+  rule, and the first one committed by this section. Original text follows.
+  — **One lock across both audio streams (B, tasks 5–6).** The WebRTC APM has two
   audio threads: `processRender` on the playback thread and `processCapture` on
   the capture thread. `AudioHandler.java:220-225,467-482` serialises `encode()`
   and `destroy()` through `mEncoderLock`, which does **not** cover the playback
