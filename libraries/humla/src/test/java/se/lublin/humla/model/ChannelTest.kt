@@ -36,8 +36,21 @@ import kotlin.concurrent.thread
  */
 private const val MIN_OVERLAPPING_READS = 50
 
-/** How many observations `aRelinkIsNeverSeenHalfDone` takes while the relinker runs. */
+/**
+ * How many observations the two tests with a fixed reader take while their writer runs.
+ *
+ * Fixing the reader's count instead of the writer's is what [ChannelTest.aRelinkIsNeverSeenHalfDone]
+ * explains, and what makes the double-count signal in
+ * [ChannelTest.countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts] fire at all.
+ */
 private const val OBSERVATIONS = 20_000
+
+/**
+ * How many subchannels the recursive count races against. 500 rather than the 20 it used to be:
+ * the double-count signal needs two array copies of that list to overlap, and at 20 references they
+ * never did - measured, five runs, zero. At 500, ten runs out of ten.
+ */
+private const val SUBCHANNELS = 500
 
 /** How many times [ChannelTest.race] calls its writer. */
 private const val WRITES = 20_000
@@ -285,58 +298,103 @@ class ChannelTest {
 
     /**
      * `getSubchannelUserCount` reads both lists and then recurses, so it is the one member that
-     * would hold a lock while calling into another [Channel] if it were simply `@Synchronized`.
-     * Its own race, because the reader here is the recursion rather than a returned list.
+     * would hold a lock while calling into another [Channel] if it were simply `@Synchronized`. Its
+     * own race, because the reader here is the recursion rather than a returned list, and its own
+     * loop shape - see the bottom of this comment.
      *
-     * It needs its own damage signals too, and that is worth spelling out: the method returns a
-     * count, not a snapshot, so the [Damage] holes and doubles below have nothing to look at and
-     * an exception is the only one of the three that can reach them. Measured: without the
-     * `synchronized` block that exception arrives in every run - the copy of `mSubchannels`
-     * includes a slot `fastRemove` has already nulled and the recursion dereferences it, on what
-     * is the main thread in production.
+     * Two signals, and both have now been seen red rather than argued for:
+     * - **an exception.** Without the `synchronized` block the copy of `mSubchannels` includes a
+     *   slot `fastRemove` has already nulled (`es[size = newSize] = null`) and the recursion
+     *   dereferences it, on what is the main thread in production. Measured on the fixture below
+     *   with the block removed: 341 to 756 throws per run, in 11 runs out of 11. With it: 0.
+     * - **a double count.** The same torn copy can hold one subchannel twice - `add(i, e)` shifts
+     *   the tail right with one `System.arraycopy` and a copy taken mid-shift sees the moved
+     *   element in both places - and the walk counts both. This is the signal spec 4.05 calls the
+     *   one most likely to be missing, and here it was missing: at 20 subchannels it never fired,
+     *   not in five runs, not with a reader that catches per observation and keeps going, which is
+     *   the most generous shape there is. The fixture was not unlucky, it was too small. A
+     *   duplicate only passes the ceiling while the tree is already holding every user, and at 20
+     *   subchannels the two array copies that have to overlap are 20 references long. At 500, and
+     *   with the *reader's* count fixed rather than the writer's, it fires in 10 of 11 runs of this
+     *   test with the lock removed - 1 to 8 observations per run - and in 10 of 10 runs of a
+     *   standalone harness. Never once with the lock in place, in 20 runs. It is therefore a signal
+     *   and not a certainty: on a run where it stays quiet the exception signal is what carries the
+     *   test, which is why both are reported together below rather than asserted in sequence.
      *
-     * The count carries the second signal, the duplicate one that spec 4.05 says is the one most
-     * likely to be missing. It only carries it because of how this fixture is built, so the
-     * constraint is written down rather than assumed: **every user has one home subchannel and
-     * only ever joins or leaves that one**, and [User.setChannel] leaves the old channel before
-     * joining the new, so a user is in at most one list at any instant and can be counted at most
-     * once per walk. The sum can then never exceed the number of users - except when the copy of
-     * `mSubchannels` holds the same subchannel twice, which is what an unlocked reader sees while
-     * an `add(i, e)` shifts the tail right. Users that wander between subchannels would break the
-     * ceiling without any race at all: the walk reads one subchannel after another, so a user that
-     * moves from an already-counted subchannel into one still to come is counted twice, and that
-     * is by design (see [Channel]'s class doc: a snapshot of one list, not of the tree).
+     * The count carries the second signal only because of how this fixture is built, so the
+     * constraint is written down rather than assumed: **every user has one home subchannel and only
+     * ever joins or leaves that one**, and [User.setChannel] leaves the old channel before joining
+     * the new, so a user is in at most one list at any instant and can be counted at most once per
+     * walk. The sum can then exceed the number of users only through a duplicated subchannel. Users
+     * wandering between subchannels would break the ceiling with no race at all - the walk reads one
+     * subchannel after another, so a user moving out of an already-counted one into one still to
+     * come is counted twice, and that is by design (see [Channel]'s class doc: a snapshot of one
+     * list, not of the tree). A [User.setChannel] that joined before it left would put every user in
+     * two lists at once and break the same constraint;
+     * [readingUsersWhileAnotherThreadMovesThemStaysUndamaged] is the test that has to catch that.
+     *
+     * The reader's count is fixed and the writer runs until it is done, which is the shape
+     * [aRelinkIsNeverSeenHalfDone] explains. Here it is what makes the duplicate signal a signal at
+     * all: the other way round the reader's share is whatever the scheduler leaves it - 3 713 to
+     * 21 107 observations, measured - and that variance is what decided whether it fired.
      */
     @Test
-    fun countingUsersRecursivelyWhileTheTreeChangesNeverThrows() {
+    fun countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts() {
         val root = Channel(0, false).apply { setName("root") }
-        val subchannels = (1..20).map { Channel(it, false).apply { setName("channel $it") } }
+        val subchannels = (1..SUBCHANNELS).map { Channel(it, false).apply { setName("channel $it") } }
         val users = (0 until 50).map { User(it, "user$it") }
-        val overcounts = AtomicInteger()
         // The tree starts empty on purpose: the writer's first pass is what attaches the
         // subchannels, so each of them is in the list exactly once or not at all. Attaching them
-        // here as well would put every one of them in twice for the whole first pass, and the
-        // count would pass the ceiling for a reason that has nothing to do with the lock.
+        // here as well would put every one of them in twice for the whole first pass, and the count
+        // would pass the ceiling for a reason that has nothing to do with the lock.
+        val overcounts = AtomicInteger()
+        val throws = AtomicInteger()
+        val firstThrow = AtomicReference<Throwable?>()
+        val writes = AtomicInteger()
+        val done = AtomicBoolean(false)
 
-        val damage = race(
-            write = { i ->
-                // Whole passes of adds and of removes, for the reason the two tests above give:
-                // an add/remove alternation per iteration removes something that is not there on
-                // every odd step, so the list only ever grows and nothing is ever torn.
+        val writer = thread(name = "tree-writer") {
+            var i = 0
+            while (!done.get()) {
+                // Whole passes of adds and of removes, for the reason the tests above give: an
+                // add/remove alternation per iteration removes something that is not there on every
+                // odd step, so the list only ever grows and nothing is ever torn.
                 val sub = subchannels[i % subchannels.size]
                 if ((i / subchannels.size) % 2 == 0) root.addSubchannel(sub) else root.removeSubchannel(sub)
                 val user = users[i % users.size]
                 val home = subchannels[(i % users.size) % subchannels.size]
                 user.setChannel(if ((i / users.size) % 2 == 0) home else null)
-            },
-            read = {
+                i++
+                writes.incrementAndGet()
+            }
+        }
+        // Catching per observation rather than around the loop, so that one throw does not end the
+        // run and hide however many double counts were still to come.
+        repeat(OBSERVATIONS) {
+            try {
                 if (root.getSubchannelUserCount() > users.size) overcounts.incrementAndGet()
-                emptyList<Any?>()
-            },
-        )
+            } catch (t: Throwable) {
+                firstThrow.compareAndSet(null, t)
+                throws.incrementAndGet()
+            }
+        }
+        done.set(true)
+        writer.join()
 
-        assertThat(damage.report()).isEmpty()
-        assertThat(overcounts.get()).isEqualTo(0)
+        // Reported together rather than asserted one after another, like [Damage.report] below: the
+        // exception signal fires first under the mutation that takes the lock away, and separate
+        // assertions would let it shadow the double count for good.
+        val damage = buildList {
+            firstThrow.get()?.let {
+                add("${throws.get()} of $OBSERVATIONS observations threw, first $it")
+            }
+            if (overcounts.get() > 0) add("${overcounts.get()} observations counted a user twice")
+            // Every observation above was taken between the writer's first write and its last, so
+            // what is left to establish is that there were writes to overlap (spec 4.04).
+            if (writes.get() < MIN_OVERLAPPING_READS) add("only ${writes.get()} writes to overlap")
+        }
+
+        assertThat(damage).isEmpty()
     }
 
     /**
