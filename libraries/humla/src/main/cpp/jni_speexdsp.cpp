@@ -31,11 +31,28 @@ struct PreprocessHandle {
     int frameSize;
 };
 
+/* Same shape, same reason. speex_resampler_process_native indexes st->last_sample[],
+ * st->samp_frac_num[] and st->mem with the caller's channel_index and never compares it against
+ * the channel count the state was created with -- all three are sized for that count, so an index
+ * past it reads and writes outside the allocation. libspeexdsp has no ctl to ask a state how many
+ * channels it has, so the count is kept beside the state. */
+struct ResamplerHandle {
+    SpeexResamplerState* state;
+    int channels;
+};
+
 /* Clamps a caller-supplied element count to what the array can actually hold. */
 jint clampToArray(JNIEnv* env, jint count, jarray array) {
     if (count < 0) return 0;
     jsize capacity = env->GetArrayLength(array);
     return count > capacity ? static_cast<jint>(capacity) : count;
+}
+
+/* The resampler's error array is optional on the Kotlin side (IntArray?) and, like every other
+ * array here, arrives with a length of its own; writeInt() alone would write slot 0 of an empty
+ * one, which on a real JVM is a pending ArrayIndexOutOfBoundsException. */
+void writeError(JNIEnv* env, jintArray error, jint value) {
+    if (error != nullptr && env->GetArrayLength(error) >= 1) writeInt(env, error, value);
 }
 
 }  // namespace
@@ -45,18 +62,37 @@ extern "C" {
 // ---- resampler ----
 
 JNIEXPORT jlong JNICALL RS(init)(JNIEnv* env, jobject, jint channels, jint inRate, jint outRate, jint quality, jintArray error) {
+    // A non-positive channel count is refused here rather than passed on: speex_resampler_init
+    // would allocate the per-channel arrays for it and every processInt would then be out of
+    // range, whatever channel index the caller used.
+    if (channels <= 0) {
+        writeError(env, error, RESAMPLER_ERR_INVALID_ARG);
+        return 0;
+    }
     int err = 0;
     SpeexResamplerState* st = speex_resampler_init(channels, inRate, outRate, quality, &err);
-    writeInt(env, error, err);
-    return toHandle(st);
+    writeError(env, error, err);
+    if (st == nullptr) return 0;
+    auto* h = new (std::nothrow) ResamplerHandle{st, channels};
+    if (h == nullptr) {
+        speex_resampler_destroy(st);
+        writeError(env, error, RESAMPLER_ERR_ALLOC_FAILED);
+        return 0;
+    }
+    return toHandle(h);
 }
 
 JNIEXPORT jint JNICALL RS(processInt)(JNIEnv* env, jobject, jlong state, jint channelIndex, jshortArray input, jintArray inLen, jshortArray out, jintArray outLen) {
-    auto* st = fromHandle<SpeexResamplerState>(state);
-    if (st == nullptr || input == nullptr || out == nullptr || inLen == nullptr || outLen == nullptr)
+    auto* h = fromHandle<ResamplerHandle>(state);
+    if (h == nullptr || input == nullptr || out == nullptr || inLen == nullptr || outLen == nullptr)
         return RESAMPLER_ERR_INVALID_ARG;
     if (env->GetArrayLength(inLen) < 1 || env->GetArrayLength(outLen) < 1)
         return RESAMPLER_ERR_INVALID_ARG;
+    // channelIndex is an index into three per-channel arrays that speex sized for the channel
+    // count this state was created with, and speex_resampler_process_native compares it against
+    // nothing. Out of range is a heap read and write outside those allocations, not an error
+    // code, so it has to be refused here -- the only place that can see both numbers.
+    if (channelIndex < 0 || channelIndex >= h->channels) return RESAMPLER_ERR_INVALID_ARG;
     jint inCount = 0, outCount = 0;
     env->GetIntArrayRegion(inLen, 0, 1, &inCount);
     env->GetIntArrayRegion(outLen, 0, 1, &outCount);
@@ -75,7 +111,7 @@ JNIEXPORT jint JNICALL RS(processInt)(JNIEnv* env, jobject, jlong state, jint ch
         env->ReleaseShortArrayElements(input, inPtr, JNI_ABORT);
         return RESAMPLER_ERR_ALLOC_FAILED;
     }
-    int result = speex_resampler_process_int(st, channelIndex, inPtr, &in, outPtr, &outN);
+    int result = speex_resampler_process_int(h->state, channelIndex, inPtr, &in, outPtr, &outN);
     env->ReleaseShortArrayElements(out, outPtr, 0);
     env->ReleaseShortArrayElements(input, inPtr, JNI_ABORT);
     writeInt(env, inLen, static_cast<jint>(in));
@@ -84,8 +120,10 @@ JNIEXPORT jint JNICALL RS(processInt)(JNIEnv* env, jobject, jlong state, jint ch
 }
 
 JNIEXPORT void JNICALL RS(destroy)(JNIEnv*, jobject, jlong state) {
-    auto* st = fromHandle<SpeexResamplerState>(state);
-    if (st != nullptr) speex_resampler_destroy(st);
+    auto* h = fromHandle<ResamplerHandle>(state);
+    if (h == nullptr) return;
+    speex_resampler_destroy(h->state);
+    delete h;
 }
 
 // ---- jitter buffer ----

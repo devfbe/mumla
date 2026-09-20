@@ -21,6 +21,7 @@
 #include "jni_env_stub.h"
 
 #include <jni.h>
+#include <speex/speex_resampler.h>
 
 #include <cstdio>
 
@@ -191,6 +192,75 @@ static void test_resampler(Env& env) {
     RS_DESTROY(e, nullptr, 0);
 }
 
+/* channelIndex is a public argument of SpeexResamplerApi.processInt and it is an index, not a
+ * count: speex_resampler_process_native uses it to reach st->last_sample[channel_index],
+ * st->samp_frac_num[channel_index] and st->mem + channel_index * st->mem_alloc_size, all three of
+ * them sized for the channel count the state was created with, and it never compares the two.
+ * Every shipped caller passes 0, but nothing below Kotlin enforces that, and getting it wrong is
+ * a heap read AND write outside three allocations rather than an error code. */
+static void test_resampler_channel_index(Env& env) {
+    JNIEnv* e = env.get();
+    Array<jint> err(1);
+
+    jlong mono = RS_INIT(e, nullptr, 1, 48000, 16000, 3, err.as<jintArray>());
+    CHECK(mono != 0, "mono resampler init succeeds");
+    if (mono == 0) return;
+    {
+        Array<jshort> in(480), out(160);
+        Array<jint> inLen(1), outLen(1);
+        inLen[0] = 480;
+        outLen[0] = 160;
+        jshortArray i = in.as<jshortArray>(), o = out.as<jshortArray>();
+        jintArray il = inLen.as<jintArray>(), ol = outLen.as<jintArray>();
+        CHECK(RS_PROCESS(e, nullptr, mono, 0, i, il, o, ol) == RESAMPLER_ERR_SUCCESS,
+              "channel 0 of a one-channel resampler is processed");
+        CHECK(RS_PROCESS(e, nullptr, mono, 1, i, il, o, ol) == RESAMPLER_ERR_INVALID_ARG,
+              "a channel index equal to the channel count is refused");
+        CHECK(RS_PROCESS(e, nullptr, mono, 7, i, il, o, ol) == RESAMPLER_ERR_INVALID_ARG,
+              "a channel index far beyond the channel count is refused");
+        CHECK(RS_PROCESS(e, nullptr, mono, -1, i, il, o, ol) == RESAMPLER_ERR_INVALID_ARG,
+              "a negative channel index is refused");
+        CHECK(jnistub::outstanding_copies() == 0, "a refused channel index never pins an array");
+    }
+    RS_DESTROY(e, nullptr, mono);
+
+    /* The check has to be against the state's own channel count, not against "0 is the only
+     * legal index": a two-channel state really does have a channel 1. */
+    jlong stereo = RS_INIT(e, nullptr, 2, 48000, 16000, 3, err.as<jintArray>());
+    CHECK(stereo != 0, "stereo resampler init succeeds");
+    if (stereo != 0) {
+        Array<jshort> in(480), out(160);
+        Array<jint> inLen(1), outLen(1);
+        jshortArray i = in.as<jshortArray>(), o = out.as<jshortArray>();
+        jintArray il = inLen.as<jintArray>(), ol = outLen.as<jintArray>();
+        for (jint channel = 0; channel < 2; channel++) {
+            inLen[0] = 480;
+            outLen[0] = 160;
+            CHECK(RS_PROCESS(e, nullptr, stereo, channel, i, il, o, ol) == RESAMPLER_ERR_SUCCESS,
+                  "both channels of a two-channel resampler are processed");
+        }
+        inLen[0] = 480;
+        outLen[0] = 160;
+        CHECK(RS_PROCESS(e, nullptr, stereo, 2, i, il, o, ol) == RESAMPLER_ERR_INVALID_ARG,
+              "channel 2 of a two-channel resampler is refused");
+        RS_DESTROY(e, nullptr, stereo);
+    }
+
+    err[0] = 0;
+    CHECK(RS_INIT(e, nullptr, 0, 48000, 16000, 3, err.as<jintArray>()) == 0,
+          "a zero channel count is rejected at init");
+    CHECK(err[0] == RESAMPLER_ERR_INVALID_ARG, "and reported as an invalid argument");
+    err[0] = 0;
+    CHECK(RS_INIT(e, nullptr, -2, 48000, 16000, 3, err.as<jintArray>()) == 0,
+          "a negative channel count is rejected at init");
+    CHECK(err[0] == RESAMPLER_ERR_INVALID_ARG, "and reported as an invalid argument");
+    /* The error array is optional on the Kotlin side (IntArray?) and may also be too short. */
+    Array<jint> empty(0);
+    CHECK(RS_INIT(e, nullptr, 0, 48000, 16000, 3, nullptr) == 0, "init tolerates a null error array");
+    CHECK(RS_INIT(e, nullptr, 0, 48000, 16000, 3, empty.as<jintArray>()) == 0,
+          "init tolerates an empty error array");
+}
+
 /* jitter_buffer_put copies packet.len bytes out of packet.data. */
 static void test_jitter(Env& env) {
     JNIEnv* e = env.get();
@@ -232,6 +302,7 @@ int main() {
     Env env;
     test_preprocessor(env);
     test_resampler(env);
+    test_resampler_channel_index(env);
     test_jitter(env);
     CHECK(jnistub::outstanding_copies() == 0, "no array copy is outstanding at the end of the run");
     std::printf("%s\n", failures ? "FAILED" : "OK");
