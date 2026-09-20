@@ -167,6 +167,11 @@ class HumlaCallbacksBoundTest {
     /**
      * An undroppable event at the head must not stop the bound from working on what is behind it,
      * and must not be the thing that gets dropped either.
+     *
+     * The second phase is the one that matters: the first stops at five undroppable events against
+     * a bound of ten, which is still below it. Once the undroppable events alone are over the
+     * bound there is no room left to take from, and the question becomes whether the tree-shape
+     * events that arrive afterwards are delivered at all or thrown away as they are accepted.
      */
     @Test
     fun undroppableEventsAtTheHeadAreKeptAndSkippedOver() {
@@ -180,9 +185,64 @@ class HumlaCallbacksBoundTest {
         }.join()
 
         assertThat(callbacks.queuedEvents).isEqualTo(10)
+
+        thread {
+            // Past the bound: 25 events nothing may drop, and then ten more tree-shape ones.
+            repeat(20) { callbacks.onLogInfo("n$it") }
+            for (id in 101..110) callbacks.onChannelAdded(Channel(id, false))
+        }.join()
+
         mainLooper.idle()
-        assertThat(recorder.logs).isEqualTo((0 until 5).map { "m$it" })
-        assertThat(recorder.channelsAdded).isEqualTo((96..100).toList())
+        assertThat(recorder.logs).isEqualTo((0 until 5).map { "m$it" } + (0 until 20).map { "n$it" })
+        // The five from the first phase lose their place to the ten that arrive behind them, and
+        // the newest survives - which is the one whose rebuild shows all 110.
+        assertThat(recorder.channelsAdded).isEqualTo(listOf(110))
+    }
+
+    /**
+     * The starvation the bound must not produce: undroppable events are not allowed to evict
+     * tree-shape ones, because every observer of those answers by rebuilding the list from the
+     * model. With the bound already full of chat and log events, an evicting bound delivers *no*
+     * `onChannelAdded` at all and the channel list stays empty until something else happens to
+     * trigger a rebuild.
+     */
+    @Test
+    fun aQueueFullOfUndroppableEventsStillDeliversTheNewestTreeShapeEvent() {
+        val callbacks = HumlaCallbacks(Handler(Looper.getMainLooper()), 10)
+        val recorder = Recorder()
+        callbacks.registerObserver(recorder)
+
+        thread {
+            repeat(10) { callbacks.onLogInfo("m$it") }
+            for (id in 1..100) callbacks.onChannelAdded(Channel(id, false))
+        }.join()
+
+        mainLooper.idle()
+        assertThat(recorder.logs).isEqualTo((0 until 10).map { "m$it" })
+        assertThat(recorder.channelsAdded).isEqualTo(listOf(100))
+    }
+
+    /**
+     * The same starvation at the production bound and in the order a real synchronisation produces
+     * it: Mumble sends the channel tree first and the users after it, and `onUserConnected` and
+     * `onUserJoinedChannel` are undroppable. Behind a busy main thread the user half alone fills
+     * the bound, so a bound that lets it evict tree-shape events drops all 5 000 `onChannelAdded`
+     * - measured on that shape: `dropped=5000`, nothing delivered, no last channel.
+     */
+    @Test
+    fun aUserSyncBehindAChannelSyncDoesNotSwallowEveryChannel() {
+        val callbacks = HumlaCallbacks()
+        val recorder = Recorder()
+        callbacks.registerObserver(recorder)
+
+        thread {
+            for (id in 1..5_000) callbacks.onChannelAdded(Channel(id, false))
+            repeat(HumlaCallbacks.MAX_QUEUED_EVENTS) { callbacks.onLogInfo("m$it") }
+        }.join()
+
+        mainLooper.idle()
+        assertThat(recorder.logs).hasSize(HumlaCallbacks.MAX_QUEUED_EVENTS)
+        assertThat(recorder.channelsAdded.lastOrNull()).isEqualTo(5_000)
     }
 
     /** Feeds the 5 000-frame sync from `ModelRaceTest` and reports what is left in the queue. */

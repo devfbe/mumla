@@ -42,7 +42,11 @@ import java.util.concurrent.ConcurrentHashMap
  * - Every [IHumlaObserver] method, [registerObserver] and [unregisterObserver] may be called from
  *   any thread, concurrently.
  * - Observer callbacks always run on [handler]'s thread, one at a time, never concurrently.
- * - Events are delivered in the order they were accepted.
+ * - Events are delivered in the order they were accepted, with one exception: a folded refresh
+ *   (below) replaces the payload of the event already queued for its subject, so the state it
+ *   carries is delivered at that older event's place in the queue - ahead of events accepted in
+ *   between. Since every folded event says only "re-read this subject", the order that matters is
+ *   preserved; the order of the *payloads* is not.
  * - Re-entrancy differs between the two paths, deliberately:
  *   - **Queued path.** An event raised from inside a callback that the drain is running is
  *     appended to the queue, because a drain is scheduled. It lands after the events already
@@ -75,12 +79,22 @@ import java.util.concurrent.ConcurrentHashMap
  *     [onChannelAdded], [onChannelRemoved] and [onUserRemoved] are the three events whose every
  *     observer answers by rebuilding the whole list from the model
  *     (`ChannelListFragment` -> `ChannelListAdapter.updateChannels()`), so the *oldest* of them is
- *     dropped to make room and the newest still triggers that rebuild. Nothing else is ever
- *     dropped: a queue over its bound that holds none of those three grows instead, and counts the
- *     overrun in [droppedEvents]. Chat, log, lifecycle and one-shot state events therefore always
- *     arrive - `ChannelDescriptionFragment` and `UserCommentFragment` register an observer that
- *     unregisters itself on the one [onChannelStateUpdated]/[onUserStateUpdated] it is waiting for,
- *     which is why those are folded rather than dropped.
+ *     dropped to make room. Nothing else is ever dropped, and two rules follow from that which
+ *     together are the whole promise:
+ *     - **Only a tree-shape event can cause a drop.** An event the bound may not drop never
+ *       evicts one it may. Otherwise a burst of chat, log or user events would push every queued
+ *       [onChannelAdded] out and leave nothing behind to rebuild from - the channel list would
+ *       stay empty until some unrelated event happened to trigger a rebuild. Measured on the
+ *       evicting version: 5 000 [onChannelAdded] followed by 1 024 [onLogInfo] delivered *no*
+ *       channel at all.
+ *     - **The newest tree-shape event is never the one dropped.** It is the delivery that shows
+ *       everything the dropped ones carried, so when the queue holds nothing else droppable it
+ *       grows past the bound rather than throwing that one away.
+ *     A queue over its bound that holds no tree-shape event beside the newest therefore grows,
+ *     and counts what it did drop in [droppedEvents]. Chat, log, lifecycle and one-shot state
+ *     events always arrive - `ChannelDescriptionFragment` and `UserCommentFragment` register an
+ *     observer that unregisters itself on the one [onChannelStateUpdated]/[onUserStateUpdated] it
+ *     is waiting for, which is why those are folded rather than dropped.
  *
  *   An observer must treat a model event as "something about this changed, read it again", never
  *   as a delta it accumulates. That was already true of every observer in the tree; the bound is
@@ -209,15 +223,31 @@ class HumlaCallbacks @JvmOverloads constructor(
             folded[policy.key] = event
         }
         queue.addLast(event)
-        while (queue.size > maxQueuedEvents && dropOldestDroppable()) {
-            // Keep going: one raise can only push the queue one over the bound, but a bound that
-            // was lowered, or a run of undroppable events that has since drained, can leave more.
+        // Only a droppable event may push the bound, and never over itself. An event that may not
+        // be dropped must not make room by evicting one that may: a burst of chat, log or user
+        // events would otherwise throw away every queued onChannelAdded and then leave nothing to
+        // rebuild from, which is the empty channel list this bound exists to prevent. The queue
+        // grows past the bound instead, exactly as it does for a queue that holds nothing
+        // droppable at all.
+        if (policy is Policy.Droppable) {
+            while (queue.size > maxQueuedEvents && dropOldestDroppableExcept(event)) {
+                // Keep going: one raise can only push the queue one over the bound, but a bound
+                // that was lowered, or a run of undroppable events that has since drained, can
+                // leave more.
+            }
         }
     }
 
-    /** Caller holds [lock]. Returns false when the queue holds nothing the bound may drop. */
-    private fun dropOldestDroppable(): Boolean {
-        val victim = queue.firstOrNull { it.policy is Policy.Droppable } ?: return false
+    /**
+     * Caller holds [lock]. Drops the oldest tree-shape event other than [newest], and returns false
+     * when there is none - which is how the newest one survives a queue that is full of events the
+     * bound may not touch. It is the one that must: every observer answers it by rebuilding the
+     * whole list from the model, so the newest delivery is the one that shows everything the
+     * dropped ones carried.
+     */
+    private fun dropOldestDroppableExcept(newest: Event): Boolean {
+        val victim = queue.firstOrNull { it !== newest && it.policy is Policy.Droppable }
+            ?: return false
         queue.remove(victim)
         dropped++
         return true

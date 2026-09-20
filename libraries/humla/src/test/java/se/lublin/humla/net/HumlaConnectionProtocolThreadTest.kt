@@ -185,8 +185,16 @@ class HumlaConnectionProtocolThreadTest {
         // passes MAX_QUEUED_EVENTS, and every observer of it in the tree answers by rebuilding the
         // list from the model rather than by accumulating a delta. What this test is about -
         // parsing off the main looper, delivery sliced, callbacks on main - is unchanged; the count
-        // is not. The last channel still arrives, which is the one that triggers the rebuild that
-        // shows all 5 000.
+        // is not.
+        //
+        // That the last channel arrives is asserted here only for the shape this test feeds:
+        // 5 000 frames of one droppable kind and nothing else, so the newest tree-shape event is
+        // always the newest event. It is not a property of the bound on its own - it holds because
+        // the bound never drops the newest droppable event and never lets an undroppable one evict
+        // a droppable. Those two rules are pinned in HumlaCallbacksBoundTest, on the mixed traffic
+        // this test does not produce (aQueueFullOfUndroppableEventsStillDeliversTheNewestTreeShape-
+        // Event, aUserSyncBehindAChannelSyncDoesNotSwallowEveryChannel); without them a real
+        // synchronisation, which sends users after channels, delivers no channel at all.
         assertThat(added.get()).isEqualTo(HumlaCallbacks.MAX_QUEUED_EVENTS)
         assertThat(lastAdded.get()).isEqualTo(4_999)
         assertThat(addedOnMain.get()).isTrue()
