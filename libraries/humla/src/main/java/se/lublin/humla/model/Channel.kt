@@ -178,9 +178,15 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     /**
      * Recursively fetches the subchannel user count, holding one channel's lock at a time: the
      * subchannels are copied under the lock and the recursion happens outside it, so no thread ever
-     * holds two channel locks at once. Nothing else in this class nests two locks, so no test can
-     * tell this apart from a plain `@Synchronized` today - it is here so that a later member that
-     * does take a second lock cannot turn this into a lock-order inversion.
+     * holds two channel locks at once.
+     *
+     * Two decisions, and only one of them is pinned. **The lock is load-bearing**: without it the
+     * copy can include a slot `fastRemove` has already nulled (`es[size = newSize] = null`) and the
+     * recursion throws a NullPointerException on the main thread - `ChannelTest`'s
+     * `countingUsersRecursivelyWhileTheTreeChangesNeverThrows` goes red in every run when it is
+     * taken away. **Releasing it before recursing** is the part no test can tell from a plain
+     * `@Synchronized`, because nothing else in this class nests two locks today; it is here so that
+     * a later member that does take a second lock cannot turn this into a lock-order inversion.
      *
      * FIXME: is it necessary to cache this?
      * @return The sum of users in this channel and its subchannels.

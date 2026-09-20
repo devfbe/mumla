@@ -227,24 +227,56 @@ class ChannelTest {
      * `getSubchannelUserCount` reads both lists and then recurses, so it is the one member that
      * would hold a lock while calling into another [Channel] if it were simply `@Synchronized`.
      * Its own race, because the reader here is the recursion rather than a returned list.
+     *
+     * It needs its own damage signals too, and that is worth spelling out: the method returns a
+     * count, not a snapshot, so the [Damage] holes and doubles below have nothing to look at and
+     * an exception is the only one of the three that can reach them. Measured: without the
+     * `synchronized` block that exception arrives in every run - the copy of `mSubchannels`
+     * includes a slot `fastRemove` has already nulled and the recursion dereferences it, on what
+     * is the main thread in production.
+     *
+     * The count carries the second signal, the duplicate one that spec 4.05 says is the one most
+     * likely to be missing. It only carries it because of how this fixture is built, so the
+     * constraint is written down rather than assumed: **every user has one home subchannel and
+     * only ever joins or leaves that one**, and [User.setChannel] leaves the old channel before
+     * joining the new, so a user is in at most one list at any instant and can be counted at most
+     * once per walk. The sum can then never exceed the number of users - except when the copy of
+     * `mSubchannels` holds the same subchannel twice, which is what an unlocked reader sees while
+     * an `add(i, e)` shifts the tail right. Users that wander between subchannels would break the
+     * ceiling without any race at all: the walk reads one subchannel after another, so a user that
+     * moves from an already-counted subchannel into one still to come is counted twice, and that
+     * is by design (see [Channel]'s class doc: a snapshot of one list, not of the tree).
      */
     @Test
     fun countingUsersRecursivelyWhileTheTreeChangesNeverThrows() {
         val root = Channel(0, false).apply { setName("root") }
         val subchannels = (1..20).map { Channel(it, false).apply { setName("channel $it") } }
-        subchannels.forEach { root.addSubchannel(it) }
         val users = (0 until 50).map { User(it, "user$it") }
+        val overcounts = AtomicInteger()
+        // The tree starts empty on purpose: the writer's first pass is what attaches the
+        // subchannels, so each of them is in the list exactly once or not at all. Attaching them
+        // here as well would put every one of them in twice for the whole first pass, and the
+        // count would pass the ceiling for a reason that has nothing to do with the lock.
 
         val damage = race(
             write = { i ->
+                // Whole passes of adds and of removes, for the reason the two tests above give:
+                // an add/remove alternation per iteration removes something that is not there on
+                // every odd step, so the list only ever grows and nothing is ever torn.
                 val sub = subchannels[i % subchannels.size]
-                if (i % 2 == 0) root.addSubchannel(sub) else root.removeSubchannel(sub)
-                users[i % users.size].setChannel(sub)
+                if ((i / subchannels.size) % 2 == 0) root.addSubchannel(sub) else root.removeSubchannel(sub)
+                val user = users[i % users.size]
+                val home = subchannels[(i % users.size) % subchannels.size]
+                user.setChannel(if ((i / users.size) % 2 == 0) home else null)
             },
-            read = { root.getSubchannelUserCount(); emptyList<Any?>() },
+            read = {
+                if (root.getSubchannelUserCount() > users.size) overcounts.incrementAndGet()
+                emptyList<Any?>()
+            },
         )
 
         assertThat(damage.report()).isEmpty()
+        assertThat(overcounts.get()).isEqualTo(0)
     }
 
     /**
