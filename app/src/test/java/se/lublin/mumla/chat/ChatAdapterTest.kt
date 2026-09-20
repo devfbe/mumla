@@ -15,6 +15,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.AsyncDifferConfig
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
@@ -65,6 +66,7 @@ class ChatAdapterTest {
         parseDispatcher: CoroutineDispatcher = Dispatchers.Default,
         selfSessionId: () -> Int = { 42 },
         decodeDispatcher: CoroutineDispatcher = Dispatchers.Unconfined,
+        diff: DiffUtil.ItemCallback<IChatMessage> = ChatAdapter.DIFF,
     ) = ChatAdapter(
         parser = parser,
         loader = ChatImageLoader(
@@ -79,7 +81,7 @@ class ChatAdapterTest {
         onImageClicked = { clicked += it },
         scope = scope,
         parseDispatcher = parseDispatcher,
-        differConfig = AsyncDifferConfig.Builder(ChatAdapter.DIFF)
+        differConfig = AsyncDifferConfig.Builder(diff)
             .setBackgroundThreadExecutor { it.run() }
             .build(),
     )
@@ -581,6 +583,48 @@ class ChatAdapterTest {
     // ------------------------------------------------------------------------------------------
     // The snapshot and the submit ordering.
     // ------------------------------------------------------------------------------------------
+
+    @Test
+    fun theDifferOnlyEverAsksAboutTheContentsOfOneAndTheSameInstance() = runTest {
+        // The premise that lets areContentsTheSame be a constant: DiffUtil only asks it about
+        // pairs areItemsTheSame has already merged, and that callback merges by identity -- so
+        // both arguments are the same object every time and no comparison could answer otherwise.
+        // Collapsing two rows into one would take areItemsTheSame conflating two *distinct*
+        // instances, which is the assertion below it and a different method.
+        val pairs = mutableListOf<Pair<IChatMessage, IChatMessage>>()
+        val recording = object : DiffUtil.ItemCallback<IChatMessage>() {
+            override fun areItemsTheSame(oldItem: IChatMessage, newItem: IChatMessage) =
+                ChatAdapter.DIFF.areItemsTheSame(oldItem, newItem)
+
+            override fun areContentsTheSame(oldItem: IChatMessage, newItem: IChatMessage): Boolean {
+                pairs += oldItem to newItem
+                return ChatAdapter.DIFF.areContentsTheSame(oldItem, newItem)
+            }
+        }
+        val adapter = adapter(diff = recording)
+        val first = info("one")
+        val second = info("two")
+        adapter.submitMessages(listOf(first))
+        idle()
+        adapter.submitMessages(listOf(first, second))
+        idle()
+        // A fresh list holding the same instances: AsyncListDiffer short-circuits on the identical
+        // List object, so this is what makes it compare contents at all.
+        adapter.submitMessages(listOf(first, second))
+        idle()
+
+        assertThat(pairs).isNotEmpty()
+        for ((oldItem, newItem) in pairs) {
+            if (oldItem !== newItem) fail("asked about two different instances: $oldItem / $newItem")
+        }
+
+        // The other half, which identity really does carry: two messages that read the same are
+        // still two rows.
+        val twin = adapter(diff = ChatAdapter.DIFF)
+        twin.submitMessages(listOf(info("same"), info("same")))
+        idle()
+        assertThat(twin.itemCount).isEqualTo(2)
+    }
 
     @Test
     fun replacingTheWholeLogRemovesAndInsertsRatherThanRebindingInPlace() = runTest {
