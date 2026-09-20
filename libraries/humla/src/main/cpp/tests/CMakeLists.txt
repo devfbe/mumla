@@ -291,3 +291,61 @@ if(HUMLA_HAVE_SANITIZERS)
   target_link_libraries(test_jni_speexdsp_asan PRIVATE speexdsp_hosttest_asan m)
   humla_add_labelled_test(jni_speexdsp_sanitized test_jni_speexdsp_asan sanitized)
 endif()
+
+# ---------------------------------------------------------------- the speex codec bridge (existing)
+# ../jni_speex.cpp has the same hazard as the ctl entry points in ../jni_speexdsp.cpp: a request
+# number arrives from Kotlin and decides what speex_decoder_ctl does with the address of a
+# four-byte stack object. SPEEX_GET_STACK writes a pointer through it, SPEEX_SET_INNOVATION_SAVE
+# keeps it and writes a subframe through it on every later decode, SPEEX_SET_HANDLER reads a
+# SpeexCallback out of it. None of that is visible from Kotlin or from libspeex.
+#
+# libspeex is rebuilt here for the same reason libspeexdsp is above: ../CMakeLists.txt defines
+# Android SHARED targets that link -llog. The source list is the one from there; if the two drift
+# apart the result is a missing symbol at link time, i.e. loud.
+set(HUMLA_SPEEX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/speex/libspeex)
+set(HUMLA_SPEEX_SOURCES
+    ${HUMLA_SPEEX_DIR}/bits.c ${HUMLA_SPEEX_DIR}/cb_search.c ${HUMLA_SPEEX_DIR}/exc_10_16_table.c
+    ${HUMLA_SPEEX_DIR}/exc_10_32_table.c ${HUMLA_SPEEX_DIR}/exc_20_32_table.c
+    ${HUMLA_SPEEX_DIR}/exc_5_256_table.c ${HUMLA_SPEEX_DIR}/exc_5_64_table.c
+    ${HUMLA_SPEEX_DIR}/exc_8_128_table.c ${HUMLA_SPEEX_DIR}/filters.c
+    ${HUMLA_SPEEX_DIR}/gain_table.c ${HUMLA_SPEEX_DIR}/gain_table_lbr.c
+    ${HUMLA_SPEEX_DIR}/hexc_10_32_table.c ${HUMLA_SPEEX_DIR}/hexc_table.c
+    ${HUMLA_SPEEX_DIR}/high_lsp_tables.c ${HUMLA_SPEEX_DIR}/kiss_fft.c
+    ${HUMLA_SPEEX_DIR}/kiss_fftr.c ${HUMLA_SPEEX_DIR}/lpc.c ${HUMLA_SPEEX_DIR}/lsp.c
+    ${HUMLA_SPEEX_DIR}/lsp_tables_nb.c ${HUMLA_SPEEX_DIR}/ltp.c ${HUMLA_SPEEX_DIR}/modes.c
+    ${HUMLA_SPEEX_DIR}/modes_wb.c ${HUMLA_SPEEX_DIR}/nb_celp.c ${HUMLA_SPEEX_DIR}/quant_lsp.c
+    ${HUMLA_SPEEX_DIR}/sb_celp.c ${HUMLA_SPEEX_DIR}/speex.c ${HUMLA_SPEEX_DIR}/speex_callbacks.c
+    ${HUMLA_SPEEX_DIR}/speex_header.c ${HUMLA_SPEEX_DIR}/stereo.c ${HUMLA_SPEEX_DIR}/vbr.c
+    ${HUMLA_SPEEX_DIR}/vq.c ${HUMLA_SPEEX_DIR}/window.c)
+
+function(humla_add_speex name)  # name, then the extra compile options
+  add_library(${name} STATIC ${HUMLA_SPEEX_SOURCES})
+  target_include_directories(${name}
+      PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/speex/include
+      PRIVATE ${HUMLA_SPEEX_DIR})
+  target_compile_definitions(${name} PUBLIC __EMX__ PRIVATE FIXED_POINT USE_KISS_FFT EXPORT=)
+  target_compile_options(${name} PRIVATE ${ARGN})
+  target_link_libraries(${name} PUBLIC m)
+endfunction()
+
+humla_add_speex(speex_hosttest)
+
+set(HUMLA_JNI_SPEEX_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_jni_speex.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_speex.cpp)
+
+add_executable(test_jni_speex ${HUMLA_JNI_SPEEX_SOURCES})
+target_include_directories(test_jni_speex PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+target_link_libraries(test_jni_speex PRIVATE speex_hosttest m)
+humla_add_labelled_test(jni_speex test_jni_speex plain)
+
+if(HUMLA_HAVE_SANITIZERS)
+  humla_add_speex(speex_hosttest_asan ${HUMLA_SAN_FLAGS})
+  target_link_options(speex_hosttest_asan PUBLIC -fsanitize=address,undefined)
+
+  add_executable(test_jni_speex_asan ${HUMLA_JNI_SPEEX_SOURCES})
+  target_include_directories(test_jni_speex_asan PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+  target_compile_options(test_jni_speex_asan PRIVATE ${HUMLA_SAN_FLAGS})
+  target_link_libraries(test_jni_speex_asan PRIVATE speex_hosttest_asan m)
+  humla_add_labelled_test(jni_speex_sanitized test_jni_speex_asan sanitized)
+endif()
