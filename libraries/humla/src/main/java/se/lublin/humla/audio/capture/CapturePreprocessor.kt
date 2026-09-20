@@ -100,9 +100,12 @@ object NoopPreprocessor : CapturePreprocessor {
  * has been released degrades to a no-op instead of touching freed native state, so a frame still
  * in flight through the old chain is harmless rather than a crash. See [SingleHandleStage].
  *
- * **"Publishing" is a requirement, not a figure of speech, and nothing implements it yet.**
- * `CapturePipeline` and `AudioOutput` both take their chain in the constructor and no field of
- * either is `@Volatile` except `amplitudeBoost`, so today there is no publication point at all.
+ * **"Publishing" is a requirement, not a figure of speech, and nothing implements it for the
+ * chain.** `CapturePipeline` and `AudioOutput` both take their chain in the constructor and
+ * neither has a setter for it, so for the chain there is no publication point at all. The one
+ * field that did get one is a different field: `CapturePipeline.setResampler` writes a `@Volatile`
+ * reference, which is the shape this paragraph asks for -- and it is the resampler, not the
+ * chain.
  * Whoever adds one writes the new chain to a `@Volatile` field, or under the same lock the capture
  * thread reads it with. A plain `var` is the failure this whole ordering exists to avoid, and it
  * fails *quietly*: the capture thread keeps reading the old, just-released reference, every stage

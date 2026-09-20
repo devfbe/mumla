@@ -29,8 +29,10 @@ import se.lublin.humla.audio.native.WebRtcApmApi
 /**
  * The capture path runs on the audio thread once every 10 ms. Every byte it allocates there is a
  * future garbage collection pause in the middle of a frame, which is a dropout the user hears --
- * so the frame path of the pipeline skeleton allocates nothing at all, and this measures it
- * rather than asserting it in a comment.
+ * so the frame path of the pipeline skeleton is held under half of the smallest object the JVM
+ * can allocate, and this measures that rather than asserting it in a comment. Note the ceiling in
+ * that sentence: the instrument reads bytes per call over a window, so what it can say is
+ * "below [HALF_AN_OBJECT]", never "nothing".
  *
  * `getThreadAllocatedBytes` counts bytes this thread handed to the allocator, so it sees the
  * things that are easy to write by accident and impossible to see by reading: the `Iterator` of a
@@ -43,7 +45,8 @@ class CaptureThreadAllocationTest {
     private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
 
     /**
-     * Allocates nothing itself, so what a chain of these measures is the chain.
+     * Adds nothing of its own to the reading -- no allocation in its source -- so what a chain of
+     * these measures is the chain.
      *
      * Note what that excludes, because 0.000 B here is easy to read as more than it is: the
      * probability is a **pre-boxed** `Float?` held in a field, so returning it allocates nothing.
@@ -65,8 +68,8 @@ class CaptureThreadAllocationTest {
     }
 
     /**
-     * Answers like `jni_speexdsp.cpp` does and allocates nothing itself, so what a stage built on
-     * it measures is the stage. `FakeSpeexPreprocessApi` cannot be used here: it records every
+     * Answers like `jni_speexdsp.cpp` does and adds nothing of its own to the reading, so what a
+     * stage built on it measures is the stage. `FakeSpeexPreprocessApi` cannot be used here: it records every
      * call into a list, which allocates on the frame path and would be measured as the stage's.
      */
     private class SilentSpeexApi : SpeexPreprocessApi {
@@ -87,7 +90,7 @@ class CaptureThreadAllocationTest {
     }
 
     @Test
-    fun `the capture frame path allocates nothing`() {
+    fun `the capture frame path allocates under half an object per frame`() {
         assertThat(threads.isThreadAllocatedMemorySupported).isTrue()
         assertThat(threads.isThreadAllocatedMemoryEnabled).isTrue()
 
@@ -143,7 +146,7 @@ class CaptureThreadAllocationTest {
      * green. ART does no such elimination.
      */
     @Test
-    fun `the speex stage allocates nothing per frame`() {
+    fun `the speex stage allocates under half an object per frame`() {
         assertThat(threads.isThreadAllocatedMemorySupported).isTrue()
         assertThat(threads.isThreadAllocatedMemoryEnabled).isTrue()
 
@@ -168,7 +171,8 @@ class CaptureThreadAllocationTest {
     }
 
     /**
-     * Answers like `jni_rnnoise.cpp` and `jni_webrtc_apm.cpp` do and allocate nothing themselves.
+     * Answer like `jni_rnnoise.cpp` and `jni_webrtc_apm.cpp` do and add nothing of their own to the
+     * reading.
      *
      * The probabilities and levels cycle through a small primitive table rather than being
      * constant: a constant would let C2 fold the value and, with it, possibly the box that is the
@@ -293,14 +297,15 @@ class CaptureThreadAllocationTest {
      * Both are measured against the skeleton's `HALF_AN_OBJECT`, not against the box allowance: the
      * detector is handed a `Float?` that some stage already boxed and `?:` unboxes rather than
      * reboxing, and the pipeline over `NoopPreprocessor` has no probability to box at all. So what
-     * is left for either of them to allocate is a mistake rather than a cost.
+     * is left for either of them to allocate is a mistake rather than a cost -- "under half an object
+     * per frame", which is what this file can measure, not "nothing".
      *
      * The detector is measured in **both** modes, because they take different halves of `isVoice`:
      * `AMPLITUDE` runs the level loop over the frame, `PROBABILITY` takes the pre-boxed float and
      * skips it. A measurement of one says nothing about the other.
      */
     @Test
-    fun `the detector and the pipeline allocate nothing per frame`() {
+    fun `the detector and the pipeline allocate under half an object per frame`() {
         assertThat(threads.isThreadAllocatedMemorySupported).isTrue()
         assertThat(threads.isThreadAllocatedMemoryEnabled).isTrue()
 
