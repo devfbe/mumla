@@ -75,10 +75,30 @@ void writeError(JNIEnv* env, jintArray error, jint value) {
  *
  * An allow list rather than a list of the dangerous ones: the argument's type is a property of
  * each request inside libspeexdsp, a version bump can add another pointer-typed request, and
- * being wrong in the allowing direction is a stack smash. Both lists are exactly the constants
- * the matching Kotlin object declares -- nothing else was ever reachable from Kotlin without
- * also adding a constant there. Adding one means checking in jitter.c / preprocess.c that the
- * new request really reads or writes a single spx_int32_t, and adding it here too.
+ * being wrong in the allowing direction is a stack smash. Both lists are exactly the ctl requests
+ * the matching Kotlin object declares as constants (SpeexJitterNative additionally declares five
+ * JITTER_BUFFER_* status codes, which are return values, not requests) -- nothing else was ever
+ * reachable from Kotlin without also adding a constant there. That on its own is NOT the reason
+ * to refuse the rest: the request is a plain Int on a public interface, so reaching one takes no
+ * native change at all.
+ *
+ * The criterion for adding one is about the pointer, not about the whole request: jitter.c /
+ * preprocess.c must treat ptr as exactly one spx_int32_t -- read once or written once -- and
+ * everything else it touches must live inside the state's own allocation. SPEEX_PREPROCESS_SET_DEREVERB
+ * (8) is the entry that makes the difference visible: it reads the single int and then zeroes
+ * st->reverb_estimate[0 .. ps_size) (preprocess.c:1103-1107). That loop is inside the
+ * preprocessor's own correctly sized array, so it is safe, but it is not "a single spx_int32_t
+ * access" and a criterion phrased that way would have excluded an entry the list already has.
+ *
+ * The two refusals are deliberately spelled differently, and the difference is not cosmetic.
+ * JB(ctl) answers JITTER_BUFFER_BAD_ARGUMENT (-2) while jitter_buffer_ctl answers -1 for a
+ * request it does not know (jitter.c:833-835), so a caller can tell "the bridge refused this"
+ * from "libspeexdsp has no such request". PP(ctlInt) cannot: speex_preprocess_ctl also answers
+ * -1, and SpeexPreprocessApi.ctlInt is documented as returning speex's own status, which has no
+ * spare value. The asymmetry is left in place rather than invented around, because a code
+ * SpeexPreprocessNative made up would be indistinguishable from a future libspeexdsp return
+ * value; test_jni_speexdsp.cpp therefore pins the preprocess refusals on requests libspeexdsp
+ * does implement, where -1 is only reachable through the allow list.
  */
 bool jitterRequestAllowed(jint request) {
     switch (request) {
@@ -126,6 +146,11 @@ JNIEXPORT jlong JNICALL RS(init)(JNIEnv* env, jobject, jint channels, jint inRat
     SpeexResamplerState* st = speex_resampler_init(channels, inRate, outRate, quality, &err);
     writeError(env, error, err);
     if (st == nullptr) return 0;
+    // This failure path survives its own removal and cannot be pinned from here: jni_env_stub.h
+    // can make Get*ArrayElements fail, but nothing in the test setup can make operator new fail,
+    // so both the destroy and the error code below are unreachable in a test. Kept because the
+    // alternative is leaking the SpeexResamplerState and returning 0 with err = 0, which reads as
+    // success. Pinning it would need an allocation hook in the test binary.
     auto* h = new (std::nothrow) ResamplerHandle{st, channels};
     if (h == nullptr) {
         speex_resampler_destroy(st);
@@ -273,6 +298,13 @@ JNIEXPORT jint JNICALL JB(updateDelay)(JNIEnv*, jobject, jlong handle) {
 JNIEXPORT jlong JNICALL PP(init)(JNIEnv*, jobject, jint frameSize, jint sampleRate) {
     if (frameSize <= 0) return 0;
     SpeexPreprocessState* state = speex_preprocess_state_init(frameSize, sampleRate);
+    // Both checks below survive their own removal, and both for a structural reason rather than a
+    // missing test. speex_preprocess_state_init cannot return nullptr in this libspeexdsp at all:
+    // it writes st->frame_size into the allocation without checking it (preprocess.c:396-397), so
+    // an allocation failure is a crash inside speex, not a null return. The check stays because
+    // the promise belongs to the library's signature, not to this version of its body. The
+    // nothrow check below is the same case as in RS(init): nothing in the test setup can make
+    // operator new fail.
     if (state == nullptr) return 0;
     auto* h = new (std::nothrow) PreprocessHandle{state, frameSize};
     if (h == nullptr) {

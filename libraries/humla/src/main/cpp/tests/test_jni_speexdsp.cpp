@@ -52,6 +52,9 @@ JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_init
 JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_ctl(JNIEnv*, jobject, jlong, jint, jintArray);
 JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_put(JNIEnv*, jobject, jlong, jbyteArray, jint, jint, jint, jint, jint);
 JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_get(JNIEnv*, jobject, jlong, jbyteArray, jint, jintArray);
+JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_pointerTimestamp(JNIEnv*, jobject, jlong);
+JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_tick(JNIEnv*, jobject, jlong);
+JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_updateDelay(JNIEnv*, jobject, jlong);
 JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_destroy(JNIEnv*, jobject, jlong);
 }
 
@@ -67,6 +70,9 @@ JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_destr
 #define JB_GET Java_se_lublin_humla_audio_native_SpeexJitterNative_get
 #define JB_CTL Java_se_lublin_humla_audio_native_SpeexJitterNative_ctl
 #define JB_DESTROY Java_se_lublin_humla_audio_native_SpeexJitterNative_destroy
+#define JB_POINTER_TIMESTAMP Java_se_lublin_humla_audio_native_SpeexJitterNative_pointerTimestamp
+#define JB_TICK Java_se_lublin_humla_audio_native_SpeexJitterNative_tick
+#define JB_UPDATE_DELAY Java_se_lublin_humla_audio_native_SpeexJitterNative_updateDelay
 
 enum { kJitterBadArgument = -2 };  /* JITTER_BUFFER_BAD_ARGUMENT */
 
@@ -178,6 +184,23 @@ static void test_resampler(Env& env) {
                    out.as<jshortArray>(), outLen.as<jintArray>());
         CHECK(outLen[0] <= 160, "an output count is clamped even when the input count is honest");
         CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
+    }
+    {
+        /* inLen and outLen are int[] like every other array here, and GetIntArrayRegion(.., 0, 1,
+         * ..) on an empty one throws on a real JVM (the stub aborts). The Kotlin signature says
+         * IntArray, not IntArray(1). */
+        Array<jshort> in(480), out(160);
+        Array<jint> empty(0), outLen(1);
+        outLen[0] = 160;
+        CHECK(RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), empty.as<jintArray>(),
+                         out.as<jshortArray>(), outLen.as<jintArray>()) != RESAMPLER_ERR_SUCCESS,
+              "an empty input-count array is refused, not read");
+        Array<jint> inLen2(1);
+        inLen2[0] = 480;
+        CHECK(RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), inLen2.as<jintArray>(),
+                         out.as<jshortArray>(), empty.as<jintArray>()) != RESAMPLER_ERR_SUCCESS,
+              "an empty output-count array is refused, not read");
+        CHECK(jnistub::outstanding_copies() == 0, "neither refusal pins an array");
     }
     {
         Array<jshort> in(480), out(160);
@@ -336,6 +359,15 @@ static void test_jitter(Env& env) {
         CHECK(jnistub::outstanding_copies() == 0, "get releases the output copy");
     }
 
+    /* pointerTimestamp, tick and updateDelay all dereference the handle in libspeexdsp. 0 is what
+     * init() returns on failure and what a Kotlin field holds before it is assigned, so each of
+     * them has to answer rather than follow it. */
+    CHECK(JB_POINTER_TIMESTAMP(e, nullptr, 0) == 0, "pointerTimestamp with a null handle answers 0");
+    JB_TICK(e, nullptr, 0);
+    CHECK(true, "tick with a null handle does not dereference it");
+    CHECK(JB_UPDATE_DELAY(e, nullptr, 0) == kJitterBadArgument,
+          "updateDelay with a null handle is refused");
+
     JB_DESTROY(e, nullptr, jb);
     JB_DESTROY(e, nullptr, 0);
 }
@@ -381,6 +413,19 @@ static void test_jitter_ctl(Env& env) {
           "GET_AVAILABLE_COUNT is allowed");
     CHECK(value[0] >= 0, "GET_AVAILABLE_COUNT writes a count back");
 
+    /* The handle and the array are checked before the request is: ctl dereferences the jitter
+     * buffer inside libspeexdsp, and reads and writes value[0]. Each of the three has its own
+     * case, because an allowed request reaches all three. */
+    CHECK(JB_CTL(e, nullptr, 0, 0 /* SET_MARGIN */, v) == kJitterBadArgument,
+          "ctl with a null handle is refused");
+    CHECK(JB_CTL(e, nullptr, jb, 0 /* SET_MARGIN */, nullptr) == kJitterBadArgument,
+          "ctl with a null value array is refused");
+    {
+        Array<jint> empty(0);
+        CHECK(JB_CTL(e, nullptr, jb, 0 /* SET_MARGIN */, empty.as<jintArray>()) == kJitterBadArgument,
+              "ctl with an empty value array is refused, not read");
+    }
+
     /* Everything else, whether libspeexdsp knows it or not. 4 and 5 are the dangerous pair; the
      * rest are int-typed but were never reachable from Kotlin, and 12345/-1 are not requests. */
     const jint refused[] = {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 2, 14, -1, 12345, 0x7fffffff};
@@ -418,12 +463,27 @@ static void test_preprocess_ctl(Env& env) {
         value[0] = 1;
         CHECK(PP_CTL(e, nullptr, st, request, v) == 0, "a named preprocess request is allowed");
     }
-    /* SET_AGC (2) and SET_AGC_TARGET (46) are on the allow list too, and speex answers -1 to both:
-     * its whole AGC control block sits behind #ifndef FIXED_POINT (preprocess.c:1057, :1193) and
-     * this library is built with FIXED_POINT. That -1 is libspeexdsp's, not the bridge's, and it
-     * is measured here so the difference stays visible -- PreprocessingEncoder.kt calls both and
-     * ignores the return value, so Mumla's AGC preference has never reached speex. Dropping them
-     * from the allow list would hide that behind the bridge's own -1. */
+    /* SET_AGC (2) and SET_AGC_TARGET (46) are on the allow list too, and speex answers -1 to
+     * both: its whole AGC control block sits behind #ifndef FIXED_POINT (preprocess.c:1057,
+     * :1193) and this library is built with FIXED_POINT (../CMakeLists.txt, the speexdsp target;
+     * the ndk-build flavour that file replaced passed the same -DFIXED_POINT, so it has never
+     * been otherwise). That -1 is libspeexdsp's, not the bridge's, and it is measured here so
+     * the difference stays visible: PreprocessingEncoder.kt:39,43 sets both and ignores the
+     * return value, so those two calls have never done anything.
+     *
+     * What this is NOT is a setting in the UI that quietly does nothing. There is no AGC
+     * preference in Mumla -- no agc key under app/src/main/res/xml/, no AutomaticGainControl
+     * anywhere in the tree; the 1 and the 30000 are literals in PreprocessingEncoder's
+     * constructor. The gain the user can actually change is the amplitude boost
+     * (Settings.kt:65-66,228 -> HumlaService.EXTRAS_AMPLITUDE_BOOST ->
+     * protocol/AudioHandler.java:454-458), a float multiplication that works. So this is dead
+     * code, not a lying switch; what is open is whether to delete the two calls or implement
+     * them elsewhere (the WebRTC APM's AGC2 is already built).
+     *
+     * This is also the only place that can see it. PreprocessingEncoderTest drives a
+     * FakePreprocess whose ctlInt returns a hard-coded 0, so the JVM test could never observe a
+     * -1 no matter what the real library does. Dropping the two requests from the allow list
+     * would hide libspeexdsp's -1 behind the bridge's own, and nothing would be left. */
     const jint agc[] = {2, 46};
     for (jint request : agc) {
         value[0] = 1;
@@ -436,6 +496,16 @@ static void test_preprocess_ctl(Env& env) {
     CHECK(PP_CTL(e, nullptr, st, 15 /* GET_PROB_START */, v) == 0, "GET_PROB_START is allowed");
     /* Stored as Q15 and scaled back by 100, so the round trip is within a percentage point. */
     CHECK(value[0] >= 41 && value[0] <= 43, "GET_PROB_START reads back what SET_PROB_START wrote");
+
+    /* Same three as JB(ctl): the state is dereferenced, and value[0] is read and written. */
+    CHECK(PP_CTL(e, nullptr, 0, 0 /* SET_DENOISE */, v) == -1, "ctlInt with a null state is refused");
+    CHECK(PP_CTL(e, nullptr, st, 0 /* SET_DENOISE */, nullptr) == -1,
+          "ctlInt with a null value array is refused");
+    {
+        Array<jint> empty(0);
+        CHECK(PP_CTL(e, nullptr, st, 0 /* SET_DENOISE */, empty.as<jintArray>()) == -1,
+              "ctlInt with an empty value array is refused, not read");
+    }
 
     /* 24/25 store or write a pointer, 39/43 write ps_size ints, 6/7 read and write a float, and
      * the remainder are simply not part of this interface. */
