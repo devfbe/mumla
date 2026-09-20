@@ -397,7 +397,11 @@ away in a method the diff never went near, and under the narrower reading it nev
 entered the list. Consequence, measured: all eleven tests in that class were
 driving a button the fragment had set to `GONE`, and only worked because the test
 helper dispatched touches directly, bypassing hit-testing. The unit is the file the
-test class hosts. A test class that never
+test class hosts. The unit is **every input the file
+branches on**, not only the ones that look like settings: the round that missed
+the fourth corner above had read "setting" as "Preference", and the two inputs
+that mattered were constructor parameters of a data class — which reach the file
+by exactly the path the user operates. A test class that never
 writes a preference the file reads is testing exactly one configuration, and the
 sweep will confirm whatever that configuration does.
 
@@ -442,12 +446,22 @@ had survived mutation for exactly this reason, invisible everywhere except in th
 window where the audio thread is still handing over frames. That is the window
 that matters.
 
-**Mutate a compound condition clause by clause.** `if (a && b && c)` is three
-guards wearing one pair of brackets, and removing the whole condition kills a test
-while removing `b` alone may not. A sweep that treats the `if` as one unit reports
-a clean result over a passenger. Done properly on one file here: 8 of 8
-sub-clauses each killed a test on their own, which is the statement worth making —
-not "the condition is covered".
+**Mutate a compound condition clause by clause — and know what that does not
+prove.** `if (a && b && c)` is three guards wearing one pair of brackets, and
+removing the whole condition kills a test while removing `b` alone may not. A
+sweep that treats the `if` as one unit reports a clean result over a passenger.
+Done properly on one file here: 8 of 8 sub-clauses each killed a test on their
+own.
+
+**But clause-wise mutation and input-space coverage are orthogonal, and reading
+the first as if it covered the second has already cost a round.** A clause sweep
+proves every clause carries weight; it proves **nothing about the operator that
+joins them**. `||` mutated to `xor` survived a file whose clause sweep was
+complete, because over three of the four corners of a two-boolean input space the
+two operators agree — and the test class never wrote the fourth corner. For a
+compound condition over k booleans the requirement is **2^k inputs, not k
+mutations**. The consequence in that case: a user who switched on both Android
+audio effects got neither, silently.
 
 And the tool: do not run the suite once. **Mutate each guard on its own and
 require exactly one test to go red.** Here that costs about eleven seconds a run.
