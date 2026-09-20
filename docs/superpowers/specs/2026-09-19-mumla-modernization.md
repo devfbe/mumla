@@ -292,6 +292,63 @@ P5. **Manifest:** `foregroundServiceType="microphone|mediaPlayback"`,
   within 3 s worst case; stream A calls it only from the audio-control thread.
 - Stream D consumes `IChatMessage` unchanged; stream A must not change its shape.
 
+### 4.1 Binding constraints discovered during execution
+
+These were found by implementers and reviewers after the plans were written. They
+are binding on the tasks named, and they live here rather than in a stream ledger
+because `.superpowers/sdd/` is gitignored — a ledger disappears with its worktree.
+
+- **One lock across both audio streams (B, tasks 5–6).** The WebRTC APM has two
+  audio threads: `processRender` on the playback thread and `processCapture` on
+  the capture thread. `AudioHandler.java:220-225,467-482` serialises `encode()`
+  and `destroy()` through `mEncoderLock`, which does **not** cover the playback
+  path. The release-versus-in-flight-process window spans `GetArrayLength` *and*
+  `GetShortArrayElements` (`jni_webrtc_apm.cpp:55-58`), i.e. an array copy that
+  can take a GC pause. The adapters must take **one** lock covering both streams
+  and `destroy()` — not two independent adapters.
+- **Native handles are not interchangeable (B, tasks 5–6).** `HandleTable::get()`
+  dereferences without validating; only `release()` checks membership. Passing a
+  handle to the bridge that did not issue it is a segfault or silent nonsense
+  (measured). Adapters must never mix the RNNoise and APM handles.
+- **Reset the toggle input mode on disconnect (A, at or before task 11).**
+  `mInputOn` (`ToggleInputMode.java:52`) is never cleared; `mToggleInputMode` is
+  created once in `HumlaService.onCreate` (`:269`) and lives as long as the
+  service. With stream P's media-key toggle a user can turn transmission on with
+  the screen off, lose the network, and the auto-reconnect resumes transmitting
+  with no key press and no visible indication. It must be cleared **in code** in
+  `HumlaService.onConnectionDisconnected`: an observer-based reset is a no-op
+  there, because `mConnectionState` is set to DISCONNECTED before
+  `mCallbacks.onDisconnected(e)` fires, and both `isConnected()` (`:1112`) and
+  `HumlaSession()` (`:747`) read that field. A reset in `onConnected()` still
+  leaves a window, because `AudioHandler.initialize()` starts the input thread
+  from `onConnectionSynchronized` (`:378-382`), before `onConnected()` (`:392`).
+- **Verify which key action the media-button path delivers before building on it
+  (P, task 4).** `MediaKeyHandler` acts on `ACTION_UP`. `MediaSessionCompat`'s
+  default callback discards everything that is not `ACTION_DOWN`, and Media3
+  ignores `ACTION_UP` before the app sees it. If our path behaves the same, the
+  button does nothing at all and no unit test of that layer can show it. Measure
+  first (log in `onMediaButtonEvent`, `adb shell input keyevent 79` and `85`, plus
+  a real Bluetooth headset — adb alone is not enough, it goes through the input
+  dispatcher rather than the AVRCP stack). If only DOWN arrives, switch to DOWN +
+  `repeatCount == 0` + no `FLAG_CANCELED`, and swallow the matching UP.
+- **Apply the host policy per redirect hop (D, task 6).** `HttpImageFetcher` sets
+  `instanceFollowRedirects = true` and follows same-scheme redirects to any host
+  without re-entering the gate. A loopback/LAN block that sits only in the gate is
+  bypassed by a single 302.
+- **Catch zero-sized bounds before calling the decoder (D, task 6).**
+  `BoundedBitmapDecoder` throws `IllegalArgumentException` on a non-positive
+  bound, and a not-yet-measured view legitimately reports 0 px. Skip the load
+  instead. Do **not** relax the `require`: it is the only thing between a negative
+  bound and a non-terminating loop (measured — the sample size doubles to
+  `Int.MIN_VALUE`, then 0, and `1f/0 = +Inf` keeps the condition true forever).
+- **Prove the send path with `createdFromBitmap`, not with the output size
+  (D, task 10).** `ChannelChatFragment.java:306` decodes full size, rotates into a
+  second full copy, and only then resizes — up to ~96 MB peak for a 12 MP photo.
+  Robolectric does not implement `inJustDecodeBounds`, so a heap delta measures
+  the opposite of what it claims. `shadowOf(bitmap).createdFromBitmap` yields the
+  source instance a scaled bitmap was made from, which makes the chain
+  sample → rotate → fit checkable link by link.
+
 ## 5. Ordering and integration
 
 1. F1–F8 sequentially on `modernization` (F1 first, F2 next, then F3, F4, F5, F6, F7, F8).
