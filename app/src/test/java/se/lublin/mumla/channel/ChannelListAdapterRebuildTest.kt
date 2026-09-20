@@ -545,6 +545,26 @@ class ChannelListAdapterRebuildTest {
         }
     }
 
+    /**
+     * A hole in `getUsers()` gets no row but is still counted, because
+     * `Channel.getSubchannelUserCount()` -- the number this replaced, and the number the row has
+     * always shown -- is `mUsers.size()` and counts it too. Counting before the skip rather than
+     * after is therefore the whole point of the line's order, and the fake could not produce the
+     * input that tells the two orders apart until it was allowed to hold a null.
+     */
+    @Test
+    fun aUserTheModelHasNotFilledInYetIsCountedButGetsNoRow() {
+        val root = FakeChannel(0)
+        root.addUser(FakeUser(200))
+        root.addAbsentUser()
+        val adapter = adapterOver(root, mapOf(0 to root))
+
+        assertThat(adapter.itemCount).isEqualTo(2)
+        assertThat(adapter.getUserPosition(200)).isEqualTo(1)
+        assertThat(userCountTextAt(adapter, recyclerView(), adapter.getChannelPosition(0)))
+            .isEqualTo("2")
+    }
+
     /** Tapping a row is how a chat target is chosen; each row reports its own subject. */
     @Test
     fun tappingARowReportsTheChannelOrTheUserItShows() {

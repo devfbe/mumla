@@ -27,7 +27,12 @@ class FakeChannel(
         }
     }
 
-    private val users = mutableListOf<IUser>()
+    // Nullable, because the real list is: `Channel.getUsers()` is an unmodifiable view of a
+    // `List<User>` the model fills in as messages arrive, and the adapter has carried a null
+    // check over that list since the Java version. Without a hole to hand out, the two sides of
+    // that check cannot be told apart and the line is untestable in the fake rather than in the
+    // code -- which is where it had been hiding.
+    private val users = mutableListOf<IUser?>()
     private val subchannels = mutableListOf<FakeChannel>()
     private val links = mutableListOf<IChannel>()
     private var parent: FakeChannel? = null
@@ -50,9 +55,15 @@ class FakeChannel(
         users.remove(user)
     }
 
+    /** A user the model counts but has not filled in yet. */
+    fun addAbsentUser() {
+        users.add(null)
+    }
+
+    @Suppress("UNCHECKED_CAST")
     override fun getUsers(): List<IUser> {
         counters.getUsersCalls++
-        return users
+        return users as List<IUser>
     }
 
     override fun getId(): Int = id
