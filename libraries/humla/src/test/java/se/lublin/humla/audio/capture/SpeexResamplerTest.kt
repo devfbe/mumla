@@ -62,13 +62,20 @@ class SpeexResamplerTest {
         assertThat(failure).hasMessageThat().contains("48000")
     }
 
+    /**
+     * The input array is deliberately **longer** than the count. `AudioInput.run` allocates its
+     * capture buffer once at the frame size and passes the read count separately, so the two are
+     * different numbers in production -- and a fixture where they agree cannot tell `inputLength`
+     * from `input.size`, which is a whole frame of stale samples handed to speex. (Found as a
+     * mutation survivor against exactly such a fixture.)
+     */
     @Test
     fun `it passes the input length and the output capacity and returns what speex produced`() {
         val api = FakeSpeexResamplerApi(produced = 300, fill = 9)
         val resampler = SpeexResampler(16000, 48000, api = api)
         val out = ShortArray(480)
 
-        val produced = resampler.resample(ShortArray(160), 160, out)
+        val produced = resampler.resample(ShortArray(480), 160, out)
 
         assertThat(produced).isEqualTo(300)
         assertThat(api.lastInLength).isEqualTo(160)
