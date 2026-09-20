@@ -60,6 +60,12 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     private val serviceObserver: IHumlaObserver = object : HumlaObserver() {
         override fun onDisconnected(e: HumlaException?) {
             channelView.adapter = null
+            // And forget it, or the rebind that follows a reconnection takes onServiceBound's
+            // setService branch and never puts an adapter back on the list -- an empty channel
+            // list for the rest of the process, with a connected server behind it. Dropping the
+            // adapter is also the only thing that re-reads the pinned channels, which are rooted
+            // per server and were baked in when it was built.
+            channelListAdapter = null
         }
 
         override fun onUserJoinedChannel(user: IUser, newChannel: IChannel, oldChannel: IChannel?) {
@@ -167,9 +173,14 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
         registerForContextMenu(channelView)
-        // Replaces a SDK_INT >= UPSIDE_DOWN_CAKE branch: ACTION_SCO_AUDIO_STATE_CHANGED is a
-        // protected system broadcast, so a not-exported registration is correct on every API
-        // level this app supports, and one code path also silences UnspecifiedRegisterReceiverFlag.
+        // Replaces a SDK_INT >= UPSIDE_DOWN_CAKE branch. What this buys is one code path and a
+        // silenced UnspecifiedRegisterReceiverFlag -- not a not-exported receiver everywhere:
+        // ContextCompat hands RECEIVER_NOT_EXPORTED to a platform that only started honouring it
+        // in API 33, so on 31 and 32, which this app still supports, the receiver stays exported.
+        // That is safe here rather than merely tolerated, because
+        // ACTION_SCO_AUDIO_STATE_CHANGED is a protected system broadcast: no other app can send
+        // it, whatever the export flag says. A receiver for a non-protected action would need a
+        // real branch.
         ContextCompat.registerReceiver(
             requireActivity(),
             bluetoothReceiver,
