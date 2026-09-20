@@ -200,7 +200,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     override fun onServiceBound(service: IHumlaService) {
         val adapter = channelListAdapter
         if (adapter == null) {
-            setupChannelList()
+            setupChannelList(service)
         } else {
             adapter.setService(service)
         }
@@ -325,9 +325,9 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         }
     }
 
-    private fun setupChannelList() {
+    private fun setupChannelList(service: IHumlaService) {
         val adapter = ChannelListAdapter(
-            activity, service, databaseProvider.database, childFragmentManager,
+            requireActivity(), service, databaseProvider.database, childFragmentManager,
             isShowingPinnedChannels(), settings.shouldShowUserCount(),
         )
         adapter.setOnChannelClickListener(this)
