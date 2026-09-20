@@ -19,8 +19,17 @@ package se.lublin.humla.audio.native
 
 /** libspeexdsp preprocessor. State handles are `SpeexPreprocessState*`; `value[0]` is the in/out int argument of `speex_preprocess_ctl`. */
 interface SpeexPreprocessApi {
+    /** A new state, or 0 if [frameSize] is not positive or speex could not allocate one. */
     fun init(frameSize: Int, sampleRate: Int): Long
-    /** Runs the preprocessor in place; returns the speex VAD decision (1 = speech). */
+
+    /**
+     * Runs the preprocessor in place; returns the speex VAD decision (1 = speech, 0 = not), or -1
+     * if the frame could not be processed.
+     *
+     * [frame] must hold at least the [frameSize] the state was created with. speex writes that
+     * many samples whatever the array's real length is, so a shorter array is refused with -1
+     * rather than overrun -- this used to be a live crash at ultra-wideband.
+     */
     fun run(state: Long, frame: ShortArray): Int
     fun ctlInt(state: Long, request: Int, value: IntArray): Int
     fun destroy(state: Long)

@@ -238,3 +238,56 @@ if(HUMLA_HAVE_SANITIZERS)
   target_link_libraries(test_jni_bridges_asan PRIVATE humla_rnnoise_asan humla_apm_asan m)
   humla_add_labelled_test(jni_bridges_sanitized test_jni_bridges_asan sanitized)
 endif()
+
+# ---------------------------------------------------------------- the speexdsp bridge (existing)
+# ../jni_speexdsp.cpp predates this directory and was never covered by anything. It is here
+# because of one bug in particular: libspeexdsp takes the number of samples to read or write from
+# somewhere other than the buffer -- speex_preprocess_run from the frame size the state was
+# created with, the resampler and the jitter buffer from separate caller-supplied counts -- so the
+# JNI layer is the only place that can compare the two. The binding this one replaced did not, and
+# speex wrote 640 samples into a 480-element Java array on every frame at ultra-wideband.
+#
+# libspeexdsp is rebuilt here rather than taken from ../CMakeLists.txt: that file defines Android
+# SHARED targets that link -llog and cannot be configured on the host, and adding it as a
+# subdirectory would also define humla_rnnoise and humla_apm a second time. The source list below
+# is the one from ../CMakeLists.txt. If the two drift apart the result is a missing or unknown
+# symbol at link time, i.e. loud -- not a silently different library.
+set(HUMLA_SPEEXDSP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/speexdsp/libspeexdsp)
+set(HUMLA_SPEEXDSP_SOURCES
+    ${HUMLA_SPEEXDSP_DIR}/buffer.c ${HUMLA_SPEEXDSP_DIR}/fftwrap.c
+    ${HUMLA_SPEEXDSP_DIR}/filterbank.c ${HUMLA_SPEEXDSP_DIR}/jitter.c
+    ${HUMLA_SPEEXDSP_DIR}/kiss_fft.c ${HUMLA_SPEEXDSP_DIR}/kiss_fftr.c
+    ${HUMLA_SPEEXDSP_DIR}/mdf.c ${HUMLA_SPEEXDSP_DIR}/preprocess.c
+    ${HUMLA_SPEEXDSP_DIR}/resample.c ${HUMLA_SPEEXDSP_DIR}/scal.c)
+
+function(humla_add_speexdsp name)  # name, then the extra compile options
+  add_library(${name} STATIC ${HUMLA_SPEEXDSP_SOURCES})
+  target_include_directories(${name}
+      PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/speexdsp/include
+      PRIVATE ${HUMLA_SPEEXDSP_DIR})
+  target_compile_definitions(${name} PUBLIC __EMX__ PRIVATE FIXED_POINT USE_KISS_FFT EXPORT=)
+  target_compile_options(${name} PRIVATE ${ARGN})
+  target_link_libraries(${name} PUBLIC m)
+endfunction()
+
+humla_add_speexdsp(speexdsp_hosttest)
+
+set(HUMLA_JNI_SPEEXDSP_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_jni_speexdsp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_speexdsp.cpp)
+
+add_executable(test_jni_speexdsp ${HUMLA_JNI_SPEEXDSP_SOURCES})
+target_include_directories(test_jni_speexdsp PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+target_link_libraries(test_jni_speexdsp PRIVATE speexdsp_hosttest m)
+humla_add_labelled_test(jni_speexdsp test_jni_speexdsp plain)
+
+if(HUMLA_HAVE_SANITIZERS)
+  humla_add_speexdsp(speexdsp_hosttest_asan ${HUMLA_SAN_FLAGS})
+  target_link_options(speexdsp_hosttest_asan PUBLIC -fsanitize=address,undefined)
+
+  add_executable(test_jni_speexdsp_asan ${HUMLA_JNI_SPEEXDSP_SOURCES})
+  target_include_directories(test_jni_speexdsp_asan PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+  target_compile_options(test_jni_speexdsp_asan PRIVATE ${HUMLA_SAN_FLAGS})
+  target_link_libraries(test_jni_speexdsp_asan PRIVATE speexdsp_hosttest_asan m)
+  humla_add_labelled_test(jni_speexdsp_sanitized test_jni_speexdsp_asan sanitized)
+endif()
