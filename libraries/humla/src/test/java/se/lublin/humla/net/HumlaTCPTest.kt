@@ -503,4 +503,61 @@ class HumlaTCPTest {
         }
         awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
     }
+
+    /**
+     * The terminal flag belongs to the connection, not to the transport. Its closing edge is the
+     * only one of the transport's flags that runs on the callback handler, so it is the only one
+     * [inUse] does not fence in: a disconnect queued for connection A can still be delivered after
+     * A's read loop released the transport and B is already up. Resetting in connect() cannot help,
+     * because A's setter arrives after that. B would then be silenced for good - no established, no
+     * frame, and a later failure arriving as a bare disconnect with no exception, which
+     * HumlaService's reconnect logic does not retry from.
+     */
+    @Test
+    fun aDisconnectDeliveredAfterTheNextConnectDoesNotSilenceIt() {
+        val callbacksBlocked = CountDownLatch(1)
+        val connecting = CountDownLatch(1)
+        val gate = CountDownLatch(1)
+        val establishedQueued = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val toClient = PipedOutputStream()
+        val second = mockk<SSLSocket>(relaxed = true)
+        every { second.inputStream } returns PipedInputStream(toClient, 4096)
+        every { second.outputStream } returns ByteArrayOutputStream()
+        every { socketFactory.createSocket(any(), any()) } answers {
+            if (calls.incrementAndGet() == 1) {
+                connecting.countDown()
+                gate.await()
+                throw IOException("no route")
+            }
+            second
+        }
+        mockkStatic(SSLCertificateSocketFactory::class)
+        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
+        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
+        // Post 1 is A's disconnect, post 2 is B's onTCPConnectionEstablished.
+        val handler = HookedHandler(callbackThread.looper) { post ->
+            if (post == 2) establishedQueued.countDown()
+        }
+        val transport = newTransport(handler)
+        Handler(callbackThread.looper).post { callbacksBlocked.await(10, TimeUnit.SECONDS) }
+
+        transport.connect("example.invalid", 64738, false) // A
+        assertThat(connecting.await(5, TimeUnit.SECONDS)).isTrue()
+        transport.disconnect() // A's disconnect is queued behind the busy callback thread
+        gate.countDown() // A's read loop unwinds and releases the transport
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+
+        transport.connect("example.invalid", 64738, false) // B
+        assertThat(establishedQueued.await(5, TimeUnit.SECONDS)).isTrue()
+        callbacksBlocked.countDown() // now A's disconnect runs, then B's established
+
+        try {
+            assertThat(listener.next()).isEqualTo("disconnect" to "test-tcp-callbacks")
+            assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
+        } finally {
+            toClient.close() // always let B's read loop unwind, however the assertion went
+        }
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+    }
 }

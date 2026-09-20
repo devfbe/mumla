@@ -75,12 +75,25 @@ class HumlaTCP @JvmOverloads constructor(
     private val disconnectReported = AtomicBoolean(true)
 
     /**
-     * Set by the disconnect callback itself, on the callback handler, so [post] can tell a callback
-     * queued before the disconnect from one queued after it. [disconnectReported] cannot answer
-     * that: it flips when the disconnect is *queued*, and the failure report of a connect that
-     * never came up is queued before it and still has to be delivered.
+     * Marks the connection whose disconnect callback has been delivered. [post] captures the epoch
+     * when it queues a callback, the disconnect callback marks that same object when it runs, so
+     * [post] can tell a callback queued before the disconnect from one queued after it.
+     * [disconnectReported] cannot answer that: it flips when the disconnect is *queued*, and the
+     * failure report of a connect that never came up is queued before it and still has to be
+     * delivered.
+     *
+     * It is per connection, and a plain flag reset in [connect] would not do. This is the only one
+     * of this class's flags whose closing edge runs on the callback handler, and that is the one
+     * thread [inUse] does not fence in: a disconnect belonging to a connection that has already
+     * released the transport is delivered *after* the next [connect], and a flag would then be set
+     * behind that connect's reset and silence the new connection for good - no established, no
+     * frame, and a failure arriving as a bare disconnect the consumer cannot reconnect from.
      */
-    private val disconnectDelivered = AtomicBoolean(false)
+    private class Epoch {
+        @Volatile var terminated = false
+    }
+
+    @Volatile private var epoch = Epoch()
 
     /**
      * Held from [connect] until the read loop has fully unwound - which is later than [running]
@@ -107,7 +120,7 @@ class HumlaTCP @JvmOverloads constructor(
             this.port = port
             this.useTor = useTor
             disconnectReported.set(false)
-            disconnectDelivered.set(false)
+            epoch = Epoch()
             running = true
             sendExecutor = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-send") }
             // Publish the executor before handing the read loop to it: the loop's finally shuts it
@@ -275,7 +288,8 @@ class HumlaTCP @JvmOverloads constructor(
         // on a looper that has quit, and a looper never comes back, so the attempt a retry would
         // have made was doomed too. Anything that could make post() fail transiently would turn
         // this into a lost disconnect.
-        if (!deliver { disconnectDelivered.set(true); it.onTCPConnectionDisconnect() }) disconnectReported.set(false)
+        val current = epoch // captured here, so a disconnect still in flight cannot mark the next connection
+        if (!deliver { current.terminated = true; it.onTCPConnectionDisconnect() }) disconnectReported.set(false)
     }
 
     private fun enqueueSend(block: () -> Unit) {
@@ -300,9 +314,10 @@ class HumlaTCP @JvmOverloads constructor(
     }
 
     /**
-     * Posts a listener callback, unless the disconnect has already been reported. The read thread
-     * parks inside readFrame and cannot see a disconnect that happens meanwhile, so a frame - or a
-     * late onTCPConnectionEstablished - can still complete afterwards. The consumer has torn its
+     * Posts a listener callback, unless this connection's disconnect has already been delivered -
+     * which is [epoch], not [disconnectReported]; the latter only says the disconnect was queued.
+     * The read thread parks inside readFrame and cannot see a disconnect that happens meanwhile, so
+     * a frame - or a late onTCPConnectionEstablished - can still complete afterwards. The consumer has torn its
      * message handlers down by then, so anything arriving behind the disconnect is dropped here.
      *
      * The decision is made inside the posted runnable, and only there. Checking before queueing
@@ -317,7 +332,8 @@ class HumlaTCP @JvmOverloads constructor(
      * would suppress itself.
      */
     private fun post(block: (TCPConnectionListener) -> Unit) {
-        deliver { if (!disconnectDelivered.get()) block(it) }
+        val current = epoch // captured here: at delivery time [epoch] may already be the next connection's
+        deliver { if (!current.terminated) block(it) }
     }
 
     /** Returns true if the callback was queued on the handler. */
