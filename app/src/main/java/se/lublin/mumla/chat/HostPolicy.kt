@@ -42,8 +42,14 @@ fun interface HostPolicy {
  * not offer.
  *
  * A host that cannot be resolved at all is **allowed** through: the connection then fails on its own
- * and is reported as [ImageError.NETWORK], which is what actually happened. Refusing it would report
- * a DNS outage as [ImageError.UNSUPPORTED] — a terminal error, cached for the life of the process.
+ * and is reported as [ImageError.NETWORK], which is what actually happened, rather than as this
+ * class's verdict on a name it never saw an answer for.
+ *
+ * Every verdict here is derived from a resolver answer, and resolver answers change — a DNS blocker
+ * says `0.0.0.0` for a CDN it filters, a captive portal and a split-horizon company resolver say
+ * `192.168.x.x` for a public name. [HttpImageFetcher] therefore reports a refusal by this policy as
+ * [ImageError.NETWORK], which expires, and keeps [ImageError.UNSUPPORTED] for what the message
+ * itself got wrong.
  */
 class PublicHostsOnly(
     private val resolve: (String) -> Array<InetAddress> = InetAddress::getAllByName,

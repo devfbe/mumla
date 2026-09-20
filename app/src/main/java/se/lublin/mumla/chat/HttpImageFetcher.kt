@@ -37,10 +37,11 @@ fun interface ImageFetcher {
  *    the scheme prefix case-insensitively, which folds some exotic characters together (`httpſ://`
  *    matches `https://`). The scheme check here is the authoritative one.
  *  * **Host.** [hostPolicy] is asked about every host this call talks to, and refusing one costs
- *    [ImageError.UNSUPPORTED] before anything is opened. The default refuses the device's own
- *    network; see [PublicHostsOnly] for why a chat message must not be able to aim the phone at its
- *    own router. Asking costs one name lookup, which is what judging the answer instead of the
- *    spelling is worth.
+ *    [ImageError.NETWORK] before anything is opened. The default refuses the device's own network;
+ *    see [PublicHostsOnly] for why a chat message must not be able to aim the phone at its own
+ *    router. Asking costs one name lookup, which is what judging the answer instead of the spelling
+ *    is worth — and because it is an *answer* that is judged, the refusal is retryable rather than
+ *    terminal; [allowedUrl] says why that distinction is not cosmetic.
  *  * **Redirects.** Followed by hand, up to [MAX_REDIRECTS] of them, and only within the same
  *    scheme: a `Location` with a different protocol ends the fetch with [ImageError.NETWORK], so an
  *    https → `file:` redirect reads nothing from disk. The same rule also blocks a legitimate
@@ -81,14 +82,20 @@ class HttpImageFetcher(
     @Throws(ImageFetchException::class)
     override fun fetch(url: String): ByteArray {
         val deadline = System.nanoTime() + totalTimeoutMs * 1_000_000L
-        var target = allowedUrl(url)
-        repeat(MAX_REDIRECTS + 1) {
+        var target = allowedUrl(url, ImageError.UNSUPPORTED)
+        var redirects = 0
+        while (true) {
             when (val hop = fetchHop(target, deadline)) {
                 is Hop.Body -> return hop.bytes
-                is Hop.Redirect -> target = allowedUrl(redirectTarget(target, hop.location))
+                is Hop.Redirect -> {
+                    // The limit is counted before the Location is resolved, so the hop that is not
+                    // followed costs no name lookup and the host it names cannot decide this call's
+                    // error code either.
+                    if (++redirects > MAX_REDIRECTS) throw ImageFetchException(ImageError.NETWORK)
+                    target = allowedUrl(redirectTarget(target, hop.location), ImageError.NETWORK)
+                }
             }
         }
-        throw ImageFetchException(ImageError.NETWORK)
     }
 
     /** One request: either the body, or where the server says to look instead. */
@@ -166,15 +173,26 @@ class HttpImageFetcher(
      *
      * A policy that throws refuses: this runs on hostile input, and the safe reading of "the check
      * could not be made" is not "let it through".
+     *
+     * **The two refusals are not the same error.** [syntaxFailure] is what the *spelling* of [url]
+     * costs: [ImageError.UNSUPPORTED] for the URL the message carried, which cannot become a
+     * different URL later, and [ImageError.NETWORK] for a `Location`, which is the server's answer
+     * and not the message's fault. A refusal by [hostPolicy] is always [ImageError.NETWORK],
+     * whichever of the two produced the URL, because the policy judges a **resolver answer** and
+     * resolver answers change: a DNS blocker returns `0.0.0.0` for a blocked CDN, a captive portal
+     * and a split-horizon company resolver return `192.168.x.x` for a public name. Reporting that
+     * as terminal would leave the image broken for the life of the process however the network
+     * changes — turning the blocker off, signing in, moving to another Wi-Fi. That is the very
+     * argument [PublicHostsOnly] already makes for an unresolvable host.
      */
-    private fun allowedUrl(url: String): URL {
-        val target = supportedUrl(url)
+    private fun allowedUrl(url: String, syntaxFailure: ImageError): URL {
+        val target = supportedUrl(url, syntaxFailure)
         val allowed = try {
             hostPolicy.isAllowed(target.host)
         } catch (e: RuntimeException) {
             false
         }
-        if (!allowed) throw ImageFetchException(ImageError.UNSUPPORTED)
+        if (!allowed) throw ImageFetchException(ImageError.NETWORK)
         return target
     }
 
@@ -218,23 +236,23 @@ class HttpImageFetcher(
      * Asking the chosen URL makes it structurally impossible for the gate and the connection to
      * disagree, which matching a second hand-written parse against the platform's never was.
      */
-    private fun supportedUrl(url: String): URL {
+    private fun supportedUrl(url: String, failure: ImageError): URL {
         val uri = try {
             URI(url)
         } catch (e: URISyntaxException) {
             // Spaces, control characters, a stray CR/LF, ... — anything that is not a URL.
-            throw ImageFetchException(ImageError.UNSUPPORTED, e)
+            throw ImageFetchException(failure, e)
         }
         val scheme = uri.scheme?.lowercase(Locale.ROOT)
-        if (scheme != "http" && scheme != "https") throw ImageFetchException(ImageError.UNSUPPORTED)
+        if (scheme != "http" && scheme != "https") throw ImageFetchException(failure)
         val target = try {
             uri.toURL()
         } catch (e: MalformedURLException) {
-            throw ImageFetchException(ImageError.UNSUPPORTED, e)
+            throw ImageFetchException(failure, e)
         } catch (e: IllegalArgumentException) {
-            throw ImageFetchException(ImageError.UNSUPPORTED, e)
+            throw ImageFetchException(failure, e)
         }
-        if (target.host.isNullOrEmpty()) throw ImageFetchException(ImageError.UNSUPPORTED)
+        if (target.host.isNullOrEmpty()) throw ImageFetchException(failure)
         return target
     }
 

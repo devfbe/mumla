@@ -284,7 +284,9 @@ class HttpImageFetcherTest {
 
         assertWithMessage("the refused hop was requested anyway").that(reached.get()).isFalse()
         assertThat(asked).containsExactly("127.0.0.1", "127.0.0.1")
-        assertThat(e.error).isEqualTo(ImageError.UNSUPPORTED)
+        // NETWORK, not UNSUPPORTED: the source in the message was fine and it is the server's
+        // Location plus a resolver answer that were judged. See aRefusalByTheHostPolicyIsRetryable.
+        assertThat(e.error).isEqualTo(ImageError.NETWORK)
     }
 
     /**
@@ -300,7 +302,7 @@ class HttpImageFetcherTest {
         val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher().fetch(url("/loopback.png")) }
 
         assertWithMessage("a loopback URL from a chat message was fetched").that(reached.get()).isFalse()
-        assertThat(e.error).isEqualTo(ImageError.UNSUPPORTED)
+        assertThat(e.error).isEqualTo(ImageError.NETWORK)
     }
 
     @Test
@@ -325,7 +327,66 @@ class HttpImageFetcherTest {
         }
 
         assertThat(reached.get()).isFalse()
-        assertThat(e.error).isEqualTo(ImageError.UNSUPPORTED)
+        assertThat(e.error).isEqualTo(ImageError.NETWORK)
+    }
+
+    /**
+     * The two gates look alike from the outside and must not be reported alike. The syntactic one
+     * judges the string the message carried: it cannot become right later, so UNSUPPORTED, which
+     * the loader remembers for the life of the process. [PublicHostsOnly] judges a **resolver
+     * answer**, and that is exactly what a DNS blocker (`0.0.0.0`), a captive portal or a
+     * split-horizon company resolver (`192.168.x.x`) hands back for a perfectly good CDN name.
+     * Reporting that as terminal means turning the blocker off, signing in to the portal or moving
+     * to another network changes nothing until the app is restarted. So: retryable.
+     */
+    @Test
+    fun aRefusalByTheHostPolicyIsRetryableWhileABrokenSourceIsNot() {
+        val reached = AtomicBoolean(false)
+        serveTripwire("/judged.png", reached)
+        val refusing = HostPolicy { false }
+
+        expectError(url("/judged.png"), ImageError.NETWORK, HttpImageFetcher(hostPolicy = refusing))
+        assertWithMessage("a refused host was fetched anyway").that(reached.get()).isFalse()
+
+        expectError("ftp://x/a.png", ImageError.UNSUPPORTED, HttpImageFetcher(hostPolicy = refusing))
+        expectError("http://@:8080/a.png", ImageError.UNSUPPORTED, HttpImageFetcher(hostPolicy = refusing))
+    }
+
+    /**
+     * The same split one hop later. A `Location` that no connection can be opened for is the
+     * server's mistake, not the message's, so it may not be remembered for good either — which is
+     * already what a missing or torn `Location` costs.
+     */
+    @Test
+    fun aRedirectToAnUnopenableUrlIsANetworkErrorNotAVerdictOnTheSource() {
+        serveRedirect("/to-hostless.png", "http://@:8080/a.png")
+        expectError(url("/to-hostless.png"), ImageError.NETWORK)
+    }
+
+    /**
+     * At the hop limit the sixth `Location` is not followed, so it must cost nothing and decide
+     * nothing: no name lookup, and no chance for the host it names to set this call's error code.
+     */
+    @Test
+    fun theHopLimitIsReachedBeforeTheNextLocationIsJudged() {
+        val hops = AtomicInteger()
+        server.createContext("/loop6.png") { exchange ->
+            hops.incrementAndGet()
+            exchange.responseHeaders.add("Location", url("/loop6.png"))
+            exchange.sendResponseHeaders(302, -1)
+            exchange.close()
+        }
+        val asked = AtomicInteger()
+        val counting = HostPolicy { asked.incrementAndGet(); true }
+
+        val e = assertThrows(ImageFetchException::class.java) {
+            HttpImageFetcher(hostPolicy = counting).fetch(url("/loop6.png"))
+        }
+
+        assertThat(e.error).isEqualTo(ImageError.NETWORK)
+        assertThat(hops.get()).isEqualTo(6)
+        assertWithMessage("name lookups: one per request made, none for the hop that is not made")
+            .that(asked.get()).isEqualTo(6)
     }
 
     /** Streams chunks until the client hangs up (or a hard backstop), i.e. an endless body. */
