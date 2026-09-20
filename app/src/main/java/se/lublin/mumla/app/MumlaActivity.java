@@ -80,7 +80,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import info.guardianproject.netcipher.proxy.OrbotHelper;
 import se.lublin.humla.IHumlaService;
-import se.lublin.humla.IHumlaSession;
 import se.lublin.humla.model.Server;
 import se.lublin.humla.net.HumlaConnection;
 import se.lublin.humla.protobuf.Mumble;
@@ -325,18 +324,6 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
             @Override
             public void onDrawerClosed(View drawerView) {
                 supportInvalidateOptionsMenu();
-            }
-
-            @Override
-            public void onDrawerStateChanged(int newState) {
-                super.onDrawerStateChanged(newState);
-                // Prevent push to talk from getting stuck on when the drawer is opened.
-                if (getService() != null && getService().isConnected()) {
-                    IHumlaSession session = getService().HumlaSession();
-                    if (session.isTalking() && !mSettings.isPushToTalkToggle()) {
-                        session.setTalkingState(false);
-                    }
-                }
             }
 
             @Override

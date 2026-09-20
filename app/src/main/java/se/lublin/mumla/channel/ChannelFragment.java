@@ -78,6 +78,8 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
 
     /** True iff the talk button has been hidden (e.g. when muted) */
     private boolean mTalkButtonHidden;
+    /** True while a touch is down on the talk button, i.e. while this fragment holds transmission. */
+    private boolean mTalkButtonHeld;
 
     private HumlaObserver mObserver = new HumlaObserver() {
         @Override
@@ -163,11 +165,18 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
+                        mTalkButtonHeld = true;
                         if (getService() != null) {
                             getService().onTalkKeyDown();
                         }
                         break;
+                    // A parent that takes the gesture over -- the navigation drawer being dragged
+                    // open -- sends ACTION_CANCEL instead of ACTION_UP. Releasing on both is what
+                    // keeps transmission from sticking on; it used to be papered over by resetting
+                    // the talk state from MumlaActivity's drawer listener.
                     case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        mTalkButtonHeld = false;
                         if (getService() != null) {
                             getService().onTalkKeyUp();
                         }
@@ -247,12 +256,16 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
     @Override
     public void onPause() {
         super.onPause();
-        if (getService() != null && getService().isConnected() &&
+        // Release what this fragment's button is holding, and nothing else. Pausing while the
+        // button is pressed would otherwise leave transmission on, since the press can no longer
+        // be released -- but a talk state set anywhere else, by a headset media key with the
+        // screen off above all, is not ours to switch off just because the user picked the phone
+        // up.
+        if (mTalkButtonHeld && getService() != null && getService().isConnected() &&
             !Settings.getInstance(getActivity()).isPushToTalkToggle()) {
-            // XXX: This ensures that push to talk is disabled when we pause.
-            // We don't want to leave the talk state active if the fragment is paused while pressed.
             getService().HumlaSession().setTalkingState(false);
         }
+        mTalkButtonHeld = false;
     }
 
     @Override
