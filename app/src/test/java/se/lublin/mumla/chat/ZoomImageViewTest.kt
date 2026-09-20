@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.drawable.ColorDrawable
+import android.os.Bundle
 import android.os.Looper
 import android.os.Parcelable
 import android.os.SystemClock
@@ -12,6 +13,7 @@ import android.view.AbsSavedState
 import android.view.InputDevice
 import android.view.MotionEvent
 import com.google.common.truth.Truth.assertThat
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -463,6 +465,40 @@ class ZoomImageViewTest {
         assertThat(values(after)[Matrix.MSCALE_X]).isEqualTo(4f)
     }
 
+    /**
+     * Saved state is *input*, not an invariant of this process. A zoom stored by an older build --
+     * or by a build whose ceiling was higher, which is exactly what happens when the ceiling drops
+     * -- must land inside the range, not throw out of `restoreHierarchyState` on the first rotation
+     * after the update.
+     */
+    @Test
+    fun aSavedZoomAboveTheCeilingIsCoercedRatherThanThrown() {
+        val view = ZoomImageView(context).apply { id = SAVED_ID }
+
+        view.restoreHierarchyState(savedStateWithScale(9f))
+        view.layout(0, 0, 400, 400)
+        view.setImageBitmap(Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888))
+
+        assertThat(view.state.scale).isEqualTo(5f)
+    }
+
+    /** And a scale or an offset that is not a number at all is dropped, not propagated as NaN. */
+    @Test
+    fun aNonFiniteSavedZoomFallsBackToTheFit() {
+        val saved = savedStateOf(viewWith(200, 200))
+        (saved.get(SAVED_ID) as Bundle).apply {
+            putFloat("scale", Float.NaN)
+            putFloat("tx", Float.POSITIVE_INFINITY)
+        }
+        val view = ZoomImageView(context).apply { id = SAVED_ID }
+
+        view.restoreHierarchyState(saved)
+        view.layout(0, 0, 400, 400)
+        view.setImageBitmap(Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888))
+
+        assertThat(view.state).isEqualTo(ZoomState())
+    }
+
     /** State belonging to somebody else (an id collision) must not crash the view. */
     @Test
     fun foreignSavedStateIsIgnored() {
@@ -472,6 +508,40 @@ class ZoomImageViewTest {
 
         view.restoreHierarchyState(foreign)
 
+        assertThat(view.state).isEqualTo(ZoomState(2f, 200f, 200f))
+    }
+
+    /**
+     * A real save with one float overwritten. Going through the view's own save keeps every other
+     * key honest; "scale" is [ZoomImageView]'s private key, named here because the point of the
+     * test is precisely that the bytes on the other side of the boundary are not under our control.
+     */
+    private fun savedStateWithScale(scale: Float): SparseArray<Parcelable> =
+        savedStateOf(viewWith(200, 200)).also { (it.get(SAVED_ID) as Bundle).putFloat("scale", scale) }
+
+    /**
+     * The other half of an id collision, and the common one: somebody else's *Bundle*. The
+     * "is it a Bundle" test alone lets it through, and what follows is silent -- there is no KEY_SUPER
+     * in it, so super is restored from null and the real super state is dropped, and then the
+     * default zoom is adopted as if it had been saved. One of our own keys is the marker that tells
+     * the two apart.
+     *
+     * What is left is the platform's own diagnostic for exactly this mistake, which is what any
+     * other View in the hierarchy would raise too: loud, and about the real cause.
+     */
+    @Test
+    fun aForeignBundleIsNotAdoptedAsOurOwnSavedState() {
+        val view = viewWith(200, 200).apply { id = SAVED_ID }
+        view.zoomBy(2f, 0f, 0f)
+        val foreign = SparseArray<Parcelable>().apply {
+            put(SAVED_ID, Bundle().apply { putString("somebody-elses-key", "x") })
+        }
+
+        val thrown = assertThrows(IllegalArgumentException::class.java) {
+            view.restoreHierarchyState(foreign)
+        }
+
+        assertThat(thrown).hasMessageThat().contains("same id in the same hierarchy")
         assertThat(view.state).isEqualTo(ZoomState(2f, 200f, 200f))
     }
 

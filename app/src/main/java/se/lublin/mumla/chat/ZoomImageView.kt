@@ -122,20 +122,35 @@ class ZoomImageView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Everything read here is *input*, not an invariant: the bytes were written by some other
+     * process, possibly by an older build of this app, and both halves of that are real.
+     *
+     * "Not a Bundle" is only the easy half of an id collision -- somebody else's Bundle is the
+     * common one, and letting it through is silent: there is no [KEY_SUPER] in it, so super is
+     * restored from null and the real super state is dropped, and the default zoom is then adopted
+     * as if it had been saved. One of our own keys is the marker that tells the two apart.
+     *
+     * And the zoom is coerced rather than required. The ceiling is per image and can drop between
+     * releases, so a stored zoom above it is an ordinary event, not a bug: asserting it here would
+     * turn the first rotation after an update into a crash inside `restoreHierarchyState`.
+     */
     override fun onRestoreInstanceState(state: Parcelable?) {
-        if (state !is Bundle) {
-            // Somebody else's state -- two views in one hierarchy sharing an id. Not ours to read.
+        if (state !is Bundle || !state.containsKey(KEY_SCALE)) {
             super.onRestoreInstanceState(state)
             return
         }
         super.onRestoreInstanceState(BundleCompat.getParcelable(state, KEY_SUPER, Parcelable::class.java))
         pendingRestore = ZoomState(
-            scale = state.getFloat(KEY_SCALE, ZoomState.MIN_SCALE),
-            tx = state.getFloat(KEY_TX),
-            ty = state.getFloat(KEY_TY),
+            scale = state.finite(KEY_SCALE).coerceIn(ZoomState.MIN_SCALE, ZoomState.MAX_SCALE),
+            tx = state.finite(KEY_TX),
+            ty = state.finite(KEY_TY),
         )
         applyState()
     }
+
+    /** A stored float, with anything that is not a number at all read as 0. */
+    private fun Bundle.finite(key: String): Float = getFloat(key).let { if (it.isFinite()) it else 0f }
 
     /**
      * Scales around ([focusX], [focusY]) in view coordinates. Ignored while there is nothing to be
