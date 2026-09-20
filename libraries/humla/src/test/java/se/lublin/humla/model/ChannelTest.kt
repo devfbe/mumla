@@ -17,6 +17,7 @@
 package se.lublin.humla.model
 
 import com.google.common.truth.Truth.assertThat
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -66,6 +67,31 @@ class ChannelTest {
 
         assertThat(links).containsExactly(b)
         assertThat(a.getLinks()).isEmpty()
+    }
+
+    /**
+     * The Java original returned `Collections.unmodifiableList`, so callers outside this library
+     * are entitled to an exception when they write to what a getter handed them. Copying without
+     * wrapping would turn that exception into a write that silently goes nowhere.
+     */
+    @Test
+    fun aSnapshotIsStillNotWritable() {
+        val root = Channel(0, false)
+        User(1, "a").setChannel(root)
+        root.addSubchannel(Channel(1, false).apply { setName("s") })
+        root.addLink(Channel(2, false).apply { setName("l") })
+
+        @Suppress("UNCHECKED_CAST")
+        val writes = listOf<() -> Unit>(
+            { (root.getUsers() as MutableList<User>).clear() },
+            { (root.getSubchannels() as MutableList<Channel>).clear() },
+            { (root.getLinks() as MutableList<Channel>).clear() },
+        )
+        writes.forEach { assertThrows(UnsupportedOperationException::class.java) { it() } }
+
+        assertThat(root.getUsers()).hasSize(1)
+        assertThat(root.getSubchannels()).hasSize(1)
+        assertThat(root.getLinks()).hasSize(1)
     }
 
     @Test

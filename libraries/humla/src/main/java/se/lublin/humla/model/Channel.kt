@@ -16,10 +16,17 @@
  */
 package se.lublin.humla.model
 
+import java.util.Collections
+
 /**
  * A channel of the server tree. Mutated on the protocol thread and read from the main thread (and
  * from the binder thread `ChannelSearchProvider` runs on), so scalar fields are volatile, list
  * mutations are synchronized and list reads return snapshots (spec A1, "guarded model").
+ *
+ * A read hands back an unmodifiable *copy*. The Java original handed back an unmodifiable *view*,
+ * so callers outside this library already treat the result as read-only; dropping that half of the
+ * contract while adding the copy would turn a caller's mistaken write from an exception into a
+ * change that silently goes nowhere.
  *
  * What a reader gets is a snapshot of one list, not of the tree: a channel can exist while its
  * subchannels are still arriving, and that is deliberate. The alternative - a tree-wide lock held
@@ -59,7 +66,7 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     }
 
     @Synchronized
-    override fun getUsers(): List<User> = ArrayList(mUsers)
+    override fun getUsers(): List<User> = Collections.unmodifiableList(ArrayList(mUsers))
 
     override fun getId(): Int = mId
 
@@ -104,7 +111,7 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     }
 
     @Synchronized
-    override fun getSubchannels(): List<Channel> = ArrayList(mSubchannels)
+    override fun getSubchannels(): List<Channel> = Collections.unmodifiableList(ArrayList(mSubchannels))
 
     /**
      * Inserts [channel] at its sorted position. A null channel is ignored: the server can name a
@@ -129,7 +136,7 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     }
 
     @Synchronized
-    override fun getLinks(): List<Channel> = ArrayList(mLinks)
+    override fun getLinks(): List<Channel> = Collections.unmodifiableList(ArrayList(mLinks))
 
     /** @see addSubchannel for why a null channel is ignored rather than rejected. */
     @Synchronized
