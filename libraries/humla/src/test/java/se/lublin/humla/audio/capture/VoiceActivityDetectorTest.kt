@@ -53,6 +53,20 @@ class VoiceActivityDetectorTest {
     }
 
     /**
+     * Both ends of the frame are in the sum. An off-by-one at either end of the loop bound is
+     * invisible in every other fixture in this file -- over 480 constant samples, dropping one
+     * moves the score by 0.0001, which no threshold assertion can see -- so it takes a frame whose
+     * whole energy sits in its two end samples. Measured: **0.75206** with both, **0.72070** with
+     * either one missing. `1 until length` and `0 until length - 1` both survived the suite before
+     * this case existed.
+     */
+    @Test
+    fun `the first and the last sample of the frame are both measured`() {
+        val spikes = ShortArray(480).also { it[0] = 32767; it[479] = 32767 }
+        assertThat(VoiceActivityDetector.amplitudeScore(spikes, 480)).isWithin(0.0005f).of(0.75206f)
+    }
+
+    /**
      * The three constants of the legacy formula, each written out, because the shape of the curve
      * is what the user's slider is calibrated against and all three are invisible in the value
      * above: 20 (amplitude rather than power dB), 96 (the divisor that maps -96 dBFS onto 0) and
