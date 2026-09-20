@@ -305,6 +305,26 @@ class HttpImageFetcherTest {
         assertThat(e.error).isEqualTo(ImageError.NETWORK)
     }
 
+    /**
+     * 304 is in the 300s but is not a redirect: it answers a conditional request, and a `Location`
+     * on one is not a place to go. Following it would let a server aim the next request with a
+     * header that nothing else in the response justifies.
+     */
+    @Test
+    fun aNotModifiedResponseIsNotFollowedAsARedirect() {
+        val reached = AtomicBoolean(false)
+        serveTripwire("/after-304.png", reached)
+        server.createContext("/not-modified.png") { exchange ->
+            exchange.responseHeaders.add("Location", url("/after-304.png"))
+            exchange.sendResponseHeaders(304, -1)
+            exchange.close()
+        }
+
+        expectError(url("/not-modified.png"), ImageError.NETWORK)
+
+        assertWithMessage("a Location on a 304 was followed").that(reached.get()).isFalse()
+    }
+
     @Test
     fun aRedirectWithNothingUsableToFollowIsANetworkError() {
         // Not UNSUPPORTED: the source in the message parsed fine, and UNSUPPORTED is the error the
@@ -671,6 +691,61 @@ class HttpImageFetcherTest {
         override fun disconnect() = onDisconnect()
     }
 
+    /**
+     * A chunked 200 that hands over a few bytes and then stalls forever, and whose stream reports a
+     * clean end-of-file the moment the connection is disconnected — which is what the watchdog does
+     * at the deadline. A real socket usually throws instead; this is the case where it does not, and
+     * it is the only one the post-body `expired` check covers.
+     */
+    private class StallingChunkedConnection(url: URL) : HttpURLConnection(url) {
+        private val closed = AtomicBoolean(false)
+        private var remaining = 16
+
+        override fun connect() = Unit
+        override fun usingProxy() = false
+        override fun getResponseCode() = 200
+        override fun getContentLengthLong() = -1L
+        override fun disconnect() {
+            closed.set(true)
+        }
+
+        override fun getInputStream(): java.io.InputStream = object : java.io.InputStream() {
+            override fun read(): Int {
+                if (remaining > 0) {
+                    remaining--
+                    return 0x41
+                }
+                while (!closed.get()) Thread.sleep(1)
+                return -1
+            }
+
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                val one = read()
+                if (one < 0) return -1
+                b[off] = one.toByte()
+                return 1
+            }
+        }
+    }
+
+    /**
+     * The silent half of a cut-off transfer. A chunked body has no declared length, so nothing
+     * downstream can tell sixteen bytes of a truncated image from a sixteen-byte image: the decoder
+     * calls it MALFORMED, and the loader remembers MALFORMED for the life of the process. The only
+     * thing standing between the two is the `expired` check *after* the body was read, because a
+     * connection the watchdog closed can surface as an ordinary end-of-file rather than an error.
+     * Its sibling case — a body that stops short of an announced length — is a different check.
+     */
+    @Test(timeout = 30_000)
+    fun aChunkedBodyTheWatchdogCutOffIsNotHandedOverAsAnImage() {
+        installSpyHttpsHandler()
+        val e = assertThrows(ImageFetchException::class.java) {
+            HttpImageFetcher(readTimeoutMs = 10_000, totalTimeoutMs = 300, hostPolicy = HostPolicy.ANY_HOST)
+                .fetch("https://$STALL_HOST/a.png")
+        }
+        assertThat(e.error).isEqualTo(ImageError.TIMEOUT)
+    }
+
     @Test
     fun anUncheckedExceptionFromDisconnectDoesNotReplaceTheRealFailure() {
         // The watchdog thread and the calling thread can both be inside
@@ -695,6 +770,7 @@ class HttpImageFetcherTest {
 
     private companion object {
         private const val SPY_HOST = "spy.invalid"
+        private const val STALL_HOST = "stall.invalid"
         private val spyDisconnect = AtomicReference<() -> Unit>({})
         /** The last connection the fetcher opened through the spy handler, so its settings can be read. */
         private val spyConnection = AtomicReference<HttpURLConnection?>(null)
@@ -714,8 +790,11 @@ class HttpImageFetcherTest {
                 else object : URLStreamHandler() {
                     override fun getDefaultPort() = 443
                     override fun openConnection(u: URL): URLConnection =
-                        if (u.host == SPY_HOST) SpyConnection(u, spyDisconnect.get()).also { spyConnection.set(it) }
-                        else throw IOException("no real https connection in unit tests")
+                        when (u.host) {
+                            SPY_HOST -> SpyConnection(u, spyDisconnect.get()).also { spyConnection.set(it) }
+                            STALL_HOST -> StallingChunkedConnection(u)
+                            else -> throw IOException("no real https connection in unit tests")
+                        }
                 }
             }
             spyHandlerInstalled = true

@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -333,14 +334,13 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * Peak memory is the fetcher's cap per fetch in flight, so the number of fetches in flight is
-     * part of the memory bound. Without the limit all four of these are in the fetcher at once.
+     * Holds [loads] loads inside the fetcher at once and reports how many ever got in together.
+     * A `null` limit means the production default, which is the number the app really runs with.
      */
-    @Test
-    fun noMoreThanMaxConcurrentLoadsFetchAtTheSameTime() = runBlocking(Dispatchers.IO) {
+    private fun peakConcurrentFetches(loads: Int, maxConcurrentLoads: Int?): Int {
         val inFetch = AtomicInteger()
         val peak = AtomicInteger()
-        val started = CountDownLatch(4)
+        val started = CountDownLatch(loads)
         val release = CountDownLatch(1)
         fetcher = ImageFetcher { _ ->
             started.countDown()
@@ -350,18 +350,80 @@ class ChatImageLoaderTest {
             inFetch.decrementAndGet()
             remoteBody
         }
-        val l = ChatImageLoader(
-            fetcher, { true }, 8L * 1024 * 1024, Dispatchers.IO, Dispatchers.Default, clock::get,
-            maxConcurrentLoads = 2,
-        )
-        val jobs = (1..4).map { async { l.loadThumbnail("https://x.org/$it.png", 240, 240) } }
-        // Give every one of the four a fair chance to reach the fetcher before looking at the peak.
-        assertThat(started.await(1, TimeUnit.SECONDS)).isFalse()
-        assertThat(peak.get()).isEqualTo(2)
-        release.countDown()
-        assertThat(jobs.awaitAll()).hasSize(4)
-        assertThat(peak.get()).isEqualTo(2)
-        Unit
+        val l = if (maxConcurrentLoads == null) {
+            ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, Dispatchers.IO, Dispatchers.Default, clock::get)
+        } else {
+            ChatImageLoader(
+                fetcher, { true }, 8L * 1024 * 1024, Dispatchers.IO, Dispatchers.Default, clock::get,
+                maxConcurrentLoads = maxConcurrentLoads,
+            )
+        }
+        return runBlocking(Dispatchers.IO) {
+            val jobs = (1..loads).map { async { l.loadThumbnail("https://x.org/$it.png", 240, 240) } }
+            // Give every one of them a fair chance to reach the fetcher before looking at the peak.
+            assertWithMessage("all %s loads reached the fetcher at once", loads)
+                .that(started.await(1, TimeUnit.SECONDS)).isFalse()
+            val whileHeld = peak.get()
+            release.countDown()
+            assertThat(jobs.awaitAll()).hasSize(loads)
+            maxOf(whileHeld, peak.get())
+        }
+    }
+
+    /**
+     * Peak memory is the fetcher's cap per fetch in flight, so the number of fetches in flight is
+     * part of the memory bound. Without the limit all four of these are in the fetcher at once.
+     */
+    @Test(timeout = 60_000)
+    fun noMoreThanMaxConcurrentLoadsFetchAtTheSameTime() {
+        assertThat(peakConcurrentFetches(loads = 4, maxConcurrentLoads = 2)).isEqualTo(2)
+    }
+
+    /**
+     * And the *default*, which is the only value the app ever uses and which the test above hid by
+     * always handing one in: raising it to 100 left the whole suite green.
+     */
+    @Test(timeout = 60_000)
+    fun theDefaultLimitsThreeFetchesAtATime() {
+        assertThat(peakConcurrentFetches(loads = 6, maxConcurrentLoads = null)).isEqualTo(3)
+    }
+
+    /**
+     * The check existed but could never run: property initialisers go first, so `Semaphore(0)` threw
+     * its own message before `init {}` was reached — and `Semaphore(-1)` is what would have been
+     * worth a message of our own.
+     */
+    @Test
+    fun aNonPositiveConcurrencyLimitIsRejectedByThisClass() {
+        listOf(0, -1).forEach { limit ->
+            val thrown = assertThrows(IllegalArgumentException::class.java) {
+                ChatImageLoader(fetcher, { true }, maxConcurrentLoads = limit)
+            }
+            assertWithMessage("message for maxConcurrentLoads = %s", limit)
+                .that(thrown).hasMessageThat().contains("maxConcurrentLoads")
+        }
+    }
+
+    /**
+     * A remembered failure is a small object, but not free: a server that sends a thousand distinct
+     * broken URLs would otherwise fill the map without ever paying for it, and the LRU would never
+     * evict anything because nothing ever grew. At 256 bytes an entry a 1 KiB budget holds four, so
+     * the fifth failure has to push the first one out and asking for it again really re-fetches.
+     */
+    @Test
+    fun rememberedFailuresAreChargedAgainstTheBudget() = runTest(dispatcher) {
+        var calls = 0
+        fetcher = ImageFetcher { calls++; throw ImageFetchException(ImageError.TOO_LARGE) }
+        val l = loader(maxCacheBytes = 1024)
+        repeat(5) { l.loadThumbnail("https://x.org/$it.png", 240, 240) }
+        assertThat(calls).isEqualTo(5)
+
+        assertThat(l.loadThumbnail("https://x.org/0.png", 240, 240))
+            .isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
+        assertWithMessage("the oldest remembered failure was never evicted").that(calls).isEqualTo(6)
+        // ... while one that is still in the cache costs nothing.
+        l.loadThumbnail("https://x.org/4.png", 240, 240)
+        assertThat(calls).isEqualTo(6)
     }
 
     @Test

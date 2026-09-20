@@ -21,16 +21,21 @@ fun interface HostPolicy {
 }
 
 /**
- * Refuses hosts that lead back into the device or its local network: loopback, the unspecified
- * address, link-local (which includes the 169.254.169.254 metadata address), site-local and
- * IPv6 unique-local ranges, and multicast.
+ * Refuses hosts that lead back into the device, its local network or the carrier's: loopback, the
+ * unspecified address, link-local (which includes the 169.254.169.254 metadata address), site-local
+ * and IPv6 unique-local ranges, multicast, and the three IPv4 ranges the JDK has no predicate for —
+ * 100.64.0.0/10 (carrier-grade NAT, which on mobile data reaches other subscribers of the same
+ * carrier), 198.18.0.0/15 (benchmarking) and 255.255.255.255 (limited broadcast).
  *
  * The URL comes from another chat participant, so `<img src="https://192.168.1.1/admin?reset=1">`
  * is a request the phone makes from inside its own network on a stranger's say-so, and the timing
  * of the failure alone tells that stranger which addresses answer. On a device most of this is
- * already out of reach — the manifest allows no cleartext traffic, so plain `http` to a router never
- * leaves the app, and a LAN device rarely has a certificate that passes validation — but neither of
- * those two is this stream's to guarantee, and both are one manifest edit away from gone.
+ * already out of reach — cleartext traffic is off, so plain `http` to a router never leaves the app,
+ * and a LAN device rarely has a certificate that passes validation — but neither of those two is
+ * this stream's to guarantee. The cleartext half is not even a decision the app has written down:
+ * the manifest sets neither `usesCleartextTraffic` nor a network security config, so it is the
+ * platform default at `targetSdk = 36`, i.e. one manifest line or one `targetSdk` change away from
+ * gone and nothing here would notice.
  *
  * **The spelling is not what decides; the answer is.** `127.0.0.1`, `127.1`, `2130706433`, `0` and
  * `[::1]` are all the same interface, and a name an attacker owns can simply have an A record of
@@ -71,7 +76,21 @@ class PublicHostsOnly(
 
     private fun InetAddress.isLocal(): Boolean =
         isAnyLocalAddress || isLoopbackAddress || isLinkLocalAddress || isSiteLocalAddress ||
-            isMulticastAddress || isUniqueLocalIpv6()
+            isMulticastAddress || isUniqueLocalIpv6() || isReservedIpv4()
+
+    /**
+     * The IPv4 ranges that are not the public internet and that the JDK has no predicate for:
+     * 100.64.0.0/10 (carrier-grade NAT), 198.18.0.0/15 (benchmarking) and 255.255.255.255.
+     * An IPv4-mapped address arrives here as four bytes, so those are covered too.
+     */
+    private fun InetAddress.isReservedIpv4(): Boolean {
+        val bytes = address
+        if (bytes.size != 4) return false
+        fun byteAt(i: Int) = bytes[i].toInt() and 0xFF
+        return (byteAt(0) == 100 && byteAt(1) in 64..127) ||
+            (byteAt(0) == 198 && byteAt(1) in 18..19) ||
+            (byteAt(0) == 255 && byteAt(1) == 255 && byteAt(2) == 255 && byteAt(3) == 255)
+    }
 
     /** fc00::/7, which the JDK reports as neither site-local nor link-local. */
     private fun InetAddress.isUniqueLocalIpv6(): Boolean =

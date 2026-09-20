@@ -88,17 +88,17 @@ class ChatImageLoader(
 
     /** Not tied to any caller's lifecycle; see the class KDoc on why the work outlives one row. */
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-    private val gate = Semaphore(maxConcurrentLoads)
+    // The bound is checked here, not in an `init {}` block: property initialisers run first, so
+    // Semaphore(0) would throw its own message before any later check could be reached.
+    private val gate = Semaphore(
+        maxConcurrentLoads.also { require(it > 0) { "maxConcurrentLoads must be positive, was $it" } },
+    )
 
     /** Guarded by `synchronized(inFlight)`. Nothing suspends inside those sections. */
     private val inFlight = HashMap<String, Shared>()
 
     /** The most recently fetched source and its bytes, so the viewer's share action can reuse them. */
     private val lastBytes = AtomicReference<Pair<String, ByteArray>?>(null)
-
-    init {
-        require(maxConcurrentLoads > 0) { "maxConcurrentLoads must be positive, was $maxConcurrentLoads" }
-    }
 
     /**
      * Thumbnail bounded by [maxWidth] x [maxHeight] px; cached per source *and* bounds.

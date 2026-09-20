@@ -46,6 +46,33 @@ class HostPolicyTest {
         assertThat(policy.isAllowed("[fd12:3456::1]")).isFalse()
     }
 
+    /**
+     * "Public" has to mean more than "not RFC 1918". None of these is loopback, link-local,
+     * site-local, multicast or the unspecified address, so every predicate the JDK offers says
+     * nothing about them — and 100.64.0.0/10 is carrier-grade NAT, which on mobile data reaches
+     * other subscribers of the same carrier, exactly the kind of neighbour this class exists to
+     * keep a chat message away from.
+     */
+    @Test
+    fun rangesThatAreNotTheInternetAreRefusedToo() {
+        assertThat(policy.isAllowed("100.64.0.1")).isFalse() // CGNAT
+        assertThat(policy.isAllowed("100.127.255.255")).isFalse()
+        assertThat(policy.isAllowed("198.18.0.1")).isFalse() // benchmarking
+        assertThat(policy.isAllowed("198.19.255.255")).isFalse()
+        assertThat(policy.isAllowed("255.255.255.255")).isFalse() // limited broadcast
+        assertThat(policyResolving("cdn.example" to listOf("100.100.0.1")).isAllowed("cdn.example")).isFalse()
+    }
+
+    /** Their neighbours, so the ranges cannot quietly widen and take the internet with them. */
+    @Test
+    fun theAddressesNextToThoseRangesAreStillAllowed() {
+        assertThat(policy.isAllowed("100.63.255.255")).isTrue()
+        assertThat(policy.isAllowed("100.128.0.1")).isTrue()
+        assertThat(policy.isAllowed("198.17.255.255")).isTrue()
+        assertThat(policy.isAllowed("198.20.0.1")).isTrue()
+        assertThat(policy.isAllowed("255.255.255.254")).isTrue()
+    }
+
     @Test
     fun publicAddressesAreAllowed() {
         assertThat(policy.isAllowed("93.184.216.34")).isTrue()
