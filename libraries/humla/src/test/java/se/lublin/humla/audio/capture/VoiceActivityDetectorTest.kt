@@ -167,6 +167,32 @@ class VoiceActivityDetectorTest {
         assertThrows(IllegalArgumentException::class.java) { VadConfig(VadMode.PROBABILITY, 0.6f, 0.3f, -1L) }
     }
 
+    /**
+     * The other end of the same guard, and the same class of defect as the unbounded stop
+     * threshold: [VoiceActivityDetector] turns this into nanoseconds with `holdTimeMs * 1_000_000`,
+     * which overflows above [VadConfig.MAX_HOLD_MS] -- about 9.2e12 ms, 292 years. Past it the
+     * product wraps negative, the deadline lands in the past and **the hold silently stops
+     * holding**, which is a detector that clips the end of every word. Unreachable through today's
+     * call sites, exactly as an unbounded stop threshold was; the guard is one line and the
+     * ceiling is not arbitrary, it is the point where the deadline idiom
+     * (`now - deadline < 0`) loses its precondition.
+     */
+    @Test
+    fun `a hold time that would overflow the nanosecond deadline is rejected`() {
+        assertThat(VadConfig.MAX_HOLD_MS).isEqualTo(Long.MAX_VALUE / 1_000_000L)
+        // The largest hold that still converts is accepted.
+        assertThat(VadConfig(VadMode.PROBABILITY, 0.6f, 0.3f, VadConfig.MAX_HOLD_MS).holdTimeMs)
+            .isEqualTo(VadConfig.MAX_HOLD_MS)
+        assertThat(
+            assertThrows(IllegalArgumentException::class.java) {
+                VadConfig(VadMode.PROBABILITY, 0.6f, 0.3f, VadConfig.MAX_HOLD_MS + 1L)
+            }
+        ).hasMessageThat().startsWith("holdTimeMs")
+        assertThrows(IllegalArgumentException::class.java) {
+            VadConfig(VadMode.PROBABILITY, 0.6f, 0.3f, Long.MAX_VALUE)
+        }
+    }
+
     @Test
     fun `probability mode uses the preprocessor probability, not the level`() {
         val d = detector(VadConfig.probability())

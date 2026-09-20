@@ -68,12 +68,20 @@ data class VadConfig(
     init {
         require(startThreshold in 0f..1f) { "startThreshold out of range: $startThreshold" }
         require(stopThreshold in 0f..startThreshold) { "stopThreshold must be within [0, startThreshold]: $stopThreshold" }
-        require(holdTimeMs >= 0) { "holdTimeMs must not be negative" }
+        require(holdTimeMs in 0L..MAX_HOLD_MS) { "holdTimeMs must be within [0, $MAX_HOLD_MS]: $holdTimeMs" }
     }
 
     companion object {
         const val AMPLITUDE_HYSTERESIS = 0.15f
         const val DEFAULT_HOLD_MS = 250L
+
+        /**
+         * The largest hold [VoiceActivityDetector] can convert: it computes its deadline as
+         * `holdTimeMs * 1_000_000`, and above this the product wraps negative, the deadline lands
+         * in the past and the hold silently stops holding. It is also exactly the precondition of
+         * the `now - deadline < 0` idiom the detector uses, so the two bounds are the same bound.
+         */
+        const val MAX_HOLD_MS = Long.MAX_VALUE / 1_000_000L
 
         /** Legacy single slider: stop = start - 0.15. */
         @JvmStatic
