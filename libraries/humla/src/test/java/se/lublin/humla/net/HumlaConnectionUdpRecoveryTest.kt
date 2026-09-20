@@ -189,6 +189,27 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(connection.getUDPLatency()).isEqualTo(6_000_000L)
     }
 
+    /**
+     * The other latency line, and the sibling of the one the effect sweep did catch. `tcpLatency =
+     * now - msg.timestamp` -> `0L` SURVIVED: the value is written into a field with a public getter
+     * and no test read it back, which is the same hole aUdpPingReplyResetsTheTimeout... closed one
+     * callback over. A sweep that finds one of a pair has found half a form.
+     */
+    @Test
+    fun aServerPingFeedsTheTcpLatency() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+
+        atSeconds(10)
+        tcp.simulateMessage(
+            HumlaTCPMessageType.Ping,
+            Mumble.Ping.newBuilder().setTimestamp(4_000_000L).build().toByteArray()
+        )
+        connection.drainProtocolQueue("server ping handled")
+
+        assertThat(connection.getTCPLatency()).isEqualTo(6_000_000L)
+    }
+
     @Test
     fun forcedTcpNeverStartsUdpNorWarns() {
         val connection = newConnection()
@@ -469,7 +490,13 @@ class HumlaConnectionUdpRecoveryTest {
 
         connection.setForceTCP(true)
         gate.countDown()
-        connection.drainProtocolQueue("failure and the restart behind it handled")
+        // Twice, for the reason the neighbour above drains twice. One drain only waits past what
+        // was queued when it was posted: if main posts the barrier before the protocol thread has
+        // taken the failure handler off the queue, the restart the handler schedules lands *behind*
+        // the barrier and the assertion is taken on an empty window. It kills its mutant today and
+        // would go on killing it - it is a race in the test, not a hole in the coverage.
+        connection.drainProtocolQueue("failure handled")
+        connection.drainProtocolQueue("the restart the failure queued handled")
         mainLooper.idle()
 
         assertThat(transports.udps).hasSize(1)
