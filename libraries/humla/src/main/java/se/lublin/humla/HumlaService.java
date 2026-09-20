@@ -59,6 +59,7 @@ import se.lublin.humla.model.TalkState;
 import se.lublin.humla.model.User;
 import se.lublin.humla.model.WhisperTarget;
 import se.lublin.humla.model.WhisperTargetList;
+import se.lublin.humla.net.ConnectionWarning;
 import se.lublin.humla.net.HumlaConnection;
 import se.lublin.humla.net.HumlaTCPMessageType;
 import se.lublin.humla.net.HumlaUDPMessageType;
@@ -290,31 +291,28 @@ public class HumlaService extends Service implements IHumlaService, IHumlaSessio
     }
 
     protected void connect() {
-        try {
-            setReconnecting(false);
-            mConnectionState = ConnectionState.DISCONNECTED;
-            mVoiceTargetId = 0;
-            mWhisperTargetList.clear();
+        setReconnecting(false);
+        mConnectionState = ConnectionState.DISCONNECTED;
+        mVoiceTargetId = 0;
+        mWhisperTargetList.clear();
 
-            mConnection = new HumlaConnection(this);
-            mConnection.setForceTCP(mForceTcp);
-            mConnection.setUseTor(mUseTor);
-            mConnection.setKeys(mCertificate, mCertificatePassword);
-            mConnection.setTrustStore(mTrustStore, mTrustStorePassword, mTrustStoreFormat);
+        mConnection = new HumlaConnection(this);
+        mConnection.setForceTCP(mForceTcp);
+        mConnection.setUseTor(mUseTor);
+        mConnection.setKeys(mCertificate, mCertificatePassword);
+        mConnection.setTrustStore(mTrustStore, mTrustStorePassword, mTrustStoreFormat);
 
-            mModelHandler = new ModelHandler(this, mCallbacks, this,
-                    mLocalMuteHistory, mLocalIgnoreHistory);
-            mConnection.addTCPMessageHandlers(mModelHandler);
+        mModelHandler = new ModelHandler(this, mCallbacks, this,
+                mLocalMuteHistory, mLocalIgnoreHistory);
+        mConnection.addTCPMessageHandlers(mModelHandler);
 
-            mConnectionState = ConnectionState.CONNECTING;
+        mConnectionState = ConnectionState.CONNECTING;
 
-            mCallbacks.onConnecting();
+        mCallbacks.onConnecting();
 
-            mConnection.connect(mServer.getSrvHost(), mServer.getSrvPort());
-        } catch (HumlaException e) {
-            e.printStackTrace();
-            mCallbacks.onDisconnected(e);
-        }
+        // Resolves the host (SRV lookup included) and opens the socket on the protocol thread;
+        // every failure, certificate errors included, arrives at onConnectionDisconnected.
+        mConnection.connect(mServer);
     }
 
     public void disconnect() {
@@ -383,8 +381,8 @@ public class HumlaService extends Service implements IHumlaService, IHumlaSessio
             mConnection.addTCPMessageHandlers(mAudioHandler);
             mConnection.addUDPMessageHandlers(mAudioHandler);
         } catch (AudioException e) {
-            e.printStackTrace();
-            onConnectionWarning(e.getMessage());
+            Log.w(TAG, "Could not initialize audio", e);
+            logWarning(e.getMessage());
         } catch (NotSynchronizedException e) {
             throw new RuntimeException("Connection should be synchronized in callback for synchronization!", e);
         }
@@ -430,8 +428,8 @@ public class HumlaService extends Service implements IHumlaService, IHumlaSessio
     }
 
     @Override
-    public void onConnectionWarning(String warning) {
-        logWarning(warning);
+    public void onConnectionWarning(ConnectionWarning warning) {
+        logWarning(getString(warning.getMessageRes()));
     }
 
     @Override

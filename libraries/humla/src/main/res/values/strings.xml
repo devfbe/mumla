@@ -49,4 +49,10 @@
     <string name="perm_denied">Permission denied.</string>
     <string name="server">Server</string>
     <string name="the_server">the server</string>
+    <string name="udp_warning_unavailable">UDP packets cannot be sent to or received from the server. Switching to TCP mode.</string>
+    <string name="udp_warning_send_failed">UDP packets cannot be sent to the server. Switching to TCP mode.</string>
+    <string name="udp_warning_receive_failed">UDP packets cannot be received from the server. Switching to TCP mode.</string>
+    <string name="udp_warning_ping_timeout">No UDP ping reply from the server for 15 seconds. Switching to TCP mode.</string>
+    <string name="udp_warning_restored">UDP packets can be sent to and received from the server. Switching back to UDP mode.</string>
+    <string name="udp_warning_thread_failed">The UDP connection failed. Voice is tunneled over TCP while UDP is retried.</string>
 </resources>
