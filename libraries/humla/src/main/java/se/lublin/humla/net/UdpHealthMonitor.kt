@@ -56,6 +56,16 @@ package se.lublin.humla.net
  * that measurement, and it is the second direction of one guard: the first,
  * aDecisionIsNotReversedWithinOneWindowOfTakingIt, only ever drove restore-after-switch.
  *
+ * **And the lockout bounds the rate, not the number.** "Two state changes inside one window are
+ * always a fault of the procedure" is a statement about a window, and it says nothing about how
+ * many windows there are. A link that delivers a burst every forty seconds is judged healthy,
+ * then silent, then healthy again, for as long as it lasts: one change per window, forever.
+ * Counted over 300 s against the shipped monitor, **15 route changes** - and this class limits
+ * none of it, because every one of them is a correct answer to the twenty seconds in front of it.
+ * What keeps the user's chat log readable is not here but in [HumlaConnection]'s `warn`, which
+ * de-duplicates the announcements. That makes the de-duplication the repair rather than the second
+ * line, and it has a price of its own; it is written down there.
+ *
  * Two properties of the window that are scoped rather than guaranteed, both measured:
  *
  * - **The effective window widens across a gap in the TCP pings.** The head is kept until the
