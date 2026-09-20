@@ -189,6 +189,36 @@ class ChannelListAdapterRebuildTest {
         assertThat(changes()).isEqualTo(2)
     }
 
+    /**
+     * The same two-turn property across the *other* way a scheduled rebuild ends. [updateChannels]
+     * clears the flag from inside the posted runnable; a position query runs that runnable by hand
+     * and has to leave the flag cleared as well.
+     *
+     * [aBurstInALaterTurnRebuildsAgain] cannot see that: it never settles anything by hand, so a
+     * mutation that re-arms the flag after a hand-run rebuild survives it. In production the first
+     * hand-run settle is the first channel switch of the session
+     * (`ChannelListFragment.onUserJoinedChannel` -> `scrollToChannel`) or the first search
+     * suggestion clicked -- after which the list would never update again.
+     */
+    @Test
+    fun aBurstAfterAPositionQuerySettledTheLastOneRebuildsAgain() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        val changes = countChanges(adapter)
+
+        adapter.updateChannels()
+        adapter.getChannelPosition(0)
+        idleMainLooper()
+        val after = adapter.itemCount
+
+        ids.getValue(0).addUser(FakeUser(300))
+        adapter.updateChannels()
+        idleMainLooper()
+
+        assertThat(adapter.itemCount).isEqualTo(after + 1)
+        assertThat(changes()).isEqualTo(2)
+    }
+
     @Test
     fun aNewlyBoundConnectedServiceRebuildsTheList() {
         val (root, ids) = smallTree()
