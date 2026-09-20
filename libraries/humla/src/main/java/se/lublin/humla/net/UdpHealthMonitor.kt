@@ -42,6 +42,22 @@ package se.lublin.humla.net
  * it on evidence it already had. Two state changes inside one window are always a fault of the
  * procedure, never a state of the network.
  *
+ * Two properties of the window that are scoped rather than guaranteed, both measured:
+ *
+ * - **The effective window widens across a gap in the TCP pings.** The head is kept until the
+ *   sample behind it is a whole window old, so after a gap the base can be much older than
+ *   [windowMicros]: samples at 0 s and 60 s carrying three packets each way yield RESTORE_UDP,
+ *   although three packets in sixty seconds are well under what the threshold is meant to ask for.
+ *   It is conservative where it switches away and permissive where it restores, which is the safe
+ *   way round of the two, and capping the window a second time would reintroduce the late-ping bug
+ *   the trim above exists to avoid. Deliberately not fixed.
+ * - **[samples] is bounded by the *server's* ping rate, not by this class.** The trim keeps roughly
+ *   [windowMicros] worth of them, so at the protocol's five second ping that is five samples and at
+ *   a server that pings a thousand times a second it is twenty thousand - a few hundred kilobytes
+ *   that the window sheds again as it moves, not a leak and not a crash. A cap belongs on the
+ *   frame boundary where the server-controlled rate enters, next to the channel depth guard, not
+ *   here; writing one here would be a branch no test of this class can reach.
+ *
  * All times are microseconds on the connection's clock ([HumlaConnection.elapsed]), which only ever
  * moves forward. Not thread-safe: the protocol thread raises every event and reads every decision.
  */

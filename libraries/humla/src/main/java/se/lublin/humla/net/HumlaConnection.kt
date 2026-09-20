@@ -496,7 +496,17 @@ class HumlaConnection @JvmOverloads constructor(
      */
     val isSynchronized: Boolean get() = synchronizedWithServer && !disconnectRequested
 
-    /** False while voice is tunneled over TCP, because it is forced or UDP was judged unusable. */
+    /**
+     * Whether [sendUDPMessage] would put an unforced packet on the UDP transport.
+     *
+     * Not "whether voice goes over UDP", which is what this said and is false along one axis:
+     * [setForceTCP] taken mid-connection tunnels the voice without touching [usingUdp], so this
+     * answers true while every packet goes over TCP. The two agree at [connect] and part company
+     * afterwards. Nothing in production reads it today - it exists for the tests in this package -
+     * which is the only reason the difference has cost nothing; anything in the UI that shows it
+     * has to read [shouldForceTCP] alongside it or it will show the wrong thing to a user who has
+     * just switched UDP off.
+     */
     val isUsingUdp: Boolean get() = usingUdp
 
     /** Microseconds since connect(). */
