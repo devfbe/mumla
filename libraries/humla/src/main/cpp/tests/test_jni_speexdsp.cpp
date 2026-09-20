@@ -268,6 +268,41 @@ static void test_resampler_channel_index(Env& env) {
           "init tolerates an empty error array");
 }
 
+/* speex_resampler_init returns NULL for more than a bad channel count: nb_channels == 0,
+ * ratio_num == 0, ratio_den == 0, quality > 10 or quality < 0 all fail the same test at
+ * resample.c:804-808, and in speex_resampler_init the two ratio terms ARE the two sample rates.
+ * So a sample rate of 0 -- which ResamplingEncoder.kt:35 forwards from whatever the device or the
+ * server said, without looking at the return value -- reaches this bridge as a NULL state that the
+ * channels <= 0 guard above does not see. Wrapping it in a handle would hand Kotlin a live handle
+ * to a null state, and the next processInt is a null dereference inside resample.c:933, in native
+ * code, with no Java stack trace.
+ *
+ * This is the guard the channel-index test cannot pin: both of its init cases (0 and -2 channels)
+ * make speex return NULL too, so they stay green with the null check deleted. */
+static void test_resampler_init_failure(Env& env) {
+    JNIEnv* e = env.get();
+    Array<jint> err(1);
+
+    err[0] = 0;
+    CHECK(RS_INIT(e, nullptr, 1, 0, 16000, 3, err.as<jintArray>()) == 0,
+          "an input rate of 0 is refused rather than wrapped in a handle");
+    CHECK(err[0] == RESAMPLER_ERR_INVALID_ARG, "and reported as an invalid argument");
+    err[0] = 0;
+    CHECK(RS_INIT(e, nullptr, 1, 48000, 0, 3, err.as<jintArray>()) == 0,
+          "an output rate of 0 is refused rather than wrapped in a handle");
+    CHECK(err[0] == RESAMPLER_ERR_INVALID_ARG, "and reported as an invalid argument");
+    /* speex_resampler_init takes quality 0..10 and nothing else. SPEEX_RESAMPLE_QUALITY is 3
+     * today, but the argument is public and unvalidated on the Kotlin side. */
+    err[0] = 0;
+    CHECK(RS_INIT(e, nullptr, 1, 48000, 16000, 99, err.as<jintArray>()) == 0,
+          "a quality above 10 is refused rather than wrapped in a handle");
+    CHECK(err[0] == RESAMPLER_ERR_INVALID_ARG, "and reported as an invalid argument");
+    err[0] = 0;
+    CHECK(RS_INIT(e, nullptr, 1, 48000, 16000, -1, err.as<jintArray>()) == 0,
+          "a negative quality is refused rather than wrapped in a handle");
+    CHECK(err[0] == RESAMPLER_ERR_INVALID_ARG, "and reported as an invalid argument");
+}
+
 /* jitter_buffer_put copies packet.len bytes out of packet.data. */
 static void test_jitter(Env& env) {
     JNIEnv* e = env.get();
@@ -493,6 +528,7 @@ int main() {
     test_preprocessor(env);
     test_resampler(env);
     test_resampler_channel_index(env);
+    test_resampler_init_failure(env);
     test_jitter(env);
     test_jitter_ctl(env);
     test_preprocess_ctl(env);
