@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <!--
-  ~ Copyright (C) 2014 Andrew Comminos
+  ~ Copyright (C) 2025 The Mumla Authors
   ~
   ~ This program is free software: you can redistribute it and/or modify
   ~ it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
 
 <androidx.cardview.widget.CardView
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="horizontal"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="@dimen/chat_item_spacing"
@@ -30,34 +29,61 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="8dp">
+        android:padding="@dimen/padding_small">
 
         <TextView
+            android:id="@+id/list_chat_item_target"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceSmall"
-            android:text="example username → channel"
             android:textSize="11sp"
-            android:id="@+id/list_chat_item_target"
             android:textColor="#999"
             android:layout_marginBottom="4dp" />
 
         <TextView
+            android:id="@+id/list_chat_item_text_before"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="example message"
-            android:id="@+id/list_chat_item_text"
             android:layout_marginBottom="4dp"
-            android:textIsSelectable="true"/>
+            android:textIsSelectable="true"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/list_chat_item_image"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="@dimen/chat_thumbnail_max"
+            android:maxHeight="@dimen/chat_thumbnail_max"
+            android:adjustViewBounds="true"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/chat_image_open"
+            android:layout_marginBottom="4dp" />
 
         <TextView
+            android:id="@+id/list_chat_item_image_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceSmall"
-            android:text="23:23:23"
-            android:textSize="11sp"
-            android:id="@+id/list_chat_item_time"
-            android:textColor="#999"/>
-    </LinearLayout>
+            android:textColor="#999"
+            android:layout_marginBottom="4dp"
+            android:visibility="gone" />
 
+        <TextView
+            android:id="@+id/list_chat_item_text_after"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:textIsSelectable="true"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/list_chat_item_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textSize="11sp"
+            android:textColor="#999" />
+    </LinearLayout>
 </androidx.cardview.widget.CardView>

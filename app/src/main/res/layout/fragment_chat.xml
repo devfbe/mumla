@@ -21,22 +21,31 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:orientation="vertical"
-    android:layout_height="fill_parent"
-    android:layout_width="fill_parent"
-    tools:ignore="NewApi"
+    android:layout_height="match_parent"
+    android:layout_width="match_parent"
     android:divider="?attr/dividerVertical"
-    android:showDividers="middle" >
+    android:showDividers="middle">
 
-    <ListView
-        android:id="@+id/chat_list"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:dividerHeight="4dp"
-        android:divider="@android:color/transparent"
-        android:clipToPadding="false"
-        android:padding="8dp"
-        tools:listitem="@layout/list_chat_item"></ListView>
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/chat_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:padding="@dimen/padding_small"
+            tools:listitem="@layout/list_chat_item" />
+
+        <ProgressBar
+            android:id="@+id/chat_image_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -44,13 +53,20 @@
         android:divider="?attr/dividerHorizontal"
         android:showDividers="middle">
 
+        <!--
+          ~ No android:enabled here or on the send button below. Both carried
+          ~ android:enabled="false" from 2022 on and it was inert: android:enabled is a TextView
+          ~ attribute, so an ImageButton never reads it (see ChatLayoutTest). Picking an image
+          ~ needs no text, so this one is always live; the send button is disabled from
+          ~ onViewCreated instead, which is where it was already re-enabled from.
+          -->
         <ImageButton
             android:id="@+id/chatImageSend"
             android:layout_width="48dp"
             android:layout_height="match_parent"
             android:layout_gravity="bottom"
             android:background="?attr/selectableItemBackground"
-            android:enabled="false"
+            android:contentDescription="@string/image_confirm_send"
             app:srcCompat="@android:drawable/ic_menu_upload"
             app:tint="?android:attr/textColorPrimary" />
 
@@ -64,19 +80,17 @@
             android:maxLines="4"
             android:inputType="textAutoCorrect|textMultiLine"
             android:imeOptions="actionSend"
-            android:layout_marginLeft="10dp"
-            android:layout_marginRight="10dp" >
-        </EditText>
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp" />
 
         <ImageButton
             android:id="@+id/chatTextSend"
             android:layout_width="48dp"
             android:layout_height="match_parent"
-            app:srcCompat="@drawable/ic_action_send"
-            app:tint="?android:attr/textColorPrimary"
-            android:enabled="false"
             android:layout_gravity="bottom"
-            android:background="?attr/selectableItemBackground"/>
-
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="@string/send_message"
+            app:srcCompat="@drawable/ic_action_send"
+            app:tint="?android:attr/textColorPrimary" />
     </LinearLayout>
 </LinearLayout>

@@ -202,6 +202,7 @@ dependencies {
     implementation libs.androidx.documentfile
     implementation libs.androidx.fragment
     implementation libs.androidx.media
+    implementation libs.androidx.lifecycle.runtime.ktx
     implementation libs.androidx.recyclerview
     implementation libs.androidx.exifinterface
     implementation libs.material
@@ -212,4 +213,9 @@ dependencies {
     googImplementation libs.billing
 
     testImplementation libs.bundles.unit.test
+    testImplementation libs.androidx.fragment.testing
+    // Must be on the debug variants rather than on the test ones: this artifact is nothing but
+    // a manifest, and it contributes FragmentScenario's empty host activity to the *merged*
+    // manifest that Robolectric reads. On testImplementation it would never be merged.
+    debugImplementation libs.androidx.fragment.testing.manifest
 }

@@ -1,0 +1,108 @@
+package se.lublin.mumla.chat
+
+import java.net.Inet6Address
+import java.net.InetAddress
+import java.net.UnknownHostException
+
+/**
+ * Decides whether an `<img src>` from a chat message may be fetched from a given host.
+ *
+ * [HttpImageFetcher] asks this **once per redirect hop**, not only for the URL the message carried.
+ * A policy consulted only at the front door is undone by a single `302`, because the platform
+ * follows a same-scheme redirect to any host it likes.
+ */
+fun interface HostPolicy {
+    fun isAllowed(host: String): Boolean
+
+    companion object {
+        /** No opinion. For tests that deliberately talk to a loopback server. */
+        val ANY_HOST = HostPolicy { true }
+    }
+}
+
+/**
+ * Refuses hosts that lead back into the device, its local network or the carrier's: loopback, the
+ * unspecified address, link-local (which includes the 169.254.169.254 metadata address), site-local
+ * and IPv6 unique-local ranges, multicast, and three IPv4 ranges the JDK has no predicate for —
+ * 100.64.0.0/10 (carrier-grade NAT, which on mobile data reaches other subscribers of the same
+ * carrier), 198.18.0.0/15 (benchmarking) and 255.255.255.255 (limited broadcast).
+ *
+ * Those three are the ones that reach somewhere; they are **not** every range the JDK is missing a
+ * predicate for. 240.0.0.0/4 (reserved), the rest of 0.0.0.0/8, 192.0.0.0/24 (IETF protocol
+ * assignments) and the three documentation ranges are equally unpredicated and equally not the
+ * public internet, and none of them is checked here. That is deliberate: this class exists to stop
+ * a chat message from aiming the phone at something it can actually reach, and an address in those
+ * ranges fails on its own as [ImageError.NETWORK]. It is a list of what is dangerous, not a list of
+ * what is non-public.
+ *
+ * The URL comes from another chat participant, so `<img src="https://192.168.1.1/admin?reset=1">`
+ * is a request the phone makes from inside its own network on a stranger's say-so, and the timing
+ * of the failure alone tells that stranger which addresses answer. On a device most of this is
+ * already out of reach — cleartext traffic is off, so plain `http` to a router never leaves the app,
+ * and a LAN device rarely has a certificate that passes validation — but neither of those two is
+ * this stream's to guarantee. The cleartext half is not even a decision the app has written down:
+ * the manifest sets neither `usesCleartextTraffic` nor a network security config, so it is the
+ * platform default at `targetSdk = 36`, i.e. one manifest line or one `targetSdk` change away from
+ * gone and nothing here would notice.
+ *
+ * **The spelling is not what decides; the answer is.** `127.0.0.1`, `127.1`, `2130706433`, `0` and
+ * `[::1]` are all the same interface, and a name an attacker owns can simply have an A record of
+ * 192.168.0.1 — which no amount of string matching catches. So every host is resolved and **all**
+ * of its addresses have to be public. Resolving costs one lookup that the connection would make
+ * anyway; the platform then resolves again when it connects, and nothing here can stop a name that
+ * answers differently the second time (DNS rebinding). That residual is documented, not fixed: the
+ * fix needs the connection pinned to the address that was checked, which `HttpURLConnection` does
+ * not offer.
+ *
+ * A host that cannot be resolved at all is **allowed** through: the connection then fails on its own
+ * and is reported as [ImageError.NETWORK], which is what actually happened, rather than as this
+ * class's verdict on a name it never saw an answer for.
+ *
+ * Every verdict here is derived from a resolver answer, and resolver answers change — a DNS blocker
+ * says `0.0.0.0` for a CDN it filters, a captive portal and a split-horizon company resolver say
+ * `192.168.x.x` for a public name. [HttpImageFetcher] therefore reports a refusal by this policy as
+ * [ImageError.NETWORK], which expires, and keeps [ImageError.UNSUPPORTED] for what the message
+ * itself got wrong.
+ */
+class PublicHostsOnly(
+    private val resolve: (String) -> Array<InetAddress> = InetAddress::getAllByName,
+) : HostPolicy {
+
+    override fun isAllowed(host: String): Boolean {
+        val addresses = try {
+            // Bracketed IPv6 literals — the form URL.getHost() hands over — are part of what
+            // getAllByName documents itself to accept (RFC 2732), so stripping them here would be
+            // a second parser for no gain. Pinned by the `[::1]` cases in HostPolicyTest.
+            resolve(host)
+        } catch (e: UnknownHostException) {
+            return true
+        } catch (e: SecurityException) {
+            return false
+        }
+        return addresses.none { it.isLocal() }
+    }
+
+    private fun InetAddress.isLocal(): Boolean =
+        isAnyLocalAddress || isLoopbackAddress || isLinkLocalAddress || isSiteLocalAddress ||
+            isMulticastAddress || isUniqueLocalIpv6() || isReservedIpv4()
+
+    /**
+     * Three IPv4 ranges that reach something the phone should not be aimed at and that the JDK has
+     * no predicate for: 100.64.0.0/10 (carrier-grade NAT), 198.18.0.0/15 (benchmarking) and
+     * 255.255.255.255. Not an enumeration of every unpredicated non-public range — see the class
+     * KDoc for the ones left out on purpose. An IPv4-mapped address arrives here as four bytes, so
+     * those are covered too.
+     */
+    private fun InetAddress.isReservedIpv4(): Boolean {
+        val bytes = address
+        if (bytes.size != 4) return false
+        fun byteAt(i: Int) = bytes[i].toInt() and 0xFF
+        return (byteAt(0) == 100 && byteAt(1) in 64..127) ||
+            (byteAt(0) == 198 && byteAt(1) in 18..19) ||
+            (byteAt(0) == 255 && byteAt(1) == 255 && byteAt(2) == 255 && byteAt(3) == 255)
+    }
+
+    /** fc00::/7, which the JDK reports as neither site-local nor link-local. */
+    private fun InetAddress.isUniqueLocalIpv6(): Boolean =
+        this is Inet6Address && (address[0].toInt() and 0xFE) == 0xFC
+}
