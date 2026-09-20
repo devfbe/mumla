@@ -357,6 +357,26 @@ tying them together is the field they both decide. Two flags with exactly one
 reader each had four writes of `false` between them, a ratio ten seconds of grep
 makes obvious and no amount of reading call paths will.
 
+**"I keep no state" is a claim about your fields, not about the behaviour.** When a
+mutation survives, the next sweep is over the mutable state of every object you
+*delegate to*, not only your own — and specifically over the transitions that only
+the event you forward can trigger. This was learned the expensive way: a view
+forwarded `ACTION_CANCEL` to Android's gesture detectors, a mutation that
+swallowed it left the whole suite green, and the conclusion drawn was "there is no
+observable, the view holds nothing to unwind". Measured afterwards, there is:
+`GestureDetector.mIsDoubleTapping` is cleared by `cancel()` or `ACTION_UP` and by
+nothing else, and `ScaleGestureDetector`'s anchored-scale mode resets only on a
+complete stream. Neither is cleared by a fresh `ACTION_DOWN`, so "the next gesture
+re-bases anyway" is true of the focus and false of the flags — after a double tap,
+a swallowed cancel leaves the next drag either dead or zooming. Borrowed state is
+still state, and forwarding is the only thing that unwinds it.
+
+**"No observable found" is always scoped to the histories you tried.** Write the
+scope into the sentence — "cancelling mid-drag is recoverable, because a plain
+DOWN re-bases the focus" — never the bare conclusion. An unscoped "there is
+nothing to leave behind" is not a finding, it is a licence: the next reader cashes
+it in by deleting the forwarding, and the comment is what told them it was safe.
+
 **Treat "assert after the teardown returned" as a false-green pattern.** Three of
 the six survivors in that one file were masked by the same thing: the teardown
 drops the state a moment later, so an assertion taken afterwards holds either
