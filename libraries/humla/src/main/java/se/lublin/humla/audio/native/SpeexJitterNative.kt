@@ -29,6 +29,18 @@ interface SpeexJitterApi {
     fun get(handle: Long, out: ByteArray, desiredSpan: Int, meta: IntArray): Int
     fun pointerTimestamp(handle: Long): Int
     fun tick(handle: Long)
+
+    /**
+     * Runs `jitter_buffer_ctl` with `value[0]` as the in/out int argument.
+     *
+     * [request] has to be one of [SpeexJitterNative.JITTER_BUFFER_SET_MARGIN],
+     * [SpeexJitterNative.JITTER_BUFFER_GET_MARGIN] or
+     * [SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT] -- those are the requests the bridge
+     * allows through, and any other number is refused with `JITTER_BUFFER_BAD_ARGUMENT` without
+     * reaching libspeexdsp. The bridge hands it the address of a four-byte int on its own stack
+     * frame, and `GET_DESTROY_CALLBACK` writes eight bytes through that address while
+     * `SET_DESTROY_CALLBACK` keeps it as the function `jitter_buffer_destroy` later calls.
+     */
     fun ctl(handle: Long, request: Int, value: IntArray): Int
     fun updateDelay(handle: Long): Int
 }

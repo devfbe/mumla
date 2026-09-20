@@ -31,6 +31,21 @@ interface SpeexPreprocessApi {
      * rather than overrun -- this used to be a live crash at ultra-wideband.
      */
     fun run(state: Long, frame: ShortArray): Int
+
+    /**
+     * Runs `speex_preprocess_ctl` with `value[0]` as the in/out int argument; returns 0, or -1.
+     *
+     * [request] has to be one of the `SPEEX_PREPROCESS_*` constants on [SpeexPreprocessNative] --
+     * those are the requests the bridge allows through, and any other number is refused with -1
+     * without reaching speex. That is not tidiness: the bridge hands speex the address of a
+     * four-byte int on its own stack frame, and several requests treat that address as something
+     * else entirely. `GET_ECHO_STATE` writes a pointer through it, `SET_ECHO_STATE` keeps it as
+     * one and dereferences it later, and `GET_PSD` writes a whole frame of ints into it.
+     *
+     * A -1 can also mean that libspeexdsp does not implement the request in this build: its AGC
+     * controls (`SPEEX_PREPROCESS_SET_AGC`, `SPEEX_PREPROCESS_SET_AGC_TARGET`) are compiled out of
+     * a fixed-point build, which is what this library is.
+     */
     fun ctlInt(state: Long, request: Int, value: IntArray): Int
     fun destroy(state: Long)
 }

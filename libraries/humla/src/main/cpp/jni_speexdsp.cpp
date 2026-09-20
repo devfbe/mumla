@@ -55,6 +55,59 @@ void writeError(JNIEnv* env, jintArray error, jint value) {
     if (error != nullptr && env->GetArrayLength(error) >= 1) writeInt(env, error, value);
 }
 
+/* The two ctl entry points below hand jitter_buffer_ctl / speex_preprocess_ctl the address of a
+ * four-byte spx_int32_t on their own stack frame. The request number decides what the callee does
+ * with that address, it arrives from Kotlin, and for several requests it is not "read or write
+ * four bytes":
+ *
+ *   JITTER_BUFFER_GET_DESTROY_CALLBACK (5)   *(void(**)(void*))ptr = jitter->destroy
+ *   SPEEX_PREPROCESS_GET_ECHO_STATE    (25)  *(SpeexEchoState**)ptr = st->echo_state
+ *       -- eight bytes into a four-byte stack object on arm64-v8a and x86_64.
+ *   JITTER_BUFFER_SET_DESTROY_CALLBACK (4)   jitter->destroy = (void(*)(void*))ptr
+ *   SPEEX_PREPROCESS_SET_ECHO_STATE    (24)  st->echo_state = (SpeexEchoState*)ptr
+ *       -- the stack address is kept as a pointer and dereferenced, or called, long after this
+ *          frame is gone; jitter_buffer_reset() calls jitter->destroy for every queued packet.
+ *   SPEEX_PREPROCESS_GET_PSD           (39)
+ *   SPEEX_PREPROCESS_GET_NOISE_PSD     (43)  ps_size ints, i.e. a whole frame, into those four
+ *                                            bytes.
+ *   SPEEX_PREPROCESS_SET_AGC_LEVEL     (6)   reads the caller's int as a float.
+ *   JITTER_BUFFER_SET_MAX_LATE_RATE    (10)  divides by the value, so 0 is a SIGFPE.
+ *
+ * An allow list rather than a list of the dangerous ones: the argument's type is a property of
+ * each request inside libspeexdsp, a version bump can add another pointer-typed request, and
+ * being wrong in the allowing direction is a stack smash. Both lists are exactly the constants
+ * the matching Kotlin object declares -- nothing else was ever reachable from Kotlin without
+ * also adding a constant there. Adding one means checking in jitter.c / preprocess.c that the
+ * new request really reads or writes a single spx_int32_t, and adding it here too.
+ */
+bool jitterRequestAllowed(jint request) {
+    switch (request) {
+        case JITTER_BUFFER_SET_MARGIN:            // 0
+        case JITTER_BUFFER_GET_MARGIN:            // 1
+        case JITTER_BUFFER_GET_AVALIABLE_COUNT:   // 3, spelled that way by libspeexdsp
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool preprocessRequestAllowed(jint request) {
+    switch (request) {
+        case SPEEX_PREPROCESS_SET_DENOISE:        // 0
+        case SPEEX_PREPROCESS_SET_AGC:            // 2
+        case SPEEX_PREPROCESS_SET_VAD:            // 4
+        case SPEEX_PREPROCESS_SET_DEREVERB:       // 8
+        case SPEEX_PREPROCESS_SET_PROB_START:     // 14
+        case SPEEX_PREPROCESS_GET_PROB_START:     // 15
+        case SPEEX_PREPROCESS_SET_NOISE_SUPPRESS: // 18
+        case SPEEX_PREPROCESS_GET_PROB:           // 45
+        case SPEEX_PREPROCESS_SET_AGC_TARGET:     // 46
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace
 
 extern "C" {
@@ -194,6 +247,9 @@ JNIEXPORT jint JNICALL JB(ctl)(JNIEnv* env, jobject, jlong handle, jint request,
     auto* jb = fromHandle<JitterBuffer>(handle);
     if (jb == nullptr || value == nullptr || env->GetArrayLength(value) < 1)
         return JITTER_BUFFER_BAD_ARGUMENT;
+    // &v below is a stack address; see jitterRequestAllowed for what the rejected requests do
+    // with it.
+    if (!jitterRequestAllowed(request)) return JITTER_BUFFER_BAD_ARGUMENT;
     jint in = 0;
     env->GetIntArrayRegion(value, 0, 1, &in);
     spx_int32_t v = in;
@@ -244,6 +300,9 @@ JNIEXPORT jint JNICALL PP(run)(JNIEnv* env, jobject, jlong state, jshortArray fr
 JNIEXPORT jint JNICALL PP(ctlInt)(JNIEnv* env, jobject, jlong state, jint request, jintArray value) {
     auto* h = fromHandle<PreprocessHandle>(state);
     if (h == nullptr || value == nullptr || env->GetArrayLength(value) < 1) return -1;
+    // Same as JB(ctl): &v is a stack address, and -1 is what speex_preprocess_ctl itself returns
+    // for a request it does not know.
+    if (!preprocessRequestAllowed(request)) return -1;
     jint in = 0;
     env->GetIntArrayRegion(value, 0, 1, &in);
     spx_int32_t v = in;
