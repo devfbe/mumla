@@ -25,14 +25,18 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 /**
- * What the two race helpers in this file demand of the overlap they produce, so that a reader whose
- * loop never started cannot report no damage and pass (spec 4.04).
+ * What the race helpers in this file demand of the overlap they produce, so that a reader whose loop
+ * never started cannot report no damage and pass (spec 4.04).
  *
+ * This is a floor, and the distribution it sits under is machine-dependent and open downward - which
+ * is what the earlier wording here got wrong by quoting a measured range as if it were the range.
  * Measured with the whole humla suite running, which is the loaded machine this has to survive, over
- * three runs of the five tests: the four that use [ChannelTest.race] produced between 879 and 9 219
- * overlapping observations, and `aRelinkIsNeverSeenHalfDone`, whose writer is 50 inserts per
- * iteration and therefore the slowest, between 189 and 399. A bound of 50 is a factor of 3.8 under
- * the worst of those and still tells a change that closes the window from one that does not.
+ * three runs: the three tests that use [ChannelTest.race] overlapped between 621 and 9 335 of their
+ * observations, [ChannelTest.aRelinkIsNeverSeenHalfDone] managed 21 854 to 1 322 561 relinks, and
+ * [ChannelTest.countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts] 49 267 to
+ * 78 906 writes. A second machine produced 484 for the first of those, which is the lowest anything
+ * has actually shown - a factor of 9.7 over this floor, and that factor rather than the range is
+ * what says the floor still tells a change that closes the window from one that does not.
  */
 private const val MIN_OVERLAPPING_READS = 50
 

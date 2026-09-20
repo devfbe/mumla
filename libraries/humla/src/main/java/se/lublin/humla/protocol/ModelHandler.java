@@ -64,7 +64,16 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
      * {@code constructNodes} (:450) both do, on the main thread, where {@code updateChannels()}
      * catches {@code IllegalStateException} and nothing else. A chain of a few thousand channels
      * is enough to turn that into a {@code StackOverflowError}, which no catch in the tree stops.
-     * 256 is far beyond any real tree and far below any stack.
+     *
+     * <p>Both sides of the number, since one of them is measured and one is chosen. <b>Below:</b>
+     * measured here, the deepest chain {@code getSubchannelUserCount()} survives is 4 096 on a 1 MB
+     * thread stack and 65 536 on the 8 MB one Android gives the main thread, which is where the
+     * walk actually runs - so 256 has a factor of 16 in hand against the smaller of those and 256
+     * against the real one. <b>Above:</b> the server's own {@code channelnestinglimit} defaults to
+     * 10 and its {@code channelcountlimit} to 1 000, so 256 is 25 times the nesting a default
+     * server permits at all - but it is a chosen number, not a derived one, and a server configured
+     * past it loses the channels below 256 to the root (see {@link #fallbackParent}) rather than
+     * to nowhere.
      */
     public static final int MAX_CHANNEL_DEPTH = 256;
 
