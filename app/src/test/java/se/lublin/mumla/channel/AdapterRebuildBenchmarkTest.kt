@@ -17,16 +17,22 @@ import se.lublin.humla.IHumlaSession
  * rediscovered. Not a gate -- wall-clock assertions are flaky, and the invariants that a
  * regression would break are pinned deterministically in [ChannelListAdapterRebuildTest].
  *
- * Run it with:
- * `./gradlew :app:testFossDebugUnitTest --tests '*AdapterRebuildBenchmarkTest' -Dbenchmark=1`
- * after removing the `@Ignore`, and read the numbers from the test report's system-out.
+ * Remove the `@Ignore` to run it, and read the numbers from the test report's system-out:
+ * `./gradlew :app:testFossDebugUnitTest --tests '*AdapterRebuildBenchmarkTest'`
  *
- * Measured on this machine, 5 000 channels, 1 000 users, branching 4, best of seven:
+ * Measured on this machine, 5 000 channels, 1 000 users, branching factor 4, one paired run,
+ * rebuild best of seven and each sync best of five:
  *
- * | | rebuild | recursive-count node visits | 1 024-event sync |
- * |---|---|---|---|
- * | before | 444.4 us | 33 179 | 307.2 ms |
- * | after  | 127.5 us | 0      | 0.2 ms   |
+ * |                              | before    | after    |
+ * |------------------------------|-----------|----------|
+ * | one rebuild                  | 351.6 us  | 165.5 us |
+ * | recursive-count node visits  | 33 179    | 0        |
+ * | 1 024-event synchronisation  | 348.0 ms  | 0.2 ms   |
+ * | 5 000-event synchronisation  | 1 376.9 ms| 0.4 ms   |
+ *
+ * Both event counts are measured because the spec's own figure was corrected: the observer queue
+ * is bounded in droppable events but not in total, and `onUserConnected` -- one of the events the
+ * channel list answers with a rebuild -- is undroppable and arrives once per user.
  */
 @Ignore("measurement harness, not a gate -- see the KDoc")
 @RunWith(RobolectricTestRunner::class)
@@ -64,10 +70,12 @@ class AdapterRebuildBenchmarkTest {
         val perRebuildUs = (1..7).minOf { rebuildUs(adapter) }
         println("per-rebuild = %.1f us".format(perRebuildUs))
 
-        // The whole sync: 1024 surviving model events, then the looper drained.
-        repeat(3) { syncMs(adapter) }
-        val best = (1..5).minOf { syncMs(adapter) }
-        println("1024-event sync main-thread = %.1f ms".format(best))
+        // The whole sync: every surviving model event, then the looper drained.
+        for (events in intArrayOf(1024, 5000)) {
+            repeat(3) { syncMs(adapter, events) }
+            val best = (1..5).minOf { syncMs(adapter, events) }
+            println("%d-event sync main-thread = %.1f ms".format(events, best))
+        }
     }
 
     private fun rebuildUs(adapter: ChannelListAdapter): Double {
@@ -77,9 +85,9 @@ class AdapterRebuildBenchmarkTest {
         return (System.nanoTime() - t0) / 1000.0 / runs
     }
 
-    private fun syncMs(adapter: ChannelListAdapter): Double {
+    private fun syncMs(adapter: ChannelListAdapter, events: Int): Double {
         val t0 = System.nanoTime()
-        repeat(1024) { adapter.updateChannels() }
+        repeat(events) { adapter.updateChannels(); adapter.notifyDataSetChanged() }
         idle()
         return (System.nanoTime() - t0) / 1_000_000.0
     }

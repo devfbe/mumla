@@ -49,8 +49,9 @@ import se.lublin.mumla.service.MumlaService
  * Created by andrew on 31/07/13.
  *
  * Every model observer answers a channel or user event with a full rebuild of this tree, and a
- * large server synchronisation delivers about a thousand events even after stream A's observer
- * queue bounds them. Two things keep that off the main thread's critical path:
+ * large server synchronisation delivers thousands of them: stream A's observer queue is bounded
+ * in the events it may drop, but `onUserConnected` is not one of those and arrives once per user.
+ * Two things keep that off the main thread's critical path:
  *
  * - **At most one rebuild per main-thread turn.** [updateChannels] only schedules; the burst of
  *   events that arrives in one turn collapses into a single walk. This is sound because a model
@@ -62,11 +63,10 @@ import se.lublin.mumla.service.MumlaService
  *   `getSubchannels()` are read exactly once, and the counts land on the [Node] so that binding a
  *   row reads no model at all.
  *
- * Measured on a 5 000-channel tree, desktop JVM, best of seven (see
- * `AdapterRebuildBenchmarkTest`): one rebuild cost 444 us and made 33 179 recursive-count node
- * visits, now 128 us and none. One synchronisation -- the 1 024 events that survive the observer
- * queue's cap -- cost 307 ms of main thread, now 0.2 ms. Binding one channel row walked the
- * channel's whole subtree twice; now it reads nothing from the model.
+ * Measured on a 5 000-channel tree, desktop JVM (see `AdapterRebuildBenchmarkTest`): one rebuild
+ * cost 351.6 us and made 33 179 recursive-count node visits, now 165.5 us and none. A
+ * synchronisation of 5 000 events cost 1 376.9 ms of main thread, now 0.4 ms. Binding one channel
+ * row walked the channel's whole subtree twice; now it reads nothing from the model.
  *
  * The recursion needs no depth check: `ModelHandler` refuses a parent that is the channel itself
  * or one of its descendants, and one deeper than 256 below the root (spec 4.1).
@@ -75,14 +75,17 @@ import se.lublin.mumla.service.MumlaService
  */
 class ChannelListAdapter(
     private val context: Context,
-    service: IHumlaService?,
+    service: IHumlaService,
     private val database: MumlaDatabase,
     private val fragmentManager: FragmentManager,
     showPinnedOnly: Boolean,
     showUserCount: Boolean,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), UserMenu.IUserLocalStateListener {
 
-    private var humlaService: IHumlaService? = service
+    // Not nullable: every caller reaches this through HumlaServiceFragment.onServiceBound, which
+    // is only entered with a bound service. A null check here would guard an input no test can
+    // produce and no caller can pass.
+    private var humlaService: IHumlaService = service
     private val rootChannels: List<Int>
     private val nodes: MutableList<Node> = ArrayList()
 
@@ -106,7 +109,7 @@ class ChannelListAdapter(
     init {
         setHasStableIds(true)
         rootChannels = if (showPinnedOnly) {
-            database.getPinnedChannels(humlaService!!.targetServer.id)
+            database.getPinnedChannels(humlaService.targetServer.id)
         } else {
             listOf(0)
         }
@@ -154,7 +157,7 @@ class ChannelListAdapter(
             var bold = false
             var italic = false
             val service = humlaService
-            if (service != null && service.isConnected) {
+            if (service.isConnected) {
                 val session = service.HumlaSession()
                 var ourChan: IChannel? = null
                 try {
@@ -207,7 +210,7 @@ class ChannelListAdapter(
 
             cvh.joinButton.setOnClickListener {
                 val current = humlaService
-                if (current != null && current.isConnected) {
+                if (current.isConnected) {
                     current.HumlaSession().joinChannel(channel.id)
                 }
             }
@@ -231,9 +234,7 @@ class ChannelListAdapter(
             var selfSession = -1
             val service = humlaService
             try {
-                if (service != null) {
-                    selfSession = service.HumlaSession().sessionId
-                }
+                selfSession = service.HumlaSession().sessionId
             } catch (e: HumlaDisconnectedException) {
                 Log.d(TAG, "exception in onBindViewHolder: $e")
             } catch (e: IllegalStateException) {
@@ -242,7 +243,7 @@ class ChannelListAdapter(
 
             uvh.userName.setTypeface(
                 null,
-                if (service != null && service.isConnected && user.session == selfSession) {
+                if (service.isConnected && user.session == selfSession) {
                     Typeface.BOLD
                 } else {
                     Typeface.NORMAL
@@ -264,7 +265,7 @@ class ChannelListAdapter(
 
             uvh.moreButton.setOnClickListener { v ->
                 UserMenu(
-                    context, user, humlaService as MumlaService?, fragmentManager, this
+                    context, user, humlaService as MumlaService, fragmentManager, this
                 ).showPopup(v)
             }
 
@@ -315,7 +316,7 @@ class ChannelListAdapter(
 
     private fun rebuildNodes() {
         val service = humlaService
-        if (service == null || !service.isConnected) {
+        if (!service.isConnected) {
             return
         }
 
@@ -471,7 +472,7 @@ class ChannelListAdapter(
         notifyDataSetChanged()
 
         // Add or remove registered user from local mute history
-        val server = humlaService!!.targetServer
+        val server = humlaService.targetServer
 
         if (user.userId >= 0 && server.isSaved) {
             Thread {

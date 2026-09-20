@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -404,9 +405,78 @@ class ChannelListAdapterRebuildTest {
         val adapter = adapterOver(root, ids)
         clickExpandToggle(adapter, adapter.getChannelPosition(1))
 
-        assertThat(expandToggleVisibilityOf(adapter, 1)).isEqualTo(View.VISIBLE)
-        assertThat(expandToggleVisibilityOf(adapter, 4)).isEqualTo(View.VISIBLE)
-        assertThat(expandToggleVisibilityOf(adapter, 3)).isEqualTo(View.INVISIBLE)
+        // All four corners of `hasSubchannels || subtreeUserCount > 0`. The last one is what
+        // separates that condition from an exclusive or, and only a test that writes it can.
+        assertThat(expandToggleVisibilityOf(adapter, 1)).isEqualTo(View.VISIBLE)  // subchannel
+        assertThat(expandToggleVisibilityOf(adapter, 4)).isEqualTo(View.VISIBLE)  // user
+        assertThat(expandToggleVisibilityOf(adapter, 2)).isEqualTo(View.VISIBLE)  // both
+        assertThat(expandToggleVisibilityOf(adapter, 3)).isEqualTo(View.INVISIBLE) // neither
+    }
+
+    /** Everything the row reads out of the session is skipped while disconnected. */
+    @Test
+    fun aDisconnectedServiceLeavesTheChannelRowUnmarked() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        every { session.sessionChannel } returns ids.getValue(2)
+        idleMainLooper()
+
+        every { service.isConnected } returns false
+
+        assertThat(nameStyleOf(adapter, 2)).isEqualTo(Typeface.NORMAL)
+    }
+
+    @Test
+    fun onlyOurOwnUserRowIsBold() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        every { session.sessionId } returns 100
+
+        assertThat(userNameStyleOf(adapter, 100)).isEqualTo(Typeface.BOLD)
+        assertThat(userNameStyleOf(adapter, 200)).isEqualTo(Typeface.NORMAL)
+
+        every { service.isConnected } returns false
+
+        assertThat(userNameStyleOf(adapter, 100)).isEqualTo(Typeface.NORMAL)
+    }
+
+    @Test
+    fun theJoinButtonJoinsTheRowsChannelWhileConnected() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+
+        joinButtonOf(adapter, 2).performClick()
+
+        verify { session.joinChannel(2) }
+    }
+
+    @Test
+    fun theJoinButtonDoesNothingWhileDisconnected() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        val join = joinButtonOf(adapter, 2)
+
+        every { service.isConnected } returns false
+        join.performClick()
+
+        verify(exactly = 0) { session.joinChannel(any()) }
+    }
+
+    private fun joinButtonOf(adapter: ChannelListAdapter, channelId: Int): android.view.View {
+        val position = adapter.getChannelPosition(channelId)
+        val parent = recyclerView()
+        val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(position))
+        adapter.onBindViewHolder(holder, position)
+        return holder.itemView.findViewById(R.id.channel_row_join)
+    }
+
+    private fun userNameStyleOf(adapter: ChannelListAdapter, session: Int): Int {
+        val position = adapter.getUserPosition(session)
+        val parent = recyclerView()
+        val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(position))
+        adapter.onBindViewHolder(holder, position)
+        return holder.itemView.findViewById<android.widget.TextView>(R.id.user_row_name)
+            .typeface?.style ?: Typeface.NORMAL
     }
 
     @Test
