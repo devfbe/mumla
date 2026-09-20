@@ -571,6 +571,15 @@ one level down. It is not a sentence that over-generalises; it is a sentence tha
 is *correct*, and whose correctness stood in for a measurement. It is also
 greppable, which is why it earns a rule: **on writing such a comment, delete the
 line, run the suite, and only then write the comment, with the result in it.**
+And the sharpest form of it, measured later in the same stream: the explanation is
+not always merely *unverified*, it can be **wrong**. A `udp = null` carried a
+paragraph about an OCB2 sequence number burned in the window between a callback
+being posted and the transport clearing its own flag. Read in the source, the
+transport clears that flag as the **first statement of the `finally`, on the same
+thread**, long before the callback is dequeued — the window is real and is closed
+by the other side first, so the line is a no-op and the paragraph describes a
+mechanism it cannot participate in. A wrong explanation defends a line better than
+a right one, because it answers the question before anyone asks it.
 
 Two things make it easier to believe, and both are about granularity:
 
@@ -629,6 +638,20 @@ returning a constant `emptyList()`, a fake that could not express a null user, t
 one), which makes it a rule rather than an anecdote: **for every input the
 production file branches on, name the fake that produces it and check it can
 produce more than one value.**
+Two riders, both earned the hard way. **Run the enumeration to exhaustion, not to
+the first find.** The pass that found `useTor` — a dimension closed *by construction*
+across an entire repository — stopped there, and had two more answers in it: the
+same fake discarded the host and port it was handed, and a sibling fake discarded
+the crypt state, which made three of six decisions unreachable end-to-end. A pass
+that produces one good find feels like it has done its work; it has only started.
+And **say when a pass was not blind.** The enumeration is supposed to happen before
+the diff is read. When that order slipped, the honest report was "treat this as an
+enumeration *from* the production file rather than one made blind" — which is worth
+more than the pass pretending to a provenance it does not have.
+Third rider, about your own correct work: **applying a rule once does not discharge
+it.** The same author who spelled out "2^k inputs, not k mutations" in a test's KDoc,
+and satisfied it exactly for one compound condition, left the four-corner gap open on
+the predicate he had just opened up two files away. A rule is a grep, not a habit.
 
 **A mutation sweep inherits the blind spots of the fixture set.** It measures
 whether the tests can *see* a change; it cannot tell you that a branch's
@@ -786,6 +809,13 @@ and reported as passing. They are repo-wide, not stream-specific.
   `daemon has been stopped` and re-run rather than record a verdict**, keep tooling
   in a per-agent subfolder of the scratchpad, and treat a baseline that fails as a
   reason to stop rather than a data point.
+- **A test or lint count summed off disk includes reports the run did not produce.**
+  `build/**/reports` keeps the previous flavour's results, so a counter that globs
+  them reports a total no single command produced. Seen twice in one task: a gate
+  that runs exactly two test tasks (**388** tests) was recorded as **1 388**, and a
+  lint count over "all five reports" included four flavours that gate never built.
+  Neither number was wrong on purpose and both read as authoritative. Count what
+  **this** invocation wrote — or clean first — and name the command that produced it.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
@@ -1014,7 +1044,43 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `AutomaticGainControl` as a settings toggle** — a binding sibling requirement the
   unqualified sentence contradicted. The high-pass helps the canceller and costs
   nothing.
-  **Second consequence, and it is not cosmetic: the VAD threshold moves.**
+  **Second consequence, measured in task 7 against the real APM, and it is not the
+  one this entry first predicted (B, binding).** 800 frames per point, read after
+  5 s of settling, three non-speech characters plus a speech-shaped signal:
+  - **The non-speech floor is now pinned rather than merely louder.** With the
+    APM's suppressor off, webrtc's own `AdaptiveDigital::max_output_noise_level_dbfs
+    = -50` binds, and a non-speech frame settles at **−45.0 dBFS whatever the input**
+    (−44.97 / −44.98 / −44.98 / −44.67 for low-passed noise at −60/−55/−50/−45 in).
+    With NS on it *tracked* the input: −61.9 / −56.6 / −51.1 / −45.6.
+  - **"Every non-speech frame measures louder" is false along the input-level axis.**
+    The shift is **+16.9 dB at −70 and −60 dBFS in, +11.7 at −55, +6.1 at −50,
+    +0.95 at −45, −0.42 at −35, −1.31 at −30** — above about −45 dBFS in it measures
+    *quieter*. It is the cap clamping, not a uniform offset. (Decomposed with AGC2
+    removed the offset *is* uniform, +13…+17 dB, and it hits speech as hard as noise:
+    the APM's suppressor attenuates broadband here, it does not separate.)
+  - **What actually moved is the headroom for speech**, by about the 4.9 dB of
+    effective SNR the suppressor used to hand AGC2: the same input now yields a
+    probability **0.16 lower — 0.608 → 0.443**. Under NS it sat *just* over B5's
+    start of 0.6; it is now under it.
+  - **The live defect is at the bottom of the window, not the top.**
+    `LevelToProbability.SILENCE_DBFS = −50` is below anything the chain now
+    produces: `fromDbfs` never returns less than **0.167**, so **any stop threshold
+    below 0.167 can never be crossed and the detector would never release**. B5's
+    default stop of 0.3 clears it by 4.0 dB of level; a task-12 slider does not.
+  **Ruling.** Move `SILENCE_DBFS` to **−45**, the measured floor, so silence reads
+  0.000 again and every stop threshold stays reachable — that number follows from
+  webrtc's own constant, not from a fixture. **Leave `FULL_DBFS` at −20.** The top
+  of the window cannot be calibrated from a synthetic signal: the stand-in used here
+  has 8.3 dB SNR where a real talker in a real room has 15–30, and under *either*
+  candidate window that stand-in fails to reach 0.6. The sentence that nobody had
+  written down and that is now binding: **"0.6" is not a loudness, it is a demand
+  for about 13 dB of SNR above the floor.** Whether 13 dB is the right demand is a
+  question for a real talker, which makes it **a QA item with hardware, owner B task
+  13** — the live input meter and loopback test is the instrument that can answer it.
+  The test that reports the current numbers already exists
+  (`VoiceActivityDetectorTest.the probability defaults sit at these dBFS levels on
+  the apm window`), so moving the window or the defaults names the new numbers.
+  **First consequence, as originally written:**
   `humla_apm.cpp:88-91` measures `last_level_dbfs` on the **processed** frame, i.e.
   after NS and AGC2. With NS off, every non-speech frame measures louder — and in
   the configuration NS=`NONE` + echo=`WEBRTC`, `LevelToProbability` (−50…−20 dBFS)
