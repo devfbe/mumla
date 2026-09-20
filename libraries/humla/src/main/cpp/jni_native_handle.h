@@ -53,7 +53,10 @@ class HandleTable {
         if (object == nullptr) return 0;
         Cell* cell = new (std::nothrow) Cell();
         if (cell == nullptr) return 0;
-        cell->object.store(object, std::memory_order_relaxed);
+        // Release, not relaxed: get() loads with acquire, and an acquire has nothing to
+        // synchronise with unless the store that publishes the pointer is a release. On arm64
+        // that is one STLR instead of one STR, off the audio path -- add() runs per session.
+        cell->object.store(object, std::memory_order_release);
         try {
             std::lock_guard<std::mutex> lock(mutex_);
             cells_.insert(cell);
