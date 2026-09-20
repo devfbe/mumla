@@ -32,18 +32,33 @@ import se.lublin.mumla.R
 /**
  * Simple adapter to display the users in a single channel.
  * Created by andrew on 24/11/13.
+ *
+ * The adapter holds **one** snapshot of the channel's users and refreshes it in
+ * [notifyDataSetChanged], which is the point at which its owner says the list may be re-read.
+ * Asking the model per call, as this used to, meant `getCount()` and `getItem(position)` answered
+ * about two different moments: a user leaving in between -- which the protocol thread does
+ * whenever it likes -- made the last row an `IndexOutOfBoundsException`. Copy-on-read in the
+ * model cannot fix that, because each call gets a correct copy of a different moment.
  */
 class ChannelAdapter(
     private val context: Context,
     private var channel: IChannel,
 ) : BaseAdapter() {
 
-    override fun getCount(): Int = channel.users.size
+    // Copied, not referenced: `Channel.getUsers()` hands out an unmodifiable *view* of the live
+    // list, so keeping the returned object would be no snapshot at all.
+    private var users: List<IUser?> = channel.users.toList()
 
-    override fun getItem(position: Int): Any = channel.users[position]
+    override fun getCount(): Int = users.size
 
-    override fun getItemId(position: Int): Long =
-        channel.users[position]?.userId?.toLong() ?: -1L
+    override fun getItem(position: Int): Any? = users[position]
+
+    override fun getItemId(position: Int): Long = users[position]?.userId?.toLong() ?: -1L
+
+    override fun notifyDataSetChanged() {
+        users = channel.users.toList()
+        super.notifyDataSetChanged()
+    }
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         val v = convertView
