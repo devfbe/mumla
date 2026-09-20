@@ -29,30 +29,32 @@ import java.util.List;
  * Created by andrew on 03/12/13.
  */
 public class Message implements IMessage {
-    private int mActor;
-    private String mActorName;
-    private List<Channel> mChannels;
-    private List<Channel> mTrees;
-    private List<User> mUsers;
-    private String mMessage;
-    private long mReceivedTime;
+    // Final rather than volatile: a message is built once and read from whichever thread picks it
+    // up, so the constructor's own publication guarantee is the whole of what it needs.
+    // GuardedModelVisibilityTest demands one or the other of every field in this package.
+    private final int mActor;
+    private final String mActorName;
+    private final List<Channel> mChannels;
+    private final List<Channel> mTrees;
+    private final List<User> mUsers;
+    private final String mMessage;
+    private final long mReceivedTime;
 
     public Message(String message) {
-        mMessage = message;
-        mActor = -1;
-        mReceivedTime = new Date().getTime();
-        mChannels = new ArrayList<Channel>();
-        mTrees = new ArrayList<Channel>();
-        mUsers = new ArrayList<User>();
+        this(-1, null, new ArrayList<Channel>(), new ArrayList<Channel>(), new ArrayList<User>(),
+                message);
     }
 
+    // The delegation used to run the other way, with this constructor overwriting five of the
+    // fields the other had just set. Same values, in one place, which is what lets them be final.
     public Message(int actor, String actorName, List<Channel> channels, List<Channel> trees, List<User> users, String message) {
-        this(message);
         mActor = actor;
         mActorName = actorName;
         mChannels = channels;
         mTrees = trees;
         mUsers = users;
+        mMessage = message;
+        mReceivedTime = new Date().getTime();
     }
     @Override
     public int getActor() {

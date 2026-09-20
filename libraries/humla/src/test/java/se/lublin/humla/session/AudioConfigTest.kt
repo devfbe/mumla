@@ -1,0 +1,82 @@
+@file:Suppress("DEPRECATION") // see AudioConfig.kt
+
+package se.lublin.humla.session
+
+import com.google.common.truth.Truth.assertThat
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.Constants
+
+/**
+ * [AudioConfig] carries two decisions of its own: the half-duplex rule (spec A7) and, because
+ * HumlaService reconfigures the pipeline on `config != previous`, structural equality over every
+ * field it holds.
+ */
+@RunWith(RobolectricTestRunner::class)
+class AudioConfigTest {
+    private fun config(requested: Boolean, transmitMode: Int) =
+        AudioConfig(halfDuplexRequested = requested, transmitMode = transmitMode)
+
+    /**
+     * All six corners of the two inputs the property reads, not the two mutations its two clauses
+     * would suggest (spec 4.04: 2^k inputs, not k mutations). `transmitMode` is not a boolean, so
+     * the space is {requested} x {the three transmit modes}.
+     */
+    @Test
+    fun halfDuplexHoldsOnlyWhenItWasRequestedAndTheModeIsPushToTalk() {
+        assertThat(config(true, Constants.TRANSMIT_PUSH_TO_TALK).halfDuplex).isTrue()
+        assertThat(config(true, Constants.TRANSMIT_VOICE_ACTIVITY).halfDuplex).isFalse()
+        assertThat(config(true, Constants.TRANSMIT_CONTINUOUS).halfDuplex).isFalse()
+        assertThat(config(false, Constants.TRANSMIT_PUSH_TO_TALK).halfDuplex).isFalse()
+        assertThat(config(false, Constants.TRANSMIT_VOICE_ACTIVITY).halfDuplex).isFalse()
+        assertThat(config(false, Constants.TRANSMIT_CONTINUOUS).halfDuplex).isFalse()
+    }
+
+    /**
+     * The request survives a mode that suppresses it: this is what makes the old
+     * `EXTRAS_HALF_DUPLEX` handling's defect unrepeatable. That code resolved the rule once, at the
+     * moment the key arrived, against `extras.getInt(EXTRAS_TRANSMIT_MODE)` of the *same* bundle -
+     * which is 0 (voice activity) whenever the bundle does not also carry the transmit mode, so a
+     * settings write that changed only half duplex always resolved to false.
+     */
+    @Test
+    fun theRequestIsRememberedWhileTheModeSuppressesIt() {
+        val requested = config(true, Constants.TRANSMIT_VOICE_ACTIVITY)
+        assertThat(requested.halfDuplex).isFalse()
+        assertThat(requested.copy(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK).halfDuplex).isTrue()
+    }
+
+    /**
+     * Enumerated from the class rather than written out, so a field stream B adds is covered the
+     * moment it exists: a property that does not reach `equals` leaves HumlaService believing the
+     * settings did not change, and the pipeline keeps the old value until the next connect.
+     */
+    @Test
+    fun everyConstructorPropertyParticipatesInEquality() {
+        val base = AudioConfig()
+        val arity = generateSequence(1) { it + 1 }
+            .takeWhile { runCatching { AudioConfig::class.java.getMethod("component$it") }.isSuccess }
+            .count()
+        assertThat(arity).isAtLeast(19)
+        val ctor = AudioConfig::class.java.declaredConstructors.single { it.parameterCount == arity }
+        val values = (1..arity)
+            .map { AudioConfig::class.java.getMethod("component$it").invoke(base) }
+            .toTypedArray()
+
+        for (i in 0 until arity) {
+            val mutated = values.copyOf()
+            mutated[i] = perturb(values[i])
+            assertThat(ctor.newInstance(*mutated)).isNotEqualTo(base)
+        }
+        assertThat(ctor.newInstance(*values)).isEqualTo(base)
+    }
+
+    private fun perturb(value: Any?): Any = when (value) {
+        is Boolean -> !value
+        is Int -> value + 1
+        is Float -> value + 1f
+        is String -> value + "-other"
+        else -> error("AudioConfig gained a ${value?.javaClass} field; teach this test to vary it")
+    }
+}

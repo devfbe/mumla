@@ -38,15 +38,25 @@ import se.lublin.humla.Constants;
 public class Server implements Parcelable {
     private static final String TAG = Server.class.getName();
 
-    private long mId;
-    private String mName;
-    private String mHost;
-    private int mPort;
-    private String mUsername;
-    private String mPassword;
+    // Volatile, not final: the setters below are called from the UI while srvResolve() writes
+    // mResolvedHost and mResolvedPort from the connecting thread and HumlaService reads them back.
+    // Visibility is all volatile can give, and all it is here for; it is not a claim that the
+    // fields are independent. mResolvedHost and mResolvedPort are not: srvResolve() writes them as
+    // a pair, but getSrvHost() and getSrvPort() call it one at a time, and setHost()/setPort()
+    // clear mResolvedHost, so a UI edit landing between two such calls hands the caller a host
+    // from one resolution and a port from another (ServerInfoTask:50 and ServerInfoFragment:90-91
+    // both read them as two calls). Pre-existing and out of this task's scope - written down so
+    // the volatile is not read as covering more than it does.
+    // GuardedModelVisibilityTest demands the modifier of every field in this package.
+    private volatile long mId;
+    private volatile String mName;
+    private volatile String mHost;
+    private volatile int mPort;
+    private volatile String mUsername;
+    private volatile String mPassword;
 
-    private String mResolvedHost = null;
-    private int mResolvedPort;
+    private volatile String mResolvedHost = null;
+    private volatile int mResolvedPort;
 
     public static final Parcelable.Creator<Server> CREATOR = new Parcelable.Creator<Server>() {
 

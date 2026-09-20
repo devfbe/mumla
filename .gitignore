@@ -22,3 +22,6 @@ local.properties
 # Created by the CI before_script, and by anyone running the same commands locally.
 .nix-cache/
 .devshell
+
+# Left behind by every Kotlin build.
+.kotlin/

@@ -24,9 +24,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import se.lublin.humla.R;
 import se.lublin.humla.model.Channel;
@@ -43,9 +43,46 @@ import se.lublin.humla.util.MessageFormatter;
  * Handles network messages related to the user-channel tree model.
  * This includes channels, users, messages, and permissions.
  * Created by andrew on 18/07/13.
+ *
+ * <p><b>Threading.</b> Every message* method runs on the "humla-protocol" thread and is the only
+ * thing that writes anything here. The getters are called from the main thread through
+ * IHumlaSession, and ChannelSearchProvider reaches getChannel/getUsers from a binder thread. That
+ * one-writer rule is what makes the compound accesses below safe, not the maps: "look the channel
+ * up, and put a new one if it is missing" is a read-check-write that a ConcurrentHashMap does not
+ * make atomic either. A second writing thread would have to turn each of those into computeIfAbsent
+ * and would still leave messageChannelState's read-modify-write of a Channel racing with itself.
+ * The concurrent maps are here so that a reader never sees a half-rehashed table, and the volatile
+ * fields so that a reader never sees a half-built object.
  */
 public class ModelHandler extends HumlaTCPMessageListener.Stub {
     private static final String TAG = ModelHandler.class.getName();
+
+    /**
+     * How far below the root a channel may be placed. The server picks every parent id, so the
+     * depth of the tree is server-controlled, and every walk over it recurses once per level -
+     * {@link Channel#getSubchannelUserCount()} from {@code ChannelListAdapter} (:438) and
+     * {@code constructNodes} (:450) both do, on the main thread, where {@code updateChannels()}
+     * catches {@code IllegalStateException} and nothing else. A chain of a few thousand channels
+     * is enough to turn that into a {@code StackOverflowError}, which no catch in the tree stops.
+     *
+     * <p>Both sides of the number, since one of them is measured and one is chosen. <b>Below:</b>
+     * measured here, the deepest chain {@code getSubchannelUserCount()} survives is 4 096 on a 1 MB
+     * thread stack and 65 536 on the 8 MB one Android gives the main thread, which is where the
+     * walk actually runs - so 256 has a factor of 16 in hand against the smaller of those and 256
+     * against the real one. <b>Above:</b> the server's own {@code channelnestinglimit} defaults to
+     * 10 and its {@code channelcountlimit} to 1 000, so 256 is 25 times the nesting a default
+     * server permits at all - but it is a chosen number, not a derived one, and a server configured
+     * past it loses the channels below 256 to the root (see {@link #fallbackParent}) rather than
+     * to nowhere.
+     */
+    public static final int MAX_CHANNEL_DEPTH = 256;
+
+    /**
+     * The id Mumble gives the root channel. {@code ChannelListAdapter} starts its walk at this
+     * channel unless the user has pinned others ({@code :94-98}), and {@code HumlaService:922}
+     * hands it out as "the" root, so it is the one place a channel is certain to be seen from.
+     */
+    public static final int ROOT_CHANNEL_ID = 0;
 
     private final Context mContext;
     private final Map<Integer, Channel> mChannels;
@@ -54,16 +91,25 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
     private final List<Integer> mLocalIgnoreHistory;
     private final IHumlaObserver mObserver;
     private final HumlaLogger mLogger;
-    private ServerSettings mServerSettings;
-    private int mPermissions;
-    private int mSession;
+    // Written on the protocol thread, read from the main thread through IHumlaSession:
+    // getServerSettings() (HumlaService:1243) and getPermissions() (:928). An unsafely published
+    // ServerSettings reference can be seen half-initialised. mSession is protocol-thread-only
+    // today; it is volatile so that the class has one rule rather than two, and
+    // GuardedModelVisibilityTest keeps the rule from rotting.
+    private volatile ServerSettings mServerSettings;
+    private volatile int mPermissions;
+    private volatile int mSession;
 
     public ModelHandler(Context context, IHumlaObserver observer, HumlaLogger logger,
                         @Nullable List<Integer> localMuteHistory,
                         @Nullable List<Integer> localIgnoreHistory) {
         mContext = context;
-        mChannels = new HashMap<Integer, Channel>();
-        mUsers = new HashMap<Integer, User>();
+        // ConcurrentHashMap, not HashMap: getChannel()/getUser() are called from the main thread
+        // while the protocol thread puts, and a HashMap read during a rehash returns null for a
+        // key that is present (measured: 20 rounds out of 20). getChannel() returning a spurious
+        // null makes ChannelListAdapter.updateChannels() skip a root channel silently.
+        mChannels = new ConcurrentHashMap<Integer, Channel>();
+        mUsers = new ConcurrentHashMap<Integer, User>();
         mLocalMuteHistory = localMuteHistory;
         mLocalIgnoreHistory = localIgnoreHistory;
         mObserver = observer;
@@ -94,6 +140,91 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         return channel;
     }
 
+    /**
+     * Whether {@code channel} may be hung under {@code parent}, which is the one thing a
+     * {@code ChannelState} frame can ask for that the model cannot represent. Both refusals leave
+     * the channel named and in the map; where it then goes is {@link #fallbackParent}'s business,
+     * and it is not "no parent" - see there for why that state is not the one a channel whose
+     * parent has not arrived yet is in.
+     *
+     * <p>A refused parent is a tree that is wrong in one place. An accepted one is a process that
+     * dies: the walk over the tree recurses per level and catches nothing that an
+     * {@code Error} passes through.
+     *
+     * <p>Two separate refusals, because they are two separate frames:
+     * <ul>
+     *   <li>{@code parent} is {@code channel} or hangs below it - the frame would make the channel
+     *       its own ancestor. One frame is enough ({@code id == parent}), two are enough for a
+     *       longer knot, and the walk over a tree with a cycle in it never ends.</li>
+     *   <li>{@code parent} already sits {@link #MAX_CHANNEL_DEPTH} below the root. The tree stays
+     *       finite, so the walk terminates, but the recursion runs out of stack long before the
+     *       server runs out of channel ids.</li>
+     * </ul>
+     *
+     * <p>Identity rather than equality: two {@link Channel} objects with the same id are equal, and
+     * the question here is about the objects that are actually linked together.
+     */
+    private boolean mayHang(Channel channel, Channel parent) {
+        int depth = 0;
+        for(Channel above = parent; above != null; above = above.getParent()) {
+            if(above == channel) {
+                Log.w(TAG, "refusing to make channel " + channel.getId() + " its own ancestor");
+                return false;
+            }
+            if(++depth > MAX_CHANNEL_DEPTH) {
+                Log.w(TAG, "refusing to hang channel " + channel.getId() + " deeper than "
+                        + MAX_CHANNEL_DEPTH);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Where a channel goes when {@link #mayHang} refuses the parent its frame names, or
+     * {@code null} to leave it where it is.
+     *
+     * <p>Leaving it parentless is not an option, which is the correction to what this file used to
+     * say. A parentless channel is <em>not</em> in the state of one whose parent has not arrived
+     * yet: that one heals itself on the next frame, this one never does, because the server does
+     * not resend a {@code ChannelState} it has already sent and nothing here retries. And the
+     * consequence is bigger than one channel missing its place -
+     * {@code ChannelListAdapter.updateChannels()} ({@code :311-328}) walks only <em>downward</em>
+     * from its root channels through {@code getSubchannels()}, and nothing in the app iterates
+     * {@link #getChannels()}, so a parentless channel is not in the list at all and neither is any
+     * user standing in it: {@code constructNodes} ({@code :450}) never reaches its
+     * {@code getUsers()}. For the rest of the connection, with a {@code Log.w} as the only trace.
+     *
+     * <p>So a refused channel is hung under the {@link #ROOT_CHANNEL_ID root} instead. The tree
+     * stays finite and acyclic - the root is checked by {@link #mayHang} like any other parent -
+     * and the channel stays visible with its users in the wrong place rather than invisibly absent.
+     *
+     * <p>A channel that already has a parent keeps it: it is in the tree, in a place the server
+     * asked for at some point, and moving it to the root on a frame we refuse would be the one
+     * thing worse than ignoring that frame
+     * ({@code aRefusedFrameLeavesAChannelWhereTheServerAlreadyPutIt}).
+     *
+     * <p>Each of the three lines below was a survivor when this was written: only the call site was
+     * covered, so the method looked tested from one step up while no branch in it was. A fourth
+     * line - a separate refusal for the root naming itself - was removed rather than pinned,
+     * because by the time this runs the channel is already in {@code mChannels} under its own id,
+     * so for the root the lookup returns this very object and the {@link #mayHang} below refuses it
+     * for being its own ancestor. Two guards, one observable.
+     */
+    private Channel fallbackParent(Channel channel) {
+        if(channel.getParent() != null) return null;
+        Channel root = mChannels.get(ROOT_CHANNEL_ID);
+        // The root's own frame need not have arrived first. Without the stub the walk below starts
+        // at null, terminates immediately and reports the hang as allowed, and the channel is left
+        // with the null parent this whole method exists to avoid.
+        if(root == null) root = createStubChannel(ROOT_CHANNEL_ID);
+        // And the fallback is a hang like any other, so it is asked the same question. Handing the
+        // root back unchecked is how the fallback itself would build the cycle the guard exists to
+        // refuse: for a frame that names the root as its own parent, the root would become its own
+        // parent and every walk over the tree would stop returning.
+        return mayHang(channel, root) ? root : null;
+    }
+
     public Map<Integer, Channel> getChannels() {
         return Collections.unmodifiableMap(mChannels);
     }
@@ -121,7 +252,6 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             return;
 
         Channel channel = mChannels.get(msg.getChannelId());
-        Channel parent = mChannels.get(msg.getParent());
 
         final boolean newChannel = channel == null;
 
@@ -137,11 +267,25 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             channel.setPosition(msg.getPosition());
 
         if(msg.hasParent()) {
-            Channel oldParent = channel.getParent();
-            channel.setParent(parent);
-            parent.addSubchannel(channel);
-            if(oldParent != null) {
-                oldParent.removeSubchannel(channel);
+            // The server picks the parent id, and it can name a channel we have no ChannelState
+            // for yet. Dereferencing that null killed the process once parsing moved to the
+            // humla-protocol thread, which installs no uncaught-exception handler. A stub is what
+            // this class already does for an unknown channel on the user path: the real
+            // ChannelState lands on the same object later and fills in its name.
+            //
+            // The lookup belongs here and not above the block that creates the channel: a frame
+            // whose channel id IS its parent id would miss there, and createStubChannel would then
+            // put a fresh nameless channel over the one this frame has just named and announced.
+            Channel parent = mChannels.get(msg.getParent());
+            if(parent == null) parent = createStubChannel(msg.getParent());
+            if(!mayHang(channel, parent)) parent = fallbackParent(channel);
+            if(parent != null) {
+                Channel oldParent = channel.getParent();
+                channel.setParent(parent);
+                parent.addSubchannel(channel);
+                if(oldParent != null) {
+                    oldParent.removeSubchannel(channel);
+                }
             }
         }
 
@@ -156,19 +300,26 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         }
 
         if(msg.getLinksCount() > 0) {
-            channel.clearLinks();
+            List<Channel> links = new ArrayList<Channel>(msg.getLinksCount());
             for(int link : msg.getLinksList()) {
-                Channel linked = mChannels.get(link);
-                channel.addLink(linked);
+                links.add(mChannels.get(link));
                 // Don't add this channel to the other channel's link list- this update occurs on
                 // server synchronization, and we will get a message for the other channels' links
-                // laster.
+                // later.
             }
+            // One replacement rather than a clear followed by adds: the main thread must not see
+            // the emptied list in between.
+            channel.setLinks(links);
         }
 
+        // Unlike a parent, a link to a channel we do not know is skipped rather than stubbed: it
+        // is an attribute of a channel we already have, not a place in the tree that the rest
+        // hangs off. Channel.addLink/removeLink tolerate the null, the second call in each pair
+        // would not.
         if(msg.getLinksRemoveCount() > 0) {
             for(int link : msg.getLinksRemoveList()) {
                 Channel linked = mChannels.get(link);
+                if(linked == null) continue;
                 channel.removeLink(linked);
                 linked.removeLink(channel);
             }
@@ -177,6 +328,7 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         if(msg.getLinksAddCount() > 0) {
             for(int link : msg.getLinksAddList()) {
                 Channel linked = mChannels.get(link);
+                if(linked == null) continue;
                 channel.addLink(linked);
                 linked.addLink(channel);
             }
