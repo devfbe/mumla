@@ -809,6 +809,11 @@ and reported as passing. They are repo-wide, not stream-specific.
   `daemon has been stopped` and re-run rather than record a verdict**, keep tooling
   in a per-agent subfolder of the scratchpad, and treat a baseline that fails as a
   reason to stop rather than a data point.
+- **zsh does not word-split an unquoted `$VAR`.** A mutation harness written for bash
+  and run under this project's shell reported **NO RESULTS** for four mutations
+  instead of a verdict — silently, because "no results" is not "failed". Same family
+  as the stdout/stderr and regex cases: the tooling answered a question nobody asked.
+  Quote or use arrays, and make "no result" an error rather than a row.
 - **A test or lint count summed off disk includes reports the run did not produce.**
   `build/**/reports` keeps the previous flavour's results, so a counter that globs
   them reports a total no single command produced. Seen twice in one task: a gate
@@ -1067,20 +1072,56 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
     produces: `fromDbfs` never returns less than **0.167**, so **any stop threshold
     below 0.167 can never be crossed and the detector would never release**. B5's
     default stop of 0.3 clears it by 4.0 dB of level; a task-12 slider does not.
-  **Ruling.** Move `SILENCE_DBFS` to **−45**, the measured floor, so silence reads
-  0.000 again and every stop threshold stays reachable — that number follows from
-  webrtc's own constant, not from a fixture. **Leave `FULL_DBFS` at −20.** The top
-  of the window cannot be calibrated from a synthetic signal: the stand-in used here
-  has 8.3 dB SNR where a real talker in a real room has 15–30, and under *either*
-  candidate window that stand-in fails to reach 0.6. The sentence that nobody had
-  written down and that is now binding: **"0.6" is not a loudness, it is a demand
-  for about 13 dB of SNR above the floor.** Whether 13 dB is the right demand is a
-  question for a real talker, which makes it **a QA item with hardware, owner B task
-  13** — the live input meter and loopback test is the instrument that can answer it.
-  The test that reports the current numbers already exists
-  (`VoiceActivityDetectorTest.the probability defaults sit at these dBFS levels on
-  the apm window`), so moving the window or the defaults names the new numbers.
-  **First consequence, as originally written:**
+  **Ruling, corrected by the review that measured it independently.** The first
+  version of this ruling moved `SILENCE_DBFS` to −45 and left `FULL_DBFS` at −20 on
+  the argument that the top could not be calibrated and should therefore stay put.
+  **That is wrong, and the arithmetic is not subtle:** `fromDbfs` is a ratio over the
+  window *width*, so raising one edge rescales the whole curve. Leaving the top alone
+  does not preserve the top; it tightens it.
+
+  | window | start 0.6 as a level | **SNR above the floor** | stop 0.3 | SNR |
+  |---|---|---|---|---|
+  | today −50/−20 | −32.0 dBFS | **13.0 dB** | −41.0 dBFS | 4.0 dB |
+  | −45/−20 (first ruling) | −30.0 dBFS | **15.0 dB** | −37.5 dBFS | 7.5 dB |
+  | −45/−25 (task 7's proposal) | −33.0 dBFS | **12.0 dB** | −39.0 dBFS | 6.0 dB |
+  | **−45/−23.3 (adopted)** | −32.0 dBFS | **13.0 dB** | −38.5 dBFS | 6.5 dB |
+
+  The first ruling would have demanded **2 dB more** SNR than today, and put the
+  weakest talker of the 15–30 dB range named in this very entry at **exactly 0.600** —
+  a coin flow per frame. Measured on the same speech stand-in, its stop reserve
+  shrinks from 0.143 to 0.032, so the tail of a sentence clips.
+
+  **Adopted: `SILENCE_DBFS = −45`, `FULL_DBFS = −23.3`.** The bottom is a defect and
+  is fixed; the top is chosen to be the value that **changes the start contract least**
+  — 13.0 dB, exactly today's — because it cannot be calibrated without a real talker
+  and the honest move is to claim nothing. The stop necessarily moves from 4.0 to
+  6.5 dB SNR: with one edge pinned by the floor there is one free parameter and two
+  contracts, and the start is the one that decides whether a person is heard at all.
+  The reviewer preferred the round −25; it is defensible and 1 dB more generous, and
+  it is rejected only because it changes a contract nobody has measured.
+  **What is binding about "0.6":** it is not a loudness, it is a demand for SNR above
+  the floor — **13.0 dB under the adopted window**, 13.0 under today's, 15.0 under the
+  ruling this replaces. The first version of that sentence gave the number without its
+  window, in the same paragraph as a ruling that changed the window. Name the axis.
+  **Still open, and it grew.** The NS-off decision itself cost speech about 4.9 dB of
+  effective SNR (probability 0.61 → 0.44 on the same input), so holding the *nominal*
+  start contract at 13.0 dB leaves a real talker slightly worse off than before that
+  decision. Whether to spend that back is a question for a real voice, not a
+  synthetic one — **QA item with hardware, owner B task 13** (live input meter and
+  loopback), together with the top of the window itself.
+  **Measurement caveats, from two independent runs.** The floor is **not** one number:
+  across two measurements and three non-speech characters it spans **−43.5 … −47.8
+  dBFS**, median ≈ −45, and it is flat against *input level* inside one character —
+  that is the axis. −45 is a measured median with spread, **not** derived from
+  webrtc's constant (that constant is −50). And the sign reversal the first version of
+  this entry recorded as fact (−0.42 dB at −35, −1.31 at −30) **did not reproduce**:
+  27 points, three characters, minimum **+3.18 dB**, never negative, and the curve
+  turns back up above −42 because the same AGC2 ceiling binds with NS on. What both
+  runs do support: the shift falls from about +17 dB to a few dB near −45 dBFS in and
+  is not meaningful above that — it is the cap clamping, not a uniform offset. The
+  cleanest evidence for that is the decomposition with AGC2 removed, where the offset
+  **is** uniform: +18.13 dB at seven of eight points, identical to two decimals.
+    **First consequence, as originally written:**
   `humla_apm.cpp:88-91` measures `last_level_dbfs` on the **processed** frame, i.e.
   after NS and AGC2. With NS off, every non-speech frame measures louder — and in
   the configuration NS=`NONE` + echo=`WEBRTC`, `LevelToProbability` (−50…−20 dBFS)
@@ -1278,6 +1319,132 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   paragraph in the core ledger that reads *"the same state as a channel whose
   parent frame has not arrived yet"* is **withdrawn**: one heals on the next frame
   and the other never does, which is the whole point.
+
+- **Denying `BLUETOOTH_CONNECT` must not take the headset away (P, task 7 review, decided).**
+  The permission is requested because spec P3 says so and because the store listing has
+  carried the Nearby-devices entry since task 2 — that justification stands. But the
+  implementation went further than P3 asked: `shouldRouteToBluetooth = wish && hasPermission`
+  **refuses to route** without it. Measured against the SDK's own annotation database
+  (`platforms/android-36/data/annotations.zip`): of 26 annotated `AudioManager` members,
+  exactly four carry a `RequiresPermission` and `startBluetoothSco()` is not among them;
+  `BLUETOOTH_CONNECT` appears on 136 members, 130 of them under `android.bluetooth.*`, none
+  in `android.media`. The same holds for `setCommunicationDevice`, which A8 migrates to.
+  So a user on API 31+ who denies the dialog loses a headset that, by the platform's own
+  documentation, would have worked — and before this task the menu item asked for nothing.
+  **Ruling: keep asking, stop gating.** Route on the wish alone, and wrap the call so a
+  `SecurityException` from an OEM that does enforce it is caught, reported once in the chat
+  log and does not crash. That keeps the feature for the deny case, stays safe where the
+  platform is stricter than its own annotations, and removes a behaviour regression nobody
+  decided to make. "Absent from the annotation database" is not "never throws anywhere",
+  which is exactly why the call is wrapped rather than trusted.
+
+- **The Bluetooth wish has exactly one carrier, and it is the preference (P task 7 /
+  A task 8, binding).** After P7 the wish lives in `pref_bluetooth_sco` on disk and
+  survives a reconnect — which is the whole point, since the user's complaint was
+  that it did not. A's task 8 introduces `ScoRouter.wanted` in memory, so two
+  carriers exist. Ruling: **the preference is the truth, `ScoRouter.wanted` is
+  derived state initialised from it at connect, and nothing in the UI reads the
+  in-memory wish.** Two riders that fall out of it, both for A task 8: if
+  `MumlaService` ever sets the wish through `EXTRAS_BLUETOOTH_WANTED`/`configureExtras`
+  rather than `enableBluetoothSco()`, the connect-time hook must move with it — today
+  it calls the public method, which exists in both worlds; and after A8
+  `usingBluetoothSco()` means the in-memory wish while `isBluetoothScoActive()` means
+  the state. **No app code reads `usingBluetoothSco()` any more** (verified: its only
+  caller was the menu path P7 deleted), so whoever displays the wish reads the
+  preference — otherwise the UI has two truths again, which is the defect class this
+  whole project has been removing.
+
+- **Measured: the Gradle knobs do not work, so the lever is fewer invocations (process).**
+  Paired runs on one machine, `:libraries:humla:testDebugUnitTest`: `maxParallelForks`
+  1 → 6 is **22/24 s against 20/25 s, i.e. nothing**; the **configuration cache is worse**,
+  35–45 s against 22–24 s, because AGP pays more to serialize the model than the cache
+  returns; a no-op invocation with everything up to date still costs **7 s**. So the test
+  execution is not the bottleneck, the invocation is, and no setting fixes it.
+  Two rules follow, and they are binding on every dispatch:
+  1. **Never `--rerun-tasks` for a mutation run — use `--rerun` on the one test task.**
+     `--rerun-tasks` re-runs the entire graph including the CMake native build for
+     **three ABIs**, which is the most expensive thing in this project, to answer a
+     question about one test class. Several reviewers did exactly this, 20–55 times
+     per task.
+  2. **The full gate runs once, at the end of the task.** `assembleFossDebug` plus lint
+     is the proof that the app still builds; it is not an iteration step. Mutations run
+     the single relevant test task and nothing else.
+  What is *not* worth doing, measured: forks, the configuration cache, and narrowing the
+  ABI list — the native artefacts are cached anyway unless the stream touches C++, which
+  only stream B does.
+  For wall clock the remaining lever is **more concurrent agents, not faster builds**.
+  Structure that allows it: a review is read-only by mandate, so it runs in a **detached
+  worktree at the commit under review**, which frees the stream's own worktree for the
+  next implementer. Two agents per stream instead of one.
+
+- **Measured: where the context actually goes, and what was done about it (process).**
+  Across 135 subagent runs, 5.13 M tokens of tool output: **Bash 87.5 %, Read 11.6 %**.
+  Inside Bash the split is **reading source with `sed`/`cat` 73.6 %**, grep 10 %, git
+  9.5 %, and **Gradle only 6.5 %** — the build runs, which were assumed to dominate,
+  are the smallest real line. Broken down by what is being read, as a share of *all*
+  tool output: **Kotlin/Java source 28 %**, **the spec, ledgers, briefs and plans
+  together 18 %**, C/C++ 3.5 %. Whole source files are read whole only 1.6 % of the
+  time; the 1 378 source reads average ~260 lines, i.e. they are already contiguous
+  reading, which is what finds a guard standing in front of a call.
+  Two things follow. A symbol-level retrieval tool addresses ~31 % and would
+  realistically save 10–15 %, against carrying its schemas in every agent context, a
+  Kotlin language server, a `compile_commands.json` the Gradle/NDK build does not
+  emit — and a new way to see a method body without what guards it, which is this
+  project's own worst failure class. **Not adopted**; the honest test, if it is ever
+  wanted, is one task with and one without, compared on tool tokens.
+  The 18 % in documents is free to reclaim and was: each stream's ledger is now split
+  into **`contracts.md`** (every contract, obligation to a later task, cross-stream
+  report and open item with an owner — 14–18 KB, mandatory reading) and
+  **`progress.md`** (measurements, fix rounds, reasoning — 35–75 KB and growing, read
+  by `grep`/`sed` only, never whole). Dispatches name `contracts.md`. New obligations
+  go in **both**: the requirement in the first, the measurement behind it in the second.
+  **And four task pairs were merged**, because the cost that dominates is not what an
+  agent loads but **how many agents there are**: three per task (implementer, reviewer,
+  fix round) at 150–330 k tokens each, so merging two tasks turns six agents into three
+  and saves ~30 % even after the merged task's agents work longer. Merged where the
+  second task consumes the first and both need the same scaffolding: `A10+A12`,
+  `B12+B13`, `D12+D13`, `P9+P10` — two of the absorbed briefs were 3 KB and 5 KB, absurd
+  as standalone tasks with three agents each. **The binding rider**: a bigger diff does
+  not get more mutations from the review, it gets the same ones spread over more code,
+  so the input, effect and fake passes are run and reported **per half**.
+  **Two limits held.** Tasks whose halves are each large or carry their own hardware
+  seam were left alone (`B9`/`B10`/`B11`, `P8`, `D11`), and the integration task must
+  stay last. And **reviewer and fix round are not merged**, tempting as it is — the
+  reviewer has the deepest context of anyone, but the fix round has **refuted the
+  reviewer** more than once: on chat task 9 the reviewer wrote off three null checks as
+  "real and covered" and the fix round measured one of them surviving all 31 tests.
+  Fresh eyes on the reviewer's findings are not a luxury, they are reproducibly the find.
+  And **core task 9 was split**: its brief alone was 93.5 KB, which is not merely
+  expensive but badly shaped — a faithful Kotlin conversion guarded by characterization
+  tests and a behaviour change are two different review questions. **9a** is
+  characterization plus conversion with no behaviour change (46 KB); **9b** is the
+  wiring (52 KB), and there every characterization test that goes red is a behaviour
+  change to justify or a defect. Core therefore has 13 tasks, not 12.
+
+- **Never point a dispatch at a plan file — point it at the brief (process, mine).**
+  The per-task brief is a **byte-identical extract** of that task's plan section, so
+  naming the plan as well is pure redundancy with a 100 000-token downside: the core
+  plan is 412 KB (~103 k tokens), the audio plan 374 KB, while a typical brief is
+  16–25 KB. Measured across the agents run so far: **zero** full reads of any plan
+  and **146** targeted range reads — the agents were doing the right thing on their
+  own, which is luck, not instruction. So the dispatch says: *the brief is the task;
+  if you need another task's section — a downstream contract, a fixture another task
+  will reuse — read that range with `sed -n 'A,Bp'` and never open the whole file.*
+  The same arithmetic applies to what is growing: the spec is 104 KB (~26 k) and is
+  read in full by every agent, which is worth it because every round has produced a
+  finding from it; the stream ledgers are 35–77 KB and climbing, and "read it whole"
+  will stop being the right instruction for them before it stops being right for the
+  spec.
+
+- **A freeze list must be diffed against the task's own Modify list (process, mine).**
+  P7's brief said *Modify: `ChannelListFragment.kt`* and my standing rule in the same
+  dispatch said that file must stay at null diff. The implementer executed the task,
+  flagged the contradiction, and mitigated it — the fragment work in two individually
+  revertable commits, the new tests in a new file, and the five files that had just
+  cost 44 mutations at a proven null diff. That was the right call and the rule was
+  mine to get wrong: a freeze exists to protect files a *previous* round paid for,
+  and when it names a file the current task must change, it is the freeze that is
+  stale. Check the two lists against each other before dispatching.
 
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
