@@ -15,12 +15,15 @@ import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.HumlaTCPMessageListener
+import se.lublin.humla.protocol.HumlaUDPMessageListener
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.HumlaCallbacks
 import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.HumlaLogger
 import se.lublin.humla.util.HumlaObserver
+import java.lang.reflect.Method
+import java.security.cert.X509Certificate
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
@@ -85,6 +88,25 @@ class HumlaConnectionProtocolThreadTest {
             Mumble.ServerSync.newBuilder().setSession(session).setMaxBandwidth(72_000).build().toByteArray()
         )
         awaitOnMain("onConnectionSynchronized delivered") { listener.synchronizedCount.get() == 1 }
+    }
+
+    /**
+     * Runs [event] on the protocol thread in the window production actually hits: [disconnect] has
+     * been asked for and the teardown it posted is queued, but has not run yet - so both transports
+     * are still wired up and a callback that is not guarded really does reach them.
+     *
+     * The gate is what makes that interleaving a fact rather than a hope. Without it the event and
+     * the teardown race, and every assertion below would also hold for the run in which the
+     * teardown won, which is the run that proves nothing.
+     */
+    private fun inTheTeardownWindow(tcp: FakeTcpTransport, event: () -> Unit) {
+        val gate = CountDownLatch(1)
+        connection.protocolHandler.post { gate.await() }
+        connection.protocolHandler.post { event() }
+        connection.disconnect()
+        gate.countDown()
+        awaitUntil(description = "teardown ran behind the queued callback") { tcp.disconnectCalls == 1 }
+        mainLooper.idle()
     }
 
     @Test
@@ -367,7 +389,148 @@ class HumlaConnectionProtocolThreadTest {
         awaitUntil(description = "protocol thread quit") { liveProtocolThreads().isEmpty() }
     }
 
+    /**
+     * [HumlaConnection.onTCPConnectionEstablished] behind a disconnect. The observable is the UDP
+     * transport, not the listener: the terminal gate drops a late onConnectionEstablished whether
+     * or not this guard is there, so an assertion on the listener would stay green without it.
+     */
+    @Test
+    fun anEstablishedCallbackBehindADisconnectStartsNoSecondUdpTransport() {
+        val tcp = connectAndEstablish(forceTcp = false)
+        awaitUntil(description = "udp started") { transports.udps.isNotEmpty() }
+
+        inTheTeardownWindow(tcp) { connection.onTCPConnectionEstablished() }
+
+        assertThat(transports.udps).hasSize(1)
+        assertThat(connection.isConnected).isFalse()
+    }
+
+    /** [HumlaConnection.onUDPDataReceived] behind a disconnect: the audio path is already down. */
+    @Test
+    fun aDatagramArrivingBehindADisconnectIsNotDispatched() {
+        val tcp = connectAndEstablish()
+        val seen = AtomicInteger()
+        connection.addUDPMessageHandlers(object : HumlaUDPMessageListener.Stub() {
+            override fun messageVoiceData(data: ByteArray, messageType: HumlaUDPMessageType) {
+                seen.incrementAndGet()
+            }
+        })
+
+        inTheTeardownWindow(tcp) { connection.onUDPDataReceived(voiceDatagram) }
+
+        assertThat(seen.get()).isEqualTo(0)
+    }
+
+    /**
+     * [HumlaConnection.resyncCryptState] behind a disconnect. It sent through the transport
+     * directly, which bypassed the connected check every other send goes through, so it was the one
+     * callback that could still put bytes on a socket the user had already closed.
+     */
+    @Test
+    fun aCryptResyncBehindADisconnectPutsNothingOnTheWire() {
+        val tcp = connectAndEstablish()
+        val sentBefore = tcp.sent.toList()
+
+        inTheTeardownWindow(tcp) { connection.resyncCryptState() }
+
+        assertThat(tcp.sent).containsExactlyElementsIn(sentBefore).inOrder()
+    }
+
+    /**
+     * [HumlaConnection.onTCPConnectionFailed] behind a disconnect: it recorded the failure as this
+     * connection's error after the disconnect had already been reported as clean, so the consumer
+     * saw a null reason and a non-null [HumlaConnection.error] for the same connection.
+     */
+    @Test
+    fun aTransportFailureBehindADisconnectDoesNotBecomeTheConnectionsError() {
+        val tcp = connectAndEstablish()
+
+        inTheTeardownWindow(tcp) {
+            connection.onTCPConnectionFailed(
+                HumlaException("late failure", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
+            )
+        }
+
+        assertThat(connection.error).isNull()
+        assertThat(listener.disconnects).containsExactly(null)
+    }
+
+    /**
+     * The structural half of the guard set, and the reason it is written with reflection rather
+     * than as a ninth hand-written case: every method of both transport listener interfaces has to
+     * be inert in the teardown window, so a callback a later task adds inherits the requirement
+     * instead of becoming the next mutation nobody thought to try. Adding a callback fails this
+     * test until someone has decided what it does behind a disconnect.
+     */
+    @Test
+    fun noTransportCallbackDoesAnyWorkBehindADisconnect() {
+        val tcp = connectAndEstablish(forceTcp = false)
+        awaitUntil(description = "udp started") { transports.udps.isNotEmpty() }
+        val frames = AtomicInteger()
+        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
+            override fun messageVersion(msg: Mumble.Version) { frames.incrementAndGet() }
+        })
+        val datagrams = AtomicInteger()
+        connection.addUDPMessageHandlers(object : HumlaUDPMessageListener.Stub() {
+            override fun messageVoiceData(data: ByteArray, messageType: HumlaUDPMessageType) {
+                datagrams.incrementAndGet()
+            }
+        })
+        val sentBefore = tcp.sent.toList()
+        val invoked = CopyOnWriteArrayList<String>()
+
+        inTheTeardownWindow(tcp) { invoked += invokeEveryTransportCallback() }
+
+        assertThat(invoked).containsExactly(
+            "onTCPConnectionDisconnect", "onTCPConnectionEstablished", "onTCPConnectionFailed",
+            "onTCPMessageReceived", "onTLSHandshakeFailed",
+            "onUDPConnectionError", "onUDPDataReceived", "resyncCryptState",
+        )
+        assertThat(frames.get()).isEqualTo(0)
+        assertThat(datagrams.get()).isEqualTo(0)
+        assertThat(tcp.sent).containsExactlyElementsIn(sentBefore).inOrder()
+        assertThat(transports.udps).hasSize(1)
+        assertThat(connection.error).isNull()
+    }
+
+    /** Invokes every declared method of both transport listener interfaces on [connection]. */
+    private fun invokeEveryTransportCallback(): List<String> {
+        val interfaces = listOf(
+            HumlaTCP.TCPConnectionListener::class.java,
+            HumlaUDP.UDPConnectionListener::class.java,
+        )
+        val names = mutableListOf<String>()
+        for (iface in interfaces) {
+            for (method in iface.declaredMethods.sortedBy { it.name }) {
+                method.invoke(connection, *method.parameterTypes.map { argumentFor(method, it) }.toTypedArray())
+                names += method.name
+            }
+        }
+        return names
+    }
+
+    private fun argumentFor(method: Method, type: Class<*>): Any = when {
+        type == HumlaTCPMessageType::class.java -> HumlaTCPMessageType.Version
+        type == Int::class.javaPrimitiveType -> versionFrame.size
+        // The only parameter type two callbacks share, and they need different bytes: a protobuf
+        // for the TCP side, a datagram whose type nibble is a voice packet for the UDP side.
+        type == ByteArray::class.java -> if (method.name == "onUDPDataReceived") voiceDatagram else versionFrame
+        type == Array<X509Certificate>::class.java -> emptyArray<X509Certificate>()
+        type == HumlaException::class.java ->
+            HumlaException("late failure", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
+        Exception::class.java.isAssignableFrom(type) -> java.io.IOException("late udp failure")
+        else -> error("No test argument for ${type.name} of ${method.name}; a new callback needs one")
+    }
+
     private companion object {
         const val PROTOCOL_THREAD = "humla-protocol"
+
+        /** A well-formed Version frame, used wherever a callback wants TCP payload bytes. */
+        val versionFrame: ByteArray = Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray()
+
+        /** A datagram whose leading type nibble marks it as Opus voice data. */
+        val voiceDatagram: ByteArray = ByteArray(64).also {
+            it[0] = ((HumlaUDPMessageType.UDPVoiceOpus.ordinal shl 5) and 0xFF).toByte()
+        }
     }
 }

@@ -623,10 +623,17 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     override fun onTCPConnectionFailed(e: HumlaException) {
+        // Without this the failure would become this connection's error *after* the disconnect had
+        // already been reported as clean: the consumer gets a null reason and a non-null error()
+        // for the same connection.
+        if (disconnectRequested) return
         handleFatalException(e)
     }
 
     override fun onTCPConnectionDisconnect() {
+        // No guard: the operation this asks for is the one already in progress, and disconnect()
+        // is idempotent. A guard here would have no effect any test could tell apart from its
+        // absence, which is the kind of guard this class has been bitten by.
         disconnect()
     }
 
@@ -654,8 +661,11 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     override fun resyncCryptState() {
-        // Send an empty cryptstate message to resync.
-        tcp?.sendMessage(Mumble.CryptSetup.newBuilder().build(), HumlaTCPMessageType.CryptSetup)
+        // Through sendTCPMessage, not through the transport: sending directly was the one path that
+        // skipped the connected check, so it could still put bytes on a socket the user had already
+        // asked to close. No disconnectRequested guard on top of it - measured, the two mask each
+        // other: with either one present, removing the other leaves the suite green.
+        sendTCPMessage(Mumble.CryptSetup.newBuilder().build(), HumlaTCPMessageType.CryptSetup)
     }
 
     /** Workaround for 1.2.2 servers that report the old types for CELT alpha and beta. */
