@@ -88,7 +88,7 @@ change minimal.
 | A Core | `HumlaService`, `net/HumlaConnection`, `net/HumlaTCP`, `net/HumlaUDP`, `net/HumlaNetworkThread`, `net/CryptState`, `protocol/ModelHandler`, `util/HumlaCallbacks`, `service/MumlaService`, `service/MumlaConnectionNotification`, `service/MumlaReconnectNotification`, `model/*`, new `service/ChatMessageLog` (bounded log, D5 acceptance lives here) |
 | B Audio | `protocol/AudioHandler`, `audio/**` (input, output, encoders, input modes, `BluetoothScoReceiver`), `src/main/cpp/**` (after Foundation created it), `preference/AudioSettingsFragment`, `res/xml/settings_audio.xml`, audio keys in `Settings.kt` (additive only) |
 | D Chat & UI | `channel/ChannelChatFragment`, `util/MumbleImageGetter`, `util/BitmapUtils`, `util/HtmlUtils`, `service/IChatMessage`, `service/MumlaMessageNotification`, chat layouts, new image viewer, new `chat/` package |
-| P Platform & controls | `app/MumlaActivity` (permissions, MediaSession wiring), `channel/ChannelListFragment` (Bluetooth menu), `channel/ChannelListAdapter` (rebuild coalescing, see 4.1), new `service/MumlaMediaSession`, non-audio keys in `Settings.kt` (additive only), `res/xml/settings_general.xml`, `AndroidManifest.xml`, battery-optimization dialog |
+| P Platform & controls | `app/MumlaActivity` (permissions, MediaSession wiring), `channel/ChannelListFragment` (Bluetooth menu), `channel/ChannelListAdapter` (rebuild coalescing, see 4.1), `channel/ChannelFragment` (talk button), `service/MumlaOverlay` (talk button, see 4.1), new `service/MumlaMediaSession`, non-audio keys in `Settings.kt` (additive only), `res/xml/settings_general.xml`, `AndroidManifest.xml`, battery-optimization dialog |
 
 Rules for shared files: `Settings.java` is converted to `Settings.kt` by
 Foundation (F3); streams B and P only add keys and accessors. `MumlaService`
@@ -518,6 +518,25 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   they are written down only in another file's KDoc, and the task-8 brief mentions
   neither "placeholder" nor "restore". One test in the dialog's own suite using
   `scenario.recreate()` twice pins both conditions and the two-rotation case.
+
+- **The overlay's talk button has the defect the fragment's just had (P, task 8).**
+  `MumlaOverlay.java:170-181` handles only DOWN and UP, never `ACTION_CANCEL`, and
+  calls `setTalkingState(true/false)` directly. A gesture the system takes away
+  therefore leaves the microphone open — in an overlay window, which nothing
+  pauses. Same shape as the fragment's, worse consequence, and `MumlaOverlay` was
+  in no ownership list either. Note the asymmetry the fragment fix ran into: in
+  hold mode a cancel must release, but in toggle mode `onTalkKeyUp()` *is* the
+  action, so a cancel must do nothing at all. The overlay calls `setTalkingState`
+  directly, so it needs the release unconditionally — but check that against the
+  toggle preference before writing it.
+- **QA must cover a held media-key press, not only a tap (P, tasks 4 and 5).**
+  Acting on DOWN is the right trade, but it has a consequence worth stating to the
+  user: once a press generates key repeats, the system stops tracking it and
+  everything that reaches us — the repeats and the final UP — is swallowed. A
+  button held past the repeat threshold (~400 ms) produces **no toggle at all**.
+  That is a new route to the complaint this whole project started from ("I pressed
+  it and nobody heard me"), so the hardware QA item covers a held press as well as
+  a tap, and task 5's settings copy says *tap, do not hold*.
 
 - **Coalesce the adapter's own rebuilds (P, task 6).** With the observer queue
   bounded, the largest remaining main-thread cost is not in the model any more —
