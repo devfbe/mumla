@@ -63,19 +63,35 @@ class HumlaTCPTest {
             events.poll(5, TimeUnit.SECONDS) ?: throw AssertionError("no callback within 5s")
     }
 
+    /**
+     * The threads that were already running when this test started. Thread.getAllStackTraces() is
+     * JVM-global, so a humla-tcp-* thread leaked by an earlier test would otherwise show up in this
+     * one's checks and fail it as pure collateral damage; [tearDown] pins a leak on the test that
+     * caused it instead.
+     */
+    private val preexistingThreads = Thread.getAllStackTraces().keys.toSet()
+
     @After
     fun tearDown() {
         tcp?.disconnect()
-        callbackThread.quitSafely()
-        unmockkAll()
+        try {
+            awaitUntil(description = "no live thread named humla-tcp-* left by this test") {
+                liveThreadNames("humla-tcp-").isEmpty()
+            }
+        } finally {
+            callbackThread.quitSafely()
+            unmockkAll()
+        }
     }
 
     private fun newTransport(handler: Handler? = null) =
         (if (handler == null) HumlaTCP(socketFactory) else HumlaTCP(socketFactory, handler))
             .also { it.setTCPConnectionListener(listener); tcp = it }
 
-    private fun liveThreadNames(prefix: String) =
-        Thread.getAllStackTraces().keys.filter { it.isAlive && it.name.startsWith(prefix) }.map { it.name }
+    /** Only threads this test started: see [preexistingThreads] for why the filter is needed. */
+    private fun liveThreadNames(prefix: String) = Thread.getAllStackTraces().keys
+        .filter { it.isAlive && it.name.startsWith(prefix) && it !in preexistingThreads }
+        .map { it.name }
 
     /** Waits until everything already queued on the callback handler has been delivered. */
     private fun drainCallbacks() {
