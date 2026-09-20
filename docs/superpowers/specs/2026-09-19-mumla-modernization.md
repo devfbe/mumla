@@ -710,6 +710,37 @@ and reported as passing. They are repo-wide, not stream-specific.
   one test makes it expressible; note it is per-test, because native graphics is
   slower and not needed by its neighbours. Same family as `inJustDecodeBounds`,
   which legacy graphics does not implement at all.
+- **`dispatchTouchEvent` on the target view is still not what a finger does — the
+  visibility filter lives in the *parent*.** `performClick()` ignores `isEnabled`
+  entirely (that is the entry below, and it drove eleven tests against an invisible
+  button in one stream). The repair everyone reaches for next — dispatch a touch
+  straight at the view under test — has the **same shape one level up**:
+  `ViewGroup.canViewReceivePointerEvents` is what drops events for a `GONE` child,
+  so a touch delivered directly to that child runs its listener anyway. Measured: a
+  test asserting "a tap on a failed (GONE) row reports nothing" **failed** under
+  direct delivery and passed only when the event entered at the row and was routed
+  down. And routing needs a real window: an **unattached** view puts its click into
+  the `HandlerActionQueue` instead of running it, while `post()` still returns
+  `true`, so the test reads as green either way. So: a real `Activity`,
+  `setContentView`, `measure` and `layout` — or the assertion is about the harness.
+- **A mutation that does not compile reads as a survivor if you only watch stdout.**
+  Kotlin writes compile errors to **stderr**. Three "survivors" in one sweep were
+  mutations the compiler had rejected — `if (false)` had destroyed a smart cast — and
+  the harness, which grepped stdout for compile errors, filed them as unpinned
+  guards. This is §4.04's no-op hazard displaced into the tooling, and it is worth
+  the same suspicion: **re-run a survivor in a form that certainly compiles** (here
+  `cond && System.nanoTime() < 0`) before writing it down. Two riders from the same
+  sweep: an XML mutation must carry enough context to be unique — `layout_height=
+  "wrap_content"` appeared five times in one file — and a **900 s per-run timeout**,
+  because a hung mutant and a killed one look identical from outside.
+- **An assertion is shadowed by any earlier assertion in the same test, and that is
+  how coverage gets mis-attributed.** Same mechanism as an absolute bound placed
+  ahead of a ratio (§4.04), but about *attribution* rather than sensitivity:
+  "this line is already covered by that test" is a claim that the test **reaches**
+  the assertion. Measured: an `android:focusable` attribute was about to be written
+  off as covered by `clickable` — and under the mutation the test failed at the
+  earlier `isClickable` assertion, so the `isFocusable` line never ran. The cover
+  did not exist. Check by running the mutation, not by reading the test.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
