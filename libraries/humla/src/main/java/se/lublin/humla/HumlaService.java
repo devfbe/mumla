@@ -286,6 +286,19 @@ public class HumlaService extends Service implements IHumlaService, IHumlaSessio
         // The protocol thread is non-daemon and only HumlaConnection.disconnect() quits its looper,
         // so a service destroyed while connected left "humla-protocol" running -- with the socket,
         // both transports and everything its queue still referenced -- for the life of the process.
+        //
+        // The order of the three statements: super.onDestroy() first because nothing below reads
+        // anything it touches, and disconnect() before unregisterReceiver() because the two do not
+        // meet. disconnect() only raises a flag, queues the teardown on the protocol looper and
+        // posts the disconnect report to main; it runs no listener code inline, so nothing between
+        // these lines can reach the receiver. Swapping them changes nothing observable.
+        //
+        // What the order does not fix, because no order can: onConnectionDisconnected is delivered
+        // on a later turn of the main looper, i.e. after this method has returned. There it joins
+        // the audio threads on main (AudioHandler.shutdown(), spec 4.1 "Take AudioHandler.shutdown()
+        // off the main thread", tasks 7 and 9) and calls stopBluetoothSco() on a receiver that is no
+        // longer registered -- harmless, since that only asks AudioManager to drop SCO and
+        // registration decides nothing but whether the state broadcast is heard.
         disconnect();
         try {
             unregisterReceiver(mBluetoothReceiver);
@@ -330,6 +343,13 @@ public class HumlaService extends Service implements IHumlaService, IHumlaSessio
             // out of onStartCommand, or out of the reconnect runnable -- a crash where the old code
             // reported a failed connection attempt. HumlaConnection reports nothing itself here:
             // it was never started, so its own disconnect delivered nothing.
+            //
+            // Deliberately not narrowed. connect() raises IllegalStateException from two checks,
+            // and the other one -- a connection used twice -- cannot fire here, because mConnection
+            // was created a dozen lines above and is never handed out before this call. Telling the
+            // two apart would mean a condition that no test can make true, i.e. a branch whose
+            // removal nothing notices; spec 4.04 says not to write one. If connect() ever throws
+            // IllegalStateException for a third reason, this comment is what has to be revisited.
             Log.w(TAG, "Connection was cancelled before it could start", e);
             mConnectionState = ConnectionState.DISCONNECTED;
             mCallbacks.onDisconnected(new HumlaException(e,

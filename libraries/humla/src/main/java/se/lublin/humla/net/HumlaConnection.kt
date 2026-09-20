@@ -171,12 +171,20 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var udpLatency = 0L
     @Volatile private var tcpLatency = 0L
 
-    // Server. Written in the posted connect block and read by startUdp, both on the protocol
-    // thread, so neither needs to be volatile. Deliberately not cleared by the teardown: clearing
-    // them was what created the loopback hazard, because InetAddress.getByName resolves null - and
-    // the empty string - to 127.0.0.1 rather than failing, so a UDP start racing a disconnect
-    // opened a socket to the local machine. Nothing reads them after the teardown and the object
-    // is single-use, so there is nothing to clear them for.
+    // Server. Written in the posted connect block and read by [startUdp], both on the protocol
+    // thread, so neither needs to be volatile.
+    //
+    // What keeps [startUdp] from ever seeing the initial "" is creation order, not the value: it is
+    // reachable only from [onTCPConnectionEstablished], only a TCP transport can raise that, and
+    // [connect] assigns both fields before it creates the transport. Move the assignment below
+    // transports.createTcp and the invariant is gone - no test holds it, so this comment is the
+    // only thing that does.
+    //
+    // Deliberately not cleared by the teardown either: clearing them was what created the loopback
+    // hazard, because InetAddress.getByName resolves null - and the empty string - to 127.0.0.1
+    // rather than failing, so a UDP start racing a disconnect opened a socket to the local machine.
+    // Nothing reads them after the teardown and the object is single-use, so there is nothing to
+    // clear them for.
     private var host = ""
     private var port = 0
     @Volatile private var remoteVersion = 0
@@ -378,6 +386,9 @@ class HumlaConnection @JvmOverloads constructor(
             }
             val resolvedHost = server.srvHost
             val resolvedPort = server.srvPort
+            // Before the transport exists, and that ordering is load-bearing: the transport is
+            // what raises onTCPConnectionEstablished, which is the only route into startUdp, which
+            // is the only reader of these two. See their declaration.
             host = resolvedHost
             port = resolvedPort
             val transport = transports.createTcp(socketFactory, protocolHandler)
@@ -505,8 +516,10 @@ class HumlaConnection @JvmOverloads constructor(
 
     /**
      * Shuts down networking. Safe from any thread, idempotent, and never blocks on a network
-     * thread. The listener's onConnectionDisconnected is delivered exactly once per connection and
-     * last, carrying [error] if one was recorded. This object is not reusable afterwards.
+     * thread. The listener's onConnectionDisconnected is delivered exactly once per *started*
+     * connection and last, carrying [error] if one was recorded - a disconnect before [connect]
+     * reports nothing at all, because there is nothing to report. This object is not reusable
+     * afterwards.
      */
     fun disconnect() {
         // Written before connectCalled is read; see the ordering note in connect().
@@ -543,6 +556,10 @@ class HumlaConnection @JvmOverloads constructor(
         if (!disconnectDelivered.compareAndSet(false, true)) return
         val e = lastError
         mainHandler.post {
+            // Set before the callback rather than after, and nothing holds that: [notifyListener]
+            // always posts and never delivers inline, so no callback can slip between these two
+            // lines and swapping them leaves the suite green. Written this way, not promised this
+            // way.
             disconnectReported = true
             listener.onConnectionDisconnected(e)
         }
@@ -780,9 +797,10 @@ class HumlaConnection @JvmOverloads constructor(
 
         /**
          * Called when the connection was lost, with the error that caused termination, or null if
-         * the disconnect was clean. Exactly once per connection, and last: no other method of this
-         * interface is called afterwards, including one whose event was already in flight when the
-         * disconnect happened.
+         * the disconnect was clean. Exactly once per started connection, and last: no other method
+         * of this interface is called afterwards, including one whose event was already in flight
+         * when the disconnect happened. A connection disconnected before it was started says
+         * nothing here - see [HumlaConnection.disconnect].
          */
         fun onConnectionDisconnected(e: HumlaException?)
 

@@ -14,6 +14,20 @@ import java.util.concurrent.atomic.AtomicInteger
  * service that goes away without disconnecting leaves "humla-protocol" running - holding the
  * socket, the transports and everything the protocol thread's queue still references - for the
  * remaining life of the process. onDestroy unregistered its Bluetooth receiver and nothing else.
+ *
+ * What this pins, exactly: that onDestroy calls disconnect(), once. What it does not pin:
+ *
+ * - **the effect.** Nothing here connects, so there is no protocol thread to watch end. That the
+ *   call actually quits the looper is HumlaConnectionProtocolThreadTest's
+ *   `aConnectionThatIsDisconnectedLeavesNoProtocolThreadBehind`; this test only closes the gap
+ *   between the two, and reaching a real connection from a Robolectric service would mean opening
+ *   a socket.
+ * - **the order** against unregisterReceiver(). Swapping the two lines in onDestroy leaves this
+ *   test green, which is honest: disconnect() posts rather than calling back inline, so the two
+ *   statements do not meet. See the ordering note in HumlaService.onDestroy.
+ *
+ * The subclass exists because the call is the observable. It overrides nothing else, so everything
+ * onDestroy does still happens.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceDestroyTest {
