@@ -140,7 +140,7 @@ class AudioController(
     fun shutdown() {
         handler.post {
             stopRunning()
-            // Measured, not argued: deleting this line alone leaves all 271 tests green, because
+            // Measured, not argued: deleting this line alone leaves all 273 tests green, because
             // start() overwrites the session and reconfigure() needs a running pipeline. It stays
             // as a retention measure - the session holds the connection that acts as the registry,
             // the session user and the input mode - and it is the one line in this class with no
