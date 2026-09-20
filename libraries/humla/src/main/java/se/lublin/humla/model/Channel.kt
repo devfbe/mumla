@@ -28,6 +28,13 @@ import java.util.Collections
  * contract while adding the copy would turn a caller's mistaken write from an exception into a
  * change that silently goes nowhere.
  *
+ * The id is the one thing that never changes. It had a setter with no callers, and the setter was
+ * not harmless: [hashCode] is the id, and `HumlaCallbacks` keys its folded state refreshes on the
+ * channel object. Changing the id under a queued refresh would strand that entry in the fold map -
+ * it would never be found again, so the refresh would leak and folding would quietly stop working
+ * for that channel. Deleting the setter is what makes that unrepresentable; `ModelHandler` creates
+ * a channel with its id and never renumbers one.
+ *
  * What a reader gets is a snapshot of one list, not of the tree: a channel can exist while its
  * subchannels are still arriving, and that is deliberate. The alternative - a tree-wide lock held
  * across a `ChannelState` frame - would make the protocol thread wait on every list read the UI
@@ -35,7 +42,7 @@ import java.util.Collections
  * `onChannelAdded`, so a half-built subtree is a frame late, not wrong.
  */
 class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false) : IChannel, Comparable<Channel> {
-    @Volatile private var mId = id
+    private val mId = id
     @Volatile private var mPosition = 0
     @Volatile private var mTemporary = temporary
     @Volatile private var mParent: Channel? = null
@@ -69,10 +76,6 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     override fun getUsers(): List<User> = Collections.unmodifiableList(ArrayList(mUsers))
 
     override fun getId(): Int = mId
-
-    fun setId(id: Int) {
-        mId = id
-    }
 
     override fun getPosition(): Int = mPosition
 

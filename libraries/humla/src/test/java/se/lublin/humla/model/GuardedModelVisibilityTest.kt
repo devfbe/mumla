@@ -84,7 +84,13 @@ class GuardedModelVisibilityTest {
     @Test
     fun everyMutableFieldOfTheGuardedModelIsVolatile() {
         val unguarded = listOf(Channel::class.java, User::class.java, ModelHandler::class.java)
-            .flatMap { type -> type.declaredFields.map { type to it } }
+            // Up the hierarchy, not just the class itself: ModelHandler extends
+            // HumlaTCPMessageListener.Stub, and declaredFields would report nothing about what it
+            // inherits. That is the same blind spot declaredMethods had in task 4, where a
+            // reflection test looked like it pinned a set and pinned one class of it. Nothing
+            // above these three declares a field today, so this changes no result - it changes
+            // what happens when someone puts one there.
+            .flatMap { type -> type.hierarchy().flatMap { level -> level.declaredFields.map { type to it } } }
             .filterNot { (_, field) -> field.isSynthetic }
             .filterNot { (_, field) -> Modifier.isStatic(field.modifiers) }
             // A final field is published safely by the constructor, and the three lists Channel
@@ -95,6 +101,9 @@ class GuardedModelVisibilityTest {
 
         assertThat(unguarded).isEmpty()
     }
+
+    private fun Class<*>.hierarchy(): List<Class<*>> =
+        generateSequence(this) { it.superclass }.takeWhile { it != Any::class.java }.toList()
 
     /**
      * The write has to land *after* the reader's loop has been compiled, which is the whole point:
