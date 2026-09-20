@@ -378,6 +378,15 @@ and reported as passing. They are repo-wide, not stream-specific.
 
 ### 4.1 Binding constraints discovered during execution
 
+**Check the ownership table before deferring anything.** Three times now work
+has been handed to a task that does not own the file: the observer-queue cap
+went to a task that never opens `HumlaCallbacks.kt`, an unchecked length field
+went to a task that never opens `HumlaTCP.kt`, and `mConnectionState`'s missing
+`@Volatile` was addressed to task 11 (notifications) when task 9 owns
+`HumlaService.java` and already declares that very field volatile in its own
+listing. Each time the sentence read as if the work were scheduled. Name the
+task from the ownership table, not from memory of what a task is about.
+
 These were found by implementers and reviewers after the plans were written. They
 are binding on the tasks named, and they live here rather than in a stream ledger
 because `.superpowers/sdd/` is gitignored — a ledger disappears with its worktree.
@@ -400,6 +409,17 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   constraint, not new work: **the branch is not integrable until task 5 lands**,
   and task 5 takes the measured reproduction above as its acceptance test rather
   than writing a new one.
+- **Take `AudioHandler.shutdown()` off the main thread (A, tasks 7 and 9).**
+  Section 4 of this spec says `shutdown()` "is safe to call from any thread and
+  returns within 3 s worst case; stream A calls it only from the audio-control
+  thread", and section 6 requires "no main-thread join in disconnect". Neither
+  holds today: `HumlaService.onConnectionDisconnected` (`:447-449`) and
+  `HumlaService.java:534` both call it on main, and it joins the audio threads
+  with no timeout (`AudioHandler.shutdown()` -> `AudioInput.shutdown()` ->
+  `stopRecording()` -> `mRecordThread.join()`, `AudioInput.java:149`). Task 4 made
+  the path newly reachable from `onDestroy()` as well. This is an unmet acceptance
+  item, not an observation, and it is the second half of the "not responding" root
+  cause -- task 4 fixed the first half by moving parsing off main.
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
   owner of the cap, but the Stream A plan's task 6 is UDP recovery and does not
