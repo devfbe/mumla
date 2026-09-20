@@ -51,6 +51,7 @@ class AudioInputTest {
     }
 
     private val received = CopyOnWriteArrayList<ShortArray>()
+    private val reportedLengths = CopyOnWriteArrayList<Int>()
     private val identities = CopyOnWriteArrayList<ShortArray>()
     private val listenerThreads = CopyOnWriteArrayList<Thread>()
     private val priorities = CopyOnWriteArrayList<Int>()
@@ -65,8 +66,9 @@ class AudioInputTest {
     private fun frame(value: Int, length: Int = FRAME) = Read.Frame(ShortArray(length) { value.toShort() })
 
     /** Records the frame by value and by identity, plus who delivered it and at what priority. */
-    private fun recorder(latch: CountDownLatch? = null) = AudioInput.AudioInputListener { f, _ ->
+    private fun recorder(latch: CountDownLatch? = null) = AudioInput.AudioInputListener { f, length ->
         received += f.copyOf()
+        reportedLengths += length
         identities += f
         listenerThreads += Thread.currentThread()
         priorities += Process.getThreadPriority(Process.myTid())
@@ -172,6 +174,10 @@ class AudioInputTest {
 
         val short = received[1]
         assertThat(short.size).isEqualTo(FRAME)
+        // The padding is the point: the count handed over is the whole frame, not the read count,
+        // because the encoder one stage further on needs a complete one (`CaptureFrame.length`
+        // makes the same choice and says so).
+        assertThat(reportedLengths).containsExactly(FRAME, FRAME)
         assertThat(short.take(100)).containsExactlyElementsIn(List(100) { 300.toShort() })
         assertThat(short.drop(100).toSet()).containsExactly(0.toShort())
 
@@ -446,5 +452,38 @@ class AudioInputTest {
         audioInput.startRecording()
 
         waitUntil("the second capture thread started") { source.events.count { it == "start" } == 2 }
+    }
+
+    /**
+     * The dangerous half of the same rule. `stopRecording` has just answered `false`, `isRecording`
+     * is already false, and the thread it gave up on is still inside a read -- so a caller that
+     * trusts either of those two answers gets the second capture thread this refuses.
+     */
+    @Test
+    fun `starting again while a timed-out capture thread is still alive is refused`() {
+        val source = FakeCaptureSource(hangAfterStopMs = 1500)
+        val audioInput = start(source, joinTimeoutMs = 50)
+        waitUntil("the capture thread started") { "start" in source.events }
+        assertThat(audioInput.stopRecording()).isFalse()
+        assertThat(audioInput.isRecording()).isFalse()
+
+        assertThrows(IllegalStateException::class.java) { audioInput.startRecording() }
+
+        assertThat(source.events.count { it == "start" }).isEqualTo(1)
+    }
+
+    /**
+     * What `AudioHandler` reads to decide whether freeing the native capture chain is safe: the
+     * recorder is released either way (spec B8), the rest of the pipeline is not.
+     */
+    @Test
+    fun `shutdown reports that the capture thread did not exit`() {
+        val source = FakeCaptureSource(hangAfterStopMs = 1500)
+        val audioInput = start(source, joinTimeoutMs = 50)
+        waitUntil("the capture thread started") { "start" in source.events }
+
+        assertThat(audioInput.shutdown()).isFalse()
+
+        assertThat(source.events).contains("release")
     }
 }
