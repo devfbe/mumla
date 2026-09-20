@@ -1,17 +1,25 @@
 package se.lublin.mumla.chat
 
+import android.content.ContentProvider
+import android.content.ContentValues
 import android.content.Context
+import android.content.res.AssetFileDescriptor
+import android.database.Cursor
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.CancellationSignal
+import android.os.ParcelFileDescriptor
 import androidx.exifinterface.media.ExifInterface
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
@@ -20,9 +28,34 @@ import se.lublin.mumla.util.BitmapUtils
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * A provider that finds the row and then hands back nothing, which is what makes
+ * `ContentResolver.openInputStream` return the `null` its signature declares:
+ * `openAssetFileDescriptor` propagates the provider's `null` and `openInputStream` returns it
+ * unwrapped rather than throwing. Registering a Robolectric input-stream supplier that answers
+ * `null` does **not** reproduce it — measured, that path throws `FileNotFoundException`.
+ *
+ * Real shapes behind it: a document provider whose backing file has been deleted or is on an
+ * unmounted volume, and a cloud provider that has nothing cached and refuses to download.
+ */
+class NullOpeningProvider : ContentProvider() {
+    override fun onCreate(): Boolean = true
+    override fun query(u: Uri, p: Array<out String>?, s: String?, a: Array<out String>?, o: String?): Cursor? = null
+    override fun getType(uri: Uri): String = "image/png"
+    override fun insert(u: Uri, values: ContentValues?): Uri? = null
+    override fun delete(u: Uri, s: String?, a: Array<out String>?): Int = 0
+    override fun update(u: Uri, v: ContentValues?, s: String?, a: Array<out String>?): Int = 0
+    override fun openAssetFile(uri: Uri, mode: String): AssetFileDescriptor? = null
+    override fun openAssetFile(uri: Uri, mode: String, signal: CancellationSignal?): AssetFileDescriptor? = null
+    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? = null
+    override fun openFile(uri: Uri, mode: String, signal: CancellationSignal?): ParcelFileDescriptor? = null
+}
 
 /**
  * Native graphics for the whole class, deliberately, and it is not a convenience.
@@ -36,6 +69,15 @@ import java.util.concurrent.atomic.AtomicInteger
  *  - dies with a `NullPointerException` (`bitmap.getWidth()` on a null decode) instead of the
  *    `DecodeException` the platform throws, which would drag a catch for it into production code.
  * `@GraphicsMode(NATIVE)` runs the real Skia decoder, where all three are the platform's behaviour.
+ *
+ * **What the fixture set does not contain**, named so the next round does not mistake a mutation
+ * that survives here for a covered one. [TestImages] builds its bytes with `javax.imageio`, which
+ * ships PNG and baseline JPEG and nothing else, so none of these reaches the decoder in any test:
+ * **HEIC/HEIF — which is what a current phone camera actually hands the picker** — an alpha
+ * channel (the one input whose JPEG encoding the encoder half refuses outright), a progressive
+ * JPEG, and CMYK. None of them is a *dimension this class branches on*: every one of them enters
+ * at `ImageDecoder.createSource` and leaves as a bitmap or as a `DecodeException`, both of which
+ * are covered by container-independent fixtures. They are listed, not built.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -51,6 +93,11 @@ class OutgoingImagePreparerTest {
 
     @After
     fun shutDownPools() = pools.forEach { it.shutdownNow() }
+
+    private companion object {
+        const val CALLER = "mumla-test-caller"
+        const val NOTHING_AUTHORITY = "se.lublin.mumla.test.opensnothing"
+    }
 
     private fun uri(path: String) = Uri.parse("content://media/external/images/$path")
 
@@ -197,11 +244,26 @@ class OutgoingImagePreparerTest {
      * bitmap that comes back is the only one this path allocates — 852 800 bytes, a factor of 56
      * against the first of the old path's two full-size copies.
      *
-     * What this test can and cannot say: it reads the size of the bitmap that was produced. The
-     * codec's own sampled intermediate lives inside Skia and no assertion here reaches it; from
-     * `ImageDecoder::setTargetSize` it is `computeSampleSize`'s result, which is within a factor of
-     * two of the target per axis. A heap delta would not help — §4.05 — and this class allocates no
-     * Java bitmap besides the returned one, which is the stronger statement anyway.
+     * **The substitution here was forced, not chosen.** The obligation this test answers to asks
+     * for the allocation chain to be shown with `ShadowBitmap.getCreatedFromBitmap()` and
+     * explicitly *not* with a final-size assertion. That instrument does not exist in the mode this
+     * class must run in: under `@GraphicsMode(NATIVE)` the shadow is `ShadowNativeBitmap` and
+     * `getCreatedFromBitmap()` throws `UnsupportedOperationException` for every bitmap. The mode is
+     * not negotiable either — see the class comment; under LEGACY the decoder produces the full
+     * image and scales afterwards, so a LEGACY reading of a memory claim says the opposite of the
+     * truth, and all eight EXIF orientations come back the same size. The obligation now reads:
+     * whoever needs NATIVE names that the counting instrument is absent there and says what the
+     * replacement carries.
+     *
+     * So, what this replacement carries and what it does not. It **carries**: the bitmap this path
+     * hands back is allocated at the fitted size, not at the source size, and — since this class
+     * creates no other `Bitmap` at all — it is the only Java bitmap the path allocates, which is
+     * the stronger of the two statements. It does **not** carry: anything about the codec's own
+     * sampled intermediate, which lives inside Skia where no assertion here reaches it. From
+     * `ImageDecoder::setTargetSize` that intermediate is `computeSampleSize`'s result, within a
+     * factor of two of the target per axis, so the true peak is a small multiple of the number
+     * below rather than the number itself. A heap delta cannot close that gap — §4.05 — it measures
+     * the opposite, because Robolectric does not implement `inJustDecodeBounds`.
      */
     @Test
     fun aTwelveMegapixelPhotoCostsOneBitmapTheSizeOfWhatIsKept() {
@@ -263,12 +325,21 @@ class OutgoingImagePreparerTest {
     }
 
     /**
-     * Measured limitation, pinned so that a platform change shows up here rather than silently:
-     * `ExifInterface` writes and reads an orientation in a PNG's `eXIf` chunk, but the decoder's
-     * PNG codec does not act on it — the header comes back unswapped. Rotating it by hand would
-     * need a second source of truth for orientation beside the decoder's, which is exactly the
-     * split that has cost this stream a critical before; a PNG carrying an orientation is also not
-     * something a camera produces.
+     * Measured limitation, accepted rather than patched, and pinned so that a platform change shows
+     * up here rather than silently: `ExifInterface` writes and reads an orientation in a PNG's
+     * `eXIf` chunk, but the decoder's PNG codec does not act on it — the header comes back
+     * unswapped. So this one case, which the old hand-rotating send path did turn, stops being
+     * turned.
+     *
+     * **Why patching it is worse, in the sharpened form — a half orientation correction is worse
+     * than none.** Rotating by hand on top of a decoder that may already have rotated needs a
+     * second source of truth and some way to tell which of the two has already acted. That
+     * question is answerable for exactly half the orientations: for the four axis-swapping ones
+     * (5–8) the decoder's action *is* detectable, by comparing `info.size` against the container's
+     * own header dimensions. For 180° and for the mirrorings it is **not** detectable at all, and
+     * neither is it for a square image. A fix that corrects four of eight cases and silently
+     * double-applies or drops the rest is worse than the one documented gap, which is also the one
+     * a camera never produces — phones emit JPEG and HEIF.
      */
     @Test
     fun aPngsExifOrientationIsIgnoredByTheDecoderAndThereforeByUs() {
@@ -380,6 +451,26 @@ class OutgoingImagePreparerTest {
         assertThat(preparer.prepare(uri)).isNull()
     }
 
+    /**
+     * The `@Nullable` arm of `openInputStream`, which is a real device shape and not a hole in the
+     * fixture: a provider that opens nothing makes the resolver hand back `null` rather than throw
+     * (see [NullOpeningProvider]). Without the `?.` this is a `NullPointerException` caught by
+     * neither `catch (IOException)` nor `catch (SecurityException)`, so it leaves `prepare` and
+     * crashes the app — the same shape as the `SecurityException` defect this class exists to fix,
+     * one exception type further along.
+     */
+    @Test
+    fun aProviderThatOpensNothingGivesNull() = runTest {
+        Robolectric.setupContentProvider(NullOpeningProvider::class.java, NOTHING_AUTHORITY)
+        val uri = Uri.parse("content://$NOTHING_AUTHORITY/images/1")
+        // The fixture is checked, not assumed: this is the one arm where the resolver answers with
+        // null instead of an exception, and a fixture that threw instead would pass for the wrong
+        // reason through the catches below.
+        assertThat(context.contentResolver.openInputStream(uri)).isNull()
+
+        assertThat(preparer.prepare(uri)).isNull()
+    }
+
     @Test
     fun aUriThatHoldsSomethingOtherThanAnImageGivesNull() = runTest {
         val uri = uri("text")
@@ -388,6 +479,60 @@ class OutgoingImagePreparerTest {
     }
 
     // ---- nothing here touches the caller's thread ---------------------------------------------
+
+    /**
+     * The **defaults**, which are the constructor the app actually uses:
+     * `ChannelChatFragment.onImagePicked` builds `OutgoingImagePreparer(requireContext())` and
+     * awaits it on `lifecycleScope`, so on the main thread. Every other test here injects
+     * dispatchers, so until this one existed the two default expressions were never constructed at
+     * all, and `ioDispatcher = Dispatchers.IO` mutated to `Dispatchers.Main` left the whole suite
+     * green — a content-provider open plus `readBytes()` of an arbitrarily large picked file on the
+     * main thread, against this class's own promise that nothing here touches it.
+     *
+     * Two assertions, two different mutations, in this order because the second needs the first:
+     *  - **completion** kills a default that dispatches to `Dispatchers.Main`. The main looper is
+     *    deliberately never idled here, so a body posted to it is never run and the poll returns
+     *    null instead of a result. Measured: with the defaults replaced by `Dispatchers.Main` the
+     *    poll runs out with `readThread` still `"none"` — so the thread assertion below would
+     *    **not** have caught it. This is a liveness bound and not a performance budget (well under
+     *    a second in practice against a 30 s poll), so it is not the wall-clock flake of §4.05.
+     *  - **the thread** kills a default that runs inline on whoever called, `Dispatchers.Unconfined`,
+     *    which completion cannot see. In production that caller is the main thread, so "inline on
+     *    the caller" is the same ANR by a second route.
+     *
+     * The caller is a background thread rather than this one: a `Dispatchers.Main` dispatch made
+     * from the test thread blocks it against Robolectric's paused looper and would hang the suite
+     * instead of failing it. It is a *daemon* thread for the same reason one level up — measured, a
+     * live non-daemon thread stuck on `Dispatchers.Main` keeps the test JVM from exiting and Gradle
+     * reports `java.io.EOFException` in place of any test result at all.
+     *
+     * What this does **not** cover, named rather than implied: `decodeDispatcher` mutated to
+     * `Dispatchers.Unconfined` resumes inline on the caller after the read has already suspended,
+     * and nothing in this class reads the decode thread back.
+     */
+    @Test
+    fun theDefaultDispatchersKeepBothHalvesOffTheMainAndTheCallersThread() {
+        val mainThread = Thread.currentThread().name
+        val uri = uri("defaults")
+        var readThread = "none"
+        serve(uri) {
+            readThread = Thread.currentThread().name.substringBefore(" @coroutine#")
+            ByteArrayInputStream(TestImages.png(1200, 800))
+        }
+        val preparer = OutgoingImagePreparer(context)
+
+        val outcome = ArrayBlockingQueue<Result<Bitmap?>>(1)
+        Thread({ outcome.add(runCatching { runBlocking { preparer.prepare(uri) } }) }, CALLER)
+            .apply { isDaemon = true }
+            .start()
+
+        val taken = outcome.poll(30, TimeUnit.SECONDS)
+        assertThat(taken).isNotNull()
+        val bitmap = taken!!.getOrThrow()!!
+        assertThat("${bitmap.width}x${bitmap.height}").isEqualTo("600x400")
+        assertThat(readThread).isNotEqualTo(mainThread)
+        assertThat(readThread).isNotEqualTo(CALLER)
+    }
 
     @Test
     fun theReadRunsOnTheIoDispatcherAndTheDecodeOnTheDecodeDispatcher() = runTest {

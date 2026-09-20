@@ -39,7 +39,7 @@ object OutgoingImageEncoder {
      * text and every `src` together, in UTF-16 units, which for this all-ASCII element is its
      * character count. Percent-encoding turns each `+`, `/` and `=` of the base64 into three
      * characters; measured over one quality ladder that is 4.1 % to 7.7 % on top of the base64
-     * length, before the 35 characters of markup here.
+     * length, before the 36 characters of markup here (PREFIX 33 + SUFFIX 3, counted).
      */
     fun imageHtml(jpeg: ByteArray): String =
         PREFIX + URLEncoder.encode(Base64.encodeToString(jpeg, Base64.NO_WRAP), "UTF-8") + SUFFIX
@@ -57,6 +57,14 @@ object OutgoingImageEncoder {
      * The message is built at every rung rather than estimated from the byte count. An estimate is
      * a second implementation of [imageHtml] that no test compares against it; the string that is
      * measured here is the one that is sent.
+     *
+     * **The price of that, stated rather than hidden:** a full JPEG encode, a full base64 encode
+     * and a full percent-encode on **every** rung, up to ten of each. At the top of the measured
+     * ladder a 600x400 photograph is 276 933 bytes of JPEG becoming a 393 142-character message,
+     * and the worst case walks all ten rungs before it fits. It is bounded — ten rungs over a
+     * bitmap the preparer has already clamped to 600x400 — and it runs on a background dispatcher.
+     * Cheaper would mean estimating, and an estimate that is 4.1 % to 7.7 % low is the defect this
+     * method exists to fix.
      */
     private fun fit(bitmap: Bitmap, maxMessageLength: Int): Pair<ByteArray, String>? {
         var quality = START_QUALITY
@@ -70,9 +78,9 @@ object OutgoingImageEncoder {
                 val html = imageHtml(jpeg)
                 // Three of the four corners of this two-boolean condition are written as tests; the
                 // fourth cannot exist. "No limit" means `maxMessageLength <= 0`, and `html` is never
-                // shorter than the 35 characters of markup around the payload, so "no limit and
+                // shorter than the 36 characters of markup around the payload, so "no limit and
                 // also fits" has no input. Measured: `||` mutated to `xor`, which differs on that
-                // corner alone, leaves all 34 tests green, while `&&` fails 7.
+                // corner alone, leaves these two classes' 37 tests green, while `&&` fails 7.
                 if (maxMessageLength <= 0 || html.length <= maxMessageLength) return jpeg to html
             }
             quality -= QUALITY_STEP

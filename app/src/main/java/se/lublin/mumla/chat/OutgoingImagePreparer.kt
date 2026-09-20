@@ -32,12 +32,26 @@ import java.nio.ByteBuffer
  * Measured against the real decoder in `OutgoingImagePreparerTest`, per orientation.
  * The one case the decoder does not cover is a PNG carrying an `eXIf` orientation; that is pinned
  * as a limitation rather than patched, because patching it means a second source of truth for
- * orientation running beside the decoder's, with no way to tell which of the two already acted.
+ * orientation running beside the decoder's, with no way to tell which of the two already acted —
+ * and the "no way to tell" is only half true, which is precisely what makes a patch worse than the
+ * gap. For the four axis-swapping orientations the decoder's action **is** detectable, by comparing
+ * `info.size` against the container's own header dimensions; for 180°, for either mirroring and for
+ * any square image it is **not**. A correction that lands on four of eight cases and double-applies
+ * or drops the other four is worse than one documented gap in a container no camera emits.
  */
 class OutgoingImagePreparer(
     context: Context,
     private val maxWidth: Int = MAX_WIDTH,
     private val maxHeight: Int = MAX_HEIGHT,
+    /**
+     * The two defaults are the production wiring: `ChannelChatFragment.onImagePicked` constructs
+     * `OutgoingImagePreparer(requireContext())` and awaits it on `lifecycleScope`, i.e. from the
+     * main thread. They are pinned by
+     * `theDefaultDispatchersKeepBothHalvesOffTheMainAndTheCallersThread`, which constructs this
+     * class exactly as the fragment does — every other test injects dispatchers, and while that was
+     * the only coverage, `Dispatchers.IO` replaced by `Dispatchers.Main` left these two classes' tests green
+     * while putting a content-provider open and a whole-file read back on the main thread.
+     */
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val decodeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
@@ -64,7 +78,7 @@ class OutgoingImagePreparer(
     suspend fun prepare(uri: Uri): Bitmap? {
         // Optimisation, not a guard: bytes that could not be read would decode to null anyway
         // (`decode(ByteArray(0))` is pinned), so this only saves a dispatch and a decoder. Measured:
-        // replacing `return null` with an empty array leaves all 34 tests green.
+        // replacing `return null` with an empty array leaves these two classes' 37 tests green.
         val bytes = withContext(ioDispatcher) { read(uri) } ?: return null
         return withContext(decodeDispatcher) { decode(bytes) }
     }
@@ -80,10 +94,21 @@ class OutgoingImagePreparer(
      */
     private fun read(uri: Uri): ByteArray? =
         try {
-            // The null arm is the platform's documented @Nullable return, and it is the one branch
-            // in this file no test reaches: Robolectric's resolver cannot produce it, because a
-            // registered supplier answering null falls through to a non-null stream. The mutation
-            // that would pin it (`?.` to `!!`) was run and left all 34 tests green.
+            // The null arm is the platform's documented @Nullable return, and it is reachable and
+            // pinned (`aProviderThatOpensNothingGivesNull`): a ContentProvider whose
+            // openAssetFile/openFile answer null makes openAssetFileDescriptor answer null, and
+            // openInputStream hands that straight back instead of throwing. Measured through a
+            // real provider hosted by Robolectric.setupContentProvider. Without the `?.` that is a
+            // NullPointerException caught by neither catch below, so it escapes prepare and crashes
+            // the app — the same shape as the SecurityException arm underneath, one type further.
+            //
+            // Note what is NOT reproducible: a Robolectric input-stream supplier that answers null
+            // throws FileNotFoundException rather than falling through, so the supplier fixture
+            // every other test here uses cannot reach this arm. That is what made it look unpinnable.
+            //
+            // And note what must NOT be added: a `catch (RuntimeException)` backstop here would
+            // swallow exactly that NullPointerException, and the pin above would pass with the `?.`
+            // deleted. Two catches over one observable are one catch and a lie (spec 4.04).
             resolver.openInputStream(uri)?.use { it.readBytes() }
         } catch (e: IOException) {
             null
@@ -103,7 +128,7 @@ class OutgoingImagePreparer(
                 // (`libs/hwui/jni/ImageDecoder.cpp`: `isHardware` is the default allocator together
                 // with a non-mutable result), which the JPEG encoder then reads back from the GPU
                 // once per quality rung, and which `getPixels` refuses outright.
-                // Unpinned and measured: deleting this line leaves all 34 tests green, because
+                // Unpinned and measured: deleting this line leaves these two classes' 37 tests green, because
                 // Robolectric has no GPU and hands back a software bitmap either way. Asserting
                 // `config != HARDWARE` here would pass with or without the line, which is a cover
                 // that does not exist rather than a test.
@@ -112,6 +137,24 @@ class OutgoingImagePreparer(
         } catch (e: IOException) {
             // ImageDecoder.DecodeException is an IOException, so this is also "not an image",
             // "no bytes at all" and "cut short mid-stream".
+            //
+            // Deliberately NOT a `catch (RuntimeException)` backstop as well, although these bytes
+            // are arbitrary and user-chosen and although the fix round one task earlier in this
+            // stream added exactly that to `HttpImageFetcher.fetch`. The difference is where the
+            // exception would come from. There, a platform StringIndexOutOfBoundsException had
+            // actually escaped, thrown out of *this project's own* arithmetic on a URI authority.
+            // Here `ImageDecoder`'s throw surface over the *bytes* is IOException by documentation;
+            // its IllegalArgumentException/IllegalStateException surface is over the *arguments the
+            // listener sets*, which are this file's own and are bounded by the `require`s above and
+            // by `boundedSize`'s one-pixel floor. Neither the review nor this round could construct
+            // an input that makes it throw anything else. An unreachable catch is an unpinnable
+            // branch that no later round can close, and it would read as covered (spec 4.04).
+            //
+            // The one residual route, named because it is the only one: `boundedSize`'s
+            // pass-through arm returns a zero dimension unchanged, and `setTargetSize(0, h)` throws
+            // IllegalArgumentException. It needs a codec that reports a zero-sized header, which no
+            // fixture here can produce. If one is ever found, the fix is the floor in `boundedSize`
+            // — not a catch, which would hide it.
             null
         }
 

@@ -20,9 +20,18 @@ import java.util.Random
 class OutgoingImageEncoderTest {
 
     /**
-     * Noise, not a flat fill. Measured on a flat 600x400 bitmap the whole quality ladder spans
-     * 4431 down to 4426 bytes — five bytes over ten rungs, which cannot tell one rung from another.
-     * With noise the same ladder spans 276 933 down to 14 809 bytes.
+     * Noise, not a flat fill. Re-measured here, because the figures first written down did not
+     * reproduce — and the conclusion they were written for comes out **stronger**, not weaker.
+     * On a flat 600x400 bitmap the whole ten-rung ladder spans, from quality 97 to quality 7:
+     *  - `Bitmap.createBitmap(600, 400, ARGB_8888)` untouched: **2183 → 2182 bytes**;
+     *  - erased to solid black: **2183 → 2182**;
+     *  - erased to solid `0x336699`: **2187 → 2184**.
+     *
+     * That is one to three bytes across ten rungs, not the five first reported. Nine of the ten
+     * rungs are byte-identical to a neighbour, so a limit derived from one rung admits another and
+     * `everyRungOfTheQualityLadderIsReachable` could not tell which rung the ladder had stopped on.
+     * With noise the same ladder spans **276 933 → 14 809** bytes, strictly decreasing at every
+     * step, which that test asserts before it uses it.
      */
     private fun noisyBitmap(width: Int = 600, height: Int = 400): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
