@@ -343,6 +343,38 @@ class ChatAdapterTest {
     }
 
     @Test
+    fun theCaptionsAroundAnOwnPictureFollowTheBubbleTheySitIn() = runTest {
+        // bindHeader aligns the box to the END for an own message, and the text row passes that on
+        // to its own TextView. bindImage did not, so the caption of a picture *you* sent sat
+        // left-aligned inside a right-aligned bubble while the plain text line next to it did not.
+        // One holder, bound twice, so the reset on reuse is pinned as well as the set.
+        val adapter = adapter(selfSessionId = { 7 })
+        adapter.submitMessages(
+            listOf(
+                text(actor = 7, body = "mine <img src=\"$url\"/> here"),
+                text(actor = 8, body = "theirs <img src=\"$url\"/> here"),
+            )
+        )
+        idle()
+        val captions = intArrayOf(R.id.list_chat_item_text_before, R.id.list_chat_item_text_after)
+
+        val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
+        assertThat(holder.box.gravity and Gravity.HORIZONTAL_GRAVITY_MASK).isEqualTo(Gravity.RIGHT)
+        for (id in captions) {
+            assertThat(holder.itemView.findViewById<TextView>(id).gravity and Gravity.HORIZONTAL_GRAVITY_MASK)
+                .isEqualTo(Gravity.RIGHT)
+        }
+
+        adapter.bindViewHolder(holder, 1)
+        idle()
+        assertThat(holder.box.gravity and Gravity.HORIZONTAL_GRAVITY_MASK).isEqualTo(Gravity.LEFT)
+        for (id in captions) {
+            assertThat(holder.itemView.findViewById<TextView>(id).gravity and Gravity.HORIZONTAL_GRAVITY_MASK)
+                .isEqualTo(Gravity.LEFT)
+        }
+    }
+
+    @Test
     fun aRecycledRowResetsBothWaysRoundBetweenAnOwnMessageAndANotice() = runTest {
         // One holder, both orders. Each direction pins a different line: a fresh row is already
         // left-aligned with a visible name, so only the *reuse* makes the resets observable, and

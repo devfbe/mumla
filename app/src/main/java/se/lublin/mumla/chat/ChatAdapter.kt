@@ -197,6 +197,12 @@ class ChatAdapter(
     private fun bindImage(holder: ImageHolder, content: ChatContent.Image) {
         holder.textBefore.setTextOrGone(content.textBefore)
         holder.textAfter.setTextOrGone(content.textAfter)
+        // The same alignment the text row hands its body. bindHeader has already aligned the box;
+        // without this a caption on a picture *you* sent stayed left-aligned inside a right-aligned
+        // bubble, unlike the plain text line beside it. Set on every bind, so a recycled holder
+        // cannot keep the previous row's side.
+        holder.textBefore.gravity = holder.box.gravity
+        holder.textAfter.gravity = holder.box.gravity
         // The four lines below are the recycled holder's reset: it may arrive showing the previous
         // row's bitmap or its failure text.
         holder.image.visibility = View.VISIBLE
