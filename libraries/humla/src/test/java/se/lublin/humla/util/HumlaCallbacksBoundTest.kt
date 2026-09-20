@@ -385,26 +385,46 @@ class HumlaCallbacksBoundTest {
      * audio thread (`AudioOutput` -> `onUserTalkStateUpdated`).
      *
      * Finding the oldest droppable event by scanning the queue is O(queue), and the queue is
-     * deepest exactly when the trim runs. Measured on the scanning version, on this machine:
-     * **177 476 ns** mean per raise against 11 024 queued events, worst 17 ms. With the index,
-     * over four runs here: 1 221 to 2 151 ns, and - which is the point - **flat**, the deeper half
-     * measuring 0.9x to 1.05x the shallower one. The queue below is eight times deeper in the
-     * second half and must not cost eight times as much. That ratio is what
-     * this test asserts, because it is a statement about the algorithm rather than about the
-     * machine; the absolute bound beside it is a floor under a change that makes the whole thing
-     * pathological.
+     * deepest exactly when the trim runs. The second half below is **64 times** deeper than the
+     * first and must not cost eight times as much: a ratio is a statement about the algorithm,
+     * where a wall-clock budget would be a statement about the machine (spec 4.04). Over four runs
+     * here the index measures 948 to 1 297 ns at 128 queued and 645 to 1 492 ns at 8 192 - ratio
+     * **0.50x to 1.57x for 64x the depth** - while the scan it replaced measures 4 548 to 9 742 ns
+     * against 91 227 to 112 942 ns, ratio **11.4x to 24.8x**. The threshold of 8 sits with a 5.1x
+     * margin under the worst real reading and a 1.4x margin over the best mutated one.
+     *
+     * Two things about the shape of the measurement, both of which cost the assertion its teeth
+     * before they were fixed, and both measured rather than reasoned:
+     * - **The shallow half must not pay for the JIT.** Written without the warm-up call below, the
+     *   first measurement carried the compilation of the whole raise path: 16 430 to 20 585 ns for
+     *   a 1 024-element scan, against 7 to 8 ns per element once warm. That inflates the number the
+     *   ratio divides by, and it inflates it only in the mutated build, where the scan is what gets
+     *   compiled.
+     * - **The spread has to beat the fixed cost per raise.** At the 8x spread this test first used
+     *   (1 024 against 8 192) the scan mutation produced ratios of 2.77x, 3.99x, 3.54x and 2.95x -
+     *   **under a 4x threshold in four runs out of four**, so the ratio assertion did not fire at
+     *   all and only the absolute bound did. "No linear scan can pass a ratio" is a property of the
+     *   spread and the warm-up, not of ratios.
+     *
+     * The absolute bound is kept as a floor under a change that makes the whole thing pathological,
+     * and it comes **second** so that it cannot shadow the ratio: with it first, the same mutation
+     * reported "expected to be less than: 20000 but was: 55975" here - 279 528 on the machine the
+     * review ran on - and the ratio line below it never ran.
      */
     @Test
     fun findingTheOldestDroppableEventDoesNotScanTheQueue() {
-        val shallow = nanosPerRaiseAgainstAFullQueue(128)
+        // Discarded: it is here so that the first *measured* raise is not the one that pays for
+        // compiling the raise path. See the doc above for what that cost the assertion.
+        nanosPerRaiseAgainstAFullQueue(16)
+        val shallow = nanosPerRaiseAgainstAFullQueue(16)
         val deep = nanosPerRaiseAgainstAFullQueue(1_024)
 
         println(
-            "MEASURE ns per droppable raise: ${128 * HumlaCallbacks.CEILING_FACTOR} queued=$shallow," +
+            "MEASURE ns per droppable raise: ${16 * HumlaCallbacks.CEILING_FACTOR} queued=$shallow," +
                 " ${1_024 * HumlaCallbacks.CEILING_FACTOR} queued=$deep"
         )
+        assertThat(deep).isLessThan(shallow * 8)
         assertThat(deep).isLessThan(20_000L)
-        assertThat(deep).isLessThan(shallow * 4)
     }
 
     /**
