@@ -12,6 +12,8 @@ import android.util.SparseArray
 import android.view.AbsSavedState
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.FrameLayout
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -400,6 +402,121 @@ class ZoomImageViewTest {
 
         // The surviving finger travelled 40 px; the image follows it by 40 px and nothing else.
         assertThat(view.state.tx - afterLift.tx).isWithin(0.01f).of(40f)
+    }
+
+    // --- the view in somebody else's hands ------------------------------------------------------
+
+    /**
+     * Task 8 hangs this view inside a scrolling container. A pan must then win against the parent,
+     * or the drag is taken away mid-gesture -- and what arrives here in exchange is the
+     * ACTION_CANCEL the two cancel tests are about.
+     */
+    @Test
+    fun aGestureOnAZoomedImageIsTakenFromAScrollingParent() {
+        val parent = RecordingParent(context)
+        val view = viewWith(200, 200)
+        parent.addView(view)
+        view.zoomBy(2f, 200f, 200f)
+
+        view.touch(MotionEvent.ACTION_DOWN, 1000, 100f, 100f)
+        view.touch(MotionEvent.ACTION_MOVE, 1020, 150f, 100f)
+        view.touch(MotionEvent.ACTION_UP, 1040, 150f, 100f)
+
+        assertThat(parent.disallow).contains(true)
+    }
+
+    /** At the fit there is nothing to pan, so the swipe belongs to the parent and is left to it. */
+    @Test
+    fun aGestureOnAnUnzoomedImageIsLeftToTheParent() {
+        val parent = RecordingParent(context)
+        val view = viewWith(200, 200)
+        parent.addView(view)
+
+        view.touch(MotionEvent.ACTION_DOWN, 1000, 100f, 100f)
+        view.touch(MotionEvent.ACTION_MOVE, 1020, 150f, 100f)
+        view.touch(MotionEvent.ACTION_UP, 1040, 150f, 100f)
+
+        assertThat(parent.disallow).doesNotContain(true)
+    }
+
+    /** A pinch is never the parent's, zoomed or not: two fingers are unambiguous. */
+    @Test
+    fun aSecondFingerIsTakenFromTheParentEvenAtTheFit() {
+        val parent = RecordingParent(context)
+        val view = viewWith(200, 200)
+        parent.addView(view)
+
+        view.touchAll(MotionEvent.ACTION_DOWN, 1000, floatArrayOf(10f), floatArrayOf(100f))
+        view.touchAll(pointerDown(1), 1010, floatArrayOf(10f, 190f), floatArrayOf(100f, 100f))
+
+        assertThat(parent.disallow).contains(true)
+    }
+
+    // --- accessibility ---------------------------------------------------------------------------
+
+    /**
+     * The two flags an accessibility service reads to decide which actions to offer. They are set
+     * in the constructor rather than left to `setOnClickListener`, so they are true before the
+     * viewer has wired anything up -- and they are asserted before this test wires anything up, for
+     * the same reason.
+     */
+    @Test
+    fun theViewAdvertisesItselfAsClickableAndLongClickable() {
+        val view = viewWith()
+
+        assertThat(view.isClickable).isTrue()
+        assertThat(view.isLongClickable).isTrue()
+    }
+
+    /** TalkBack's click goes to performClick directly and never touches onTouchEvent. */
+    @Test
+    fun anAccessibilityClickReachesTheClickListener() {
+        val view = viewWith()
+        var clicks = 0
+        view.setOnClickListener { clicks++ }
+
+        assertThat(view.performAccessibilityAction(AccessibilityNodeInfo.ACTION_CLICK, null)).isTrue()
+
+        assertThat(clicks).isEqualTo(1)
+    }
+
+    /** And a long press on the screen reaches the long-click listener, through the detector. */
+    @Test
+    fun aLongPressDispatchesALongClick() {
+        val view = viewWith()
+        var longClicks = 0
+        view.setOnLongClickListener { longClicks++; true }
+
+        val down = SystemClock.uptimeMillis()
+        view.touch(MotionEvent.ACTION_DOWN, down, 10f, 10f)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1000))
+
+        assertThat(longClicks).isEqualTo(1)
+    }
+
+    /** A single tap still counts once, which is why super.onTouchEvent is deliberately not called. */
+    @Test
+    fun aSingleTapStillCountsOnceWithTheClickableFlagsSet() {
+        val view = viewWith()
+        var clicks = 0
+        view.setOnClickListener { clicks++ }
+
+        val down = SystemClock.uptimeMillis()
+        view.touch(MotionEvent.ACTION_DOWN, down, 10f, 10f)
+        view.touch(MotionEvent.ACTION_UP, down + 20, 10f, 10f)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+
+        assertThat(clicks).isEqualTo(1)
+    }
+
+    /** A parent that writes down every time it is told to keep out of a gesture. */
+    private class RecordingParent(context: Context) : FrameLayout(context) {
+        val disallow = mutableListOf<Boolean>()
+
+        override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+            disallow += disallowIntercept
+            super.requestDisallowInterceptTouchEvent(disallowIntercept)
+        }
     }
 
     // --- configuration changes -----------------------------------------------------------------

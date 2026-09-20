@@ -85,14 +85,43 @@ class ZoomImageView @JvmOverloads constructor(
                 performClick()
                 return true
             }
+
+            override fun onLongPress(e: MotionEvent) {
+                performLongClick()
+            }
         },
     )
 
     init {
         scaleType = ScaleType.MATRIX
+        // Set here rather than left to setOnClickListener: these two flags are what an accessibility
+        // service reads to decide which actions to offer, and TalkBack's click and long-click go
+        // straight to performClick/performLongClick without ever reaching [onTouchEvent].
+        isClickable = true
+        isLongClickable = true
     }
 
+    /**
+     * Every event goes to both detectors, ACTION_CANCEL included -- see the class KDoc for what
+     * happens when one does not.
+     *
+     * The parent is asked to keep its hands off while there is something here to pan or pinch. A
+     * `ViewPager2` or a scrolling container otherwise takes the drag away mid-pan, and what this
+     * view gets in exchange is precisely the ACTION_CANCEL that the two cancel tests are about. The
+     * criterion is deliberately coarse -- zoomed in at all, or more than one finger -- rather than
+     * per axis: at the fit there is nothing to pan on either axis, and that is the case where a
+     * pager must win.
+     *
+     * `super.onTouchEvent` is not called, and that is a decision rather than an omission. View's own
+     * click handling posts a `performClick` from ACTION_UP, which would land *alongside* the one
+     * [GestureDetector.SimpleOnGestureListener.onSingleTapConfirmed] sends -- a single tap counted
+     * twice. The confirmed one is the one worth keeping: it waits out the double-tap window, so the
+     * first tap of a double-tap does not also dismiss the dialog. What View's path would otherwise
+     * have contributed is covered above: the accessibility actions by the two flags in [init], the
+     * long press by `onLongPress`.
+     */
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        parent?.requestDisallowInterceptTouchEvent(event.pointerCount > 1 || state.scale > ZoomState.MIN_SCALE)
         scaleDetector.onTouchEvent(event)
         gestureDetector.onTouchEvent(event)
         return true
