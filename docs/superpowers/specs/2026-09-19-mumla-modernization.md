@@ -594,6 +594,35 @@ another reason** — an output that was being read anyway produced it, not judge
 The unpinned arm needed a mutation nothing else in the round would have produced.
 Findings that cost nothing do not tell you the sweep is working.
 
+**A guard whose premise is false is invisible from both sides, and the answer is to
+delete it and pin the premise.** Mutation testing asks whether removing a line
+turns a test red. It cannot distinguish "nothing reads this line" from "this line
+never did anything", and the second case also refuses to be pinned: an attempt to
+write the test goes red against correct production code. Measured here on
+`state != newState.constantState` in a talk-state repaint — the icons are layer
+lists, and `LayerDrawable.getConstantState()` hands back its **own state, freshly
+copied per instance**, so two lookups of the same resource never share one. The
+comparison was true on every call; the guard had never once suppressed a repaint.
+The move is not to pin it and not to leave it: **delete it** (behaviour-identical,
+and it removed a latent dereference with it) and write the premise down as its own
+test — *two lookups of one icon never share a constant state* — so that a framework
+or resource change turns that red instead of silently giving the dead guard a job.
+Note the order this is discovered in: the tell was that **writing the pinning test
+produced a RED against correct code**. A test you cannot write is evidence about
+the production line, not about your scaffolding.
+
+**Sweep the fakes' outputs as well as the production file's inputs.** The
+enumeration recipes point at the production file, and a dimension can be closed off
+by the **test double** instead: the fake returns a constant, so every corner behind
+that input is unreachable and the enumeration never notices, because the production
+file does branch on it. Here `FakeUser.getTexture()` was a constant `null` — so
+avatars, a whole dimension, had never been rendered in a test, and the branch's
+success case had never run. This is the third instance of the same shape (a mock
+returning a constant `emptyList()`, a fake that could not express a null user, this
+one), which makes it a rule rather than an anecdote: **for every input the
+production file branches on, name the fake that produces it and check it can
+produce more than one value.**
+
 ### 4.05 Testing hazards that have already produced a false green
 
 Both were caught in this project, each after a test had been written, reviewed
@@ -673,6 +702,14 @@ and reported as passing. They are repo-wide, not stream-specific.
   is fine (12 s, 152 characters of output). And the right form is an index loop that
   reports the **first** diverging index — `diverges at sample %s` — which costs
   nothing and says more.
+- **Under Robolectric's legacy graphics, `BitmapFactory` decodes anything.** Hand it
+  arbitrary bytes and it returns a `Bitmap` rather than null, so the corner "these
+  bytes do not decode" — exactly the one a `yes, decoding can fail` comment is
+  written over — is **unwritable**, and the attempt goes red against correct code.
+  The success case then passes for the wrong reason. `@GraphicsMode(NATIVE)` on that
+  one test makes it expressible; note it is per-test, because native graphics is
+  slower and not needed by its neighbours. Same family as `inJustDecodeBounds`,
+  which legacy graphics does not implement at all.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
