@@ -809,6 +809,11 @@ and reported as passing. They are repo-wide, not stream-specific.
   `daemon has been stopped` and re-run rather than record a verdict**, keep tooling
   in a per-agent subfolder of the scratchpad, and treat a baseline that fails as a
   reason to stop rather than a data point.
+- **zsh does not word-split an unquoted `$VAR`.** A mutation harness written for bash
+  and run under this project's shell reported **NO RESULTS** for four mutations
+  instead of a verdict — silently, because "no results" is not "failed". Same family
+  as the stdout/stderr and regex cases: the tooling answered a question nobody asked.
+  Quote or use arrays, and make "no result" an error rather than a row.
 - **A test or lint count summed off disk includes reports the run did not produce.**
   `build/**/reports` keeps the previous flavour's results, so a counter that globs
   them reports a total no single command produced. Seen twice in one task: a gate
@@ -1278,6 +1283,32 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   paragraph in the core ledger that reads *"the same state as a channel whose
   parent frame has not arrived yet"* is **withdrawn**: one heals on the next frame
   and the other never does, which is the whole point.
+
+- **The Bluetooth wish has exactly one carrier, and it is the preference (P task 7 /
+  A task 8, binding).** After P7 the wish lives in `pref_bluetooth_sco` on disk and
+  survives a reconnect — which is the whole point, since the user's complaint was
+  that it did not. A's task 8 introduces `ScoRouter.wanted` in memory, so two
+  carriers exist. Ruling: **the preference is the truth, `ScoRouter.wanted` is
+  derived state initialised from it at connect, and nothing in the UI reads the
+  in-memory wish.** Two riders that fall out of it, both for A task 8: if
+  `MumlaService` ever sets the wish through `EXTRAS_BLUETOOTH_WANTED`/`configureExtras`
+  rather than `enableBluetoothSco()`, the connect-time hook must move with it — today
+  it calls the public method, which exists in both worlds; and after A8
+  `usingBluetoothSco()` means the in-memory wish while `isBluetoothScoActive()` means
+  the state. **No app code reads `usingBluetoothSco()` any more** (verified: its only
+  caller was the menu path P7 deleted), so whoever displays the wish reads the
+  preference — otherwise the UI has two truths again, which is the defect class this
+  whole project has been removing.
+
+- **A freeze list must be diffed against the task's own Modify list (process, mine).**
+  P7's brief said *Modify: `ChannelListFragment.kt`* and my standing rule in the same
+  dispatch said that file must stay at null diff. The implementer executed the task,
+  flagged the contradiction, and mitigated it — the fragment work in two individually
+  revertable commits, the new tests in a new file, and the five files that had just
+  cost 44 mutations at a proven null diff. That was the right call and the rule was
+  mine to get wrong: a freeze exists to protect files a *previous* round paid for,
+  and when it names a file the current task must change, it is the freeze that is
+  stale. Check the two lists against each other before dispatching.
 
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
