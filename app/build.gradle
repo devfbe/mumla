@@ -149,6 +149,14 @@ android {
                 // ApplicationSharedMemory goes through it, so without this every Robolectric test
                 // dies in setUpApplicationState.
                 jvmArgs '--add-opens=java.base/jdk.internal.access=ALL-UNNAMED'
+                // Gradle's default test worker heap is 512m and the whole module runs in one
+                // worker. Robolectric holds the framework resources of every @Config(sdk = ...)
+                // it has seen, so the cost grows with the suite and not with the test: measured
+                // here, NotificationPostingTest died with "OutOfMemoryError: Failed to load
+                // android-all-instrumented-13" in the full run and passed on its own, at a suite
+                // size of 226. That is a harness limit reading as eight red tests, which is the
+                // shape section 4.05 warns about, so it is raised rather than worked around.
+                maxHeapSize = '1g'
             }
         }
     }
