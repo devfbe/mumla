@@ -308,6 +308,22 @@ class Settings private constructor(context: Context) {
         const val DEFAULT_PREPROCESSOR_ENABLED = true
 
         const val PREF_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
+
+        /**
+         * Still "none", and **blocked from moving** until the playback route is fixed.
+         *
+         * Any other value makes `AudioSourcePolicy.needsCommunicationMode` true, and
+         * `AudioHandler` then puts the AudioManager into `MODE_IN_COMMUNICATION` -- while the
+         * playback `AudioTrack` is opened on the stream `ServerConnectTask:61` chose, which is
+         * `STREAM_MUSIC` for everyone who has not switched handset mode on. In communication mode
+         * Android routes by the communication device, and a media-stream track no longer follows
+         * it. Reported from a Galaxy S25 on `"system"`: **the user hears nobody at all.**
+         *
+         * The fix is a routing one -- `AudioManager.setCommunicationDevice` to the built-in
+         * speaker when handset mode is off, and the track on the communication stream -- and the
+         * `AndroidCommunicationDevices` seam that owns it lives in the core stream, not here.
+         * `EchoCancellationDefaultRouteTest` fails the moment this constant changes, on purpose.
+         */
         const val DEFAULT_ECHO_CANCELLATION_METHOD = "none"
 
         const val PREF_STAY_AWAKE = "stay_awake"

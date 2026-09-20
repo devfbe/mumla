@@ -154,6 +154,21 @@ class WebRtcApmPreprocessorTest {
 
     // ------------------------------------------------------------------ the reverse stream
 
+    /**
+     * The one number a wiring site must not guess. `jni_webrtc_apm.cpp:55` refuses a frame shorter
+     * than the APM's and **accepts a longer one**, reading `num_frames()` out of it and dropping
+     * the tail without a word, so an oversized chunker costs about 21 dB with
+     * [WebRtcApmPreprocessor.rejectedFarEndFrames] still reading 0. Sizing the chunker from the
+     * stage is what closes it, and the rate the chain happens to run at is not what answers here:
+     * at 16 kHz a far-end frame is 160 samples, so the 480 that `AudioHandler.FRAME_SIZE` would
+     * have supplied is wrong by a factor of three.
+     */
+    @Test
+    fun `the far-end frame size is the apm's own, not the chain's frame size`() {
+        assertThat(WebRtcApmPreprocessor(api, ONE).farEndFrameSize).isEqualTo(FRAME)
+        assertThat(WebRtcApmPreprocessor(api, ONE, sampleRate = 16000).farEndFrameSize).isEqualTo(160)
+    }
+
     @Test
     fun `the stage is a far-end sink`() {
         assertThat(WebRtcApmPreprocessor(api, ONE)).isInstanceOf(FarEndSink::class.java)

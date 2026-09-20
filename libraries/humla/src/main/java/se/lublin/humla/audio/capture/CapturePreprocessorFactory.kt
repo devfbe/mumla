@@ -53,11 +53,20 @@ import se.lublin.humla.audio.native.WebRtcApmNative
  * (`SpeexPreprocessor.rejectedFrames`, `RnnoisePreprocessor.rejectedFrames`,
  * `WebRtcApmPreprocessor.rejectedFrames` and `rejectedFarEndFrames`) are what that owner reads.
  *
- * @param farEndSink must be fed frames of exactly `sampleRate / 100` samples -- 480 at 48 kHz.
+ * @param farEndSink must be fed frames of exactly [farEndFrameSize] samples.
  *   [FarEndFrameChunker] is what produces them; anything else is refused and counted in
  *   `WebRtcApmPreprocessor.rejectedFarEndFrames`.
+ * @param farEndFrameSize the length [farEndSink] demands, taken from the APM itself
+ *   (`WebRtcApmApi.frameSize`) and not from anyone's idea of the sample rate -- 480 at 48 kHz, and
+ *   0 when there is no sink. It is carried next to the sink because the two are one decision: only
+ *   the *short* direction is counted, an oversized frame is accepted and silently truncated, so a
+ *   wiring site that sizes its chunker from a constant loses about 21 dB with every counter at 0.
  */
-class CaptureChain(val preprocessor: CapturePreprocessor, val farEndSink: FarEndSink?)
+class CaptureChain(
+    val preprocessor: CapturePreprocessor,
+    val farEndSink: FarEndSink?,
+    val farEndFrameSize: Int = 0,
+)
 
 /**
  * Builds the capture chain spec B2 describes: the WebRTC APM first when echo cancellation is set
@@ -98,6 +107,7 @@ class CapturePreprocessorFactory(
     ): CaptureChain {
         val stages = mutableListOf<CapturePreprocessor>()
         var farEnd: FarEndSink? = null
+        var farEndFrameSize = 0
 
         try {
             // First, always. AEC3 tracks a linear path from the reference to the microphone and
@@ -116,6 +126,8 @@ class CapturePreprocessorFactory(
                     // capture thread have to meet the same object, because that object is what
                     // holds the one lock over the one handle (spec §4.1).
                     farEnd = apm
+                    // The APM's own number, travelling with the sink. See CaptureChain.
+                    farEndFrameSize = apm.farEndFrameSize
                 }
             }
             when (noise) {
@@ -142,7 +154,7 @@ class CapturePreprocessorFactory(
             1 -> stages[0]
             else -> ChainedPreprocessor(stages)
         }
-        return CaptureChain(preprocessor, farEnd)
+        return CaptureChain(preprocessor, farEnd, farEndFrameSize)
     }
 
     /**

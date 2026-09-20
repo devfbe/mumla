@@ -149,6 +149,20 @@ class CapturePreprocessorFactoryTest {
         assertThat(chain.farEndSink).isSameInstanceAs(chain.preprocessor)
     }
 
+    /**
+     * The length that travels with the sink, and the reason it travels at all: only a *short*
+     * far-end frame is refused and counted, a long one is accepted and truncated in silence. A
+     * caller that sized its chunker from a constant would therefore lose about 21 dB with every
+     * counter at 0, so the APM's own answer is carried out of here instead.
+     */
+    @Test
+    fun `the chain carries the far-end frame size the apm demands`() {
+        assertThat(factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC).farEndFrameSize)
+            .isEqualTo(FRAME)
+        assertThat(factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.NONE).farEndFrameSize)
+            .isEqualTo(0)
+    }
+
     /** A chain of one is that one stage; wrapping it would cost an indirection on every frame. */
     @Test
     fun `a single stage is handed back unwrapped`() {

@@ -162,22 +162,46 @@ object LevelToProbability {
  * it: AEC3 estimates the delay itself and feeding it the true delay moved the residual echo by
  * less than 0.02 dB (task 2).
  */
-class WebRtcApmPreprocessor(
+class WebRtcApmPreprocessor private constructor(
     private val api: WebRtcApmApi,
-    config: WebRtcApmConfig,
-    sampleRate: Int = DEFAULT_SAMPLE_RATE,
-) : SingleHandleStage(
-    api.create(
-        sampleRate,
-        config.echoCancellation,
-        config.noiseSuppression,
-        UNUSED_NOISE_SUPPRESSION_LEVEL,
-        config.gainControl,
-        config.highPass,
-    ),
-    "the webrtc audio processing module at $sampleRate Hz",
-),
+    handle: Long,
+    sampleRate: Int,
+) : SingleHandleStage(handle, "the webrtc audio processing module at $sampleRate Hz"),
     FarEndSink {
+
+    constructor(
+        api: WebRtcApmApi,
+        config: WebRtcApmConfig,
+        sampleRate: Int = DEFAULT_SAMPLE_RATE,
+    ) : this(
+        api,
+        api.create(
+            sampleRate,
+            config.echoCancellation,
+            config.noiseSuppression,
+            UNUSED_NOISE_SUPPRESSION_LEVEL,
+            config.gainControl,
+            config.highPass,
+        ),
+        sampleRate,
+    )
+
+    /**
+     * How many samples one far-end frame has to hold, **asked of the APM** rather than computed
+     * from the rate this stage was asked for. `FarEndFrameChunker` is built with this number.
+     *
+     * The direction that needs it is the one with no observable: `jni_webrtc_apm.cpp:55` refuses a
+     * frame *shorter* than the APM's -- that is [rejectedFarEndFrames] -- but accepts a longer one
+     * and silently drops its tail, so a chunker built for 960 samples against a 480-sample APM
+     * loses about 21 dB of echo cancellation with every counter in this class still reading 0.
+     * A constant at the wiring site is exactly how that happens; `WebRtcApmApi.frameSize` is the
+     * number the native side will really read, and this is its production caller.
+     *
+     * Read once, while the handle is still this constructor's: it cannot change for the life of
+     * the handle, and a released stage still answers what its chunker was sized for rather than
+     * the 0 the bridge would report.
+     */
+    val farEndFrameSize: Int = api.frameSize(handle)
 
     /**
      * Near-end frames the APM refused, i.e. any non-zero `webrtc::AudioProcessing::Error` -- -8 for

@@ -21,15 +21,17 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
-import android.media.MediaRecorder;
 import android.util.Log;
 
 import se.lublin.humla.R;
 import se.lublin.humla.audio.AudioInput;
 import se.lublin.humla.audio.AudioOutput;
+import se.lublin.humla.audio.capture.AndroidAudioEffects;
+import se.lublin.humla.audio.capture.AudioSourcePolicy;
 import se.lublin.humla.audio.capture.CaptureFrame;
 import se.lublin.humla.audio.capture.CapturePipeline;
 import se.lublin.humla.audio.capture.CaptureWiring;
+import se.lublin.humla.audio.capture.EchoCancellationMode;
 import se.lublin.humla.audio.capture.NoiseSuppressionMode;
 import se.lublin.humla.audio.encoder.CELT11Encoder;
 import se.lublin.humla.audio.encoder.CELT7Encoder;
@@ -62,6 +64,13 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     public static final int SAMPLE_RATE = 48000;
     public static final int FRAME_SIZE = SAMPLE_RATE/100;
     public static final int MAX_BUFFER_SIZE = 960;
+
+    /**
+     * Spec B6's android.media.audiofx effects are not wired through this class yet, so the source
+     * policy is asked with both of them off. The moment they are, this constant is the thing that
+     * has to become the real setting -- not a second copy of the condition.
+     */
+    private static final AndroidAudioEffects NO_ANDROID_EFFECTS = new AndroidAudioEffects(false, false);
 
     private final Context mContext;
     private final HumlaLogger mLogger;
@@ -129,14 +138,25 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         mEncoderLock = new Object();
 
-        int actualSource = audioSource;
-        if (echoCancellationMethod.equals("system") /* android.media.audiofx.AcousticEchoCanceler */) {
-            // Enforce MODE_IN_COMMUNICATION for AudioManager, some AECs won't function without this.
-            AudioManager audioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
-            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-            actualSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION;
+        final EchoCancellationMode echo = EchoCancellationMode.fromPreferenceValue(echoCancellationMethod);
+        // One decision for the recording source and the audio mode, because they have to agree:
+        // AudioSourcePolicy also resolves the source inside PcmCaptureSource, so asking it here
+        // rather than testing for "system" is what keeps the WebRTC canceller from capturing on
+        // VOICE_COMMUNICATION while the manager still sits in MODE_NORMAL. Some AECs -- ours
+        // included, it needs a shared clock with the playback path -- will not work otherwise.
+        //
+        // KNOWN DEFECT, and the reason echo cancellation is not the default: this mode changes
+        // how Android routes *output*, and initialize() below still opens the playback track on
+        // whatever stream the app chose -- STREAM_MUSIC unless handset mode is on. A media-stream
+        // track does not follow the communication route, and a Galaxy S25 on "system" reports
+        // hearing nobody at all. The fix belongs to the routing seam (setCommunicationDevice to
+        // the built-in speaker when handset mode is off, track on the communication stream), not
+        // here. Settings.DEFAULT_ECHO_CANCELLATION_METHOD and EchoCancellationDefaultRouteTest
+        // hold the default at "none" until it lands.
+        if (AudioSourcePolicy.needsCommunicationMode(NO_ANDROID_EFFECTS, echo)) {
+            mAudioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
         }
-        mAudioSource = actualSource;
+        mAudioSource = AudioSourcePolicy.resolve(audioSource, NO_ANDROID_EFFECTS, echo);
 
         if (mContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -144,16 +164,21 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         }
         mInput = new AudioInput(this, mAudioSource, mSampleRate, mEchoCancellationMethod);
         // The existing `preprocessor_enabled` switch keeps its meaning -- "suppress noise" -- and
-        // changes what does the suppressing: RNNoise instead of speex inside the encoder. Echo
-        // cancellation is not configured here: AEC3 needs the far-end reference from AudioOutput,
-        // and without it task 2 measured -0.62 dB of residual echo against -22.32 dB wired
-        // correctly. The platform canceller the user may have chosen is attached to the AudioRecord
-        // session by AudioInput, exactly as before.
-        mCapturePipeline = CaptureWiring.capturePipeline(
+        // changes what does the suppressing: RNNoise instead of speex inside the encoder. The echo
+        // setting picks between the platform canceller, which AudioInput attaches to the
+        // AudioRecord session exactly as before, and ours -- never both, they are two values of
+        // one preference.
+        //
+        // Both ends of the WebRTC canceller are taken from one call and handed to the two threads
+        // that need them: the chain to the capture thread, and the far-end tap to AudioOutput's
+        // playback thread. Wiring only the near end measured -0.62 dB of residual echo against
+        // -22.32 dB with the reference fed (task 2).
+        CaptureWiring.Wiring wiring = CaptureWiring.wire(
                 mInput.getSampleRate(), mInputMode, mAmplitudeBoost,
                 mPreprocessorEnabled ? NoiseSuppressionMode.RNNOISE : NoiseSuppressionMode.NONE,
-                mLogger);
-        mOutput = new AudioOutput(mOutputListener);
+                echo, mLogger);
+        mCapturePipeline = wiring.getPipeline();
+        mOutput = new AudioOutput(mOutputListener, wiring.getFarEnd());
     }
 
     /**
