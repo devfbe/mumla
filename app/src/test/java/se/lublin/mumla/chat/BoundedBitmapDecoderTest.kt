@@ -271,6 +271,106 @@ class BoundedBitmapDecoderTest {
         assertThat(bitmap.width).isEqualTo(240)
         assertThat(bitmap.height).isEqualTo(120)
     }
+
+    // ---- the one-allocation decode the fullscreen viewer uses -------------------------------
+
+    @Test
+    fun theAtMostSampleTakesTheHalvingTheExactFitDeclines() {
+        // Just under twice the bound on both axes: the exact-fit sampler stops at 1 and hands the
+        // scaler the whole image, which is the case that peaks.
+        assertThat(BoundedBitmapDecoder.sampleSizeFor(479, 479, 240, 240)).isEqualTo(1)
+        assertThat(BoundedBitmapDecoder.sampleSizeAtMost(479, 479, 240, 240)).isEqualTo(2)
+        // Exactly on twice: both agree, because one halving lands exactly on the bound.
+        assertThat(BoundedBitmapDecoder.sampleSizeAtMost(480, 480, 240, 240)).isEqualTo(2)
+        // Already inside the bound: nothing to sample either way.
+        assertThat(BoundedBitmapDecoder.sampleSizeAtMost(100, 40, 240, 240)).isEqualTo(1)
+        assertThat(BoundedBitmapDecoder.sampleSizeAtMost(240, 240, 240, 240)).isEqualTo(1)
+        // Bounded by one axis alone, same as sampleSizeFor: 12000/240 -> 32 there, 64 here.
+        assertThat(BoundedBitmapDecoder.sampleSizeAtMost(12000, 200, 240, 240)).isEqualTo(64)
+    }
+
+    @Test
+    fun theAtMostSampleKeepsTheDegenerateAndRejectingCornersOfTheOtherOne() {
+        assertThat(BoundedBitmapDecoder.sampleSizeAtMost(0, 500, 240, 240)).isEqualTo(1)
+        assertThat(BoundedBitmapDecoder.sampleSizeAtMost(500, 0, 240, 240)).isEqualTo(1)
+        assertThat(BoundedBitmapDecoder.sampleSizeAtMost(-1, -1, 240, 240)).isEqualTo(1)
+        assertThrows(IllegalArgumentException::class.java) {
+            BoundedBitmapDecoder.sampleSizeAtMost(1000, 500, 0, 240)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            BoundedBitmapDecoder.sampleSizeAtMost(1000, 500, 240, -3)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            BoundedBitmapDecoder.decodeAtMost(TestImages.png(1000, 500), 0, 240)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            BoundedBitmapDecoder.decodeAtMost(ByteArray(0), 240, -5)
+        }
+    }
+
+    @Test
+    fun theAtMostDecodeReportsUndecodableDataTheSameWay() {
+        assertThat(BoundedBitmapDecoder.decodeAtMost("definitely not an image".toByteArray(), 240, 240)).isNull()
+        assertThat(BoundedBitmapDecoder.decodeAtMost(ByteArray(0), 240, 240)).isNull()
+    }
+
+    @Test
+    fun theAtMostDecodeNeverExceedsTheBoundAndNeverUpscales() {
+        val big = BoundedBitmapDecoder.decodeAtMost(TestImages.png(479, 479), 240, 240)!!
+        assertThat(big.width).isAtMost(240)
+        assertThat(big.height).isAtMost(240)
+        val small = BoundedBitmapDecoder.decodeAtMost(TestImages.png(100, 40), 240, 240)!!
+        assertThat(small.width).isEqualTo(100)
+        assertThat(small.height).isEqualTo(40)
+    }
+
+    /**
+     * The measurement, and the whole reason the function exists.
+     *
+     * The instrument is the shadow's own record of what the path built, not a heap delta: a heap
+     * delta measures the opposite here, because Robolectric does not implement `inJustDecodeBounds`
+     * and allocates a full bitmap for the bounds pass. `createdFromBitmap` hands back the instance
+     * `createScaledBitmap` scaled from, so the sum below is every bitmap the decode created and
+     * held at once — a *structural* peak, exact for this path, and it does not depend on the JVM's
+     * allocator. It is validated in the same test: the exact-fit path must show a chain of two and
+     * the at-most path a chain of one, so a run in which the instrument read nothing back fails
+     * rather than reporting zero.
+     *
+     * The size is a tenth of the real one on each axis so the fixture stays cheap; bitmap bytes are
+     * w * h * 4, so the real figures at 2160 x 4680 (the viewer's bound on a 1080 x 2340 screen)
+     * are exactly a hundred times these, and the sample sizes are pinned at that size above.
+     */
+    @Test
+    fun theFullscreenDecodeHoldsOneBitmapWhereTheExactFitHoldsTwo() {
+        val png = TestImages.png(431, 935) // just under twice 216 x 468 on the limiting axis
+
+        val exact = BoundedBitmapDecoder.decode(png, 216, 468)!!
+        val intermediate = shadowOf(exact).createdFromBitmap
+        assertThat(intermediate).isNotNull() // instrument check: the exact fit really does copy
+        val exactPeak = exact.byteCount.toLong() + intermediate!!.byteCount.toLong()
+
+        val atMost = BoundedBitmapDecoder.decodeAtMost(png, 216, 468)!!
+        assertThat(shadowOf(atMost).createdFromBitmap).isNull() // one allocation, nothing to add
+        val atMostPeak = atMost.byteCount.toLong()
+
+        assertThat(intermediate.width).isEqualTo(431) // the full image, materialised
+        assertThat(exactPeak).isEqualTo(431L * 935 * 4 + exact.width.toLong() * exact.height * 4)
+        assertThat(atMostPeak).isEqualTo(215L * 467 * 4)
+        assertThat(atMostPeak * 5).isLessThan(exactPeak)
+    }
+
+    /**
+     * The same worst case at the size the viewer really asks for — sample sizes only, so nothing is
+     * allocated. 4319 x 9359 at 4 bytes a pixel is 161.7 MB decoded whole; the fitted copy beside
+     * it is 40.4 MB, so the exact fit peaks at 202.1 MB. One halving brings the decode to
+     * 2159 x 4679, which is 40.4 MB and the only bitmap there is.
+     */
+    @Test
+    fun atTwiceA1080x2340ScreenTheHalvingIsWhatSeparates202MBFrom40MB() {
+        assertThat(BoundedBitmapDecoder.sampleSizeFor(4319, 9359, 2160, 4680)).isEqualTo(1)
+        assertThat(BoundedBitmapDecoder.sampleSizeAtMost(4319, 9359, 2160, 4680)).isEqualTo(2)
+    }
+
 }
 
 /**

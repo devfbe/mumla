@@ -148,11 +148,18 @@ class ChatImageLoader(
         return shared(key) { loadAndCache(key, source, sourceKey, maxWidth, maxHeight) }
     }
 
-    /** Decode bounded by the given size (e.g. the screen); never cached as a bitmap. */
+    /**
+     * Decode bounded by the given size (e.g. the screen); never cached as a bitmap.
+     *
+     * Bounded with [BoundedBitmapDecoder.decodeAtMost], not with an exact fit: this is the only
+     * path whose bound is screen-sized, so it is the only one where the exact fit's second bitmap
+     * is measured in tens of megabytes. See that function for the numbers and for why the viewer
+     * does not notice.
+     */
     suspend fun loadFull(source: String, maxWidth: Int, maxHeight: Int): ImageResult {
         if (maxWidth <= 0 || maxHeight <= 0) return ImageResult.Skipped
         if (source.length > MAX_SOURCE_LENGTH) return ImageResult.Failed(ImageError.TOO_LARGE)
-        return load(source, withContext(decodeDispatcher) { cacheKey(source) }, maxWidth, maxHeight)
+        return load(source, withContext(decodeDispatcher) { cacheKey(source) }, maxWidth, maxHeight, exactFit = false)
     }
 
     /**
@@ -280,13 +287,25 @@ class ChatImageLoader(
         else -> Long.MAX_VALUE
     }
 
-    private suspend fun load(source: String, sourceKey: String, maxWidth: Int, maxHeight: Int): ImageResult = gate.withPermit {
+    private suspend fun load(
+        source: String,
+        sourceKey: String,
+        maxWidth: Int,
+        maxHeight: Int,
+        exactFit: Boolean = true,
+    ): ImageResult = gate.withPermit {
         val bytes = try {
             withContext(ioDispatcher) { fetchBytes(source, sourceKey) }
         } catch (e: ImageFetchException) {
             return@withPermit ImageResult.Failed(e.error)
         }
-        val bitmap = withContext(decodeDispatcher) { BoundedBitmapDecoder.decode(bytes, maxWidth, maxHeight) }
+        val bitmap = withContext(decodeDispatcher) {
+            if (exactFit) {
+                BoundedBitmapDecoder.decode(bytes, maxWidth, maxHeight)
+            } else {
+                BoundedBitmapDecoder.decodeAtMost(bytes, maxWidth, maxHeight)
+            }
+        }
         if (bitmap == null) ImageResult.Failed(ImageError.MALFORMED) else ImageResult.Ready(bitmap)
     }
 

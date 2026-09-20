@@ -33,6 +33,31 @@ object BoundedBitmapDecoder {
     }
 
     /**
+     * Smallest power-of-two sample size whose result is at or **below** the aspect-fitted target
+     * size — [sampleSizeFor]'s rounding turned the other way.
+     *
+     * One halving more than [sampleSizeFor] takes, and that one halving is the difference between
+     * holding one bitmap and holding two. [sampleSizeFor] stops while the sampled image is still
+     * larger than the box, so an exact fit needs a second, scaled bitmap and both are alive at
+     * once; this one lands at or under the box, so the decoded bitmap is the only one there ever
+     * is. The cost is up to one halving of detail. [decodeAtMost] is where that trade is taken and
+     * its KDoc says why the fullscreen viewer can afford it.
+     *
+     * Same contract as [sampleSizeFor] otherwise: a non-positive [width] or [height] means the
+     * header could not be read, and the bounds must be positive.
+     *
+     * @throws IllegalArgumentException if [maxWidth] or [maxHeight] is not positive.
+     */
+    fun sampleSizeAtMost(width: Int, height: Int, maxWidth: Int, maxHeight: Int): Int {
+        requirePositiveBounds(maxWidth, maxHeight)
+        if (width <= 0 || height <= 0) return 1
+        val fit = minOf(maxWidth / width.toFloat(), maxHeight / height.toFloat()).coerceAtMost(1f)
+        var sample = 1
+        while (1f / sample > fit) sample *= 2
+        return sample
+    }
+
+    /**
      * Decodes [bytes] to a bitmap no larger than [maxWidth] x [maxHeight], aspect ratio kept.
      *
      * The size is taken from the header first and the image is sampled down while it is decoded, so
@@ -57,7 +82,39 @@ object BoundedBitmapDecoder {
      *   caller-supplied limits rather than untrusted data, so a bad one is a programming error and
      *   must not be disguised as "not an image".
      */
-    fun decode(bytes: ByteArray, maxWidth: Int, maxHeight: Int): Bitmap? {
+    fun decode(bytes: ByteArray, maxWidth: Int, maxHeight: Int): Bitmap? =
+        decode(bytes, maxWidth, maxHeight, exactFit = true)
+
+    /**
+     * Decodes [bytes] to a bitmap that is at or **below** [maxWidth] x [maxHeight] — never above,
+     * never rescaled — so the decode allocates exactly one bitmap and the peak is what is kept.
+     *
+     * [decode] cannot do that. An exact fit needs a scaled copy of the sampled bitmap, and the two
+     * are alive together: sampling stops while the intermediate is still in [1x, 2x) of the target
+     * per axis, i.e. up to 4x the pixels, for a peak of just over **5x** what is kept. There is no
+     * decoder flag that removes the copy. `inScaled` is this same two-step done inside
+     * `BitmapFactory::doDecode`, and when it scales it redirects `inBitmap` to the heap allocator,
+     * so reuse is no escape either; `ImageDecoder.setTargetSize` scales in the codec only where the
+     * codec can (JPEG, WebP) and **not for PNG**, which is what the worst case is built from.
+     *
+     * So the fit is given up instead. Measured at twice a 1080x2340 screen, which is what the
+     * fullscreen viewer asks for: a 4319 x 9359 image — just under twice the bound, the worst case
+     * — samples at 1 under [sampleSizeFor] and at 2 here, which is 161.7 MB + 40.4 MB held at once
+     * against 40.4 MB. The 128 MiB `heapgrowthlimit` this spec measures itself against sits between
+     * the two.
+     *
+     * It costs nothing on screen: `ZoomImageView` draws with `ScaleType.MATRIX` and derives its
+     * zoom ceiling from the bitmap's own intrinsic size, so a smaller bitmap moves the ceiling
+     * rather than clipping the picture. It is not free for a **thumbnail**, which is drawn into a
+     * fixed box and would simply be softer, which is why [decode] keeps the exact fit and only the
+     * viewer's path comes here.
+     *
+     * @throws IllegalArgumentException if [maxWidth] or [maxHeight] is not positive.
+     */
+    fun decodeAtMost(bytes: ByteArray, maxWidth: Int, maxHeight: Int): Bitmap? =
+        decode(bytes, maxWidth, maxHeight, exactFit = false)
+
+    private fun decode(bytes: ByteArray, maxWidth: Int, maxHeight: Int, exactFit: Boolean): Bitmap? {
         requirePositiveBounds(maxWidth, maxHeight)
 
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -69,12 +126,18 @@ object BoundedBitmapDecoder {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
         val options = BitmapFactory.Options().apply {
-            inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxWidth, maxHeight)
+            inSampleSize = if (exactFit) {
+                sampleSizeFor(bounds.outWidth, bounds.outHeight, maxWidth, maxHeight)
+            } else {
+                sampleSizeAtMost(bounds.outWidth, bounds.outHeight, maxWidth, maxHeight)
+            }
         }
         val decoded = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) }
             .getOrElse { if (it is RuntimeException) return null else throw it }
             ?: return null
-        return BitmapUtils.resizeKeepingAspect(decoded, maxWidth, maxHeight)
+        // The at-most sample already put the decode inside the box, so there is nothing left to
+        // scale and nothing to hold a second bitmap for.
+        return if (exactFit) BitmapUtils.resizeKeepingAspect(decoded, maxWidth, maxHeight) else decoded
     }
 
     private fun requirePositiveBounds(maxWidth: Int, maxHeight: Int) {

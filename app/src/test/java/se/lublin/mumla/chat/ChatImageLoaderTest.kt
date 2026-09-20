@@ -22,6 +22,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowBitmapFactory
 import java.net.InetSocketAddress
 import java.security.MessageDigest
@@ -325,7 +326,10 @@ class ChatImageLoaderTest {
         val l = loader()
         val first = l.loadFull(url, 200, 200) as ImageResult.Ready
         val second = l.loadFull(url, 200, 200) as ImageResult.Ready
-        assertThat(first.bitmap.width).isEqualTo(200)
+        // 300 into 200: one halving lands at 150, which is inside the box. loadFull takes it,
+        // because the alternative is a second full-size bitmap alive beside the result — see
+        // BoundedBitmapDecoder.decodeAtMost.
+        assertThat(first.bitmap.width).isEqualTo(150)
         assertThat(second.bitmap).isNotSameInstanceAs(first.bitmap)
         assertThat(fetched).containsExactly(url)
     }
@@ -639,6 +643,37 @@ class ChatImageLoaderTest {
                 .that(ChatImageLoader.cacheKey(it)).isEqualTo(reference(it))
         }
     }
+
+    /**
+     * The fullscreen decode must hold **one** bitmap. Its bound is the screen, so the exact fit's
+     * second bitmap is measured in tens of megabytes: sampling stops while the intermediate is
+     * still in [1x, 2x) of the target per axis, up to 4x the pixels, for a peak of just over 5x
+     * what is kept. Scaled to twice a 1080x2340 screen that is a 202 MB peak, against the 128 MiB
+     * `heapgrowthlimit` this spec measures itself by.
+     *
+     * The instrument is the shadow's own record of what the path built — `createdFromBitmap` is
+     * the instance `createScaledBitmap` scaled from — not a heap delta, which measures the opposite
+     * here because Robolectric allocates a full bitmap for the `inJustDecodeBounds` pass it does
+     * not implement. The thumbnail half is the instrument's validation: it must still show a chain
+     * of two, so a run in which the instrument read nothing back fails rather than reporting one
+     * bitmap everywhere.
+     */
+    @Test
+    fun loadFullDecodesInOneAllocationWhileTheThumbnailStillFitsExactly() = runTest(dispatcher) {
+        // 431 x 935 into 216 x 468 is just under twice the bound: the exact fit's worst case.
+        remoteBody = TestImages.png(431, 935)
+        val l = loader()
+        val full = (l.loadFull(url, 216, 468) as ImageResult.Ready).bitmap
+        assertThat(shadowOf(full).createdFromBitmap).isNull()
+        assertThat(full.width).isAtMost(216)
+        assertThat(full.height).isAtMost(468)
+
+        val thumb = (l.loadThumbnail(TestImages.dataUri(TestImages.png(431, 935)), 216, 468)
+            as ImageResult.Ready).bitmap
+        assertThat(shadowOf(thumb).createdFromBitmap).isNotNull()
+        assertThat(thumb.height).isEqualTo(468)
+    }
+
 }
 
 /**

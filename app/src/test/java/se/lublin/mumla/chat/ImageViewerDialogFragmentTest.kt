@@ -250,7 +250,7 @@ class ImageViewerDialogFragmentTest {
      * environment's own metrics, so the same assertion holds under the second screen below.
      */
     @Test
-    fun theImageIsDecodedAtTwiceTheScreenSoThereIsDetailToZoomInto() {
+    fun theImageIsDecodedBetweenOneAndTwoScreensSoThereIsDetailToZoomInto() {
         installLoader { TestImages.png(2000, 2000) }
         launched { fragment ->
             idle()
@@ -258,8 +258,8 @@ class ImageViewerDialogFragmentTest {
             assertThat(metrics.widthPixels).isEqualTo(320)
             assertThat(metrics.heightPixels).isEqualTo(470)
             val bitmap = (fragment.image().drawable as BitmapDrawable).bitmap
-            assertThat(bitmap.width).isEqualTo(2 * metrics.widthPixels)
-            assertThat(bitmap.height).isEqualTo(2 * metrics.widthPixels)
+            assertThat(bitmap.width).isAtMost(2 * metrics.widthPixels)
+            assertThat(bitmap.width).isAtLeast(metrics.widthPixels)
         }
     }
 
@@ -271,14 +271,18 @@ class ImageViewerDialogFragmentTest {
     @Test
     @Config(qualifiers = "w480dp-h800dp-mdpi")
     fun theDecodeBoundFollowsTheScreenRatherThanAConstant() {
-        installLoader { TestImages.png(2000, 2000) }
+        installLoader { TestImages.png(3000, 3000) }
         launched { fragment ->
             idle()
             val metrics = fragment.resources.displayMetrics
             assertThat(metrics.widthPixels).isEqualTo(480)
             assertThat(metrics.heightPixels).isEqualTo(800)
             val bitmap = (fragment.image().drawable as BitmapDrawable).bitmap
-            assertThat(bitmap.width).isEqualTo(2 * metrics.widthPixels)
+            // 3000 into 960 samples at 8, into 640 at 16: the same source gives 750 here and 375
+            // on the default screen, so a constant bound cannot satisfy both.
+            assertThat(bitmap.width).isEqualTo(750)
+            assertThat(bitmap.width).isAtMost(2 * metrics.widthPixels)
+            assertThat(bitmap.width).isAtLeast(metrics.widthPixels)
         }
     }
 
@@ -297,51 +301,53 @@ class ImageViewerDialogFragmentTest {
             assertThat(metrics.heightPixels).isEqualTo(2340)
 
             val shown = (fragment.image().drawable as BitmapDrawable).bitmap
-            assertThat(shown.width).isEqualTo(2160)
-            assertThat(shown.height).isEqualTo(4680)
-            assertThat(shown.byteCount).isEqualTo(40_435_200)
+            // 2400 x 5200 into 2160 x 4680 samples at 2 and stops there. What the doubling bounds
+            // is 2160 x 4680 = 40_435_200 B, and since the decode allocates once, that ceiling is
+            // now the peak rather than a fifth of it.
+            assertThat(shown.width).isEqualTo(1200)
+            assertThat(shown.height).isEqualTo(2600)
+            assertThat(shown.byteCount).isAtMost(40_435_200)
+            assertThat(shadowOf(shown).createdFromBitmap).isNull()
         }
     }
 
     /**
-     * ...and what it *costs while it is being made*, which is the number the spec does not have.
+     * ...and what it costs **while it is being made**, which is the number the spec did not have
+     * until this test measured it — and which is why the fullscreen path stopped fitting exactly.
      *
-     * `BoundedBitmapDecoder` samples by powers of two and then calls `Bitmap.createScaledBitmap`,
-     * so the intermediate and the result are both alive for the length of that call. Sampling stops
-     * as soon as one more halving would undershoot the target, which leaves the intermediate
-     * anywhere in [1x, 2x) of the target on each axis -- up to four times the pixels. A source
-     * sized just above a halving hits that ceiling exactly, and the peak is then just **over** five
-     * times the bitmap the viewer keeps. Five is a supremum and never a value: the `toInt()`
-     * truncation in `resizeKeepingAspect` makes the target box slightly smaller than the exact fit,
-     * so the ratio sits above 5 (5.0026 in the spec's 1080x2340 worst case, 5.0010 here). The
-     * assertion below is written as a bound in both directions rather than as an approximate
-     * equality, so that a change which pushes the ratio *below* 5 is a failure and not a rounding.
+     * Before: `BoundedBitmapDecoder.decode` sampled by powers of two and then called
+     * `Bitmap.createScaledBitmap`, so the intermediate and the result were both alive for the
+     * length of that call. Sampling stopped as soon as one more halving would undershoot, which
+     * left the intermediate anywhere in [1x, 2x) of the target per axis — up to four times the
+     * pixels — for a peak just **over five times** the bitmap the viewer keeps. Measured at this
+     * screen: 9_612_964 B beside 2_402_640 B, a peak of 12_015_604 B at a ratio of 5.0010. Scaled
+     * to 1080x2340 at K=2 that is **202_176_000 B, about 193 MiB**, against the 128 MiB
+     * `heapgrowthlimit` floor task 6 measured, with nothing catching the `OutOfMemoryError`.
      *
-     * Measured here at the default 320x470 screen because a full-size reproduction would have to
-     * build a 40-megapixel image in the test JVM. The factor does not depend on the size, so at
-     * 1080x2340 and K=2 it reads: **5 x 40_435_200 B = 202_176_000 B, about 193 MiB**, against the
-     * 128 MiB `heapgrowthlimit` floor task 6 measured. At K=1 the same worst case is 50_544_000 B,
-     * about 48 MiB. Applying the spec's own criterion to the measured peak rather than to the
-     * retained bitmap therefore does *not* yield K=2; see the task report. Nothing catches the
-     * `OutOfMemoryError` on the way out, by design (task 5), so the failure mode is a crash.
+     * After: `loadFull` decodes with `decodeAtMost`, which takes the halving the exact fit
+     * declines. The decoded bitmap is then at or below the box, there is nothing to scale, and the
+     * peak **is** what is kept — 2_400_084 B here, a factor of 5.006 less. What it costs is up to
+     * one halving of detail, which the assertions above bound: the bitmap is never smaller than
+     * one screen on the limiting axis, so zooming to one source pixel per screen pixel is still
+     * reachable, and `ZoomImageView` derives its ceiling from the intrinsic size rather than
+     * assuming a fit scale of 1.
      */
     @Test
-    fun theTransientPeakOfADecodeIsFiveTimesTheBitmapItKeeps() {
-        // 1279x1879 into the 640x940 box: one halving would undershoot, so nothing is sampled away.
+    fun theDecodeHoldsNothingBesideTheBitmapItKeeps() {
+        // 1279x1879 into the 640x940 box: the case that used to peak, because one halving would
+        // have undershot the exact fit and nothing was sampled away.
         installLoader { TestImages.png(1279, 1879) }
         launched { fragment ->
             idle()
             val shown = (fragment.image().drawable as BitmapDrawable).bitmap
-            val intermediate = shadowOf(shown).createdFromBitmap!!
 
-            assertThat(shown.width to shown.height).isEqualTo(639 to 940)
-            assertThat(shown.byteCount).isEqualTo(2_402_640)
-            assertThat(intermediate.width to intermediate.height).isEqualTo(1279 to 1879)
-            assertThat(intermediate.byteCount).isEqualTo(9_612_964)
+            assertThat(shadowOf(shown).createdFromBitmap).isNull()
+            assertThat(shown.width to shown.height).isEqualTo(639 to 939)
+            assertThat(shown.byteCount).isEqualTo(2_400_084)
 
-            val peak = intermediate.byteCount.toLong() + shown.byteCount
-            assertThat(peak).isEqualTo(12_015_604L)
-            val ratio = peak.toDouble() / shown.byteCount
+            val peak = shown.byteCount.toLong()
+            assertThat(peak).isEqualTo(2_400_084L)
+            val ratio = 12_015_604.0 / peak
             assertThat(ratio).isGreaterThan(5.0)
             assertThat(ratio).isLessThan(5.01)
         }
