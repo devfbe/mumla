@@ -1520,6 +1520,15 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
      an agent that stops twice without reporting is stuck, not done — look in its
      worktree (one command) before dispatching anything that writes there.
 
+- **A ruling in §4.1 that binds a later task must also be written into that stream's
+  `contracts.md` — and I have now failed to do that twice (process, mine).** The ledger
+  split I introduced makes `contracts.md` the mandatory reading and `progress.md` a thing
+  to grep. So a ruling that lives only in the spec reaches the task it binds **by
+  accident**. It happened to task 6's eight-point behaviour contract, which a reviewer
+  caught, and then again to the binding Bluetooth obligation from stream P, which the next
+  implementer caught while reading his own brief. Both are nachgetragen. The rule: **the
+  same commit that writes a ruling writes it to the stream that has to obey it.**
+
 - **Scope cut by the user, 2026-09-20: finish the five original complaints, drop the rest.**
   Budget, not doubt, is the reason. **In scope (8 tasks):** B9, B10, B11, B12+13 — which is
   what makes noise cancelling audible and adjustable, since every stage is built and
