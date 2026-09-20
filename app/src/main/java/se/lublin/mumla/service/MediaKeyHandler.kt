@@ -63,8 +63,9 @@ class MediaKeyHandler(
          * SM-T220. That is repeated delivery of the *same* keycode; for the cross-key case (one
          * press producing both HEADSETHOOK and MEDIA_PLAY_PAUSE) no evidence was found. Whether it
          * reaches us is unverified: that report is about Media3's dispatch and we receive keys
-         * through MediaSessionCompat, so it is one more thing for Task 4 to measure on real
-         * hardware alongside the ACTION_DOWN/ACTION_UP question.
+         * through MediaSessionCompat, and it is the half of the question that needs hardware. The
+         * other half -- which key action the platform delivers -- is measured and settled; see
+         * [onKeyEvent].
          *
          * It is not debounced here regardless. A time-window filter cannot distinguish a duplicated
          * event from a deliberate quick double press, and the two want opposite outcomes: a real
