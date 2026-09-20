@@ -18,6 +18,7 @@ package se.lublin.humla.protocol
 
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -52,7 +53,13 @@ import kotlin.concurrent.thread
  *
  * 1. `ConcurrentModificationException` out of the walk, after 158 iterations at frame 835 of 5 000.
  *    `updateChannels()` catches only `IllegalStateException`, so on the device this is a crash on
- *    joining a large server with the channel list open.
+ *    joining a large server with the channel list open. The throwing frame is worth naming exactly,
+ *    because it decides which method needs the copy: measured five times out of five, it is
+ *    `Channel.getSubchannelUserCount`'s own `for (sub in mSubchannels)`, reached four frames deep
+ *    from the `subchannelUserCount` read at the top of [constructNodes] - *not* from
+ *    [constructNodes]'s own loop over `channel.subchannels`, which is the line the walk appears to
+ *    blame. The recursion iterates the live list; the adapter only ever iterates a snapshot it was
+ *    handed.
  * 2. `HashMap.get` returning `null` for a key that is present, because a concurrent `put` is
  *    rehashing. `updateChannels()` skips a null channel, so the walk silently renders an empty
  *    channel list. Measured standalone at 20 rounds out of 20 before this test existed.
@@ -153,15 +160,23 @@ class ModelRaceTest {
         protocolThread.join()
         mainWalk.join()
 
-        assertThat(walkFailure.get()).isNull()
+        assertWithMessage("walk failed at frame %s of %s", failedAtFrame.get(), frames.get())
+            .that(walkFailure.get()).isNull()
         assertThat(nullReadsForPresentKeys.get()).isEqualTo(0)
         // Guards the guard: a walk that ran only after the feeder had finished would satisfy both
         // assertions above without ever opening the window (spec 4.04). A "concurrent walk" is one
         // during which the frame counter advanced, so this counts overlap rather than wall-clock
-        // luck. The bound is 1 on purpose: the unguarded model needed as few as 4 walks to throw
-        // (measured over five runs: 4, 20, 112, 112, 275), so a higher bound would only make the
-        // test scheduler-dependent, not stronger.
-        assertThat(concurrentWalks.get()).isAtLeast(1)
+        // luck.
+        //
+        // The bound used to be 1, which is enough to fail a walk that never ran and blind to
+        // anything short of that: a change that pushed the overlap from hundreds to two would go
+        // unnoticed. Measured over six runs, three here and three by review: 696, 714, 860 of
+        // 1 177-1 296 walks, and 613 of 1 120. 100 sits an order of magnitude under the worst of
+        // those and well over the handful of walks the unguarded model needed to throw (4, 20,
+        // 112, 112, 275), so it stays insensitive to the scheduler and sensitive to the window
+        // closing.
+        assertWithMessage("only %s of %s walks overlapped a frame", concurrentWalks.get(), walks.get())
+            .that(concurrentWalks.get()).isAtLeast(100)
     }
 
     /**
@@ -212,6 +227,7 @@ class ModelRaceTest {
         assertThat(bogusNulls.get()).isEqualTo(0)
         // Without this a reader that never got to run would pass (spec 4.04).
         assertThat(lookups.get()).isGreaterThan(1_000)
+        assertThat(stored.get()).isEqualTo(4_999)
     }
 
     /**

@@ -25,6 +25,16 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 /**
+ * What [ChannelTest.race] demands of the overlap it produces, so that a reader whose loop never
+ * started cannot report no damage and pass (spec 4.04). Measured over four runs of the five tests
+ * that use the helper: the lowest any of them produced was 256 overlapping observations of 256
+ * taken, the highest 8 069 of 8 344, and the overlap was never below 95% of the reads. A bound of
+ * 50 is an order of magnitude under the worst measurement and still tells a future change that
+ * closes the window from one that does not.
+ */
+private const val MIN_OVERLAPPING_READS = 50
+
+/**
  * The three lists a [Channel] owns are written on the protocol thread and read on the main thread,
  * so each one gets the same two questions: does a read hand back a snapshot, and can a read taken
  * while the protocol thread writes come back damaged? See [Damage] for what "damaged" covers and
@@ -201,26 +211,33 @@ class ChannelTest {
         root.setLinks(linked)
 
         val partials = AtomicInteger()
-        val reads = AtomicInteger()
+        val overlaps = AtomicInteger()
+        val relinks = AtomicInteger()
         val done = AtomicBoolean(false)
         val writer = thread(name = "relinker") {
             try {
-                repeat(20_000) { root.setLinks(linked) }
+                repeat(20_000) {
+                    root.setLinks(linked)
+                    relinks.incrementAndGet()
+                }
             } finally {
                 done.set(true)
             }
         }
         val reader = thread(name = "link-reader") {
             while (!done.get()) {
+                val relinksAtStart = relinks.get()
                 if (root.getLinks().size != linked.size) partials.incrementAndGet()
-                reads.incrementAndGet()
+                if (relinks.get() > relinksAtStart) overlaps.incrementAndGet()
             }
         }
         writer.join()
         reader.join()
 
         assertThat(partials.get()).isEqualTo(0)
-        assertThat(reads.get()).isGreaterThan(0)
+        // Same reason as [race]: a count of zero partial reads proves nothing about a reader that
+        // never read while the writer was rebuilding, so count the reads that did overlap one.
+        assertThat(overlaps.get()).isAtLeast(MIN_OVERLAPPING_READS)
     }
 
     /**
@@ -297,11 +314,16 @@ class ChannelTest {
         val failure = AtomicReference<Throwable?>()
         val holes = AtomicInteger()
         val doubles = AtomicInteger()
+        val reads = AtomicInteger()
+        val overlaps = AtomicInteger()
 
         fun report(): List<String> = buildList {
             failure.get()?.let { add("threw $it") }
             if (holes.get() > 0) add("${holes.get()} snapshots with a null element")
             if (doubles.get() > 0) add("${doubles.get()} snapshots with a duplicate element")
+            if (overlaps.get() < MIN_OVERLAPPING_READS) {
+                add("only ${overlaps.get()} of ${reads.get()} observations overlapped a write")
+            }
         }
     }
 
@@ -310,13 +332,23 @@ class ChannelTest {
      * the result, and reports what the reader saw. Both threads are joined before anything is
      * asserted, but every observation is taken while the writer is running - an inspection after
      * the join would see a settled list and prove nothing (spec 4.04).
+     *
+     * That last sentence is a claim about the schedule, so the helper counts rather than claims:
+     * an observation counts as overlapping when the writer's own counter advanced while the
+     * observation was being taken, and [Damage.report] reports a shortfall as damage of its own.
+     * A reader thread that never entered its loop - because it lost the start, or because a later
+     * change made [write] finish first - otherwise hands back an empty report and a green test.
      */
     private fun race(write: (Int) -> Unit, read: () -> List<Any?>): Damage {
         val damage = Damage()
         val done = AtomicBoolean(false)
+        val writes = AtomicInteger()
         val writer = thread(name = "writer") {
             try {
-                for (i in 0 until 20_000) write(i)
+                for (i in 0 until 20_000) {
+                    write(i)
+                    writes.incrementAndGet()
+                }
             } finally {
                 done.set(true)
             }
@@ -324,10 +356,13 @@ class ChannelTest {
         val reader = thread(name = "reader") {
             try {
                 while (!done.get()) {
+                    val writesAtStart = writes.get()
                     val snapshot = read()
                     if (snapshot.any { it == null }) damage.holes.incrementAndGet()
                     else if (snapshot.toSet().size != snapshot.size) damage.doubles.incrementAndGet()
                     for (element in snapshot) element?.hashCode()
+                    damage.reads.incrementAndGet()
+                    if (writes.get() > writesAtStart) damage.overlaps.incrementAndGet()
                 }
             } catch (t: Throwable) {
                 damage.failure.set(t)
