@@ -667,6 +667,19 @@ So: **write the history next to the number.** A number that survives only on the
 its author had in mind is a claim about that author, not about the code — and the right
 reason, found by the person who tried to refute it, is worth more than the number.
 
+**And it inherits the blind spots of the mutation *selection*, which is the sharper half.**
+"45 mutations, all killed" was a true statement about those 45 and said nothing about the
+file. A reviewer then chose **twelve** of his own — derived from the effect and input
+passes rather than from the diff — and **all twelve survived**. Among them the one line
+that turns a tap into a viewer: replacing it with `{ }` left **all 432 tests green**, which
+is the user's complaint exactly, invisible to the gate.
+The cure is procedural: **derive the mutation list from the passes, not from the diff.**
+A diff-derived list mutates what you were thinking about; the effect pass mutates what the
+file *does*, including the wiring you wrote once and never looked at again. The tell that a
+list is diff-derived is that it is all guards and no seams — constructor arguments, listener
+assignments and one-line delegations are exactly what a diff-derived list omits and what an
+effect pass produces.
+
 **A mutation sweep inherits the blind spots of the fixture set.** It measures
 whether the tests can *see* a change; it cannot tell you that a branch's
 discriminating input never appears in any test at all. Fifty-six mutants, all
@@ -1008,6 +1021,17 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   of detail against an exact fit, which lands the effective sharpness between K=1
   and K=2 at K=1's memory. It costs nothing in display, because `ZoomImageView`
   uses `ScaleType.MATRIX` and derives `maxScale` from the intrinsic size.
+  **Done — by D task 11, not task 10, and the ownership line above was wrong twice over**
+  (`89126168`). Task 10 measured that its own send path has no such peak: one allocation
+  of 852 800 B, and it never calls `sampleSizeFor`. The peak is the **viewer**'s, so it
+  belonged to the task that wires the viewer. Verified by the review, recomputed by hand:
+  161 686 084 B before the first allocation against Android's 134 217 728 B
+  `heapgrowthlimit` — **the first allocation alone blew it**, so this was a crash on
+  opening a large picture, not an inefficiency. After: 40.4 MB, one allocation.
+  **And the sentence "it costs nothing in display" is scoped to the viewer.** The
+  thumbnail keeps its exact fit deliberately: it is drawn by a plain `ImageView` into a
+  fixed 240 dp box with no matrix and no per-image cap, so a halving there would be
+  upscaled and visibly softer. Confirmed by the review against the layout.
 
 - **Decide the zoom ceiling against the decoder, not by taste (D, tasks 7 and 8).**
   `MAX_SCALE = 5` came from the plan and nobody checked it against what the
@@ -1499,6 +1523,14 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   What actually prevented it was a rule written for an unrelated reason: **`git add`
   path-scoped, never `-A`**, introduced after an implementer tore a production change
   apart from its RED. Two rules now carry the weight:
+  0. **It is not only reviewer-plus-implementer — two implementers are the same hazard,
+     and I made exactly that mistake three hours after writing this rule.** Two fix rounds
+     for the same stream went into one worktree. The second one noticed, built itself a
+     detached worktree and measured there, and the harm was immediate and quantified: the
+     same test task reported **445** tests in the shared worktree and **434** in the
+     isolated one — the difference being the other agent's uncommitted tests. So the
+     counting rule has a level above it: not just *count what this invocation wrote*, but
+     **count what this commit contains**.
   1. **A review runs in a detached worktree at the commit under review**, never in the
      stream's own worktree. This was adopted for wall-clock — two agents per stream —
      and turns out to be the safety property as well.
@@ -1506,6 +1538,15 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
      A notification that says background work is still running is not a completion, and
      an agent that stops twice without reporting is stuck, not done — look in its
      worktree (one command) before dispatching anything that writes there.
+
+- **A ruling in §4.1 that binds a later task must also be written into that stream's
+  `contracts.md` — and I have now failed to do that twice (process, mine).** The ledger
+  split I introduced makes `contracts.md` the mandatory reading and `progress.md` a thing
+  to grep. So a ruling that lives only in the spec reaches the task it binds **by
+  accident**. It happened to task 6's eight-point behaviour contract, which a reviewer
+  caught, and then again to the binding Bluetooth obligation from stream P, which the next
+  implementer caught while reading his own brief. Both are nachgetragen. The rule: **the
+  same commit that writes a ruling writes it to the stream that has to obey it.**
 
 - **Scope cut by the user, 2026-09-20: finish the five original complaints, drop the rest.**
   Budget, not doubt, is the reason. **In scope (8 tasks):** B9, B10, B11, B12+13 — which is
