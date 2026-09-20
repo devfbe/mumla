@@ -1407,6 +1407,23 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   preference — otherwise the UI has two truths again, which is the defect class this
   whole project has been removing.
 
+- **Six concurrent agents saturate this machine; the wall-clock lever has a ceiling (measured).**
+  Reported from inside a run: **load 12–18 with 12 parallel Gradle processes from four
+  other worktrees**, and a mutation run that takes **53 s alone took up to 12 minutes**.
+  The sweep process was **killed twice** by memory pressure and left the tree mutated.
+  So the earlier conclusion — "the lever is more concurrent agents, not faster builds" —
+  has a limit, and it is around **four to five**, not eight. Past it, every agent's
+  mutation sweep slows down together and the failure mode is not slowness but a killed
+  sweep leaving a deliberately broken guard on disk.
+  Two rules follow, both paid for:
+  1. **Commit before mutating.** A harness that cleans up with `git checkout --` will
+     take uncommitted production changes with it — it did. The harness must refuse to
+     start on a dirty tree, be resumable, and restart itself after a kill.
+  2. **A process name needs an agent-unique marker, exactly like the scratchpad folder.**
+     `pgrep -f sweep.py` matched **another agent's** sweep, so the wait loop watched the
+     wrong process and returned early. Name it `sweep-<task>.py`, as the scratchpad
+     subfolder already is.
+
 - **Never run a mutation sweep in a worktree another agent commits from (process, mine).**
   A mutation sweep *edits production files* — that is what it is. If a second agent is
   committing from the same worktree, a `git add -A` pulls a deliberately broken guard
