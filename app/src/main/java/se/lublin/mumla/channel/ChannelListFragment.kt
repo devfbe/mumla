@@ -17,16 +17,13 @@
 
 package se.lublin.mumla.channel
 
+import android.Manifest
 import android.app.Activity
 import android.app.SearchManager
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.database.CursorWrapper
 import android.graphics.PorterDuff
-import android.media.AudioManager
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -35,10 +32,12 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
-import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -128,18 +127,28 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         }
     }
 
-    private val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            activity?.invalidateOptionsMenu() // Update bluetooth menu item
-        }
-    }
-
     private lateinit var channelView: RecyclerView
     private var channelListAdapter: ChannelListAdapter? = null
     private lateinit var targetProvider: ChatTargetProvider
     private lateinit var databaseProvider: DatabaseProvider
     private var actionMode: ActionMode? = null
     private lateinit var settings: Settings
+    private lateinit var bluetoothToggle: BluetoothScoToggle
+
+    // Registered from the constructor: a fragment may not register a launcher once it has been
+    // created.
+    private val bluetoothPermissionRequester: ActivityResultLauncher<String> =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!bluetoothToggle.onPermissionResult(granted)) {
+                Toast.makeText(
+                    requireContext(), R.string.grant_perm_bluetooth, Toast.LENGTH_LONG,
+                ).show()
+            }
+            // No invalidateOptionsMenu() here. A grant writes the preference, and that already
+            // arrives at onSharedPreferenceChanged below and redraws the item; a denial writes
+            // nothing and leaves an item that was never ticked. Deleting the call alone kept the
+            // whole suite green -- it was a second guard over the observable the first one holds.
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -154,6 +163,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         databaseProvider = activity as? DatabaseProvider
             ?: throw ClassCastException("$activity must implement DatabaseProvider")
         settings = Settings.getInstance(activity)
+        bluetoothToggle = BluetoothScoToggle(activity.applicationContext, settings)
         PreferenceManager.getDefaultSharedPreferences(activity)
             .registerOnSharedPreferenceChangeListener(this)
     }
@@ -173,25 +183,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
         registerForContextMenu(channelView)
-        // Replaces a SDK_INT >= UPSIDE_DOWN_CAKE branch. What this buys is one code path and a
-        // silenced UnspecifiedRegisterReceiverFlag -- not a not-exported receiver everywhere:
-        // ContextCompat hands RECEIVER_NOT_EXPORTED to a platform that only started honouring it
-        // in API 33, so on 31 and 32, which this app still supports, the receiver stays exported.
-        // That is safe here rather than merely tolerated, because
-        // ACTION_SCO_AUDIO_STATE_CHANGED is a protected system broadcast: no other app can send
-        // it, whatever the export flag says. A receiver for a non-protected action would need a
-        // real branch.
-        ContextCompat.registerReceiver(
-            requireActivity(),
-            bluetoothReceiver,
-            IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_CHANGED),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
-    }
-
-    override fun onDetach() {
-        requireActivity().unregisterReceiver(bluetoothReceiver)
-        super.onDetach()
     }
 
     override fun onDestroy() {
@@ -240,8 +231,10 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
                 deafenItem.icon?.mutate()?.setColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
             }
 
+            // The stored wish, not the live SCO state: the link is torn down on every dropped
+            // connection and the item has to keep showing what the user asked for.
             val bluetoothItem = menu.findItem(R.id.menu_bluetooth)
-            bluetoothItem.isChecked = session.usingBluetoothSco()
+            bluetoothItem.isChecked = bluetoothToggle.isEnabled
         }
     }
 
@@ -318,11 +311,11 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
             }
             R.id.menu_search -> false
             R.id.menu_bluetooth -> {
-                item.isChecked = !item.isChecked
-                if (item.isChecked) {
-                    session.enableBluetoothSco()
-                } else {
-                    session.disableBluetoothSco()
+                when (bluetoothToggle.toggle()) {
+                    BluetoothScoToggle.Result.Enabled -> item.isChecked = true
+                    BluetoothScoToggle.Result.Disabled -> item.isChecked = false
+                    BluetoothScoToggle.Result.PermissionNeeded ->
+                        bluetoothPermissionRequester.launch(Manifest.permission.BLUETOOTH_CONNECT)
                 }
                 true
             }
@@ -391,8 +384,11 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
-        if (Settings.PREF_SHOW_USER_COUNT == key) {
-            channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount())
+        when (key) {
+            Settings.PREF_SHOW_USER_COUNT ->
+                channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount())
+            // The settings screen writes the same preference from another activity.
+            Settings.PREF_BLUETOOTH_SCO -> activity?.invalidateOptionsMenu()
         }
     }
 
