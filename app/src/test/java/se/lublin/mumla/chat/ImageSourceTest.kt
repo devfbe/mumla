@@ -200,8 +200,71 @@ class ImageSourceTest {
         val allocated = threads.currentThreadAllocatedBytes - before
 
         assertThat(parsed).isEqualTo(ImageSource.TooLarge)
+        // A tenth of a mebibyte, not "less than the source": the refusing path allocates nothing but
+        // the measurement's own boxing and whatever the first call on this thread loads, measured at
+        // 6_792 B. Anything that copies, decodes or even trims the source is orders of magnitude
+        // above this, and a bound of one source length would have let the whole decode through.
         assertWithMessage("bytes allocated by parse() for a %s character source", source.length)
-            .that(allocated).isLessThan(source.length.toLong())
+            .that(allocated).isLessThan(100L * 1024)
+    }
+
+    /**
+     * What one [ImageSource.parse] of a maximal source really costs, and what that multiplies out to.
+     *
+     * The cap is not a number about one call: [ChatImageLoader] lets
+     * [ChatImageLoader.DEFAULT_MAX_CONCURRENT_LOADS] loads run at once and its `fetchBytes` share
+     * path takes no permit at all, so the worst case is **four** maximal sources being parsed at the
+     * same instant, each by a different row of the chat log. Three of them holding a permit and the
+     * fourth sharing is a state an ordinary chat log reaches, not a contrived one.
+     *
+     * 48 MiB is the written-down budget for that worst case. On the smallest heap an Android 12
+     * device realistically hands out — a 128 MiB `dalvik.vm.heapgrowthlimit` — the thumbnail cache
+     * has already taken `maxMemory() / 8` = 16 MiB, so 48 MiB leaves 64 MiB for the rest of the app.
+     * At the cap this stream shipped first (7_000_000 characters) the same four parses came to
+     * 133 MB, i.e. more than the whole heap, and three of them at once needed an `-Xmx` of 160 MiB
+     * before they completed at all.
+     *
+     * The percent-encoded form is the expensive one and therefore the one measured: `percentDecode`
+     * returns its input unchanged when there is no `%` in it, so a plain `data:` URI costs 2.75 bytes
+     * per character and this one costs 4.75.
+     */
+    @Test
+    fun fourMaximalSourcesParsedAtOnceFitTheMemoryBudget() {
+        val head = "data:image/png;base64,%41"
+        val atCap = head + "A".repeat(ImageSource.MAX_SOURCE_LENGTH - head.length)
+        assertThat(atCap.length).isEqualTo(ImageSource.MAX_SOURCE_LENGTH)
+        val threads = ManagementFactory.getThreadMXBean() as ThreadMXBean
+        assertWithMessage("this JVM must account per-thread allocation for the measurement below")
+            .that(threads.isThreadAllocatedMemoryEnabled).isTrue()
+
+        val before = threads.currentThreadAllocatedBytes
+        val parsed = ImageSource.parse(atCap)
+        val perParse = threads.currentThreadAllocatedBytes - before
+
+        assertThat(parsed).isInstanceOf(ImageSource.Data::class.java)
+        // Measured: 10_137_896 B for the first parse on a thread, 9_961_760 B once warm.
+        assertWithMessage("bytes allocated by one parse() of a %s character source", atCap.length)
+            .that(perParse).isLessThan(11L * 1024 * 1024)
+        val concurrent = ChatImageLoader.DEFAULT_MAX_CONCURRENT_LOADS + 1 // + the ungated share path
+        assertWithMessage("bytes allocated by %s concurrent parses at the cap", concurrent)
+            .that(perParse * concurrent).isLessThan(48L * 1024 * 1024)
+    }
+
+    /**
+     * The cap is a fact about Mumble servers, not a round number.
+     *
+     * Murmur's own default for `imagemessagelength` is 1_048_576, set in `src/murmur/Meta.cpp`
+     * (`MetaParams::MetaParams`: `iMaxImageMessageLength = 1048576;`) and overridden from the ini by
+     * `typeCheckedFromSettings("imagemessagelength", iMaxImageMessageLength)`. It bounds the **whole
+     * message**: `Server::isTextAllowed` in `src/murmur/Server.cpp` compares it against
+     * `text.length()`, i.e. the UTF-16 length of the entire HTML, markup and every `<img src>`
+     * together. One `src` can therefore never be longer than that on a default server, whatever it
+     * is spelled like. The factor two is the headroom for a server that raised the setting.
+     */
+    @Test
+    fun theCapIsTwiceWhatADefaultMurmurWillCarryInOneWholeMessage() {
+        val murmurDefaultImageMessageLength = 1_048_576
+        assertThat(ImageSource.MAX_SOURCE_LENGTH).isEqualTo(2 * murmurDefaultImageMessageLength)
     }
 
     /** The cap itself, from both sides, so it cannot drift by one in either direction. */

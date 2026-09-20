@@ -39,17 +39,48 @@ sealed class ImageSource {
         private const val BASE64_MARKER = ";base64"
 
         /**
-         * Longest source string this parser will look at. Base64 costs four characters per three
-         * bytes, so this bounds an inline payload at 5_250_000 B = 5.01 MiB — the same order as
-         * [HttpImageFetcher]'s cap on a remote body, and the only bound there is on an inline one.
+         * Murmur's own default for `imagemessagelength`, and the reason [MAX_SOURCE_LENGTH] is that
+         * number rather than a round one. It bounds the **whole** chat message — markup, text and
+         * every `<img src>` together — so on a default server no single `src` can be longer than
+         * this, however it is spelled.
+         *
+         * `src/murmur/Meta.cpp`, `MetaParams::MetaParams`: `iMaxImageMessageLength = 1048576;`,
+         * overridden from the ini by
+         * `typeCheckedFromSettings("imagemessagelength", iMaxImageMessageLength)`. Enforced in
+         * `src/murmur/Server.cpp`, `Server::isTextAllowed`, which compares it against
+         * `text.length()` — Qt's UTF-16 count, the same unit [String.length] counts here.
+         */
+        private const val MURMUR_DEFAULT_IMAGE_MESSAGE_LENGTH = 1_048_576
+
+        /**
+         * Longest source string this parser will look at: twice what a default Murmur will carry in
+         * one whole message, so one `src` may be the entire message *and* a server that doubled
+         * `imagemessagelength` still has its inline images shown. Base64 costs four characters per
+         * three bytes, so it bounds an inline payload at 1_572_846 B = 1.5 MiB — well under
+         * [HttpImageFetcher]'s 5 MiB cap on a remote body, and deliberately so: a remote body costs
+         * its own size, an inline one costs 4.75 times its length before anything can be done with
+         * it.
          *
          * The cap lives **here**, not in the caller, because this is where the allocations are:
          * [HtmlUtils.percentDecode] builds a `StringBuilder` of the input's length and then a
          * `toString()` of it, and `Base64.getMimeDecoder().decode` materialises the whole payload.
          * A caller that forgot to ask would hand all three of those a megabytes-long string, and no
          * assertion on the returned value could tell the difference.
+         *
+         * **It is a concurrency budget, not a per-call one, and that is what set the number.**
+         * Measured on one [parse] of a maximal percent-encoded `data:` source: 4.75 bytes allocated
+         * per character, 10_137_896 B. [ChatImageLoader] lets
+         * [ChatImageLoader.DEFAULT_MAX_CONCURRENT_LOADS] loads run at once and its `fetchBytes`
+         * share path takes no permit at all, so the honest worst case is **four** of those at the
+         * same instant — 40_551_584 B — on top of the thumbnail cache's `maxMemory() / 8`. The first
+         * cap this stream shipped, 7_000_000, made the same four come to 133_001_792 B, more than
+         * the whole heap of a small device: three concurrent parses at that cap needed an `-Xmx` of
+         * 160 MiB before they completed at all, four at this one need 56 MiB. Nothing on the load
+         * path catches an [OutOfMemoryError] — deliberately, so that an exhausted heap fails where
+         * it can be diagnosed — which is exactly why the cap has to be one that cannot cause one.
+         * Pinned by `fourMaximalSourcesParsedAtOnceFitTheMemoryBudget`.
          */
-        const val MAX_SOURCE_LENGTH = 7_000_000
+        const val MAX_SOURCE_LENGTH = 2 * MURMUR_DEFAULT_IMAGE_MESSAGE_LENGTH
 
         /**
          * Classifies [source] (trimmed, raw). The scheme prefixes are matched case-insensitively,

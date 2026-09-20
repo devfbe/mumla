@@ -60,11 +60,23 @@ sealed class ImageResult {
  * the result is dropped rather than cached; what bounds a fast fling is the permit below.
  *
  * At most [maxConcurrentLoads] loads hold a permit at a time, and a permit covers the decode as well
- * as the fetch, so decodes are serialised to the same number. [fetchBytes] called on its own — the
- * share path — takes no permit at all and is not counted here. Peak memory per fetch is bounded by
- * [HttpImageFetcher]'s byte cap, so the number in flight is part of the memory bound, not a
- * throughput knob; the arithmetic, including the terms this sentence does not cover, is in the
- * stream's ledger rather than here, because it depends on the heap the device gives the app.
+ * as the fetch, so decodes are serialised to the same number. That number is a memory bound, not a
+ * throughput knob, and the bound it states is
+ *
+ *     maxConcurrentLoads x (peak per load)  +  1 x (peak per load, ungated)  +  maxCacheBytes
+ *
+ * The second term is [fetchBytes] called on its own — the share path — which takes **no permit at
+ * all**, so a share running beside three full loads is a fourth concurrent peak, not a third.
+ *
+ * Peak per load is whichever source path that load takes: an inline `data:` source costs 4.75 bytes
+ * per character inside [ImageSource.parse] (10_137_896 B at [MAX_SOURCE_LENGTH], which is where that
+ * cap's number comes from), a remote one costs [HttpImageFetcher]'s byte cap. The two do not add up
+ * *within* one load — one load takes one path — but four loads are four different sources and may
+ * take four different paths, so the worst case is four times the larger of the two.
+ *
+ * At the defaults that is 4 x ~10 MB = ~40 MB of transient peak plus `maxMemory() / 8` of cache. It
+ * is a bound, not a guarantee: none of this catches an [OutOfMemoryError], on purpose, so that an
+ * exhausted heap fails where it can be diagnosed rather than being swallowed here.
  */
 class ChatImageLoader(
     private val fetcher: ImageFetcher = HttpImageFetcher(),
@@ -276,7 +288,10 @@ class ChatImageLoader(
          */
         const val MAX_SOURCE_LENGTH = ImageSource.MAX_SOURCE_LENGTH
 
-        /** In flight at once. Each one costs up to [HttpImageFetcher]'s cap, so this bounds memory. */
+        /**
+         * In flight at once. Each one costs a peak of its own, and the ungated share path adds one
+         * more on top; see the class KDoc for the arithmetic this number is a factor of.
+         */
         const val DEFAULT_MAX_CONCURRENT_LOADS = 3
 
         /** What a cached failure is charged against the budget: the entry, its key and the error. */
