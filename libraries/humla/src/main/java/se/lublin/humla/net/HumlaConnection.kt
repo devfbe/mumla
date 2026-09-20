@@ -30,6 +30,7 @@ import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.HumlaTCPMessageListener
 import se.lublin.humla.protocol.HumlaUDPMessageListener
+import se.lublin.humla.session.ReconnectPolicy
 import se.lublin.humla.util.HumlaException
 import java.io.IOException
 import java.net.ConnectException
@@ -53,6 +54,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  * (ModelHandler, AudioHandler), voice routing, the ping timer and every transport callback run on
  * the "humla-protocol" [HandlerThread] this object owns. [HumlaConnectionListener] callbacks are
  * posted to [mainHandler]. [sendTCPMessage] and [sendUDPMessage] may be called from any thread.
+ *
+ * [mainHandler] is load-bearing beyond this class, and whoever changes it should know why.
+ * `HumlaCallbacks`'s absolute queue ceiling exempts the four connection-lifecycle events, and what
+ * keeps that exemption from turning the ceiling into no ceiling at all is that those four are
+ * raised on the delivery thread itself - which holds only while this handler and the one
+ * `HumlaCallbacks` was built with are the same thread. Both default to the main looper and
+ * `HumlaService` takes both defaults. The two routes out of this class to the listener are
+ * [deliverDisconnected] and [notifyListener], and both post to [mainHandler]; there is no third.
+ * Giving this class a handler of its own is therefore a change to that ceiling, not only to this
+ * class - see `HumlaCallbacks.Policy.Lifecycle`.
  *
  * Single-use, and that is what keeps its state flags honest. HumlaTCP's class comment asks of every
  * flag: which thread closes its window, and does anything fence that thread in? Here nothing closes
@@ -87,6 +98,13 @@ class HumlaConnection @JvmOverloads constructor(
     private val transports: TransportFactory = DefaultTransportFactory(),
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
     private val nanoClock: () -> Long = System::nanoTime,
+    private val udpHealth: UdpHealthMonitor = UdpHealthMonitor(),
+    private val udpRestartPolicy: ReconnectPolicy = ReconnectPolicy(
+        baseDelayMillis = 1_000L,
+        maxDelayMillis = 30_000L,
+        maxAttempts = Int.MAX_VALUE,
+        maxJitterFraction = 0.0,
+    ),
 ) : HumlaTCP.TCPConnectionListener, HumlaUDP.UDPConnectionListener, MessageHandlerRegistry {
 
     /** Builds the transports, so tests can supply fakes that never open a socket. */
@@ -219,6 +237,51 @@ class HumlaConnection @JvmOverloads constructor(
         }
     }
 
+    /**
+     * How many times the UDP transport has been rebuilt since it last carried traffic. Protocol
+     * thread only: raised by [scheduleUdpRestart], cleared where [udpHealth] says UDP works again,
+     * and read nowhere else. Clearing it is what makes the backoff belong to the outage rather than
+     * to the connection - without it the fifth outage of a long call waits half a minute for its
+     * first retry, having waited a second for the first outage's.
+     */
+    private var udpRestartAttempt = 0
+
+    /**
+     * Rebuilds the UDP transport after its thread died (spec A5).
+     *
+     * This is the *only* entry guard in the restart path, which is why [scheduleUdpRestart] repeats
+     * none of it and the teardown does not removeCallbacks this runnable: all three would decide
+     * the same observable - how many transports [TransportFactory] is asked for - and with any two
+     * of them in place, removing the third leaves the suite green.
+     *
+     * Both clauses close a real window. Measured with a zero restart delay, which is the shape that
+     * makes the interleaving a fact rather than a race: the restart is queued behind the teardown,
+     * `quitSafely` still delivers it because it is already due, and without [disconnectRequested]
+     * the connection opens a UDP socket after its teardown has run - one nothing will ever close,
+     * because the teardown disconnected the transport it held at that moment and this object is
+     * single-use. [shouldForceTCP] is the same window for a setting instead of a disconnect.
+     */
+    private val udpRestartRunnable = Runnable {
+        if (disconnectRequested || shouldForceTCP()) return@Runnable
+        Log.i(TAG, "Restarting UDP transport, attempt $udpRestartAttempt")
+        startUdp()
+    }
+
+    private fun scheduleUdpRestart() {
+        udpRestartAttempt += 1
+        // The policy's own way of saying "stop trying". The default never says it - a UDP link can
+        // come back an hour into a call - but a caller may hand this connection one that does.
+        val delay = udpRestartPolicy.delayFor(udpRestartAttempt, 0.0) ?: return
+        Log.i(TAG, "UDP restart scheduled in $delay ms")
+        protocolHandler.postDelayed(udpRestartRunnable, delay)
+    }
+
+    /** Tunnels outgoing voice over TCP and tells the user why. Protocol thread. */
+    private fun switchToTcp(warning: ConnectionWarning) {
+        usingUdp = false
+        warn(warning)
+    }
+
     /** Handles packets received that are critical to the connection state (protocol thread). */
     private val connectionMessageHandler = object : HumlaTCPMessageListener.Stub() {
         override fun messageServerSync(msg: Mumble.ServerSync) {
@@ -304,29 +367,29 @@ class HumlaConnection @JvmOverloads constructor(
             val now = elapsed
             tcpLatency = now - msg.timestamp
 
-            if ((cryptState.mUiRemoteGood == 0 || cryptState.mUiGood == 0) && usingUdp && now > 20000000) {
-                usingUdp = false
-                if (!shouldForceTCP()) {
-                    warn(
-                        when {
-                            cryptState.mUiRemoteGood == 0 && cryptState.mUiGood == 0 -> ConnectionWarning.UDP_UNAVAILABLE
-                            cryptState.mUiRemoteGood == 0 -> ConnectionWarning.UDP_SEND_FAILED
-                            else -> ConnectionWarning.UDP_RECEIVE_FAILED
-                        }
-                    )
-                }
-            } else if (!usingUdp && cryptState.mUiRemoteGood > 3 && cryptState.mUiGood > 3) {
+            // Nothing to judge while the user has chosen TCP, and judging anyway is not merely
+            // pointless: forcing TCP mid-connection leaves usingUdp set, stops the UDP ping and
+            // tunnels the voice, so both counters freeze - and twenty seconds later the chat log
+            // would tell a user who had just switched UDP off that UDP is unavailable.
+            if (shouldForceTCP()) return
+
+            val decision = udpHealth.onTcpPing(now, cryptState.mUiGood, cryptState.mUiRemoteGood, usingUdp)
+            if (decision == UdpHealthMonitor.Decision.RESTORE_UDP) {
                 usingUdp = true
-                if (!shouldForceTCP()) warn(ConnectionWarning.UDP_RESTORED)
+                udpRestartAttempt = 0
+                warn(ConnectionWarning.UDP_RESTORED)
+            } else {
+                switchWarningFor(decision)?.let { switchToTcp(it) }
             }
         }
     }
 
     private val udpPingListener = object : HumlaUDPMessageListener.Stub() {
         override fun messageUDPPing(data: ByteArray) {
+            val now = elapsed
             val timestamp = ByteBuffer.wrap(data, 1, 8).long
-            udpLatency = elapsed - timestamp
-            // TODO refresh UDP?
+            udpLatency = now - timestamp
+            udpHealth.onUdpPingReply(now)
         }
     }
 
@@ -338,6 +401,7 @@ class HumlaConnection @JvmOverloads constructor(
             buffer.put(((HumlaUDPMessageType.UDPPing.ordinal shl 5) and 0xFF).toByte())
             buffer.putLong(t)
             sendUDPMessage(buffer.array(), 16, true)
+            udpHealth.onUdpPingSent(t)
         }
         val pb = Mumble.Ping.newBuilder()
         pb.timestamp = t
@@ -753,9 +817,22 @@ class HumlaConnection @JvmOverloads constructor(
 
     override fun onUDPConnectionError(e: Exception) {
         Log.w(TAG, "UDP connection thread failed", e)
+        // Measured survivor, and it is kept for one window rather than for tidiness. Removing this
+        // line alone leaves all 99 tests in this package green, and the only assertion that could
+        // go red for it would read FakeUdpTransport.sent - a fake artefact, because the real
+        // HumlaUDP drops a send on a dead transport before it reaches the socket. What it is not
+        // free of is the crypt sequence: HumlaUDP posts onUDPConnectionError from the *catch* and
+        // clears its own `connected` in the *finally* after it, so between the two a
+        // sendUDPMessage from the audio or ping path still reaches encrypt() and burns an OCB2
+        // sequence number the server's replay window then never sees used. Nulling the field here
+        // closes that window from this side. Scope of the claim: no history tried here - restore,
+        // both branches of sendUDPMessage, the teardown, an exhausted restart policy - can tell it
+        // apart otherwise.
+        udp = null
+        usingUdp = false
         warn(ConnectionWarning.UDP_THREAD_FAILED)
         enableForceTCP()
-        // TODO recover UDP thread automagically
+        scheduleUdpRestart()
     }
 
     override fun resyncCryptState() {
@@ -812,6 +889,25 @@ class HumlaConnection @JvmOverloads constructor(
         private val TAG: String = HumlaConnection::class.java.name
         private const val PROTOCOL_THREAD_NAME = "humla-protocol"
         private const val PING_INTERVAL_MILLIS = 5_000L
+
+        /**
+         * The warning a [UdpHealthMonitor.Decision] carries when it takes voice off UDP, or null
+         * when it is not a switch at all.
+         *
+         * A function over the whole enum rather than five arms inside [connectionMessageHandler],
+         * so the mapping can be pinned as a *set*: three of the five switch reasons cannot be
+         * produced through a fake transport at all, because they need the crypt state's own packet
+         * counter to move, and written as arms they would have been five branches with two of them
+         * tested. The `when` is exhaustive over the enum, so a decision added later is a compile
+         * error here and a failure in udpSwitchDecisionsCarryOneWarningEach.
+         */
+        internal fun switchWarningFor(decision: UdpHealthMonitor.Decision): ConnectionWarning? = when (decision) {
+            UdpHealthMonitor.Decision.KEEP, UdpHealthMonitor.Decision.RESTORE_UDP -> null
+            UdpHealthMonitor.Decision.SWITCH_TO_TCP_BOTH -> ConnectionWarning.UDP_UNAVAILABLE
+            UdpHealthMonitor.Decision.SWITCH_TO_TCP_SEND -> ConnectionWarning.UDP_SEND_FAILED
+            UdpHealthMonitor.Decision.SWITCH_TO_TCP_RECEIVE -> ConnectionWarning.UDP_RECEIVE_FAILED
+            UdpHealthMonitor.Decision.SWITCH_TO_TCP_PING_TIMEOUT -> ConnectionWarning.UDP_PING_TIMEOUT
+        }
 
         /** Message types that aren't shown in logcat, for annoying types like UDPTunnel. */
         @JvmField

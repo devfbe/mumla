@@ -29,6 +29,29 @@ class HumlaConnectionStaticsTest {
         assertThat(parsed.name).isEqualTo("five")
     }
 
+    /**
+     * The whole decision-to-warning mapping in one assertion, iterated from the enum rather than
+     * written out case by case. Three of the four switch reasons cannot be produced through the
+     * fake transports at all - they need `CryptState.mUiGood` itself to move - so as five branches
+     * inside the ping handler they would have been five arms with two of them pinned, which 4.04
+     * calls a function that only looks covered. Written this way, a decision added later is an
+     * extra entry here as well as a compile error in the `when`, and a swapped pair of warnings is
+     * a mismatched value rather than a still-distinct set.
+     */
+    @Test
+    fun everyUdpSwitchDecisionCarriesItsOwnWarning() {
+        val mapped = UdpHealthMonitor.Decision.values().associateWith { HumlaConnection.switchWarningFor(it) }
+
+        assertThat(mapped).containsExactly(
+            UdpHealthMonitor.Decision.KEEP, null,
+            UdpHealthMonitor.Decision.RESTORE_UDP, null,
+            UdpHealthMonitor.Decision.SWITCH_TO_TCP_BOTH, ConnectionWarning.UDP_UNAVAILABLE,
+            UdpHealthMonitor.Decision.SWITCH_TO_TCP_SEND, ConnectionWarning.UDP_SEND_FAILED,
+            UdpHealthMonitor.Decision.SWITCH_TO_TCP_RECEIVE, ConnectionWarning.UDP_RECEIVE_FAILED,
+            UdpHealthMonitor.Decision.SWITCH_TO_TCP_PING_TIMEOUT, ConnectionWarning.UDP_PING_TIMEOUT,
+        )
+    }
+
     @Test
     fun voiceTargetIsNotAServerToClientMessage() {
         assertThrows(InvalidProtocolBufferException::class.java) {
