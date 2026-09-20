@@ -23,6 +23,7 @@ import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.HumlaLogger
 import se.lublin.humla.util.HumlaObserver
 import java.lang.reflect.Method
+import java.lang.reflect.Modifier
 import java.security.cert.X509Certificate
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -614,7 +615,14 @@ class HumlaConnectionProtocolThreadTest {
         assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
     }
 
-    /** Invokes every declared method of both transport listener interfaces on [connection]. */
+    /**
+     * Invokes every method of both transport listener interfaces on [connection].
+     *
+     * `methods`, not `declaredMethods`: the latter stops at the interface itself, so the first time
+     * someone pulls a shared base interface out of these two, its callbacks would be skipped in
+     * silence - which is the one thing this test exists to prevent. Static and synthetic members
+     * are dropped because they are not callbacks the transports invoke.
+     */
     private fun invokeEveryTransportCallback(): List<String> {
         val interfaces = listOf(
             HumlaTCP.TCPConnectionListener::class.java,
@@ -622,7 +630,10 @@ class HumlaConnectionProtocolThreadTest {
         )
         val names = mutableListOf<String>()
         for (iface in interfaces) {
-            for (method in iface.declaredMethods.sortedBy { it.name }) {
+            val callbacks = iface.methods
+                .filter { !Modifier.isStatic(it.modifiers) && !it.isSynthetic }
+                .sortedBy { it.name }
+            for (method in callbacks) {
                 method.invoke(connection, *method.parameterTypes.map { argumentFor(method, it) }.toTypedArray())
                 names += method.name
             }
