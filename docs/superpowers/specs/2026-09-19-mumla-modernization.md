@@ -191,7 +191,7 @@ B2. **`CapturePreprocessor` interface** with implementations selectable in
     settings: `None`, `Speex` (denoise, configurable suppression dB, VAD
     probability via `SPEEX_PREPROCESS_GET_PROB`, no AGC calls), `RNNoise`
     (48 kHz/480-sample frames, returns VAD probability), `WebRtcApm`
-    (NS + AEC3 + AGC2 + high-pass, VAD from level). Composition rule: WebRTC APM
+    (AEC3 + AGC2 + high-pass, **noise suppression off** — see 4.1, VAD from level). Composition rule: WebRTC APM
     (when enabled for echo cancellation) runs first, then RNNoise; the VAD
     probability comes from the last stage that provides one.
 B3. **Echo cancellation via WebRTC APM.** Vendor `webrtc-audio-processing`
@@ -769,6 +769,24 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `release()` can now block for one native call (~0.3 ms at 48 kHz), so spec §4's
   "shutdown returns within 3 s" has a real dependency where it had a free
   operation.
+- **The WebRTC APM runs with its own noise suppression off (B, decided).** B2 above
+  used to say "NS + AEC3 + AGC2 + high-pass", and task 6 implemented that
+  literally, then flagged the consequence rather than deciding it alone — correctly.
+  The consequence is in two halves and the second one settles it: with NS set to
+  Speex or RNNoise, **two noise suppressors run cascaded**, which is an accident
+  rather than a design (RNNoise's model is speech plus additive noise, and feeding
+  it pre-suppressed audio is not the input it was trained on); and with NS set to
+  **none**, the APM suppresses noise anyway — **a switch that does not do what it
+  says**. This whole project has been about removing switches that lie: the media
+  key that did nothing, the AGC setting that never reached Speex, the preference
+  whose default disagreed with its XML. Adding one deliberately is not available.
+  **AEC3, AGC2 and the high-pass stay on.** AGC2 in particular, because it is the
+  **only** gain control left in the project — Speex's is dead code in the
+  fixed-point build — so switching it off would silently remove a feature. The
+  high-pass helps the canceller and costs nothing.
+  The constant is named and its test compares against a written-out literal, so
+  each of the four flags going the other way turns a test red. That is what makes
+  this decision reversible on purpose rather than by accident.
 - **Drop `SET_VAD` and `SET_PROB_START` from the Speex stage (B, decided).** Both
   are answered by the library and both are **observably inert for this stage**:
   `vad_enabled`, `speech_prob_start` and `speech_prob_continue` are read in exactly
