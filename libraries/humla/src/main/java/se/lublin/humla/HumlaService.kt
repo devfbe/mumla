@@ -875,7 +875,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
     }
 
-    override fun isTalking(): Boolean = mToggleInputMode.isTalkingOn
+    override fun isTalking(): Boolean = mToggleInputMode.isTalkingOn()
 
     override fun setTalkingState(talking: Boolean) {
         mToggleInputMode.setTalkingOn(talking)
