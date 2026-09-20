@@ -27,6 +27,18 @@ enable_testing()
 option(HUMLA_REQUIRE_SANITIZERS
        "Fail configuration if the host toolchain cannot build the sanitized tests"
        $ENV{HUMLA_REQUIRE_SANITIZERS})
+# option() only writes the cache the first time. Without the line below, a build directory that
+# was first configured without HUMLA_REQUIRE_SANITIZERS in the environment keeps :BOOL=OFF
+# forever, and reconfiguring it with the variable set changes nothing -- the guard would go on
+# being off in exactly the situation someone had just asked for it to be on. CI never sees this
+# because build/ is not cached; a developer with a warm build directory does. The environment is
+# therefore treated as authoritative whenever it says anything at all, in either direction,
+# which also means it outranks -DHUMLA_REQUIRE_SANITIZERS on the command line. Unset it to
+# hand control back to -D.
+if(DEFINED ENV{HUMLA_REQUIRE_SANITIZERS} AND NOT "$ENV{HUMLA_REQUIRE_SANITIZERS}" STREQUAL "")
+  set(HUMLA_REQUIRE_SANITIZERS "$ENV{HUMLA_REQUIRE_SANITIZERS}" CACHE BOOL
+      "Fail configuration if the host toolchain cannot build the sanitized tests" FORCE)
+endif()
 
 if(NOT ANDROID AND NOT CMAKE_CROSSCOMPILING)
   include(CheckCSourceCompiles)
