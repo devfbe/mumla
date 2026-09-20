@@ -574,6 +574,13 @@ line, run the suite, and only then write the comment, with the result in it.**
 
 Two things make it easier to believe, and both are about granularity:
 
+- **A pinned *call site* lends the whole function an air of coverage — the same
+  thing one level up.** Measured: swapping a refused-parent fallback back for
+  "leave it parentless" turned three tests red, so at call-site granularity the
+  function looked covered. **Every single branch inside it could be deleted with
+  the suite green** — including the one whose KDoc called its failure "the one
+  thing worse than ignoring that frame". So the granularity to sweep at is not the
+  call, and not the function: it is the **branch**.
 - **A pinned sibling branch lends the whole function an air of coverage.** The
   mutation granularity one reaches for is the function. `forget()` is one `when`
   with two arms; the droppable arm is obviously load-bearing and obviously pinned,
@@ -741,6 +748,16 @@ and reported as passing. They are repo-wide, not stream-specific.
   the `HandlerActionQueue` instead of running it, while `post()` still returns
   `true`, so the test reads as green either way. So: a real `Activity`,
   `setContentView`, `measure` and `layout` — or the assertion is about the harness.
+- **Check the harness that reads the results, not just the one that runs them.** A
+  passing JUnit test is a **self-closing** `<testcase/>` element, so a lazy
+  `(.*?)</testcase>` regex attaches the next `<failure>` to the first *passing* test
+  in the file. Measured symptom: the same innocent test reported red under all
+  twenty mutations, and one real survivor hidden among them. Parse the XML with a
+  parser. This is the second harness defect in this project to invert verdicts
+  wholesale — the first read only stdout while Kotlin writes compile errors to
+  stderr — which makes it a class: **before believing a sweep, run one mutation you
+  are certain kills and one you are certain does not, and check the harness reports
+  both correctly.**
 - **A mutation that does not compile reads as a survivor if you only watch stdout.**
   Kotlin writes compile errors to **stderr**. Three "survivors" in one sweep were
   mutations the compiler had rejected — `if (false)` had destroyed a smart cast — and
@@ -769,6 +786,13 @@ and reported as passing. They are repo-wide, not stream-specific.
   `daemon has been stopped` and re-run rather than record a verdict**, keep tooling
   in a per-agent subfolder of the scratchpad, and treat a baseline that fails as a
   reason to stop rather than a data point.
+- **A test or lint count summed off disk includes reports the run did not produce.**
+  `build/**/reports` keeps the previous flavour's results, so a counter that globs
+  them reports a total no single command produced. Seen twice in one task: a gate
+  that runs exactly two test tasks (**388** tests) was recorded as **1 388**, and a
+  lint count over "all five reports" included four flavours that gate never built.
+  Neither number was wrong on purpose and both read as authoritative. Count what
+  **this** invocation wrote — or clean first — and name the command that produced it.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
@@ -997,7 +1021,43 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `AutomaticGainControl` as a settings toggle** — a binding sibling requirement the
   unqualified sentence contradicted. The high-pass helps the canceller and costs
   nothing.
-  **Second consequence, and it is not cosmetic: the VAD threshold moves.**
+  **Second consequence, measured in task 7 against the real APM, and it is not the
+  one this entry first predicted (B, binding).** 800 frames per point, read after
+  5 s of settling, three non-speech characters plus a speech-shaped signal:
+  - **The non-speech floor is now pinned rather than merely louder.** With the
+    APM's suppressor off, webrtc's own `AdaptiveDigital::max_output_noise_level_dbfs
+    = -50` binds, and a non-speech frame settles at **−45.0 dBFS whatever the input**
+    (−44.97 / −44.98 / −44.98 / −44.67 for low-passed noise at −60/−55/−50/−45 in).
+    With NS on it *tracked* the input: −61.9 / −56.6 / −51.1 / −45.6.
+  - **"Every non-speech frame measures louder" is false along the input-level axis.**
+    The shift is **+16.9 dB at −70 and −60 dBFS in, +11.7 at −55, +6.1 at −50,
+    +0.95 at −45, −0.42 at −35, −1.31 at −30** — above about −45 dBFS in it measures
+    *quieter*. It is the cap clamping, not a uniform offset. (Decomposed with AGC2
+    removed the offset *is* uniform, +13…+17 dB, and it hits speech as hard as noise:
+    the APM's suppressor attenuates broadband here, it does not separate.)
+  - **What actually moved is the headroom for speech**, by about the 4.9 dB of
+    effective SNR the suppressor used to hand AGC2: the same input now yields a
+    probability **0.16 lower — 0.608 → 0.443**. Under NS it sat *just* over B5's
+    start of 0.6; it is now under it.
+  - **The live defect is at the bottom of the window, not the top.**
+    `LevelToProbability.SILENCE_DBFS = −50` is below anything the chain now
+    produces: `fromDbfs` never returns less than **0.167**, so **any stop threshold
+    below 0.167 can never be crossed and the detector would never release**. B5's
+    default stop of 0.3 clears it by 4.0 dB of level; a task-12 slider does not.
+  **Ruling.** Move `SILENCE_DBFS` to **−45**, the measured floor, so silence reads
+  0.000 again and every stop threshold stays reachable — that number follows from
+  webrtc's own constant, not from a fixture. **Leave `FULL_DBFS` at −20.** The top
+  of the window cannot be calibrated from a synthetic signal: the stand-in used here
+  has 8.3 dB SNR where a real talker in a real room has 15–30, and under *either*
+  candidate window that stand-in fails to reach 0.6. The sentence that nobody had
+  written down and that is now binding: **"0.6" is not a loudness, it is a demand
+  for about 13 dB of SNR above the floor.** Whether 13 dB is the right demand is a
+  question for a real talker, which makes it **a QA item with hardware, owner B task
+  13** — the live input meter and loopback test is the instrument that can answer it.
+  The test that reports the current numbers already exists
+  (`VoiceActivityDetectorTest.the probability defaults sit at these dBFS levels on
+  the apm window`), so moving the window or the defaults names the new numbers.
+  **First consequence, as originally written:**
   `humla_apm.cpp:88-91` measures `last_level_dbfs` on the **processed** frame, i.e.
   after NS and AGC2. With NS off, every non-speech frame measures louder — and in
   the configuration NS=`NONE` + echo=`WEBRTC`, `LevelToProbability` (−50…−20 dBFS)
@@ -1186,7 +1246,12 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   parentless. The tree stays finite and acyclic, and the channel stays visible in
   the wrong place rather than invisibly absent. **Owner: A, task 6**, as a rider —
   it is a few lines in `ModelHandler.java`, no other stream owns that file, and no
-  later brief goes near the frame boundary where the guard sits. The contract
+  later brief goes near the frame boundary where the guard sits. **Status: the
+  fallback was in fact already written in task 5's fix round (`39924e64`), 22
+  commits before task 6 began — but its *inside* was unpinned**, every branch in it
+  deletable with the suite green, which is the pinned-call-site case in §4.04.
+  Task 6 pinned it and removed one branch that decided the same result on the same
+  input as the closing check. The contract
   paragraph in the core ledger that reads *"the same state as a channel whose
   parent frame has not arrived yet"* is **withdrawn**: one heals on the next frame
   and the other never does, which is the whole point.
