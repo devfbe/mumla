@@ -881,6 +881,15 @@ and reported as passing. They are repo-wide, not stream-specific.
   `instrument ASSERTION FAILED` in the output as **no verdict at all**, because a partial
   result set with failures in it reads exactly like a killed mutant -- the same inversion as
   the daemon-stopped and stdout-only cases above.
+- **`DialogFragment.show()` commits asynchronously, so a `findFragmentByTag` check in
+  front of it answers about a dialog that is not there yet.** This was written into a
+  binding obligation of mine — "what enforces uniqueness is `findFragmentByTag(TAG) == null`
+  before the `show`" — and it is **not sufficient**. Measured: with the check *and*
+  `show`, two rapid taps open **two** viewers. `showNow` (which is `commitNow`) is what
+  makes the check's answer true by the time the next tap reads it. Both halves need
+  pinning separately: the check, and the *now*. General form: **a guard that reads state
+  another call is about to write asynchronously is not a guard**, and the tell is that
+  the pinning test passes with the guard deleted.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
@@ -1426,6 +1435,24 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   starts optional machinery, the restore goes first** -- and the test that pins it drives one
   of the later steps into a throw and reads the restore back, which is an ordering assertion
   a call-count assertion cannot make.
+
+- **The image-loading default and its per-server opt-in are D task 14 (decided).** §4.0
+  records the user's decision — images off by default, with "always load on this server"
+  as the opt-in — and this entry's own text says it "needs a settings surface and
+  per-server storage; it is its own task". Task 11 correctly declined to flip it: its
+  brief lists neither `Settings.kt` nor `settings_general.xml`. **It is now task 14**, and
+  it is the last of the user's five original complaints that has no owner.
+  Three things travel together and none of them alone is the change:
+  1. `app/src/main/res/xml/settings_general.xml:52` **and**
+     `app/src/main/java/se/lublin/mumla/Settings.kt:274` — the default lives in **both**,
+     and §4.05 already records a round where a test read one while the app read the other.
+  2. The per-server allow list, which `HostPolicy`/`ChatImageLoader` consume, and whose
+     key **must carry the server identity into the cache key** — otherwise a cached
+     `Ready` from an allowed server is served to a row on a disallowed one.
+  3. **A false green that is already armed**:
+     `theRealLoaderIsWiredToTheRealFetcherAndItsHostPolicy` runs through the real
+     `Settings` lookup and will read `EXTERNAL_DISABLED` instead of `NETWORK` the moment
+     the default flips. It must set the preference itself, not inherit it.
 
 - **The Bluetooth wish has exactly one carrier, and it is the preference (P task 7 /
   A task 8, binding).** After P7 the wish lives in `pref_bluetooth_sco` on disk and
