@@ -305,6 +305,49 @@ class HumlaTCPTest {
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
 
+    /**
+     * Where inUse is released inside the finally is the whole point of holding it: everything from
+     * postDisconnectOnce() down still belongs to the connection that is ending. A connect() let
+     * through any earlier would have its disconnect token consumed and its brand-new executors
+     * shut down by the outgoing finally, leaving sendMessage a silent no-op with nobody ever
+     * reporting a disconnect.
+     *
+     * aConnectIsRefusedUntilTheReadLoopHasFinishedUnwinding cannot see this: it takes the token
+     * while the read thread still hangs in createSocket, long before the finally is entered, so it
+     * holds for a release anywhere inside the finally. Here the read thread is parked *inside* the
+     * finally - in the disconnect post, its first interceptable statement - which makes the
+     * position of the release observable rather than just its existence.
+     */
+    @Test
+    fun aConnectIsRefusedWhileTheReadLoopIsStillInsideItsFinally() {
+        val inFinally = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        // Post 1 is the failure report from the catch, post 2 the disconnect from the finally.
+        val handler = HookedHandler(callbackThread.looper) { post ->
+            if (post == 2) {
+                inFinally.countDown()
+                release.await(5, TimeUnit.SECONDS)
+            }
+        }
+        every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
+        val transport = newTransport(handler)
+
+        transport.connect("example.invalid", 64738, false)
+        assertThat(inFinally.await(5, TimeUnit.SECONDS)).isTrue()
+
+        try {
+            assertThrows(ConnectException::class.java) { transport.connect("example.invalid", 64738, false) }
+        } finally {
+            release.countDown() // always let the read thread unwind, however the assertion went
+        }
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        drainCallbacks()
+        assertThat(listener.next().first).isEqualTo("failed")
+        assertThat(listener.next().first).isEqualTo("disconnect")
+        assertThat(listener.events).isEmpty()
+        assertThat(listener.disconnects.get()).isEqualTo(1)
+    }
+
     /** Refusing during teardown must not turn the transport into a one-shot. */
     @Test
     fun theTransportConnectsAgainOnceTheReadLoopHasFinished() {
