@@ -337,6 +337,24 @@ These were found by implementers and reviewers after the plans were written. The
 are binding on the tasks named, and they live here rather than in a stream ledger
 because `.superpowers/sdd/` is gitignored — a ledger disappears with its worktree.
 
+- **Close the model race task 4 opened (A, task 5, hard precondition for
+  integration).** Task 4 moved frame parsing off the main looper, which is what it
+  was for — and with it `ModelHandler`, which writes `mChannels`/`mUsers` (plain
+  `HashMap`) and `Channel.mSubchannels`/`mUsers` (plain `ArrayList`). The UI reads
+  those same objects on main: `ChannelListAdapter.updateChannels()` runs from the
+  `onChannelAdded`/`onUserJoinedChannel` observers and iterates `getUsers()`
+  (`:444`) and `getSubchannels()` (`:450`) while the protocol thread is still
+  feeding frames. **Measured: `ConcurrentModificationException` after 158
+  iterations, at frame 835 of 5 000.** `updateChannels()` catches only
+  `IllegalStateException`, so it is not covered. Same root cause, not measured: an
+  unsynchronised `HashMap` read during a `put` resize can return `null` for a key
+  that is present. The user-visible failure is a crash on joining a large server
+  with the channel list open — exactly the moment task 4 exists to speed up. The
+  ownership table already assigns the fix (`ModelHandler.java`: `ConcurrentHashMap`
+  + `volatile`; `Channel`/`User`: copy-on-read lists), so this is a sequencing
+  constraint, not new work: **the branch is not integrable until task 5 lands**,
+  and task 5 takes the measured reproduction above as its acceptance test rather
+  than writing a new one.
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
   owner of the cap, but the Stream A plan's task 6 is UDP recovery and does not
