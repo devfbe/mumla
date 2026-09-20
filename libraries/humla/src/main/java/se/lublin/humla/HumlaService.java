@@ -310,9 +310,23 @@ public class HumlaService extends Service implements IHumlaService, IHumlaSessio
 
         mCallbacks.onConnecting();
 
-        // Resolves the host (SRV lookup included) and opens the socket on the protocol thread;
-        // every failure, certificate errors included, arrives at onConnectionDisconnected.
-        mConnection.connect(mServer);
+        try {
+            // Resolves the host (SRV lookup included) and opens the socket on the protocol thread;
+            // every failure, certificate errors included, arrives at onConnectionDisconnected.
+            mConnection.connect(mServer);
+        } catch (IllegalStateException e) {
+            // mCallbacks.onConnecting() above is raised on this handler's own thread with an empty
+            // queue, so it is delivered inline: an observer can call disconnect() from inside it,
+            // and the connection it marks as disconnected is the one this line is about to start.
+            // HumlaConnection is single-use and refuses. Without this the refusal would be thrown
+            // out of onStartCommand, or out of the reconnect runnable -- a crash where the old code
+            // reported a failed connection attempt. HumlaConnection reports nothing itself here:
+            // it was never started, so its own disconnect delivered nothing.
+            Log.w(TAG, "Connection was cancelled before it could start", e);
+            mConnectionState = ConnectionState.DISCONNECTED;
+            mCallbacks.onDisconnected(new HumlaException(e,
+                    HumlaException.HumlaDisconnectReason.OTHER_ERROR));
+        }
     }
 
     public void disconnect() {
