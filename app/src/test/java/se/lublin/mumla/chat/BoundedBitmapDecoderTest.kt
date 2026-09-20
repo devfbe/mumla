@@ -1,5 +1,7 @@
 package se.lublin.mumla.chat
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Before
@@ -7,6 +9,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowBitmapFactory
 
 @RunWith(RobolectricTestRunner::class)
@@ -19,6 +24,7 @@ class BoundedBitmapDecoderTest {
     @Before
     fun realisticDecoding() {
         ShadowBitmapFactory.setAllowInvalidImageData(false)
+        ArmedBitmapFactory.disarm()
     }
 
     @Test
@@ -168,6 +174,14 @@ class BoundedBitmapDecoderTest {
     /**
      * A body cut short is a real case: HttpImageFetcher accepts a response that stops before the
      * announced Content-Length. Decoding must report "not an image", not throw.
+     *
+     * Measured: for every prefix below the *bounds* pass already fails, so what this pins is the
+     * first of the two decode calls, never the second — with the catch around the second decode
+     * removed entirely, this test still passed. That holds for the prefixes that keep the header
+     * intact and cut into the pixel data too, because this test's decoder (ImageIO) reads the
+     * metadata across the whole stream. A cut that survives the bounds pass and then fails on the
+     * pixel pass is therefore not producible with real bytes here; that branch is covered by
+     * [aThrowingSampledPassIsReportedAsNotAnImage] instead.
      */
     @Test
     fun aTruncatedImageDecodesToNull() {
@@ -175,6 +189,57 @@ class BoundedBitmapDecoderTest {
         for (prefix in listOf(8, 24, 33, 40, 100, png.size - 20, png.size - 12, png.size - 8)) {
             assertThat(BoundedBitmapDecoder.decode(png.copyOfRange(0, prefix), 240, 240)).isNull()
         }
+    }
+
+    /**
+     * The sampled pass throwing is defence in depth rather than an observed case, so it takes a
+     * decoder double to reach: no byte sequence gets past the bounds pass and then throws (see
+     * [aTruncatedImageDecodesToNull]). A throwing decoder is still "not an image", not a crash.
+     */
+    @Test
+    @Config(shadows = [ArmedBitmapFactory::class])
+    fun aThrowingSampledPassIsReportedAsNotAnImage() {
+        ArmedBitmapFactory.armCall(2, IllegalStateException("decoder gave up on the pixel data"))
+        assertThat(BoundedBitmapDecoder.decode(TestImages.png(1000, 500), 240, 240)).isNull()
+        assertThat(ArmedBitmapFactory.calls).isEqualTo(2)
+    }
+
+    /**
+     * The OOM policy, which until now existed only as prose in the KDoc: an [Error] is not an
+     * "undecodable image", it is the heap being gone, and it must reach the caller. Swallowing it
+     * would report a memory exhaustion as "not an image" and let the app run on a wrecked heap.
+     *
+     * The error is constructed rather than provoked on purpose. Really exhausting the heap in a
+     * unit test is neither reproducible nor survivable for the rest of the suite, and it would not
+     * test anything extra: both catches branch on the *type* of what was thrown, so a constructed
+     * instance takes the exact path an allocator-thrown one takes. A second, non-OOM [Error] is
+     * armed as well so the pinned policy is "no Error is caught" rather than "OOM is special-cased".
+     */
+    @Test
+    @Config(shadows = [ArmedBitmapFactory::class])
+    fun anErrorFromTheBoundsPassReachesTheCaller() {
+        val png = TestImages.png(1000, 500)
+        ArmedBitmapFactory.armCall(1, OutOfMemoryError("failed to allocate a 48000012 byte allocation"))
+        assertThat(
+            assertThrows(OutOfMemoryError::class.java) { BoundedBitmapDecoder.decode(png, 240, 240) }
+        ).hasMessageThat().contains("48000012")
+
+        ArmedBitmapFactory.armCall(1, StackOverflowError())
+        assertThrows(StackOverflowError::class.java) { BoundedBitmapDecoder.decode(png, 240, 240) }
+    }
+
+    /** The sampled pass is where the big allocation happens, so this is the realistic OOM site. */
+    @Test
+    @Config(shadows = [ArmedBitmapFactory::class])
+    fun anErrorFromTheSampledPassReachesTheCaller() {
+        val png = TestImages.png(1000, 500)
+        ArmedBitmapFactory.armCall(2, OutOfMemoryError("failed to allocate a 12000012 byte allocation"))
+        assertThat(
+            assertThrows(OutOfMemoryError::class.java) { BoundedBitmapDecoder.decode(png, 240, 240) }
+        ).hasMessageThat().contains("12000012")
+
+        ArmedBitmapFactory.armCall(2, StackOverflowError())
+        assertThrows(StackOverflowError::class.java) { BoundedBitmapDecoder.decode(png, 240, 240) }
     }
 
     /**
@@ -188,5 +253,50 @@ class BoundedBitmapDecoderTest {
         val bitmap = BoundedBitmapDecoder.decode(png.copyOfRange(0, png.size - 1), 240, 240)!!
         assertThat(bitmap.width).isEqualTo(240)
         assertThat(bitmap.height).isEqualTo(120)
+    }
+}
+
+/**
+ * A [BitmapFactory] whose decode calls can be armed to throw, installed per test via `@Config`.
+ *
+ * Robolectric's own shadow cannot be driven into throwing and real bytes cannot reach the second
+ * decode call in a throwing state, so this is the only way to cover what `decode` promises about
+ * throwing decoders. Calls that are not the armed one report a plausible header on the options and
+ * return nothing: `decode` reads the size off the options and discards the bitmap of the bounds
+ * pass, so that is enough to get from the first call to the second.
+ */
+@Implements(BitmapFactory::class)
+class ArmedBitmapFactory {
+    companion object {
+        /** 1-based index of the `decodeByteArray` call that throws; 0 arms nothing. */
+        private var failingCall = 0
+        private var failure: Throwable? = null
+
+        /** How many times `decodeByteArray` has been entered since the last arming. */
+        var calls = 0
+            private set
+
+        fun armCall(call: Int, failure: Throwable) {
+            this.failingCall = call
+            this.failure = failure
+            calls = 0
+        }
+
+        fun disarm() = armCall(0, RuntimeException("never thrown"))
+
+        @JvmStatic
+        @Implementation
+        fun decodeByteArray(
+            data: ByteArray?,
+            offset: Int,
+            length: Int,
+            opts: BitmapFactory.Options?,
+        ): Bitmap? {
+            calls++
+            if (calls == failingCall) throw failure!!
+            opts?.outWidth = 1000
+            opts?.outHeight = 500
+            return null
+        }
     }
 }

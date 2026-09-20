@@ -35,8 +35,17 @@ object BoundedBitmapDecoder {
      *
      * Returns `null` for anything that is not a decodable image — random bytes, no bytes, or a body
      * cut short mid-stream. Undecodable data is an ordinary outcome for chat content, not an
-     * exceptional one, so it is never reported by throwing; note that a truncated image is data the
-     * network layer really can hand over. [OutOfMemoryError] is deliberately not caught.
+     * exceptional one, so it is never reported by throwing.
+     *
+     * Catching [RuntimeException] around each decode is defence in depth. Android's
+     * `decodeByteArray` reports broken data by returning `null`, not by throwing; the throwing is a
+     * JVM/ImageIO behaviour, which is what the unit tests decode with. (Truncated bodies themselves
+     * are real — HttpImageFetcher hands them over — it is only the *throwing* that is decoder
+     * specific.) The catch keeps a decoder that does throw from turning a bad chat image into a
+     * crash. It is deliberately narrowed to [RuntimeException]: an [Error], above all
+     * [OutOfMemoryError], means the heap is gone, not that this was not an image, and must reach
+     * the caller so it fails where it can be diagnosed. That policy is pinned by tests, not only
+     * stated here — see `anErrorFrom…ReachesTheCaller` in BoundedBitmapDecoderTest.
      *
      * @throws IllegalArgumentException if [maxWidth] or [maxHeight] is not positive. Those are
      *   caller-supplied limits rather than untrusted data, so a bad one is a programming error and
@@ -48,6 +57,9 @@ object BoundedBitmapDecoder {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds) }
             .getOrElse { if (it is RuntimeException) return null else throw it }
+        // Optimisation, not a guard: a header that yielded no size cannot produce a bitmap either,
+        // so this only saves the second decode. Behaviour is unchanged without it, which is why no
+        // test can kill it.
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
         val options = BitmapFactory.Options().apply {
