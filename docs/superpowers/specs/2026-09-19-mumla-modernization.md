@@ -657,6 +657,22 @@ and reported as passing. They are repo-wide, not stream-specific.
   here burned twenty minutes before anyone noticed. Pass `--timeout` to `ctest`,
   and treat a sweep that produces no output as a result to investigate rather than
   a run to repeat.
+- **A naive sequence assertion over hundreds of thousands of elements is expensive
+  enough to look like a hang — and that is a different entry from the one above.**
+  The `ctest` case above is a real hang. This one was written here as one and was
+  not; it was measured twice, in two streams, and both readings say the same thing.
+  Two ~3 000 000-element `List<Short>` handed to `isEqualTo` with a **single** sample
+  differing: **273 s and a 43 MB failure message**, against 0.1 s for that test green
+  and ~12 s for the whole module. (A smaller pairing measured 29 s against a 12–15 s
+  baseline — same shape, same conclusion.) It fails, with output. But under a
+  per-test timeout below that, it becomes a timeout instead of a diagnosis, and the
+  message goes into the XML, the HTML report and the CI log.
+  Two riders, both learned by getting them wrong first. The divergence has to be
+  **content-only**: seed it by changing a count and the cheap size assertion fires
+  ahead of the comparison, the expensive one never runs, and you conclude the form
+  is fine (12 s, 152 characters of output). And the right form is an index loop that
+  reports the **first** diverging index — `diverges at sample %s` — which costs
+  nothing and says more.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
