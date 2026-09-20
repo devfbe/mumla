@@ -1354,6 +1354,26 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   preference — otherwise the UI has two truths again, which is the defect class this
   whole project has been removing.
 
+- **Never run a mutation sweep in a worktree another agent commits from (process, mine).**
+  A mutation sweep *edits production files* — that is what it is. If a second agent is
+  committing from the same worktree, a `git add -A` pulls a deliberately broken guard
+  into a commit, and it looks green because the sweep restores the file a second later.
+  This nearly happened: a reviewer's task-notification said "stopped with background
+  work of its own still running", I read it as finished, and dispatched the fix round
+  into the same worktree. The reviewer caught it afterwards and verified line by line
+  that nothing of its sweep survived — the repaired trim intact, `||` not turned into
+  `xor`, the warning map not swapped, its calibration marker and probe file gone.
+  What actually prevented it was a rule written for an unrelated reason: **`git add`
+  path-scoped, never `-A`**, introduced after an implementer tore a production change
+  apart from its RED. Two rules now carry the weight:
+  1. **A review runs in a detached worktree at the commit under review**, never in the
+     stream's own worktree. This was adopted for wall-clock — two agents per stream —
+     and turns out to be the safety property as well.
+  2. **"Agent finished" means it delivered its report**, not that a notification fired.
+     A notification that says background work is still running is not a completion, and
+     an agent that stops twice without reporting is stuck, not done — look in its
+     worktree (one command) before dispatching anything that writes there.
+
 - **Measured: the Gradle knobs do not work, so the lever is fewer invocations (process).**
   Paired runs on one machine, `:libraries:humla:testDebugUnitTest`: `maxParallelForks`
   1 → 6 is **22/24 s against 20/25 s, i.e. nothing**; the **configuration cache is worse**,
