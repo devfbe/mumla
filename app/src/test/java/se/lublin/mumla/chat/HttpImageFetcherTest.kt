@@ -21,6 +21,7 @@ import java.net.URL
 import java.net.URLConnection
 import java.net.URLStreamHandler
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -62,7 +63,7 @@ class HttpImageFetcherTest {
     fun returnsResponseBody() {
         val body = ByteArray(100) { it.toByte() }
         serve("/a.png", body)
-        assertThat(HttpImageFetcher().fetch(url("/a.png"))).isEqualTo(body)
+        assertThat(HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(url("/a.png"))).isEqualTo(body)
     }
 
     @Test
@@ -74,35 +75,35 @@ class HttpImageFetcherTest {
             exchange.sendResponseHeaders(200, body.size.toLong())
             exchange.responseBody.use { it.write(body) }
         }
-        assertThat(HttpImageFetcher().fetch(url("/a%20b.png"))).isEqualTo(body)
+        assertThat(HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(url("/a%20b.png"))).isEqualTo(body)
         assertThat(requested.get()).isEqualTo("/a%20b.png")
     }
 
     @Test
     fun rejectsDeclaredOversizedBody() {
         serve("/big", ByteArray(10), declaredLength = 2_000)
-        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(maxBytes = 1_000).fetch(url("/big")) }
+        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/big")) }
         assertThat(e.error).isEqualTo(ImageError.TOO_LARGE)
     }
 
     @Test
     fun rejectsUndeclaredOversizedBody() {
         serve("/chunked", ByteArray(2_000), declaredLength = 0)
-        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(maxBytes = 1_000).fetch(url("/chunked")) }
+        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/chunked")) }
         assertThat(e.error).isEqualTo(ImageError.TOO_LARGE)
     }
 
     @Test
     fun non2xxIsNetworkError() {
         serve("/missing", "nope".toByteArray(), status = 404)
-        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher().fetch(url("/missing")) }
+        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(url("/missing")) }
         assertThat(e.error).isEqualTo(ImageError.NETWORK)
     }
 
     @Test
     fun readTimeoutIsReported() {
         serve("/slow", ByteArray(10), delayMs = 1_000)
-        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(readTimeoutMs = 200).fetch(url("/slow")) }
+        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(readTimeoutMs = 200, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/slow")) }
         assertThat(e.error).isEqualTo(ImageError.TIMEOUT)
     }
 
@@ -110,20 +111,20 @@ class HttpImageFetcherTest {
     fun connectionRefusedIsNetworkError() {
         val port = server.address.port
         server.stop(0)
-        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(connectTimeoutMs = 500).fetch("http://127.0.0.1:$port/x") }
+        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(connectTimeoutMs = 500, hostPolicy = HostPolicy.ANY_HOST).fetch("http://127.0.0.1:$port/x") }
         assertThat(e.error).isEqualTo(ImageError.NETWORK)
     }
 
     @Test
     fun nonHttpUrlIsUnsupported() {
-        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher().fetch("nourl") }
+        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch("nourl") }
         assertThat(e.error).isEqualTo(ImageError.UNSUPPORTED)
     }
 
     // --- The fetcher is the second half of the scheme guarantee: it must refuse a source that
     // --- ImageSource classifies as Unsupported outright, without opening anything.
 
-    private fun expectError(url: String, error: ImageError, fetcher: HttpImageFetcher = HttpImageFetcher()) {
+    private fun expectError(url: String, error: ImageError, fetcher: HttpImageFetcher = HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST)) {
         val e = assertThrows("expected $error for <$url>", ImageFetchException::class.java) { fetcher.fetch(url) }
         assertWithMessage("error for <%s>", url).that(e.error).isEqualTo(error)
     }
@@ -176,14 +177,14 @@ class HttpImageFetcherTest {
     fun uppercaseSchemeIsAccepted() {
         val body = ByteArray(10) { it.toByte() }
         serve("/up.png", body)
-        assertThat(HttpImageFetcher().fetch("HTTP://127.0.0.1:${server.address.port}/up.png")).isEqualTo(body)
+        assertThat(HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch("HTTP://127.0.0.1:${server.address.port}/up.png")).isEqualTo(body)
     }
 
     @Test
     fun credentialsInTheUrlConnectToTheHostNotTheUserinfo() {
         val body = ByteArray(10) { it.toByte() }
         serve("/cred.png", body)
-        val fetched = HttpImageFetcher().fetch("http://user:pass@127.0.0.1:${server.address.port}/cred.png")
+        val fetched = HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch("http://user:pass@127.0.0.1:${server.address.port}/cred.png")
         assertThat(fetched).isEqualTo(body)
     }
 
@@ -200,7 +201,7 @@ class HttpImageFetcherTest {
         val body = ByteArray(10) { it.toByte() }
         serve("/target.png", body)
         serveRedirect("/redirect.png", url("/target.png"))
-        assertThat(HttpImageFetcher().fetch(url("/redirect.png"))).isEqualTo(body)
+        assertThat(HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(url("/redirect.png"))).isEqualTo(body)
     }
 
     @Test
@@ -225,6 +226,108 @@ class HttpImageFetcherTest {
         expectError(url("/to-https.png"), ImageError.NETWORK)
     }
 
+    /** Records that it was reached and answers; used where being reached at all is the failure. */
+    private fun serveTripwire(path: String, reached: AtomicBoolean) {
+        server.createContext(path) { exchange ->
+            reached.set(true)
+            exchange.sendResponseHeaders(200, 0)
+            exchange.close()
+        }
+    }
+
+    @Test
+    fun aRelativeRedirectIsResolvedAgainstTheUrlThatSentIt() {
+        // HttpURLConnection used to resolve these; now the fetcher follows redirects itself, so it
+        // has to, and a Location of "/target.png" is what a real server sends.
+        val body = ByteArray(10) { it.toByte() }
+        serve("/relative-target.png", body)
+        serveRedirect("/relative.png", "/relative-target.png")
+        assertThat(HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(url("/relative.png"))).isEqualTo(body)
+    }
+
+    @Test
+    fun anEndlessRedirectLoopIsCutOff() {
+        val hops = AtomicInteger()
+        server.createContext("/loop.png") { exchange ->
+            hops.incrementAndGet()
+            exchange.responseHeaders.add("Location", url("/loop.png"))
+            exchange.sendResponseHeaders(302, -1)
+            exchange.close()
+        }
+        val e = assertThrows(ImageFetchException::class.java) {
+            HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(url("/loop.png"))
+        }
+        assertThat(e.error).isEqualTo(ImageError.NETWORK)
+        // Six requests: the original plus MAX_REDIRECTS. Following redirects by hand means the
+        // bound is ours now, so it is worth stating rather than trusting the platform's.
+        assertThat(hops.get()).isEqualTo(6)
+    }
+
+    /**
+     * The point of following redirects by hand. The policy is asked again for the second hop, and
+     * refusing it has to stop the request, not merely rename the error afterwards — so the target
+     * records whether it was ever reached, and that is what is asserted first.
+     */
+    @Test
+    fun theHostPolicyIsAskedAgainForEveryRedirectHop() {
+        val reached = AtomicBoolean(false)
+        serveTripwire("/second-hop.png", reached)
+        serveRedirect("/first-hop.png", url("/second-hop.png"))
+        val asked = mutableListOf<String>()
+        val onceOnly = HostPolicy { host ->
+            synchronized(asked) { asked += host; asked.size == 1 }
+        }
+
+        val e = assertThrows(ImageFetchException::class.java) {
+            HttpImageFetcher(hostPolicy = onceOnly).fetch(url("/first-hop.png"))
+        }
+
+        assertWithMessage("the refused hop was requested anyway").that(reached.get()).isFalse()
+        assertThat(asked).containsExactly("127.0.0.1", "127.0.0.1")
+        assertThat(e.error).isEqualTo(ImageError.UNSUPPORTED)
+    }
+
+    /**
+     * That the *default* is the refusing policy is a claim of its own: every other test in this
+     * class hands in HostPolicy.ANY_HOST, so a default quietly changed to that would leave all of
+     * them green.
+     */
+    @Test
+    fun theDefaultPolicyRefusesTheDevicesOwnNetworkWithoutOpeningAnything() {
+        val reached = AtomicBoolean(false)
+        serveTripwire("/loopback.png", reached)
+
+        val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher().fetch(url("/loopback.png")) }
+
+        assertWithMessage("a loopback URL from a chat message was fetched").that(reached.get()).isFalse()
+        assertThat(e.error).isEqualTo(ImageError.UNSUPPORTED)
+    }
+
+    @Test
+    fun aRedirectWithNothingUsableToFollowIsANetworkError() {
+        // Not UNSUPPORTED: the source in the message parsed fine, and UNSUPPORTED is the error the
+        // loader caches for good. A server that answers badly must stay retryable.
+        serveRedirect("/no-location.png", "")
+        serveRedirect("/torn-location.png", "http://[not a url")
+        expectError(url("/no-location.png"), ImageError.NETWORK)
+        expectError(url("/torn-location.png"), ImageError.NETWORK)
+    }
+
+    /** "The check could not be made" must not read as "let it through". */
+    @Test
+    fun aHostPolicyThatThrowsRefuses() {
+        val reached = AtomicBoolean(false)
+        serveTripwire("/throwing-policy.png", reached)
+        val broken = HostPolicy { throw IllegalStateException("resolver on fire") }
+
+        val e = assertThrows(ImageFetchException::class.java) {
+            HttpImageFetcher(hostPolicy = broken).fetch(url("/throwing-policy.png"))
+        }
+
+        assertThat(reached.get()).isFalse()
+        assertThat(e.error).isEqualTo(ImageError.UNSUPPORTED)
+    }
+
     /** Streams chunks until the client hangs up (or a hard backstop), i.e. an endless body. */
     private fun serveEndless(path: String, chunk: ByteArray = ByteArray(4_096)) {
         server.createContext(path) { exchange ->
@@ -246,7 +349,7 @@ class HttpImageFetcherTest {
     @Test(timeout = 30_000)
     fun endlessBodyIsCutOffByTheSizeCap() {
         serveEndless("/endless")
-        expectError(url("/endless"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 64 * 1024))
+        expectError(url("/endless"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 64 * 1024, hostPolicy = HostPolicy.ANY_HOST))
     }
 
     /** Serves one connection by hand, so the response can break the rules the JDK server enforces. */
@@ -298,7 +401,7 @@ class HttpImageFetcherTest {
         // small reads, but a single large read overshoots it freely (asking for 16 KiB after a
         // declared 10 returned 16384 bytes). The fetcher never asks for more than what is left of
         // the cap, so the 512 KiB tail cannot reach the caller either way.
-        val body = HttpImageFetcher(maxBytes = 1_000).fetch(target)
+        val body = HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(target)
         assertWithMessage("body must never exceed the cap").that(body.size).isAtMost(1_000)
         assertThat(body).isEqualTo(truthful)
     }
@@ -329,7 +432,7 @@ class HttpImageFetcherTest {
         expectError(
             url("/dribble"),
             ImageError.TIMEOUT,
-            HttpImageFetcher(readTimeoutMs = 10_000, maxBytes = 5L * 1024 * 1024, totalTimeoutMs = 500),
+            HttpImageFetcher(readTimeoutMs = 10_000, maxBytes = 5L * 1024 * 1024, totalTimeoutMs = 500, hostPolicy = HostPolicy.ANY_HOST),
         )
         val elapsedMs = (System.nanoTime() - started) / 1_000_000
         assertThat(elapsedMs).isLessThan(5_000)
@@ -388,7 +491,7 @@ class HttpImageFetcherTest {
             override fun connectFailed(uri: URI, sa: SocketAddress, e: IOException) = Unit
         })
         try {
-            val fetcher = HttpImageFetcher(connectTimeoutMs = 1_000, readTimeoutMs = 1_000, totalTimeoutMs = 2_000)
+            val fetcher = HttpImageFetcher(connectTimeoutMs = 1_000, readTimeoutMs = 1_000, totalTimeoutMs = 2_000, hostPolicy = HostPolicy.ANY_HOST)
             // Control first: without it a count of zero below would also be what a broken trap
             // looks like. The trap never answers, so this fetch can only fail — that is fine.
             assertThrows(ImageFetchException::class.java) { fetcher.fetch(url("/a.png")) }
@@ -417,7 +520,7 @@ class HttpImageFetcherTest {
         // registry-based name (URI.getHost() is null for it), a non-ASCII one, a bracketed IPv6
         // literal with and without userinfo, an empty port, a fully qualified name. The gate must
         // let them through; what the network then makes of them is not this test's business.
-        val fetcher = HttpImageFetcher(connectTimeoutMs = 2_000, readTimeoutMs = 2_000, totalTimeoutMs = 6_000)
+        val fetcher = HttpImageFetcher(connectTimeoutMs = 2_000, readTimeoutMs = 2_000, totalTimeoutMs = 6_000, hostPolicy = HostPolicy.ANY_HOST)
         listOf(
             "http://my_host.invalid/a.png",
             "http://\u65e5\u672c.invalid/a.png",
@@ -447,7 +550,7 @@ class HttpImageFetcherTest {
     fun dribblingResponseHeadersHitTheTotalTimeout() {
         val target = rawHeaderDribbleServer()
         val started = System.nanoTime()
-        expectError(target, ImageError.TIMEOUT, HttpImageFetcher(readTimeoutMs = 10_000, totalTimeoutMs = 500))
+        expectError(target, ImageError.TIMEOUT, HttpImageFetcher(readTimeoutMs = 10_000, totalTimeoutMs = 500, hostPolicy = HostPolicy.ANY_HOST))
         val elapsedMs = (System.nanoTime() - started) / 1_000_000
         assertWithMessage("elapsed ms").that(elapsedMs).isLessThan(5_000)
     }
@@ -456,13 +559,13 @@ class HttpImageFetcherTest {
     fun aBodyExactlyAtTheCapIsStillReturned() {
         val body = ByteArray(1_000) { it.toByte() }
         serve("/exact", body)
-        assertThat(HttpImageFetcher(maxBytes = 1_000).fetch(url("/exact"))).isEqualTo(body)
+        assertThat(HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/exact"))).isEqualTo(body)
     }
 
     @Test
     fun oneByteOverTheCapIsRejectedEvenWhenUndeclared() {
         serve("/justover", ByteArray(1_001), declaredLength = 0)
-        expectError(url("/justover"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 1_000))
+        expectError(url("/justover"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST))
     }
 
     /**
@@ -490,7 +593,7 @@ class HttpImageFetcherTest {
         spyDisconnect.set { throw IllegalStateException("disconnect() raced the watchdog") }
         try {
             val e = assertThrows(ImageFetchException::class.java) {
-                HttpImageFetcher().fetch("https://$SPY_HOST/a.png")
+                HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch("https://$SPY_HOST/a.png")
             }
             assertWithMessage("the 404 must survive the throwing disconnect()")
                 .that(e.error).isEqualTo(ImageError.NETWORK)
