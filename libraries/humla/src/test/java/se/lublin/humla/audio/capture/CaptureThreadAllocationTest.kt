@@ -21,6 +21,7 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import java.lang.management.ManagementFactory
+import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.native.RnnoiseApi
 import se.lublin.humla.audio.native.SpeexPreprocessApi
 import se.lublin.humla.audio.native.WebRtcApmApi
@@ -282,6 +283,58 @@ class CaptureThreadAllocationTest {
             .that(maxOf(chunkerCold, chunkerHot)).isLessThan(HALF_AN_OBJECT)
         assertWithMessage("the chunker must actually have produced frames")
             .that(farEndSink.frames).isGreaterThan(0)
+    }
+
+    /**
+     * The two pieces task 7 and task 8 added to the frame path, and the reason this file is opened
+     * by both: `VoiceActivityDetector` had no number at all -- its KDoc said so and named this test
+     * as the instrument -- and `CapturePipeline` is now the thing that calls it once per 10 ms.
+     *
+     * Both are measured against the skeleton's `HALF_AN_OBJECT`, not against the box allowance: the
+     * detector is handed a `Float?` that some stage already boxed and `?:` unboxes rather than
+     * reboxing, and the pipeline over `NoopPreprocessor` has no probability to box at all. So what
+     * is left for either of them to allocate is a mistake rather than a cost.
+     *
+     * The detector is measured in **both** modes, because they take different halves of `isVoice`:
+     * `AMPLITUDE` runs the level loop over the frame, `PROBABILITY` takes the pre-boxed float and
+     * skips it. A measurement of one says nothing about the other.
+     */
+    @Test
+    fun `the detector and the pipeline allocate nothing per frame`() {
+        assertThat(threads.isThreadAllocatedMemorySupported).isTrue()
+        assertThat(threads.isThreadAllocatedMemoryEnabled).isTrue()
+
+        val sink = arrayOfNulls<Any>(1)
+        val instrument = hot { sink[0] = ShortArray(FRAME_SIZE) }
+        assertWithMessage("the allocation counter is not counting; every result below would be a false green")
+            .that(instrument).isAtLeast(FRAME_SIZE.toDouble())
+
+        val frame = ShortArray(FRAME_SIZE) { (it % 997).toShort() }
+        val amplitude = VoiceActivityDetector(VadConfig.amplitude(0.5f))
+        val probability = VoiceActivityDetector(VadConfig.probability())
+        val boxed: Float? = 0.8f
+        val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode())
+
+        val amplitudeCold = cold { amplitude.isVoice(frame, FRAME_SIZE, null) }
+        val amplitudeHot = hot { amplitude.isVoice(frame, FRAME_SIZE, null) }
+        val probabilityCold = cold { probability.isVoice(frame, FRAME_SIZE, boxed) }
+        val probabilityHot = hot { probability.isVoice(frame, FRAME_SIZE, boxed) }
+        val pipelineCold = cold { pipeline.process(frame, FRAME_SIZE) }
+        val pipelineHot = hot { pipeline.process(frame, FRAME_SIZE) }
+
+        println(
+            "allocation per 10 ms frame (cold / hot): instrument baseline ${"%.1f".format(instrument)} B, " +
+                "VoiceActivityDetector amplitude ${"%.3f".format(amplitudeCold)} / ${"%.3f".format(amplitudeHot)} B, " +
+                "probability ${"%.3f".format(probabilityCold)} / ${"%.3f".format(probabilityHot)} B, " +
+                "CapturePipeline ${"%.3f".format(pipelineCold)} / ${"%.3f".format(pipelineHot)} B"
+        )
+
+        assertWithMessage("VoiceActivityDetector.isVoice allocates on the audio thread in amplitude mode")
+            .that(maxOf(amplitudeCold, amplitudeHot)).isLessThan(HALF_AN_OBJECT)
+        assertWithMessage("VoiceActivityDetector.isVoice allocates on the audio thread in probability mode")
+            .that(maxOf(probabilityCold, probabilityHot)).isLessThan(HALF_AN_OBJECT)
+        assertWithMessage("CapturePipeline.process allocates on the audio thread")
+            .that(maxOf(pipelineCold, pipelineHot)).isLessThan(HALF_AN_OBJECT)
     }
 
     /**

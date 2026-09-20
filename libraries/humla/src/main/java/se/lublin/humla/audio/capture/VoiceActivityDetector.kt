@@ -21,6 +21,18 @@ import kotlin.math.log10
 import kotlin.math.sqrt
 
 /**
+ * A monotonic nanosecond clock, injectable for tests.
+ *
+ * It is a `fun interface` rather than a `() -> Long`, and the difference is 24 B on the audio
+ * thread per frame rather than a matter of style: a Kotlin function type erases its return to a
+ * reference, so `Function0<Long>.invoke()` boxes. `nanoTime()` here compiles to `()J`. Every call
+ * site is a lambda or a method reference and needs no change, because Kotlin converts both.
+ */
+fun interface NanoClock {
+    fun nanoTime(): Long
+}
+
+/**
  * Decides per frame whether the user is talking (spec B5): start/stop hysteresis over a score, plus
  * a hold that keeps the transmission open across the gaps inside a word.
  *
@@ -33,17 +45,24 @@ import kotlin.math.sqrt
  * ("some fixed but arbitrary origin time") and which is why the hold is a deadline compared with
  * `now - deadline < 0` rather than an elapsed time compared with the hold.
  *
- * **Its frame path is not measured yet.** Read out of the source, [isVoice] constructs nothing:
- * the `Float?` it receives is already boxed by the stage that produced it, `?:` unboxes rather
- * than reboxing, and the `when` is over an enum. But that is a claim about the text, and the only
- * instrument in this module that can separate it from zero is `CaptureThreadAllocationTest`'s
- * heap delta -- which measures the stages and not this class. Task 8 opens that file to add
- * `CapturePipeline`; the detector belongs in the same pass. Until then nobody has a number here,
- * and "allocates nothing" is not something this file gets to say.
+ * **Its frame path is measured now, and the source-reading was wrong.** The reading was: [isVoice]
+ * constructs nothing, because the `Float?` it receives is already boxed by the stage that produced
+ * it, `?:` unboxes rather than reboxing, and the `when` is over an enum. All true, and it missed
+ * the clock. `CaptureThreadAllocationTest` measured **24.006 B per frame, cold, in both modes** --
+ * in [VadMode.PROBABILITY] too, where the level loop never runs, which is what pointed at the one
+ * line both modes share. `() -> Long` is `Function0<java.lang.Long>`: its `invoke` erases to a
+ * reference return, so every reading of the clock boxed a `Long` on the audio thread. Proven
+ * rather than reasoned: a clock returning `0L` sits inside `Long.valueOf`'s cache and measured
+ * **0.006 B**, one returning `1_000_000_000L` measured **18.135 B**, same code. Hence [NanoClock],
+ * whose `nanoTime()` has JVM signature `()J`. After it: 0.006 B cold in both modes.
+ *
+ * That is also why the number had to be taken rather than argued. The hot window reads 0.000 B
+ * either way -- C2 scalar-replaces the box -- and ART does no such elimination, so a hot-only
+ * measurement would have certified an allocation the device makes (spec §4.05).
  */
 class VoiceActivityDetector(
     config: VadConfig,
-    private val clock: () -> Long = System::nanoTime,
+    private val clock: NanoClock = NanoClock(System::nanoTime),
 ) {
     @Volatile
     var config: VadConfig = config
@@ -55,7 +74,7 @@ class VoiceActivityDetector(
      * first frame reads "the hold is over" whatever the clock's origin is, without a second field
      * to say whether voice has ever been heard.
      */
-    private var holdUntilNanos: Long = clock()
+    private var holdUntilNanos: Long = clock.nanoTime()
 
     /**
      * @param pcm the (already preprocessed) frame
@@ -71,7 +90,7 @@ class VoiceActivityDetector(
             VadMode.AMPLITUDE -> amplitudeScore(pcm, length)
             VadMode.PROBABILITY -> probability ?: amplitudeScore(pcm, length)
         }
-        val now = clock()
+        val now = clock.nanoTime()
         val threshold = if (talking) c.stopThreshold else c.startThreshold
         val detected = score >= threshold
         if (detected) holdUntilNanos = now + c.holdTimeMs * 1_000_000L
