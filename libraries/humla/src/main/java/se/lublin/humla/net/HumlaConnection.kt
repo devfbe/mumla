@@ -55,13 +55,26 @@ import java.util.concurrent.atomic.AtomicBoolean
  * posted to [mainHandler]. [sendTCPMessage] and [sendUDPMessage] may be called from any thread.
  *
  * Single-use, and that is what keeps its state flags honest. HumlaTCP's class comment asks of every
- * flag: which thread closes its window, and does anything fence that thread in? Here the answer is
- * that none of them has a closing edge at all - [connectCalled], [disconnectRequested],
- * [disconnectDelivered] and [exceptionHandled] are set once and never cleared, so there is no
- * window for a late writer to reopen, whichever thread it runs on. A second connection is a second
- * object. [connected] and [synchronizedWithServer] do close, on the protocol thread and in
- * [disconnect]; they gate sends, and a send that slips through the closing edge reaches a transport
- * that is already tearing down and drops it.
+ * flag: which thread closes its window, and does anything fence that thread in? Most of them have
+ * no closing edge at all - [connectCalled], [disconnectRequested], [disconnectDelivered],
+ * [exceptionHandled] and [disconnectReported] are set once and never cleared, so there is no window
+ * for a late writer to reopen, whichever thread it runs on. A second connection is a second object.
+ *
+ * [connected] and [synchronizedWithServer] do close, and they are HumlaTCP's warning read from the
+ * other end: they are *opened* on the protocol thread, and [disconnect] used to close them from
+ * whichever thread called it. An opener and a closer on different threads is the same hazard
+ * mirrored - a disconnect landing between the established callback's guard check and its write one
+ * instruction later would have left [connected] set for the life of the object. So [disconnect] is
+ * not a writer any more: it sets [disconnectRequested], the closing writes happen in the teardown
+ * it queues onto the protocol thread, which that looper always runs after the opener, and
+ * [isConnected] and [isSynchronized] read the pair. One writer thread, plus a monotone flag for the
+ * caller's edge.
+ *
+ * What the caller's edge does not do is stop a send already past its check. [sendTCPMessage] reads
+ * [isConnected], a [disconnect] runs, and the write still goes out: the teardown that drops the
+ * transport is only queued at that point, [tcp] is still set and its send executor is still
+ * running. The bytes really are written. That is harmless - a ping or a crypt resync on a socket
+ * about to close - but it is not the same statement as "the send is dropped".
  */
 class HumlaConnection @JvmOverloads constructor(
     private val listener: HumlaConnectionListener,
@@ -96,6 +109,12 @@ class HumlaConnection @JvmOverloads constructor(
      * Runs parsing, model updates and voice routing. Started on first access - i.e. by [connect] -
      * so a connection object that is built and then thrown away leaks no thread. Quit by
      * [disconnect], from inside the queued teardown rather than before it.
+     *
+     * What this leaves on the caller's thread is a thread start, not I/O: the initialiser calls
+     * HandlerThread.getLooper(), which waits until the new thread has published its looper, and
+     * `by lazy` holds a SYNCHRONIZED monitor while it does - so a [disconnect] from another thread
+     * can block on that monitor for as long as [connect] holds it. Bounded by a thread start, and
+     * it is the reason [connect] is the only caller that touches this before the first post.
      */
     val protocolHandler: Handler by lazy {
         protocolThread.start()
@@ -116,6 +135,13 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var usingUdp = true
     @Volatile private var forceTcp = false
     @Volatile private var useTor = false
+    /**
+     * Whether the socket is up, and whether the handshake completed. Both are written only on the
+     * protocol thread - opened by the established callback and by ServerSync, closed in the queued
+     * teardown, which the same looper always runs after them. The public predicates [isConnected]
+     * and [isSynchronized] compose them with [disconnectRequested], so a [disconnect] from any
+     * thread closes both at once without becoming a second writer that the opener could race.
+     */
     @Volatile private var connected = false
     @Volatile private var synchronizedWithServer = false
     @Volatile private var lastError: HumlaException? = null
@@ -138,9 +164,14 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var udpLatency = 0L
     @Volatile private var tcpLatency = 0L
 
-    // Server
-    @Volatile private var host: String? = null
-    @Volatile private var port = 0
+    // Server. Written in the posted connect block and read by startUdp, both on the protocol
+    // thread, so neither needs to be volatile. Deliberately not cleared by the teardown: clearing
+    // them was what created the loopback hazard, because InetAddress.getByName resolves null - and
+    // the empty string - to 127.0.0.1 rather than failing, so a UDP start racing a disconnect
+    // opened a socket to the local machine. Nothing reads them after the teardown and the object
+    // is single-use, so there is nothing to clear them for.
+    private var host = ""
+    private var port = 0
     @Volatile private var remoteVersion = 0
     @Volatile private var remoteRelease: String? = null
     @Volatile private var remoteOsName: String? = null
@@ -162,7 +193,7 @@ class HumlaConnection @JvmOverloads constructor(
      */
     private val pingRunnable = object : Runnable {
         override fun run() {
-            if (!connected) return
+            if (!isConnected) return
             sendPings()
             protocolHandler.postDelayed(this, PING_INTERVAL_MILLIS)
         }
@@ -351,14 +382,14 @@ class HumlaConnection @JvmOverloads constructor(
         }
     }
 
-    val isConnected: Boolean get() = connected
+    val isConnected: Boolean get() = connected && !disconnectRequested
 
     /**
      * Returns whether or not the service is fully synchronized with the remote server - this
      * happens when we get the ServerSync message. You shouldn't log any user actions until the
      * connection is synchronized.
      */
-    val isSynchronized: Boolean get() = synchronizedWithServer
+    val isSynchronized: Boolean get() = synchronizedWithServer && !disconnectRequested
 
     /** False while voice is tunneled over TCP, because it is forced or UDP was judged unusable. */
     val isUsingUdp: Boolean get() = usingUdp
@@ -406,56 +437,56 @@ class HumlaConnection @JvmOverloads constructor(
 
     @Throws(NotSynchronizedException::class)
     fun getServerVersion(): Int {
-        if (!synchronizedWithServer) throw NotSynchronizedException()
+        if (!isSynchronized) throw NotSynchronizedException()
         return remoteVersion
     }
 
     @Throws(NotSynchronizedException::class)
     fun getServerRelease(): String? {
-        if (!synchronizedWithServer) throw NotSynchronizedException()
+        if (!isSynchronized) throw NotSynchronizedException()
         return remoteRelease
     }
 
     @Throws(NotSynchronizedException::class)
     fun getServerOSName(): String? {
-        if (!synchronizedWithServer) throw NotSynchronizedException()
+        if (!isSynchronized) throw NotSynchronizedException()
         return remoteOsName
     }
 
     @Throws(NotSynchronizedException::class)
     fun getServerOSVersion(): String? {
-        if (!synchronizedWithServer) throw NotSynchronizedException()
+        if (!isSynchronized) throw NotSynchronizedException()
         return remoteOsVersion
     }
 
     @Throws(NotConnectedException::class)
     fun getTCPLatency(): Long {
-        if (!connected) throw NotConnectedException()
+        if (!isConnected) throw NotConnectedException()
         return tcpLatency
     }
 
     @Throws(NotConnectedException::class)
     fun getUDPLatency(): Long {
-        if (!connected) throw NotConnectedException()
+        if (!isConnected) throw NotConnectedException()
         return udpLatency
     }
 
     @Throws(NotSynchronizedException::class)
     fun getSession(): Int {
-        if (!synchronizedWithServer) throw NotSynchronizedException("Session is set during synchronization")
+        if (!isSynchronized) throw NotSynchronizedException("Session is set during synchronization")
         return sessionId
     }
 
     /** Server-reported maximum input bandwidth in bps, or -1 if not set. */
     @Throws(NotSynchronizedException::class)
     fun getMaxBandwidth(): Int {
-        if (!synchronizedWithServer) throw NotSynchronizedException()
+        if (!isSynchronized) throw NotSynchronizedException()
         return serverMaxBandwidth
     }
 
     @Throws(NotSynchronizedException::class)
     fun getCodec(): HumlaUDPMessageType? {
-        if (!synchronizedWithServer) throw NotSynchronizedException()
+        if (!isSynchronized) throw NotSynchronizedException()
         return serverCodec
     }
 
@@ -470,17 +501,15 @@ class HumlaConnection @JvmOverloads constructor(
     fun disconnect() {
         // Written before connectCalled is read; see the ordering note in connect().
         disconnectRequested = true
-        connected = false
-        synchronizedWithServer = false
         if (protocolThread.isAlive) {
             protocolHandler.post {
                 protocolHandler.removeCallbacks(pingRunnable)
+                connected = false
+                synchronizedWithServer = false
                 tcp?.disconnect()
                 tcp = null
                 udp?.disconnect()
                 udp = null
-                host = null
-                port = 0
                 quitProtocolThread()
             }
         }
@@ -582,13 +611,13 @@ class HumlaConnection @JvmOverloads constructor(
 
     /** Sends a protobuf message over TCP. Can silently fail. */
     fun sendTCPMessage(message: Message, messageType: HumlaTCPMessageType) {
-        if (!connected) return
+        if (!isConnected) return
         tcp?.sendMessage(message, messageType)
     }
 
     /** Sends a datagram over UDP, or tunnels it through TCP unless [force]. */
     fun sendUDPMessage(data: ByteArray, length: Int, force: Boolean) {
-        if (!connected) return
+        if (!isConnected) return
         require(length <= data.size) { "Requested length $length is longer than available data length ${data.size}!" }
         if (remoteVersion == 0x10202) applyLegacyCodecWorkaround(data)
         val tcpTransport = tcp
@@ -602,26 +631,23 @@ class HumlaConnection @JvmOverloads constructor(
 
     /** Asks the server to tunnel future voice packets over TCP. */
     private fun enableForceTCP() {
-        if (!connected) return
+        if (!isConnected) return
         val utb = Mumble.UDPTunnel.newBuilder()
         utb.packet = ByteString.copyFrom(ByteArray(3))
         sendTCPMessage(utb.build(), HumlaTCPMessageType.UDPTunnel)
     }
 
     fun sendAccessTokens(tokens: Collection<String>) {
-        if (!connected) return
+        if (!isConnected) return
         val ab = Mumble.Authenticate.newBuilder()
         ab.addAllTokens(tokens)
         sendTCPMessage(ab.build(), HumlaTCPMessageType.Authenticate)
     }
 
     private fun startUdp() {
-        // A disconnect() racing the handshake nulls the host, and the Java passed it straight
-        // through to InetAddress.getByName, which resolves null to loopback rather than failing.
-        val h = host ?: return
         val transport = transports.createUdp(cryptState, this, protocolHandler)
         udp = transport
-        transport.connect(h, port)
+        transport.connect(host, port)
     }
 
     // ---- TCPConnectionListener (protocol thread) ----
