@@ -146,6 +146,12 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             channel.setPosition(msg.getPosition());
 
         if(msg.hasParent()) {
+            // The server picks the parent id, and it can name a channel we have no ChannelState
+            // for yet. Dereferencing that null killed the process once parsing moved to the
+            // humla-protocol thread, which installs no uncaught-exception handler. A stub is what
+            // this class already does for an unknown channel on the user path: the real
+            // ChannelState lands on the same object later and fills in its name.
+            if(parent == null) parent = createStubChannel(msg.getParent());
             Channel oldParent = channel.getParent();
             channel.setParent(parent);
             parent.addSubchannel(channel);
@@ -177,9 +183,14 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             channel.setLinks(links);
         }
 
+        // Unlike a parent, a link to a channel we do not know is skipped rather than stubbed: it
+        // is an attribute of a channel we already have, not a place in the tree that the rest
+        // hangs off. Channel.addLink/removeLink tolerate the null, the second call in each pair
+        // would not.
         if(msg.getLinksRemoveCount() > 0) {
             for(int link : msg.getLinksRemoveList()) {
                 Channel linked = mChannels.get(link);
+                if(linked == null) continue;
                 channel.removeLink(linked);
                 linked.removeLink(channel);
             }
@@ -188,6 +199,7 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         if(msg.getLinksAddCount() > 0) {
             for(int link : msg.getLinksAddList()) {
                 Channel linked = mChannels.get(link);
+                if(linked == null) continue;
                 channel.addLink(linked);
                 linked.addLink(channel);
             }
