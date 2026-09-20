@@ -88,7 +88,7 @@ change minimal.
 | A Core | `HumlaService`, `net/HumlaConnection`, `net/HumlaTCP`, `net/HumlaUDP`, `net/HumlaNetworkThread`, `net/CryptState`, `protocol/ModelHandler`, `util/HumlaCallbacks`, `service/MumlaService`, `service/MumlaConnectionNotification`, `service/MumlaReconnectNotification`, `model/*`, new `service/ChatMessageLog` (bounded log, D5 acceptance lives here) |
 | B Audio | `protocol/AudioHandler`, `audio/**` (input, output, encoders, input modes, `BluetoothScoReceiver`), `src/main/cpp/**` (after Foundation created it), `preference/AudioSettingsFragment`, `res/xml/settings_audio.xml`, audio keys in `Settings.kt` (additive only) |
 | D Chat & UI | `channel/ChannelChatFragment`, `util/MumbleImageGetter`, `util/BitmapUtils`, `util/HtmlUtils`, `service/IChatMessage`, `service/MumlaMessageNotification`, chat layouts, new image viewer, new `chat/` package |
-| P Platform & controls | `app/MumlaActivity` (permissions, MediaSession wiring), `channel/ChannelListFragment` (Bluetooth menu), new `service/MumlaMediaSession`, non-audio keys in `Settings.kt` (additive only), `res/xml/settings_general.xml`, `AndroidManifest.xml`, battery-optimization dialog |
+| P Platform & controls | `app/MumlaActivity` (permissions, MediaSession wiring), `channel/ChannelListFragment` (Bluetooth menu), `channel/ChannelListAdapter` (rebuild coalescing, see 4.1), new `service/MumlaMediaSession`, non-audio keys in `Settings.kt` (additive only), `res/xml/settings_general.xml`, `AndroidManifest.xml`, battery-optimization dialog |
 
 Rules for shared files: `Settings.java` is converted to `Settings.kt` by
 Foundation (F3); streams B and P only add keys and accessors. `MumlaService`
@@ -519,6 +519,26 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   neither "placeholder" nor "restore". One test in the dialog's own suite using
   `scenario.recreate()` twice pins both conditions and the two-rotation case.
 
+- **Coalesce the adapter's own rebuilds (P, task 6).** With the observer queue
+  bounded, the largest remaining main-thread cost is not in the model any more —
+  it is `ChannelListAdapter.updateChannels()`, which is O(n·depth) and runs *in
+  full* from every model observer event. Measured on a 5 000-channel tree: **637 µs
+  per rebuild on a desktop JVM**, and one large sync still delivers 1 024 of them
+  after the cap, i.e. **roughly three to six seconds of main-thread work on a
+  phone**. The cap cut it fivefold and can cut it no further, because the events
+  that survive are exactly the ones every observer answers with a full rebuild. The
+  fix belongs in the adapter: one posted rebuild per frame instead of one per
+  event. Inside the walk, `getSubchannelUserCount()` dominates — it is recomputed
+  from scratch at every node of every walk, which is what turns an O(n) walk into
+  O(n·depth); the file's own `FIXME: is it necessary to cache this?` is the answer.
+  `ChannelListAdapter` was in no stream's ownership list, which is why this had
+  nobody to go to; it is now Platform's, next to `ChannelListFragment`, and task 6
+  is the task that already opens that neighbourhood.
+  Two more adapter defects found at the same time, same owner: `ChannelAdapter.java:50-60`
+  calls `getUsers()` **three times per bind**, and `getCount()` and
+  `getItem(position)` read two *different* snapshots — a user leaving between them
+  is an `IndexOutOfBoundsException`. That was equally racy before the guarded model
+  and copy-on-read does not fix it; the adapter has to hold one snapshot.
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
   owner of the cap, but the Stream A plan's task 6 is UDP recovery and does not
