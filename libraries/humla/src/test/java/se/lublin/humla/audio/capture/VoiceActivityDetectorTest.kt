@@ -119,6 +119,35 @@ class VoiceActivityDetectorTest {
         assertThrows(IllegalArgumentException::class.java) { VadConfig(VadMode.PROBABILITY, -0.1f, -0.2f, 250L) }
     }
 
+    /**
+     * Both range checks, each mutated on its own -- and the reason this test exists at all is that
+     * dropping the **lower** bound of either one survived the first sweep.
+     *
+     * `stopThreshold in 0f..startThreshold` already rejects every negative start, because the
+     * range is empty then, so `startThreshold in 0f..1f`'s lower half never gets to be the reason
+     * for a rejection: two guards over one observable, which spec §4.04 says read as one guard and
+     * a lie. The observable that separates them is the **message**, which is the only thing a
+     * programmer-error guard produces, and it is asserted by its first word so that
+     * "stopThreshold must be within [0, startThreshold]" cannot pass for the other one.
+     *
+     * The other survivor was not masked, it was simply an input nobody had written: a negative
+     * *stop* under a valid start constructs happily without the lower bound, and a negative stop
+     * means the detector can never fall below it -- the microphone latches on for the session.
+     */
+    @Test
+    fun `each range check names the field it rejected`() {
+        assertThat(
+            assertThrows(IllegalArgumentException::class.java) {
+                VadConfig(VadMode.PROBABILITY, -0.1f, -0.1f, 250L)
+            }
+        ).hasMessageThat().startsWith("startThreshold")
+        assertThat(
+            assertThrows(IllegalArgumentException::class.java) {
+                VadConfig(VadMode.PROBABILITY, 0.6f, -0.1f, 250L)
+            }
+        ).hasMessageThat().startsWith("stopThreshold")
+    }
+
     @Test
     fun `a negative hold time is rejected`() {
         assertThrows(IllegalArgumentException::class.java) { VadConfig(VadMode.PROBABILITY, 0.6f, 0.3f, -1L) }
