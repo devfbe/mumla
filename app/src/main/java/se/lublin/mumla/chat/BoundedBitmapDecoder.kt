@@ -51,6 +51,10 @@ object BoundedBitmapDecoder {
     fun sampleSizeAtMost(width: Int, height: Int, maxWidth: Int, maxHeight: Int): Int {
         requirePositiveBounds(maxWidth, maxHeight)
         if (width <= 0 || height <= 0) return 1
+        // The clamp is inert here and kept only so the two samplers read alike: for `fit >= 1` the
+        // very first test is `1 > fit`, which is already false, so an image inside the box is not
+        // sampled with or without it. Measured -- removing it leaves all 79 tests green, which is a
+        // no-op mutation and not an unpinned line.
         val fit = minOf(maxWidth / width.toFloat(), maxHeight / height.toFloat()).coerceAtMost(1f)
         var sample = 1
         while (1f / sample > fit) sample *= 2
@@ -135,8 +139,12 @@ object BoundedBitmapDecoder {
         val decoded = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) }
             .getOrElse { if (it is RuntimeException) return null else throw it }
             ?: return null
-        // The at-most sample already put the decode inside the box, so there is nothing left to
-        // scale and nothing to hold a second bitmap for.
+        // What saves the second bitmap is the sample size, not this branch. The at-most sample
+        // already put the decode inside the box on both axes -- `floor(w / k) <= maxWidth` follows
+        // from `1 / k <= fit` -- and `resizeKeepingAspect` returns its argument unchanged for a
+        // bitmap that already fits. So calling it here would be a no-op, measured: the mutation
+        // that calls it on both paths leaves all 79 tests green. The branch skips a call that
+        // would do nothing; `sampleSizeAtMost` is what does the work.
         return if (exactFit) BitmapUtils.resizeKeepingAspect(decoded, maxWidth, maxHeight) else decoded
     }
 
