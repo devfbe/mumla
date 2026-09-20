@@ -53,6 +53,7 @@ import se.lublin.humla.util.HumlaException;
 import se.lublin.humla.util.HumlaObserver;
 import se.lublin.mumla.R;
 import se.lublin.mumla.Settings;
+import se.lublin.mumla.channel.BluetoothScoToggle;
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver;
 import se.lublin.mumla.util.HtmlUtils;
 
@@ -393,6 +394,13 @@ public class MumlaService extends HumlaService implements
         if (mSettings.isHandsetMode()) {
             setProximitySensorOn(true);
         }
+
+        // The Bluetooth headset is a stored wish, not a live state (spec P2): SCO is torn down
+        // by onConnectionDisconnected on every dropped connection, auto-reconnect included, so
+        // this is where it comes back.
+        if (BluetoothScoToggle.shouldRouteToBluetooth(this, mSettings)) {
+            enableBluetoothSco();
+        }
     }
 
     @Override
@@ -479,6 +487,15 @@ public class MumlaService extends HumlaService implements
                 break;
             case Settings.PREF_FRAMES_PER_PACKET:
                 changedExtras.putInt(EXTRAS_FRAMES_PER_PACKET, mSettings.getFramesPerPacket());
+                break;
+            case Settings.PREF_BLUETOOTH_SCO:
+                if (isSynchronized()) {
+                    if (BluetoothScoToggle.shouldRouteToBluetooth(this, mSettings)) {
+                        enableBluetoothSco();
+                    } else {
+                        disableBluetoothSco();
+                    }
+                }
                 break;
             case Settings.PREF_CERT_ID:
             case Settings.PREF_FORCE_TCP:
