@@ -97,7 +97,7 @@ class CapturePipelineTest {
     /**
      * The buffer question, and it is the pipeline's rather than the detector's.
      *
-     * `AudioInput.run` allocates its capture buffer **once outside the loop** (`:202`), and this
+     * `AudioInput.loop` allocates its capture buffer **once outside the loop**, and this
      * pipeline does the same with its own 480-sample frame -- so without the padding write the
      * 180 samples behind a 300-sample frame still hold the previous frame's tail. That is not a
      * measurement artefact: those 180 samples are handed to the encoder as part of the full frame
@@ -319,7 +319,7 @@ class CapturePipelineTest {
     }
 
     /**
-     * The copy path's own empty frame: `AudioInput.run` tests `shortsRead > 0` before calling, but
+     * The copy path's own empty frame: `AudioInput.loop` skips a read of 0 before calling, but
      * `AudioHandler:430` passes a read count straight through and task 11 replaces it with this.
      */
     @Test

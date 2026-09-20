@@ -82,8 +82,8 @@ class ActivityInputModeTest {
     }
 
     /**
-     * The same defect in the units it will be met in, and it is not hypothetical: `AudioInput.run`
-     * allocates its capture buffer **once, outside the loop** (`AudioInput.java:202`), so every
+     * The same defect in the units it will be met in, and it is not hypothetical: `AudioInput.loop`
+     * allocates its capture buffer **once, outside the loop**, so every
      * short frame arrives in a buffer whose tail still holds the previous frame. Task 8's
      * `CapturePipeline` opens exactly this dimension -- `a short resampler output is zero-padded`
      * hands `length = 300` into a 480-sample buffer.
@@ -91,8 +91,9 @@ class ActivityInputModeTest {
      * 300 quiet samples (value 300) in a buffer whose remaining 180 still carry a loud tail
      * (20000) score **0.5753** read correctly and **0.9322** read over the whole buffer. Against
      * the same threshold that is silence against shouting: **the microphone opens on a quiet frame
-     * because of audio that is already gone.** Today `AudioInput.java:205-210` shields this by
-     * passing `mFrameSize` rather than `shortsRead`; from task 8 on nothing does.
+     * because of audio that is already gone.** `AudioInput.loop` shields this twice over since
+     * task 9: it zero-pads the buffer from the read count to the end, and it still hands over the
+     * whole frame size. From task 8 on, the pipeline is what has to keep doing both.
      */
     @Test
     fun `a short frame is not measured against the previous frame's tail`() {

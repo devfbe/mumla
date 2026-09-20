@@ -100,6 +100,14 @@ class AndroidAudioRecordSource internal constructor(
      * Cached, not delegated. The Java original's `getSampleRate()` read the `AudioRecord` field on
      * every call and `shutdown()` set that field to null, so asking a shut-down `AudioInput` for its
      * rate was a `NullPointerException`; reading it off a *released* `AudioRecord` is worse.
+     *
+     * **Not pinnable here, and the mutation that would do it has been run**: `= record.sampleRate`
+     * to `get() = record.sampleRate` leaves all 297 tests green, because Robolectric's
+     * `AudioRecord.release()` leaves `mSampleRate` standing and its getter keeps answering. The
+     * same property one level up **is** pinned -- `AudioInputTest.the rate and the frame size still
+     * answer after shutdown`, over a fake whose accessor throws after release, kills the equivalent
+     * mutation in `AudioInput`. What is unproven is only that a *released device* recorder still
+     * answers, which is a statement about `AudioRecord`, not about this line.
      */
     override val sampleRate: Int = record.sampleRate
     override val audioSessionId: Int = record.audioSessionId
@@ -143,6 +151,14 @@ class AndroidAudioRecordSource internal constructor(
      * handle it already cleared -- so such a guard would be a line whose premise is false, which
      * spec 4.04 says to delete and replace with a test of the premise. That test is
      * `releasing twice is safe`.
+     *
+     * The `setSilenceListener(null)` below is **unpinned, and the mutation has been run**: deleting
+     * it leaves all 297 tests green, because `ShadowAudioRecord` shadows neither
+     * `registerAudioRecordingCallback` nor its counterpart, so `recordingCallback` is null in every
+     * test and the call is a no-op there. It stays because `release()` is public and may be reached
+     * without `AudioInput.stopRecording` having unregistered first, and because a platform callback
+     * outliving the recorder it names is a leak on a device. A device test is the only thing that
+     * could kill it.
      */
     override fun release() {
         released = true

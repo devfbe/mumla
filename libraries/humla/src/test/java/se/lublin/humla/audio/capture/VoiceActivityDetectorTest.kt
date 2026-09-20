@@ -44,9 +44,9 @@ class VoiceActivityDetectorTest {
      * above every threshold: `length == 0` reads as louder than anything.
      *
      * **Not as an observed defect -- the sentence this replaces said it was one.**
-     * `AudioInput.java:205-210` is the only call site on this path today and it tests
-     * `shortsRead > 0` before calling, handing over `mFrameSize` rather than the count, so the
-     * infinity is shielded. From B1/B11 on nothing shields it: task 8's `CapturePipeline` passes a
+     * `AudioInput.loop` is the only call site on this path today and it skips a read of 0
+     * before calling, handing over the whole frame size rather than the count, so the infinity is
+     * shielded. From B1/B11 on nothing shields it: task 8's `CapturePipeline` passes a
      * resampler's own output length down, and `AudioHandler:430` -- which does pass a read count
      * straight through -- is task 11's to replace.
      */

@@ -77,15 +77,15 @@ class ToggleInputModeTest {
      * that [ToggleInputMode.waitForInput] **returns**; the `Log.w` inside it is incidental. Deleting
      * the `try`/`catch` and leaving a bare `await()` used to survive the whole suite.
      *
-     * What it costs, read off the chain rather than guessed: `AudioInput.mRecordThread` runs
-     * `AudioInput.run()`, which calls `onAudioInputReceived` (`:207`), which reaches
+     * What it costs, read off the chain rather than guessed: `AudioInput`'s capture thread runs
+     * `AudioInput.loop()`, which calls `onAudioInputReceived`, which reaches
      * `AudioHandler:488` and `waitForInput()` -- so `await()` parks the **recording** thread.
-     * `AudioInput.stopRecording()` (`:144-152`) clears `mRecording`, then `interrupt()`s that
+     * `AudioInput.stopRecording()` clears `recording`, stops the source, then `interrupt()`s that
      * thread, then `join()`s it. Without the catch the `InterruptedException` leaves `waitForInput`,
      * leaves `onAudioInputReceived`, leaves the `while (mRecording)` loop, and the thread dies
      * **before `mAudioRecord.stop()` at `:213`**. The user-visible result: shutting down in push to
      * talk with the button not held leaves the `AudioRecord` running and the microphone indicator
-     * lit. `AudioInput.java:203`'s comment ("we want to always cleanly shutdown") names exactly the
+     * lit. `AudioInput.loop`'s own KDoc names exactly the
      * property this arm holds.
      *
      * Written against [Thread.State.WAITING] for the same reason the test above is: a latch that

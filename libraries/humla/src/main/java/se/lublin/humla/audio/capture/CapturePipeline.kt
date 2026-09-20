@@ -66,7 +66,7 @@ class CaptureFrame internal constructor(val samples: ShortArray) {
  *   0.62157 and 4000 reads 0.80971, so a boost of 8 straddles a 0.7 threshold. Pinned.
  *
  * **The frame buffer is reused, and that is the third thing this class has to get right.** It is
- * allocated once, like `AudioInput.run`'s (`:202`), so the samples behind a short frame still hold
+ * allocated once, like `AudioInput.loop`'s, so the samples behind a short frame still hold
  * the previous frame's tail. Two distinct things follow, with two distinct guards, because they
  * are two observables rather than one:
  *

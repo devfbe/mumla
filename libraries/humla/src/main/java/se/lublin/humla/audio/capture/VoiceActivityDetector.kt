@@ -123,9 +123,9 @@ class VoiceActivityDetector(
          * and the plan's listing do this. It returns [NO_SIGNAL] instead.
          *
          * **It is not a live defect, and the first version of this paragraph claimed it was.**
-         * `AudioInput.java:205-210` is the only call site on this path today; it tests
-         * `shortsRead > 0` *before* calling and hands over `mFrameSize` rather than the count, so
-         * no zero-sample frame reaches here. What makes the repair right is where B1 and B11 take
+         * `AudioInput.loop` is the only call site on this path today; it skips a read of 0
+         * *before* calling and hands over the whole frame size rather than the count, so no
+         * zero-sample frame reaches here. What makes the repair right is where B1 and B11 take
          * it: task 8's `CapturePipeline` passes a resampler's own output length down, and
          * `AudioHandler:430` -- which does pass a read count straight through -- is task 11's to
          * replace.
