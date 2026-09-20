@@ -97,9 +97,21 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
     }
 }
 
+/**
+ * A UDP transport that never opens a socket.
+ *
+ * It holds the [CryptState] the factory handed it, which is not decoration: `mUiGood` grows in
+ * exactly one place, `CryptState.decrypt()`, reachable only from HumlaUDP's receive loop. A fake
+ * that dropped the crypt state left `localGood` constant zero in every connection test, and with
+ * it three of the six decisions in [UdpHealthMonitor] unreachable end-to-end - SWITCH_TO_TCP_SEND
+ * outright, and RESTORE_UDP at any threshold a caller would actually use, which is why the one
+ * restore test had to construct restoreThreshold = -1. [simulateDatagram] counts the packet the
+ * way a successful decrypt would, so the production threshold is drivable.
+ */
 class FakeUdpTransport(
     private val callbackHandler: Handler,
     private val listener: HumlaUDP.UDPConnectionListener,
+    private val cryptState: CryptState = CryptState(),
 ) : UdpTransport {
     val connectCalls = AtomicInteger()
     val disconnectCalls = AtomicInteger()
@@ -127,7 +139,16 @@ class FakeUdpTransport(
     override fun disconnect() { disconnectCalls.incrementAndGet() }
 
     fun simulateError(e: Exception) = callbackHandler.post { listener.onUDPConnectionError(e) }
-    fun simulateDatagram(data: ByteArray) = callbackHandler.post { listener.onUDPDataReceived(data) }
+
+    /**
+     * A datagram that decrypted. The counter is raised here rather than in the test, because in
+     * production it is raised by the same call that produces the buffer - a test that had to
+     * remember to bump it separately would be free to forget, which is the state this fake was in.
+     */
+    fun simulateDatagram(data: ByteArray) = callbackHandler.post {
+        cryptState.mUiGood++
+        listener.onUDPDataReceived(data)
+    }
 }
 
 class FakeTransports : HumlaConnection.TransportFactory {
@@ -138,7 +159,7 @@ class FakeTransports : HumlaConnection.TransportFactory {
         FakeTcpTransport(callbackHandler).also { tcps += it }
 
     override fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, callbackHandler: Handler): UdpTransport =
-        FakeUdpTransport(callbackHandler, listener).also { udps += it }
+        FakeUdpTransport(callbackHandler, listener, cryptState).also { udps += it }
 }
 
 class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {

@@ -348,6 +348,91 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
+     * The production restore condition, driven end to end for the first time.
+     *
+     * It could not be before, and the reason was a fake rather than a missing test:
+     * `CryptState.mUiGood` grows only in `CryptState.decrypt()`, reachable only from HumlaUDP's
+     * receive loop, and [FakeTransports.createUdp] threw the crypt state away. `localGood` was
+     * therefore constant zero in every connection test here, which made `localDelta > threshold`
+     * unsatisfiable and forced restoringUdpResetsTheBackoff... to construct
+     * `restoreThreshold = -1`. The threshold the app ships was never once reached in a test.
+     *
+     * The history is the one the app actually produces while voice is tunneled: sendPings keeps
+     * sending a UDP ping every five seconds because only the *route* changed, the replies raise
+     * mUiGood here and the server's `good` count in its own Ping, and four of each per twenty
+     * second window clear a threshold of one comfortably.
+     */
+    @Test
+    fun udpIsRestoredAtTheThresholdTheAppShipsOncePingRepliesFlowAgain() {
+        val connection = newConnection() // the production monitor: 20 s window, threshold 1
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+
+        udp.simulateError(IOException("down"))
+        awaitUntil(description = "switched to tcp") { !connection.isUsingUdp }
+        connection.drainProtocolQueue("failure handled to the end")
+        shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(1))
+        awaitUntil(description = "udp restarted") { transports.udps.size == 2 }
+        val restarted = transports.udps[1]
+
+        connection.feedPings(listOf(0L), tcp, good = 0) // the base sample, both counters at zero
+        repeat(4) {
+            restarted.simulateDatagram(udpPingReply(sentAtMicros = 0L))
+            connection.drainProtocolQueue("ping reply handled")
+        }
+        connection.feedPings(listOf(20L), tcp, good = 4)
+
+        awaitUntil(description = "udp restored") { connection.isUsingUdp }
+        mainLooper.idle()
+        assertThat(listener.warnings)
+            .containsExactly(ConnectionWarning.UDP_THREAD_FAILED, ConnectionWarning.UDP_RESTORED).inOrder()
+    }
+
+    /**
+     * SWITCH_TO_TCP_SEND at the connection, which the same fake made unreachable: it needs
+     * `localDelta > 0` while the server's count stands still, and localDelta could not move.
+     * Reachable now, and it is the case of a firewall that passes our way and not the other - we
+     * keep hearing the server, the server stops hearing us, and voice has to be tunneled anyway
+     * because a call that only works in one direction is not a call.
+     */
+    @Test
+    fun aServerThatStopsHearingUsTunnelsTheVoiceWhileWeStillHearIt() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+
+        connection.feedPings(listOf(0L), tcp, good = 0)
+        repeat(4) {
+            udp.simulateDatagram(udpPingReply(sentAtMicros = 0L))
+            connection.drainProtocolQueue("datagram handled")
+        }
+        connection.feedPings(listOf(20L), tcp, good = 0) // the server still reports nothing good
+
+        awaitUntil(description = "switched to tcp") { !connection.isUsingUdp }
+        mainLooper.idle()
+        assertThat(listener.warnings).containsExactly(ConnectionWarning.UDP_SEND_FAILED)
+    }
+
+    /**
+     * The mirror image, SWITCH_TO_TCP_RECEIVE: the server hears us, nothing comes back. Reachable
+     * with a constant-zero localGood too, and untested for exactly that reason - every history the
+     * fakes could produce ended in SWITCH_TO_TCP_BOTH, which is the arm before it.
+     */
+    @Test
+    fun aServerWeCanReachButNotHearTunnelsTheVoiceToo() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        connection.firstUdp()
+
+        connection.feedPings(listOf(0L), tcp, good = 0)
+        connection.feedPings(listOf(20L), tcp, good = 4) // the server heard four, we heard none
+
+        awaitUntil(description = "switched to tcp") { !connection.isUsingUdp }
+        mainLooper.idle()
+        assertThat(listener.warnings).containsExactly(ConnectionWarning.UDP_RECEIVE_FAILED)
+    }
+
+    /**
      * A restart that comes due behind a disconnect. It is the one callback in this task that can
      * still open a socket after the teardown has run, and nothing would ever close it: the teardown
      * disconnects the transport the connection held at that moment and the object is single-use, so

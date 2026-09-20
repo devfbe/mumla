@@ -911,11 +911,17 @@ class HumlaConnection @JvmOverloads constructor(
          * when it is not a switch at all.
          *
          * A function over the whole enum rather than five arms inside [connectionMessageHandler],
-         * so the mapping can be pinned as a *set*: three of the five switch reasons cannot be
+         * so the mapping can be pinned as a *set*: everyUdpSwitchDecisionCarriesItsOwnWarning
+         * iterates the enum and demands a distinct warning of every switch reason, and the `when`
+         * is exhaustive, so a decision added later is a compile error here and a failure there.
+         *
+         * The reason first given for that shape - "three of the five switch reasons cannot be
          * produced through a fake transport at all, because they need the crypt state's own packet
-         * counter to move, and written as arms they would have been five branches with two of them
-         * tested. The `when` is exhaustive over the enum, so a decision added later is a compile
-         * error here and a failure in udpSwitchDecisionsCarryOneWarningEach.
+         * counter to move" - was a statement about the fake dressed as one about the code, and it
+         * is no longer true of the fake either: FakeUdpTransport holds the crypt state and counts a
+         * simulated datagram, so SWITCH_TO_TCP_SEND, SWITCH_TO_TCP_RECEIVE and RESTORE_UDP are each
+         * driven end to end in HumlaConnectionUdpRecoveryTest. The set test earns its keep on the
+         * first argument alone.
          */
         internal fun switchWarningFor(decision: UdpHealthMonitor.Decision): ConnectionWarning? = when (decision) {
             UdpHealthMonitor.Decision.KEEP, UdpHealthMonitor.Decision.RESTORE_UDP -> null
