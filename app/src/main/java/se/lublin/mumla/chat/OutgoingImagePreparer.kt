@@ -78,7 +78,8 @@ class OutgoingImagePreparer(
     suspend fun prepare(uri: Uri): Bitmap? {
         // Optimisation, not a guard: bytes that could not be read would decode to null anyway
         // (`decode(ByteArray(0))` is pinned), so this only saves a dispatch and a decoder. Measured:
-        // replacing `return null` with an empty array leaves these two classes' 37 tests green.
+        // replacing `return null` with an empty array leaves all 434 tests of
+        // `:app:testFossDebugUnitTest` green, these two classes' 37 among them.
         val bytes = withContext(ioDispatcher) { read(uri) } ?: return null
         return withContext(decodeDispatcher) { decode(bytes) }
     }
@@ -128,7 +129,8 @@ class OutgoingImagePreparer(
                 // (`libs/hwui/jni/ImageDecoder.cpp`: `isHardware` is the default allocator together
                 // with a non-mutable result), which the JPEG encoder then reads back from the GPU
                 // once per quality rung, and which `getPixels` refuses outright.
-                // Unpinned and measured: deleting this line leaves these two classes' 37 tests green, because
+                // Unpinned and measured: deleting this line leaves all 434 tests of
+                // `:app:testFossDebugUnitTest` green, these two classes' 37 among them, because
                 // Robolectric has no GPU and hands back a software bitmap either way. Asserting
                 // `config != HARDWARE` here would pass with or without the line, which is a cover
                 // that does not exist rather than a test.

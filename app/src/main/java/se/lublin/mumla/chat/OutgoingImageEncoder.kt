@@ -80,7 +80,8 @@ object OutgoingImageEncoder {
                 // fourth cannot exist. "No limit" means `maxMessageLength <= 0`, and `html` is never
                 // shorter than the 36 characters of markup around the payload, so "no limit and
                 // also fits" has no input. Measured: `||` mutated to `xor`, which differs on that
-                // corner alone, leaves these two classes' 37 tests green, while `&&` fails 7.
+                // corner alone, leaves all 434 tests of `:app:testFossDebugUnitTest` green (these
+                // two classes' 37 among them), while `&&` fails 7.
                 if (maxMessageLength <= 0 || html.length <= maxMessageLength) return jpeg to html
             }
             quality -= QUALITY_STEP
