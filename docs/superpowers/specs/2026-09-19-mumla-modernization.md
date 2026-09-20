@@ -346,6 +346,27 @@ Three handles follow from it:
    not at N call sites. One mechanism has one mutation; N guards have N mutations,
    of which N−1 tend to be invisible.
 
+**Sweep by field, not by call path.** The three handles above all check a guard
+as it is written. They need the reverse sweep too: for every mutable field, grep
+every write and every read, and ask of each write whether any reader can tell it
+apart from its absence. The round that derived this rule did the call-path sweep
+and found one masked pair, then missed a second — because the two guards on that
+field are not on a path at all. One sits in a getter, the other in a teardown, in
+different halves of the file, with no call relation whatsoever; the only thing
+tying them together is the field they both decide. Two flags with exactly one
+reader each had four writes of `false` between them, a ratio ten seconds of grep
+makes obvious and no amount of reading call paths will.
+
+**Treat "assert after the teardown returned" as a false-green pattern.** Three of
+the six survivors in that one file were masked by the same thing: the teardown
+drops the state a moment later, so an assertion taken afterwards holds either
+way. Only an assertion taken *inside* the window can tell the difference, which
+is why a helper that opens that window earns its keep. One of those three guards
+turned out to be real and load-bearing — the only gate on the voice path — and it
+had survived mutation for exactly this reason, invisible everywhere except in the
+window where the audio thread is still handing over frames. That is the window
+that matters.
+
 And the tool: do not run the suite once. **Mutate each guard on its own and
 require exactly one test to go red.** Here that costs about eleven seconds a run.
 
