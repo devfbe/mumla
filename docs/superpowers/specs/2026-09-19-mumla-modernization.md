@@ -858,6 +858,29 @@ and reported as passing. They are repo-wide, not stream-specific.
   lint count over "all five reports" included four flavours that gate never built.
   Neither number was wrong on purpose and both read as authoritative. Count what
   **this** invocation wrote — or clean first — and name the command that produced it.
+- **`MenuItem.isChecked` answers whether the CHECKED flag is set, not whether the item
+  can draw a tick.** `MenuItemImpl.setChecked` and `isChecked` store and return that flag
+  **independently of CHECKABLE**, so nine assertions of the form
+  `assertThat(item.isChecked).isTrue()` against one menu item all stayed green with
+  `android:checkable="true"` deleted from it -- an item that shows no tick at all, which
+  was the confirmation the whole feature exists to give. Same family as 4.04's sweep-by-
+  effect case (state written into an object you do not own and read back through an
+  accessor that ignores the dimension you changed), except here the accessor sits on the
+  same object, which is what makes it convincing. The assertion that reads the dimension is
+  `isCheckable`, and it belongs in a test of its own: behind an `isChecked` assertion it is
+  shadowed and the mutation never reaches it.
+- **Gradle's default unit-test worker heap is 512m, and the whole module shares one
+  worker.** Robolectric keeps the framework resources of every `@Config(sdk = ...)` it has
+  loaded, so the cost grows with the **suite**, not with the test that pays it. Measured
+  here: at 226 tests the module's multi-SDK class died eight times with
+  `OutOfMemoryError: Failed to load android-all-instrumented-13` in the full run and passed
+  on its own in 18 s -- and which class dies depends on execution order, so the red tests
+  name the wrong file and a bisect blames the wrong diff. Two consequences. Raise
+  `maxHeapSize` in `testOptions.unitTests.all` (1g here) instead of chasing the class that
+  reported it; and make any mutation harness treat `OutOfMemoryError` or
+  `instrument ASSERTION FAILED` in the output as **no verdict at all**, because a partial
+  result set with failures in it reads exactly like a killed mutant -- the same inversion as
+  the daemon-stopped and stdout-only cases above.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
@@ -1390,6 +1413,19 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `PERM_DENIED_TYPE(TextTooLong)`, `ModelHandler` maps it to *"Denied: Text message too
   long."* and `MumlaActivity` shows a dialog. The defect was real; the stated symptom was
   not. A wrong-sounding dialog for a picture is still a defect, and it belongs to D task 11.
+
+- **Put a restore where nothing can throw in front of it (P task 7 fix round).**
+  `MumlaService.onConnectionSynchronized` rebuilt the Bluetooth route as its **last**
+  statement, behind `registerReceiver`, `mHotCorner.setShown(true)` and
+  `setProximitySensorOn(true)`. `WindowManager.addView` and the proximity wake lock can both
+  throw, and anything that throws in front of the restore skips it and reproduces the exact
+  complaint the task exists to close -- reconnected, and no headset. No triggering case was
+  found in the field (the hot corner checks `canDrawOverlays` and returns early), so this is
+  an ordering fix and not a live defect; the point is that the ordering costs nothing and
+  the failure mode is the feature's own. General form: **when a hook both restores state and
+  starts optional machinery, the restore goes first** -- and the test that pins it drives one
+  of the later steps into a throw and reads the restore back, which is an ordering assertion
+  a call-count assertion cannot make.
 
 - **The Bluetooth wish has exactly one carrier, and it is the preference (P task 7 /
   A task 8, binding).** After P7 the wish lives in `pref_bluetooth_sco` on disk and
