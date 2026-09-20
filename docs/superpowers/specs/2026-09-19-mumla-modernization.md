@@ -387,6 +387,13 @@ had survived mutation for exactly this reason, invisible everywhere except in th
 window where the audio thread is still handing over frames. That is the window
 that matters.
 
+**Mutate a compound condition clause by clause.** `if (a && b && c)` is three
+guards wearing one pair of brackets, and removing the whole condition kills a test
+while removing `b` alone may not. A sweep that treats the `if` as one unit reports
+a clean result over a passenger. Done properly on one file here: 8 of 8
+sub-clauses each killed a test on their own, which is the statement worth making —
+not "the condition is covered".
+
 And the tool: do not run the suite once. **Mutate each guard on its own and
 require exactly one test to go red.** Here that costs about eleven seconds a run.
 
@@ -414,6 +421,13 @@ and reported as passing. They are repo-wide, not stream-specific.
   brief's test listing and once in a fresh test scaffold — so the rule is: a fake
   implementing an interface with explicit accessors backs the value in a private
   field and overrides the accessors, never with a `var`.
+- **A removed guard can hang the suite instead of failing it.** Deleting a
+  `count < 0` check in a native bridge does not produce a red test: `-1` becomes a
+  four-billion unsigned count and the library runs. A mutation sweep without a
+  per-test timeout stalls on the first such mutation and produces nothing — one
+  here burned twenty minutes before anyone noticed. Pass `--timeout` to `ctest`,
+  and treat a sweep that produces no output as a result to investigate rather than
+  a run to repeat.
 - **A naive SARIF reader counts ten lint errors this project does not have.**
   `MissingQuantity` is demoted to `warning` in the module's own config, but the
   *rule default* in the SARIF stays `error`. A script that falls back to the rule
