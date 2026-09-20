@@ -109,6 +109,33 @@ class AndroidCommunicationDevicesTest {
     }
 
     /**
+     * The platform's own refusal, which is a different answer from "there is no such device" and
+     * was the last constant left in the double: `ShadowAudioManager.setCommunicationDevice` returns
+     * true for anything unless the route is locked, so without `lockCommunicationDevice` this seam
+     * could only ever be asked a question it always answers yes to. Under the lock the shadow
+     * refuses and stores nothing, which is what an OEM that will not hand over the route does.
+     *
+     * The lock is a **static** field of the shadow, so it is put back in a `finally`; leaving it
+     * set would refuse every selection in every test that runs afterwards in this JVM.
+     */
+    @Test
+    fun aPlatformThatRefusesTheSelectionIsReportedAsARefusal() {
+        val device = sco()
+        shadowOf(audioManager).setAvailableCommunicationDevices(listOf(device))
+        val id = devices.availableIdsOfType(AudioDeviceInfo.TYPE_BLUETOOTH_SCO).single()
+
+        shadowOf(audioManager).lockCommunicationDevice(true)
+        try {
+            assertThat(devices.select(id)).isFalse()
+            assertThat(devices.currentType()).isNull()
+        } finally {
+            shadowOf(audioManager).lockCommunicationDevice(false)
+        }
+
+        assertThat(devices.select(id)).isTrue() // and the lock really was what refused it
+    }
+
+    /**
      * The platform event, driven where the platform raises it. `ShadowAudioManager.setCommunication
      * Device` stores the device and does **not** call the registered listeners - disassembled to
      * check, it is a field write and a return - so driving the notification through `select()`
