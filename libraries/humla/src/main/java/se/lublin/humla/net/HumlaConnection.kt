@@ -238,11 +238,18 @@ class HumlaConnection @JvmOverloads constructor(
      * kept for this one task: the protocol thread is already there and already owns the send path,
      * so a second thread bought nothing but a shutdown to get wrong.
      *
-     * No entry guard of its own. It had one, and three other things already did its job: the
-     * teardown removes this callback before it quits the looper, quitSafely refuses the reschedule
-     * afterwards, and every byte [sendPings] produces leaves through [sendTCPMessage] or
-     * [sendUDPMessage], which make the [isConnected] decision at the one place a send is
-     * observable. A fourth copy of it was a branch no test could fail on.
+     * No entry guard of its own. It had one, and two other things already do its job: quitSafely
+     * refuses a reschedule that is not yet due, and every byte [sendPings] produces leaves through
+     * [sendTCPMessage] or [sendUDPMessage], which make the [isConnected] decision at the one place
+     * a send is observable. A third copy of it was a branch no test could fail on.
+     *
+     * Two, not three. A `removeCallbacks(pingRunnable)` in the teardown was named here as the
+     * first of them until 33d9d1c8 measured it and deleted it: on its own it left the suite green,
+     * `sendTCPMessage`'s `if (!isConnected) return` alone is KILLED(2), and both together kill the
+     * same two tests and no more, so it never masked its neighbour and carried no observable of
+     * its own. This paragraph is what the mechanism left behind - a justification that outlived
+     * the thing it named, in a round whose own spec entry says a wrong explanation defends a line
+     * better than a right one. The teardown's own reasoning now sits in [disconnect].
      */
     private val pingRunnable = object : Runnable {
         override fun run() {
