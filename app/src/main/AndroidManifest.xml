@@ -87,6 +87,21 @@
             android:enabled="true"
             android:foregroundServiceType="microphone" />
 
+        <!--
+            Publishes one cache subdirectory so the chat image viewer can hand a single image to
+            another app through the share sheet. Not exported: the only way in is a per-URI grant
+            travelling on the share intent. See res/xml/shared_image_paths.xml.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_image_paths" />
+        </provider>
+
         <activity
             android:name=".app.MumlaActivity"
             android:label="@string/app_name"
