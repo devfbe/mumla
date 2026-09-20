@@ -20,6 +20,7 @@ package se.lublin.humla.protocol;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.util.Log;
 
@@ -155,6 +156,24 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         // hold the default at "none" until it lands.
         if (AudioSourcePolicy.needsCommunicationMode(NO_ANDROID_EFFECTS, echo)) {
             mAudioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            // Keep playback audible: in MODE_IN_COMMUNICATION the route follows the
+            // communication device, which defaults to the earpiece. Select the built-in
+            // speaker unless the user asked for handset mode -- and never touch a route
+            // something else already claimed (a Bluetooth headset chosen by ScoRouter),
+            // which is what the null/earpiece test below is for.
+            if (mAudioStream != AudioManager.STREAM_VOICE_CALL) {
+                AudioDeviceInfo speaker = null;
+                for (AudioDeviceInfo d : mAudioManager.getAvailableCommunicationDevices()) {
+                    if (d.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) { speaker = d; break; }
+                }
+                AudioDeviceInfo current = mAudioManager.getCommunicationDevice();
+                boolean unclaimed = current == null
+                        || current.getType() == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
+                if (speaker != null && unclaimed) {
+                    mLogger.logInfo("routing playback to the loudspeaker for echo cancellation");
+                    mAudioManager.setCommunicationDevice(speaker);
+                }
+            }
         }
         mAudioSource = AudioSourcePolicy.resolve(audioSource, NO_ANDROID_EFFECTS, echo);
 

@@ -90,11 +90,13 @@
     <string-array name="echoCancellationNames">
         <item>@string/echoCancellationDisabled</item>
         <item>@string/echoCancellationSystem</item>
+        <item>WebRTC (AEC3)</item>
     </string-array>
 
     <string-array name="echoCancellationValues">
         <item>none</item>
         <item>system</item>
+        <item>webrtc</item>
     </string-array>
 
     <string-array name="mediaButtonActionNames">
