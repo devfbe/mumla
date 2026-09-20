@@ -407,6 +407,10 @@ class VoiceActivityDetectorTest {
                 )
             }
         }
+        println(
+            "vad sweep over 200 000 frames: $started starts, $stopped stops, " +
+                "$keptByStop frames held by the stop threshold, $keptByHold by the hold"
+        )
         assertThat(started).isGreaterThan(1000)
         assertThat(keptByStop).isGreaterThan(1000)
         assertThat(keptByHold).isGreaterThan(1000)
