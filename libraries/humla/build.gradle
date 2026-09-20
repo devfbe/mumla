@@ -86,8 +86,8 @@ android {
                 // also re-exported the C++ runtime it contains (libhumla_opus 382 symbols,
                 // libhumlaapm up to 2355) and the dynamic linker could bind one library's copy
                 // to another's. src/main/cpp/CMakeLists.txt now hides them, and
-                // check_exports.cmake fails the build if any humla_*.so exports anything but
-                // its Java_* entry points.
+                // check_library.cmake fails the build if any of these libraries exports
+                // anything but its Java_* entry points.
                 arguments += ['-DANDROID_STL=c++_static']
             }
         }

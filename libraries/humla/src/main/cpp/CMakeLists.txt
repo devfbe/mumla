@@ -7,7 +7,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(THIRD_PARTY "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
-# Android 15+ requires 16 KB page alignment for shared libraries.
+# -z,max-page-size=16384 aligns every segment to 16 KB, which is what Android 15+ requires of a
+# shared library it loads. Measured on NDK 29.0.14206865 with the flag removed and the build
+# directories recreated: only armeabi-v7a changes (0x1000 instead of 0x4000); arm64-v8a and x86_64
+# stay at 0x4000 because the NDK has aligned to 16 KB by default since r28, and there is no 32-bit
+# device with 16 KB pages. So the flag is not currently holding a load failure at bay on any ABI.
+# It is on all seven targets so that the alignment does not depend on an NDK default that was
+# different one release ago, and so that one rule covers all of them; check_library.cmake asserts
+# the result after every link, because a comment claiming an alignment is exactly what gets
+# checked once and then deleted.
 #
 # --exclude-libs,ALL hides everything that comes out of a static archive, which here means the
 # vendored codecs and, above all, libc++_static.a. Without it each humla_*.so re-exports the C++
@@ -17,7 +25,7 @@ set(THIRD_PARTY "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 # ANDROID_STL=c++_static, and build.gradle rules it out on the grounds that these libraries
 # "export only C JNI entry points". They did not: measured on this tree before this line was
 # added, libhumla_opus exported 382 symbols and libhumlaapm 1010-2355 depending on the ABI. Now
-# they export their JNI entry points and nothing else, and check_exports.cmake fails the build if
+# they export their JNI entry points and nothing else, and check_library.cmake fails the build if
 # that ever stops being true.
 set(HUMLA_LINK_OPTIONS "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL")
 
@@ -26,13 +34,19 @@ set(HUMLA_LINK_OPTIONS "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL")
 # and survive this.
 set(HUMLA_JNI_C_OPTIONS -fvisibility=hidden)
 
-# Fails the build when a humla_*.so exports anything but its JNI entry points. The property this
-# pins is invisible at run time until two libraries start sharing a C++ runtime by accident, and
-# it is one linker flag away from silently going back.
-function(humla_check_exports target)
+# Fails the build when one of these libraries exports anything but its JNI entry points, or has a
+# segment that is not 16 KB aligned. Both are one linker flag away from silently going back and
+# neither is visible to anything else here: the first goes wrong only once two libraries start
+# sharing a C++ runtime by accident, the second only on a 16 KB device.
+#
+# check_library.cmake is a DEPENDS and not just a -P argument: without that, sharpening the script
+# leaves every already-linked library unchecked until something else forces a relink.
+function(humla_check_library target)
   add_custom_command(TARGET ${target} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DLIBRARY=$<TARGET_FILE:${target}>
-                               -P ${CMAKE_CURRENT_SOURCE_DIR}/check_exports.cmake
+      COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DREADELF=${CMAKE_READELF}
+                               -DLIBRARY=$<TARGET_FILE:${target}>
+                               -P ${CMAKE_CURRENT_SOURCE_DIR}/check_library.cmake
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/check_library.cmake
       VERBATIM)
 endfunction()
 # celt 0.7/0.11 predate C99-strict clang: keep implicit declarations as warnings, as ndk-build did.
@@ -57,7 +71,7 @@ add_library(humla_opus SHARED jni_opus.cpp)
 target_link_libraries(humla_opus PRIVATE opus log)
 target_link_options(humla_opus PRIVATE ${HUMLA_LINK_OPTIONS})
 target_compile_options(humla_opus PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_exports(humla_opus)
+humla_check_library(humla_opus)
 
 # ---------------------------------------------------------------- speex 1.2.1 (codec)
 set(SPEEX_DIR "${THIRD_PARTY}/speex/libspeex")
@@ -81,7 +95,7 @@ add_library(humla_speex SHARED jni_speex.cpp)
 target_link_libraries(humla_speex PRIVATE speex log)
 target_link_options(humla_speex PRIVATE ${HUMLA_LINK_OPTIONS})
 target_compile_options(humla_speex PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_exports(humla_speex)
+humla_check_library(humla_speex)
 
 # ---------------------------------------------------------------- speexdsp 1.2.1 (resampler, jitter, preprocess)
 set(SPEEXDSP_DIR "${THIRD_PARTY}/speexdsp/libspeexdsp")
@@ -97,7 +111,7 @@ add_library(humla_speexdsp SHARED jni_speexdsp.cpp)
 target_link_libraries(humla_speexdsp PRIVATE speexdsp log)
 target_link_options(humla_speexdsp PRIVATE ${HUMLA_LINK_OPTIONS})
 target_compile_options(humla_speexdsp PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_exports(humla_speexdsp)
+humla_check_library(humla_speexdsp)
 
 # ---------------------------------------------------------------- celt 0.7.1 ("CELT alpha")
 set(CELT7_DIR "${THIRD_PARTY}/celt-0.7.0/libcelt")
@@ -115,7 +129,7 @@ add_library(humla_celt7 SHARED jni_celt7.cpp)
 target_link_libraries(humla_celt7 PRIVATE celt7 log)
 target_link_options(humla_celt7 PRIVATE ${HUMLA_LINK_OPTIONS})
 target_compile_options(humla_celt7 PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_exports(humla_celt7)
+humla_check_library(humla_celt7)
 
 # ---------------------------------------------------------------- celt 0.11.1 ("CELT beta")
 set(CELT11_DIR "${THIRD_PARTY}/celt-0.11.0/libcelt")
@@ -133,16 +147,20 @@ add_library(humla_celt11 SHARED jni_celt11.cpp)
 target_link_libraries(humla_celt11 PRIVATE celt11 log)
 target_link_options(humla_celt11 PRIVATE ${HUMLA_LINK_OPTIONS})
 target_compile_options(humla_celt11 PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_exports(humla_celt11)
+humla_check_library(humla_celt11)
 
 # ---------------------------------------------------------------- rnnoise 0.2 + webrtc apm 2.1
 # Stream B: noise suppression (RNNoise) and echo cancellation (WebRTC APM). Both subdirectories
 # were added to the repository before this point and were, until now, compiled only by the host
 # ctest in tests/ -- these four lines are the first time either is linked for Android.
 #
-# HUMLA_LINK_OPTIONS applies here for the same reason it applies to the five targets above:
-# Android 15+ rejects a shared library that is not 16 KB page aligned, and that is a run-time
-# failure on the device, not a build error.
+# The plan's listing left target_link_options off both of these targets. HUMLA_LINK_OPTIONS
+# applies here for the same reasons it applies to the five above, in that order of weight:
+# --exclude-libs,ALL, without which libhumlaapm alone re-exported 1010-2355 symbols of static
+# libc++ and abseil; and -z,max-page-size=16384, which keeps the segment alignment independent of
+# the NDK's default rather than rescuing any ABI today -- on NDK 29 only armeabi-v7a would change
+# without it, and no 32-bit device has 16 KB pages. See the HUMLA_LINK_OPTIONS comment at the top
+# for the measurements. humla_check_library() below asserts both after every link.
 add_subdirectory(rnnoise)
 add_subdirectory(webrtc_apm)
 
@@ -150,10 +168,10 @@ add_library(humlarnnoise SHARED jni_rnnoise.cpp)
 target_link_libraries(humlarnnoise PRIVATE humla_rnnoise log)
 target_link_options(humlarnnoise PRIVATE ${HUMLA_LINK_OPTIONS})
 target_compile_options(humlarnnoise PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_exports(humlarnnoise)
+humla_check_library(humlarnnoise)
 
 add_library(humlaapm SHARED jni_webrtc_apm.cpp)
 target_link_libraries(humlaapm PRIVATE humla_apm log)
 target_link_options(humlaapm PRIVATE ${HUMLA_LINK_OPTIONS})
 target_compile_options(humlaapm PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_exports(humlaapm)
+humla_check_library(humlaapm)
