@@ -858,18 +858,21 @@ class HumlaConnection @JvmOverloads constructor(
 
     override fun onUDPConnectionError(e: Exception) {
         Log.w(TAG, "UDP connection thread failed", e)
-        // Measured survivor, and it is kept for one window rather than for tidiness. Removing this
-        // line alone leaves all 99 tests in this package green, and the only assertion that could
-        // go red for it would read FakeUdpTransport.sent - a fake artefact, because the real
-        // HumlaUDP drops a send on a dead transport before it reaches the socket. What it is not
-        // free of is the crypt sequence: HumlaUDP posts onUDPConnectionError from the *catch* and
-        // clears its own `connected` in the *finally* after it, so between the two a
-        // sendUDPMessage from the audio or ping path still reaches encrypt() and burns an OCB2
-        // sequence number the server's replay window then never sees used. Nulling the field here
-        // closes that window from this side. Scope of the claim: no history tried here - restore,
-        // both branches of sendUDPMessage, the teardown, an exhausted restart policy - can tell it
-        // apart otherwise.
-        udp = null
+        // A `udp = null` stood here, defended by a paragraph about an OCB2 sequence number burned
+        // between HumlaUDP posting this callback from its catch and clearing its own `connected` in
+        // the finally after it. The paragraph was wrong, which is worse than missing: HumlaUDP.kt
+        // :131 sets connected = false as the first statement of that finally, on the thread that
+        // threw, while this callback is only *enqueued* on the protocol looper - so this line runs
+        // strictly later than the flag it was supposed to beat, and cannot close a window that is
+        // already shut from the other side. What it protected against is pinned where it belongs,
+        // in HumlaUDPTest.aSendAfterTheThreadDiedDoesNotBurnASequenceNumber.
+        //
+        // Deleting it alone left all 237 tests green; deleting `usingUdp = false` alone is
+        // KILLED(2). Field sweep over `udp`: the teardown's `udp?.disconnect()` and
+        // sendUDPMessage's read are its only readers, and neither can tell the clear apart from its
+        // absence in anything the user or the server sees - the first would call disconnect() a
+        // second time on a transport that already closed its own socket, the second hands bytes to
+        // a transport that drops them before encrypt(). The restart overwrites the field anyway.
         usingUdp = false
         warn(ConnectionWarning.UDP_THREAD_FAILED)
         enableForceTCP()

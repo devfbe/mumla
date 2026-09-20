@@ -117,6 +117,35 @@ class HumlaUDPTest {
         awaitUntil(description = "udp stopped") { !udp.isRunning }
     }
 
+    /**
+     * The premise HumlaConnection leans on when it does *not* clear its reference to a transport
+     * whose thread has died: a send after the death is dropped before encrypt(), so no OCB2
+     * sequence number is burned on a packet the server's replay window will never see used.
+     *
+     * The encrypt IV is the sequence number, and CryptState.encrypt() increments it before it does
+     * anything else, so an unchanged IV is exactly "encrypt() was not reached". Written because a
+     * comment in HumlaConnection asserted this window was open and closed it from the wrong side;
+     * a claim about another class's ordering belongs in a test of that class.
+     */
+    @Test
+    fun aSendAfterTheThreadDiedDoesNotBurnASequenceNumber() {
+        val crypt = CryptState().apply { setKeys(key, clientNonce, serverNonce) }
+        val sockets = LinkedBlockingQueue<DatagramSocket>()
+        udp = HumlaUDP(crypt, listener, Handler(callbackThread.looper)) {
+            DatagramSocket().also { sockets.add(it) }
+        }
+        udp.connect("127.0.0.1", server.localPort)
+        awaitUntil(description = "udp running") { udp.isRunning }
+        sockets.poll(5, TimeUnit.SECONDS)!!.close()
+        assertThat(listener.errors.poll(5, TimeUnit.SECONDS)).isInstanceOf(IOException::class.java)
+        awaitUntil(description = "udp stopped") { !udp.isRunning }
+
+        val ivBefore = crypt.encryptIV.copyOf()
+        udp.sendMessage(ByteArray(64), 64)
+
+        assertThat(crypt.encryptIV).isEqualTo(ivBefore)
+    }
+
     @Test
     fun aUserDisconnectIsNotReportedAsAnError() {
         val client = startClient()
