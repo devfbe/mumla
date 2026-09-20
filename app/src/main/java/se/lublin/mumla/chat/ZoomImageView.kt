@@ -22,8 +22,11 @@ import androidx.core.os.BundleCompat
  * so an ACTION_CANCEL that does not reach it leaves every later drag routed to `onDoubleTapEvent`
  * instead of `onScroll`, i.e. dead. Forwarding every event to both detectors, cancels included, is
  * therefore load-bearing and is pinned as such.
- * Every path that changes the state ends in [applyState], so the invariant "what is on screen is
- * the clamped state" holds after every single event.
+ *
+ * Every path that changes the state ends in [applyState], so the invariants "what is on screen is
+ * the clamped state" and "the zoom is inside this image's ceiling" hold after every single event --
+ * including the events that did not come from a gesture, such as a state restored from an older
+ * release.
  *
  * **Across a configuration change** the zoom factor is kept exactly and the pan position only
  * roughly. [ZoomState.scale] is relative to the fit, so "three times as close" still *means* the
@@ -245,6 +248,11 @@ class ZoomImageView @JvmOverloads constructor(
     }
 
     private companion object {
+        /**
+         * What one double-tap is worth. It is *asked for*, not granted: [ZoomState.scaledBy] holds
+         * it to the ceiling this image earns, so on a bitmap with no pixels to spare -- which is
+         * every bitmap the viewer decodes -- a double-tap lands on 2 rather than on 2.5.
+         */
         const val DOUBLE_TAP_SCALE = 2.5f
         const val KEY_SUPER = "super"
         const val KEY_SCALE = "scale"
