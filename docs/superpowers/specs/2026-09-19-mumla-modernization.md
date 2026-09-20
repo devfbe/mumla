@@ -761,6 +761,16 @@ and reported as passing. They are repo-wide, not stream-specific.
   here burned twenty minutes before anyone noticed. Pass `--timeout` to `ctest`,
   and treat a sweep that produces no output as a result to investigate rather than
   a run to repeat.
+- **Correction, measured: the `var`/`setX` clash is a rule about the *declaration*, not
+  the call site.** This entry has cost four scaffolds a compile run, and the count was
+  used to justify tightening briefs. But a Kotlin function that **overrides a getter
+  declared in Java** keeps its synthetic property: `service.connectionState` still
+  compiles. One **newly declared in Kotlin** does not: `service.connection` is
+  `Unresolved reference`. Verified with a throwaway file, and the conversion that
+  prompted it cost **zero** call-site fixes where three were expected. **The origin of
+  the declaration decides, not the language of the override** — so converting a Java
+  class to Kotlin does not break its Java callers' property access, and only a
+  genuinely new Kotlin declaration does.
 - **A naive sequence assertion over hundreds of thousands of elements is expensive
   enough to look like a hang — and that is a different entry from the one above.**
   The `ctest` case above is a real hang. This one was written here as one and was
