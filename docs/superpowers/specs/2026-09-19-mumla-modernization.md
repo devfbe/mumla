@@ -574,6 +574,13 @@ line, run the suite, and only then write the comment, with the result in it.**
 
 Two things make it easier to believe, and both are about granularity:
 
+- **A pinned *call site* lends the whole function an air of coverage — the same
+  thing one level up.** Measured: swapping a refused-parent fallback back for
+  "leave it parentless" turned three tests red, so at call-site granularity the
+  function looked covered. **Every single branch inside it could be deleted with
+  the suite green** — including the one whose KDoc called its failure "the one
+  thing worse than ignoring that frame". So the granularity to sweep at is not the
+  call, and not the function: it is the **branch**.
 - **A pinned sibling branch lends the whole function an air of coverage.** The
   mutation granularity one reaches for is the function. `forget()` is one `when`
   with two arms; the droppable arm is obviously load-bearing and obviously pinned,
@@ -741,6 +748,16 @@ and reported as passing. They are repo-wide, not stream-specific.
   the `HandlerActionQueue` instead of running it, while `post()` still returns
   `true`, so the test reads as green either way. So: a real `Activity`,
   `setContentView`, `measure` and `layout` — or the assertion is about the harness.
+- **Check the harness that reads the results, not just the one that runs them.** A
+  passing JUnit test is a **self-closing** `<testcase/>` element, so a lazy
+  `(.*?)</testcase>` regex attaches the next `<failure>` to the first *passing* test
+  in the file. Measured symptom: the same innocent test reported red under all
+  twenty mutations, and one real survivor hidden among them. Parse the XML with a
+  parser. This is the second harness defect in this project to invert verdicts
+  wholesale — the first read only stdout while Kotlin writes compile errors to
+  stderr — which makes it a class: **before believing a sweep, run one mutation you
+  are certain kills and one you are certain does not, and check the harness reports
+  both correctly.**
 - **A mutation that does not compile reads as a survivor if you only watch stdout.**
   Kotlin writes compile errors to **stderr**. Three "survivors" in one sweep were
   mutations the compiler had rejected — `if (false)` had destroyed a smart cast — and
@@ -1186,7 +1203,12 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   parentless. The tree stays finite and acyclic, and the channel stays visible in
   the wrong place rather than invisibly absent. **Owner: A, task 6**, as a rider —
   it is a few lines in `ModelHandler.java`, no other stream owns that file, and no
-  later brief goes near the frame boundary where the guard sits. The contract
+  later brief goes near the frame boundary where the guard sits. **Status: the
+  fallback was in fact already written in task 5's fix round (`39924e64`), 22
+  commits before task 6 began — but its *inside* was unpinned**, every branch in it
+  deletable with the suite green, which is the pinned-call-site case in §4.04.
+  Task 6 pinned it and removed one branch that decided the same result on the same
+  input as the closing check. The contract
   paragraph in the core ledger that reads *"the same state as a channel whose
   parent frame has not arrived yet"* is **withdrawn**: one heals on the next frame
   and the other never does, which is the whole point.
