@@ -164,6 +164,11 @@ class HumlaTCP @JvmOverloads constructor(
             } catch (e: IOException) {
                 Log.w(TAG, "Error closing TCP socket", e)
             }
+            // Drop the streams, not just close them: on a reconnect the new send executor is live
+            // from connect() on, while these fields are only replaced after the new handshake, so a
+            // send in between would otherwise go to the closed streams of the connection just ended.
+            input = null
+            output = null
             running = false
             postDisconnectOnce()
             sendExecutor?.shutdown()
@@ -182,7 +187,7 @@ class HumlaTCP @JvmOverloads constructor(
     override fun sendMessage(message: Message, messageType: HumlaTCPMessageType) {
         enqueueSend {
             if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) Log.v(TAG, "OUT: $messageType")
-            val out = output ?: return@enqueueSend
+            val out = output ?: return@enqueueSend logNoStream(messageType)
             out.writeShort(messageType.ordinal)
             out.writeInt(message.serializedSize)
             message.writeTo(out)
@@ -198,11 +203,20 @@ class HumlaTCP @JvmOverloads constructor(
     override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) {
         enqueueSend {
             if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) Log.v(TAG, "OUT: $messageType")
-            val out = output ?: return@enqueueSend
+            val out = output ?: return@enqueueSend logNoStream(messageType)
             out.writeShort(messageType.ordinal)
             out.writeInt(length)
             out.write(data, 0, length)
         }
+    }
+
+    /**
+     * The named exit for a send that finds no stream - before the handshake, or after the read loop
+     * ended. Dropping is the only option left on the send thread: there is nowhere to write and
+     * nobody to throw at, so say it out loud rather than lose the message silently.
+     */
+    private fun logNoStream(messageType: HumlaTCPMessageType) {
+        Log.w(TAG, "Dropping $messageType, the TCP connection has no stream")
     }
 
     /**

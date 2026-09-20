@@ -338,4 +338,51 @@ class HumlaTCPTest {
         assertThat(attempts.get()).isEqualTo(2)
         assertThat(listener.disconnects.get()).isEqualTo(2)
     }
+
+    /**
+     * A reconnect on the same transport must not write into the previous connection's streams. The
+     * read loop closes them but used to leave the fields pointing at them, so between connect() and
+     * the new handshake - the new send executor is already running - sendMessage still found the old
+     * output. On a real socket that is an IOException swallowed by the send thread, so the message
+     * would simply vanish; the fake here keeps the bytes instead, which is what makes it visible.
+     */
+    @Test
+    fun aSendBetweenTwoConnectionsDoesNotReachThePreviousConnectionsStream() {
+        val firstOutput = ByteArrayOutputStream()
+        val toClient = PipedOutputStream()
+        val first = mockk<SSLSocket>(relaxed = true)
+        every { first.inputStream } returns PipedInputStream(toClient, 64)
+        every { first.outputStream } returns firstOutput
+        val handshaking = CountDownLatch(1)
+        val gate = CountDownLatch(1)
+        val secondClosed = CountDownLatch(1)
+        val second = mockk<SSLSocket>(relaxed = true)
+        every { second.startHandshake() } answers { handshaking.countDown(); gate.await() }
+        every { second.close() } answers { secondClosed.countDown() }
+        every { socketFactory.createSocket(any(), any()) } returnsMany listOf(first, second)
+        mockkStatic(SSLCertificateSocketFactory::class)
+        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
+        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
+        val transport = newTransport(Handler(callbackThread.looper))
+
+        transport.connect("example.invalid", 64738, false)
+        assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
+        toClient.close() // the server hangs up; the read loop unwinds and tears everything down
+        assertThat(listener.next().first).isEqualTo("failed")
+        assertThat(listener.next().first).isEqualTo("disconnect")
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        assertThat(firstOutput.size()).isEqualTo(0)
+
+        transport.connect("example.invalid", 64738, false) // the second connection parks in the handshake
+        assertThat(handshaking.await(5, TimeUnit.SECONDS)).isTrue()
+        transport.sendMessage(byteArrayOf(1, 2, 3), 3, HumlaTCPMessageType.Ping)
+        transport.disconnect() // queued behind the send on the single send thread, so it is a barrier
+        try {
+            assertThat(secondClosed.await(5, TimeUnit.SECONDS)).isTrue()
+            assertThat(firstOutput.size()).isEqualTo(0)
+        } finally {
+            gate.countDown()
+        }
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+    }
 }
