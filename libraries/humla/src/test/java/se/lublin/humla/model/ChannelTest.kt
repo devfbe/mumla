@@ -19,6 +19,7 @@ package se.lublin.humla.model
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -288,11 +289,20 @@ class ChannelTest {
                 relinks.incrementAndGet()
             }
         }
-        repeat(OBSERVATIONS) {
-            if (root.getLinks().size != linked.size) partials.incrementAndGet()
+        try {
+            // Started, not merely spawned. Nothing here can see a half-done relink - both members
+            // hold the same monitor - so the only way this test can fail is the floor below, and
+            // the only way that can happen on a correct implementation is the reader taking all its
+            // observations before the writer thread is ever scheduled. Seen once, on a machine
+            // running a full rebuild beside it.
+            awaitUntil(description = "the relinker's first pass") { relinks.get() > 0 }
+            repeat(OBSERVATIONS) {
+                if (root.getLinks().size != linked.size) partials.incrementAndGet()
+            }
+        } finally {
+            done.set(true)
+            writer.join()
         }
-        done.set(true)
-        writer.join()
 
         assertThat(partials.get()).isEqualTo(0)
         // Every one of the observations above was taken between the writer's first relink and its
@@ -372,18 +382,22 @@ class ChannelTest {
                 writes.incrementAndGet()
             }
         }
-        // Catching per observation rather than around the loop, so that one throw does not end the
-        // run and hide however many double counts were still to come.
-        repeat(OBSERVATIONS) {
-            try {
-                if (root.getSubchannelUserCount() > users.size) overcounts.incrementAndGet()
-            } catch (t: Throwable) {
-                firstThrow.compareAndSet(null, t)
-                throws.incrementAndGet()
+        try {
+            awaitUntil(description = "the tree writer's first pass") { writes.get() > 0 }
+            // Catching per observation rather than around the loop, so that one throw does not end
+            // the run and hide however many double counts were still to come.
+            repeat(OBSERVATIONS) {
+                try {
+                    if (root.getSubchannelUserCount() > users.size) overcounts.incrementAndGet()
+                } catch (t: Throwable) {
+                    firstThrow.compareAndSet(null, t)
+                    throws.incrementAndGet()
+                }
             }
+        } finally {
+            done.set(true)
+            writer.join()
         }
-        done.set(true)
-        writer.join()
 
         // Reported together rather than asserted one after another, like [Damage.report] below: the
         // exception signal fires first under the mutation that takes the lock away, and separate
@@ -447,9 +461,14 @@ class ChannelTest {
     private fun race(write: (Int) -> Unit, read: () -> List<Any?>): Damage {
         val damage = Damage()
         val done = AtomicBoolean(false)
+        val reading = AtomicBoolean(false)
         val writes = AtomicInteger()
         val writer = thread(name = "writer") {
             try {
+                // The same start race the two fixed-count tests above have, in the other direction:
+                // here it is the reader that may still be unscheduled when the writer finishes all
+                // WRITES, which would leave it no window at all and report that as damage.
+                awaitUntil(description = "the reader's loop") { reading.get() }
                 for (i in 0 until WRITES) {
                     write(i)
                     writes.incrementAndGet()
@@ -460,6 +479,7 @@ class ChannelTest {
         }
         val reader = thread(name = "reader") {
             try {
+                reading.set(true)
                 while (!done.get()) {
                     val writesAtStart = writes.get()
                     val snapshot = read()
