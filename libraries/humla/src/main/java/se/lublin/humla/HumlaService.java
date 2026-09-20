@@ -397,6 +397,16 @@ public class HumlaService extends Service implements IHumlaService, IHumlaSessio
 
     @Override
     public void onConnectionDisconnected(HumlaException e) {
+        // Before anything else, and in code rather than through an observer: mToggleInputMode
+        // outlives every connection, and nothing else ever clears it. Left set, an auto-reconnect
+        // resumes transmitting from its first second with no key press and nothing on screen --
+        // reachable with a headset media key while the screen is off. An observer cannot do this:
+        // mConnectionState is set below before mCallbacks.onDisconnected(e) fires, and both
+        // isConnected() and HumlaSession() read that field, so the reset would be a no-op.
+        // Clearing it here also signals the toggle's condition, which releases the input thread
+        // waiting in waitForInput() before mAudioHandler.shutdown() has to.
+        mToggleInputMode.setTalkingOn(false);
+
         if (e != null) {
             Log.e(TAG, "Error: " + e.getMessage() + " (reason: " + e.getReason().name() + ")");
             mConnectionState = ConnectionState.CONNECTION_LOST;
