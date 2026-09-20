@@ -202,4 +202,35 @@ class UdpHealthMonitorTest {
     fun rejectsANonPositiveWindow() {
         assertThrows(IllegalArgumentException::class.java) { UdpHealthMonitor(windowMicros = 0L) }
     }
+
+    /**
+     * The same argument as the window, one dimension over, and it was missing for the same reason
+     * the timeout was only ever sampled at its default: a non-positive timeout does not crash
+     * either. `now - reference > 0` is already true at the ping that records the first send, so
+     * every connection would tunnel its voice from its first ping onwards and tell the user UDP
+     * timed out - and never come back, because a reference only ever moves forward with a reply
+     * that this configuration can no longer wait for.
+     */
+    @Test
+    fun rejectsANonPositivePingTimeout() {
+        assertThrows(IllegalArgumentException::class.java) { UdpHealthMonitor(pingTimeoutMicros = 0L) }
+    }
+
+    /**
+     * [UdpHealthMonitor.pingTimeoutMicros] was driven at its default and nowhere else, so replacing
+     * the parameter with the literal `15_000_000L` survived the whole suite: one point on an axis
+     * cannot tell a parameter from a constant, however many mutations the other axes have had.
+     * Five seconds is the ping interval, i.e. the tightest timeout a caller could sensibly ask for.
+     *
+     * This test passes on HEAD - it is a coverage hole being closed, not a defect being fixed.
+     */
+    @Test
+    fun aPingTimeoutOtherThanTheDefaultIsWhatDecides() {
+        val impatient = UdpHealthMonitor(pingTimeoutMicros = seconds(5))
+        impatient.onUdpPingSent(seconds(0))
+
+        assertThat(impatient.onTcpPing(seconds(4), 0, 0, usingUdp = true)).isEqualTo(Decision.KEEP)
+        assertThat(impatient.onTcpPing(seconds(6), 0, 0, usingUdp = true))
+            .isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
+    }
 }

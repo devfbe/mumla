@@ -51,6 +51,11 @@ class UdpHealthMonitor(
         // then always reduces to the newest sample alone, every delta is zero against itself, and
         // the monitor answers SWITCH_TO_TCP_BOTH forever without anything looking wrong.
         require(windowMicros > 0) { "windowMicros must be positive, was $windowMicros" }
+        // Word for word the same argument, and it was missing because this parameter had only ever
+        // been driven at its default: `nowMicros - reference > 0` is already true at the ping that
+        // records the first send, so a non-positive timeout tunnels every connection's voice from
+        // its first ping onwards and never lets it back.
+        require(pingTimeoutMicros > 0) { "pingTimeoutMicros must be positive, was $pingTimeoutMicros" }
     }
 
     /**
