@@ -346,6 +346,19 @@ Three handles follow from it:
    not at N call sites. One mechanism has one mutation; N guards have N mutations,
    of which N−1 tend to be invisible.
 
+**Assert the algorithm, not the machine: measure at two sizes and require the
+bigger one not to cost proportionally more.** A wall-clock budget in a test is the
+flake spec 4.05 warns about; a *ratio* is not. Measured here on a queue scan:
+taking the victim by index costs 1 106 ns at depth 1 024 and 1 695 ns at 8 192 —
+**1.53x for 8x the depth** — while the scan it replaced costs 57 889 ns and
+279 528 ns, **4.83x**. The assertion is "the 8x deeper one must not cost 4x as
+much", which no slow machine can fail and no linear scan can pass. Two caveats
+from the round that produced it: put the ratio assertion **first**, because an
+absolute bound placed ahead of it fires under the same mutation and hides it (that
+shadowing happened here and was fixed one commit later in a different file); and
+watch the margin — 2.5x between the real ratio and the threshold was the tightest
+number in that round.
+
 **A label or a comparison must name the dimension it holds along, or it is a
 mechanism description wearing a guarantee's clothes.** Two sentences from one task
 report were copied into this spec as binding guarantees and both were measured
