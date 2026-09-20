@@ -269,8 +269,14 @@ class HumlaConnection @JvmOverloads constructor(
 
     private fun scheduleUdpRestart() {
         udpRestartAttempt += 1
-        // The policy's own way of saying "stop trying". The default never says it - a UDP link can
-        // come back an hour into a call - but a caller may hand this connection one that does.
+        // Jitter is deliberately not drawn: it exists in ReconnectPolicy to spread a fleet of
+        // clients reconnecting to one server after an outage, and this retry is one socket inside
+        // one session that is already up. A policy handed in with a non-zero maxJitterFraction
+        // therefore gets none here, which is why the default this class builds sets it to zero
+        // rather than leaving the field's own default to say something it cannot deliver.
+        //
+        // The elvis is the policy's own way of saying "stop trying". The default never says it -
+        // a UDP link can come back an hour into a call - but a caller may hand one in that does.
         val delay = udpRestartPolicy.delayFor(udpRestartAttempt, 0.0) ?: return
         Log.i(TAG, "UDP restart scheduled in $delay ms")
         protocolHandler.postDelayed(udpRestartRunnable, delay)

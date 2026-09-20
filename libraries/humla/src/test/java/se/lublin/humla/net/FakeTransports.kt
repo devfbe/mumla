@@ -23,6 +23,8 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
     @Volatile var connectThread: String? = null
     @Volatile var connectHost: String? = null
     @Volatile var connectPort: Int = 0
+    /** Recorded because nothing read it back: the connection passes it and no test looked. */
+    @Volatile var connectUseTor: Boolean = false
     @Volatile var disconnectCalls = 0
     val sent = CopyOnWriteArrayList<HumlaTCPMessageType>()
 
@@ -43,9 +45,12 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
     override val isRunning: Boolean get() = connectThread != null && disconnectCalls == 0
     override fun setTCPConnectionListener(listener: HumlaTCP.TCPConnectionListener?) { this.listener = listener }
     override fun connect(host: String, port: Int, useTor: Boolean) {
-        connectThread = Thread.currentThread().name
         connectHost = host
         connectPort = port
+        connectUseTor = useTor
+        // Published last, like disconnectCalls below: tests wait on this field, so everything the
+        // call recorded has to be in place before a waiter can see it.
+        connectThread = Thread.currentThread().name
     }
     override fun sendMessage(message: Message, messageType: HumlaTCPMessageType) { record(messageType) }
     override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) { record(messageType) }

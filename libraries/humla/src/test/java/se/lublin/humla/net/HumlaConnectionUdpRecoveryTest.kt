@@ -203,6 +203,36 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
+     * The other input to `shouldForceTCP()`, and nothing in this repository had ever written it:
+     * every test drives `forceTcp` and leaves `useTor` false, so `forceTcp || useTor` was only ever
+     * sampled over half of its two-boolean input space and the Tor clause was untested by
+     * construction - in a file where that one predicate decides whether a UDP socket is opened at
+     * all. The flag's trip into the transport was unread for the same reason; the fake now records
+     * it.
+     *
+     * Tor is also where it matters most: it is the configuration in which the handshake can outlast
+     * the ping timeout, which is the case theTimeoutIsMeasuredFromTheFirstPing... covers next door.
+     */
+    @Test
+    fun routingOverTorTunnelsVoiceTheSameWayTheSettingDoes() {
+        val connection = newConnection()
+        connection.setUseTor(true)
+        connection.connect(server)
+        awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null }
+        val tcp = transports.tcps[0]
+        tcp.simulateConnected()
+        awaitUntil(description = "connection established") { connection.isConnected }
+
+        connection.feedPings(listOf(0L, 5L, 10L, 15L, 20L), tcp)
+        mainLooper.idle()
+
+        assertThat(tcp.connectUseTor).isTrue()
+        assertThat(transports.udps).isEmpty()
+        assertThat(listener.warnings).isEmpty()
+        assertThat(connection.isUsingUdp).isFalse()
+    }
+
+    /**
      * The other half of that dimension, and the half the brief's test cannot see: forcing TCP
      * *after* the connection is up. `connect()` decides `usingUdp` once, so the judgement is still
      * armed - and the counters it reads stop moving the moment the user forces TCP, because
