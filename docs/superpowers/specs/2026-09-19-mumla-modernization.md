@@ -462,6 +462,20 @@ and reported as passing. They are repo-wide, not stream-specific.
   (`i % 2` for the branch and `i % size` for the element, so even indices only
   ever added and odd ones only ever removed something absent), not the memory
   model. Check the writer before believing the architecture.
+- **A hot-window-only allocation measurement is a lie.** HotSpot's C2
+  scalar-replaces the `Iterator` of a `for (x in aList)`, so a chain that really
+  allocates reads **0.000 B** in a warmed-up window and passes. The same code in a
+  cold window reads **32.000 B per frame** — and ART performs no such elimination
+  for an interface iterator, so the hot-only number certifies an allocation the
+  device actually makes. Measure **both** windows, validate the instrument each run
+  against a known allocation (a `ShortArray(480)` is exactly 976.0 B), and assert
+  against half the smallest object the JVM can allocate rather than against zero:
+  one stray JIT-bookkeeping allocation in an 8 000-call window reads as 0.238 B per
+  call and fails an `isEqualTo(0.0)` about one run in nine.
+- **A no-op mutation reads exactly like a proven-unpinnable guard.** Two mutations
+  in one sweep here reported SURVIVED because they changed a storage type or added
+  an unused field without changing behaviour. Both killed once corrected. Before
+  recording a survivor, check that the mutation changes what the code *does*.
 - **A removed guard can hang the suite instead of failing it.** Deleting a
   `count < 0` check in a native bridge does not produce a red test: `-1` becomes a
   four-billion unsigned count and the library runs. A mutation sweep without a
@@ -593,6 +607,48 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   it and nobody heard me"), so the hardware QA item covers a held press as well as
   a tap, and task 5's settings copy says *tap, do not hold*.
 
+- **Task 3's shipped native interfaces are authoritative; task 6 does not
+  re-declare them (B, task 6).** Plan §0.4 and the task 6 listing put `RnnoiseApi`
+  and `WebRtcApmApi` in `se.lublin.humla.audio.capture`; task 3 shipped both in
+  `se.lublin.humla.audio.native`. `RnnoiseApi` is identical, so the duplicate would
+  merely be waste. `WebRtcApmApi` is **not**: the shipped one takes flat booleans
+  rather than a config object and carries an extra `frameSize(handle)`. Task 6's
+  planned fake implements neither and would not compile, and `WebRtcApmNative`
+  could not be handed to `WebRtcApmPreprocessor` without a pointless adapter.
+  Ruling: use the shipped interfaces, delete the re-declarations from the plan's
+  listing. Likewise `FarEndSink` is declared in `CapturePreprocessor.kt` by task 4,
+  not in `WebRtcApmPreprocessor.kt` as §0.4 plans — it is half of what the one lock
+  must cover, and splitting the declaration is exactly what makes a stage with two
+  audio threads look like it has one. **Task 6 must not re-declare it.**
+- **`Float?` stays as the per-frame probability return (B, decided).** Measured:
+  every stage that *computes* a probability boxes 16 B per frame, so three stages
+  cost about 4.8 KB/s on the audio thread. Kept anyway. That rate is two to three
+  orders of magnitude below what moves ART's allocation-triggered collection, and
+  the alternative — a primitive with a NaN sentinel — trades a type-system
+  guarantee for a convention every future stage has to remember, in a contract
+  tasks 5 through 8 are already written against. Revisit only if on-device
+  profiling shows dropouts attributable to it; the measurement is in
+  `CaptureThreadAllocationTest` so the number does not have to be rediscovered.
+- **Never call into a preprocessor stage while holding `mEncoderLock` (B, task 11).**
+  The capture thread will hold `mEncoderLock` around `encode()` and the stage lock
+  around `process()`. Nothing takes them in both orders today and nothing may: the
+  inversion is a deadlock between the capture and playback threads. Also note
+  `release()` can now block for one native call (~0.3 ms at 48 kHz), so spec §4's
+  "shutdown returns within 3 s" has a real dependency where it had a free
+  operation.
+- **Do not throw from the capture thread (B, task 6).** Task 6's planned
+  `RnnoisePreprocessor` test requires `process` to throw `IllegalArgumentException`
+  on a 441-sample frame. That is an exception once per frame from the audio thread,
+  and an uncaught one kills the capture thread — the user goes silent with no
+  warning, which is the complaint this project started from. The JNI bridge already
+  refuses a short frame with `-1` without overrunning. Refuse and report; do not
+  throw.
+- **Pin "off is off" by identity, in task 6.** `NoopPreprocessor` is proven to run
+  no code on the frame, but the observable that matters — that the factory returns
+  it for `NONE` rather than a stage constructed with neutral parameters — lives in
+  `CapturePreprocessorFactory`. Assert the *identity* of what the factory returns,
+  not that the output frame is unchanged.
+
 - **Coalesce the adapter's own rebuilds (P, task 6).** With the observer queue
   bounded, the largest remaining main-thread cost is not in the model any more —
   it is `ChannelListAdapter.updateChannels()`, which is O(n·depth) and runs *in
@@ -624,7 +680,16 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   already inside the objects the queue retains. A cap needs a policy for what to
   drop or fold, and events that are pure state refreshes for one user or channel
   are the ones that coalesce.
-- **One lock across both audio streams (B, tasks 5–6).** The WebRTC APM has two
+- **One lock across both audio streams (B, task 4 — DISCHARGED).**
+  *Re-addressed and closed.* This entry named tasks 5 and 6, which **cannot**
+  discharge it: they own `SpeexPreprocessor.kt`, `RnnoisePreprocessor.kt` and
+  `WebRtcApmPreprocessor.kt`, three separate files, and the only shape those two
+  tasks can produce on their own is exactly the two-independent-adapters shape
+  this constraint forbids. The owner of the seam is task 4, which built it:
+  `SingleHandleStage` holds one lock and one handle field, every stage extends it
+  and writes no locking at all. Fourth instance of this section's own opening
+  rule, and the first one committed by this section. Original text follows.
+  — **One lock across both audio streams (B, tasks 5–6).** The WebRTC APM has two
   audio threads: `processRender` on the playback thread and `processCapture` on
   the capture thread. `AudioHandler.java:220-225,467-482` serialises `encode()`
   and `destroy()` through `mEncoderLock`, which does **not** cover the playback
