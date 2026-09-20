@@ -750,6 +750,29 @@ and reported as passing. They are repo-wide, not stream-specific.
   is fine (12 s, 152 characters of output). And the right form is an index loop that
   reports the **first** diverging index — `diverges at sample %s` — which costs
   nothing and says more.
+- **The graphics mode decides which claims are even expressible, and it cuts both ways.**
+  Measured on the outgoing-image path, same code, both modes:
+  - **Orientation only exists under NATIVE.** An eight-orientation JPEG read through
+    `ImageDecoder` reports `60x40` for orientations 1–4 and **`40x60` for 5–8** under
+    `@GraphicsMode(NATIVE)`, and **`60x40` for all eight** under legacy, whose
+    `ShadowImageDecoder` reads width, height and MIME from the header and nothing else.
+    A legacy suite cannot see a double rotation — which is what the brief here
+    prescribed, and it would have turned every rotated photo a half turn.
+  - **Memory claims invert under legacy.** Legacy's decoder produces the **full-size**
+    bitmap and scales afterwards, so a legacy suite measuring "one allocation the size
+    of what is kept" measures the opposite of the truth.
+  - **And the tool for counting allocations does not exist under NATIVE.**
+    `shadowOf(bitmap).getCreatedFromBitmap()` works under legacy
+    (`ShadowLegacyBitmap`) and throws **`UnsupportedOperationException`** under NATIVE
+    (`ShadowNativeBitmap`). So a suite that needs NATIVE for correctness cannot use the
+    allocation-counting instrument, and any obligation written in terms of it is
+    impossible for that suite — as one in this project's own ledger was. State the
+    substitution and why it was forced; do not let it look like a weaker test chosen
+    freely.
+  The rule: **pick the graphics mode from the dimension under test, then say which
+  assertions that choice makes unwritable.** Per-test where the neighbours do not need
+  it, whole-suite where every corner does — the cost measured here was 3.23 s plus
+  1.04 s for 35 tests, far less than feared.
 - **Under Robolectric's legacy graphics, `BitmapFactory` decodes anything.** Hand it
   arbitrary bytes and it returns a `Bitmap` rather than null, so the corner "these
   bytes do not decode" — exactly the one a `yes, decoding can fail` comment is
@@ -1337,6 +1360,22 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   platform is stricter than its own annotations, and removes a behaviour regression nobody
   decided to make. "Absent from the annotation database" is not "never throws anywhere",
   which is exactly why the call is wrapped rather than trusted.
+
+- **A PNG carrying an `eXIf` orientation stops being rotated on the send path (D, task 10,
+  accepted).** The old path read `ExifInterface` and rotated by hand; the new one lets
+  `ImageDecoder` rotate, and the PNG codec does not honour `eXIf`. So that one case
+  regresses. Accepted, because the alternative is worse: rotating by hand on top of a
+  decoder that may already have rotated needs **a second source of truth for orientation
+  and no way to tell which one already acted**. The review sharpened this correctly — for
+  the four axis-swapping orientations the decoder's action *is* detectable by comparing
+  `info.size` against the container header, but it is **not** detectable for 180° or a
+  flip, and a partial orientation fix is worse than none. Cameras emit JPEG/HEIF, the case
+  is pinned by a test so a Skia change goes red rather than silent, and it is disclosed
+  here rather than in a commit body. **Correction to how this was reported:** an
+  over-long image message is **not** silently dropped — Murmur answers
+  `PERM_DENIED_TYPE(TextTooLong)`, `ModelHandler` maps it to *"Denied: Text message too
+  long."* and `MumlaActivity` shows a dialog. The defect was real; the stated symptom was
+  not. A wrong-sounding dialog for a picture is still a defect, and it belongs to D task 11.
 
 - **The Bluetooth wish has exactly one carrier, and it is the preference (P task 7 /
   A task 8, binding).** After P7 the wish lives in `pref_bluetooth_sco` on disk and
