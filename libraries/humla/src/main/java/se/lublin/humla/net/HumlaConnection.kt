@@ -192,11 +192,21 @@ class HumlaConnection @JvmOverloads constructor(
     // Server. Written in the posted connect block and read by [startUdp], both on the protocol
     // thread, so neither needs to be volatile.
     //
-    // What keeps [startUdp] from ever seeing the initial "" is creation order, not the value: it is
-    // reachable only from [onTCPConnectionEstablished], only a TCP transport can raise that, and
-    // [connect] assigns both fields before it creates the transport. Move the assignment below
-    // transports.createTcp and the invariant is gone - no test holds it, so this comment is the
-    // only thing that does.
+    // What keeps [startUdp] from ever seeing the initial "" is creation order, not the value, and
+    // it has two callers to hold it for since this file gained a restart path:
+    //  - [onTCPConnectionEstablished]. Only a TCP transport can raise it, and [connect] assigns
+    //    both fields before it creates that transport. Move the assignment below
+    //    transports.createTcp and the argument is gone.
+    //  - [udpRestartRunnable]. It has no argument of its own and does not need one: a restart is
+    //    only ever scheduled from [onUDPConnectionError], which only a UDP transport can raise,
+    //    which only the caller above can have created. It inherits the ordering rather than
+    //    repeating it - but it inherits it through one more link, so a future caller of [startUdp]
+    //    that is not downstream of the established callback breaks this without touching [connect].
+    // This comment used to add "no test holds it, so this comment is the only thing that does",
+    // which was true when it was written and is no longer: the fake recorded neither argument, so
+    // `transport.connect("", 0)` survived the whole suite, and
+    // everyUdpTransportIsConnectedToTheSameEndpointTheTcpTransportGot now reads both back, for the
+    // first transport and for a restarted one.
     //
     // Deliberately not cleared by the teardown either: clearing them was what created the loopback
     // hazard, because InetAddress.getByName resolves null - and the empty string - to 127.0.0.1

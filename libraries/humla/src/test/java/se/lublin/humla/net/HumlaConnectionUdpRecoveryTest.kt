@@ -233,6 +233,42 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
+     * Where the UDP socket is pointed, for both callers of `startUdp()`. It was unpinned, and not
+     * for want of a mutation: `transport.connect("", 0)` at HumlaConnection.kt:751 SURVIVED all 230
+     * tests because [FakeUdpTransport] counted the call and recorded neither argument. Exactly the
+     * defect [FakeTcpTransport.connectUseTor] was added for, one class further down.
+     *
+     * Asserted against what the TCP transport was handed rather than against a literal, because
+     * "the voice goes to the server the control connection went to" is the property; the host is a
+     * SRV lookup's answer, not the string the test passed in. The emptiness check is separate
+     * because InetAddress.getByName("") resolves to loopback rather than failing, so an empty host
+     * is not an error the user would ever see - it is a call that goes quietly to 127.0.0.1.
+     *
+     * The restart half matters on its own: this task gave startUdp() its second caller, and the
+     * argument that keeps `host` from being read before it is written is written down at the
+     * fields' declaration for both of them now.
+     */
+    @Test
+    fun everyUdpTransportIsConnectedToTheSameEndpointTheTcpTransportGot() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+
+        assertThat(udp.connectHost).isEqualTo(tcp.connectHost)
+        assertThat(udp.connectPort).isEqualTo(tcp.connectPort)
+        assertThat(udp.connectHost).isNotEmpty()
+        assertThat(udp.connectPort).isNotEqualTo(0)
+
+        udp.simulateError(IOException("down"))
+        connection.drainProtocolQueue("failure handled to the end")
+        shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(1))
+        awaitUntil(description = "udp restarted") { transports.udps.size == 2 }
+
+        assertThat(transports.udps[1].connectHost).isEqualTo(tcp.connectHost)
+        assertThat(transports.udps[1].connectPort).isEqualTo(tcp.connectPort)
+    }
+
+    /**
      * The fourth corner of `forceTcp || useTor`, and the only one the other three cannot reach:
      * over (false,false), (true,false) and (false,true) `||` and `xor` agree. Measured before this
      * test existed - `forceTcp || useTor` -> `forceTcp xor useTor` SURVIVED all 230 tests, while

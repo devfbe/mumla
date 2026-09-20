@@ -104,11 +104,23 @@ class FakeUdpTransport(
     val connectCalls = AtomicInteger()
     val disconnectCalls = AtomicInteger()
     @Volatile var connectThread: String? = null
+    /**
+     * Recorded for the same reason [FakeTcpTransport.connectUseTor] is: this fake counted the call
+     * and dropped both arguments, so `transport.connect("", 0)` in startUdp() survived the whole
+     * suite. InetAddress.getByName("") resolves to loopback instead of failing, so the production
+     * consequence of that line going wrong is a call that is silently sent to 127.0.0.1.
+     */
+    @Volatile var connectHost: String? = null
+    @Volatile var connectPort: Int = 0
     val sent = CopyOnWriteArrayList<ByteArray>()
 
     override val isRunning: Boolean get() = connectCalls.get() > disconnectCalls.get()
     override fun connect(host: String, port: Int) {
+        connectHost = host
+        connectPort = port
         connectThread = Thread.currentThread().name
+        // Published last: tests wait on this counter, so everything the call recorded has to be in
+        // place before a waiter can see it.
         connectCalls.incrementAndGet()
     }
     override fun sendMessage(data: ByteArray, length: Int) { sent += data.copyOf(length) }
