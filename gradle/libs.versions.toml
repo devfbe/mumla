@@ -69,6 +69,11 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
+# FragmentScenario and the empty host activity it needs. Deliberately on the same version ref
+# as `androidx-fragment`: the two are one library split across two artifacts, and pinning the
+# test half a version behind the main one only invites a resolution bump nobody chose.
+androidx-fragment-testing = { module = "androidx.fragment:fragment-testing", version.ref = "androidx-fragment" }
+androidx-fragment-testing-manifest = { module = "androidx.fragment:fragment-testing-manifest", version.ref = "androidx-fragment" }
 
 [bundles]
 unit-test = ["junit", "robolectric", "mockk", "truth", "kotlinx-coroutines-test", "androidx-test-core"]
