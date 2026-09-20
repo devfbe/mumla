@@ -66,6 +66,28 @@ class ModesTest {
         }
     }
 
+    /**
+     * The on-disk spelling of every constant, pinned in the *writing* direction.
+     *
+     * [fromPreferenceValue] alone cannot pin it: `entries.firstOrNull { it.preferenceValue == value }`
+     * falls back to the same constant the misspelt entry would have matched, so
+     * `SPEEX("speex") -> "speexdsp"` and `NONE("none") -> "off"` both survive every read test,
+     * including the round-trip one -- that test looks the value up with the very field it compares
+     * against, which makes it tautological for a `firstOrNull` mapping.
+     *
+     * The direction that has no read test is the one that reaches the disk: task 12 builds the
+     * ListPreference from these strings, and a wrong one means the preference shows nothing
+     * selected and the user can no longer change the noise filter at all. `containsExactly` also
+     * pins the set, so a constant added without a decision about its on-disk value fails here.
+     */
+    @Test
+    fun `every constant keeps its on-disk value`() {
+        assertThat(NoiseSuppressionMode.entries.associate { it.name to it.preferenceValue })
+            .containsExactly("NONE", "none", "SPEEX", "speex", "RNNOISE", "rnnoise")
+        assertThat(EchoCancellationMode.entries.associate { it.name to it.preferenceValue })
+            .containsExactly("NONE", "none", "ANDROID", "system", "WEBRTC", "webrtc")
+    }
+
     /** Two constants sharing an on-disk value would make one of them unreachable from settings. */
     @Test
     fun `preference values are distinct within each mode`() {
@@ -75,10 +97,25 @@ class ModesTest {
             .containsNoDuplicates()
     }
 
+    /**
+     * All four points of the input space, because three of them were not enough. With only `()`,
+     * `(ns)` and `(agc)` written down, `||` survives its mutation to `xor`: the one input that
+     * tells the two apart is the one a user produces by ticking both boxes. Then [any] is false,
+     * task 9/11 does not switch to VOICE_COMMUNICATION + MODE_IN_COMMUNICATION, and neither effect
+     * attaches to the session -- the user silently does not get the setting they turned on twice.
+     */
     @Test
-    fun `android effects any is true when either effect is on`() {
-        assertThat(AndroidAudioEffects().any).isFalse()
-        assertThat(AndroidAudioEffects(noiseSuppressor = true).any).isTrue()
-        assertThat(AndroidAudioEffects(automaticGainControl = true).any).isTrue()
+    fun `android effects any is true for every combination with an effect on`() {
+        assertThat(AndroidAudioEffects(noiseSuppressor = false, automaticGainControl = false).any).isFalse()
+        assertThat(AndroidAudioEffects(noiseSuppressor = true, automaticGainControl = false).any).isTrue()
+        assertThat(AndroidAudioEffects(noiseSuppressor = false, automaticGainControl = true).any).isTrue()
+        assertThat(AndroidAudioEffects(noiseSuppressor = true, automaticGainControl = true).any).isTrue()
+    }
+
+    /** The defaults are what a caller that names neither effect gets; both off is "attach nothing". */
+    @Test
+    fun `android effects default to both off`() {
+        assertThat(AndroidAudioEffects().noiseSuppressor).isFalse()
+        assertThat(AndroidAudioEffects().automaticGainControl).isFalse()
     }
 }

@@ -22,7 +22,7 @@ package se.lublin.humla.audio.capture
  *
  * There is no on-disk value for this setting yet: today's preference is the boolean
  * `preprocessor_enabled`, default true (`Settings.kt:288-289`,
- * `res/xml/settings_audio.xml:139-143`). [SPEEX] is the fallback for that reason -- an
+ * `res/xml/settings_audio.xml:137-142`). [SPEEX] is the fallback for that reason -- an
  * installation that has never seen the new key keeps the noise suppressor it has been running
  * all along.
  */
