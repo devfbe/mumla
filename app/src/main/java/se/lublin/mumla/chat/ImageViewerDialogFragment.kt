@@ -29,21 +29,51 @@ import java.io.IOException
  * `heapgrowthlimit` floor and the `maxMemory() / 8` thumbnail cache. Three times the screen would
  * be 91 MB and does not fit.
  *
+ * **What the 40.4 MB does not include, and neither does the loader's own sum.** That is what the
+ * decode *keeps*. `BoundedBitmapDecoder` samples by powers of two and then calls
+ * `Bitmap.createScaledBitmap`, so an intermediate of up to four times the kept pixels is alive
+ * across that call: a transient peak with a supremum of 5x — measured 5.0026, the excess being the
+ * `toInt()` truncation in `resizeKeepingAspect` — i.e. **about 193 MiB at K=2 on a 1080x2340
+ * phone**, against a 128 MiB floor. Neither `ChatImageLoader`'s class-level arithmetic nor the
+ * paragraph above carries that term; `theTransientPeakOfADecodeIsFiveTimesTheBitmapItKeeps`
+ * measures it. It is reachable with a flat 4320x9360 PNG of 136 303 bytes, a factor of 38 under the
+ * fetch cap. Removing it is task 10's: round the sample size up instead of down and drop the
+ * rescale on this path.
+ *
  * **What this fragment borrows, and who unwinds it.** It keeps one field of its own ([ioDispatcher],
  * a test seam), which is not the interesting half:
- *  - `FragmentManager` owns this instance and its view. The load runs in
- *    `viewLifecycleOwner.lifecycleScope`, so the manager's own teardown cancels it; nothing here
- *    holds a view past `onDestroyView`, and the only `Context` the share path uses is captured
- *    before the coroutine starts rather than fetched inside it.
- *  - `ChatImageLoader` is process-wide and outlives every viewer. It owns the bitmap handed over in
- *    [ImageResult.Ready] and the byte array handed out by `fetchBytes` — neither is copied, so both
- *    are read and never recycled or written here. It also keeps *one* fetched payload, which is why
- *    the share path can have to fetch a second time.
+ *  - `FragmentManager` owns this instance and its view. Both coroutines run in
+ *    `viewLifecycleOwner.lifecycleScope`. **Scope of that claim:** what the teardown cancels is the
+ *    *continuation*, not the effect — a dialog dismissed mid-share leaves `export()` running to the
+ *    end on its IO thread and the file written; only `startActivity` is skipped. And
+ *    `viewLifecycleOwner` rather than `this` is a distinction without an observable *for a
+ *    `DialogFragment`*, whose view and instance are always destroyed together: the mutation to a
+ *    plain `lifecycleScope` survives the suite, and it is written this way because a fragment that
+ *    later gained a second view would not be. Do not read the scope as the thing that makes
+ *    dismissal safe; that is the `finally` and the `Context` captured before the launch.
+ *  - `ChatImageLoader` is process-wide and outlives every viewer. What it lends this screen:
+ *    * the byte array from `fetchBytes`, handed out without a copy — read, never written, and held
+ *      here for the life of the dialog so that the share cannot hand out anything else;
+ *    * **not** the bitmap. `loadFull` caches nothing, so the up-to-40 MB bitmap in
+ *      [ImageResult.Ready] belongs to the `ImageView` alone and dies with it. The sentence that
+ *      said otherwise was copied from [ImageResult.Ready]'s KDoc, which describes `loadThumbnail`.
+ *    Calling `fetchBytes` also **writes** loader state: it sets the one-entry `lastBytes` memo,
+ *    which holds up to 5 MiB process-wide outside the cache budget and displaces whatever the
+ *    thumbnail path had put there. It takes no permit from the loader's gate either, so this
+ *    screen's fetch is a peak beside the three the gate counts.
  *  - `FileProvider` owns nothing but the per-URI grant on the intent below; the platform drops that
  *    when the receiving activity finishes. The *file* is owned by [ImageShareExporter], which is
- *    why that class prunes on every export — there is no other moment at which anything would.
+ *    why that class prunes on every export — there is no other moment at which anything would, so a
+ *    user who shares exactly once keeps that file until the system clears the cache.
  *  - The `ContentResolver` on the receiving side is the one that opens the file, and it does so
  *    after this fragment is gone. Nothing may be deleted on dismissal for that reason.
+ *
+ * **One throw is not caught, deliberately and with its scope.** `FileProvider.getUriForFile` raises
+ * `IllegalArgumentException` for a file outside the published roots, which no `catch` here covers.
+ * It is unreachable while `shared_image_paths.xml` publishes the directory [ImageShareExporter]
+ * writes to — pinned from both sides by `theProviderPublishesNothingButTheShareDirectory` — and
+ * narrowing that file would turn it into an uncaught throw on a user's tap. This is a note about
+ * what depends on that XML, not a claim that nothing can throw.
  *
  * **Fullscreen is the theme's, and only the theme's.** `Theme.Mumla.ImageViewer` sets
  * `android:windowIsFloating=false`, which is what makes `PhoneWindow.generateLayout` give the

@@ -135,12 +135,22 @@ class ImageViewerDialogFragmentTest {
             ImageViewerDialogFragment()
         }
 
+    /**
+     * [launch], one block on the fragment, and **close the scenario**. A `FragmentScenario` holds a
+     * host activity open until it is closed; `everyOutcomeThatIsNotAReadyBitmapEndsAsAVisibleFailure`
+     * opens seven in one method, and an activity still in the stack is exactly what
+     * `shadowOf(activity).nextStartedActivity` reads from.
+     */
+    private fun launched(source: String? = this.source, block: (ImageViewerDialogFragment) -> Unit) {
+        launch(source).use { it.onFragment(block) }
+    }
+
     // --- the brief's three tests ----------------------------------------------------------------
 
     @Test
     fun aLoadedImageIsShownAndCanBeShared() {
         installLoader { TestImages.png(100, 50) }
-        launch().onFragment { fragment ->
+        launched { fragment ->
             idle()
             assertThat(fragment.progress().visibility).isEqualTo(View.GONE)
             assertThat(fragment.image().drawable).isNotNull()
@@ -152,7 +162,7 @@ class ImageViewerDialogFragmentTest {
     @Test
     fun aFailedLoadShowsTheErrorAndKeepsSharingDisabled() {
         installLoader { throw ImageFetchException(ImageError.NETWORK) }
-        launch().onFragment { fragment ->
+        launched { fragment ->
             idle()
             assertThat(fragment.progress().visibility).isEqualTo(View.GONE)
             assertThat(fragment.status().visibility).isEqualTo(View.VISIBLE)
@@ -166,7 +176,7 @@ class ImageViewerDialogFragmentTest {
     @Test
     fun sharingStartsAChooserThatCanReadTheExportedFile() {
         installLoader { TestImages.png(100, 50) }
-        launch().onFragment { fragment ->
+        launched { fragment ->
             fragment.ioDispatcher = Dispatchers.Unconfined
             idle()
             fragment.share().tap()
@@ -207,7 +217,7 @@ class ImageViewerDialogFragmentTest {
     @Test
     fun theImageIsDecodedAtTwiceTheScreenSoThereIsDetailToZoomInto() {
         installLoader { TestImages.png(2000, 2000) }
-        launch().onFragment { fragment ->
+        launched { fragment ->
             idle()
             val metrics = fragment.resources.displayMetrics
             assertThat(metrics.widthPixels).isEqualTo(320)
@@ -227,7 +237,7 @@ class ImageViewerDialogFragmentTest {
     @Config(qualifiers = "w480dp-h800dp-mdpi")
     fun theDecodeBoundFollowsTheScreenRatherThanAConstant() {
         installLoader { TestImages.png(2000, 2000) }
-        launch().onFragment { fragment ->
+        launched { fragment ->
             idle()
             val metrics = fragment.resources.displayMetrics
             assertThat(metrics.widthPixels).isEqualTo(480)
@@ -245,7 +255,7 @@ class ImageViewerDialogFragmentTest {
     @Config(qualifiers = "w360dp-h780dp-xxhdpi")
     fun theDoubledDecodeKeepsFortyMegabytesOnAFullHdPhone() {
         installLoader { TestImages.png(2400, 5200) }
-        launch().onFragment { fragment ->
+        launched { fragment ->
             idle()
             val metrics = fragment.resources.displayMetrics
             assertThat(metrics.widthPixels).isEqualTo(1080)
@@ -265,8 +275,12 @@ class ImageViewerDialogFragmentTest {
      * so the intermediate and the result are both alive for the length of that call. Sampling stops
      * as soon as one more halving would undershoot the target, which leaves the intermediate
      * anywhere in [1x, 2x) of the target on each axis -- up to four times the pixels. A source
-     * sized just above a halving hits that ceiling exactly, and the peak is then five times the
-     * bitmap the viewer keeps.
+     * sized just above a halving hits that ceiling exactly, and the peak is then just **over** five
+     * times the bitmap the viewer keeps. Five is a supremum and never a value: the `toInt()`
+     * truncation in `resizeKeepingAspect` makes the target box slightly smaller than the exact fit,
+     * so the ratio sits above 5 (5.0026 in the spec's 1080x2340 worst case, 5.0010 here). The
+     * assertion below is written as a bound in both directions rather than as an approximate
+     * equality, so that a change which pushes the ratio *below* 5 is a failure and not a rounding.
      *
      * Measured here at the default 320x470 screen because a full-size reproduction would have to
      * build a 40-megapixel image in the test JVM. The factor does not depend on the size, so at
@@ -280,7 +294,7 @@ class ImageViewerDialogFragmentTest {
     fun theTransientPeakOfADecodeIsFiveTimesTheBitmapItKeeps() {
         // 1279x1879 into the 640x940 box: one halving would undershoot, so nothing is sampled away.
         installLoader { TestImages.png(1279, 1879) }
-        launch().onFragment { fragment ->
+        launched { fragment ->
             idle()
             val shown = (fragment.image().drawable as BitmapDrawable).bitmap
             val intermediate = shadowOf(shown).createdFromBitmap!!
@@ -292,7 +306,9 @@ class ImageViewerDialogFragmentTest {
 
             val peak = intermediate.byteCount.toLong() + shown.byteCount
             assertThat(peak).isEqualTo(12_015_604L)
-            assertThat(peak.toDouble() / shown.byteCount).isWithin(0.01).of(5.0)
+            val ratio = peak.toDouble() / shown.byteCount
+            assertThat(ratio).isGreaterThan(5.0)
+            assertThat(ratio).isLessThan(5.01)
         }
     }
 
@@ -309,9 +325,12 @@ class ImageViewerDialogFragmentTest {
      *     real image arriving afterwards would count as a second image and snap back to the fit.
      *     That is why the progress spinner and the failure message are separate views.
      *
-     * Two recreations, not one, and both while the load is still parked -- the dialog loads over the
-     * network, so a rotation before the image arrives is the ordinary case, and a second one inside
-     * the same window is what catches a restore that saves live state instead of the pending one.
+     * Two recreations, and they are deliberately **not** the same case -- the KDoc used to say "both
+     * in the waiting window", which is true of the second only. The first `release()` runs *before*
+     * the first `recreate()`, so recreation one carries a zoom that was applied to a finished image;
+     * the second happens while the new fragment's load is still parked, which is the ordinary case
+     * for a dialog that loads over the network and the one that catches a restore saving live state
+     * instead of the pending one. Covering both is better than covering the window twice.
      */
     @Test
     fun theZoomSurvivesTwoRecreationsWhileTheImageIsStillLoading() {
@@ -346,6 +365,7 @@ class ImageViewerDialogFragmentTest {
             assertThat(fragment.image().drawable).isNotNull()
             assertThat(fragment.image().state.scale).isEqualTo(2f)
         }
+        scenario.close()
     }
 
     // --- the outcome set, not one member of it ---------------------------------------------------
@@ -375,7 +395,7 @@ class ImageViewerDialogFragmentTest {
             coEvery { mocked.fetchBytes(any()) } returns TestImages.png(4, 4)
             coEvery { mocked.loadFull(any(), any(), any()) } returns outcome
             ChatImageLoaders.setForTests(mocked)
-            launch().onFragment { fragment ->
+            launched { fragment ->
                 idle()
                 assertThat(fragment.progress().visibility).isEqualTo(View.GONE)
                 assertThat(fragment.status().visibility).isEqualTo(View.VISIBLE)
@@ -404,22 +424,20 @@ class ImageViewerDialogFragmentTest {
     fun aSecondTapWhileTheFirstShareIsStillWritingIsRefused() {
         val exporting = ParkingDispatcher()
         installLoader { TestImages.png(40, 40) }
-        launch().use { scenario ->
-            scenario.onFragment { fragment ->
-                fragment.ioDispatcher = exporting
-                idle()
+        launched { fragment ->
+            fragment.ioDispatcher = exporting
+            idle()
 
-                fragment.share().tap()
-                assertThat(fragment.share().isEnabled).isFalse()
-                fragment.share().tap()
+            fragment.share().tap()
+            assertThat(fragment.share().isEnabled).isFalse()
+            fragment.share().tap()
 
-                exporting.release()
-                idle()
+            exporting.release()
+            idle()
 
-                val activity = fragment.requireActivity()
-                assertThat(shadowOf(activity).nextStartedActivity).isNotNull()
-                assertThat(shadowOf(activity).nextStartedActivity).isNull()
-            }
+            val activity = fragment.requireActivity()
+            assertThat(shadowOf(activity).nextStartedActivity).isNotNull()
+            assertThat(shadowOf(activity).nextStartedActivity).isNull()
         }
     }
 
@@ -440,21 +458,19 @@ class ImageViewerDialogFragmentTest {
         val shown = TestImages.png(40, 40)
         var served: ByteArray = shown
         installLoader { served }
-        launch().use { scenario ->
-            scenario.onFragment { fragment ->
-                fragment.ioDispatcher = Dispatchers.Unconfined
-                idle()
-                // The server changes its mind, and a row bound behind the dialog displaces the one
-                // payload the loader remembers. A share that fetches again fetches *this*.
-                served = "not an image at all".toByteArray()
-                runBlocking { loader!!.fetchBytes(other) }
+        launched { fragment ->
+            fragment.ioDispatcher = Dispatchers.Unconfined
+            idle()
+            // The server changes its mind, and a row bound behind the dialog displaces the one
+            // payload the loader remembers. A share that fetches again fetches *this*.
+            served = "not an image at all".toByteArray()
+            runBlocking { loader!!.fetchBytes(other) }
 
-                fragment.share().tap()
+            fragment.share().tap()
 
-                val send = sentIntent(fragment)
-                assertThat(send.type).isEqualTo("image/png")
-                assertThat(exportedFile(fragment, "$keyOfA.png").readBytes()).isEqualTo(shown)
-            }
+            val send = sentIntent(fragment)
+            assertThat(send.type).isEqualTo("image/png")
+            assertThat(exportedFile(fragment, "$keyOfA.png").readBytes()).isEqualTo(shown)
         }
     }
 
@@ -467,17 +483,15 @@ class ImageViewerDialogFragmentTest {
     fun theShareDoesNotGoBackToTheNetwork() {
         val fetched = mutableListOf<String>()
         installLoader { url -> fetched += url; TestImages.png(40, 40) }
-        launch().use { scenario ->
-            scenario.onFragment { fragment ->
-                fragment.ioDispatcher = Dispatchers.Unconfined
-                idle()
-                runBlocking { loader!!.fetchBytes(other) }
+        launched { fragment ->
+            fragment.ioDispatcher = Dispatchers.Unconfined
+            idle()
+            runBlocking { loader!!.fetchBytes(other) }
 
-                fragment.share().tap()
+            fragment.share().tap()
 
-                assertThat(sentIntent(fragment).type).isEqualTo("image/png")
-                assertThat(fetched.count { it == source }).isEqualTo(1)
-            }
+            assertThat(sentIntent(fragment).type).isEqualTo("image/png")
+            assertThat(fetched.count { it == source }).isEqualTo(1)
         }
     }
 
@@ -498,13 +512,11 @@ class ImageViewerDialogFragmentTest {
     @Test
     fun theViewerWindowFillsTheScreen() {
         installLoader { TestImages.png(8, 8) }
-        launch().use { scenario ->
-            scenario.onFragment { fragment ->
-                idle()
-                val attributes = fragment.dialog!!.window!!.attributes
-                assertThat(attributes.width).isEqualTo(ViewGroup.LayoutParams.MATCH_PARENT)
-                assertThat(attributes.height).isEqualTo(ViewGroup.LayoutParams.MATCH_PARENT)
-            }
+        launched { fragment ->
+            idle()
+            val attributes = fragment.dialog!!.window!!.attributes
+            assertThat(attributes.width).isEqualTo(ViewGroup.LayoutParams.MATCH_PARENT)
+            assertThat(attributes.height).isEqualTo(ViewGroup.LayoutParams.MATCH_PARENT)
         }
     }
 
@@ -517,13 +529,11 @@ class ImageViewerDialogFragmentTest {
     @Test
     fun theBlackSurfaceIsTheWindowAndNotASecondLayerInTheLayout() {
         installLoader { TestImages.png(8, 8) }
-        launch().use { scenario ->
-            scenario.onFragment { fragment ->
-                idle()
-                val window = (fragment.dialog!!.window!!.decorView.background as ColorDrawable).color
-                assertThat(window).isEqualTo(Color.BLACK)
-                assertThat(fragment.requireView().background).isNull()
-            }
+        launched { fragment ->
+            idle()
+            val window = (fragment.dialog!!.window!!.decorView.background as ColorDrawable).color
+            assertThat(window).isEqualTo(Color.BLACK)
+            assertThat(fragment.requireView().background).isNull()
         }
     }
 
@@ -538,7 +548,7 @@ class ImageViewerDialogFragmentTest {
     fun aViewerWithoutASourceFailsWithoutAskingTheLoader() {
         val asked = mutableListOf<String>()
         installLoader { url -> asked += url; TestImages.png(4, 4) }
-        launch(source = null).onFragment { fragment ->
+        launched(source = null) { fragment ->
             idle()
             assertThat(fragment.progress().visibility).isEqualTo(View.GONE)
             assertThat(fragment.status().visibility).isEqualTo(View.VISIBLE)
@@ -550,10 +560,31 @@ class ImageViewerDialogFragmentTest {
     @Test
     fun theCloseButtonDismissesTheDialog() {
         installLoader { TestImages.png(4, 4) }
-        launch().onFragment { fragment ->
+        launched { fragment ->
             idle()
             assertThat(fragment.dialog?.isShowing).isTrue()
             fragment.requireView().findViewById<View>(R.id.image_viewer_close).tap()
+            assertThat(fragment.dialog?.isShowing ?: false).isFalse()
+        }
+    }
+
+    /**
+     * The close button is the only way out of a wait that by design has no timeout, and it is wired
+     * before the load starts precisely so that it works during one. [theCloseButtonDismissesTheDialog]
+     * presses it after a finished image, which is the half that cannot fail; this is the other half.
+     */
+    @Test
+    fun theCloseButtonWorksWhileTheImageIsStillLoading() {
+        val parked = ParkingDispatcher()
+        installLoader(ioDispatcher = parked) { TestImages.png(8, 8) }
+        launched { fragment ->
+            idle()
+            val close = fragment.requireView().findViewById<View>(R.id.image_viewer_close)
+            assertThat(fragment.progress().visibility).isEqualTo(View.VISIBLE)
+            assertThat(fragment.dialog?.isShowing).isTrue()
+
+            close.tap()
+
             assertThat(fragment.dialog?.isShowing ?: false).isFalse()
         }
     }
@@ -569,7 +600,7 @@ class ImageViewerDialogFragmentTest {
     @Test
     fun aShareThatCannotBeWrittenSaysSoAndStartsNothing() {
         installLoader { TestImages.png(4, 4) }
-        launch().onFragment { fragment ->
+        launched { fragment ->
             fragment.ioDispatcher = Dispatchers.Unconfined
             idle()
             val blocking = File(fragment.requireContext().cacheDir, ImageShareExporter.DIRECTORY)

@@ -122,12 +122,13 @@ class ImageShareExporterTest {
             "\u0000evil",
         )
         val exporter = ImageShareExporter(context)
-        val canonicalDir = dir.canonicalFile
         for (source in hostile) {
             val exported = exporter.export(source, TestImages.png(2, 2))
-            val name = exported.uri.lastPathSegment!!
-            assertThat(name).matches("[0-9a-f]{40}\\.png")
-            assertThat(File(dir, name).canonicalFile.parentFile).isEqualTo(canonicalDir)
+            // One claim, not two: a name of forty hex digits plus ".png" has no separator and no
+            // parent reference in it, so "stays inside the directory" is not a second fact to
+            // assert -- it is this one restated, and a second assertion would read as a second
+            // piece of evidence.
+            assertThat(exported.uri.lastPathSegment).matches("[0-9a-f]{40}\\.png")
         }
     }
 
@@ -154,6 +155,12 @@ class ImageShareExporterTest {
      * querying the provider directly instead of waiting to be handed a grant, and
      * `grantUriPermissions="true"` is what makes the grant on the share intent mean anything at all
      * -- without it the chooser's flag is silently inert and the receiver sees a SecurityException.
+     *
+     * **Scope.** This reads the declaration back through the `PackageManager`, i.e. it holds the
+     * manifest against itself. Both mutations die, so it catches an accidental edit of those two
+     * attributes; it cannot catch a wrong *design*, because there is nothing here that the manifest
+     * is not also the source of. What a widened `shared_image_paths.xml` would do is a different
+     * question and [theProviderPublishesNothingButTheShareDirectory] is where it is asked.
      */
     @Test
     fun theProviderIsPrivateAndGrantsPerUri() {

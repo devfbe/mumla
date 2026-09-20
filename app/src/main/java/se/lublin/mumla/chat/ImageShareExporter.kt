@@ -40,9 +40,16 @@ class ImageShareExporter(
      * files again, so drop everything older than [MAX_AGE_MS] whenever a new share is prepared.
      *
      * Runs *before* the write, so that a clock that has moved forward cannot delete the very share
-     * it was asked to prepare. Nothing but [export] writes here, so there is no `isFile` test: it
-     * would be a clause no test could make fire, since `File.delete` leaves a non-empty directory
-     * alone by itself.
+     * it was asked to prepare. Nothing but [export] writes here, so there is no `isFile` test: in
+     * every reachable state of this directory that clause is a **no-op**, not merely an unpinnable
+     * one -- the entries are all files, and even if a directory appeared, `File.delete` leaves a
+     * non-empty one alone by itself. A no-op reads exactly like a proven-unpinnable guard, so it is
+     * recorded as the former.
+     *
+     * **This is the only caller.** Nothing prunes on a timer, on a dismissal or at startup, so a
+     * user who shares exactly once keeps that file until Android clears the app's cache. That is the
+     * deliberate trade: the receiving app opens the URI after this dialog is gone, so a deletion
+     * tied to the viewer's lifetime would break the share it just made.
      */
     private fun prune(dir: File) {
         val cutoff = nowMillis() - MAX_AGE_MS

@@ -229,7 +229,6 @@
 • Make the Back-button ask to disconnect from server again on Android 16+\n</string>
 
     <!-- Chat images (spec D2/D3) -->
-    <string name="chat_image_open">Open image</string>
     <string name="chat_image_share">Share image</string>
     <string name="chat_image_close">Close</string>
     <string name="chat_image_load_failed">Image could not be loaded</string>
