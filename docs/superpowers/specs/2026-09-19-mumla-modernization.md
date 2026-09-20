@@ -346,6 +346,33 @@ Three handles follow from it:
    not at N call sites. One mechanism has one mutation; N guards have N mutations,
    of which N−1 tend to be invisible.
 
+**A label or a comparison must name the dimension it holds along, or it is a
+mechanism description wearing a guarantee's clothes.** Two sentences from one task
+report were copied into this spec as binding guarantees and both were measured
+false. Neither was careless — both were *summaries of correct mechanism
+descriptions*, and both lost the same thing:
+
+- *"The observer queue is bounded and folding."* The mechanism was stated
+  correctly in the same report: trimming runs **when a droppable event arrives**.
+  The summary kept the mechanism's name and dropped the condition. The tell is
+  grammatical — **"bounded" with no object.** Bounded *in what*? Unsaid reads as
+  "in everything".
+- *"the same state as a channel whose parent has not arrived yet."* An appositive
+  asserting two states are equal. True along the dimension that had been looked at
+  (the field is null either way), false along the one that matters: one heals on
+  the next frame and the other never does. Same tell — **"the same as X" with no
+  "along which axis"** — and note what it smuggles in: a claim about the state's
+  *future*, dressed as a claim about its present.
+
+One question catches both: **bounded in what? the same along which axis?** If a
+sentence cannot answer that inside itself, it is not a guarantee.
+
+And the part that matters for whoever reads reports: those reports were **not**
+uniformly loose. "Goes red in every run" was literally true and a reviewer
+confirmed it. It was specifically the **summary** sentences that generalised —
+which is the dangerous place for it, because a summary is what gets copied into a
+spec.
+
 **"No test can distinguish this" is only writable after the mutation that would
 distinguish it has been run.** An unproven unpinnability claim is more expensive
 than none: it replaces the measurement with an assertion and immunises exactly the
