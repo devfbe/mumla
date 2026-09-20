@@ -618,27 +618,42 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   the path newly reachable from `onDestroy()` as well. This is an unmet acceptance
   item, not an observation, and it is the second half of the "not responding" root
   cause -- task 4 fixed the first half by moving parsing off main.
-- **The decoder must stop holding two bitmaps, before integration (D, binding).**
-  Task 8 measured what the K=2 ruling above did not: `BoundedBitmapDecoder` samples
-  by powers of two and then calls `Bitmap.createScaledBitmap`, so the sampled
-  intermediate **and** the result are alive during that call. Sampling stops as soon
-  as one more halving would undershoot, leaving the intermediate in [1x, 2x) of the
-  target per axis — up to **4x the pixels**, so a **peak of 5x the bitmap that is
-  kept**. Measured with `shadowOf(bitmap).createdFromBitmap`, pinned permanently:
-  final 2 402 640 B, intermediate 9 612 964 B, peak 12 015 604 B, ratio exactly 5.00,
-  and the worst case sits just above a halving boundary.
-  Scaled to a 1080x2340 phone: **K=2 peaks at ~193 MiB**, K=1 at ~48 MiB — against
-  the 128 MiB `heapgrowthlimit` floor this spec itself named as the criterion. So
-  the criterion, applied to the *peak* rather than the retained bitmap, chooses K=1.
-  Reachable from one chat message: a ~4319x9359 image under the 5 MiB fetch cap is
-  about 1.04 bits per pixel, ordinary JPEG territory, and nothing catches
-  `OutOfMemoryError` on the way out.
-  **Ruling: keep K=2 and fix the decoder**, rather than halve the decode and leave a
-  decoder that transiently holds five times what it returns — that is wrong at any
-  K, and task 10's send path will meet the same peak. Decode straight to the target
-  (`inScaled`/`inDensity`/`inTargetDensity`, or `inBitmap` reuse) so the second
-  bitmap never exists; then K=2 costs the 40.4 MB the ruling assumed. This is a
-  precondition for integrating stream D.
+- **The decoder must stop holding two bitmaps (D, task 10 — and the recipe below
+  replaces the one I first wrote).** Measured: `BoundedBitmapDecoder` samples by
+  powers of two and then calls `Bitmap.createScaledBitmap`, so the sampled
+  intermediate **and** the result are alive together. Sampling stops as soon as one
+  more halving would undershoot, leaving the intermediate in [1x, 2x) of the target
+  per axis — up to 4x the pixels, so a peak of **just over 5x** what is kept
+  (measured 5.0026; the excess is the integer truncation in `resizeKeepingAspect`,
+  so 5 is a supremum, not an exact value). Scaled to a 1080x2340 phone, **K=2 peaks
+  at ~193 MiB** against the 128 MiB floor this spec names as its own criterion.
+  **Trivially reachable: a flat 4320x9360 PNG is 136 303 bytes** — a factor of 38
+  under the fetch cap, not "plausible JPEG size" but something anyone builds in ten
+  seconds. Nothing catches `OutOfMemoryError`.
+  **Two corrections to my first version of this entry.**
+  (1) It said "(D, binding)" and named **no task**. `BoundedBitmapDecoder.kt`
+  belongs to task 5, which is closed, and task 6 is closed; no open task in the D
+  plan opens that file. That is the fourth time work has been addressed to nobody,
+  and the first time by the entry that warns about it. It goes to **task 10**,
+  which already consumes `sampleSizeFor` for the send path and meets the same peak
+  there — and which runs before task 11 wires the tap that makes the viewer
+  reachable at all.
+  (2) The recipe was wrong. `inScaled` does not remove the second bitmap:
+  `BitmapFactory::doDecode` implements it exactly as this decoder does by hand —
+  decode sampled, then draw into a second, scaled bitmap — and when scaling is
+  required it redirects `inBitmap` to the heap allocator, so reuse is no escape
+  either. `ImageDecoder.setTargetSize` only helps codecs with native scaled
+  decoding (JPEG, WebP) and **not PNG**, which is the format the worst case is
+  built from. Left as written, someone implements `inScaled`, reports it done, and
+  the peak is unchanged.
+  **What actually works: round the sample size up instead of down** (`while (1f /
+  sample > fit) sample *= 2`) and drop `resizeKeepingAspect` on the fullscreen
+  path. The decoded bitmap is then always at or below the box — one allocation,
+  peak equals what is kept, at most 40.4 MB at K=2. The cost is up to one halving
+  of detail against an exact fit, which lands the effective sharpness between K=1
+  and K=2 at K=1's memory. It costs nothing in display, because `ZoomImageView`
+  uses `ScaleType.MATRIX` and derives `maxScale` from the intrinsic size.
+
 - **Decide the zoom ceiling against the decoder, not by taste (D, tasks 7 and 8).**
   `MAX_SCALE = 5` came from the plan and nobody checked it against what the
   decoder produces. The chain, read out of the code: the viewer calls
