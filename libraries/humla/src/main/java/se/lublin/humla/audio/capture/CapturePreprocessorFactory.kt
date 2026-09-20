@@ -65,10 +65,12 @@ class CaptureChain(val preprocessor: CapturePreprocessor, val farEndSink: FarEnd
  *
  * ### Why the apis arrive as functions
  *
- * `RnnoiseNative` and `WebRtcApmNative` call `System.loadLibrary` in their object initialiser, so
- * *touching* either of them is what can fail. Passing them as `() -> Api` keeps that touch inside
- * [tryStage], where a missing `.so` becomes a skipped stage and a log line instead of taking the
- * whole pipeline -- and the codecs with it -- down (§0.3 decision 3).
+ * `SpeexPreprocessNative`, `RnnoiseNative` and `WebRtcApmNative` all call `System.loadLibrary` in
+ * their object initialiser, so *touching* any of them is what can fail. Passing them as
+ * `() -> Api` keeps that touch inside [tryStage], where a missing `.so` becomes a skipped stage
+ * and a log line instead of taking the whole pipeline -- and the codecs with it -- down (§0.3
+ * decision 3). All three branches, not two: each of them has a load-failure test and a
+ * state-failure test in `CapturePreprocessorFactoryTest`.
  *
  * ### Off is off
  *
@@ -97,30 +99,42 @@ class CapturePreprocessorFactory(
         val stages = mutableListOf<CapturePreprocessor>()
         var farEnd: FarEndSink? = null
 
-        // First, always. AEC3 tracks a linear path from the reference to the microphone and adapts
-        // it over seconds; a noise suppressor or a gain stage in front of it changes that path from
-        // frame to frame for reasons the reference cannot explain, and an unconverged canceller
-        // does not fail loudly -- it returns the frame nearly unchanged. 21.7 dB, measured in task
-        // 2. ChainedPreprocessor's KDoc has the long version.
-        if (echo == EchoCancellationMode.WEBRTC) {
-            val apm = tryStage(WEBRTC_APM) {
-                WebRtcApmPreprocessor(apmApi(), WebRtcApmConfig.FOR_ECHO_CANCELLATION)
+        try {
+            // First, always. AEC3 tracks a linear path from the reference to the microphone and
+            // adapts it over seconds; a noise suppressor or a gain stage in front of it changes
+            // that path from frame to frame for reasons the reference cannot explain, and an
+            // unconverged canceller does not fail loudly -- it returns the frame nearly unchanged.
+            // 21.7 dB of ERLE, measured in task 2: -22.3 dB residual converged against -0.6 dB
+            // unconverged (`tests/test_apm.c`). ChainedPreprocessor's KDoc has the long version.
+            if (echo == EchoCancellationMode.WEBRTC) {
+                val apm = tryStage(WEBRTC_APM) {
+                    WebRtcApmPreprocessor(apmApi(), WebRtcApmConfig.FOR_ECHO_CANCELLATION)
+                }
+                if (apm != null) {
+                    stages += apm
+                    // The stage itself, not an adapter around it: the playback thread and the
+                    // capture thread have to meet the same object, because that object is what
+                    // holds the one lock over the one handle (spec §4.1).
+                    farEnd = apm
+                }
             }
-            if (apm != null) {
-                stages += apm
-                // The stage itself, not an adapter around it: the playback thread and the capture
-                // thread have to meet the same object, because that object is what holds the one
-                // lock over the one handle (spec §4.1).
-                farEnd = apm
+            when (noise) {
+                NoiseSuppressionMode.NONE -> Unit
+                NoiseSuppressionMode.SPEEX ->
+                    tryStage(SPEEX) { SpeexPreprocessor(speexApi(), noiseSuppressDb = speexNoiseSuppressDb) }
+                        ?.let { stages += it }
+                NoiseSuppressionMode.RNNOISE ->
+                    tryStage(RNNOISE) { RnnoisePreprocessor(rnnoiseApi()) }?.let { stages += it }
             }
-        }
-        when (noise) {
-            NoiseSuppressionMode.NONE -> Unit
-            NoiseSuppressionMode.SPEEX ->
-                tryStage(SPEEX) { SpeexPreprocessor(speexApi(), noiseSuppressDb = speexNoiseSuppressDb) }
-                    ?.let { stages += it }
-            NoiseSuppressionMode.RNNOISE ->
-                tryStage(RNNOISE) { RnnoisePreprocessor(rnnoiseApi()) }?.let { stages += it }
+        } catch (e: Throwable) {
+            // Whatever [tryStage] deliberately does not catch leaves this method, and until it
+            // returns a [CaptureChain] nobody else holds the stages built so far. An escaping
+            // throw would strand them: an `IllegalArgumentException` from the speex depth with
+            // `echo = WEBRTC` leaks one `webrtc::AudioProcessing` with its AEC3 state per call,
+            // unreachable and never freed. `release()` is idempotent and takes each stage's own
+            // lock, so this is safe for a stage that never came up as well.
+            for (stage in stages) stage.release()
+            throw e
         }
 
         val preprocessor: CapturePreprocessor = when (stages.size) {
@@ -147,6 +161,11 @@ class CapturePreprocessorFactory(
      * factory a speex suppression depth that does not exist; that is a programmer error, not a
      * missing library, and swallowing it would turn a bug into a user whose noise suppression is
      * quietly off.
+     *
+     * **Narrow here means someone else has to clean up.** Everything this does not catch travels
+     * out of [create], and the stages built before it are reachable from nowhere else at that
+     * moment. [create] releases them on the way out; every future stage that can throw is covered
+     * by that without a line of its own.
      */
     private fun <T : CapturePreprocessor> tryStage(name: String, build: () -> T): T? = try {
         build()

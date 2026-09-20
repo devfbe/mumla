@@ -274,6 +274,49 @@ class CapturePreprocessorFactoryTest {
         assertThat(logs.single()).contains("WebRTC APM")
     }
 
+    /**
+     * The third branch, which had no failure test of its own while RNNoise and the APM had two
+     * each. §4.04's "sweep by effect": the speex branch makes one call into an object this file
+     * does not own -- `log` -- and nothing read the result back, so `tryStage` around it and the
+     * name it logs with were both unpinned. Measured, both surviving before this test existed:
+     * dropping `tryStage` from the speex branch, and `const val SPEEX = ""`.
+     *
+     * §0.3 decision 3 is the user-facing half: a missing `libhumla_speexdsp.so` must cost the
+     * noise suppression and nothing else. `SpeexPreprocessNative` loads it in its object
+     * initialiser exactly like the other two, so the speex branch is exposed to it exactly like
+     * the other two.
+     */
+    @Test
+    fun `a speex stage whose native library fails to load is skipped and logged`() {
+        val broken = CapturePreprocessorFactory(
+            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_speexdsp.so not found")) },
+            { rnnoise },
+            { apm },
+        ) { logs += it }
+
+        val chain = broken.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.WEBRTC)
+        val probability = chain.preprocessor.process(ShortArray(FRAME))
+
+        assertThat(order).containsExactly("apm")
+        assertThat(probability).isEqualTo(0.5f)
+        assertThat(logs).hasSize(1)
+        assertWithMessage("the log line is what tells the user which suppressor is not running")
+            .that(logs.single()).contains("Speex")
+    }
+
+    @Test
+    fun `a speex stage whose native state fails is skipped and logged`() {
+        speex.failCreate = true
+
+        val chain = factory.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.WEBRTC)
+        val probability = chain.preprocessor.process(ShortArray(FRAME))
+
+        assertThat(order).containsExactly("apm")
+        assertThat(probability).isEqualTo(0.5f)
+        assertThat(logs).hasSize(1)
+        assertThat(logs.single()).contains("Speex")
+    }
+
     @Test
     fun `every stage failing leaves the no-op stage itself`() {
         rnnoise.failCreate = true
@@ -298,6 +341,31 @@ class CapturePreprocessorFactoryTest {
             factory.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.NONE, speexNoiseSuppressDb = -20)
         }
 
+        assertThat(logs).isEmpty()
+    }
+
+    /**
+     * The same throw, with a stage already built -- which is the combination the test above
+     * cannot reach, because it uses `EchoCancellationMode.NONE`.
+     *
+     * An `IllegalArgumentException` out of the speex constructor leaves `create` with a fully
+     * built `WebRtcApmPreprocessor` in a local list that nothing else can reach: one
+     * `webrtc::AudioProcessing` with its AEC3 state, unreferenced and never freed, per call. The
+     * narrow `catch` is right and stays; what was missing is that the half-built chain has an
+     * owner until `create` returns, and it has to hand back what it took.
+     */
+    @Test
+    fun `a throwing stage releases the stages already built`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            factory.create(
+                NoiseSuppressionMode.SPEEX,
+                EchoCancellationMode.WEBRTC,
+                speexNoiseSuppressDb = -20,
+            )
+        }
+
+        assertWithMessage("the apm built before the throw is unreachable, so nothing else can free it")
+            .that(apm.destroyed).isEqualTo(1)
         assertThat(logs).isEmpty()
     }
 
