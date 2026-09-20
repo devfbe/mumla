@@ -1507,6 +1507,22 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
      an agent that stops twice without reporting is stuck, not done — look in its
      worktree (one command) before dispatching anything that writes there.
 
+- **Scope cut by the user, 2026-09-20: finish the five original complaints, drop the rest.**
+  Budget, not doubt, is the reason. **In scope (8 tasks):** B9, B10, B11, B12+13 — which is
+  what makes noise cancelling audible and adjustable, since every stage is built and
+  measured but nothing is wired into `AudioHandler` or the settings screen — and A9a, A9b,
+  A11, A10+12, which is the microphone-dies-with-the-screen complaint. Then integrate
+  A → B → P → D and build an APK for the device.
+  **Out of scope, explicitly not abandoned but not funded:** B14 (stream A/B integration),
+  D12+13 (notification text and inline reply), D14 (image default and per-server opt-in),
+  P8 (`MumlaActivity` to Kotlin), P9+10 (permission rationale and battery exemption).
+  Each has a brief and a ledger entry; they resume without re-derivation.
+  **One process change to pay for it:** for the remaining tasks the fix round is done by
+  **resuming the implementer** rather than dispatching a fresh agent — it keeps the context
+  it already has instead of reloading it, worth roughly a quarter of a task. The cost is
+  real and is named here: a fresh fix-round agent has **refuted the reviewer** more than
+  once in this project, and that check is what is being given up. Reviews themselves stay.
+
 - **Measured: the Gradle knobs do not work, so the lever is fewer invocations (process).**
   Paired runs on one machine, `:libraries:humla:testDebugUnitTest`: `maxParallelForks`
   1 → 6 is **22/24 s against 20/25 s, i.e. nothing**; the **configuration cache is worse**,
