@@ -9,9 +9,9 @@ import java.net.URI
 import java.net.URISyntaxException
 import java.net.URL
 import java.util.Locale
-import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -204,8 +204,13 @@ class HttpImageFetcher(
 
         /** Shared, daemon: one idle thread for the whole app, and never a reason to keep it alive. */
         private val WATCHDOG: ScheduledExecutorService =
-            Executors.newSingleThreadScheduledExecutor { r ->
+            ScheduledThreadPoolExecutor(1) { r ->
                 Thread(r, "mumla-image-fetch-watchdog").apply { isDaemon = true }
+            }.apply {
+                // Off by default, which would leave every finished fetch's cancelled task in the
+                // queue — and with it the HttpURLConnection the task captured — until its deadline,
+                // i.e. for up to totalTimeoutMs after the fetch itself is long over.
+                removeOnCancelPolicy = true
             }
     }
 }
