@@ -43,6 +43,16 @@ import se.lublin.humla.util.MessageFormatter;
  * Handles network messages related to the user-channel tree model.
  * This includes channels, users, messages, and permissions.
  * Created by andrew on 18/07/13.
+ *
+ * <p><b>Threading.</b> Every message* method runs on the "humla-protocol" thread and is the only
+ * thing that writes anything here. The getters are called from the main thread through
+ * IHumlaSession, and ChannelSearchProvider reaches getChannel/getUsers from a binder thread. That
+ * one-writer rule is what makes the compound accesses below safe, not the maps: "look the channel
+ * up, and put a new one if it is missing" is a read-check-write that a ConcurrentHashMap does not
+ * make atomic either. A second writing thread would have to turn each of those into computeIfAbsent
+ * and would still leave messageChannelState's read-modify-write of a Channel racing with itself.
+ * The concurrent maps are here so that a reader never sees a half-rehashed table, and the volatile
+ * fields so that a reader never sees a half-built object.
  */
 public class ModelHandler extends HumlaTCPMessageListener.Stub {
     private static final String TAG = ModelHandler.class.getName();
