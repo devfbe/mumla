@@ -1357,6 +1357,22 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   **`progress.md`** (measurements, fix rounds, reasoning — 35–75 KB and growing, read
   by `grep`/`sed` only, never whole). Dispatches name `contracts.md`. New obligations
   go in **both**: the requirement in the first, the measurement behind it in the second.
+  **And four task pairs were merged**, because the cost that dominates is not what an
+  agent loads but **how many agents there are**: three per task (implementer, reviewer,
+  fix round) at 150–330 k tokens each, so merging two tasks turns six agents into three
+  and saves ~30 % even after the merged task's agents work longer. Merged where the
+  second task consumes the first and both need the same scaffolding: `A10+A12`,
+  `B12+B13`, `D12+D13`, `P9+P10` — two of the absorbed briefs were 3 KB and 5 KB, absurd
+  as standalone tasks with three agents each. **The binding rider**: a bigger diff does
+  not get more mutations from the review, it gets the same ones spread over more code,
+  so the input, effect and fake passes are run and reported **per half**.
+  **Two limits held.** Tasks whose halves are each large or carry their own hardware
+  seam were left alone (`B9`/`B10`/`B11`, `P8`, `D11`), and the integration task must
+  stay last. And **reviewer and fix round are not merged**, tempting as it is — the
+  reviewer has the deepest context of anyone, but the fix round has **refuted the
+  reviewer** more than once: on chat task 9 the reviewer wrote off three null checks as
+  "real and covered" and the fix round measured one of them surviving all 31 tests.
+  Fresh eyes on the reviewer's findings are not a luxury, they are reproducibly the find.
   And **core task 9 was split**: its brief alone was 93.5 KB, which is not merely
   expensive but badly shaped — a faithful Kotlin conversion guarded by characterization
   tests and a behaviour change are two different review questions. **9a** is
