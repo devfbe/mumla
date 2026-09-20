@@ -346,6 +346,27 @@ Three handles follow from it:
    not at N call sites. One mechanism has one mutation; N guards have N mutations,
    of which N−1 tend to be invisible.
 
+**"No test can distinguish this" is only writable after the mutation that would
+distinguish it has been run.** An unproven unpinnability claim is more expensive
+than none: it replaces the measurement with an assertion and immunises exactly the
+spot that needed measuring. It also has to name **which single mutation** it means.
+Learned the hard way: a KDoc here said "nothing pinnable" about a *lock-nesting*
+detail, and the next reader — its own author — took it as a licence covering the
+whole `synchronized` block and never mutated it. The lock turned out to be
+unpinned and load-bearing; removing it alone threw a `NullPointerException` on the
+main thread in three runs out of three. Same shape as the unscoped "no observable
+found" sentence, except this one stopped its writer from taking the measurement
+that would have refuted it.
+
+**A test-author defect is a defect of the form, not of the site.** Whoever finds
+one greps the file for every other occurrence of the idiom **before committing**,
+rather than repairing the places currently under the nose. Here a broken race
+writer (`i % 2` choosing the branch beside `i % size` choosing the element, so
+even iterations only ever added and odd ones only ever removed something absent)
+was diagnosed correctly, fixed in the two neighbouring tests that looked alike,
+and missed in the third — because the repair followed the shape of the code rather
+than the property. One grep; three rounds.
+
 **A surviving guard marks an unexplored dimension, not just an unpinned line.**
 When a condition survives mutation, do not only ask "can I pin this?" — ask **what
 else in this file branches on the same condition, and what am I about to add that
@@ -688,6 +709,21 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `getItem(position)` read two *different* snapshots — a user leaving between them
   is an `IndexOutOfBoundsException`. That was equally racy before the guarded model
   and copy-on-read does not fix it; the adapter has to hold one snapshot.
+- **Two facts the model now guarantees, for everyone who reads it (A, binding).**
+  These were settled in task 5 and would otherwise live only in a gitignored
+  ledger. (a) **The observer queue is bounded and folding**, so "nothing is ever
+  dropped" — task 2's contract — is no longer true: refresh events for one subject
+  fold in place, and the three tree-shape events may be dropped oldest-first when
+  the queue is over its bound, though never the newest of them and never at the
+  hands of an undroppable event. An observer must therefore treat a model event as
+  "read this again", never as a delta it accumulates. (b) **The channel tree is
+  finite and acyclic by construction**: `ModelHandler` refuses a `ChannelState`
+  whose parent is the channel itself or one of its descendants, and one that would
+  sit deeper than 256 below the root. The channel keeps its name and its place in
+  the map and simply has no parent — the same state as one whose parent frame has
+  not arrived yet. That is one guard at the frame boundary instead of a depth check
+  at every read, and it is why recursive walks of the tree need none.
+
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
   owner of the cap, but the Stream A plan's task 6 is UDP recovery and does not
