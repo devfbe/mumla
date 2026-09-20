@@ -465,6 +465,67 @@ class HttpImageFetcherTest {
         expectError(url("/justover"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 1_000))
     }
 
+    /**
+     * A connection the fetcher will really open and really use, so that [disconnect] can be made to
+     * throw on demand. `fetch` takes a string and opens the connection itself, so this is the only
+     * seam the JDK leaves: a stream handler of our own.
+     */
+    private class SpyConnection(url: URL, private val onDisconnect: () -> Unit) : HttpURLConnection(url) {
+        override fun connect() = Unit
+        override fun usingProxy() = false
+        override fun getResponseCode() = 404
+        override fun disconnect() = onDisconnect()
+    }
+
+    @Test
+    fun anUncheckedExceptionFromDisconnectDoesNotReplaceTheRealFailure() {
+        // The watchdog thread and the calling thread can both be inside
+        // sun.net.www.protocol.http.HttpURLConnection.disconnect() at once. It is unsynchronised
+        // and re-reads its `http` field after a separate null check, so whichever thread gets there
+        // second can see it nulled and throw a NullPointerException. The watchdog's own call is
+        // wrapped; the one in the finally block must be too, or that NPE escapes fetch() unchecked
+        // and displaces the ImageFetchException already on its way out — precisely what the
+        // RuntimeException backstop inside fetch() exists to prevent.
+        installSpyHttpsHandler()
+        spyDisconnect.set { throw IllegalStateException("disconnect() raced the watchdog") }
+        try {
+            val e = assertThrows(ImageFetchException::class.java) {
+                HttpImageFetcher().fetch("https://$SPY_HOST/a.png")
+            }
+            assertWithMessage("the 404 must survive the throwing disconnect()")
+                .that(e.error).isEqualTo(ImageError.NETWORK)
+        } finally {
+            spyDisconnect.set {}
+        }
+    }
+
+    private companion object {
+        private const val SPY_HOST = "spy.invalid"
+        private val spyDisconnect = AtomicReference<() -> Unit>({})
+        private var spyHandlerInstalled = false
+
+        /**
+         * Installs, once per JVM, an https stream handler that hands out [SpyConnection]s for
+         * [SPY_HOST]. The factory can only be set once and is global, which is tolerable here:
+         * setting it clears the handler cache, so it wins whatever ran first, it parses exactly
+         * like the real https handler (both inherit `URLStreamHandler.parseURL`), and no test in
+         * this module opens a real https connection. http is left untouched.
+         */
+        fun installSpyHttpsHandler() {
+            if (spyHandlerInstalled) return
+            URL.setURLStreamHandlerFactory { protocol ->
+                if (!protocol.equals("https", ignoreCase = true)) null
+                else object : URLStreamHandler() {
+                    override fun getDefaultPort() = 443
+                    override fun openConnection(u: URL): URLConnection =
+                        if (u.host == SPY_HOST) SpyConnection(u, spyDisconnect.get())
+                        else throw IOException("no real https connection in unit tests")
+                }
+            }
+            spyHandlerInstalled = true
+        }
+    }
+
     @Test
     fun nonPositiveTimeoutsAreRejectedByTheConstructor() {
         // 0 means "no timeout" to the platform, which would silently remove the bound.

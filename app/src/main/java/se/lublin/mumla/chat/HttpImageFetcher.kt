@@ -114,7 +114,11 @@ class HttpImageFetcher(
             throw ImageFetchException(if (expired.get()) ImageError.TIMEOUT else ImageError.NETWORK, e)
         } finally {
             watchdog.cancel(false)
-            connection.disconnect()
+            // The watchdog thread may be inside disconnect() at the same moment. The platform's
+            // implementation is unsynchronised and re-reads its connection field after checking it
+            // for null, so the loser of that race can throw — and an unchecked exception thrown
+            // here would replace the ImageFetchException that is already on its way out.
+            runCatching { connection.disconnect() }
         }
     }
 
