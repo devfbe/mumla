@@ -128,7 +128,7 @@ class ImageViewerDialogFragment : DialogFragment() {
                     // The bytes ride in the listener rather than in a field of this fragment: there
                     // is then no state to be null, no guard for a share before the load, and the
                     // reference dies with the view that holds the listener.
-                    share.setOnClickListener { shareImage(source, bytes) }
+                    share.setOnClickListener { shareImage(share, source, bytes) }
                     share.isEnabled = true
                 }
                 is ImageResult.Failed -> fail()
@@ -159,32 +159,43 @@ class ImageViewerDialogFragment : DialogFragment() {
      * new: `fetchBytes` already keeps it process-wide, outside the cache budget, and displaces
      * whatever the thumbnail path had put there.
      */
-    private fun shareImage(source: String, bytes: ByteArray) {
+    private fun shareImage(share: View, source: String, bytes: ByteArray) {
+        // The whole debounce. `share.setOnClickListener` has none of its own, and `export()` writes
+        // its file unconditionally under a name derived from the source -- so two quick taps used to
+        // run two writes of the *same path* on two IO threads, with the second truncating and
+        // rewriting while the first one's chooser was already handing the URI out. Disabled for
+        // exactly as long as one export is in flight and re-enabled in the `finally` however it
+        // ended, because `View.onTouchEvent` refuses a disabled view and that is what makes this a
+        // mechanism rather than a greyed-out picture. A tap *after* a share finished is a second
+        // share and is allowed.
+        share.isEnabled = false
         val context = requireContext()
         viewLifecycleOwner.lifecycleScope.launch {
-            val exported = try {
-                withContext(ioDispatcher) { ImageShareExporter(context).export(source, bytes) }
+            try {
+                val exported = withContext(ioDispatcher) { ImageShareExporter(context).export(source, bytes) }
+                // The URI has to travel as ClipData and not only as EXTRA_STREAM:
+                // Intent.createChooser migrates FLAG_GRANT_READ_URI_PERMISSION to the chooser only
+                // for the intent's data or its ClipData, and a chooser without the flag hands the
+                // receiver a URI it may not open.
+                //
+                // The plan also added the flag to the chooser by hand. Measured, that is the *same*
+                // guard twice: with the ClipData set, createChooser carries the flag over by
+                // itself; with the flag set by hand, the platform's own
+                // migrateExtraStreamToClipData fills the ClipData in at startActivity. Each alone
+                // keeps `sharingStartsAChooserThatCanReadTheExportedFile` green and only removing
+                // both turns it red, which is exactly the shape spec 4.04 calls one guard and a
+                // lie. This is the half that is done before the intent leaves, so it stays.
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType(exported.mimeType)
+                    .putExtra(Intent.EXTRA_STREAM, exported.uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                send.clipData = ClipData.newRawUri(null, exported.uri)
+                startActivity(Intent.createChooser(send, getString(R.string.chat_image_share)))
             } catch (e: IOException) {
                 Toast.makeText(context, R.string.chat_image_load_failed, Toast.LENGTH_SHORT).show()
-                return@launch
+            } finally {
+                share.isEnabled = true
             }
-            // The URI has to travel as ClipData and not only as EXTRA_STREAM: Intent.createChooser
-            // migrates FLAG_GRANT_READ_URI_PERMISSION to the chooser only for the intent's data or
-            // its ClipData, and a chooser without the flag hands the receiver a URI it may not open.
-            //
-            // The plan also added the flag to the chooser by hand. Measured, that is the *same*
-            // guard twice: with the ClipData set, createChooser carries the flag over by itself;
-            // with the flag set by hand, the platform's own migrateExtraStreamToClipData fills the
-            // ClipData in at startActivity. Each alone keeps
-            // `sharingStartsAChooserThatCanReadTheExportedFile` green and only removing both turns
-            // it red, which is exactly the shape spec 4.04 calls one guard and a lie. This is the
-            // half that is done before the intent leaves, so it is the half that stays.
-            val send = Intent(Intent.ACTION_SEND)
-                .setType(exported.mimeType)
-                .putExtra(Intent.EXTRA_STREAM, exported.uri)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            send.clipData = ClipData.newRawUri(null, exported.uri)
-            startActivity(Intent.createChooser(send, getString(R.string.chat_image_share)))
         }
     }
 

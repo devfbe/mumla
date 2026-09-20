@@ -7,6 +7,8 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Looper
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -79,6 +81,19 @@ class ImageViewerDialogFragmentTest {
     }
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+
+    /**
+     * A tap that goes in through `View.dispatchTouchEvent`, the way a finger does, and **not**
+     * through `performClick()`: `performClick` calls the listener whatever the view's state is, so
+     * it cannot see a button that production has disabled. That is the shape spec 4.04 records as
+     * having hidden a `GONE` button from eleven tests at once.
+     */
+    private fun View.tap() {
+        val down = SystemClock.uptimeMillis()
+        dispatchTouchEvent(MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, 0f, 0f, 0))
+        dispatchTouchEvent(MotionEvent.obtain(down, down + 1, MotionEvent.ACTION_UP, 0f, 0f, 0))
+        idle()
+    }
 
     private fun ImageViewerDialogFragment.image(): ZoomImageView =
         requireView().findViewById(R.id.image_viewer_image)
@@ -154,8 +169,7 @@ class ImageViewerDialogFragmentTest {
         launch().onFragment { fragment ->
             fragment.ioDispatcher = Dispatchers.Unconfined
             idle()
-            fragment.share().performClick()
-            idle()
+            fragment.share().tap()
 
             val activity: Activity = fragment.requireActivity()
             val chooser = shadowOf(activity).nextStartedActivity
@@ -172,6 +186,9 @@ class ImageViewerDialogFragmentTest {
                 .isEqualTo(expected)
             // Without ClipData the chooser drops the grant; assert it is carried.
             assertThat(send.clipData!!.getItemAt(0).uri.toString()).isEqualTo(expected)
+            // The debounce releases on the way out of a *successful* share too, not only a failed
+            // one: a share that finished must not leave the button dead.
+            assertThat(fragment.share().isEnabled).isTrue()
         }
     }
 
@@ -370,6 +387,42 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
+    // --- one share at a time ----------------------------------------------------------------------
+
+    /**
+     * `share.setOnClickListener` debounces nothing, so two quick taps used to start two coroutines
+     * -- and `ImageShareExporter.export` writes unconditionally, to a name derived from the source,
+     * so both wrote **the same file** on two IO threads. Export B truncates and rewrites while the
+     * chooser from export A is already handing the URI out, and the receiver reads a half-written
+     * image. Two choosers land on top of each other as well.
+     *
+     * The export is parked here so that the second tap arrives while the first one is still inside
+     * the write, which is the window that matters; a tap after the first share has finished is a
+     * legitimate second share and is allowed.
+     */
+    @Test
+    fun aSecondTapWhileTheFirstShareIsStillWritingIsRefused() {
+        val exporting = ParkingDispatcher()
+        installLoader { TestImages.png(40, 40) }
+        launch().use { scenario ->
+            scenario.onFragment { fragment ->
+                fragment.ioDispatcher = exporting
+                idle()
+
+                fragment.share().tap()
+                assertThat(fragment.share().isEnabled).isFalse()
+                fragment.share().tap()
+
+                exporting.release()
+                idle()
+
+                val activity = fragment.requireActivity()
+                assertThat(shadowOf(activity).nextStartedActivity).isNotNull()
+                assertThat(shadowOf(activity).nextStartedActivity).isNull()
+            }
+        }
+    }
+
     // --- what leaves the app is what was on the screen --------------------------------------------
 
     /**
@@ -396,8 +449,7 @@ class ImageViewerDialogFragmentTest {
                 served = "not an image at all".toByteArray()
                 runBlocking { loader!!.fetchBytes(other) }
 
-                fragment.share().performClick()
-                idle()
+                fragment.share().tap()
 
                 val send = sentIntent(fragment)
                 assertThat(send.type).isEqualTo("image/png")
@@ -421,8 +473,7 @@ class ImageViewerDialogFragmentTest {
                 idle()
                 runBlocking { loader!!.fetchBytes(other) }
 
-                fragment.share().performClick()
-                idle()
+                fragment.share().tap()
 
                 assertThat(sentIntent(fragment).type).isEqualTo("image/png")
                 assertThat(fetched.count { it == source }).isEqualTo(1)
@@ -502,8 +553,7 @@ class ImageViewerDialogFragmentTest {
         launch().onFragment { fragment ->
             idle()
             assertThat(fragment.dialog?.isShowing).isTrue()
-            fragment.requireView().findViewById<View>(R.id.image_viewer_close).performClick()
-            idle()
+            fragment.requireView().findViewById<View>(R.id.image_viewer_close).tap()
             assertThat(fragment.dialog?.isShowing ?: false).isFalse()
         }
     }
@@ -526,12 +576,13 @@ class ImageViewerDialogFragmentTest {
             blocking.deleteRecursively()
             blocking.writeBytes(ByteArray(1))
 
-            fragment.share().performClick()
-            idle()
+            fragment.share().tap()
 
             assertThat(ShadowToast.getTextOfLatestToast())
                 .isEqualTo(fragment.getString(R.string.chat_image_load_failed))
             assertThat(shadowOf(fragment.requireActivity()).nextStartedActivity).isNull()
+            // ...and the button comes back, or one failed write would end sharing for this dialog.
+            assertThat(fragment.share().isEnabled).isTrue()
         }
     }
 }
