@@ -285,6 +285,29 @@ class ChannelListAdapterRebuildTest {
         assertThat(root.counters.subchannelUserCountCalls).isEqualTo(0)
     }
 
+    /**
+     * "One pass over the model" is one pass over the *whole* model. A collapsed channel is walked
+     * to count it and its rows are dropped again, where the Java turned back at the closed door,
+     * so a list showing a single row can still read 1 000 channels. That is the cost of carrying
+     * the count instead of asking for it, and it is deliberate -- this pins it so that the class
+     * doc's claim is a measured one rather than a hopeful one.
+     */
+    @Test
+    fun aCollapsedSubtreeIsStillWalkedBecauseItsUsersStillHaveToBeCounted() {
+        val (root, ids) = buildChannelTree(channelCount = 1000, branching = 4, userEvery = 5)
+        val adapter = adapterOver(root, ids)
+        clickExpandToggle(adapter, adapter.getChannelPosition(0))
+        root.counters.reset()
+
+        adapter.updateChannels()
+        idleMainLooper()
+
+        assertThat(adapter.itemCount).isEqualTo(1)
+        assertThat(root.counters.getUsersCalls).isEqualTo(1000)
+        assertThat(root.counters.getSubchannelsCalls).isEqualTo(1000)
+        assertThat(root.counters.subchannelUserCountCalls).isEqualTo(0)
+    }
+
     @Test
     fun nothingIsRebuiltBeforeTheMainThreadTurnEnds() {
         val (root, ids) = smallTree()

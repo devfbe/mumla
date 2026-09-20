@@ -58,16 +58,27 @@ import se.lublin.mumla.service.MumlaService
  *   events that arrives in one turn collapses into a single walk. This is sound because a model
  *   event means "read the model again" and never carries a delta (spec 4.1) -- the rebuild
  *   answers whatever state the model is in when it runs.
- * - **One pass over the model per rebuild.** [constructNodes] carries the subtree user count back
- *   up instead of asking `IChannel.getSubchannelUserCount()`, which re-walks the whole subtree on
- *   every call and turned an O(n) walk into O(n*depth). Each channel's `getUsers()` and
- *   `getSubchannels()` are read exactly once, and the counts land on the [Node] so that binding a
- *   row reads no model at all.
+ * - **One pass over the whole model per rebuild -- including the subtrees the user has
+ *   collapsed.** [constructNodes] carries the subtree user count back up instead of asking
+ *   `IChannel.getSubchannelUserCount()`, which re-walks the whole subtree on every call and turned
+ *   an O(n) walk into O(n*depth). Each channel's `getUsers()` and `getSubchannels()` are read
+ *   exactly once -- *every* channel's, because a collapsed channel still has to be counted before
+ *   its rows are dropped again, where the Java returned at the closed door and never looked
+ *   inside. On the 5 000-channel tree that is 5 000 reads of each per rebuild against the Java's
+ *   1 999, and the worst case is the root collapsed: a list showing one row that still walks 5 000
+ *   channels. It is a clear net win -- O(n) at a larger constant against O(n*depth) -- but it is
+ *   not "less model read", and the counts land on the [Node] so that binding a row reads no model
+ *   at all.
  *
  * Measured on a 5 000-channel tree, desktop JVM (see `AdapterRebuildBenchmarkTest`): one rebuild
- * cost 351.6 us and made 33 179 recursive-count node visits, now 165.5 us and none. A
- * synchronisation of 5 000 events cost 1 376.9 ms of main thread, now 0.4 ms. Binding one channel
- * row walked the channel's whole subtree twice; now it reads nothing from the model.
+ * made 33 179 recursive-count node visits and now makes none, and that number is the algorithm and
+ * is the same everywhere. The wall-clock figures beside it are **a sample from one machine, not a
+ * budget**: the same paired run on a reviewer's hardware reproduced every count to the visit and
+ * differed by up to 58 % on the clock. What is claimed is the ratio -- one rebuild roughly halves,
+ * a 5 000-event synchronisation goes from seconds of main thread to well under a millisecond --
+ * and the invariants behind it are pinned deterministically in `ChannelListAdapterRebuildTest`
+ * (spec 4.04). Binding one channel row walked the channel's whole subtree twice; now it reads
+ * nothing from the model.
  *
  * The recursion needs no depth check: `ModelHandler` refuses a parent that is the channel itself
  * or one of its descendants, and one deeper than 256 below the root (spec 4.1).
@@ -130,7 +141,10 @@ class ChannelListAdapter(
         return when (viewType) {
             R.layout.channel_row -> ChannelViewHolder(view)
             R.layout.channel_user_row -> UserViewHolder(view)
-            // The Java version returned null here, which RecyclerView dereferences immediately.
+            // Unreachable: [getItemViewType] answers with one of these two for every [Node], and
+            // a Node is a channel or a user by construction. Not a guard -- no test can reach it
+            // and every mutation on it is equivalent. The Java version returned null here, which
+            // RecyclerView dereferences immediately.
             else -> throw IllegalArgumentException("unknown view type $viewType")
         }
     }
@@ -296,10 +310,14 @@ class ChannelListAdapter(
         return when {
             node.channel != null -> R.layout.channel_row
             node.user != null -> R.layout.channel_user_row
+            // Unreachable, like [Node.nodeId]'s null: a Node's two constructors each set exactly
+            // one of the two. Kotlin cannot say so, so the branch stands and is not a guard.
             else -> 0
         }
     }
 
+    // The elvis is unreachable for the same reason as the two branches above; stable ids are on,
+    // so a real -1 here would be a duplicate id rather than a missing one.
     override fun getItemId(position: Int): Long = nodes[position].nodeId ?: -1L
 
     /**
@@ -400,12 +418,25 @@ class ChannelListAdapter(
         return ResourcesCompat.getDrawable(resources, id, null)!!
     }
 
+    /**
+     * The list position of a user's row, or -1.
+     *
+     * Not a plain read: a rebuild scheduled in this turn is run first, and that notifies. Do not
+     * call this while the list is laying out or scrolling -- from inside
+     * `LayoutManager.onLayoutChildren`, an item animator or a scroll listener -- because
+     * `notifyDataSetChanged()` throws `IllegalStateException` there. Measured: it does throw.
+     * Every caller today reaches this as a main-looper message and so cannot be inside one.
+     */
     fun getUserPosition(session: Int): Int {
         rebuildIfScheduled()
         val itemId = session.toLong() or USER_ID_MASK
         return nodes.indexOfFirst { it.nodeId == itemId }
     }
 
+    /**
+     * The list position of a channel's row, or -1. Settles a scheduled rebuild and notifies first,
+     * with the same caveat as [getUserPosition]: not during layout or scrolling.
+     */
     fun getChannelPosition(channelId: Int): Int {
         rebuildIfScheduled()
         val itemId = channelId.toLong() or CHANNEL_ID_MASK
@@ -436,6 +467,14 @@ class ChannelListAdapter(
      * because whether it is contracted is only known once its users have been counted. That keeps
      * the walk to one pass: `getUsers()` and `getSubchannels()` are read once per channel, and
      * nothing asks `IChannel.getSubchannelUserCount()`, which would re-walk the subtree.
+     *
+     * The price of that order is that a contracted channel is walked before it is dropped, where
+     * the Java turned back at it. One pass, but over the whole model rather than over the visible
+     * part of it -- see the class doc.
+     *
+     * A user the model has not filled in yet gets no row but is counted, because
+     * `Channel.getSubchannelUserCount()` counts it too: the number on the row has always been
+     * `mUsers.size()` deep, and this reproduces it rather than improving on it.
      *
      * @param parent The parent node to propagate under.
      * @param channel The parent channel.

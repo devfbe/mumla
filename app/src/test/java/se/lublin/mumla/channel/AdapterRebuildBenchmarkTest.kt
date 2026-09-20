@@ -20,8 +20,16 @@ import se.lublin.humla.IHumlaSession
  * Remove the `@Ignore` to run it, and read the numbers from the test report's system-out:
  * `./gradlew :app:testFossDebugUnitTest --tests '*AdapterRebuildBenchmarkTest'`
  *
- * Measured on this machine, 5 000 channels, 1 000 users, branching factor 4, one paired run,
- * rebuild best of seven and each sync best of five:
+ * **The wall-clock column is a sample from one machine, not a measurement of the change.** A
+ * reviewer ran the same paired benchmark on other hardware and came out up to 58 % away on the
+ * clock (2 174.4 ms against 1 376.9 ms for the 5 000-event synchronisation before the change)
+ * while reproducing every deterministic count exactly. Read the ratios and the node visits; the
+ * milliseconds are here so the order of magnitude does not have to be rediscovered, and spec 4.04
+ * asks that the algorithm be asserted and the machine not be (which is why nothing here is a
+ * gate).
+ *
+ * 5 000 channels, 1 000 users, branching factor 4, one paired run, rebuild best of seven and each
+ * sync best of five:
  *
  * |                              | before    | after    |
  * |------------------------------|-----------|----------|
