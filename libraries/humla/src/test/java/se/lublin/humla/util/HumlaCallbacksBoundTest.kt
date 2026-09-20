@@ -31,6 +31,7 @@ import se.lublin.humla.model.User
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.testutil.SilentLogger
+import java.lang.reflect.Method
 import kotlin.concurrent.thread
 
 /**
@@ -371,6 +372,86 @@ class HumlaCallbacksBoundTest {
         return total / RAISES
     }
 
+    /**
+     * What each of the nineteen events may have done to it, pinned as a set rather than as
+     * nineteen cases (spec 4.04, handle 2).
+     *
+     * The mapping is decided one raise site at a time at the bottom of [HumlaCallbacks], which is a
+     * hand-written list. That was harmless while `Plain` meant no more than "is never dropped".
+     * Since [HumlaCallbacks.absoluteCeiling] it also means "counts against the only ceiling that
+     * holds", so a twentieth event somebody adds and forgets to classify moves that ceiling
+     * silently. Here it fails instead, because the expectation below is compared against the
+     * interface and not only against the behaviour.
+     *
+     * The policy is private, so each event is *classified by what the queue does with it*, which is
+     * the property anyone cares about anyway:
+     * - raise it twice and one delivery is left -> it folds;
+     * - raise it three times against a first ceiling of one and something was dropped -> the first
+     *   ceiling may drop it;
+     * - put it under an absolute ceiling's worth of events that ceiling may not drop, and see
+     *   whether it or nothing is thrown away -> it is exempt, or it is not.
+     *
+     * Both halves have been seen red rather than assumed to work: giving `onUserConnected`
+     * `Policy.Droppable` fails with "for key onUserConnected expected PLAIN but got DROPPABLE", and
+     * deleting `onLogError` from the expectation fails with "missing (1): onLogError".
+     */
+    @Test
+    fun everyObserverEventHasTheQueuePolicyThisFileClaimsForIt() {
+        val methods = IHumlaObserver::class.java.declaredMethods.sortedBy { it.name }
+
+        // No overloads today, so the name is a key; if that ever changes this says so first.
+        assertThat(methods.map { it.name }).containsNoDuplicates()
+        assertThat(EXPECTED_POLICIES.keys).containsExactlyElementsIn(methods.map { it.name })
+        assertThat(methods.associate { it.name to classify(it) })
+            .containsExactlyEntriesIn(EXPECTED_POLICIES)
+    }
+
+    private enum class QueuePolicy { FOLD, DROPPABLE, LIFECYCLE, PLAIN }
+
+    private fun classify(event: Method): QueuePolicy = when {
+        raiseTwice(event) == 1 -> QueuePolicy.FOLD
+        droppedWhenRaisedThreeTimesAgainstACeilingOfOne(event) > 0 -> QueuePolicy.DROPPABLE
+        droppedWhenBuriedUnderExemptEvents(event) == 0L -> QueuePolicy.LIFECYCLE
+        else -> QueuePolicy.PLAIN
+    }
+
+    /** How many deliveries two raises of [event] leave queued. One means it folded into itself. */
+    private fun raiseTwice(event: Method): Int = measure(bound = 4) { callbacks ->
+        repeat(2) { raise(callbacks, event) }
+    }.queued
+
+    private fun droppedWhenRaisedThreeTimesAgainstACeilingOfOne(event: Method): Long =
+        measure(bound = 1) { callbacks -> repeat(3) { raise(callbacks, event) } }.dropped
+
+    /**
+     * Raises [event] and then fills the queue past [HumlaCallbacks.absoluteCeiling] with events the
+     * ceiling is not allowed to touch, so [event] is the only thing left for it to take. Zero drops
+     * means the ceiling found nothing it was allowed to drop, i.e. [event] is exempt too.
+     */
+    private fun droppedWhenBuriedUnderExemptEvents(event: Method): Long =
+        measure(bound = 1) { callbacks ->
+            raise(callbacks, event)
+            repeat(callbacks.absoluteCeiling) { callbacks.onConnecting() }
+        }.dropped
+
+    private fun raise(callbacks: HumlaCallbacks, event: Method) {
+        // Null arguments throughout: every parameter in IHumlaObserver is a reference type, and a
+        // folded event keys on the model object it carries, so two nulls are two raises for one
+        // subject - which is exactly what the fold is being asked about.
+        event.invoke(callbacks, *arrayOfNulls<Any?>(event.parameterCount))
+    }
+
+    private class Reading(val queued: Int, val dropped: Long)
+
+    /** Runs [raises] off the delivery thread, so nothing is delivered inline, and reads the counters. */
+    private fun measure(bound: Int, raises: (HumlaCallbacks) -> Unit): Reading {
+        val callbacks = HumlaCallbacks(Handler(Looper.getMainLooper()), bound)
+        thread { raises(callbacks) }.join()
+        val reading = Reading(callbacks.queuedEvents, callbacks.droppedEvents)
+        mainLooper.idle()
+        return reading
+    }
+
     /** Feeds the 5 000-frame sync from `ModelRaceTest` and reports what is left in the queue. */
     private fun sync(callbacks: HumlaCallbacks): Int {
         val handler = ModelHandler(
@@ -399,5 +480,36 @@ class HumlaCallbacksBoundTest {
     private companion object {
         /** Enough raises that one slow one cannot decide the mean. */
         const val RAISES = 2_000
+
+        /**
+         * What [HumlaCallbacks] claims to do with each event, as its raise sites are written.
+         * A name that is not in `IHumlaObserver`, or one of its methods that is not here, fails
+         * [everyObserverEventHasTheQueuePolicyThisFileClaimsForIt].
+         */
+        val EXPECTED_POLICIES = mapOf(
+            // The connection's own progress: exempt from both ceilings.
+            "onConnected" to QueuePolicy.LIFECYCLE,
+            "onConnecting" to QueuePolicy.LIFECYCLE,
+            "onDisconnected" to QueuePolicy.LIFECYCLE,
+            "onTLSHandshakeFailed" to QueuePolicy.LIFECYCLE,
+            // Everything an observer answers by rebuilding the whole list.
+            "onChannelAdded" to QueuePolicy.DROPPABLE,
+            "onChannelRemoved" to QueuePolicy.DROPPABLE,
+            "onUserRemoved" to QueuePolicy.DROPPABLE,
+            // A refresh for one subject, which the next one for that subject replaces.
+            "onChannelStateUpdated" to QueuePolicy.FOLD,
+            "onChannelPermissionsUpdated" to QueuePolicy.FOLD,
+            "onUserStateUpdated" to QueuePolicy.FOLD,
+            "onUserTalkStateUpdated" to QueuePolicy.FOLD,
+            // The rest: delivered as raised, and counting against the absolute ceiling.
+            "onUserConnected" to QueuePolicy.PLAIN,
+            "onUserJoinedChannel" to QueuePolicy.PLAIN,
+            "onPermissionDenied" to QueuePolicy.PLAIN,
+            "onMessageLogged" to QueuePolicy.PLAIN,
+            "onVoiceTargetChanged" to QueuePolicy.PLAIN,
+            "onLogInfo" to QueuePolicy.PLAIN,
+            "onLogWarning" to QueuePolicy.PLAIN,
+            "onLogError" to QueuePolicy.PLAIN,
+        )
     }
 }
