@@ -251,4 +251,9 @@
 
     <!-- Used only by flavor "foss" -->
     <string name="donate_foss">Donate</string>
+
+    <!-- Chat image sending -->
+    <string name="permission_denied_storage">Permission denied to read storage</string>
+    <string name="image_decode_failed">Could not read that image</string>
+    <string name="image_too_large">Image is too large for this server</string>
 </resources>
