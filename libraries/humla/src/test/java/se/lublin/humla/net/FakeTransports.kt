@@ -56,11 +56,19 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
     }
 
     override fun disconnect() {
-        val first = disconnectCalls == 0
-        disconnectCalls++
-        if (!first) return // the real transport's disconnect() returns early once it is not running
-        val l = listener ?: return
-        if (callbackHandler.post { l.onTCPConnectionDisconnect() }) terminalPostAccepted.set(true)
+        if (disconnectCalls > 0) {
+            disconnectCalls++ // the real transport returns early once it is not running
+            return
+        }
+        val l = listener
+        if (l != null && callbackHandler.post { l.onTCPConnectionDisconnect() }) {
+            terminalPostAccepted.set(true)
+        }
+        // Published last, on purpose: tests wait on this counter, so a counter they can see has to
+        // imply everything this call already did. Written the other way round, the test that pins
+        // the terminal post passes whenever the waiter happens to be slower than one field write --
+        // measured, 200 ms between the two lines is enough to fail it.
+        disconnectCalls = 1
     }
 
     fun simulateConnected() = post { it.onTCPConnectionEstablished() }

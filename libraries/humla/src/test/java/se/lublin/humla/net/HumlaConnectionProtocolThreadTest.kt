@@ -44,23 +44,12 @@ class HumlaConnectionProtocolThreadTest {
     private val connection = HumlaConnection(listener, transports)
     private val server = Server(-1, "test", "127.0.0.1", 64738, "user", "")
 
-    /**
-     * Threads that were already running when this test started. Thread.getAllStackTraces() is
-     * JVM-global, so a protocol thread another test leaked would otherwise fail this one as pure
-     * collateral damage; [tearDown] pins a leak on the test that caused it instead.
-     */
-    private val preexistingThreads = Thread.getAllStackTraces().keys.toSet()
-
-    private fun liveProtocolThreads(): List<Thread> =
-        Thread.getAllStackTraces().keys
-            .filter { it !in preexistingThreads && it.isAlive && it.name == PROTOCOL_THREAD }
-
     @After
     fun tearDown() {
         connection.disconnect()
         mainLooper.idle()
-        awaitUntil(description = "no live $PROTOCOL_THREAD thread left by this test") {
-            liveProtocolThreads().isEmpty()
+        awaitUntil(description = "no live protocol thread left by this test") {
+            !connection.protocolThread.isAlive
         }
     }
 
@@ -375,23 +364,28 @@ class HumlaConnectionProtocolThreadTest {
         assertThat(listener.disconnects).isEmpty() // nothing was started, so there is nothing to report
     }
 
+    /**
+     * Asserts on the connection's own thread object rather than on a name filter over
+     * Thread.getAllStackTraces(): the filter direction matters here, and a thread a library renames
+     * would drop out of the filter and make a leak look like an empty result set.
+     */
     @Test
     fun anUnusedConnectionStartsNoProtocolThread() {
         val unused = HumlaConnection(RecordingConnectionListener(), FakeTransports())
-        assertThat(liveProtocolThreads()).isEmpty()
+        assertThat(unused.protocolThread.isAlive).isFalse()
 
         unused.disconnect() // must not start a thread either
-        assertThat(liveProtocolThreads()).isEmpty()
+        assertThat(unused.protocolThread.isAlive).isFalse()
     }
 
     @Test
     fun aConnectionThatIsDisconnectedLeavesNoProtocolThreadBehind() {
         connectAndEstablish()
-        assertThat(liveProtocolThreads()).hasSize(1)
+        assertThat(connection.protocolThread.isAlive).isTrue()
 
         connection.disconnect()
 
-        awaitUntil(description = "protocol thread quit") { liveProtocolThreads().isEmpty() }
+        awaitUntil(description = "protocol thread quit") { !connection.protocolThread.isAlive }
     }
 
     /**

@@ -84,7 +84,13 @@ class HumlaConnection @JvmOverloads constructor(
             HumlaUDP(cryptState, listener, callbackHandler)
     }
 
-    private val protocolThread = HandlerThread(PROTOCOL_THREAD_NAME)
+    /**
+     * The thread this connection runs on. Not private so a test can assert on the thread itself
+     * rather than on a filter over [Thread.getAllStackTraces] by name: a library that renames
+     * threads turns a name filter into a leak test that passes because it found nothing to look at.
+     * Reading this does not start the thread; [protocolHandler] does.
+     */
+    internal val protocolThread = HandlerThread(PROTOCOL_THREAD_NAME)
 
     /**
      * Runs parsing, model updates and voice routing. Started on first access - i.e. by [connect] -
