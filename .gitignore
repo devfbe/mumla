@@ -22,3 +22,6 @@ local.properties
 # Created by the CI before_script, and by anyone running the same commands locally.
 .nix-cache/
 .devshell
+
+# Kotlin build-tool session files, written by any gradle run since KGP 2.0.
+.kotlin/
