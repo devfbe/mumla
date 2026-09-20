@@ -393,6 +393,21 @@ class HttpImageFetcherTest {
         }
     }
 
+    /**
+     * The other direction of a lying Content-Length, and the one that is silent: a body that stops
+     * early reaches the decoder as a truncated image, which is indistinguishable from a broken one
+     * — and the loader caches MALFORMED for the life of the process. Half a download must be a
+     * NETWORK error, which expires, not a verdict on the image.
+     */
+    @Test(timeout = 30_000)
+    fun aBodyThatStopsShortOfItsContentLengthIsNotAccepted() {
+        val target = rawLyingServer(declared = 1_000, actual = ByteArray(400) { 1 })
+        val e = assertThrows(ImageFetchException::class.java) {
+            HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(target)
+        }
+        assertThat(e.error).isEqualTo(ImageError.NETWORK)
+    }
+
     @Test(timeout = 30_000)
     fun aContentLengthThatUnderstatesTheBodyCannotDefeatTheCap() {
         val truthful = ByteArray(10) { it.toByte() }

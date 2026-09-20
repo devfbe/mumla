@@ -52,8 +52,9 @@ fun interface ImageFetcher {
  *  * **Size.** [maxBytes] is enforced twice: against `Content-Length` (so an oversized body is
  *    refused before it is read) and, independently, against the bytes actually read. The header is
  *    never trusted as the end of the body, so a server that understates it, omits it or streams
- *    chunked forever is still cut off at the cap. The accumulation buffer is pre-sized from a
- *    plausible `Content-Length` and never grows past the cap.
+ *    chunked forever is still cut off at the cap. A body that falls *short* of a declared length is
+ *    refused as [ImageError.NETWORK] rather than handed over truncated. The accumulation buffer is
+ *    pre-sized from a plausible `Content-Length` and never grows past the cap.
  *  * **Time.** [totalTimeoutMs] bounds the whole call: the socket read timeout is clamped to the
  *    remaining budget before the response is read and again before the body is read, the remaining
  *    budget is checked after every read, and a watchdog closes the connection at the deadline. A
@@ -134,6 +135,11 @@ class HttpImageFetcher(
             // A connection closed by the watchdog can surface as a plain EOF rather than an error,
             // which would hand the caller a silently truncated image.
             if (expired.get()) throw ImageFetchException(ImageError.TIMEOUT)
+            // Neither can a body that simply stops early. The declared length is no end-of-body
+            // marker (a server that understates it keeps streaming, which is what the cap is for),
+            // but falling short of it is a broken transfer, and half an image would otherwise reach
+            // the decoder as MALFORMED — a terminal error the loader remembers for good.
+            if (declared > 0 && body.size < declared) throw ImageFetchException(ImageError.NETWORK)
             return Hop.Body(body)
         } catch (e: SocketTimeoutException) {
             throw ImageFetchException(ImageError.TIMEOUT, e)
