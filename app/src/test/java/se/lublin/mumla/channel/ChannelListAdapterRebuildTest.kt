@@ -23,9 +23,13 @@ import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.HumlaService
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.model.Server
 import se.lublin.humla.model.TalkState
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executor
+import java.util.concurrent.TimeUnit
 
 /**
  * What one model event costs the main thread.
@@ -55,12 +59,14 @@ class ChannelListAdapterRebuildTest {
         /** Tall enough for every row of [smallTree] to be laid out at once. */
         const val WIDTH_PX = 1000
         const val HEIGHT_PX = 4000
+        const val SERVER_ID = 42L
     }
 
     private lateinit var context: Context
     private lateinit var session: IHumlaSession
     private lateinit var service: IHumlaService
     private lateinit var database: MumlaDatabase
+    private lateinit var server: Server
     private lateinit var byId: MutableMap<Int, FakeChannel>
 
     private fun adapterOver(
@@ -69,13 +75,21 @@ class ChannelListAdapterRebuildTest {
         pinnedChannels: List<Int>? = null,
         showUserCount: Boolean = true,
         connected: Boolean = true,
+        // Inline, so that what the background write does is a fact of the test rather than a race
+        // with it. The production default is pinned separately, by
+        // [theDefaultDatabaseExecutorWritesOffTheCallingThread].
+        databaseExecutor: Executor = Executor { it.run() },
     ): ChannelListAdapter {
         byId = ids.toMutableMap()
         session = mockk(relaxed = true)
         every { session.getChannel(any()) } answers { byId[firstArg<Int>()] }
+        server = mockk(relaxed = true)
+        every { server.id } returns SERVER_ID
+        every { server.isSaved } returns true
         service = mockk(relaxed = true)
         every { service.isConnected } returns connected
         every { service.HumlaSession() } returns session
+        every { service.targetServer } returns server
         database = mockk(relaxed = true)
         if (pinnedChannels != null) {
             every { database.getPinnedChannels(any()) } returns pinnedChannels
@@ -87,6 +101,7 @@ class ChannelListAdapterRebuildTest {
             mockk<FragmentManager>(relaxed = true),
             pinnedChannels != null,
             showUserCount,
+            databaseExecutor,
         ).also { root.counters.reset() }
     }
 
@@ -652,6 +667,138 @@ class ChannelListAdapterRebuildTest {
 
         user.selfDeafened = true
         assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_deafened)
+    }
+
+    /**
+     * Three talk states share the talking icon, and the one test above writes only `TALKING`, so
+     * dropping either of the other two clauses survived it. Whispering and shouting are Mumble
+     * features a user can be in for minutes at a time; with a clause gone they show the resting
+     * dot while their voice is coming out of the speaker. The chain was rewritten from an if-chain
+     * into a `when` in this conversion.
+     */
+    @Test
+    fun everyActiveTalkStateShowsTheTalkingIcon() {
+        val (root, ids) = smallTree()
+        val user = ids.getValue(4).getUsers().first() as FakeUser
+        val adapter = adapterOver(root, ids)
+
+        // Enumerated rather than listed, so that a talk state added later fails here until
+        // somebody decides which icon it gets, instead of silently inheriting the resting dot.
+        for (state in TalkState.values()) {
+            user.state = state
+            val expected =
+                if (state == TalkState.PASSIVE) R.drawable.outline_circle_talking_off
+                else R.drawable.outline_circle_talking_on
+            assertThat(talkStateDrawableOf(adapter)).isEqualTo(expected)
+        }
+    }
+
+    /**
+     * The local mute/ignore history is kept per registered account on a saved server, so both
+     * clauses have to hold before anything is written. `&&` -> `||` survived until now, because
+     * the write happens on a thread nobody waited for: with a bare `Thread` the two corners that
+     * separate the two operators are only observable through a race. The executor is injected for
+     * exactly that reason, and [theDefaultDatabaseExecutorWritesOffTheCallingThread] pins that the
+     * production default still leaves the main thread.
+     */
+    @Test
+    fun theLocalMuteHistoryIsWrittenOnlyForARegisteredUserOnASavedServer() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+
+        // Neither clause.
+        every { server.isSaved } returns false
+        adapter.onLocalUserStateUpdated(FakeUser(500, userId = -1))
+        // The right clause alone: an anonymous user on a saved server has no row to keep.
+        every { server.isSaved } returns true
+        adapter.onLocalUserStateUpdated(FakeUser(501, userId = -1))
+        // The left clause alone: a registered user on a server we do not store.
+        every { server.isSaved } returns false
+        adapter.onLocalUserStateUpdated(FakeUser(502, userId = 7))
+
+        verify(exactly = 0) { database.removeLocalMutedUser(any(), any()) }
+        verify(exactly = 0) { database.removeLocalIgnoredUser(any(), any()) }
+
+        // Both.
+        every { server.isSaved } returns true
+        adapter.onLocalUserStateUpdated(FakeUser(503, userId = 7))
+
+        verify(exactly = 1) { database.removeLocalMutedUser(SERVER_ID, 7) }
+        verify(exactly = 1) { database.removeLocalIgnoredUser(SERVER_ID, 7) }
+    }
+
+    /** Muting and ignoring are stored separately, and each one is added or removed, never both. */
+    @Test
+    fun theLocalMuteAndIgnoreRowsFollowTheUsersOwnFlags() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        val user = FakeUser(504, userId = 11)
+
+        user.setLocalMuted(true)
+        adapter.onLocalUserStateUpdated(user)
+
+        verify(exactly = 1) { database.addLocalMutedUser(SERVER_ID, 11) }
+        verify(exactly = 1) { database.removeLocalIgnoredUser(SERVER_ID, 11) }
+        verify(exactly = 0) { database.removeLocalMutedUser(any(), any()) }
+        verify(exactly = 0) { database.addLocalIgnoredUser(any(), any()) }
+
+        user.setLocalMuted(false)
+        user.setLocalIgnored(true)
+        adapter.onLocalUserStateUpdated(user)
+
+        verify(exactly = 1) { database.removeLocalMutedUser(SERVER_ID, 11) }
+        verify(exactly = 1) { database.addLocalIgnoredUser(SERVER_ID, 11) }
+    }
+
+    /**
+     * The list is redrawn for every local state change, whether or not it is persisted: local mute
+     * is what the row shows, and a server we do not store still shows it.
+     */
+    @Test
+    fun aLocalStateChangeRedrawsTheListEvenWhenNothingIsStored() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        val changes = countChanges(adapter)
+        every { server.isSaved } returns false
+
+        adapter.onLocalUserStateUpdated(FakeUser(505, userId = -1))
+
+        assertThat(changes()).isEqualTo(1)
+        verify(exactly = 0) { database.removeLocalMutedUser(any(), any()) }
+    }
+
+    /**
+     * The injected executor is a test seam, so the default it replaces needs a test of its own:
+     * the two database writes are disk I/O and must not run on the caller, which is the main
+     * thread. Deterministic because the write itself releases the latch.
+     */
+    @Test
+    fun theDefaultDatabaseExecutorWritesOffTheCallingThread() {
+        val (root, ids) = smallTree()
+        val database = mockk<MumlaDatabase>(relaxed = true)
+        val server = mockk<Server>(relaxed = true)
+        every { server.id } returns SERVER_ID
+        every { server.isSaved } returns true
+        val service = mockk<IHumlaService>(relaxed = true)
+        every { service.isConnected } returns true
+        every { service.HumlaSession() } returns mockk<IHumlaSession>(relaxed = true)
+        every { service.targetServer } returns server
+        val adapter = ChannelListAdapter(
+            context, service, database, mockk<FragmentManager>(relaxed = true), false, true,
+        )
+        val done = CountDownLatch(1)
+        val writer = arrayOfNulls<String>(1)
+        every { database.removeLocalMutedUser(any(), any()) } answers {
+            writer[0] = Thread.currentThread().name.substringBefore(" @coroutine#")
+            done.countDown()
+        }
+
+        adapter.onLocalUserStateUpdated(FakeUser(506, userId = 13))
+
+        assertThat(done.await(10, TimeUnit.SECONDS)).isTrue()
+        assertThat(writer[0]).isNotEqualTo(
+            Thread.currentThread().name.substringBefore(" @coroutine#")
+        )
     }
 
     /**

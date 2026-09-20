@@ -99,10 +99,18 @@ class FakeUser(
     // Not `var talkState`: that generates getTalkState(), which collides with the interface
     // method this class overrides (spec 4.05).
     var state: TalkState = TalkState.PASSIVE,
+    // Negative for an unregistered user, which is the server's way of saying "not an account".
+    // Backed by a field rather than a `var` for the same reason: `var userId` would generate
+    // getUserId(), which is the interface's own accessor (spec 4.05).
+    userId: Int = -1,
 ) : IUser {
+    private val registeredUserId: Int = userId
+    private var localMuted = false
+    private var localIgnored = false
+
     override fun getSession(): Int = session
     override fun getChannel(): se.lublin.humla.model.Channel? = null
-    override fun getUserId(): Int = -1
+    override fun getUserId(): Int = registeredUserId
     override fun getName(): String = name
     override fun getComment(): String = ""
     override fun getCommentHash(): ByteArray? = null
@@ -116,10 +124,10 @@ class FakeUser(
     override fun isSelfDeafened(): Boolean = selfDeafened
     override fun isPrioritySpeaker(): Boolean = false
     override fun isRecording(): Boolean = false
-    override fun isLocalMuted(): Boolean = false
-    override fun isLocalIgnored(): Boolean = false
-    override fun setLocalMuted(muted: Boolean) = Unit
-    override fun setLocalIgnored(ignored: Boolean) = Unit
+    override fun isLocalMuted(): Boolean = localMuted
+    override fun isLocalIgnored(): Boolean = localIgnored
+    override fun setLocalMuted(muted: Boolean) { localMuted = muted }
+    override fun setLocalIgnored(ignored: Boolean) { localIgnored = ignored }
     override fun getTalkState(): TalkState = state
 }
 

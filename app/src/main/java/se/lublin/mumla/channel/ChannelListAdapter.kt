@@ -34,6 +34,7 @@ import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.RecyclerView
+import java.util.concurrent.Executor
 import se.lublin.humla.HumlaService
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.model.IChannel
@@ -80,6 +81,13 @@ class ChannelListAdapter(
     private val fragmentManager: FragmentManager,
     showPinnedOnly: Boolean,
     showUserCount: Boolean,
+    /**
+     * Where the local mute/ignore rows are written. Off the main thread by default, and injected
+     * only so that a test can run the write inline: with a bare `Thread` the two clauses that
+     * decide whether the write happens at all are observable only through a race, which is how
+     * `onLocalUserStateUpdated` came to have four unpinned lines behind an unpinned condition.
+     */
+    private val databaseExecutor: Executor = Executor { Thread(it).start() },
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), UserMenu.IUserLocalStateListener {
 
     // Not nullable: every caller reaches this through HumlaServiceFragment.onServiceBound, which
@@ -482,7 +490,7 @@ class ChannelListAdapter(
         val server = humlaService.targetServer
 
         if (user.userId >= 0 && server.isSaved) {
-            Thread {
+            databaseExecutor.execute {
                 if (user.isLocalMuted) {
                     database.addLocalMutedUser(server.id, user.userId)
                 } else {
@@ -493,7 +501,7 @@ class ChannelListAdapter(
                 } else {
                     database.removeLocalIgnoredUser(server.id, user.userId)
                 }
-            }.start()
+            }
         }
     }
 
