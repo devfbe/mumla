@@ -201,13 +201,27 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
      *
      * <p>A channel that already has a parent keeps it: it is in the tree, in a place the server
      * asked for at some point, and moving it to the root on a frame we refuse would be the one
-     * thing worse than ignoring that frame.
+     * thing worse than ignoring that frame
+     * ({@code aRefusedFrameLeavesAChannelWhereTheServerAlreadyPutIt}).
+     *
+     * <p>Each of the three lines below was a survivor when this was written: only the call site was
+     * covered, so the method looked tested from one step up while no branch in it was. A fourth
+     * line - a separate refusal for the root naming itself - was removed rather than pinned,
+     * because by the time this runs the channel is already in {@code mChannels} under its own id,
+     * so for the root the lookup returns this very object and the {@link #mayHang} below refuses it
+     * for being its own ancestor. Two guards, one observable.
      */
     private Channel fallbackParent(Channel channel) {
         if(channel.getParent() != null) return null;
-        if(channel.getId() == ROOT_CHANNEL_ID) return null;
         Channel root = mChannels.get(ROOT_CHANNEL_ID);
+        // The root's own frame need not have arrived first. Without the stub the walk below starts
+        // at null, terminates immediately and reports the hang as allowed, and the channel is left
+        // with the null parent this whole method exists to avoid.
         if(root == null) root = createStubChannel(ROOT_CHANNEL_ID);
+        // And the fallback is a hang like any other, so it is asked the same question. Handing the
+        // root back unchecked is how the fallback itself would build the cycle the guard exists to
+        // refuse: for a frame that names the root as its own parent, the root would become its own
+        // parent and every walk over the tree would stop returning.
         return mayHang(channel, root) ? root : null;
     }
 

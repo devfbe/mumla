@@ -49,15 +49,17 @@ class ModelHandlerFrameTest {
 
     @Before
     fun setUp() {
-        handler = ModelHandler(
-            ApplicationProvider.getApplicationContext(),
-            NoopObserver(),
-            SilentLogger,
-            null,
-            null,
-        )
+        handler = newHandler()
         handler.messageChannelState(channelState(0, name = "Root"))
     }
+
+    private fun newHandler() = ModelHandler(
+        ApplicationProvider.getApplicationContext(),
+        NoopObserver(),
+        SilentLogger,
+        null,
+        null,
+    )
 
     @Test
     fun aChannelWhoseParentIsUnknownIsHungOffAStubInsteadOfKillingTheProtocolThread() {
@@ -199,6 +201,61 @@ class ModelHandlerFrameTest {
         assertThat(handler.getChannel(tooDeep)!!.getParent()).isEqualTo(handler.getChannel(0))
         assertThat(channelsBelowRoot().map { it.getId() }).contains(tooDeep)
         assertThat(usersBelowRoot().map { it.getName() }).containsExactly("someone")
+    }
+
+    /**
+     * The three tests below are the inside of the fallback. Before them only its call site was
+     * covered: swapping the whole fallback back for "leave it parentless" killed three tests, while
+     * every single branch within it could be deleted with the suite staying green - a function that
+     * reads as tested from one step up, with nothing in it tested at all.
+     *
+     * First branch: a channel the server has already placed keeps its place. The refusal is about
+     * the frame, not about the channel, and moving a channel out of a subtree the user is looking
+     * at - for a frame we are refusing precisely because we do not believe it - is worse than
+     * ignoring that frame.
+     */
+    @Test
+    fun aRefusedFrameLeavesAChannelWhereTheServerAlreadyPutIt() {
+        handler.messageChannelState(channelState(2, parent = 0, name = "two"))
+        handler.messageChannelState(channelState(5, parent = 2, name = "five"))
+
+        handler.messageChannelState(channelState(5, parent = 5, name = "five"))
+
+        assertThat(handler.getChannel(5)!!.getParent()).isEqualTo(handler.getChannel(2))
+        assertThat(handler.getChannel(0)!!.getSubchannels().map { it.getId() }).containsExactly(2)
+    }
+
+    /**
+     * Second branch: the root's own frame need not have arrived before the refused one. Nothing in
+     * the protocol promises that order, and without the stub the fallback hands back the null it
+     * exists to avoid - the channel and its users vanish from the list exactly as they did before
+     * the fallback was written.
+     */
+    @Test
+    fun aFrameRefusedBeforeTheRootFrameArrivedStillLandsUnderTheRoot() {
+        val early = newHandler()
+
+        early.messageChannelState(channelState(5, parent = 5, name = "five"))
+
+        assertThat(early.getChannel(0)).isNotNull()
+        assertThat(early.getChannel(5)!!.getParent()).isEqualTo(early.getChannel(0))
+    }
+
+    /**
+     * Third branch: the fallback is a hang like any other and is asked the same question. A frame
+     * naming the root as its own parent is refused, and handing the root back unchecked would make
+     * the root its own parent - the fallback building the very cycle the guard refused.
+     *
+     * Timed out rather than left to run: a cycle here does not fail an assertion, it makes every
+     * walk over the tree stop returning, and a mutation sweep with no per-test deadline reports
+     * nothing at all for it.
+     */
+    @Test(timeout = 30_000)
+    fun aRootThatNamesItselfAsItsParentIsNotHungUnderItself() {
+        handler.messageChannelState(channelState(0, parent = 0, name = "Root"))
+
+        assertThat(handler.getChannel(0)!!.getParent()).isNull()
+        assertThat(handler.getChannel(0)!!.getSubchannels()).isEmpty()
     }
 
     /** Every channel `ChannelListAdapter` would reach, in the order it reaches them. */
