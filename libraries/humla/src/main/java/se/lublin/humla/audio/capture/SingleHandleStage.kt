@@ -51,10 +51,20 @@ package se.lublin.humla.audio.capture
  *
  * Spec §4.1 again: `HandleTable::get()` dereferences without validating, so handing an RNNoise
  * handle to the APM bridge is a segfault with no Java stack trace, and the checkable place for
- * that is Kotlin-side. So the handle is one private field of one owner, it is never returned by
- * any member, and a subclass only ever sees it as an argument it is expected to pass straight
- * back to its own bridge. `SingleHandleStageTest` pins that as a property of the class rather
- * than of today's members.
+ * that is Kotlin-side. So the handle is one private field of one owner, no member of this class
+ * mentions a `long` at all except the three callbacks, and a subclass only ever sees it as an
+ * argument it is expected to pass straight back to its own bridge. `SingleHandleStageTest` pins
+ * that as a property of the class rather than of today's members.
+ *
+ * **What that does not cover, stated rather than implied:** the handle reaches this constructor
+ * from the subclass, so a subclass that wants a second copy can keep the argument it passed up.
+ * Nothing here prevents that, and no test in this package can see it. Moving creation into the
+ * base (`protected abstract fun createHandle(): Long`) was considered and rejected: it would call
+ * a subclass method from this constructor, before the subclass's own `val api` is assigned, so
+ * every stage would have to create its handle from a half-built object -- and it would not even
+ * close the hole, because the subclass still produces the value and can keep it on the way out.
+ * What *is* closed structurally is the route: [process], [release] and [analyzeReverseStream] are
+ * all final, so a copied handle has no unlocked entry point left to travel through.
  *
  * ### Life cycle
  *
@@ -85,6 +95,13 @@ abstract class SingleHandleStage protected constructor(handle: Long, what: Strin
         if (handle == 0L) null else onCaptureFrame(handle, frame)
     }
 
+    /**
+     * The field is cleared **before** the free, not after. The two orders differ only when
+     * [onReleaseHandle] throws: with the free first, the throw leaves the field set, and every
+     * later [process] hands a freed handle back to the bridge -- which is a use-after-free with
+     * `HandleTable::get()` dereferencing it unvalidated. Cleared first, a failed free costs the
+     * leak of one native object and nothing else.
+     */
     final override fun release() = synchronized(lock) {
         val handle = this.handle
         if (handle != 0L) {
@@ -94,11 +111,23 @@ abstract class SingleHandleStage protected constructor(handle: Long, what: Strin
     }
 
     /**
-     * The far-end entry point, under the same lock as [process] and [release]. A stage that
-     * consumes the reverse stream implements [FarEndSink.analyzeReverseStream] by calling this and
-     * overrides [onFarEndFrame]; a stage that does not implements neither.
+     * The far-end entry point, under the same lock as [process] and [release].
+     *
+     * It is declared here, `final`, and *not* as an override: a stage that consumes the reverse
+     * stream declares [FarEndSink] in its supertype list -- this method is what satisfies it -- and
+     * overrides [onFarEndFrame]; a stage that does not declares neither, and its reverse stream is
+     * refused rather than dropped (see [onFarEndFrame]).
+     *
+     * That shape is the point. When the base offered only a `protected farEnd` for the subclass to
+     * wrap, every stage wrote its own `override fun analyzeReverseStream`, and a stage that wrote
+     * `apm.analyzeReverse(myHandle, frame)` there instead compiled, ran, and took no lock at all --
+     * on the playback thread, against a handle the control thread is free to release. The one
+     * unlocked route from a subclass into the native layer was the one line every subclass had to
+     * write. Now there is no such line to write: the entry point is final, so it cannot be
+     * overridden, and the only thing left for a subclass is [onFarEndFrame], which is called with
+     * the lock already held.
      */
-    protected fun farEnd(frame: ShortArray) = synchronized(lock) {
+    fun analyzeReverseStream(frame: ShortArray) = synchronized(lock) {
         val handle = this.handle
         if (handle != 0L) onFarEndFrame(handle, frame)
     }

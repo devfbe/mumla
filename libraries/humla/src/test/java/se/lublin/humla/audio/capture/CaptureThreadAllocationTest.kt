@@ -56,7 +56,6 @@ class CaptureThreadAllocationTest {
         override fun onCaptureFrame(handle: Long, frame: ShortArray): Float? = probability
         override fun onFarEndFrame(handle: Long, frame: ShortArray) = Unit
         override fun onReleaseHandle(handle: Long) = Unit
-        override fun analyzeReverseStream(frame: ShortArray) = farEnd(frame)
     }
 
     @Test
