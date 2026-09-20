@@ -75,6 +75,9 @@ public class MumlaService extends HumlaService implements
     private MumlaConnectionNotification mNotification;
     private MumlaMessageNotification mMessageNotification;
     private MumlaReconnectNotification mReconnectNotification;
+
+    /** Headset / AVRCP media buttons while connected (stream P). */
+    private MumlaMediaSession mMediaSession;
     /** Channel view overlay. */
     private MumlaOverlay mChannelOverlay;
     /** Proximity lock for handset mode. */
@@ -316,6 +319,9 @@ public class MumlaService extends HumlaService implements
             mTTS = new TextToSpeech(this, mTTSInitListener);
 
         mTalkReceiver = new TalkBroadcastReceiver(this);
+
+        mMediaSession = new MumlaMediaSession(this, new HumlaMediaKeyTarget(this), mSettings);
+        mMediaSession.attach(this);
     }
 
     @Override
@@ -342,6 +348,7 @@ public class MumlaService extends HumlaService implements
             e.printStackTrace();
         }
 
+        mMediaSession.detach(this);
         unregisterObserver(mObserver);
         if(mTTS != null) mTTS.shutdown();
         mMessageLog = null;
