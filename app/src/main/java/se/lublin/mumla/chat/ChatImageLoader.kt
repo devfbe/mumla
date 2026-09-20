@@ -54,12 +54,17 @@ sealed class ImageResult {
  * Concurrent loads of the same key share one fetch and one decode, so a fling that binds the same
  * source in several rows does the work once. The shared work runs in the loader's own scope rather
  * than in the first caller's, because otherwise the row that scrolls away first cancels the row that
- * is still on screen. It is abandoned when its last caller is gone, so a fast fling does not
- * download everything it flew past.
+ * is still on screen. When its last caller is gone the job is cancelled — but cancellation is
+ * cooperative and [ImageFetcher.fetch] blocks, so it never observes it: a download that has already
+ * started runs to the end. What the cancellation buys is that no *further* work is queued and that
+ * the result is dropped rather than cached; what bounds a fast fling is the permit below.
  *
- * At most [maxConcurrentLoads] fetches run at a time. Peak memory is bounded per fetch by
+ * At most [maxConcurrentLoads] loads hold a permit at a time, and a permit covers the decode as well
+ * as the fetch, so decodes are serialised to the same number. [fetchBytes] called on its own — the
+ * share path — takes no permit at all and is not counted here. Peak memory per fetch is bounded by
  * [HttpImageFetcher]'s byte cap, so the number in flight is part of the memory bound, not a
- * throughput knob.
+ * throughput knob; the arithmetic, including the terms this sentence does not cover, is in the
+ * stream's ledger rather than here, because it depends on the heap the device gives the app.
  */
 class ChatImageLoader(
     private val fetcher: ImageFetcher = HttpImageFetcher(),
@@ -133,6 +138,14 @@ class ChatImageLoader(
      * Raw bytes of [source]. Throws [ImageFetchException]. Runs on [ioDispatcher].
      * Remembers the last result (one entry) so displaying an image and then sharing it does not
      * download it twice.
+     *
+     * **The array is the loader's**, exactly as [ImageResult.Ready.bitmap] is: it is the remembered
+     * entry itself, handed out without a copy because copying five mebibytes per call is the disease
+     * this class treats. Read it, never write to it.
+     *
+     * Takes no permit from the concurrency gate: [load] already holds one while it calls this, and
+     * the gate is not reentrant. A caller that uses this directly is therefore not counted against
+     * [maxConcurrentLoads].
      */
     suspend fun fetchBytes(source: String): ByteArray {
         // ImageSource.parse enforces the same cap and is the authoritative one — it is where the
@@ -179,6 +192,9 @@ class ChatImageLoader(
             // `isCompleted`, not `isActive`: a lazily created job has not started yet, and a caller
             // that arrived in that window has to join it rather than start a second fetch. Both a
             // finished and a cancelled job are completed, and neither may be handed to a new caller.
+            // Untested, deliberately: a cancelled entry is removed inside the same critical section
+            // that cancels it, and re-awaiting a finished one returns the same result, so no
+            // observable failure could be built for dropping this. It is a guard, not a covered path.
             val running = inFlight[key]?.takeIf { !it.job.isCompleted }
             val shared = running ?: Shared().also {
                 inFlight[key] = it
@@ -226,6 +242,9 @@ class ChatImageLoader(
 
     /** How long [result] may be served from the cache; `null` means do not cache it at all. */
     private fun ttlMillisFor(result: ImageResult): Long? = when {
+        // Unreachable by construction — loadThumbnail returns Skipped before anything can be cached
+        // — and kept anyway, because the alternative if it ever became reachable is caching "this
+        // view had not been measured yet" for the life of the process.
         result is ImageResult.Skipped -> null
         result is ImageResult.Failed && result.error == ImageError.EXTERNAL_DISABLED -> null
         result is ImageResult.Failed &&

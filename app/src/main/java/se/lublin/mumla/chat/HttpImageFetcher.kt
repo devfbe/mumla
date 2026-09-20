@@ -141,6 +141,10 @@ class HttpImageFetcher(
             val code = connection.responseCode
             if (code in 300..399 && code != HttpURLConnection.HTTP_NOT_MODIFIED) {
                 if (expired.get()) throw ImageFetchException(ImageError.TIMEOUT)
+                // Two Location headers: getHeaderField returns the last one on JDK 21 and the
+                // platform is free to pick either. Not a way past anything — whichever it is goes
+                // through allowedUrl like every other hop — but it is the platform's choice, not
+                // ours, and no test pins it because pinning it would pin the platform.
                 return Hop.Redirect(connection.getHeaderField("Location"))
             }
             if (code !in 200..299) throw ImageFetchException(ImageError.NETWORK)
