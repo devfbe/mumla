@@ -88,7 +88,7 @@ change minimal.
 | A Core | `HumlaService`, `net/HumlaConnection`, `net/HumlaTCP`, `net/HumlaUDP`, `net/HumlaNetworkThread`, `net/CryptState`, `protocol/ModelHandler`, `util/HumlaCallbacks`, `service/MumlaService`, `service/MumlaConnectionNotification`, `service/MumlaReconnectNotification`, `model/*`, new `service/ChatMessageLog` (bounded log, D5 acceptance lives here) |
 | B Audio | `protocol/AudioHandler`, `audio/**` (input, output, encoders, input modes, `BluetoothScoReceiver`), `src/main/cpp/**` (after Foundation created it), `preference/AudioSettingsFragment`, `res/xml/settings_audio.xml`, audio keys in `Settings.kt` (additive only) |
 | D Chat & UI | `channel/ChannelChatFragment`, `util/MumbleImageGetter`, `util/BitmapUtils`, `util/HtmlUtils`, `service/IChatMessage`, `service/MumlaMessageNotification`, chat layouts, new image viewer, new `chat/` package |
-| P Platform & controls | `app/MumlaActivity` (permissions, MediaSession wiring), `channel/ChannelListFragment` (Bluetooth menu), `channel/ChannelListAdapter` (rebuild coalescing, see 4.1), `channel/ChannelFragment` (talk button), `service/MumlaOverlay` (talk button, see 4.1), new `service/MumlaMediaSession`, non-audio keys in `Settings.kt` (additive only), `res/xml/settings_general.xml`, `AndroidManifest.xml`, battery-optimization dialog |
+| P Platform & controls | `app/MumlaActivity` (permissions, MediaSession wiring), `channel/ChannelListFragment` (Bluetooth menu), `channel/ChannelListAdapter` (rebuild coalescing, see 4.1), `channel/ChannelFragment` (talk button), `service/MumlaOverlay` (talk button, see 4.1), `channel/ChannelSearchProvider` (see 4.1), new `service/MumlaMediaSession`, non-audio keys in `Settings.kt` (additive only), `res/xml/settings_general.xml`, `AndroidManifest.xml`, battery-optimization dialog |
 
 Rules for shared files: `Settings.java` is converted to `Settings.kt` by
 Foundation (F3); streams B and P only add keys and accessors. `MumlaService`
@@ -773,6 +773,32 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `FileProvider` that is carefully locked down. Stream A owns `MumlaService`.
   Either narrow it (a signature permission, or `exported="false"` if nothing
   external binds) or write down why it stays open.
+- **Two leftovers from the adapter work, now owned (P, task 8).**
+  (a) `ChannelSearchProvider` walks the channel tree from a **binder thread** —
+  `channelSearch()`/`userSearch()` recurse over `getSubchannels()`/`getUsers()`
+  while the protocol thread writes, with no `catch` anywhere. Stream A's guarded
+  model covers the race (those getters now return copies), so this is not a live
+  crash — but the file was in **no** ownership table, and it carries the same
+  defect the adapter work just removed: `:135` calls `getSubchannelUserCount()`
+  **twice per suggestion row**. Not on the main thread, so it is cheaper, but it
+  is the same shape.
+  (b) `MumlaOverlay` and `ChannelListAdapter` **disagree about icon priority**. The
+  channel list orders self-deafened → server-deafened → self-muted →
+  server-muted; the overlay orders self-deafened → self-muted → server-deafened →
+  server-muted. A user who is server-deafened and self-muted therefore shows a
+  **different icon in the two lists**. Both chains are now pinned, so the
+  divergence is documented rather than merely present — but nobody ever decided
+  it. Decide it in task 8, which opens the overlay anyway.
+- **Correction to the adapter ruling above: the cause named there is not the main
+  one.** Measured in a paired run on one machine: coalescing rebuilds took a
+  5 000-event sync from **1 376.9 ms to 0.4 ms**, while the O(n·depth)→O(n) count
+  fix makes a single rebuild only about twice as fast (351.6 µs → 165.5 µs). The
+  33 179 count visits per rebuild are cheap — field reads, no allocation. Where
+  `getSubchannelUserCount()` really dominates is a place the ruling never
+  mentioned: **`onBindViewHolder` called it twice per channel row**, i.e. two full
+  subtree walks for every row bound **while scrolling**. That is now zero, because
+  the counts ride on the node.
+
 - **Coalesce the adapter's own rebuilds (P, task 6).** With the observer queue
   bounded, the largest remaining main-thread cost is not in the model any more —
   it is `ChannelListAdapter.updateChannels()`, which is O(n·depth) and runs *in
