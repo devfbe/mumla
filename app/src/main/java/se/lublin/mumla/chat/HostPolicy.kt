@@ -23,9 +23,17 @@ fun interface HostPolicy {
 /**
  * Refuses hosts that lead back into the device, its local network or the carrier's: loopback, the
  * unspecified address, link-local (which includes the 169.254.169.254 metadata address), site-local
- * and IPv6 unique-local ranges, multicast, and the three IPv4 ranges the JDK has no predicate for —
+ * and IPv6 unique-local ranges, multicast, and three IPv4 ranges the JDK has no predicate for —
  * 100.64.0.0/10 (carrier-grade NAT, which on mobile data reaches other subscribers of the same
  * carrier), 198.18.0.0/15 (benchmarking) and 255.255.255.255 (limited broadcast).
+ *
+ * Those three are the ones that reach somewhere; they are **not** every range the JDK is missing a
+ * predicate for. 240.0.0.0/4 (reserved), the rest of 0.0.0.0/8, 192.0.0.0/24 (IETF protocol
+ * assignments) and the three documentation ranges are equally unpredicated and equally not the
+ * public internet, and none of them is checked here. That is deliberate: this class exists to stop
+ * a chat message from aiming the phone at something it can actually reach, and an address in those
+ * ranges fails on its own as [ImageError.NETWORK]. It is a list of what is dangerous, not a list of
+ * what is non-public.
  *
  * The URL comes from another chat participant, so `<img src="https://192.168.1.1/admin?reset=1">`
  * is a request the phone makes from inside its own network on a stranger's say-so, and the timing
@@ -79,9 +87,11 @@ class PublicHostsOnly(
             isMulticastAddress || isUniqueLocalIpv6() || isReservedIpv4()
 
     /**
-     * The IPv4 ranges that are not the public internet and that the JDK has no predicate for:
-     * 100.64.0.0/10 (carrier-grade NAT), 198.18.0.0/15 (benchmarking) and 255.255.255.255.
-     * An IPv4-mapped address arrives here as four bytes, so those are covered too.
+     * Three IPv4 ranges that reach something the phone should not be aimed at and that the JDK has
+     * no predicate for: 100.64.0.0/10 (carrier-grade NAT), 198.18.0.0/15 (benchmarking) and
+     * 255.255.255.255. Not an enumeration of every unpredicated non-public range — see the class
+     * KDoc for the ones left out on purpose. An IPv4-mapped address arrives here as four bytes, so
+     * those are covered too.
      */
     private fun InetAddress.isReservedIpv4(): Boolean {
         val bytes = address
