@@ -53,7 +53,7 @@ class ToggleInputMode : IInputMode {
         }
     }
 
-    override fun shouldTransmit(pcm: ShortArray, length: Int): Boolean = inputOn
+    override fun shouldTransmit(pcm: ShortArray, length: Int, vadProbability: Float?): Boolean = inputOn
 
     override fun waitForInput() {
         toggleLock.withLock {

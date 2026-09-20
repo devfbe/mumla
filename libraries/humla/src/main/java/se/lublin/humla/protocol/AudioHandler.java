@@ -427,7 +427,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
 
     @Override
     public void onAudioInputReceived(short[] frame, int frameSize) {
-        boolean talking = mInputMode.shouldTransmit(frame, frameSize);
+        boolean talking = mInputMode.shouldTransmit(frame, frameSize, null);
         talking &= !mMuted;
 
         if (mTalking ^ talking) {

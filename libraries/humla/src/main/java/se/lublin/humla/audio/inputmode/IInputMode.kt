@@ -20,13 +20,16 @@ package se.lublin.humla.audio.inputmode
 /** A talk state engine, providing information regarding when it is appropriate to send audio. */
 interface IInputMode {
     /**
-     * Called when new input is received from the audio recording thread.
+     * Called for every frame after preprocessing (spec B1), never gated on the talking state.
      *
-     * @param pcm PCM data.
-     * @param length the number of shorts in the PCM data.
+     * @param pcm the preprocessed PCM frame.
+     * @param length the number of valid shorts in [pcm].
+     * @param vadProbability the preprocessor chain's voice probability for this frame, or null
+     *   when no stage in the chain has an opinion. A mode that reads it must treat null as "no
+     *   information", never as "no voice".
      * @return true if the input should be transmitted.
      */
-    fun shouldTransmit(pcm: ShortArray, length: Int): Boolean
+    fun shouldTransmit(pcm: ShortArray, length: Int, vadProbability: Float?): Boolean
 
     /**
      * Called before any audio processing to wait for a change in input availability. For example,
