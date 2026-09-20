@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.graphics.Typeface
 import android.os.Looper
+import android.util.TypedValue
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.res.ResourcesCompat
@@ -459,10 +460,107 @@ class ChannelListAdapterRebuildTest {
 
         // All four corners of `hasSubchannels || subtreeUserCount > 0`. The last one is what
         // separates that condition from an exclusive or, and only a test that writes it can.
-        assertThat(expandToggleVisibilityOf(adapter, 1)).isEqualTo(View.VISIBLE)  // subchannel
-        assertThat(expandToggleVisibilityOf(adapter, 4)).isEqualTo(View.VISIBLE)  // user
-        assertThat(expandToggleVisibilityOf(adapter, 2)).isEqualTo(View.VISIBLE)  // both
-        assertThat(expandToggleVisibilityOf(adapter, 3)).isEqualTo(View.INVISIBLE) // neither
+        // Both effects the condition has on the view are read back: the same corner decides the
+        // visibility and the enabled state, and a test that reads only one of them leaves the
+        // other free.
+        assertThat(expandToggleOf(adapter, 1).visibility).isEqualTo(View.VISIBLE)   // subchannel
+        assertThat(expandToggleOf(adapter, 4).visibility).isEqualTo(View.VISIBLE)   // user
+        assertThat(expandToggleOf(adapter, 2).visibility).isEqualTo(View.VISIBLE)   // both
+        assertThat(expandToggleOf(adapter, 3).visibility).isEqualTo(View.INVISIBLE) // neither
+
+        assertThat(expandToggleOf(adapter, 1).isEnabled).isTrue()
+        assertThat(expandToggleOf(adapter, 4).isEnabled).isTrue()
+        assertThat(expandToggleOf(adapter, 2).isEnabled).isTrue()
+        assertThat(expandToggleOf(adapter, 3).isEnabled).isFalse()
+    }
+
+    /**
+     * Which way the chevron points. Nothing read it back before, so swapping the two drawables
+     * survived: the arrow would promise the opposite of what the tap does, and the list would
+     * still behave correctly underneath it.
+     */
+    @Test
+    fun theExpandToggleChevronShowsWhetherTheRowIsOpen() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+
+        assertThat(expandToggleImageOf(adapter, 2)).isEqualTo(R.drawable.ic_action_expanded)
+        assertThat(expandToggleImageOf(adapter, 1)).isEqualTo(R.drawable.ic_action_collapsed)
+
+        clickExpandToggle(adapter, adapter.getChannelPosition(2))
+        clickExpandToggle(adapter, adapter.getChannelPosition(1))
+
+        assertThat(expandToggleImageOf(adapter, 2)).isEqualTo(R.drawable.ic_action_collapsed)
+        assertThat(expandToggleImageOf(adapter, 1)).isEqualTo(R.drawable.ic_action_expanded)
+    }
+
+    /** The row says whose row it is. */
+    @Test
+    fun aRowCarriesTheNameOfTheChannelOrUserItShows() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+
+        assertThat(channelRowTextOf(adapter, 2, R.id.channel_row_name)).isEqualTo("channel-2")
+        assertThat(userRowTextOf(adapter, 100, R.id.user_row_name)).isEqualTo("user-100")
+    }
+
+    /**
+     * The indent is what makes the flat list read as a tree, and it is the only thing that does.
+     * A user row sits one step further in than the channel it belongs to.
+     */
+    @Test
+    fun aRowIsIndentedByItsDepthInTheTree() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+
+        assertThat(channelRowPaddingOf(adapter, 0)).isEqualTo(indentPx(0))
+        assertThat(channelRowPaddingOf(adapter, 2)).isEqualTo(indentPx(1))
+        assertThat(channelRowPaddingOf(adapter, 4)).isEqualTo(indentPx(2))
+        assertThat(userRowPaddingOf(adapter, 200)).isEqualTo(indentPx(1))
+        assertThat(userRowPaddingOf(adapter, 100)).isEqualTo(indentPx(3))
+    }
+
+    /**
+     * A long press anywhere on a row is the row's overflow button. Only the delegation is pinned:
+     * what the button itself then opens is a `ChannelMenu` / `UserMenu` popup, which is another
+     * file's behaviour, so the listener is replaced before the press rather than mocked around.
+     */
+    @Test
+    fun aLongPressOnARowIsATapOnItsOverflowButton() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+
+        val rows = listOf(
+            rowOf(adapter, adapter.getChannelPosition(2)) to R.id.channel_row_more,
+            rowOf(adapter, adapter.getUserPosition(100)) to R.id.user_row_more,
+        )
+
+        for ((row, overflowId) in rows) {
+            var taps = 0
+            row.findViewById<View>(overflowId).setOnClickListener { taps++ }
+
+            assertThat(row.performLongClick()).isTrue()
+
+            assertThat(taps).isEqualTo(1)
+        }
+    }
+
+    /** Tapping a row is how a chat target is chosen; each row reports its own subject. */
+    @Test
+    fun tappingARowReportsTheChannelOrTheUserItShows() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        val channels = mutableListOf<Int>()
+        val users = mutableListOf<Int>()
+        adapter.setOnChannelClickListener { channels.add(it.id) }
+        adapter.setOnUserClickListener { users.add(it.session) }
+
+        rowOf(adapter, adapter.getChannelPosition(2)).performClick()
+        rowOf(adapter, adapter.getChannelPosition(1)).performClick()
+        rowOf(adapter, adapter.getUserPosition(100)).performClick()
+
+        assertThat(channels).containsExactly(2, 1).inOrder()
+        assertThat(users).containsExactly(100)
     }
 
     /** Everything the row reads out of the session is skipped while disconnected. */
@@ -531,16 +629,24 @@ class ChannelListAdapterRebuildTest {
             .typeface?.style ?: Typeface.NORMAL
     }
 
+    /**
+     * The setting is read at bind time, so a test that binds a fresh holder after flipping it
+     * proves only that the new row is right -- the rows already on screen are the ones the user
+     * is looking at, and they are redrawn by the notification, not by the flag. Deleting that
+     * notification survived until this test read it back.
+     */
     @Test
     fun theUserCountIsHiddenWhenTheSettingIsOff() {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids, showUserCount = false)
+        val changes = countChanges(adapter)
 
         assertThat(userCountViewAt(adapter, adapter.getChannelPosition(0)).visibility)
             .isEqualTo(View.GONE)
 
         adapter.setShowChannelUserCount(true)
 
+        assertThat(changes()).isEqualTo(1)
         assertThat(userCountViewAt(adapter, adapter.getChannelPosition(0)).visibility)
             .isEqualTo(View.VISIBLE)
     }
@@ -849,14 +955,40 @@ class ChannelListAdapterRebuildTest {
         return newcomer
     }
 
-    private fun expandToggleVisibilityOf(adapter: ChannelListAdapter, channelId: Int): Int {
-        val position = adapter.getChannelPosition(channelId)
+    /** A bound row, by list position. */
+    private fun rowOf(adapter: ChannelListAdapter, position: Int): View {
         val parent = recyclerView()
         val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(position))
         adapter.onBindViewHolder(holder, position)
-        return holder.itemView.findViewById<android.widget.ImageView>(R.id.channel_row_expand)
-            .visibility
+        return holder.itemView
     }
+
+    private fun expandToggleOf(adapter: ChannelListAdapter, channelId: Int) =
+        rowOf(adapter, adapter.getChannelPosition(channelId))
+            .findViewById<android.widget.ImageView>(R.id.channel_row_expand)
+
+    private fun expandToggleImageOf(adapter: ChannelListAdapter, channelId: Int): Int =
+        shadowOf(expandToggleOf(adapter, channelId).drawable).createdFromResId
+
+    private fun channelRowTextOf(adapter: ChannelListAdapter, channelId: Int, id: Int): String =
+        rowOf(adapter, adapter.getChannelPosition(channelId))
+            .findViewById<android.widget.TextView>(id).text.toString()
+
+    private fun userRowTextOf(adapter: ChannelListAdapter, session: Int, id: Int): String =
+        rowOf(adapter, adapter.getUserPosition(session))
+            .findViewById<android.widget.TextView>(id).text.toString()
+
+    private fun channelRowPaddingOf(adapter: ChannelListAdapter, channelId: Int): Int =
+        rowOf(adapter, adapter.getChannelPosition(channelId))
+            .findViewById<View>(R.id.channel_row_title).paddingLeft
+
+    private fun userRowPaddingOf(adapter: ChannelListAdapter, session: Int): Int =
+        rowOf(adapter, adapter.getUserPosition(session))
+            .findViewById<View>(R.id.user_row_title).paddingLeft
+
+    private fun indentPx(level: Int): Int = (level * TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP, 25f, context.resources.displayMetrics
+    )).toInt()
 
     private fun userCountViewAt(adapter: ChannelListAdapter, position: Int): android.widget.TextView {
         val parent = recyclerView()

@@ -223,6 +223,10 @@ class ChannelListAdapter(
                 }
             }
 
+            // Measured unpinned: replacing this listener body with a no-op survives the whole
+            // class. What it produces is a popup owned by ChannelMenu, and a test that asserted
+            // one appeared would be asserting that file's behaviour. The long press that reaches
+            // it *is* pinned, so the two are not one guard between them.
             cvh.moreButton.setOnClickListener { v ->
                 ChannelMenu(context, channel, humlaService, database, fragmentManager).showPopup(v)
             }
@@ -271,6 +275,7 @@ class ChannelListAdapter(
                 uvh.userHolder.paddingBottom,
             )
 
+            // Measured unpinned, same single mutation and same reason as the channel row's.
             uvh.moreButton.setOnClickListener { v ->
                 UserMenu(
                     context, user, humlaService as MumlaService, fragmentManager, this
