@@ -235,6 +235,11 @@
     <!-- Spoken by a screen reader for the picture filling the viewer. Not "Open image": that one
          labels the thumbnail in the chat log, which opens this screen when it is activated. -->
     <string name="chat_image_viewer_image">Image</string>
+    <!-- Spoken by a screen reader for a thumbnail in the chat log. Activating it opens the
+         fullscreen viewer, which labels its own picture with chat_image_viewer_image. -->
+    <string name="chat_image_open">Open image</string>
+    <!-- Stands in for the second and further images of one message, which are not rendered. -->
+    <string name="chat_image_placeholder">[image]</string>
 
     <!-- Used only by flavor "goog" -->
     <string name="donate_dialog_title_goog">Enjoying Mumla?</string>
