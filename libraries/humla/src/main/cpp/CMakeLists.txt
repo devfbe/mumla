@@ -98,3 +98,22 @@ target_compile_options(celt11 PRIVATE ${CELT_C_OPTIONS})
 add_library(humla_celt11 SHARED jni_celt11.cpp)
 target_link_libraries(humla_celt11 PRIVATE celt11 log)
 target_link_options(humla_celt11 PRIVATE ${HUMLA_LINK_OPTIONS})
+
+# ---------------------------------------------------------------- rnnoise 0.2 + webrtc apm 2.1
+# Stream B: noise suppression (RNNoise) and echo cancellation (WebRTC APM). Both subdirectories
+# were added to the repository before this point and were, until now, compiled only by the host
+# ctest in tests/ -- these four lines are the first time either is linked for Android.
+#
+# HUMLA_LINK_OPTIONS applies here for the same reason it applies to the five targets above:
+# Android 15+ rejects a shared library that is not 16 KB page aligned, and that is a run-time
+# failure on the device, not a build error.
+add_subdirectory(rnnoise)
+add_subdirectory(webrtc_apm)
+
+add_library(humlarnnoise SHARED jni_rnnoise.cpp)
+target_link_libraries(humlarnnoise PRIVATE humla_rnnoise log)
+target_link_options(humlarnnoise PRIVATE ${HUMLA_LINK_OPTIONS})
+
+add_library(humlaapm SHARED jni_webrtc_apm.cpp)
+target_link_libraries(humlaapm PRIVATE humla_apm log)
+target_link_options(humlaapm PRIVATE ${HUMLA_LINK_OPTIONS})
