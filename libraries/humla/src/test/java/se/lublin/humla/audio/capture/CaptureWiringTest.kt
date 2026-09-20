@@ -18,17 +18,21 @@
 package se.lublin.humla.audio.capture
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.fakes.FakeResampler
 import se.lublin.humla.audio.capture.fakes.FakeRnnoiseApi
+import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.util.HumlaLogger
 
 /**
- * The two assurances the wiring commit carries, and nothing else: **the preprocessed frame is what
- * reaches the consumer**, and **a chain that cannot be built does not take capture down with it.**
+ * The assurances the wiring carries, and nothing else: **the preprocessed frame is what reaches the
+ * consumer**, **the mixed playback buffer reaches the canceller as frames of the APM's own length,
+ * before the capture frame that carries their echo**, and **a chain that cannot be built takes
+ * neither capture nor playback down with it.**
  *
  * The seam is here rather than in `AudioHandler` because that class cannot be instantiated on the
  * host: its constructor opens an `AudioRecord` and its encoders `System.loadLibrary`. The six lines
@@ -50,13 +54,24 @@ class CaptureWiringTest {
     private fun factory(rnnoise: () -> se.lublin.humla.audio.native.RnnoiseApi) =
         CapturePreprocessorFactory(rnnoiseApi = rnnoise, log = { warnings += it })
 
+    private fun apmFactory(apm: FakeWebRtcApmApi) = CapturePreprocessorFactory(
+        rnnoiseApi = { FakeRnnoiseApi() }, apmApi = { apm }, log = { warnings += it },
+    )
+
+    private fun wire(
+        noise: NoiseSuppressionMode,
+        echo: EchoCancellationMode,
+        factory: CapturePreprocessorFactory,
+    ) = CaptureWiring.wire(48000, ContinuousInputMode(), 1f, noise, echo, logger, factory)
+
     /** What the user gets by default: one stage, RNNoise, and its probability on every frame. */
     @Test
     fun `the default chain denoises every frame with rnnoise`() {
         val api = FakeRnnoiseApi(probability = 0.9f, onProcess = { it.fill(11) })
-        val pipeline = CaptureWiring.capturePipeline(
-            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.RNNOISE, logger, factory { api },
-        )
+        val pipeline = CaptureWiring.wire(
+            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.RNNOISE,
+            EchoCancellationMode.NONE, logger, factory { api },
+        ).pipeline
 
         val frame = pipeline.process(ShortArray(FRAME) { 1000 }, FRAME)
 
@@ -73,10 +88,11 @@ class CaptureWiringTest {
      */
     @Test
     fun `a chain that cannot be built leaves capture running and says so`() {
-        val pipeline = CaptureWiring.capturePipeline(
-            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.RNNOISE, logger,
+        val pipeline = CaptureWiring.wire(
+            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.RNNOISE,
+            EchoCancellationMode.NONE, logger,
             factory { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumlarnnoise.so")) },
-        )
+        ).pipeline
 
         val frame = pipeline.process(ShortArray(FRAME) { 1234 }, FRAME)
 
@@ -89,13 +105,129 @@ class CaptureWiringTest {
     /** Off is off: no stage, and no warning about a stage nobody asked for. */
     @Test
     fun `no noise suppression builds no stage and warns about nothing`() {
-        val pipeline = CaptureWiring.capturePipeline(
-            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE, logger,
+        val pipeline = CaptureWiring.wire(
+            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE,
+            EchoCancellationMode.NONE, logger,
             factory { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumlarnnoise.so")) },
-        )
+        ).pipeline
 
         assertThat(pipeline.process(ShortArray(FRAME) { 7 }, FRAME).probability).isNull()
         assertThat(warnings).isEmpty()
+    }
+
+    // ------------------------------------------------------------------ the far-end reference
+
+    /**
+     * What the user gets once the default says `webrtc`: the APM is in the chain **and** the
+     * playback path has somewhere to put the reference. Both halves in one assertion, because
+     * either one alone is the configuration task 2 measured at -0.62 dB.
+     */
+    @Test
+    fun `the webrtc canceller gets both a capture stage and a far-end tap`() {
+        val apm = FakeWebRtcApmApi()
+
+        val wiring = wire(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC, apmFactory(apm))
+        wiring.pipeline.process(ShortArray(FRAME) { 1000 }, FRAME)
+
+        assertThat(apm.createdWith).isEqualTo(48000 to WebRtcApmConfig.FOR_ECHO_CANCELLATION)
+        assertThat(apm.capturedLengths).containsExactly(FRAME)
+        assertThat(wiring.farEnd).isNotNull()
+        assertThat(warnings).isEmpty()
+    }
+
+    /**
+     * The length the sink sees is the **APM's frame**, not the playback buffer `AudioOutput` hands
+     * over -- that one is `minOf(minBufferSize, FRAME_SIZE * 12)` samples and has nothing to do
+     * with 10 ms. Getting it wrong upward is the silent direction: the bridge accepts a long frame
+     * and truncates it, so `rejectedFarEndFrames` stays at 0 while about 21 dB is gone.
+     */
+    @Test
+    fun `the mixed playback buffer arrives as frames of the apm's own length`() {
+        val apm = FakeWebRtcApmApi()
+        val wiring = wire(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC, apmFactory(apm))
+
+        val mix = ShortArray(1000) { it.toShort() }
+        wiring.farEnd!!.push(mix, mix.size)
+
+        assertThat(apm.renderFrames.map { it.size }).containsExactly(FRAME, FRAME).inOrder()
+        assertThat(apm.renderFrames[0][0]).isEqualTo(0.toShort())
+        assertThat(apm.renderFrames[1][0]).isEqualTo(480.toShort())
+        assertWithMessage("the 40 samples left over must wait, not be padded into a third frame")
+            .that(apm.renderFrames).hasSize(2)
+    }
+
+    /**
+     * The relation the two streams have to stand in, driven end to end for the first time: the
+     * far-end frame in, then the near-end frame that will carry its echo. Nothing in the JVM
+     * enforces it -- the capture and playback threads are independent -- so what this pins is that
+     * the wiring puts no *reordering* between the two calls. The real ordering is bought elsewhere
+     * (`AudioOutput` pushes before `AudioTrack.write`, i.e. before the samples have even been
+     * queued for the speaker) and absorbed by AEC3's delay estimator; this is the layer where a
+     * chunker that buffered a frame too long, or a chain that fed the reference to a different
+     * instance, would show up.
+     */
+    @Test
+    fun `each tick feeds the reference before the capture frame`() {
+        val calls = mutableListOf<String>()
+        val apm = FakeWebRtcApmApi(onCapture = { calls += "capture" }, onRender = { calls += "render" })
+        val wiring = wire(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC, apmFactory(apm))
+
+        repeat(3) {
+            wiring.farEnd!!.push(ShortArray(FRAME) { 7 }, FRAME)
+            wiring.pipeline.process(ShortArray(FRAME) { 3 }, FRAME)
+        }
+
+        assertThat(calls)
+            .containsExactly("render", "capture", "render", "capture", "render", "capture")
+            .inOrder()
+    }
+
+    /** The other canceller. One setting, two values: the platform effect builds nothing here. */
+    @Test
+    fun `the system canceller builds no apm and no tap`() {
+        val apm = FakeWebRtcApmApi()
+
+        val wiring = wire(NoiseSuppressionMode.NONE, EchoCancellationMode.ANDROID, apmFactory(apm))
+
+        assertWithMessage("two cancellers on one signal is worse than one")
+            .that(apm.createdWith).isNull()
+        assertThat(wiring.farEnd).isNull()
+        assertThat(warnings).isEmpty()
+    }
+
+    /**
+     * The second hard requirement, for the half that did not have one: an APM that cannot be built
+     * leaves **playback** running too. `farEnd` is null rather than a tap that throws, which is what
+     * makes `AudioOutput`'s null check the whole of the fallback on the playback thread.
+     */
+    @Test
+    fun `an apm that cannot be built leaves capture and playback running and says so`() {
+        val apm = FakeWebRtcApmApi().apply { failCreate = true }
+
+        val wiring = wire(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC, apmFactory(apm))
+        val frame = wiring.pipeline.process(ShortArray(FRAME) { 1234 }, FRAME)
+
+        assertThat(wiring.farEnd).isNull()
+        assertThat(frame.samples.toSet()).containsExactly(1234.toShort())
+        assertThat(frame.transmit).isTrue()
+        assertThat(warnings.any { it.contains("echo cancellation (webrtc)") }).isTrue()
+    }
+
+    /** The same fallback through the other door: the `.so` that is not on the device at all. */
+    @Test
+    fun `a missing apm library is a skipped stage rather than a dead microphone`() {
+        val wiring = CaptureWiring.wire(
+            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC,
+            logger,
+            CapturePreprocessorFactory(
+                apmApi = { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumlaapm.so")) },
+                log = { warnings += it },
+            ),
+        )
+
+        assertThat(wiring.farEnd).isNull()
+        assertThat(wiring.pipeline.process(ShortArray(FRAME) { 5 }, FRAME).length).isEqualTo(FRAME)
+        assertThat(warnings.any { it.contains("echo cancellation (webrtc)") }).isTrue()
     }
 
     // ------------------------------------------------------------------ the resampler
@@ -104,8 +236,9 @@ class CaptureWiringTest {
     fun `capture at 48 kHz needs no resampler`() {
         val built = mutableListOf<Pair<Int, Int>>()
 
-        CaptureWiring.capturePipeline(
-            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE, logger, factory { FakeRnnoiseApi() },
+        CaptureWiring.wire(
+            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE, EchoCancellationMode.NONE,
+            logger, factory { FakeRnnoiseApi() },
         ) { from, to -> built += from to to; FakeResampler(1) }
 
         assertThat(built).isEmpty()
@@ -119,9 +252,10 @@ class CaptureWiringTest {
     @Test
     fun `capture below 48 kHz gets a resampler up to the codec rate`() {
         val built = mutableListOf<Pair<Int, Int>>()
-        val pipeline = CaptureWiring.capturePipeline(
-            16000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE, logger, factory { FakeRnnoiseApi() },
-        ) { from, to -> built += from to to; FakeResampler(3) }
+        val pipeline = CaptureWiring.wire(
+            16000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE, EchoCancellationMode.NONE,
+            logger, factory { FakeRnnoiseApi() },
+        ) { from, to -> built += from to to; FakeResampler(3) }.pipeline
 
         val frame = pipeline.process(ShortArray(160) { 5 }, 160)
 

@@ -36,6 +36,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import se.lublin.humla.audio.capture.FarEndFrameChunker;
 import se.lublin.humla.exception.AudioInitializationException;
 import se.lublin.humla.exception.NativeAudioException;
 import se.lublin.humla.model.TalkState;
@@ -61,9 +62,22 @@ public class AudioOutput implements Runnable, AudioOutputSpeech.TalkStateListene
     private AudioOutputListener mListener;
     private final IAudioMixer<float[], short[]> mMixer;
     private ExecutorService mDecodeExecutorService;
+    /**
+     * The far-end reference for AEC3, or null when the WebRTC canceller is not in the capture
+     * chain -- which includes the case where it was asked for and could not be built. Written once
+     * in the constructor and read only by the playback thread in {@link #run()}.
+     */
+    private final FarEndFrameChunker mFarEnd;
 
-    public AudioOutput(AudioOutputListener listener) {
+    /**
+     * @param farEnd where every mixed buffer is handed over a second time, on its way to the
+     *               speaker. It belongs to this thread: {@link FarEndFrameChunker} is not
+     *               thread-safe and one chunker serves one playback thread, while the sink behind
+     *               it takes the one lock that also covers the capture thread.
+     */
+    public AudioOutput(AudioOutputListener listener, FarEndFrameChunker farEnd) {
         mListener = listener;
+        mFarEnd = farEnd;
         mMainHandler = new Handler(Looper.getMainLooper());
         mDecodeExecutorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         mPacketLock = new ReentrantLock();
@@ -136,6 +150,15 @@ public class AudioOutput implements Runnable, AudioOutputSpeech.TalkStateListene
 
         while(mRunning) {
             if(fetchAudio(mix, 0, mBufferSize)) {
+                // The same samples the speaker gets, handed to the canceller before the write
+                // rather than after it: write() blocks until the track has room, and every
+                // millisecond the reference spends waiting here is a millisecond it is later than
+                // the capture frame that will carry its echo. The chunker copies what it takes, so
+                // the APM's render-side processing -- which may modify a frame in place -- cannot
+                // reach this buffer on its way to AudioTrack.
+                if (mFarEnd != null) {
+                    mFarEnd.push(mix, mBufferSize);
+                }
                 mAudioTrack.write(mix, 0, mBufferSize);
             } else {
                 Log.v(TAG, "Pausing thread.");
