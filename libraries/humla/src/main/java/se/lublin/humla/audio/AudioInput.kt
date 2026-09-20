@@ -18,194 +18,188 @@
 package se.lublin.humla.audio
 
 import android.Manifest
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.audiofx.AcousticEchoCanceler
+import android.os.Process
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import se.lublin.humla.audio.capture.AndroidAudioRecordSource
+import se.lublin.humla.audio.capture.CaptureRequest
+import se.lublin.humla.audio.capture.CaptureState
+import se.lublin.humla.audio.capture.EchoCancellationMode
+import se.lublin.humla.audio.capture.PcmCaptureSource
 import se.lublin.humla.exception.AudioInitializationException
-import se.lublin.humla.protocol.AudioHandler
 
 /**
- * Created by andrew on 23/08/13.
+ * Owns the capture thread -- the one bare `Thread` the audio path is allowed (spec section 2) --
+ * and pumps 10 ms frames from a [PcmCaptureSource] to [listener]. Nothing else: the recorder, the
+ * android audio effects and the device routing live behind the source, and the preprocessing,
+ * detection and encoding above the listener.
  *
- * Mechanically converted from Java; behaviour is unchanged, including the defects the next commit
- * removes (unsynchronised start/stop, a non-volatile `recording` flag, an unbounded `join()`, a
- * `sampleRate` getter that dereferences a field `shutdown()` nulls out, and a listener that is
- * handed the whole reused buffer whatever the read count was).
+ * **Thread ownership, because this class is nothing but that.** [startRecording], [stopRecording]
+ * and [shutdown] are `synchronized` on this instance and are the only writers of [thread];
+ * [recording] is `@Volatile` because the capture thread reads it every frame while another thread
+ * writes it. `AudioHandler` additionally wraps its own calls in `synchronized (mInput)`, which is
+ * the same monitor and reentrant. Nothing the capture thread touches takes this monitor, so the
+ * bounded join inside it cannot deadlock against the loop -- that ordering is the reason
+ * [listener] is called outside any lock this class holds.
+ *
+ * **Three corrections to the Java original, all of them race conditions it had from the start:**
+ * - `mRecording` was a plain `boolean` read by the capture thread and written by the main one.
+ * - `stopRecording()` joined **without a timeout** while `AudioHandler` held a lock the UI thread
+ *   wants, so one wedged `AudioRecord.read` froze the app rather than one thread. Spec B8 asks for
+ *   `stop()` before `join(2000)` and for the timeout to log and carry on.
+ * - `getSampleRate()` read `mAudioRecord.getSampleRate()` and `shutdown()` set `mAudioRecord` to
+ *   null, so the getter threw for every caller after a disconnect. The rate is read once now.
  */
-class AudioInput
-@RequiresPermission(Manifest.permission.RECORD_AUDIO)
-@Throws(AudioInitializationException::class)
-constructor(
+class AudioInput(
     private val listener: AudioInputListener,
-    audioSource: Int,
-    targetSampleRate: Int,
-    private val echoCancellationMethod: String,
-) : Runnable {
+    private val source: PcmCaptureSource,
+    private val stateListener: ((CaptureState) -> Unit)? = null,
+    private val joinTimeoutMs: Long = DEFAULT_JOIN_TIMEOUT_MS,
+) {
+    /**
+     * The bridge `AudioHandler.java:138` still calls. It dies with that file in task 11; until then
+     * it is the only production caller and the reason the source seam has a real implementation
+     * behind it at all.
+     */
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
+    @Throws(AudioInitializationException::class)
+    constructor(
+        listener: AudioInputListener,
+        audioSource: Int,
+        targetSampleRate: Int,
+        echoCancellationMethod: String,
+    ) : this(
+        listener,
+        AndroidAudioRecordSource.Factory().open(
+            CaptureRequest(
+                audioSource = audioSource,
+                targetSampleRate = targetSampleRate,
+                echo = EchoCancellationMode.fromPreferenceValue(echoCancellationMethod),
+            ),
+        ),
+    )
+
     fun interface AudioInputListener {
+        /**
+         * @param frame the **reused** capture buffer: valid until this call returns, never kept.
+         * @param frameSize always the whole buffer. A read that produced fewer samples is padded
+         *   with silence rather than shortened, because the encoder needs a full frame -- see the
+         *   padding in [loop].
+         */
         fun onAudioInputReceived(frame: ShortArray, frameSize: Int)
     }
 
-    private var audioRecord: AudioRecord? = null
-    private var aec: AcousticEchoCanceler? = null
-    private val mFrameSize: Int
-    private var recordThread: Thread? = null
+    /** The rate the source really opened at, cached before anything can release it. */
+    val sampleRate: Int = source.sampleRate
+
+    /** Samples per 10 ms at [sampleRate]. */
+    val frameSize: Int = sampleRate / FRAMES_PER_SECOND
+
+    @Volatile
     private var recording = false
 
-    init {
-        // Attempt to construct an AudioRecord with the target sample rate first.
-        // If it fails, keep producing AudioRecord instances until we find one that initializes
-        // correctly. Maybe one day Android will let us probe for supported sample rates, as we
-        // aren't even guaranteed that 44100hz will work across all devices.
-        for (i in 0 until SAMPLE_RATES.size + 1) {
-            val rate = if (i == 0) targetSampleRate else SAMPLE_RATES[i - 1]
-            try {
-                audioRecord = setupAudioRecord(rate, audioSource)
-                if (enableEchoCancellation()) {
-                    Log.w(TAG, "echo cancellation enabled: $echoCancellationMethod")
-                }
-                break
-            } catch (e: AudioInitializationException) {
-                // Continue iteration, probing for a supported sample rate.
-            }
-        }
-
-        if (audioRecord == null) throw AudioInitializationException("Unable to initialize AudioInput.")
-
-        // FIXME: does not work properly if 10ms frames cannot be represented as integers
-        mFrameSize = (sampleRate * AudioHandler.FRAME_SIZE) / AudioHandler.SAMPLE_RATE
-    }
-
-    private fun enableEchoCancellation(): Boolean {
-        if (echoCancellationMethod == "system" /* android.media.audiofx.AcousticEchoCanceler */) {
-            if (!AcousticEchoCanceler.isAvailable()) {
-                Log.e(TAG, "could not enable system AEC: not available")
-                return false
-            }
-            aec?.release()
-            val created = AcousticEchoCanceler.create(audioRecord!!.audioSessionId)
-            if (created == null) {
-                Log.e(TAG, "could not enable system AEC: create failed")
-                return false
-            }
-            created.enabled = true
-            aec = created
-            return true
-        } else if (echoCancellationMethod == "none") {
-            Log.w(TAG, "echocancellation not enabled by user")
-        } else {
-            Log.w(TAG, "ignoring unknown echocancellation method: $echoCancellationMethod")
-        }
-        return false
-    }
+    private var thread: Thread? = null
 
     /**
-     * Starts the recording thread.
-     * Not thread-safe.
+     * @throws IllegalStateException if a capture thread is still alive. Two threads reading one
+     *   source is not a recoverable state, and [isRecording] cannot be used to rule it out: that
+     *   flag is about intent and is already false when [stopRecording] has given up on a join.
      */
+    @Synchronized
     fun startRecording() {
+        check(thread?.isAlive != true) { "the capture thread from the previous run is still alive" }
         recording = true
-        recordThread = Thread(this).also { it.start() }
+        source.setSilenceListener { silenced ->
+            stateListener?.invoke(if (silenced) CaptureState.Silenced else CaptureState.Active)
+        }
+        thread = Thread(::loop, THREAD_NAME).also { it.start() }
     }
 
     /**
-     * Stops the record loop after the current iteration, joining it.
-     * Not thread-safe.
+     * Stops the source first -- which is what makes a blocked read return -- then interrupts and
+     * joins with a bound. The interrupt is not for the read (a native one ignores it) but for
+     * whatever the listener is blocked on: `ToggleInputMode.waitForInput` parks the capture thread
+     * until the talk key is pressed, and without the interrupt the loop never comes back to notice
+     * that [recording] is false.
+     *
+     * @return whether the capture thread really exited. `false` means it is still running against
+     *   a source [shutdown] is about to release, and the caller must not free native state the
+     *   capture path still reaches (spec B8: the timeout "logs and releases anyway", which is a
+     *   decision about the recorder, not a licence for everything downstream of it).
      */
-    fun stopRecording() {
-        if (!recording) return
+    @Synchronized
+    fun stopRecording(): Boolean {
+        val t = thread ?: return true
         recording = false
+        source.stop()
+        t.interrupt()
         try {
-            recordThread?.interrupt()
-            recordThread?.join()
-            recordThread = null
+            t.join(joinTimeoutMs)
         } catch (e: InterruptedException) {
-            e.printStackTrace()
+            // Our caller is being cancelled. Do not swallow it the way the Java original did:
+            // every frame above this one has to be able to see it too.
+            Thread.currentThread().interrupt()
         }
+        val exited = !t.isAlive
+        if (!exited) Log.e(TAG, "capture thread still running after $joinTimeoutMs ms; releasing anyway")
+        thread = if (exited) null else t
+        source.setSilenceListener(null)
+        return exited
     }
 
-    /**
-     * Stops the record loop and waits on it to finish.
-     * Releases native audio resources.
-     * NOTE: It is not safe to call startRecording after.
-     */
-    fun shutdown() {
-        stopRecording()
-        if (audioRecord != null) {
-            aec?.release()
-            aec = null
-            audioRecord?.release()
-            audioRecord = null
-        }
+    /** @return what [stopRecording] answered; the source is released either way (spec B8). */
+    @Synchronized
+    fun shutdown(): Boolean {
+        val exited = stopRecording()
+        source.release()
+        return exited
     }
 
+    /** Whether capture is *meant* to be running. A timed-out join leaves this false and a thread alive. */
     fun isRecording(): Boolean = recording
 
-    /** @return the sample rate used by the AudioRecord instance. */
-    val sampleRate: Int get() = audioRecord!!.sampleRate
-
-    /** @return the frame size used, varying depending on the sample rate selected. */
-    val frameSize: Int get() = mFrameSize
-
-    override fun run() {
-        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
-
-        Log.i(TAG, "started")
-
-        val record = audioRecord ?: return
-        record.startRecording()
-
-        if (record.state != AudioRecord.STATE_INITIALIZED) return
-
-        val audioBuffer = ShortArray(mFrameSize)
-        // We loop when the 'recording' instance var is true instead of checking audio record state
-        // because we want to always cleanly shutdown.
-        while (recording) {
-            val shortsRead = record.read(audioBuffer, 0, mFrameSize)
-            if (shortsRead > 0) {
-                listener.onAudioInputReceived(audioBuffer, mFrameSize)
-            } else {
-                Log.e(TAG, "Error fetching audio! AudioRecord error $shortsRead")
-            }
+    private fun loop() {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+        try {
+            source.start()
+        } catch (e: IllegalStateException) {
+            Log.e(TAG, "capture could not be started", e)
+            stateListener?.invoke(CaptureState.Error("capture could not be started: ${e.message}"))
+            return
         }
-
-        record.stop()
-
-        Log.i(TAG, "stopped")
+        Log.i(TAG, "capturing at $sampleRate Hz in frames of $frameSize")
+        val buffer = ShortArray(frameSize)
+        while (recording) {
+            val read = source.read(buffer, frameSize)
+            if (read < 0) {
+                // A read racing our own shutdown answers a negative code because the recorder is
+                // gone. That is not news, and AudioHandler puts every CaptureState.Error in front
+                // of the user (stream A8), so reporting it means a warning on every disconnect.
+                if (recording) {
+                    Log.e(TAG, "capture read error $read")
+                    stateListener?.invoke(CaptureState.Error("capture read error $read"))
+                }
+                break
+            }
+            // Nothing was read, so there is nothing to deliver: a blocking AudioRecord answers 0
+            // when it is no longer recording, and the padding below would turn that into 10 ms of
+            // silence the microphone never produced.
+            if (read == 0) continue
+            // The buffer is allocated once, so after a short read its tail is the previous frame --
+            // audio that was already sent, going out again. No `if (read < frameSize)` in front of
+            // this: `fill` over an empty range is a no-op, and a cost guard here would be a branch
+            // no test can tell from its absence.
+            buffer.fill(0, read, frameSize)
+            listener.onAudioInputReceived(buffer, frameSize)
+        }
+        source.stop()
+        Log.i(TAG, "capture stopped")
     }
 
     companion object {
-        private val TAG: String = AudioInput::class.java.name
-
-        @JvmField
-        val SAMPLE_RATES = intArrayOf(48000, 44100, 16000, 8000)
-
-        @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-        @Throws(AudioInitializationException::class)
-        private fun setupAudioRecord(sampleRate: Int, audioSource: Int): AudioRecord {
-            val minBufferSize = AudioRecord.getMinBufferSize(
-                sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
-            )
-            if (minBufferSize <= 0) {
-                throw AudioInitializationException("Invalid buffer size returned (unsupported sample rate).")
-            }
-
-            val audioRecord = try {
-                AudioRecord(
-                    audioSource, sampleRate, AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT, minBufferSize,
-                )
-            } catch (e: IllegalArgumentException) {
-                throw AudioInitializationException(e)
-            }
-
-            if (audioRecord.state == AudioRecord.STATE_UNINITIALIZED) {
-                audioRecord.release()
-                throw AudioInitializationException("AudioRecord failed to initialize!")
-            }
-
-            return audioRecord
-        }
+        private const val TAG = "AudioInput"
+        private const val THREAD_NAME = "humla-capture"
+        private const val FRAMES_PER_SECOND = 100
+        const val DEFAULT_JOIN_TIMEOUT_MS = 2000L
     }
 }
