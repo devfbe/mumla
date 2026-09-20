@@ -54,18 +54,52 @@ class ActivityInputModeTest {
     }
 
     /**
-     * The length, not the array's size. `AudioInput` hands the capture buffer down whole with the
-     * count of valid samples beside it, so reading `pcm.size` instead of `length` averages the
-     * frame against a tail of zeros and reports a level that is too low -- quietly, and only for
-     * the last frame of a burst.
+     * The length, not the array's size -- **both** the divisor and the loop bound. `AudioInput`
+     * hands the capture buffer down whole with the count of valid samples beside it, so reading
+     * `pcm.size` instead of `length` averages the frame against whatever is past the valid samples
+     * and reports a level that is wrong -- quietly, and only for a short frame.
+     *
+     * **The tail must not be zeros, and this test used to have zeros.** With a zero tail the two
+     * sums are bit-identical, so the assertion held for the wrong reason: it pinned the *divisor*
+     * and left the *loop bound* free, and a mutation of `0 until length` to `pcm.indices` survived
+     * the whole suite. The bracket below is two-sided on purpose -- one assertion cannot separate
+     * a reading that is too low from one that is too high.
+     *
+     * Computed for 480 samples of 3277 followed by 480 of 2000:
+     * - correct, `length = 480`: **0.79167**
+     * - loop bound over the whole array, `length = 480`: **0.80600** (too high; the upper bracket)
+     * - divisor `pcm.size`, `length = 480`: **0.76031** (too low; the lower bracket)
+     * - correct, `length = 960`: **0.77464**
      */
     @Test
     fun `only the first length samples are measured`() {
-        // 480 loud samples then 480 zeros: score 0.7917 over the first half, 0.7603 over both.
         val padded = ShortArray(960)
         for (i in 0 until 480) padded[i] = 3277
+        for (i in 480 until 960) padded[i] = 2000
         assertThat(ActivityInputMode(0.78f).shouldTransmit(padded, 480, null)).isTrue()
+        assertThat(ActivityInputMode(0.80f).shouldTransmit(padded, 480, null)).isFalse()
         assertThat(ActivityInputMode(0.78f).shouldTransmit(padded, 960, null)).isFalse()
+    }
+
+    /**
+     * The same defect in the units it will be met in, and it is not hypothetical: `AudioInput.run`
+     * allocates its capture buffer **once, outside the loop** (`AudioInput.java:202`), so every
+     * short frame arrives in a buffer whose tail still holds the previous frame. Task 8's
+     * `CapturePipeline` opens exactly this dimension -- `a short resampler output is zero-padded`
+     * hands `length = 300` into a 480-sample buffer.
+     *
+     * 300 quiet samples (value 300) in a buffer whose remaining 180 still carry a loud tail
+     * (20000) score **0.5753** read correctly and **0.9322** read over the whole buffer. Against
+     * the same threshold that is silence against shouting: **the microphone opens on a quiet frame
+     * because of audio that is already gone.** Today `AudioInput.java:205-210` shields this by
+     * passing `mFrameSize` rather than `shortsRead`; from task 8 on nothing does.
+     */
+    @Test
+    fun `a short frame is not measured against the previous frame's tail`() {
+        val reused = ShortArray(480) { if (it < 300) 300 else 20000 }
+        assertThat(ActivityInputMode(0.6f).shouldTransmit(reused, 300, null)).isFalse()
+        // And the loud leftovers really are loud: read whole, the same buffer is far over.
+        assertThat(ActivityInputMode(0.6f).shouldTransmit(reused, 480, null)).isTrue()
     }
 
     @Test
