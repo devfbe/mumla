@@ -838,14 +838,24 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `CapturePreprocessorFactory`. Assert the *identity* of what the factory returns,
   not that the output frame is unchanged.
 
-- **`MumlaService` is exported with no permission (A, needs a decision).**
-  `AndroidManifest.xml:84-88`: `android:exported="true"` and no permission
-  attribute, so **any installed app can start or bind the Mumble service**.
-  Pre-existing and possibly deliberate — external clients may rely on it — but it
-  has never been decided, and it sits three lines from the new private
-  `FileProvider` that is carefully locked down. Stream A owns `MumlaService`.
-  Either narrow it (a signature permission, or `exported="false"` if nothing
-  external binds) or write down why it stays open.
+- **`MumlaService` becomes `exported="false"` (P, task 9 — decided).** It is
+  currently `android:exported="true"` with no permission, and `onBind` returns the
+  binder **unconditionally** — no permission check, no caller check. So any
+  installed app that knows the component name, which is public in an open-source
+  app on F-Droid, can bind it and hold `IHumlaService`: disconnect the session,
+  and through it reach the microphone. That is the failure class this whole
+  project has been closing, reachable from another application.
+  Checked before deciding rather than assumed: the service declares **no
+  intent-filter**, so nothing can find it by action; and all three internal
+  binders — `MumlaActivity:401`, `ChannelSearchProvider:97`, `ServerConnectTask:64`
+  — build `new Intent(context, MumlaService.class)`, an explicit component intent,
+  which works unchanged when the service is not exported. Nothing in the tree
+  documents or implies an external client.
+  The residual risk is an undocumented third-party integration binding it today;
+  that is unsupported, and the change is one attribute, trivially reversible if
+  anyone reports it. `AndroidManifest.xml` belongs to Platform, and task 9 is the
+  one that already opens the permission surface.
+
 - **Two leftovers from the adapter work, now owned (P, task 8).**
   (a) `ChannelSearchProvider` walks the channel tree from a **binder thread** —
   `channelSearch()`/`userSearch()` recurse over `getSubchannels()`/`getUsers()`
@@ -955,7 +965,7 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   dereferences without validating; only `release()` checks membership. Passing a
   handle to the bridge that did not issue it is a segfault or silent nonsense
   (measured). Adapters must never mix the RNNoise and APM handles.
-- **Reset the toggle input mode on disconnect (A, at or before task 11).**
+- **Reset the toggle input mode on disconnect (A — DISCHARGED in task 4).**
   `mInputOn` (`ToggleInputMode.java:52`) is never cleared; `mToggleInputMode` is
   created once in `HumlaService.onCreate` (`:269`) and lives as long as the
   service. With stream P's media-key toggle a user can turn transmission on with
