@@ -20,7 +20,7 @@ class ZoomStateTest {
 
     @Test
     fun zoomingAroundTheTopLeftCornerKeepsThatCornerFixed() {
-        val zoomed = ZoomState().scaledBy(2f, 0f, 0f, 400f, 400f)
+        val zoomed = ZoomState().scaledBy(2f, 0f, 0f, 400f, 400f, 200f, 100f)
         assertThat(zoomed.scale).isEqualTo(2f)
         assertThat(zoomed.tx).isEqualTo(200f)
         assertThat(zoomed.ty).isEqualTo(200f)
@@ -28,19 +28,21 @@ class ZoomStateTest {
 
     @Test
     fun zoomingAroundTheCenterDoesNotPan() {
-        val zoomed = ZoomState().scaledBy(3f, 200f, 200f, 400f, 400f)
+        val zoomed = ZoomState().scaledBy(3f, 200f, 200f, 400f, 400f, 200f, 100f)
         assertThat(zoomed.tx).isEqualTo(0f)
         assertThat(zoomed.ty).isEqualTo(0f)
     }
 
+    /** An image with pixels to spare: 1600 wide into 400 is a budget of 4, and 4 is the cap. */
     @Test
-    fun zoomIsCappedAtMaxScale() {
-        assertThat(ZoomState(scale = 4f).scaledBy(2f, 200f, 200f, 400f, 400f).scale).isEqualTo(5f)
+    fun zoomIsCappedAtTheCeilingThisImageEarns() {
+        val zoomed = ZoomState(scale = 3f).scaledBy(2f, 200f, 200f, 400f, 400f, 1600f, 1600f)
+        assertThat(zoomed.scale).isEqualTo(4f)
     }
 
     @Test
     fun zoomingOutStopsAtTheFitScale() {
-        val zoomed = ZoomState(scale = 1f).scaledBy(0.5f, 0f, 0f, 400f, 400f)
+        val zoomed = ZoomState(scale = 1f).scaledBy(0.5f, 0f, 0f, 400f, 400f, 200f, 100f)
         assertThat(zoomed.scale).isEqualTo(1f)
         assertThat(zoomed.tx).isEqualTo(0f)
     }
@@ -102,7 +104,8 @@ class ZoomStateTest {
      */
     @Test
     fun zoomingAnAlreadyPannedStateScalesTheOffsetWithIt() {
-        val zoomed = ZoomState(scale = 2f, tx = 100f, ty = -50f).scaledBy(2f, 200f, 200f, 400f, 400f)
+        val zoomed =
+            ZoomState(scale = 2f, tx = 100f, ty = -50f).scaledBy(2f, 200f, 200f, 400f, 400f, 1600f, 1600f)
         assertThat(zoomed.scale).isEqualTo(4f)
         assertThat(zoomed.tx).isEqualTo(200f)
         assertThat(zoomed.ty).isEqualTo(-100f)
@@ -111,7 +114,8 @@ class ZoomStateTest {
     /** Clamping is the view's business; [ZoomState.scaledBy] deliberately does not do it. */
     @Test
     fun scalingDoesNotClampTheOffsets() {
-        val zoomed = ZoomState(scale = 2f, tx = 1000f, ty = -1000f).scaledBy(1f, 200f, 200f, 400f, 400f)
+        val zoomed =
+            ZoomState(scale = 2f, tx = 1000f, ty = -1000f).scaledBy(1f, 200f, 200f, 400f, 400f, 200f, 100f)
         assertThat(zoomed.tx).isEqualTo(1000f)
         assertThat(zoomed.ty).isEqualTo(-1000f)
     }
@@ -140,7 +144,7 @@ class ZoomStateTest {
     /** A focus point outside the view is not special-cased; the same linear rule holds. */
     @Test
     fun aFocusPointOutsideTheViewIsNotSpecialCased() {
-        val zoomed = ZoomState().scaledBy(2f, -100f, 500f, 400f, 400f)
+        val zoomed = ZoomState().scaledBy(2f, -100f, 500f, 400f, 400f, 200f, 100f)
         assertThat(zoomed.tx).isEqualTo(300f)
         assertThat(zoomed.ty).isEqualTo(-300f)
     }
@@ -148,10 +152,10 @@ class ZoomStateTest {
     /** Zooming by 1 anywhere is a no-op, at both ends of the scale range. */
     @Test
     fun zoomingByOneChangesNothingAtEitherEndOfTheRange() {
-        assertThat(ZoomState(scale = ZoomState.MIN_SCALE).scaledBy(1f, 17f, 23f, 400f, 400f))
+        assertThat(ZoomState(scale = ZoomState.MIN_SCALE).scaledBy(1f, 17f, 23f, 400f, 400f, 8000f, 8000f))
             .isEqualTo(ZoomState(scale = ZoomState.MIN_SCALE))
-        assertThat(ZoomState(scale = ZoomState.MAX_SCALE, tx = 7f).scaledBy(1f, 17f, 23f, 400f, 400f))
-            .isEqualTo(ZoomState(scale = ZoomState.MAX_SCALE, tx = 7f))
+        assertThat(ZoomState(scale = ZoomState.MAX_CEILING, tx = 7f).scaledBy(1f, 17f, 23f, 400f, 400f, 8000f, 8000f))
+            .isEqualTo(ZoomState(scale = ZoomState.MAX_CEILING, tx = 7f))
     }
 
     /**
@@ -173,16 +177,73 @@ class ZoomStateTest {
     }
 
     /**
-     * There is no such thing as an out-of-range zoom state: the range is enforced where the value
-     * is born, not at every place that reads it. NaN fails the same check (no comparison with NaN
-     * is true), so a non-finite scale factor can never poison the view for the rest of its life.
+     * The constructor's bound is a sanity bound, not the zoom ceiling -- the ceiling is per image
+     * and is [ZoomState.maxScale]'s business. What is left here catches arithmetic that has gone
+     * wrong: a zero or negative scale, and NaN, which fails the same check because no comparison
+     * with NaN is true and so can never poison the view's matrix for the rest of its life.
      */
     @Test
-    fun aScaleOutsideTheRangeCannotBeConstructed() {
+    fun aScaleOutsideTheSanityBoundCannotBeConstructed() {
         assertThrows(IllegalArgumentException::class.java) { ZoomState(scale = 0f) }
-        assertThrows(IllegalArgumentException::class.java) { ZoomState(scale = 5.5f) }
+        assertThrows(IllegalArgumentException::class.java) { ZoomState(scale = 101f) }
         assertThrows(IllegalArgumentException::class.java) { ZoomState(scale = Float.NaN) }
-        assertThrows(IllegalArgumentException::class.java) { ZoomState().scaledBy(Float.NaN, 0f, 0f, 400f, 400f) }
+        assertThrows(IllegalArgumentException::class.java) {
+            ZoomState().scaledBy(Float.NaN, 0f, 0f, 400f, 400f, 200f, 100f)
+        }
+    }
+
+    // --- the zoom ceiling, which is a property of the image and not of the state ---
+
+    /**
+     * The budget: zoom until one source pixel covers one screen pixel. 1600 px of source into a
+     * 400 px view is a fit of 0.25, so there are four zooms' worth of pixels in the bitmap.
+     */
+    @Test
+    fun theCeilingIsOneSourcePixelPerScreenPixel() {
+        assertThat(ZoomState.maxScale(400f, 400f, 1600f, 1600f)).isEqualTo(4f)
+        assertThat(ZoomState.maxScale(400f, 400f, 1200f, 1200f)).isEqualTo(3f)
+    }
+
+    /**
+     * An image the fit already had to enlarge has a budget below 1 -- that is every image the
+     * viewer decodes, since `resizeKeepingAspect` never enlarges and the decode is screen-sized.
+     * Refusing to zoom those at all would make a small picture impossible to look at.
+     */
+    @Test
+    fun anImageWithNoPixelsToSpareStillZoomsTwice() {
+        assertThat(ZoomState.maxScale(400f, 400f, 400f, 400f)).isEqualTo(2f) // budget exactly 1
+        assertThat(ZoomState.maxScale(400f, 400f, 10f, 10f)).isEqualTo(2f) // budget 0.025
+    }
+
+    /** And a very large source does not get its full budget: the decoder dropped those pixels. */
+    @Test
+    fun aHugeImageStopsAtTheGlobalCeiling() {
+        assertThat(ZoomState.maxScale(400f, 400f, 8000f, 8000f)).isEqualTo(5f) // budget 20
+    }
+
+    /** The ceiling follows the *limiting* axis, exactly as the fit does. */
+    @Test
+    fun theCeilingIsDecidedByTheSameAxisAsTheFit() {
+        // 4096x1 into 512x512: fit 0.125 by width, budget 8, capped at 5 -- the height is irrelevant.
+        assertThat(ZoomState.maxScale(512f, 512f, 4096f, 1f)).isEqualTo(5f)
+    }
+
+    /**
+     * A zoom above the ceiling is pulled down by [ZoomState.clamped] and not only by [scaledBy],
+     * because a state can arrive at a view without having been through a gesture: restored from a
+     * release whose ceiling was higher, or carried into a different image.
+     */
+    @Test
+    fun clampPullsAZoomAboveTheCeilingBackDown() {
+        val clamped = ZoomState(scale = 5f, tx = 0f, ty = 0f).clamped(400f, 400f, 400f, 400f)
+        assertThat(clamped.scale).isEqualTo(2f)
+    }
+
+    /** And it leaves a zoom inside the ceiling alone, so the clamp cannot become a zoom-out. */
+    @Test
+    fun clampLeavesAZoomInsideTheCeilingAlone() {
+        val clamped = ZoomState(scale = 3.5f, tx = 0f, ty = 0f).clamped(400f, 400f, 1600f, 1600f)
+        assertThat(clamped.scale).isEqualTo(3.5f)
     }
 
     /** Same for the offsets: an infinite pan is a bug, not a position. */

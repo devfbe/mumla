@@ -259,8 +259,10 @@ class ZoomImageViewTest {
         view.touch(MotionEvent.ACTION_DOWN, 1080, 100f, 100f)
         view.touch(MotionEvent.ACTION_UP, 1100, 100f, 100f)
 
-        assertThat(view.state.scale).isEqualTo(2.5f)
-        assertThat(view.state.tx).isGreaterThan(0f) // zoomed towards the upper left corner
+        // 2, not DOUBLE_TAP_SCALE: 200 px of source blown up into a 400 px view has no pixels to
+        // spare, so this image's ceiling is the floor of 2. The offset is asserted exactly, so a
+        // ceiling that stopped being applied would show up here as 150 rather than 100.
+        assertThat(view.state).isEqualTo(ZoomState(2f, 100f, 100f))
 
         view.touch(MotionEvent.ACTION_DOWN, 2000, 100f, 100f)
         view.touch(MotionEvent.ACTION_UP, 2020, 100f, 100f)
@@ -493,20 +495,35 @@ class ZoomImageViewTest {
     }
 
     /**
-     * Saved state is *input*, not an invariant of this process. A zoom stored by an older build --
-     * or by a build whose ceiling was higher, which is exactly what happens when the ceiling drops
-     * -- must land inside the range, not throw out of `restoreHierarchyState` on the first rotation
-     * after the update.
+     * Saved state is *input*, not an invariant of this process: the bytes were written by another
+     * process, possibly by another build. A number [ZoomState] cannot hold at all has to land
+     * inside the range, not throw out of `restoreHierarchyState`.
      */
     @Test
-    fun aSavedZoomAboveTheCeilingIsCoercedRatherThanThrown() {
+    fun aSavedZoomOutsideWhatTheStateCanHoldIsCoercedRatherThanThrown() {
         val view = ZoomImageView(context).apply { id = SAVED_ID }
 
-        view.restoreHierarchyState(savedStateWithScale(9f))
+        view.restoreHierarchyState(savedStateWithScale(900f))
+        view.layout(0, 0, 400, 400)
+        view.setImageBitmap(Bitmap.createBitmap(2000, 2000, Bitmap.Config.ARGB_8888))
+
+        assertThat(view.state.scale).isEqualTo(5f) // this image's ceiling, applied on the way in
+    }
+
+    /**
+     * And the scenario the coercion exists for: the ceiling is per image and can drop between
+     * releases, so a zoom saved by yesterday's build comes back at today's ceiling. Without it a
+     * user with a stored 5x crashed on the first rotation after the update.
+     */
+    @Test
+    fun aSavedZoomAboveThisImagesCeilingComesBackAtTheCeiling() {
+        val view = ZoomImageView(context).apply { id = SAVED_ID }
+
+        view.restoreHierarchyState(savedStateWithScale(5f))
         view.layout(0, 0, 400, 400)
         view.setImageBitmap(Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888))
 
-        assertThat(view.state.scale).isEqualTo(5f)
+        assertThat(view.state.scale).isEqualTo(2f) // 200 px of source into 400: no pixels to spare
     }
 
     /** And a scale or an offset that is not a number at all is dropped, not propagated as NaN. */

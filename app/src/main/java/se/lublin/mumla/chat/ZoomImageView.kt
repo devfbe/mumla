@@ -139,7 +139,10 @@ class ZoomImageView @JvmOverloads constructor(
      *
      * And the zoom is coerced rather than required. The ceiling is per image and can drop between
      * releases, so a stored zoom above it is an ordinary event, not a bug: asserting it here would
-     * turn the first rotation after an update into a crash inside `restoreHierarchyState`.
+     * turn the first rotation after an update into a crash inside `restoreHierarchyState`. What is
+     * coerced to here is only what [ZoomState] can hold at all -- the *ceiling* is applied by
+     * [applyState], once, for every state however it arrived, rather than a second time here where
+     * no test could tell the two apart.
      */
     override fun onRestoreInstanceState(state: Parcelable?) {
         if (state !is Bundle || !state.containsKey(KEY_SCALE)) {
@@ -148,7 +151,7 @@ class ZoomImageView @JvmOverloads constructor(
         }
         super.onRestoreInstanceState(BundleCompat.getParcelable(state, KEY_SUPER, Parcelable::class.java))
         pendingRestore = ZoomState(
-            scale = state.finite(KEY_SCALE).coerceIn(ZoomState.MIN_SCALE, ZoomState.MAX_SCALE),
+            scale = state.finite(KEY_SCALE).coerceIn(ZoomState.MIN_SCALE, ZoomState.ABSOLUTE_MAX_SCALE),
             tx = state.finite(KEY_TX),
             ty = state.finite(KEY_TY),
         )
@@ -166,7 +169,16 @@ class ZoomImageView @JvmOverloads constructor(
      */
     fun zoomBy(factor: Float, focusX: Float, focusY: Float) {
         if (!canFit()) return
-        state = state.scaledBy(factor, focusX, focusY, width.toFloat(), height.toFloat())
+        val d = checkNotNull(drawable)
+        state = state.scaledBy(
+            factor,
+            focusX,
+            focusY,
+            width.toFloat(),
+            height.toFloat(),
+            d.intrinsicWidth.toFloat(),
+            d.intrinsicHeight.toFloat(),
+        )
         applyState()
     }
 
