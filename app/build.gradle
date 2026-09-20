@@ -186,6 +186,7 @@ dependencies {
     implementation libs.androidx.core.ktx
     implementation libs.androidx.documentfile
     implementation libs.androidx.fragment
+    implementation libs.androidx.lifecycle.runtime.ktx
     implementation libs.androidx.recyclerview
     implementation libs.androidx.exifinterface
     implementation libs.material
