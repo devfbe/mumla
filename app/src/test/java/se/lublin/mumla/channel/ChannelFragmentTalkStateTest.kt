@@ -58,7 +58,16 @@ class ChannelFragmentTalkStateTest {
     fun setUp() {
         PreferenceManager
             .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
-            .edit().clear().commit()
+            .edit().clear()
+            // `configureInput` reads three settings, and clearing the preferences answers only two
+            // of them the way this class needs. `isPushToTalkButtonShown` defaults to shown, but
+            // `getInputMethod` defaults to ARRAY_INPUT_METHOD_VOICE, and voice activity hides the
+            // talk view outright -- measured: every test below ran against `visibility == GONE`
+            // and passed anyway, because `touch` dispatches straight at the view and never asks
+            // whether a finger could have landed there. A push-to-talk button is the premise of
+            // the whole class, so it is written here rather than per test.
+            .putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_PTT)
+            .commit()
         session = mockk(relaxed = true)
         service = mockk(relaxed = true) {
             every { isConnected } returns true
@@ -160,6 +169,40 @@ class ChannelFragmentTalkStateTest {
     @Test
     fun hostingTheFragmentReallyBuildsTheButton() {
         assertThat(talkButton).isNotNull()
+    }
+
+    /**
+     * Every other test here reaches the button through `dispatchTouchEvent`, which walks past hit
+     * testing and visibility alike -- so the whole class would stay green against a button the
+     * user can never touch. It is not a hypothetical: `configureInput` hides the talk view unless
+     * the input method is push-to-talk, and `Settings.getInputMethod` defaults to voice activity.
+     * This is the one test that asserts a real finger could arrive at all, and it is asserted on
+     * `pushtotalk_view`, because that is the view `setTalkButtonHidden` writes to; the button's
+     * own visibility never changes and would report VISIBLE inside a GONE parent.
+     */
+    @Test
+    fun theTalkButtonIsVisibleInPushToTalkMode() {
+        val talkView: View = fragment.requireView().findViewById(R.id.pushtotalk_view)
+
+        assertThat(talkView.visibility).isEqualTo(View.VISIBLE)
+    }
+
+    /**
+     * The third setting `configureInput` reads. The test above pins only its default answer --
+     * "not hidden" -- which is the same answer an `isPushToTalkButtonShown()` that had been
+     * deleted would give, so the other value is pinned here: the user hiding the button takes it
+     * away even in push-to-talk mode. Written after setup on purpose, because that also pins the
+     * preference listener that turns the setting into a re-layout while the fragment is up.
+     */
+    @Test
+    fun hidingTheTalkButtonTakesItAwayInPushToTalkMode() {
+        val talkView: View = fragment.requireView().findViewById(R.id.pushtotalk_view)
+
+        PreferenceManager
+            .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
+            .edit().putBoolean(Settings.PREF_PUSH_BUTTON_HIDE_KEY, true).commit()
+
+        assertThat(talkView.visibility).isEqualTo(View.GONE)
     }
 
     /**
