@@ -116,9 +116,15 @@ class HumlaCallbacks @JvmOverloads constructor(
      * overwrites [deliver] in place, which keeps this event's position in the queue and hands the
      * newest payload to the observers. [droppable] marks the tree-shape events the bound may throw
      * away. Both are decided at the raise site, in the overrides at the bottom of this class.
+     *
+     * [deliver] is a plain var although it is written on the producing thread and read on the
+     * delivery thread: every write happens under [lock], and the drain takes [lock] to dequeue,
+     * which orders the write before the read. Once dequeued the event is out of [folded] too, so no
+     * producer can find it to write again. A `@Volatile` here would be a second guard on the same
+     * ordering - one that no test could tell apart from its absence.
      */
     private class Event(
-        @Volatile var deliver: (IHumlaObserver) -> Unit,
+        var deliver: (IHumlaObserver) -> Unit,
         val foldKey: Any?,
         val droppable: Boolean,
     )
