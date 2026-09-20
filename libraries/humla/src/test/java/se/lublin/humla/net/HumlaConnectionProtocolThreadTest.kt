@@ -133,10 +133,12 @@ class HumlaConnectionProtocolThreadTest {
         val tcp = connectAndEstablish()
         val callbacks = HumlaCallbacks()
         val added = AtomicInteger()
+        val lastAdded = AtomicInteger(-1)
         val addedOnMain = AtomicBoolean(true)
         callbacks.registerObserver(object : HumlaObserver() {
             override fun onChannelAdded(channel: IChannel) {
                 added.incrementAndGet()
+                lastAdded.set(channel.id)
                 if (Looper.myLooper() != Looper.getMainLooper()) addedOnMain.set(false)
             }
         })
@@ -178,7 +180,15 @@ class HumlaConnectionProtocolThreadTest {
         assertThat(tasksBeforeProbe).isAtMost(1)
         assertThat(eventsBeforeProbe).isAtMost(HumlaCallbacks.MAX_EVENTS_PER_SLICE)
         mainLooper.idle()
-        assertThat(added.get()).isEqualTo(5_000)
+        // This used to assert all 5 000 arrive. The observer queue is bounded since task 5:
+        // onChannelAdded is a tree-shape event, so the oldest ones are dropped once the backlog
+        // passes MAX_QUEUED_EVENTS, and every observer of it in the tree answers by rebuilding the
+        // list from the model rather than by accumulating a delta. What this test is about -
+        // parsing off the main looper, delivery sliced, callbacks on main - is unchanged; the count
+        // is not. The last channel still arrives, which is the one that triggers the rebuild that
+        // shows all 5 000.
+        assertThat(added.get()).isEqualTo(HumlaCallbacks.MAX_QUEUED_EVENTS)
+        assertThat(lastAdded.get()).isEqualTo(4_999)
         assertThat(addedOnMain.get()).isTrue()
     }
 
