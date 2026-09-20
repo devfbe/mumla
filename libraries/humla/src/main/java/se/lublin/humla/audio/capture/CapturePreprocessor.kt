@@ -23,8 +23,9 @@ package se.lublin.humla.audio.capture
  *
  * Both methods run on the capture thread, so an implementation must neither block on anything it
  * does not itself control nor allocate: a garbage collection that lands between two frames is a
- * dropout the user hears. `CaptureThreadAllocationTest` measures the skeleton at 0 bytes per
- * frame and fails if that changes.
+ * dropout the user hears. `CaptureThreadAllocationTest` measures the skeleton below half an
+ * object per frame -- 0.000 to 0.016 B, i.e. a fixed cost per measuring window rather than per
+ * call -- and fails if that changes.
  *
  * @return this stage's voice probability in [0, 1], or null when the stage has no opinion.
  */

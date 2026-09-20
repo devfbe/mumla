@@ -104,7 +104,8 @@ class CaptureThreadAllocationTest {
      * the opposite of the truth. Measured here -- with only the hot window, swapping the chain's
      * array for a `List` and a for-in survives the test. ART's optimizing compiler does no such
      * elimination for an escaping-by-default interface iterator, so the device would allocate the
-     * iterator the JVM optimised away.
+     * iterator the JVM optimised away. Measured on this tree, three runs out of three: cold
+     * 32.000 B per call (32.119 B once), hot 0.000 B.
      *
      * The cold window measures before C2 gets there, which is where that allocation is still
      * visible; the hot window keeps catching everything escape analysis cannot remove (a `Ref`
@@ -131,13 +132,35 @@ class CaptureThreadAllocationTest {
          * separates "this path allocates something on every frame" from "something allocated once
          * somewhere else on this thread" -- and it is the *claim* the test makes, not a budget.
          *
-         * A window has a noise floor: measured here, the cold window read 0.238 B per call once in
-         * nine runs, which is one stray ~950 B allocation in an 8 000-call window (JIT bookkeeping
-         * on the measuring thread), not a per-call cost. Asserting an exact 0.0 therefore fails
-         * about one run in ten for a reason that has nothing to do with the code under test.
-         * Against that floor this threshold has 30x of room; against the smallest real defect it
-         * would have to catch -- a 32 B iterator per frame, measured at 32.0 B per call with the
-         * array swapped for a list -- it has 4x.
+         * Six consecutive runs on this machine, so the floor is a measurement rather than an
+         * estimate:
+         *
+         * | reading                    | six runs                                     |
+         * |----------------------------|----------------------------------------------|
+         * | instrument baseline        | 976.0 B every run (a `ShortArray(480)` exactly) |
+         * | chain, cold                | 0.000 B x4, 0.119 B x2                       |
+         * | capture path, cold         | 0.016 B every run                            |
+         * | far-end path, cold         | 0.000 B every run                            |
+         * | all three, hot             | 0.000 B every run                            |
+         *
+         * Both non-zero readings are a fixed cost per *window*, not per call: 0.119 x 8 000 is one
+         * stray 952 B allocation, and 0.016 x 8 000 is a reproducible 128 B that the cold window
+         * pays once while it is still interpreting. So **`isEqualTo(0.0)` would have been red in
+         * all six of those runs**, on the capture path, with nothing wrong. That is what the
+         * threshold is for, and it is why it is not a matter of taste.
+         *
+         * Headroom, both directions: 67x above the largest floor reading, and 4x below the
+         * smallest real defect it has to catch -- swapping the chain's array for a `List` and a
+         * for-in measures 32.000 B per call cold (32.119 B once, the same stray on top) and
+         * 0.000 B hot, three runs out of three.
+         *
+         * **What it does not carry:** 8.0 is the right line for "one object per frame". It is not
+         * a line for one object every *three* frames, which reads 5.33 B per call and passes --
+         * about 533 B/s on the audio thread. That is deliberate rather than overlooked: spec §4.1
+         * already accepts about 4.8 KB/s for the `Float?` boxing of three stages, an order of
+         * magnitude more, so a test that failed at 533 B/s would be stricter than the contract it
+         * is testing. A per-frame allocation, which is what the mistakes in this file's KDoc all
+         * produce, is at least 16 B and is caught.
          */
         const val HALF_AN_OBJECT = 8.0
     }
