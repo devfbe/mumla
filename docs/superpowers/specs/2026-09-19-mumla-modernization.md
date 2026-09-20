@@ -829,12 +829,27 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   key that did nothing, the AGC setting that never reached Speex, the preference
   whose default disagreed with its XML. Adding one deliberately is not available.
   **AEC3, AGC2 and the high-pass stay on.** AGC2 in particular, because it is the
-  **only** gain control left in the project — Speex's is dead code in the
-  fixed-point build — so switching it off would silently remove a feature. The
-  high-pass helps the canceller and costs nothing.
+  only **automatic** gain control **inside the capture chain, today** — Speex's is
+  dead code in the fixed-point build (`FIXED_POINT` at `CMakeLists.txt:92,108`,
+  `SET_AGC` under `#ifndef FIXED_POINT`). The axis matters, because the first
+  version of this sentence said "the only gain control left in the project" and
+  that is false in two directions: `AudioHandler.java:454-458` applies
+  `mAmplitudeBoost` on the capture path today, and **B6 requires adding Android's
+  `AutomaticGainControl` as a settings toggle** — a binding sibling requirement the
+  unqualified sentence contradicted. The high-pass helps the canceller and costs
+  nothing.
+  **Second consequence, and it is not cosmetic: the VAD threshold moves.**
+  `humla_apm.cpp:88-91` measures `last_level_dbfs` on the **processed** frame, i.e.
+  after NS and AGC2. With NS off, every non-speech frame measures louder — and in
+  the configuration NS=`NONE` + echo=`WEBRTC`, `LevelToProbability` (−50…−20 dBFS)
+  is the **only** opinion in the chain, which is what task 7 gates transmission on.
+  Task 7 owns re-checking that window against the new levels; it must not meet this
+  as a surprise.
   The constant is named and its test compares against a written-out literal, so
   each of the four flags going the other way turns a test red. That is what makes
-  this decision reversible on purpose rather than by accident.
+  this decision reversible on purpose rather than by accident. Measured: the
+  production change alone turns `the apm is built for echo cancellation at 48 kHz`
+  red, which is the property the decision claims for itself.
 - **Drop `SET_VAD` and `SET_PROB_START` from the Speex stage (B, decided).** Both
   are answered by the library and both are **observably inert for this stage**:
   `vad_enabled`, `speech_prob_start` and `speech_prob_continue` are read in exactly
