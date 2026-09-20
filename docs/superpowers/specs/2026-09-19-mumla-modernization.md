@@ -1336,6 +1336,21 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   preference — otherwise the UI has two truths again, which is the defect class this
   whole project has been removing.
 
+- **Never point a dispatch at a plan file — point it at the brief (process, mine).**
+  The per-task brief is a **byte-identical extract** of that task's plan section, so
+  naming the plan as well is pure redundancy with a 100 000-token downside: the core
+  plan is 412 KB (~103 k tokens), the audio plan 374 KB, while a typical brief is
+  16–25 KB. Measured across the agents run so far: **zero** full reads of any plan
+  and **146** targeted range reads — the agents were doing the right thing on their
+  own, which is luck, not instruction. So the dispatch says: *the brief is the task;
+  if you need another task's section — a downstream contract, a fixture another task
+  will reuse — read that range with `sed -n 'A,Bp'` and never open the whole file.*
+  The same arithmetic applies to what is growing: the spec is 104 KB (~26 k) and is
+  read in full by every agent, which is worth it because every round has produced a
+  finding from it; the stream ledgers are 35–77 KB and climbing, and "read it whole"
+  will stop being the right instruction for them before it stops being right for the
+  spec.
+
 - **A freeze list must be diffed against the task's own Modify list (process, mine).**
   P7's brief said *Modify: `ChannelListFragment.kt`* and my standing rule in the same
   dispatch said that file must stay at null diff. The implementer executed the task,
