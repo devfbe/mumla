@@ -224,7 +224,11 @@ class HumlaTCP @JvmOverloads constructor(
 
     /** Posts onTCPConnectionDisconnect if no one has posted it yet for this connect(). */
     private fun postDisconnectOnce() {
-        if (disconnectReported.compareAndSet(false, true)) deliver { it.onTCPConnectionDisconnect() }
+        if (!disconnectReported.compareAndSet(false, true)) return
+        // Only a callback that was actually queued consumes the token: post() returns false once
+        // the handler's looper has quit, and a report dropped there must not suppress the read
+        // loop's own attempt, or nobody reports the disconnect at all.
+        if (!deliver { it.onTCPConnectionDisconnect() }) disconnectReported.set(false)
     }
 
     private fun enqueueSend(block: () -> Unit) {
@@ -259,9 +263,10 @@ class HumlaTCP @JvmOverloads constructor(
         deliver(block)
     }
 
-    private fun deliver(block: (TCPConnectionListener) -> Unit) {
-        val l = listener ?: return
-        callbackHandler.post { block(l) }
+    /** Returns true if the callback was queued on the handler. */
+    private fun deliver(block: (TCPConnectionListener) -> Unit): Boolean {
+        val l = listener ?: return true // nothing to deliver, so nothing is owed
+        return callbackHandler.post { block(l) }
     }
 
     /** Note that all calls are made on the callback handler this transport was given. */

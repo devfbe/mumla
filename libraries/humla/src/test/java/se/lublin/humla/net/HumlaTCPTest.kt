@@ -308,4 +308,34 @@ class HumlaTCPTest {
         assertThat(listener.next().first).isEqualTo("disconnect")
         assertThat(listener.disconnects.get()).isEqualTo(2)
     }
+
+    /**
+     * Handler.post returns false once its looper has quit - which Task 4's protocol thread can do.
+     * The token that makes the disconnect exactly-once must only be consumed by a callback that was
+     * actually queued, otherwise the one report is dropped on the floor and the read loop, which
+     * would have reported it a moment later, stays suppressed: nobody ever reports.
+     */
+    @Test
+    fun aDisconnectThePostRejectsIsReportedAgainByTheReadLoop() {
+        val attempts = AtomicInteger()
+        val handler = mockk<Handler>()
+        every { handler.post(any()) } answers {
+            attempts.incrementAndGet()
+            firstArg<Runnable>().run() // run inline, so the listener still sees what was attempted
+            false // ... but tell the caller the looper is gone and the message was not queued
+        }
+        val gate = CountDownLatch(1)
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socketFactory.createSocket(any(), any()) } answers { gate.await(); socket }
+        val transport = newTransport(handler)
+
+        transport.connect("example.invalid", 64738, false)
+        transport.disconnect()
+        assertThat(attempts.get()).isEqualTo(1)
+
+        gate.countDown() // the read thread unwinds and finds the report still unclaimed
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        assertThat(attempts.get()).isEqualTo(2)
+        assertThat(listener.disconnects.get()).isEqualTo(2)
+    }
 }

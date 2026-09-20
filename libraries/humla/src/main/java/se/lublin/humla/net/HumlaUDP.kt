@@ -108,10 +108,10 @@ class HumlaUDP @JvmOverloads constructor(
                 try {
                     val buffer = cryptState.decrypt(data, length)
                     if (buffer != null) {
-                        callbackHandler.post { listener.onUDPDataReceived(buffer) }
+                        post { listener.onUDPDataReceived(buffer) }
                     } else if (cryptState.lastGoodElapsed > 5000000 && cryptState.lastRequestElapsed > 5000000) {
                         cryptState.resetLastRequestTime()
-                        callbackHandler.post { listener.resyncCryptState() }
+                        post { listener.resyncCryptState() }
                         Log.d(TAG, "Packet failed to decrypt, discarding and requesting crypt state resync")
                     } else {
                         Log.d(TAG, "Packet failed to decrypt, discarding")
@@ -124,7 +124,7 @@ class HumlaUDP @JvmOverloads constructor(
             // If a stop was requested, then this is a user-triggered disconnection. Report no error.
             if (!stopRequested) {
                 Log.d(TAG, "UDP socket closed unexpectedly")
-                callbackHandler.post { listener.onUDPConnectionError(e) }
+                post { listener.onUDPConnectionError(e) }
             } else {
                 Log.d(TAG, "UDP socket closed in response to user disconnect")
             }
@@ -135,6 +135,14 @@ class HumlaUDP @JvmOverloads constructor(
             sendQueue.clear()
             udpSocket?.close()
         }
+    }
+
+    /**
+     * Posts a listener callback. There is no second route to the listener, so a post the handler
+     * refuses - its looper has quit - is a lost callback; say so instead of dropping it silently.
+     */
+    private fun post(block: () -> Unit) {
+        if (!callbackHandler.post(block)) Log.w(TAG, "Callback dropped, the callback handler is gone")
     }
 
     override fun sendMessage(data: ByteArray, length: Int) {
