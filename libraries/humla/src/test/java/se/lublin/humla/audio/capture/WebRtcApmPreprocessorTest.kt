@@ -108,6 +108,10 @@ class WebRtcApmPreprocessorTest {
         // -35 dBFS is 10 dB above the -45 floor, i.e. 10/21.7 of the adopted -45/-23.3 window.
         assertThat(probability).isWithin(0.0005f).of(0.4608f)
         assertThat(api.capturedLengths).containsExactly(FRAME)
+        // The counting direction of `levelReads`. Two tests below assert it is *zero* after a
+        // refused frame -- and a counter that never counted would pass both of them, which is the
+        // fake reporting a property it cannot see. One read per accepted frame, exactly.
+        assertThat(api.levelReads).isEqualTo(1)
     }
 
     /**
