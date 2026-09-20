@@ -22,6 +22,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.model.Channel
+import se.lublin.humla.model.User
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.testutil.NoopObserver
 import se.lublin.humla.testutil.SilentLogger
@@ -110,8 +112,10 @@ class ModelHandlerFrameTest {
 
         assertThat(handler.getChannel(3)!!.getName()).isEqualTo("self")
         // And the frame is refused rather than believed: a channel that is its own parent is a
-        // one-frame cycle, and the walk over it never returns.
-        assertThat(handler.getChannel(3)!!.getParent()).isNull()
+        // one-frame cycle, and the walk over it never returns. It lands under the root instead of
+        // nowhere, so it is still in the list - see
+        // aRefusedParentLeavesTheChannelAndItsUsersWhereTheListCanReachThem.
+        assertThat(handler.getChannel(3)!!.getParent()).isEqualTo(handler.getChannel(0))
         assertThat(handler.getChannel(3)!!.getSubchannelUserCount()).isEqualTo(0)
     }
 
@@ -135,8 +139,9 @@ class ModelHandlerFrameTest {
     /**
      * The same crash without a cycle: a chain deep enough to exhaust the stack in the recursion,
      * which takes one frame per channel. The tree is cut off at [ModelHandler.MAX_CHANNEL_DEPTH]
-     * instead - a channel below it keeps its name and its place in the map and simply has no
-     * parent, which is what the model already does for any channel whose parent has not arrived.
+     * instead - a channel below it keeps its name, its place in the map and its users, and is hung
+     * under the root, so no *path* is ever longer than the limit while the channel itself is still
+     * in the list.
      */
     @Test
     fun aChainDeeperThanTheTreeMayBeIsCutOffInsteadOfKillingTheMainThread() {
@@ -154,6 +159,58 @@ class ModelHandlerFrameTest {
         }
         assertThat(depth).isAtMost(ModelHandler.MAX_CHANNEL_DEPTH)
     }
+
+    /**
+     * A refused parent must not take the channel out of the list.
+     *
+     * `ChannelListAdapter.updateChannels()` (`:311-328`) walks *down* from its root channels through
+     * `getSubchannels()`, and nothing in `app/` iterates `getChannels()` - so a channel with no
+     * parent is not in the list at all, and neither is any user standing in it, because
+     * `constructNodes` (`:450`) never reaches its `getUsers()`. A `Log.w` is the only trace.
+     *
+     * That is what separates a refused parent from one that has not arrived yet, which is how this
+     * file used to describe it: the not-yet-arrived state heals itself on the next frame, the
+     * refused one never does. The server does not resend a `ChannelState` it has already sent and
+     * nothing here retries, so the channel and its users are gone for the rest of the connection.
+     *
+     * Ruling (spec 4.1): hang a refused channel under the root instead of leaving it parentless.
+     * The tree stays finite and acyclic, and the channel is visible in the wrong place rather than
+     * invisibly absent.
+     */
+    @Test
+    fun aRefusedParentLeavesTheChannelAndItsUsersWhereTheListCanReachThem() {
+        handler.messageChannelState(channelState(5, parent = 7, name = "a"))
+        handler.messageChannelState(channelState(7, parent = 5, name = "b"))
+        User(1, "someone").setChannel(handler.getChannel(7))
+
+        assertThat(channelsBelowRoot().map { it.getId() }).containsExactly(5, 7)
+        assertThat(usersBelowRoot().map { it.getName() }).containsExactly("someone")
+    }
+
+    /** The same for the other refusal: too deep is still in the tree, at the top of it. */
+    @Test
+    fun aChannelRefusedForDepthIsHungUnderTheRootRatherThanDropped() {
+        for (id in 1..ModelHandler.MAX_CHANNEL_DEPTH + 1) {
+            handler.messageChannelState(channelState(id, parent = id - 1, name = "channel $id"))
+        }
+        val tooDeep = ModelHandler.MAX_CHANNEL_DEPTH + 1
+        User(1, "someone").setChannel(handler.getChannel(tooDeep))
+
+        assertThat(handler.getChannel(tooDeep)!!.getParent()).isEqualTo(handler.getChannel(0))
+        assertThat(channelsBelowRoot().map { it.getId() }).contains(tooDeep)
+        assertThat(usersBelowRoot().map { it.getName() }).containsExactly("someone")
+    }
+
+    /** Every channel `ChannelListAdapter` would reach, in the order it reaches them. */
+    private fun channelsBelowRoot(): List<Channel> = buildList {
+        fun walk(channel: Channel) {
+            add(channel)
+            channel.getSubchannels().forEach { walk(it) }
+        }
+        handler.getChannel(0)!!.getSubchannels().forEach { walk(it) }
+    }
+
+    private fun usersBelowRoot(): List<User> = channelsBelowRoot().flatMap { it.getUsers() }
 
     private fun channelState(id: Int, parent: Int? = null, name: String): Mumble.ChannelState =
         Mumble.ChannelState.newBuilder()

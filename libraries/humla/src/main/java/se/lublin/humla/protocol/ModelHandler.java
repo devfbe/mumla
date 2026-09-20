@@ -68,6 +68,13 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
      */
     public static final int MAX_CHANNEL_DEPTH = 256;
 
+    /**
+     * The id Mumble gives the root channel. {@code ChannelListAdapter} starts its walk at this
+     * channel unless the user has pinned others ({@code :94-98}), and {@code HumlaService:922}
+     * hands it out as "the" root, so it is the one place a channel is certain to be seen from.
+     */
+    public static final int ROOT_CHANNEL_ID = 0;
+
     private final Context mContext;
     private final Map<Integer, Channel> mChannels;
     private final Map<Integer, User> mUsers;
@@ -127,8 +134,9 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
     /**
      * Whether {@code channel} may be hung under {@code parent}, which is the one thing a
      * {@code ChannelState} frame can ask for that the model cannot represent. Both refusals leave
-     * the channel where it is - named, in the map, and reachable, with no parent if it never had
-     * one, which is the same state as a channel whose parent has not arrived yet.
+     * the channel named and in the map; where it then goes is {@link #fallbackParent}'s business,
+     * and it is not "no parent" - see there for why that state is not the one a channel whose
+     * parent has not arrived yet is in.
      *
      * <p>A refused parent is a tree that is wrong in one place. An accepted one is a process that
      * dies: the walk over the tree recurses per level and catches nothing that an
@@ -161,6 +169,37 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             }
         }
         return true;
+    }
+
+    /**
+     * Where a channel goes when {@link #mayHang} refuses the parent its frame names, or
+     * {@code null} to leave it where it is.
+     *
+     * <p>Leaving it parentless is not an option, which is the correction to what this file used to
+     * say. A parentless channel is <em>not</em> in the state of one whose parent has not arrived
+     * yet: that one heals itself on the next frame, this one never does, because the server does
+     * not resend a {@code ChannelState} it has already sent and nothing here retries. And the
+     * consequence is bigger than one channel missing its place -
+     * {@code ChannelListAdapter.updateChannels()} ({@code :311-328}) walks only <em>downward</em>
+     * from its root channels through {@code getSubchannels()}, and nothing in the app iterates
+     * {@link #getChannels()}, so a parentless channel is not in the list at all and neither is any
+     * user standing in it: {@code constructNodes} ({@code :450}) never reaches its
+     * {@code getUsers()}. For the rest of the connection, with a {@code Log.w} as the only trace.
+     *
+     * <p>So a refused channel is hung under the {@link #ROOT_CHANNEL_ID root} instead. The tree
+     * stays finite and acyclic - the root is checked by {@link #mayHang} like any other parent -
+     * and the channel stays visible with its users in the wrong place rather than invisibly absent.
+     *
+     * <p>A channel that already has a parent keeps it: it is in the tree, in a place the server
+     * asked for at some point, and moving it to the root on a frame we refuse would be the one
+     * thing worse than ignoring that frame.
+     */
+    private Channel fallbackParent(Channel channel) {
+        if(channel.getParent() != null) return null;
+        if(channel.getId() == ROOT_CHANNEL_ID) return null;
+        Channel root = mChannels.get(ROOT_CHANNEL_ID);
+        if(root == null) root = createStubChannel(ROOT_CHANNEL_ID);
+        return mayHang(channel, root) ? root : null;
     }
 
     public Map<Integer, Channel> getChannels() {
@@ -216,7 +255,8 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             // put a fresh nameless channel over the one this frame has just named and announced.
             Channel parent = mChannels.get(msg.getParent());
             if(parent == null) parent = createStubChannel(msg.getParent());
-            if(mayHang(channel, parent)) {
+            if(!mayHang(channel, parent)) parent = fallbackParent(channel);
+            if(parent != null) {
                 Channel oldParent = channel.getParent();
                 channel.setParent(parent);
                 parent.addSubchannel(channel);
