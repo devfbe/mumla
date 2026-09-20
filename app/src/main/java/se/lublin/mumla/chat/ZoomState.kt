@@ -11,10 +11,15 @@ import android.graphics.Matrix
  * centered position.
  *
  * Two consequences of that choice, both deliberate:
- *  - [scale] survives a configuration change unchanged and still means the same thing, because it
- *    is a ratio, not a pixel count. [tx]/[ty] do not: half a screen is a different number of pixels
- *    after a rotation. [ZoomImageView] therefore restores all three and lets [clamped] pull the
- *    offsets back into the new bounds, which keeps the zoom exactly and the position approximately.
+ *  - [scale] survives a configuration change unchanged, and keeps *meaning* the same thing: "n
+ *    times closer than the fit". It does not keep the image the same size on screen. The fit is
+ *    decided by the limiting axis, the limiting axis changes with the rotation, and the matrix
+ *    scale changes with it -- measured, 2.0 becomes 2.67 for a 4:3 image turned into landscape.
+ *    The invariant that does hold is about that axis: the visible fraction along the limiting axis
+ *    is 1 / [scale]. [tx]/[ty] survive less well again. They are view pixels, [ZoomImageView]
+ *    restores them as such and lets [clamped] pull them into the new bounds, so the offset is kept
+ *    in pixels and not in proportion: a pan halfway to the edge can come out three quarters of the
+ *    way there. "Approximately" means that, and no more.
  *  - the state is the same size for a 100x100 and a 4000x3000 image, so nothing here scales with
  *    the image.
  *

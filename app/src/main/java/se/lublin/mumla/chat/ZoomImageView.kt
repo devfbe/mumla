@@ -25,13 +25,14 @@ import androidx.core.os.BundleCompat
  * Every path that changes the state ends in [applyState], so the invariant "what is on screen is
  * the clamped state" holds after every single event.
  *
- * **Across a configuration change** the zoom factor is kept and the pan position is kept as far as
- * it still exists. That is a deliberate split: [ZoomState.scale] is relative to the fit scale, so
- * "three times as close" means the same thing in portrait and in landscape, while the offsets are
- * view pixels and half a screen is a different number of pixels after a rotation -- they are
- * re-clamped into the new bounds instead of being thrown away. The restored state is applied to the
- * first image that arrives, because a dialog restores its views before the image has finished
- * loading; a *second*, genuinely new image resets to the fit like any other.
+ * **Across a configuration change** the zoom factor is kept exactly and the pan position only
+ * roughly. [ZoomState.scale] is relative to the fit, so "three times as close" still *means* the
+ * same thing after a rotation -- though not the same size on screen, because the fit follows the
+ * limiting axis and the limiting axis changes. The offsets are view pixels and are restored as
+ * pixels, then re-clamped into the new bounds rather than thrown away, so a pan halfway to the edge
+ * can come back three quarters of the way there; [ZoomState] says what that costs. The restored
+ * state is applied to the first image that arrives, because a dialog restores its views before the
+ * image has finished loading; a *second*, genuinely new image resets to the fit like any other.
  *
  * Two things the host has to get right for that to work. The view needs an `android:id`, because
  * View saves no state for a view without one. And nothing may be shown in *this* view before the

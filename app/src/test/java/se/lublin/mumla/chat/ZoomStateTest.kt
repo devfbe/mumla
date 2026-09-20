@@ -72,8 +72,13 @@ class ZoomStateTest {
     // --- the tests above are the plan's; the ones below close gaps it leaves ---
 
     /**
-     * The mirror image of [clampLimitsPanToTheImageEdges]. Without it the mutation
-     * `offset.coerceAtMost(slack)` -- half of the pan clamp deleted -- stays green.
+     * The mirror image of [clampLimitsPanToTheImageEdges].
+     *
+     * Not, as an earlier round claimed, because the mutation `offset.coerceAtMost(slack)` -- half of
+     * the pan clamp deleted -- would otherwise survive: measured, two tests kill it, and one of them
+     * is the plan's own `fitsTheImageCenteredAndAppliesZoomAndPan`. What is true is the weaker
+     * statement, that the plan's **ZoomStateTest on its own** leaves the opposite direction unpinned,
+     * which leaves the arithmetic depending on a view-level test to catch a pure-arithmetic bug.
      */
     @Test
     fun clampLimitsPanToTheOppositeEdgeToo() {

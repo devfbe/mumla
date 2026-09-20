@@ -216,10 +216,19 @@ class ZoomImageViewTest {
      * A symmetric pinch around (100, 100): the focus never moves, so nothing else in the stream can
      * produce the result -- put the focus in the middle of the view instead and tx/ty come out 0.
      *
-     * Two properties of the real ScaleGestureDetector the numbers depend on, both measured here:
-     * the gesture only begins once the span has changed by more than the span slop (2 x 16 px), and
-     * the first onScale after onScaleBegin reports a factor of exactly 1 and re-bases the span.
-     * So 180 -> 260 is the no-op that arms it and 260 -> 360 is the zoom.
+     * Two properties of ScaleGestureDetector the numbers depend on, both measured here: the gesture
+     * only begins once the span has changed by more than the span slop, and the first onScale after
+     * onScaleBegin reports a factor of exactly 1 and re-bases the span. So 180 -> 260 is the no-op
+     * that arms it and 260 -> 360 is the zoom.
+     *
+     * What that is measured against is worth being exact about, because two thirds of it are not
+     * Android. The *logic* is AOSP's and really runs: `ShadowGestureDetector` and
+     * `ShadowScaleGestureDetector` are in the path, but they delegate to the real class through a
+     * reflector. The *constants* are Robolectric's fixtures at density 1.0 -- `ShadowViewConfiguration`
+     * hard-codes touch slop 16 and paging touch slop 32, and the 170 px minimum scaling span sits
+     * behind `robolectric.useRealMinScalingSpan` -- so the 2 x 16 px that decides where this pinch
+     * starts is about 2 x 24 px on a real 3x device. These numbers pin the rule, not the pixel
+     * counts a phone would use.
      */
     @Test
     fun aPinchZoomsAroundTheGestureFocus() {
@@ -704,6 +713,64 @@ class ZoomImageViewTest {
 
         assertThat(thrown).hasMessageThat().contains("same id in the same hierarchy")
         assertThat(view.state).isEqualTo(ZoomState(2f, 200f, 200f))
+    }
+
+    /**
+     * What survives a rotation, measured rather than asserted, because the honest answer is not
+     * "the zoom exactly and the position approximately" in the way that reads.
+     *
+     * [ZoomState.scale] is kept exactly, and it is a ratio, so it keeps *meaning* the same thing:
+     * "twice as close as the fit". It is not the number the matrix ends up with. The fit is decided
+     * by the limiting axis and the limiting axis changes with the rotation, so the image genuinely
+     * appears at a different size -- here the matrix scale goes from 2.0 to 2.67, a third *larger*,
+     * for a state that did not change. The invariant is about the *limiting* axis: the visible
+     * fraction along it stays 1 / scale, and which axis that is changes with the rotation.
+     */
+    @Test
+    fun aRotationKeepsTheZoomFactorButNotTheSizeOnScreen() {
+        val view = ZoomImageView(context)
+        view.setImageBitmap(Bitmap.createBitmap(400, 300, Bitmap.Config.ARGB_8888))
+        view.layout(0, 0, 400, 800) // fit decided by width: 400/400 = 1
+        view.zoomBy(2f, 200f, 400f)
+        assertThat(values(view)[Matrix.MSCALE_X]).isEqualTo(2f)
+
+        view.layout(0, 0, 800, 400) // fit now decided by height: 400/300 = 1.333
+
+        assertThat(view.state.scale).isEqualTo(2f)
+        assertThat(values(view)[Matrix.MSCALE_X]).isWithin(0.001f).of(2.6667f)
+    }
+
+    /**
+     * And the offset is kept in *pixels*, not in proportion, which is a weaker promise than the
+     * word "approximately" suggests. Measured here: a pan sitting halfway to the edge comes out of
+     * the rotation three quarters of the way there, because the pannable range shrank from 200 px
+     * to 133 and the offset did not shrink with it.
+     *
+     * Kept as it is, deliberately. Storing `tx / slack` instead is not the three-line change it
+     * looks like: a real rotation of the viewer goes through save/restore, not through
+     * [onSizeChanged], so the *saved format* would have to carry the normalised offset -- and the
+     * restore parks in `pendingRestore` before any geometry is known, so that parked value could no
+     * longer be a [ZoomState]. That is a change of shape, and it belongs with the viewer in task 8,
+     * which owns the restore conditions anyway. This test is here so the claim in the KDoc is a
+     * measurement and so the day someone does normalise it, it goes red on purpose.
+     */
+    @Test
+    fun aRotationKeepsTheOffsetInPixelsRatherThanInProportion() {
+        val view = ZoomImageView(context)
+        view.setImageBitmap(Bitmap.createBitmap(400, 300, Bitmap.Config.ARGB_8888))
+        view.layout(0, 0, 400, 800)
+        view.zoomBy(2f, 200f, 400f)
+
+        view.panBy(-1000f, 0f)
+        assertThat(view.state.tx).isEqualTo(-200f) // hard against the edge: the range is 200 px
+        view.panBy(100f, 0f)
+        assertThat(view.state.tx).isEqualTo(-100f) // halfway back: 50% of the range
+
+        view.layout(0, 0, 800, 400)
+
+        val rangeAfter = ZoomState(2f, -10_000f, 0f).clamped(800f, 400f, 400f, 300f).tx
+        assertThat(rangeAfter).isWithin(0.01f).of(-133.33f)
+        assertThat(view.state.tx).isEqualTo(-100f) // 75% of the range now, not 50%
     }
 
     private fun savedStateOf(view: ZoomImageView): SparseArray<Parcelable> {
