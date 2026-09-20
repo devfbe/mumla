@@ -352,12 +352,28 @@ flake spec 4.05 warns about; a *ratio* is not. Measured here on a queue scan:
 taking the victim by index costs 1 106 ns at depth 1 024 and 1 695 ns at 8 192 —
 **1.53x for 8x the depth** — while the scan it replaced costs 57 889 ns and
 279 528 ns, **4.83x**. The assertion is "the 8x deeper one must not cost 4x as
-much", which no slow machine can fail and no linear scan can pass. Two caveats
-from the round that produced it: put the ratio assertion **first**, because an
-absolute bound placed ahead of it fires under the same mutation and hides it (that
-shadowing happened here and was fixed one commit later in a different file); and
-watch the margin — 2.5x between the real ratio and the threshold was the tightest
-number in that round.
+much". Three caveats, the third measured after this entry was first written:
+
+1. **Put the ratio assertion first.** An absolute bound placed ahead of it fires
+   under the same mutation and reports its own number, so the ratio line is never
+   reached (that shadowing happened here and was fixed one commit later in a
+   different file).
+2. **Watch the margin.** 2.5x between the real ratio and the threshold was the
+   tightest number in the round that produced this entry.
+3. **"No linear scan can pass a ratio" is a property of the spread and the
+   warm-up, not of ratios.** Unshadowing the assertion above showed it had been
+   toothless as well as hidden: at its 8x spread the scan mutation measured
+   **2.77x, 3.99x, 3.54x and 2.95x — under a 4x threshold in four runs out of
+   four**, and only the absolute bound ever fired. Two causes. The *shallow* half
+   was paying for JIT compilation of the whole raise path (16 430–20 585 ns for a
+   1 024-element scan, against 7–8 ns per element once warm), which inflates the
+   number the ratio divides by — and inflates it only in the mutated build, where
+   the scan is what gets compiled. And an 8x spread is too narrow for the fixed
+   cost per raise to disappear from the shallow reading. A **discarded warm-up
+   measurement** and a **64x spread** fixed both: the index then measures 0.50x–
+   1.57x for 64x the depth and the scan 11.4x–24.8x, against a threshold of 8.
+   So: discard one measurement before the first one that counts, and choose the
+   spread so the shallow reading is dominated by the thing being measured.
 
 **Sweep by effect, too.** The enumeration recipes above are all *input*-shaped —
 "for every setting the file reads", "every input the file branches on" — so they
@@ -968,6 +984,34 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   already inside the objects the queue retains. A cap needs a policy for what to
   drop or fold, and events that are pure state refreshes for one user or channel
   are the ones that coalesce.
+- **The observer queue's ceiling rests on thread confinement, which task 6 is
+  about to break (A, task 6 — contract).** `HumlaCallbacks.absoluteCeiling` drops
+  the oldest event whatever its policy, with one exemption: the four
+  connection-lifecycle events. The invariant is therefore not `size <= ceiling`
+  but **`queuedEvents <= max(absoluteCeiling, number of lifecycle events
+  enqueued)`**, and the second term is only small for one reason: all four are
+  raised *on the delivery thread itself*. `HumlaConnection` posts every listener
+  callback to its `mainHandler` (`deliverDisconnected`, `notifyListener`),
+  `HumlaTCP` posts `onTLSHandshakeFailed` to its callback handler,
+  `HumlaService.connect()` raises `onConnecting` on main, and `setReconnecting()`
+  posts the retry to a main `Handler`. While that thread is stuck — the only state
+  in which the queue grows at all — no lifecycle event can arrive to grow it.
+  The argument first written into the code (*"their number is the connection's to
+  choose rather than the server's"*) is **false** and must not be relied on:
+  `onConnectionDisconnected` turns a `CONNECTION_ERROR` into
+  `setReconnecting(true)`, which posts `connect()` after the auto-reconnect delay,
+  and every cycle raises `onConnecting` and `onDisconnected` again — there is no
+  attempt cap in the production path, since the session state machine that adds one
+  is tasks 6, 9 and 12. **The contract for task 6:** it owns `HumlaConnection.kt`
+  and is the first task that can give the connection a handler that is not
+  `HumlaCallbacks`'s. The moment those are two threads, this exemption has no
+  argument left and the queue has no bound; the same goes for tasks 9 and 12. Two
+  things to do then, both cheap: re-derive the exemption or drop it, and re-cost
+  `dropOldestUnlessLifecycle()`, whose scan over the exempt prefix is O(L) per
+  raise under the lock the protocol thread shares with the audio thread — today
+  unreachable for the confinement reason and for no other, and **not** covered by
+  `findingTheOldestDroppableEventDoesNotScanTheQueue`, which fills with `onLogInfo`
+  and stops that loop at element 0.
 - **One lock across both audio streams (B, task 4 — DISCHARGED).**
   *Re-addressed and closed.* This entry named tasks 5 and 6, which **cannot**
   discharge it: they own `SpeexPreprocessor.kt`, `RnnoisePreprocessor.kt` and

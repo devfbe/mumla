@@ -123,6 +123,12 @@ class GuardedModelVisibilityTest {
      * `HumlaService` (`:277`, `:318`, `:474`, `:1194`, `:1209`, `:1235`); if it is ever reached
      * from two threads what it needs is the list's own monitor, and saying so here is the point of
      * naming it rather than quietly leaving it out.
+     *
+     * Note what the exclusion takes out: the **whole class**, not the one field it is argued from.
+     * `mActiveTargets` is `final`, so the filter below would have let it through anyway - and that
+     * is itself the sweep's blind spot rather than a clearance, because `append()` writes its
+     * *elements* with no synchronisation at all, which no modifier can express. Excluded here
+     * means "not looked at by this test", not "checked and found safe".
      */
     private fun guardedModel(): List<Class<*>> {
         val model = classesIn("se.lublin.humla.model")
