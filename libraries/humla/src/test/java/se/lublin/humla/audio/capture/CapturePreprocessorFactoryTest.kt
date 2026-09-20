@@ -125,14 +125,14 @@ class CapturePreprocessorFactoryTest {
     /**
      * The corner the composition rule leaves behind, pinned so task 7 meets it as a fact rather
      * than as a surprise: with no noise suppressor the only opinion in the chain is the APM's, and
-     * the APM's number is an output **level** (-35 dBFS is halfway between -50 and -20), not a
-     * speech model.
+     * the APM's number is an output **level** (the fake reports -35 dBFS, which is 10 dB above the
+     * -45 floor, i.e. 0.4608 of the adopted -45/-23.3 window), not a speech model.
      */
     @Test
     fun `webrtc echo alone provides a level-based probability and a far-end sink`() {
         val chain = factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC)
 
-        assertThat(chain.preprocessor.process(ShortArray(FRAME))).isEqualTo(0.5f)
+        assertThat(chain.preprocessor.process(ShortArray(FRAME))).isWithin(0.0005f).of(0.4608f)
         assertThat(chain.farEndSink).isNotNull()
     }
 
@@ -226,7 +226,7 @@ class CapturePreprocessorFactoryTest {
         val probability = chain.preprocessor.process(ShortArray(FRAME))
 
         assertThat(order).containsExactly("apm")
-        assertThat(probability).isEqualTo(0.5f)
+        assertThat(probability).isWithin(0.0005f).of(0.4608f)
         assertThat(logs).hasSize(1)
         assertThat(logs.single()).contains("RNNoise")
     }
@@ -250,7 +250,7 @@ class CapturePreprocessorFactoryTest {
         val probability = chain.preprocessor.process(ShortArray(FRAME))
 
         assertThat(order).containsExactly("apm")
-        assertThat(probability).isEqualTo(0.5f)
+        assertThat(probability).isWithin(0.0005f).of(0.4608f)
         assertThat(logs).hasSize(1)
         assertThat(logs.single()).contains("RNNoise")
     }
@@ -298,7 +298,7 @@ class CapturePreprocessorFactoryTest {
         val probability = chain.preprocessor.process(ShortArray(FRAME))
 
         assertThat(order).containsExactly("apm")
-        assertThat(probability).isEqualTo(0.5f)
+        assertThat(probability).isWithin(0.0005f).of(0.4608f)
         assertThat(logs).hasSize(1)
         assertWithMessage("the log line is what tells the user which suppressor is not running")
             .that(logs.single()).contains("Speex")
@@ -312,7 +312,7 @@ class CapturePreprocessorFactoryTest {
         val probability = chain.preprocessor.process(ShortArray(FRAME))
 
         assertThat(order).containsExactly("apm")
-        assertThat(probability).isEqualTo(0.5f)
+        assertThat(probability).isWithin(0.0005f).of(0.4608f)
         assertThat(logs).hasSize(1)
         assertThat(logs.single()).contains("Speex")
     }

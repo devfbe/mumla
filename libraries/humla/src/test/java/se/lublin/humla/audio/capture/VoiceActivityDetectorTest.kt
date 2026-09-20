@@ -308,28 +308,41 @@ class VoiceActivityDetectorTest {
      * compared against is not a speech model's (spec §4.1: noise suppression NONE with echo
      * cancellation WEBRTC, where `LevelToProbability` is the only opinion).
      *
-     * This is the pin for M-7. The measurement behind the numbers, taken on the host against the
-     * real APM (`tests/CMakeLists.txt`'s `humla_apm`, 800 frames per point, read after 5 s of
-     * settling): with the APM's own noise suppressor off, AGC2's `max_output_noise_level_dbfs`
-     * cap binds and the processed level of a **non-speech** frame settles at **-45.0 dBFS**
-     * (-44.67 to -44.98 for a low-passed noise, -45.07 to -46.74 white, -43.55 hum, over input
-     * levels from -60 to -45 dBFS) instead of tracking the input as it did with the suppressor on
-     * (-61.9 / -56.6 / -51.1 / -45.6 for inputs of -59 / -54 / -49 / -44).
+     * This is the pin for M-7, and for the window spec §4.1 adopted after it. The measurement
+     * behind the numbers was taken on the host against the real APM (`tests/CMakeLists.txt`'s
+     * `humla_apm`, 800 frames per point, read after 5 s of settling), and reproduced independently.
      *
-     * Two consequences, and they are what these assertions hold:
+     * **The floor is a band, and the axis it is flat against is the input level inside one noise
+     * character -- not "whatever the input".** With the APM's own noise suppressor off, AGC2's
+     * `max_output_noise_level_dbfs` cap binds and a **non-speech** frame stops tracking its input:
+     * over input levels from -70 to -45 dBFS the processed level moves by well under a dB inside
+     * one character. Across characters it does move. Two runs, three characters: **-43.55 dBFS
+     * (hum) to -47.80 (white), median about -45**. With the suppressor on it tracked the input
+     * instead (-61.9 / -56.6 / -51.1 / -45.6 for inputs of -59 / -54 / -49 / -44).
+     * -45 is that **measured median with spread**. It is not derived from webrtc's constant --
+     * that constant is -50, and the fact that the measurement lands 5 dB off it is the reason to
+     * trust the measurement and not the constant.
      *
-     * - The default stop threshold has to stay **reachable**. `SILENCE_DBFS` is -50 while the
-     *   floor is -45, so `fromDbfs` never returns less than 0.167 in this chain: a stop threshold
-     *   below that can never be crossed and the detector would never release. 0.3 clears it by
-     *   0.133, i.e. by 4.0 dB of level.
-     * - The start threshold is 13.0 dB above that floor, so what "0.6" means here is **13 dB of
-     *   signal-to-noise**, not a loudness. That is the honest reading of the window after AGC2,
-     *   and it is the sentence nobody had written down.
+     * Three consequences, and they are what these assertions hold:
      *
-     * The recommendation that follows from the same measurement -- move the window onto the band
-     * AGC2 actually produces, `SILENCE_DBFS` -50 -> -45 and `FULL_DBFS` -20 -> -25 -- is **not**
-     * applied here: `WebRtcApmPreprocessor.kt` is closed for this task. It is in the ledger with
-     * its numbers. If it is applied later, this test is what says so out loud.
+     * - The default stop threshold has to stay **reachable**. Under the old -50/-20 window
+     *   `fromDbfs` could not return less than 0.167 at the median floor (0.215 at its loud edge),
+     *   so a stop threshold below that could never be crossed and the detector would never
+     *   release. That was a live defect at the *bottom* of the window and it is fixed by moving
+     *   `SILENCE_DBFS` onto the measured floor.
+     * - **"0.6" is not a loudness. It is a demand for 13.0 dB of signal above the floor** -- and
+     *   naming that axis is the whole point of this test. `fromDbfs` is a ratio over the window
+     *   *width*, so raising one edge rescales the whole curve: leaving `FULL_DBFS` at -20 would
+     *   have *tightened* the start to 15.0 dB rather than preserving it. -23.3 is the value that
+     *   leaves the start contract exactly where the shipping window put it.
+     * - The stop necessarily moves, from 4.0 dB of reserve to 6.5. With one edge pinned by the
+     *   floor there is one free parameter and two contracts, and the start is the one that decides
+     *   whether a person is heard at all.
+     *
+     * Still open, and it is not this test's to close: the NS-off decision cost speech about 4.9 dB
+     * of effective SNR (probability 0.61 -> 0.44 on the same synthetic input), so holding the
+     * nominal start contract leaves a real talker slightly worse off. The top of the window cannot
+     * be calibrated without a real voice -- QA with hardware, spec §4.1, owner B task 13.
      */
     @Test
     fun `the probability defaults sit at these dBFS levels on the apm window`() {
@@ -337,13 +350,20 @@ class VoiceActivityDetectorTest {
             LevelToProbability.SILENCE_DBFS + p * (LevelToProbability.FULL_DBFS - LevelToProbability.SILENCE_DBFS)
 
         assertThat(levelFor(VadConfig.DEFAULT.startThreshold)).isWithin(0.05f).of(-32.0f)
-        assertThat(levelFor(VadConfig.DEFAULT.stopThreshold)).isWithin(0.05f).of(-41.0f)
+        assertThat(levelFor(VadConfig.DEFAULT.stopThreshold)).isWithin(0.05f).of(-38.5f)
 
-        // The measured floor of this chain, and the margin the default stop has over it.
-        val measuredNoiseFloorDbfs = -45.0f
-        assertThat(LevelToProbability.fromDbfs(measuredNoiseFloorDbfs)).isWithin(0.001f).of(0.167f)
-        assertThat(LevelToProbability.fromDbfs(measuredNoiseFloorDbfs))
-            .isLessThan(VadConfig.DEFAULT.stopThreshold)
+        // The same two numbers said as what they actually are: SNR above the measured floor. This
+        // is the contract, and the level above is only its reading on today's floor.
+        val medianNoiseFloorDbfs = -45.0f
+        assertThat(levelFor(VadConfig.DEFAULT.startThreshold) - medianNoiseFloorDbfs).isWithin(0.05f).of(13.0f)
+        assertThat(levelFor(VadConfig.DEFAULT.stopThreshold) - medianNoiseFloorDbfs).isWithin(0.05f).of(6.5f)
+
+        // The floor reads as silence again, and the *loud edge* of the measured band -- the hum
+        // character, the worst case of the two runs -- still reads well below the default stop.
+        // 0.167 was neither worst case: it was the median floor on the old window.
+        assertThat(LevelToProbability.fromDbfs(medianNoiseFloorDbfs)).isEqualTo(0f)
+        assertThat(LevelToProbability.fromDbfs(-43.55f)).isWithin(0.001f).of(0.0668f)
+        assertThat(LevelToProbability.fromDbfs(-43.55f)).isLessThan(VadConfig.DEFAULT.stopThreshold)
     }
 
     /**

@@ -105,8 +105,8 @@ class WebRtcApmPreprocessorTest {
         val probability = WebRtcApmPreprocessor(api, ONE).process(frame)
 
         assertThat(frame[0]).isEqualTo(3.toShort())
-        // -35 dBFS is halfway between -50 (0.0) and -20 (1.0).
-        assertThat(probability).isEqualTo(0.5f)
+        // -35 dBFS is 10 dB above the -45 floor, i.e. 10/21.7 of the adopted -45/-23.3 window.
+        assertThat(probability).isWithin(0.0005f).of(0.4608f)
         assertThat(api.capturedLengths).containsExactly(FRAME)
     }
 
@@ -231,11 +231,11 @@ class WebRtcApmPreprocessorTest {
      * type, and a threshold tuned against RNNoise does not mean the same thing here.
      */
     @Test
-    fun `level to probability is linear between -50 and -20 dBFS and clamped outside`() {
+    fun `level to probability is linear between -45 and -23_3 dBFS and clamped outside`() {
         assertThat(LevelToProbability.fromDbfs(-100f)).isEqualTo(0f)
-        assertThat(LevelToProbability.fromDbfs(-50f)).isEqualTo(0f)
-        assertThat(LevelToProbability.fromDbfs(-35f)).isEqualTo(0.5f)
-        assertThat(LevelToProbability.fromDbfs(-20f)).isEqualTo(1f)
+        assertThat(LevelToProbability.fromDbfs(-45f)).isEqualTo(0f)
+        assertThat(LevelToProbability.fromDbfs(-34.15f)).isWithin(0.0005f).of(0.5f)
+        assertThat(LevelToProbability.fromDbfs(-23.3f)).isEqualTo(1f)
         assertThat(LevelToProbability.fromDbfs(0f)).isEqualTo(1f)
     }
 

@@ -83,8 +83,8 @@ data class WebRtcApmConfig(
 }
 
 /**
- * Maps the APM's output level in dBFS onto a "voice probability": -50 dBFS and below is 0, -20 dBFS
- * and above is 1, linear in between.
+ * Maps the APM's output level in dBFS onto a "voice probability": [SILENCE_DBFS] and below is 0,
+ * [FULL_DBFS] and above is 1, linear in between.
  *
  * **It is a loudness threshold wearing a voice probability's type.** Spec §4.1 wants that written
  * down rather than hidden: with noise suppression NONE and echo cancellation WEBRTC this is the
@@ -92,17 +92,36 @@ data class WebRtcApmConfig(
  * A threshold tuned against a speech model does not transfer, and the two do not even fail the
  * same way -- a quiet talker in a quiet room is speech to RNNoise and silence to this.
  *
- * **These two constants are not yet tuned against the levels this chain now produces.** The APM
- * measures `last_level_dbfs` on the *processed* frame (`humla_apm.cpp:88-91`) and its own noise
- * suppressor is off (spec §4.1), so every non-speech frame measures louder than it did while B2
- * still said "NS + AEC3". Task 7 owns the re-check; the ledger carries it.
+ * **The window is set against what this chain measures, not against a round number.** The APM
+ * reads `last_level_dbfs` on the *processed* frame (`humla_apm.cpp:88-91`) with its own noise
+ * suppressor off (spec §4.1), so AGC2's noise cap binds and the non-speech floor stops tracking
+ * the input. Measured on the host against the real APM, two runs, three non-speech characters:
+ * the floor spans -43.55 to -47.80 dBFS with a **median about -45**, flat against the *input
+ * level* inside one character. That is the axis, and -45 is a measured median with spread -- it
+ * is **not** webrtc's `max_output_noise_level_dbfs`, which is -50.
+ *
+ * `fromDbfs` is a ratio over the window **width**, so the two edges are not independent: raising
+ * the bottom alone rescales the whole curve and *tightens* the top rather than leaving it where
+ * it was. [FULL_DBFS] is therefore chosen to hold the start contract fixed, not left at its old
+ * value -- spec §4.1 carries the arithmetic and
+ * `VoiceActivityDetectorTest.the probability defaults sit at these dBFS levels on the apm window`
+ * says both readings out loud.
  */
 object LevelToProbability {
-    /** At or below this level the stage reports no voice at all. */
-    const val SILENCE_DBFS = -50f
+    /**
+     * At or below this level the stage reports no voice at all: the measured non-speech floor of
+     * this chain. Below it, the default stop threshold was unreachable -- a live defect.
+     */
+    const val SILENCE_DBFS = -45f
 
-    /** At or above this level the stage reports full confidence. */
-    const val FULL_DBFS = -20f
+    /**
+     * At or above this level the stage reports full confidence. Not calibratable without a real
+     * talker (spec §4.1, QA item, B task 13), so it is set to the value that changes the start
+     * contract least: with the bottom on the floor, 0.6 still means **13.0 dB above the floor**,
+     * exactly what the shipping -50/-20 window demanded. The stop moves from 4.0 to 6.5 dB, which
+     * is forced -- one free parameter, two contracts.
+     */
+    const val FULL_DBFS = -23.3f
 
     fun fromDbfs(dbfs: Float): Float =
         ((dbfs - SILENCE_DBFS) / (FULL_DBFS - SILENCE_DBFS)).coerceIn(0f, 1f)
