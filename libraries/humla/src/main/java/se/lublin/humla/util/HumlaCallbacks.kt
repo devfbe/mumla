@@ -110,12 +110,28 @@ class HumlaCallbacks @JvmOverloads constructor(
     val droppedEvents: Long get() = synchronized(lock) { dropped }
 
     /**
-     * One queued fan-out.
+     * What the queue may do with an event besides deliver it, decided at the raise site in the
+     * overrides at the bottom of this class.
      *
-     * [foldKey] identifies the subject a state refresh is about; a later event with an equal key
-     * overwrites [deliver] in place, which keeps this event's position in the queue and hands the
-     * newest payload to the observers. [droppable] marks the tree-shape events the bound may throw
-     * away. Both are decided at the raise site, in the overrides at the bottom of this class.
+     * Exactly one of the three applies, and that is why this is a type rather than a key plus a
+     * flag: an event that was folded *and* droppable could be dropped while [folded] still pointed
+     * at it, and the next event for that subject would then fold into something already thrown
+     * away and never be delivered. Making the combination unrepresentable is cheaper than guarding
+     * against it, and leaves nothing behind that no test could reach.
+     */
+    private sealed interface Policy {
+        /** Delivered as raised: never folded, never dropped. */
+        data object Plain : Policy
+
+        /** A state refresh for [key]; a later refresh for the same key replaces it in place. */
+        class Fold(val key: Any) : Policy
+
+        /** A tree-shape event the bound may throw away, oldest first. */
+        data object Droppable : Policy
+    }
+
+    /**
+     * One queued fan-out.
      *
      * [deliver] is a plain var although it is written on the producing thread and read on the
      * delivery thread: every write happens under [lock], and the drain takes [lock] to dequeue,
@@ -123,11 +139,7 @@ class HumlaCallbacks @JvmOverloads constructor(
      * producer can find it to write again. A `@Volatile` here would be a second guard on the same
      * ordering - one that no test could tell apart from its absence.
      */
-    private class Event(
-        var deliver: (IHumlaObserver) -> Unit,
-        val foldKey: Any?,
-        val droppable: Boolean,
-    )
+    private class Event(var deliver: (IHumlaObserver) -> Unit, val policy: Policy)
 
     private val drain = object : Runnable {
         override fun run() {
@@ -140,7 +152,9 @@ class HumlaCallbacks @JvmOverloads constructor(
                 // slice that delivers nothing and re-posts, which is churn rather than progress.
                 while (true) {
                     val event = synchronized(lock) {
-                        queue.removeFirstOrNull()?.also { e -> e.foldKey?.let { folded.remove(it) } }
+                        queue.removeFirstOrNull()?.also { e ->
+                            (e.policy as? Policy.Fold)?.let { folded.remove(it.key) }
+                        }
                     } ?: break
                     deliver(event.deliver)
                     delivered++
@@ -169,16 +183,12 @@ class HumlaCallbacks @JvmOverloads constructor(
         observers.remove(observer)
     }
 
-    private fun dispatch(
-        foldKey: Any? = null,
-        droppable: Boolean = false,
-        event: (IHumlaObserver) -> Unit,
-    ) {
+    private fun dispatch(policy: Policy = Policy.Plain, event: (IHumlaObserver) -> Unit) {
         val inline: Boolean
         synchronized(lock) {
             inline = Looper.myLooper() == handler.looper && queue.isEmpty() && !drainScheduled
             if (!inline) {
-                enqueue(Event(event, foldKey, droppable))
+                enqueue(Event(event, policy))
                 if (!drainScheduled) {
                     drainScheduled = handler.post(drain)
                 }
@@ -189,14 +199,14 @@ class HumlaCallbacks @JvmOverloads constructor(
 
     /** Caller holds [lock]. */
     private fun enqueue(event: Event) {
-        val key = event.foldKey
-        if (key != null) {
-            val queued = folded[key]
+        val policy = event.policy
+        if (policy is Policy.Fold) {
+            val queued = folded[policy.key]
             if (queued != null) {
                 queued.deliver = event.deliver
                 return
             }
-            folded[key] = event
+            folded[policy.key] = event
         }
         queue.addLast(event)
         while (queue.size > maxQueuedEvents && dropOldestDroppable()) {
@@ -207,9 +217,8 @@ class HumlaCallbacks @JvmOverloads constructor(
 
     /** Caller holds [lock]. Returns false when the queue holds nothing the bound may drop. */
     private fun dropOldestDroppable(): Boolean {
-        val victim = queue.firstOrNull { it.droppable } ?: return false
+        val victim = queue.firstOrNull { it.policy is Policy.Droppable } ?: return false
         queue.remove(victim)
-        victim.foldKey?.let { folded.remove(it) }
         dropped++
         return true
     }
@@ -223,22 +232,22 @@ class HumlaCallbacks @JvmOverloads constructor(
     override fun onDisconnected(e: HumlaException?) = dispatch { it.onDisconnected(e) }
     override fun onTLSHandshakeFailed(chain: Array<X509Certificate>?) = dispatch { it.onTLSHandshakeFailed(chain) }
     override fun onChannelAdded(channel: IChannel?) =
-        dispatch(droppable = true) { it.onChannelAdded(channel) }
+        dispatch(Policy.Droppable) { it.onChannelAdded(channel) }
     override fun onChannelStateUpdated(channel: IChannel?) =
-        dispatch(foldKey = Fold.CHANNEL_STATE to channel) { it.onChannelStateUpdated(channel) }
+        dispatch(Policy.Fold(Subject.CHANNEL_STATE to channel)) { it.onChannelStateUpdated(channel) }
     override fun onChannelRemoved(channel: IChannel?) =
-        dispatch(droppable = true) { it.onChannelRemoved(channel) }
+        dispatch(Policy.Droppable) { it.onChannelRemoved(channel) }
     override fun onChannelPermissionsUpdated(channel: IChannel?) =
-        dispatch(foldKey = Fold.CHANNEL_PERMISSIONS to channel) { it.onChannelPermissionsUpdated(channel) }
+        dispatch(Policy.Fold(Subject.CHANNEL_PERMISSIONS to channel)) { it.onChannelPermissionsUpdated(channel) }
     override fun onUserConnected(user: IUser?) = dispatch { it.onUserConnected(user) }
     override fun onUserStateUpdated(user: IUser?) =
-        dispatch(foldKey = Fold.USER_STATE to user) { it.onUserStateUpdated(user) }
+        dispatch(Policy.Fold(Subject.USER_STATE to user)) { it.onUserStateUpdated(user) }
     override fun onUserTalkStateUpdated(user: IUser?) =
-        dispatch(foldKey = Fold.USER_TALK_STATE to user) { it.onUserTalkStateUpdated(user) }
+        dispatch(Policy.Fold(Subject.USER_TALK_STATE to user)) { it.onUserTalkStateUpdated(user) }
     override fun onUserJoinedChannel(user: IUser?, newChannel: IChannel?, oldChannel: IChannel?) =
         dispatch { it.onUserJoinedChannel(user, newChannel, oldChannel) }
     override fun onUserRemoved(user: IUser?, reason: String?) =
-        dispatch(droppable = true) { it.onUserRemoved(user, reason) }
+        dispatch(Policy.Droppable) { it.onUserRemoved(user, reason) }
     override fun onPermissionDenied(reason: String?) = dispatch { it.onPermissionDenied(reason) }
     override fun onMessageLogged(message: IMessage?) = dispatch { it.onMessageLogged(message) }
     override fun onVoiceTargetChanged(mode: VoiceTargetMode?) = dispatch { it.onVoiceTargetChanged(mode) }
@@ -246,8 +255,8 @@ class HumlaCallbacks @JvmOverloads constructor(
     override fun onLogWarning(message: String?) = dispatch { it.onLogWarning(message) }
     override fun onLogError(message: String?) = dispatch { it.onLogError(message) }
 
-    /** The kinds of event that fold, paired with their subject to make a queue key. */
-    private enum class Fold { CHANNEL_STATE, CHANNEL_PERMISSIONS, USER_STATE, USER_TALK_STATE }
+    /** The kinds of event that fold, paired with the model object to make a queue key. */
+    private enum class Subject { CHANNEL_STATE, CHANNEL_PERMISSIONS, USER_STATE, USER_TALK_STATE }
 
     companion object {
         /** Upper bound of observer events delivered per main-looper task. */
