@@ -310,6 +310,27 @@ P5. **Manifest:** `foregroundServiceType="microphone|mediaPlayback"`,
   the already-deferred R8 and APK-size work rather than to decide on ABI splits
   now.
 
+### 4.05 Testing hazards that have already produced a false green
+
+Both were caught in this project, each after a test had been written, reviewed
+and reported as passing. They are repo-wide, not stream-specific.
+
+- **kotlinx.coroutines renames threads.** While a coroutine runs on a thread, its
+  name becomes `"<name> @coroutine#<n>"`. An assertion of the form
+  `assertThat(threadNames).doesNotContain("mumla-test-caller")` therefore passes
+  even when that very thread did the work. This was found only because the
+  measured runtime did not fit the claim. Strip the ` @coroutine#` suffix before
+  comparing, in every thread assertion.
+- **Robolectric does not implement `inJustDecodeBounds`.** Its
+  `ShadowBitmapFactory.create` allocates the full bitmap for the bounds pass, so a
+  heap-delta measurement of a decode path measures the opposite of what it claims
+  (bounds pass 120 MB allocated against 72 MB for the sampled decode). Measure
+  `byteCount` of the bitmap the path actually produced, or reach the source
+  instance through `shadowOf(bitmap).createdFromBitmap`, and never assert a heap
+  delta. `ShadowBitmapFactory` also invents a 100x100 bitmap for undecodable bytes
+  unless `setAllowInvalidImageData(false)` is set, and `@Config(shadows = [...])`
+  that replaces the shadow silently drops that switch.
+
 ### 4.1 Binding constraints discovered during execution
 
 These were found by implementers and reviewers after the plans were written. They
