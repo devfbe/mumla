@@ -39,6 +39,9 @@ private const val MIN_OVERLAPPING_READS = 50
 /** How many observations `aRelinkIsNeverSeenHalfDone` takes while the relinker runs. */
 private const val OBSERVATIONS = 20_000
 
+/** How many times [ChannelTest.race] calls its writer. */
+private const val WRITES = 20_000
+
 /**
  * The three lists a [Channel] owns are written on the protocol thread and read on the main thread,
  * so each one gets the same two questions: does a read hand back a snapshot, and can a read taken
@@ -153,18 +156,53 @@ class ChannelTest {
         assertThat(a.getSubchannels()).isEmpty()
     }
 
+    /**
+     * The writer moves *every* user back and forth, in whole passes, for the reason the two tests
+     * below give - and here it carries a second one. `i % 2` beside `i % users.size` makes the
+     * branch a pure function of the element whenever the list is even-sized, so each user was bound
+     * to one channel for good: measured, 50 real channel changes out of 20 000 writes, with
+     * `root.getUsers()` settling between 1 and 25 instead of swinging between 0 and 50. Nobody was
+     * ever *between* two channels, so every defect that needs a source object and a target object
+     * at once was invisible - a [User.setChannel] that joined before it left, say. That is not a
+     * hypothetical: it is the very ordering
+     * [countingUsersRecursivelyWhileTheTreeChangesNeverThrows] rests its ceiling on, and this is
+     * the only test that could break it.
+     *
+     * Whole passes make all 20 000 writes real moves, and the printed range is what the reader then
+     * sees - 0 to 50 in three runs of three, against 0 to 25 before. Only the move count is
+     * asserted: it is a property of the writer and came out 20 000 every time, while the range is a
+     * property of the schedule.
+     */
     @Test
     fun readingUsersWhileAnotherThreadMovesThemStaysUndamaged() {
         val root = Channel(0, false)
         val other = Channel(1, false)
         val users = (0 until 50).map { User(it, "user$it") }
+        val moves = AtomicInteger()
+        val fullest = AtomicInteger()
+        val emptiest = AtomicInteger(Int.MAX_VALUE)
 
         val damage = race(
-            write = { i -> users[i % users.size].setChannel(if (i % 2 == 0) root else other) },
-            read = { root.getUsers() },
+            write = { i ->
+                val user = users[i % users.size]
+                val target = if ((i / users.size) % 2 == 0) root else other
+                if (user.getChannel() !== target) moves.incrementAndGet()
+                user.setChannel(target)
+            },
+            read = {
+                root.getUsers().also {
+                    fullest.accumulateAndGet(it.size, ::maxOf)
+                    emptiest.accumulateAndGet(it.size, ::minOf)
+                }
+            },
         )
 
+        println(
+            "MEASURE channel changes: ${moves.get()} of $WRITES," +
+                " root.getUsers() between ${emptiest.get()} and ${fullest.get()}"
+        )
         assertThat(damage.report()).isEmpty()
+        assertThat(moves.get()).isAtLeast(WRITES / 2)
     }
 
     @Test
@@ -333,7 +371,7 @@ class ChannelTest {
     }
 
     /**
-     * Runs [write] 20 000 times on one thread while another repeatedly takes [read] and inspects
+     * Runs [write] [WRITES] times on one thread while another repeatedly takes [read] and inspects
      * the result, and reports what the reader saw. Both threads are joined before anything is
      * asserted, but every observation is taken while the writer is running - an inspection after
      * the join would see a settled list and prove nothing (spec 4.04).
@@ -350,7 +388,7 @@ class ChannelTest {
         val writes = AtomicInteger()
         val writer = thread(name = "writer") {
             try {
-                for (i in 0 until 20_000) {
+                for (i in 0 until WRITES) {
                     write(i)
                     writes.incrementAndGet()
                 }
