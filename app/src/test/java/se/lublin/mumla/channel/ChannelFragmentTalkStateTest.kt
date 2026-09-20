@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.preference.PreferenceManager
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
@@ -16,6 +18,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.util.HumlaServiceFragment
 import se.lublin.mumla.util.HumlaServiceProvider
@@ -53,6 +56,9 @@ class ChannelFragmentTalkStateTest {
 
     @Before
     fun setUp() {
+        PreferenceManager
+            .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
+            .edit().clear().commit()
         session = mockk(relaxed = true)
         service = mockk(relaxed = true) {
             every { isConnected } returns true
@@ -67,6 +73,16 @@ class ChannelFragmentTalkStateTest {
     }
 
     private val talkButton: View get() = fragment.requireView().findViewById(R.id.pushtotalk)
+
+    /**
+     * The talk button is a hold by default and a toggle when this is on. The two are not variants
+     * of one behaviour: in toggle mode the *down* does nothing and the *up* is the whole action.
+     */
+    private fun setPushToTalkToggle(toggle: Boolean) {
+        PreferenceManager
+            .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
+            .edit().putBoolean(Settings.PREF_PTT_TOGGLE, toggle).commit()
+    }
 
     private fun touch(action: Int) {
         talkButton.dispatchTouchEvent(MotionEvent.obtain(0L, 0L, action, 0f, 0f, 0))
@@ -144,5 +160,65 @@ class ChannelFragmentTalkStateTest {
     @Test
     fun hostingTheFragmentReallyBuildsTheButton() {
         assertThat(talkButton).isNotNull()
+    }
+
+    /**
+     * A cancel says the gesture was taken away, not that the user finished it, and in toggle mode
+     * `MumlaService.onTalkKeyUp()` is not a release but the action itself -- the down did nothing,
+     * because `onTalkKeyDown` is gated on `!isPushToTalkToggle()`. Treating the cancel like an up
+     * therefore switches the microphone *on* after the user aborted. It is reachable: the button is
+     * `match_parent` at the bottom of a `DrawerLayout`, so its left edge is both the drawer's drag
+     * zone and where the system back gesture starts, and both synthesize exactly this cancel.
+     */
+    @Test
+    fun aCanceledPressInToggleModeDoesNotPerformTheToggle() {
+        setPushToTalkToggle(true)
+        touch(MotionEvent.ACTION_DOWN)
+
+        touch(MotionEvent.ACTION_CANCEL)
+
+        verify(exactly = 0) { service.onTalkKeyUp() }
+    }
+
+    /** And nothing takes it back later: `onPause` does not release in toggle mode either. */
+    @Test
+    fun aCanceledPressInToggleModeIsNotTurnedOnByTheFollowingPause() {
+        setPushToTalkToggle(true)
+        touch(MotionEvent.ACTION_DOWN)
+        touch(MotionEvent.ACTION_CANCEL)
+
+        controller.pause()
+
+        verify(exactly = 0) { service.onTalkKeyUp() }
+        verify(exactly = 0) { session.setTalkingState(any()) }
+    }
+
+    /**
+     * In toggle mode a held button is holding nothing -- the down is a no-op there -- so a pause on
+     * it has nothing of ours to release, and switching transmission off would silence a state
+     * somebody else set.
+     */
+    @Test
+    fun pausingOnAHeldButtonInToggleModeSilencesNothing() {
+        setPushToTalkToggle(true)
+        touch(MotionEvent.ACTION_DOWN)
+
+        controller.pause()
+
+        verify(exactly = 0) { session.setTalkingState(false) }
+    }
+
+    /**
+     * Releasing goes through `HumlaSession()`, which throws under exactly the condition that makes
+     * `isConnected()` false. A pause that arrives once the connection is gone must not reach for it.
+     */
+    @Test
+    fun pausingOnAHeldButtonWhileDisconnectedReleasesNothing() {
+        every { service.isConnected } returns false
+        touch(MotionEvent.ACTION_DOWN)
+
+        controller.pause()
+
+        verify(exactly = 0) { session.setTalkingState(false) }
     }
 }

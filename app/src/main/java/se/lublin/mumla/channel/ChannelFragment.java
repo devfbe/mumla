@@ -170,14 +170,26 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
                             getService().onTalkKeyDown();
                         }
                         break;
-                    // A parent that takes the gesture over -- the navigation drawer being dragged
-                    // open -- sends ACTION_CANCEL instead of ACTION_UP. Releasing on both is what
-                    // keeps transmission from sticking on; it used to be papered over by resetting
-                    // the talk state from MumlaActivity's drawer listener.
                     case MotionEvent.ACTION_UP:
-                    case MotionEvent.ACTION_CANCEL:
                         mTalkButtonHeld = false;
                         if (getService() != null) {
+                            getService().onTalkKeyUp();
+                        }
+                        break;
+                    // A parent that takes the gesture over -- the navigation drawer being dragged
+                    // open, or the system's back gesture, both of which start in the left edge zone
+                    // this full-width button sits in -- sends ACTION_CANCEL instead of ACTION_UP.
+                    // In hold mode that still has to release the press, or transmission sticks on;
+                    // it used to be papered over by resetting the talk state from MumlaActivity's
+                    // drawer listener. In toggle mode onTalkKeyUp() is not a release but the action
+                    // itself -- the ACTION_DOWN above did nothing, because onTalkKeyDown() is gated
+                    // on !isPushToTalkToggle() -- and an aborted gesture must not perform the
+                    // action, exactly as a Button does not fire onClick on a cancel. So the cancel
+                    // carries the same guard the drawer listener carried.
+                    case MotionEvent.ACTION_CANCEL:
+                        mTalkButtonHeld = false;
+                        if (getService() != null
+                                && !Settings.getInstance(getActivity()).isPushToTalkToggle()) {
                             getService().onTalkKeyUp();
                         }
                         break;
