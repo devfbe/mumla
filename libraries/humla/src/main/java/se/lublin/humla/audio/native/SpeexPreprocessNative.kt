@@ -17,7 +17,14 @@
 
 package se.lublin.humla.audio.native
 
-/** libspeexdsp preprocessor. State handles are `SpeexPreprocessState*`; `value[0]` is the in/out int argument of `speex_preprocess_ctl`. */
+/**
+ * libspeexdsp preprocessor.
+ *
+ * State handles are opaque. They are not `SpeexPreprocessState*`: `speex_preprocess_run` writes
+ * the frame size the state was CREATED with and libspeexdsp has no ctl to ask a state for it, so
+ * the bridge hands out a small struct holding the state and that frame size, and compares it
+ * against the array's real length in [run].
+ */
 interface SpeexPreprocessApi {
     /** A new state, or 0 if [frameSize] is not positive or speex could not allocate one. */
     fun init(frameSize: Int, sampleRate: Int): Long
