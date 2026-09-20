@@ -64,7 +64,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
         override fun onUserJoinedChannel(user: IUser, newChannel: IChannel, oldChannel: IChannel?) {
             channelListAdapter?.updateChannels()
-            channelListAdapter?.notifyDataSetChanged()
 
             val service = service
             if (service == null || !service.isConnected) {
@@ -88,22 +87,18 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
         override fun onChannelAdded(channel: IChannel) {
             channelListAdapter?.updateChannels()
-            channelListAdapter?.notifyDataSetChanged()
         }
 
         override fun onChannelRemoved(channel: IChannel) {
             channelListAdapter?.updateChannels()
-            channelListAdapter?.notifyDataSetChanged()
         }
 
         override fun onChannelStateUpdated(channel: IChannel) {
             channelListAdapter?.updateChannels()
-            channelListAdapter?.notifyDataSetChanged()
         }
 
         override fun onUserConnected(user: IUser) {
             channelListAdapter?.updateChannels()
-            channelListAdapter?.notifyDataSetChanged()
         }
 
         override fun onUserRemoved(user: IUser, reason: String?) {
@@ -115,7 +110,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
             }
 
             channelListAdapter?.updateChannels()
-            channelListAdapter?.notifyDataSetChanged()
         }
 
         override fun onUserStateUpdated(user: IUser) {
