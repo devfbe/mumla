@@ -8,7 +8,33 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(THIRD_PARTY "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 # Android 15+ requires 16 KB page alignment for shared libraries.
-set(HUMLA_LINK_OPTIONS "-Wl,-z,max-page-size=16384")
+#
+# --exclude-libs,ALL hides everything that comes out of a static archive, which here means the
+# vendored codecs and, above all, libc++_static.a. Without it each humla_*.so re-exports the C++
+# runtime it statically contains -- typeinfo, the __cxa_* handlers, std::locale's id objects --
+# with default visibility, and the dynamic linker is then free to bind one library's copy to
+# another library's. That is exactly the duplicated-libc++-state hazard the NDK warns about for
+# ANDROID_STL=c++_static, and build.gradle rules it out on the grounds that these libraries
+# "export only C JNI entry points". They did not: measured on this tree before this line was
+# added, libhumla_opus exported 382 symbols and libhumlaapm 1010-2355 depending on the ABI. Now
+# they export their JNI entry points and nothing else, and check_exports.cmake fails the build if
+# that ever stops being true.
+set(HUMLA_LINK_OPTIONS "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL")
+
+# Symbols defined in the JNI translation unit itself are not in an archive, so --exclude-libs
+# does not reach them; the JNIEXPORT entry points carry an explicit default-visibility attribute
+# and survive this.
+set(HUMLA_JNI_C_OPTIONS -fvisibility=hidden)
+
+# Fails the build when a humla_*.so exports anything but its JNI entry points. The property this
+# pins is invisible at run time until two libraries start sharing a C++ runtime by accident, and
+# it is one linker flag away from silently going back.
+function(humla_check_exports target)
+  add_custom_command(TARGET ${target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DLIBRARY=$<TARGET_FILE:${target}>
+                               -P ${CMAKE_CURRENT_SOURCE_DIR}/check_exports.cmake
+      VERBATIM)
+endfunction()
 # celt 0.7/0.11 predate C99-strict clang: keep implicit declarations as warnings, as ndk-build did.
 set(CELT_C_OPTIONS -fvisibility=hidden -Wno-error=implicit-function-declaration -Wno-implicit-function-declaration)
 
@@ -30,6 +56,8 @@ add_subdirectory("${THIRD_PARTY}/opus" EXCLUDE_FROM_ALL)
 add_library(humla_opus SHARED jni_opus.cpp)
 target_link_libraries(humla_opus PRIVATE opus log)
 target_link_options(humla_opus PRIVATE ${HUMLA_LINK_OPTIONS})
+target_compile_options(humla_opus PRIVATE ${HUMLA_JNI_C_OPTIONS})
+humla_check_exports(humla_opus)
 
 # ---------------------------------------------------------------- speex 1.2.1 (codec)
 set(SPEEX_DIR "${THIRD_PARTY}/speex/libspeex")
@@ -52,6 +80,8 @@ target_compile_definitions(speex PUBLIC __EMX__ PRIVATE FIXED_POINT USE_KISS_FFT
 add_library(humla_speex SHARED jni_speex.cpp)
 target_link_libraries(humla_speex PRIVATE speex log)
 target_link_options(humla_speex PRIVATE ${HUMLA_LINK_OPTIONS})
+target_compile_options(humla_speex PRIVATE ${HUMLA_JNI_C_OPTIONS})
+humla_check_exports(humla_speex)
 
 # ---------------------------------------------------------------- speexdsp 1.2.1 (resampler, jitter, preprocess)
 set(SPEEXDSP_DIR "${THIRD_PARTY}/speexdsp/libspeexdsp")
@@ -66,6 +96,8 @@ target_compile_definitions(speexdsp PUBLIC __EMX__ PRIVATE FIXED_POINT USE_KISS_
 add_library(humla_speexdsp SHARED jni_speexdsp.cpp)
 target_link_libraries(humla_speexdsp PRIVATE speexdsp log)
 target_link_options(humla_speexdsp PRIVATE ${HUMLA_LINK_OPTIONS})
+target_compile_options(humla_speexdsp PRIVATE ${HUMLA_JNI_C_OPTIONS})
+humla_check_exports(humla_speexdsp)
 
 # ---------------------------------------------------------------- celt 0.7.1 ("CELT alpha")
 set(CELT7_DIR "${THIRD_PARTY}/celt-0.7.0/libcelt")
@@ -82,6 +114,8 @@ target_compile_options(celt7 PRIVATE ${CELT_C_OPTIONS})
 add_library(humla_celt7 SHARED jni_celt7.cpp)
 target_link_libraries(humla_celt7 PRIVATE celt7 log)
 target_link_options(humla_celt7 PRIVATE ${HUMLA_LINK_OPTIONS})
+target_compile_options(humla_celt7 PRIVATE ${HUMLA_JNI_C_OPTIONS})
+humla_check_exports(humla_celt7)
 
 # ---------------------------------------------------------------- celt 0.11.1 ("CELT beta")
 set(CELT11_DIR "${THIRD_PARTY}/celt-0.11.0/libcelt")
@@ -98,6 +132,8 @@ target_compile_options(celt11 PRIVATE ${CELT_C_OPTIONS})
 add_library(humla_celt11 SHARED jni_celt11.cpp)
 target_link_libraries(humla_celt11 PRIVATE celt11 log)
 target_link_options(humla_celt11 PRIVATE ${HUMLA_LINK_OPTIONS})
+target_compile_options(humla_celt11 PRIVATE ${HUMLA_JNI_C_OPTIONS})
+humla_check_exports(humla_celt11)
 
 # ---------------------------------------------------------------- rnnoise 0.2 + webrtc apm 2.1
 # Stream B: noise suppression (RNNoise) and echo cancellation (WebRTC APM). Both subdirectories
@@ -113,7 +149,11 @@ add_subdirectory(webrtc_apm)
 add_library(humlarnnoise SHARED jni_rnnoise.cpp)
 target_link_libraries(humlarnnoise PRIVATE humla_rnnoise log)
 target_link_options(humlarnnoise PRIVATE ${HUMLA_LINK_OPTIONS})
+target_compile_options(humlarnnoise PRIVATE ${HUMLA_JNI_C_OPTIONS})
+humla_check_exports(humlarnnoise)
 
 add_library(humlaapm SHARED jni_webrtc_apm.cpp)
 target_link_libraries(humlaapm PRIVATE humla_apm log)
 target_link_options(humlaapm PRIVATE ${HUMLA_LINK_OPTIONS})
+target_compile_options(humlaapm PRIVATE ${HUMLA_JNI_C_OPTIONS})
+humla_check_exports(humlaapm)

@@ -80,6 +80,14 @@ android {
                 // Static libc++: every humla_*.so is self-contained, exports only C JNI
                 // entry points and shares no C++ objects or exceptions across libraries,
                 // so the NDK's warning about duplicated libc++ state does not apply.
+                //
+                // "exports only C JNI entry points" is the load-bearing half of that, and it
+                // used not to be true: with the static libc++ merely linked in, each library
+                // also re-exported the C++ runtime it contains (libhumla_opus 382 symbols,
+                // libhumlaapm up to 2355) and the dynamic linker could bind one library's copy
+                // to another's. src/main/cpp/CMakeLists.txt now hides them, and
+                // check_exports.cmake fails the build if any humla_*.so exports anything but
+                // its Java_* entry points.
                 arguments += ['-DANDROID_STL=c++_static']
             }
         }
