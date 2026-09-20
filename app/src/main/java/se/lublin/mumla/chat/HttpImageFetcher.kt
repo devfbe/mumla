@@ -67,9 +67,14 @@ fun interface ImageFetcher {
  *    `InetAddress.getAllByName` takes no timeout parameter and Android's resolver retries per
  *    configured server, so one hostile name can block for far longer than the budget and nothing
  *    here can shorten it. Doing so needs resolution on a thread of its own, which this class
- *    deliberately does not start. The honest bound on one [fetch] is therefore `totalTimeoutMs`
- *    **plus up to [MAX_REDIRECTS] + 1 name resolutions**, and [fetch] blocks: it is not cancellable,
- *    so a caller that must not wait longer needs its own answer to that, not this number.
+ *    deliberately does not start. Nor is one lookup per hop the count: `HttpURLConnection` resolves
+ *    the host again, through `InetSocketAddress`, before the `connect()` that the timeouts above
+ *    cover, so with a cold address cache a hop costs **two**. In practice the second is a cache hit,
+ *    and the [PublicHostsOnly] KDoc already turns that second resolution into a documented residual
+ *    of its own — it is the one that can answer differently. The honest bound on one [fetch] is
+ *    therefore `totalTimeoutMs` **plus up to 2 x ([MAX_REDIRECTS] + 1) name resolutions**, and
+ *    [fetch] blocks: it is not cancellable, so a caller that must not wait longer needs its own
+ *    answer to that, not this number.
  */
 class HttpImageFetcher(
     private val connectTimeoutMs: Int = 5_000,
@@ -91,9 +96,12 @@ class HttpImageFetcher(
     override fun fetch(url: String): ByteArray {
         val deadline = System.nanoTime() + totalTimeoutMs * 1_000_000L
         var target = allowedUrl(url, ImageError.UNSUPPORTED)
+        // Whose fault an unusable target is. It starts as the message's and becomes the server's the
+        // moment a Location decides where to look; see [allowedUrl] for why the two differ.
+        var blame = ImageError.UNSUPPORTED
         var redirects = 0
         while (true) {
-            when (val hop = fetchHop(target, deadline)) {
+            when (val hop = fetchHop(target, deadline, blame)) {
                 is Hop.Body -> return hop.bytes
                 is Hop.Redirect -> {
                     // The limit is counted before the Location is resolved, so the hop that is not
@@ -101,6 +109,7 @@ class HttpImageFetcher(
                     // error code either.
                     if (++redirects > MAX_REDIRECTS) throw ImageFetchException(ImageError.NETWORK)
                     target = allowedUrl(redirectTarget(target, hop.location), ImageError.NETWORK)
+                    blame = ImageError.NETWORK
                 }
             }
         }
@@ -112,10 +121,14 @@ class HttpImageFetcher(
         class Redirect(val location: String?) : Hop
     }
 
-    private fun fetchHop(target: URL, deadline: Long): Hop {
+    /** [unopenable] is what a [target] that yields no [HttpURLConnection] costs; see [fetch]. */
+    private fun fetchHop(target: URL, deadline: Long, unopenable: ImageError): Hop {
         val connection = try {
+            // Only reachable through a URLStreamHandlerFactory, since the scheme is already fixed at
+            // http(s) — but if one is installed, the target may have come from a Location, and then
+            // this is the server's answer being wrong and not the message's. Hence the parameter.
             target.openConnection() as? HttpURLConnection
-                ?: throw ImageFetchException(ImageError.UNSUPPORTED)
+                ?: throw ImageFetchException(unopenable)
         } catch (e: IOException) {
             throw ImageFetchException(ImageError.NETWORK, e)
         } catch (e: RuntimeException) {

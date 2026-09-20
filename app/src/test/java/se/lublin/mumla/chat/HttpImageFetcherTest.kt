@@ -684,6 +684,16 @@ class HttpImageFetcherTest {
      * throw on demand. `fetch` takes a string and opens the connection itself, so this is the only
      * seam the JDK leaves: a stream handler of our own.
      */
+    /** A same-scheme 302 to a fixed [location], and nothing else. */
+    private class RedirectingConnection(url: URL, private val location: String) : HttpURLConnection(url) {
+        override fun connect() = Unit
+        override fun usingProxy() = false
+        override fun getResponseCode() = HTTP_MOVED_TEMP
+        override fun getHeaderField(name: String): String? =
+            if (name.equals("Location", ignoreCase = true)) location else null
+        override fun disconnect() = Unit
+    }
+
     private class SpyConnection(url: URL, private val onDisconnect: () -> Unit) : HttpURLConnection(url) {
         override fun connect() = Unit
         override fun usingProxy() = false
@@ -768,9 +778,38 @@ class HttpImageFetcherTest {
         }
     }
 
+    /**
+     * The last place in this class where the server could still decide the caller's error code.
+     *
+     * Every other refusal now follows one rule: what the *message* got wrong is
+     * [ImageError.UNSUPPORTED] and is remembered for the life of the process, what a *server* got
+     * wrong is [ImageError.NETWORK] and expires. `openConnection()` handing back something that is
+     * not an [HttpURLConnection] was the exception — it said UNSUPPORTED whoever named the target.
+     *
+     * It takes a `URLStreamHandlerFactory` to reach at all, since the scheme is nailed down long
+     * before this point, and these tests install one — which is the whole reason it is worth
+     * closing: the moment anything in the process installs a factory of its own, one `302` can turn
+     * a perfectly good `<img src>` into a failure the loader never retries.
+     */
+    @Test
+    fun anUnopenableTargetIsTheServersFaultWhenAServerNamedIt() {
+        installSpyHttpsHandler()
+        // The message named it: terminal, because that source cannot become a different one later.
+        expectError("https://$PLAIN_HOST/a.png", ImageError.UNSUPPORTED)
+        // A Location named it: retryable, exactly like every other thing a server answers wrong.
+        expectError("https://$REDIRECT_TO_PLAIN_HOST/a.png", ImageError.NETWORK)
+    }
+
     private companion object {
         private const val SPY_HOST = "spy.invalid"
         private const val STALL_HOST = "stall.invalid"
+
+        /** Hands out a [URLConnection] that is not an [HttpURLConnection]; see the test above. */
+        private const val PLAIN_HOST = "plain.invalid"
+
+        /** Redirects, same scheme, to [PLAIN_HOST]. */
+        private const val REDIRECT_TO_PLAIN_HOST = "redirect-to-plain.invalid"
+
         private val spyDisconnect = AtomicReference<() -> Unit>({})
         /** The last connection the fetcher opened through the spy handler, so its settings can be read. */
         private val spyConnection = AtomicReference<HttpURLConnection?>(null)
@@ -793,6 +832,10 @@ class HttpImageFetcherTest {
                         when (u.host) {
                             SPY_HOST -> SpyConnection(u, spyDisconnect.get()).also { spyConnection.set(it) }
                             STALL_HOST -> StallingChunkedConnection(u)
+                            PLAIN_HOST -> object : URLConnection(u) {
+                                override fun connect() = Unit
+                            }
+                            REDIRECT_TO_PLAIN_HOST -> RedirectingConnection(u, "https://$PLAIN_HOST/a.png")
                             else -> throw IOException("no real https connection in unit tests")
                         }
                 }
