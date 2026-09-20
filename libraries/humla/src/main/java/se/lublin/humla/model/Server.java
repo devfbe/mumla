@@ -38,15 +38,19 @@ import se.lublin.humla.Constants;
 public class Server implements Parcelable {
     private static final String TAG = Server.class.getName();
 
-    private long mId;
-    private String mName;
-    private String mHost;
-    private int mPort;
-    private String mUsername;
-    private String mPassword;
+    // Volatile, not final: the setters below are called from the UI while resolveHost() writes
+    // mResolvedHost and mResolvedPort from the connecting thread and HumlaService reads them back.
+    // No two of these fields form an invariant together, so plain visibility is the whole of what
+    // they need. GuardedModelVisibilityTest demands it of every field in this package.
+    private volatile long mId;
+    private volatile String mName;
+    private volatile String mHost;
+    private volatile int mPort;
+    private volatile String mUsername;
+    private volatile String mPassword;
 
-    private String mResolvedHost = null;
-    private int mResolvedPort;
+    private volatile String mResolvedHost = null;
+    private volatile int mResolvedPort;
 
     public static final Parcelable.Creator<Server> CREATOR = new Parcelable.Creator<Server>() {
 

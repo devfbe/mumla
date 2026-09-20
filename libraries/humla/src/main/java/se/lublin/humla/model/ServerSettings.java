@@ -3,12 +3,15 @@ package se.lublin.humla.model;
 import se.lublin.humla.protobuf.Mumble;
 
 public class ServerSettings implements IServerSettings{
-    private boolean mAllowHtml;
-    private int mMessageLength;
-    private int mImageMessageLength;
-    private int mMaxBandwidth;
-    private int mMaxUsers;
-    private String mWelcomeText;
+    // Final rather than volatile: written once in the constructor and never again, which is the
+    // stronger of the two guarantees and the one ModelHandler's volatile mServerSettings reference
+    // needs in order to mean anything. GuardedModelVisibilityTest demands one or the other.
+    private final boolean mAllowHtml;
+    private final int mMessageLength;
+    private final int mImageMessageLength;
+    private final int mMaxBandwidth;
+    private final int mMaxUsers;
+    private final String mWelcomeText;
 
     public ServerSettings(Mumble.ServerConfig msg){
         mAllowHtml = msg.getAllowHtml();

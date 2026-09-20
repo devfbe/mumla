@@ -19,6 +19,7 @@ package se.lublin.humla.model
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import se.lublin.humla.protocol.ModelHandler
+import java.io.File
 import java.lang.reflect.Modifier
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -83,7 +84,7 @@ class GuardedModelVisibilityTest {
 
     @Test
     fun everyMutableFieldOfTheGuardedModelIsVolatile() {
-        val unguarded = listOf(Channel::class.java, User::class.java, ModelHandler::class.java)
+        val unguarded = guardedModel()
             // Up the hierarchy, not just the class itself: ModelHandler extends
             // HumlaTCPMessageListener.Stub, and declaredFields would report nothing about what it
             // inherits. That is the same blind spot declaredMethods had in task 4, where a
@@ -102,8 +103,82 @@ class GuardedModelVisibilityTest {
         assertThat(unguarded).isEmpty()
     }
 
+    /**
+     * The classes this test demands the property of, derived rather than listed.
+     *
+     * A hand-written `listOf(Channel, User, ModelHandler)` was the same blindness the field sweep
+     * below fixes, one level up: blind to *siblings*. Two of them had been looked at by hand and
+     * cleared - but on a different argument (they are written once in a constructor and published
+     * safely), which is an argument this test does not make and cannot make. So the membership is
+     * derived from the package and the exemption is structural: a field written only in a
+     * constructor is `final`, and the filter below already lets `final` through for exactly that
+     * reason. A class somebody adds to `se.lublin.humla.model` is in this set from the moment its
+     * file exists. Seen red rather than assumed: a plain `private int mProbe` added to
+     * [WhisperTargetChannel] - a class the old literal never looked at - fails with
+     * "expected to be empty but was: [WhisperTargetChannel.mProbe]".
+     *
+     * [WhisperTargetList] is the one exclusion, and not because it is cleared. `mTakenIds` is a
+     * bitmask updated with `|=` and `&=`, a read-modify-write that `volatile` would not make
+     * correct - it would only make this test pass, which is worse than failing. Every caller is
+     * `HumlaService` (`:277`, `:318`, `:474`, `:1194`, `:1209`, `:1235`); if it is ever reached
+     * from two threads what it needs is the list's own monitor, and saying so here is the point of
+     * naming it rather than quietly leaving it out.
+     */
+    private fun guardedModel(): List<Class<*>> {
+        val model = classesIn("se.lublin.humla.model")
+        // A scan that finds nothing, or only the half one compiler wrote, would make this test pass
+        // by finding nothing to fail.
+        assertThat(model).containsAtLeast(
+            Channel::class.java, User::class.java, // Kotlin
+            Message::class.java, ServerSettings::class.java, // Java
+        )
+        return model.filterNot { it == WhisperTargetList::class.java } + ModelHandler::class.java
+    }
+
+    /**
+     * Every production class of [packageName], found through the places two of its own members were
+     * compiled to.
+     *
+     * Not the whole classpath: that finds the *test* classes of this package as well, and this file
+     * is in it. Not one code source either - Kotlin and Java output go to different places, so
+     * [Channel] and [Message] are asked separately and whatever holds those two holds the rest.
+     */
+    private fun classesIn(packageName: String): List<Class<*>> {
+        val prefix = packageName.replace('.', '/')
+        val roots = listOf(Channel::class.java, Message::class.java)
+            .mapNotNull { it.protectionDomain?.codeSource?.location?.toURI()?.let(::File) }
+            .distinct()
+        return roots
+            .flatMap { root -> if (root.isDirectory) namesUnder(root, prefix) else namesInJar(root, prefix) }
+            .distinct()
+            .sorted()
+            .map { Class.forName("$packageName.$it") }
+    }
+
+    private fun namesUnder(root: File, prefix: String): List<String> =
+        File(root, prefix).listFiles().orEmpty()
+            .filter { it.name.endsWith(CLASS_SUFFIX) }
+            .map { it.name.removeSuffix(CLASS_SUFFIX) }
+
+    private fun namesInJar(jar: File, prefix: String): List<String> =
+        java.util.zip.ZipFile(jar).use { zip ->
+            zip.entries().asSequence()
+                .map { it.name }
+                .filter { it.startsWith("$prefix/") && it.endsWith(CLASS_SUFFIX) }
+                .map { it.removePrefix("$prefix/").removeSuffix(CLASS_SUFFIX) }
+                .filterNot { it.contains('/') }
+                .toList()
+        }
+
+    /**
+     * The class and everything it inherits from, up to the library boundary. Not up to [Any]:
+     * `java.lang.Enum` carries a non-final `hash` field of its own since JDK 21, and the two enums
+     * in this package would report it as unguarded state of ours. The boundary is the right place
+     * to stop anyway - `ModelHandler` extends `HumlaTCPMessageListener.Stub`, which is inside it,
+     * and that is the inheritance this sweep exists to follow.
+     */
     private fun Class<*>.hierarchy(): List<Class<*>> =
-        generateSequence(this) { it.superclass }.takeWhile { it != Any::class.java }.toList()
+        generateSequence(this) { it.superclass }.takeWhile { it.name.startsWith(LIBRARY) }.toList()
 
     /**
      * The write has to land *after* the reader's loop has been compiled, which is the whole point:
@@ -126,5 +201,7 @@ class GuardedModelVisibilityTest {
         const val SPIN_LIMIT = 20_000_000_000L
         const val WRITE_DELAY_MILLIS = 500L
         const val JOIN_TIMEOUT_MILLIS = 30_000L
+        const val CLASS_SUFFIX = ".class"
+        const val LIBRARY = "se.lublin.humla."
     }
 }
