@@ -571,6 +571,15 @@ one level down. It is not a sentence that over-generalises; it is a sentence tha
 is *correct*, and whose correctness stood in for a measurement. It is also
 greppable, which is why it earns a rule: **on writing such a comment, delete the
 line, run the suite, and only then write the comment, with the result in it.**
+And the sharpest form of it, measured later in the same stream: the explanation is
+not always merely *unverified*, it can be **wrong**. A `udp = null` carried a
+paragraph about an OCB2 sequence number burned in the window between a callback
+being posted and the transport clearing its own flag. Read in the source, the
+transport clears that flag as the **first statement of the `finally`, on the same
+thread**, long before the callback is dequeued — the window is real and is closed
+by the other side first, so the line is a no-op and the paragraph describes a
+mechanism it cannot participate in. A wrong explanation defends a line better than
+a right one, because it answers the question before anyone asks it.
 
 Two things make it easier to believe, and both are about granularity:
 
@@ -629,6 +638,20 @@ returning a constant `emptyList()`, a fake that could not express a null user, t
 one), which makes it a rule rather than an anecdote: **for every input the
 production file branches on, name the fake that produces it and check it can
 produce more than one value.**
+Two riders, both earned the hard way. **Run the enumeration to exhaustion, not to
+the first find.** The pass that found `useTor` — a dimension closed *by construction*
+across an entire repository — stopped there, and had two more answers in it: the
+same fake discarded the host and port it was handed, and a sibling fake discarded
+the crypt state, which made three of six decisions unreachable end-to-end. A pass
+that produces one good find feels like it has done its work; it has only started.
+And **say when a pass was not blind.** The enumeration is supposed to happen before
+the diff is read. When that order slipped, the honest report was "treat this as an
+enumeration *from* the production file rather than one made blind" — which is worth
+more than the pass pretending to a provenance it does not have.
+Third rider, about your own correct work: **applying a rule once does not discharge
+it.** The same author who spelled out "2^k inputs, not k mutations" in a test's KDoc,
+and satisfied it exactly for one compound condition, left the four-corner gap open on
+the predicate he had just opened up two files away. A rule is a grep, not a habit.
 
 **A mutation sweep inherits the blind spots of the fixture set.** It measures
 whether the tests can *see* a change; it cannot tell you that a branch's
