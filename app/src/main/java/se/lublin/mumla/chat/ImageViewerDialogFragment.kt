@@ -105,11 +105,18 @@ class ImageViewerDialogFragment : DialogFragment() {
             fail()
             return
         }
-        share.setOnClickListener { shareImage(source) }
 
         val metrics = resources.displayMetrics
+        val loader = ChatImageLoaders.get(requireContext())
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = ChatImageLoaders.get(requireContext()).loadFull(
+            // Fetched here and not in the share path, so that what leaves the app is the array this
+            // screen was decoded from. See [shareImage] for what that costs and what it does not buy.
+            val bytes = try {
+                loader.fetchBytes(source)
+            } catch (e: ImageFetchException) {
+                return@launch fail()
+            }
+            val result = loader.loadFull(
                 source,
                 metrics.widthPixels * DECODE_SCALE,
                 metrics.heightPixels * DECODE_SCALE,
@@ -118,6 +125,10 @@ class ImageViewerDialogFragment : DialogFragment() {
                 is ImageResult.Ready -> {
                     progress.visibility = View.GONE
                     image.setImageBitmap(result.bitmap)
+                    // The bytes ride in the listener rather than in a field of this fragment: there
+                    // is then no state to be null, no guard for a share before the load, and the
+                    // reference dies with the view that holds the listener.
+                    share.setOnClickListener { shareImage(source, bytes) }
                     share.isEnabled = true
                 }
                 is ImageResult.Failed -> fail()
@@ -127,22 +138,32 @@ class ImageViewerDialogFragment : DialogFragment() {
     }
 
     /**
-     * The loader remembers exactly one payload, so this usually costs nothing — but a row bound
-     * behind the dialog displaces it and then this really does fetch again, which is why the
-     * failure path is not decoration. Note that a direct `fetchBytes` takes **no permit** from the
-     * loader's concurrency gate: a share running beside three loads is a fourth concurrent peak.
+     * Writes [bytes] out and hands the receiver a grant for them. [bytes] are the array the picture
+     * on screen was decoded from, carried here from the load rather than fetched again.
+     *
+     * **Why not fetch here.** A second `GET` re-announces the user's IP to a host a chat message
+     * chose, on a tap that says "share"; and it is free to answer with something else, which
+     * `ImageShareExporter.typeOf` would then re-type -- so the user sends bytes they never saw,
+     * named by this app. Nothing downstream compares the two. Both pinned by
+     * `theSharedBytesAreTheOnesThatWereShown` and `theShareDoesNotGoBackToTheNetwork`.
+     *
+     * **What that does not buy, stated with its scope.** The array is the one *this dialog* fetched.
+     * `ChatImageLoader.loadFull` decodes from the loader's one-entry memo, which is this same array
+     * unless another load displaced it in the window between the two calls -- a few dispatches wide,
+     * and no longer the width of a decode. In that window the picture is re-fetched and can differ
+     * from what is shared. Closing it needs `loadFull` to hand back the bytes it decoded, which is
+     * task 10's file, not this one.
+     *
+     * **What it costs.** Up to `HttpImageFetcher.maxBytes` (5 MiB) stays reachable for the life of
+     * the dialog instead of only for the life of the loader's memo. The allocation itself is not
+     * new: `fetchBytes` already keeps it process-wide, outside the cache budget, and displaces
+     * whatever the thumbnail path had put there.
      */
-    private fun shareImage(source: String) {
+    private fun shareImage(source: String, bytes: ByteArray) {
         val context = requireContext()
         viewLifecycleOwner.lifecycleScope.launch {
             val exported = try {
-                withContext(ioDispatcher) {
-                    val bytes = ChatImageLoaders.get(context).fetchBytes(source)
-                    ImageShareExporter(context).export(source, bytes)
-                }
-            } catch (e: ImageFetchException) {
-                Toast.makeText(context, R.string.chat_image_load_failed, Toast.LENGTH_SHORT).show()
-                return@launch
+                withContext(ioDispatcher) { ImageShareExporter(context).export(source, bytes) }
             } catch (e: IOException) {
                 Toast.makeText(context, R.string.chat_image_load_failed, Toast.LENGTH_SHORT).show()
                 return@launch

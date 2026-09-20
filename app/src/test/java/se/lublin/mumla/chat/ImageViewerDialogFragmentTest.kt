@@ -35,6 +35,10 @@ class ImageViewerDialogFragmentTest {
     private val source = "https://x.org/a.png"
     private val other = "https://x.org/b.png"
 
+    // Hand-computed, not derived from the code under test:
+    //   $ printf 'https://x.org/a.png' | sha1sum
+    private val keyOfA = "c03da97f398e3f951d29689263e7fa31bf3c163d"
+
     /** Runs nothing until it is told to; see `theZoomSurvivesTwoRecreationsWhileTheImageIsStillLoading`. */
     private class ParkingDispatcher : CoroutineDispatcher() {
         private val parked = ArrayDeque<Runnable>()
@@ -87,6 +91,17 @@ class ImageViewerDialogFragmentTest {
 
     private fun ImageViewerDialogFragment.share(): View =
         requireView().findViewById(R.id.image_viewer_share)
+
+    /** The ACTION_SEND the chooser was built around, or an assertion failure if nothing was started. */
+    private fun sentIntent(fragment: ImageViewerDialogFragment): Intent {
+        val chooser = shadowOf(fragment.requireActivity()).nextStartedActivity
+        assertThat(chooser).isNotNull()
+        assertThat(chooser.action).isEqualTo(Intent.ACTION_CHOOSER)
+        return chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
+    }
+
+    private fun exportedFile(fragment: ImageViewerDialogFragment, name: String): File =
+        File(fragment.requireContext().cacheDir, ImageShareExporter.DIRECTORY + "/" + name)
 
     /** Robolectric never runs a layout pass for the dialog window, so the view is sized by hand. */
     private fun ImageViewerDialogFragment.layOutTheImage(side: Int = 400) {
@@ -338,6 +353,9 @@ class ImageViewerDialogFragmentTest {
 
         for (outcome in outcomes) {
             val mocked = mockk<ChatImageLoader>()
+            // The viewer fetches the bytes it will later share before it asks for a decode; this
+            // test is about what the *decode* answered, so the fetch always succeeds here.
+            coEvery { mocked.fetchBytes(any()) } returns TestImages.png(4, 4)
             coEvery { mocked.loadFull(any(), any(), any()) } returns outcome
             ChatImageLoaders.setForTests(mocked)
             launch().onFragment { fragment ->
@@ -348,6 +366,66 @@ class ImageViewerDialogFragmentTest {
                     .isEqualTo(fragment.getString(R.string.chat_image_load_failed))
                 assertThat(fragment.share().isEnabled).isFalse()
                 assertThat(fragment.image().drawable).isNull()
+            }
+        }
+    }
+
+    // --- what leaves the app is what was on the screen --------------------------------------------
+
+    /**
+     * The share must hand out the bytes this dialog decoded, and a second fetch cannot promise that:
+     * the server is free to answer differently, `ImageShareExporter.typeOf` then re-decides the type
+     * from the new bytes, and the user sends something they never saw under a name this app chose.
+     * Nothing compared the exported bytes with the decoded ones.
+     *
+     * The displacement is not hypothetical -- it is the same one
+     * [aShareThatCannotBeWrittenSaysSoAndStartsNothing]'s neighbour used to build: the loader
+     * remembers exactly one payload, so one row binding behind the dialog is enough.
+     */
+    @Test
+    fun theSharedBytesAreTheOnesThatWereShown() {
+        val shown = TestImages.png(40, 40)
+        var served: ByteArray = shown
+        installLoader { served }
+        launch().use { scenario ->
+            scenario.onFragment { fragment ->
+                fragment.ioDispatcher = Dispatchers.Unconfined
+                idle()
+                // The server changes its mind, and a row bound behind the dialog displaces the one
+                // payload the loader remembers. A share that fetches again fetches *this*.
+                served = "not an image at all".toByteArray()
+                runBlocking { loader!!.fetchBytes(other) }
+
+                fragment.share().performClick()
+                idle()
+
+                val send = sentIntent(fragment)
+                assertThat(send.type).isEqualTo("image/png")
+                assertThat(exportedFile(fragment, "$keyOfA.png").readBytes()).isEqualTo(shown)
+            }
+        }
+    }
+
+    /**
+     * The privacy half of the same fix. A second request is a second contact with a host the user
+     * only ever agreed to look at once -- it re-announces their IP and the fact that they are still
+     * there, on a tap that says "share", and it is observable to the sender of the message.
+     */
+    @Test
+    fun theShareDoesNotGoBackToTheNetwork() {
+        val fetched = mutableListOf<String>()
+        installLoader { url -> fetched += url; TestImages.png(40, 40) }
+        launch().use { scenario ->
+            scenario.onFragment { fragment ->
+                fragment.ioDispatcher = Dispatchers.Unconfined
+                idle()
+                runBlocking { loader!!.fetchBytes(other) }
+
+                fragment.share().performClick()
+                idle()
+
+                assertThat(sentIntent(fragment).type).isEqualTo("image/png")
+                assertThat(fetched.count { it == source }).isEqualTo(1)
             }
         }
     }
@@ -431,37 +509,12 @@ class ImageViewerDialogFragmentTest {
     }
 
     /**
-     * The share re-fetches, and the re-fetch can fail: the loader remembers exactly one payload, so
-     * any image bound behind the dialog displaces it. A message, not a crash, and nothing started.
-     */
-    @Test
-    fun aShareWhoseRefetchFailsSaysSoAndStartsNothing() {
-        var armed = false
-        installLoader { url ->
-            if (armed && url.endsWith("a.png")) throw ImageFetchException(ImageError.NETWORK)
-            TestImages.png(4, 4)
-        }
-        launch().onFragment { fragment ->
-            fragment.ioDispatcher = Dispatchers.Unconfined
-            idle()
-            // Displace the one remembered payload, exactly as a row binding behind the dialog would.
-            runBlocking { loader!!.fetchBytes(other) }
-            armed = true
-
-            fragment.share().performClick()
-            idle()
-
-            assertThat(ShadowToast.getTextOfLatestToast())
-                .isEqualTo(fragment.getString(R.string.chat_image_load_failed))
-            assertThat(shadowOf(fragment.requireActivity()).nextStartedActivity).isNull()
-        }
-    }
-
-    /**
-     * The other half of the share's failure surface: the fetch worked and the *write* did not. A
-     * plain file where the staging directory should be makes `mkdirs` fail and the write throw,
-     * which is an `IOException` rather than an `ImageFetchException` -- two catch clauses, two
-     * tests, neither of them able to cover for the other.
+     * The share's whole failure surface, now that it does not fetch: the *write* fails. A plain file
+     * where the staging directory should be makes `mkdirs` fail and the write throw an
+     * `IOException`. There used to be a second test here for a re-fetch that fails; the share no
+     * longer fetches, so that path and its `catch (e: ImageFetchException)` are both gone -- a
+     * failing fetch is now a failing *load*, which
+     * [aFailedLoadShowsTheErrorAndKeepsSharingDisabled] covers.
      */
     @Test
     fun aShareThatCannotBeWrittenSaysSoAndStartsNothing() {
