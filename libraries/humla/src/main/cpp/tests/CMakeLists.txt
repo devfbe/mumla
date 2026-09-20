@@ -146,6 +146,12 @@ if(HUMLA_HAVE_SANITIZERS)
   if(NOT HUMLA_SANITIZE_WEBRTC)
     # The uninstrumented upstream objects still have to come from somewhere. humla_apm.cpp is
     # in both archives; the instrumented one is listed first so its definitions win.
+    #
+    # "so its definitions win" is an assumption about link order, and an assumption that fails
+    # silently: every target would still build and apm_sanitized would still pass while
+    # instrumenting nothing. apm_is_instrumented below stops asserting it and starts checking
+    # it, on the linked image. See assert_instrumented.cmake for why it cannot be checked from
+    # inside the test process.
     target_link_libraries(humla_apm_asan PUBLIC humla_apm)
   endif()
 
@@ -155,4 +161,20 @@ if(HUMLA_HAVE_SANITIZERS)
   target_link_libraries(test_apm_asan PRIVATE humla_apm_asan m)
 
   humla_add_labelled_test(apm_sanitized test_apm_asan sanitized)
+
+  # objdump is a hard requirement here rather than a soft one: making the check optional would
+  # reintroduce exactly the silent shrinkage HUMLA_REQUIRE_SANITIZERS was added to prevent.
+  find_program(HUMLA_OBJDUMP NAMES ${CMAKE_OBJDUMP} llvm-objdump objdump)
+  if(NOT HUMLA_OBJDUMP)
+    message(FATAL_ERROR
+        "No objdump found. It is needed to verify that test_apm_asan links the instrumented "
+        "copy of humla_apm.cpp rather than the uninstrumented one; without it that test can "
+        "pass while instrumenting nothing.")
+  endif()
+  add_test(NAME apm_is_instrumented
+           COMMAND ${CMAKE_COMMAND} -DOBJDUMP=${HUMLA_OBJDUMP}
+                                    -DBINARY=$<TARGET_FILE:test_apm_asan>
+                                    -DSYMBOL=humla_apm_create
+                                    -P ${CMAKE_CURRENT_SOURCE_DIR}/assert_instrumented.cmake)
+  set_tests_properties(apm_is_instrumented PROPERTIES LABELS sanitized)
 endif()
