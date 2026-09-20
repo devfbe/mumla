@@ -203,10 +203,18 @@ class HumlaCallbacksTest {
 
     /**
      * Case 2 and case 4: a queue that keeps refilling while the drain runs still yields the
-     * delivery thread after one slice, and loses nothing once the producer stops.
+     * delivery thread after one slice, and everything raised is either delivered in order or
+     * counted.
+     *
+     * "Loses nothing" is what this test asserted before the absolute ceiling existed, and the
+     * producer here is the shape that ceiling is for: a background thread raising undroppable
+     * events faster than the main thread drains them, which is what a large server's synchronisation
+     * is. What is left to demand is a conservation law rather than no loss - every event is
+     * delivered or counted in [HumlaCallbacks.droppedEvents], none is reordered, and the drain
+     * still hands the looper back after one slice.
      */
     @Test
-    fun aRefillingQueueStillYieldsAfterOneSliceAndLosesNothing() {
+    fun aRefillingQueueStillYieldsAfterOneSliceAndAccountsForEveryEvent() {
         val observer = RecordingObserver()
         callbacks.registerObserver(observer)
 
@@ -239,8 +247,11 @@ class HumlaCallbacksTest {
 
         mainLooper.idle()
         val total = produced.get()
-        assertThat(observer.messages).hasSize(total)
-        assertThat((0 until total).firstOrNull { observer.messages[it] != "m$it" }).isNull()
+        val delivered = observer.messages.map { it.removePrefix("m").toInt() }
+        assertThat(delivered.size + callbacks.droppedEvents).isEqualTo(total.toLong())
+        assertThat(delivered).isInOrder()
+        // The oldest go first, so what survives is a suffix that reaches the last event raised.
+        assertThat(delivered.last()).isEqualTo(total - 1)
     }
 
     /** Records how deeply observer callbacks nest inside one another. */

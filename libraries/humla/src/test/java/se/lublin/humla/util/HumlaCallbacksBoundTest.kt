@@ -49,9 +49,11 @@ class HumlaCallbacksBoundTest {
 
     private class Recorder : HumlaObserver() {
         val logs = mutableListOf<String?>()
+        var connected = 0
         val channelsAdded = mutableListOf<Int>()
         val channelStates = mutableListOf<String?>()
         val userStates = mutableListOf<Int>()
+        override fun onConnected() { connected++ }
         override fun onLogInfo(message: String?) { logs += message }
         override fun onChannelAdded(channel: IChannel?) { channelsAdded += channel!!.id }
         override fun onChannelStateUpdated(channel: IChannel?) { channelStates += channel?.name }
@@ -147,17 +149,20 @@ class HumlaCallbacksBoundTest {
     }
 
     /**
-     * The bound is allowed to throw away tree-shape events and nothing else, so a queue of chat and
-     * log events grows past it rather than losing a message.
+     * The first ceiling is allowed to throw away tree-shape events and nothing else, so a queue of
+     * chat and log events grows past it rather than losing a message. Five times past it here, and
+     * still short of [HumlaCallbacks.absoluteCeiling], which is the only thing that stops it -
+     * see [undroppableEventsCannotPushTheQueuePastTheAbsoluteCeiling] for the other side.
      */
     @Test
-    fun chatAndLogEventsAreNeverDropped() {
-        val callbacks = HumlaCallbacks(Handler(Looper.getMainLooper()), 10)
+    fun chatAndLogEventsAreNeverDroppedByTheFirstCeiling() {
+        val callbacks = HumlaCallbacks(Handler(Looper.getMainLooper()), 20)
         val recorder = Recorder()
         callbacks.registerObserver(recorder)
 
         thread { repeat(100) { callbacks.onLogInfo("m$it") } }.join()
 
+        assertThat(callbacks.absoluteCeiling).isAtLeast(100) // this one is the first ceiling's job
         assertThat(callbacks.queuedEvents).isEqualTo(100)
         assertThat(callbacks.droppedEvents).isEqualTo(0)
         mainLooper.idle()
@@ -245,6 +250,127 @@ class HumlaCallbacksBoundTest {
         assertThat(recorder.channelsAdded.lastOrNull()).isEqualTo(5_000)
     }
 
+    /**
+     * The second bound, and the one the first does not give. Trimming runs only when the arriving
+     * event is itself droppable - which is what keeps a burst of chat from starving the channel
+     * rebuild - so `queue.size <= maxQueuedEvents` holds only while the undroppable events stay
+     * under it. Above that the first bound's ceiling is `#undroppable + 1`, and **nothing bounds
+     * `#undroppable`**: twelve of the nineteen events are undroppable and two of them are bulk,
+     * because `ModelHandler.messageUserState` raises `onUserConnected` *and* an `onLogInfo` per new
+     * user. A 5 000-user server is therefore at least 10 000 events nothing may touch, and the
+     * count is the server's to choose.
+     */
+    @Test
+    fun undroppableEventsCannotPushTheQueuePastTheAbsoluteCeiling() {
+        val callbacks = HumlaCallbacks(Handler(Looper.getMainLooper()), 10)
+        val recorder = Recorder()
+        callbacks.registerObserver(recorder)
+
+        thread { repeat(1_000) { callbacks.onLogInfo("m$it") } }.join()
+
+        assertThat(callbacks.queuedEvents).isEqualTo(callbacks.absoluteCeiling)
+        assertThat(callbacks.droppedEvents).isEqualTo(1_000L - callbacks.absoluteCeiling)
+        mainLooper.idle()
+        // Oldest first: what survives is the newest ceiling-worth of them.
+        assertThat(recorder.logs)
+            .isEqualTo((1_000 - callbacks.absoluteCeiling until 1_000).map { "m$it" })
+    }
+
+    /** The same at the production bound, in the shape a real user sync produces it. */
+    @Test
+    fun aFiveThousandUserSyncIsBoundedInTotalAndNotOnlyInDroppableEvents() {
+        val callbacks = HumlaCallbacks()
+
+        thread {
+            repeat(5_000) {
+                callbacks.onUserConnected(User(it, "u$it"))
+                callbacks.onLogInfo("u$it connected")
+            }
+        }.join()
+
+        println("MEASURE observer queue after a 5 000-user sync: ${callbacks.queuedEvents}")
+        assertThat(callbacks.queuedEvents).isAtMost(callbacks.absoluteCeiling)
+    }
+
+    /**
+     * The one exemption, and why it is the only one: an absolute ceiling that may throw away
+     * `onConnected` would leave `MumlaActivity` (`:172`) on its connecting screen for good, and
+     * nothing in the model can be re-read to recover it. The four connection-lifecycle events are
+     * also the only undroppable ones whose count is the *connection's* to choose rather than the
+     * server's, so exempting them leaves the ceiling bounded by something no server can inflate.
+     */
+    @Test
+    fun aConnectionLifecycleEventSurvivesTheCeilingThatSwallowsTheBulk() {
+        val callbacks = HumlaCallbacks(Handler(Looper.getMainLooper()), 10)
+        val recorder = Recorder()
+        callbacks.registerObserver(recorder)
+        val flood = callbacks.absoluteCeiling * 2
+
+        thread {
+            callbacks.onConnected()
+            repeat(flood) { callbacks.onLogInfo("m$it") }
+        }.join()
+
+        assertThat(callbacks.queuedEvents).isEqualTo(callbacks.absoluteCeiling)
+        mainLooper.idle()
+        assertThat(recorder.connected).isEqualTo(1)
+        // The lifecycle event holds a place, so one fewer log line does.
+        assertThat(recorder.logs)
+            .isEqualTo((flood - callbacks.absoluteCeiling + 1 until flood).map { "m$it" })
+    }
+
+    /**
+     * What the trim costs on the raise path, which is the only new cost either ceiling puts on the
+     * hot path - and that path is `dispatch()` holding a lock the protocol thread shares with the
+     * audio thread (`AudioOutput` -> `onUserTalkStateUpdated`).
+     *
+     * Finding the oldest droppable event by scanning the queue is O(queue), and the queue is
+     * deepest exactly when the trim runs. Measured on the scanning version, on this machine:
+     * **177 476 ns** mean per raise against 11 024 queued events, worst 17 ms. With the index,
+     * over four runs here: 1 221 to 2 151 ns, and - which is the point - **flat**, the deeper half
+     * measuring 0.9x to 1.05x the shallower one. The queue below is eight times deeper in the
+     * second half and must not cost eight times as much. That ratio is what
+     * this test asserts, because it is a statement about the algorithm rather than about the
+     * machine; the absolute bound beside it is a floor under a change that makes the whole thing
+     * pathological.
+     */
+    @Test
+    fun findingTheOldestDroppableEventDoesNotScanTheQueue() {
+        val shallow = nanosPerRaiseAgainstAFullQueue(128)
+        val deep = nanosPerRaiseAgainstAFullQueue(1_024)
+
+        println(
+            "MEASURE ns per droppable raise: ${128 * HumlaCallbacks.CEILING_FACTOR} queued=$shallow," +
+                " ${1_024 * HumlaCallbacks.CEILING_FACTOR} queued=$deep"
+        )
+        assertThat(deep).isLessThan(20_000L)
+        assertThat(deep).isLessThan(shallow * 4)
+    }
+
+    /**
+     * Fills a queue to [HumlaCallbacks.absoluteCeiling] the way a sync does - the tree first, then
+     * the undroppable user traffic behind it - and returns the mean cost of one more droppable
+     * raise against it.
+     */
+    private fun nanosPerRaiseAgainstAFullQueue(bound: Int): Long {
+        val callbacks = HumlaCallbacks(Handler(Looper.getMainLooper()), bound)
+        thread {
+            for (id in 1..bound) callbacks.onChannelAdded(Channel(id, false))
+            repeat(callbacks.absoluteCeiling * 2) { callbacks.onLogInfo("m$it") }
+        }.join()
+        assertThat(callbacks.queuedEvents).isEqualTo(callbacks.absoluteCeiling)
+
+        var total = 0L
+        thread {
+            repeat(RAISES) {
+                val start = System.nanoTime()
+                callbacks.onChannelAdded(Channel(1_000_000 + it, false))
+                total += System.nanoTime() - start
+            }
+        }.join()
+        return total / RAISES
+    }
+
     /** Feeds the 5 000-frame sync from `ModelRaceTest` and reports what is left in the queue. */
     private fun sync(callbacks: HumlaCallbacks): Int {
         val handler = ModelHandler(
@@ -269,4 +395,9 @@ class HumlaCallbacksBoundTest {
             .setName(name)
             .also { if (parent != null) it.setParent(parent) }
             .build()
+
+    private companion object {
+        /** Enough raises that one slow one cannot decide the mean. */
+        const val RAISES = 2_000
+    }
 }

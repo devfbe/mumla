@@ -67,7 +67,10 @@ import java.util.concurrent.ConcurrentHashMap
  * - An event accepted while an observer unregisters is still delivered to every observer that is
  *   registered when its turn comes, and a slice that ends early - because a callback threw, or
  *   because the looper refused the re-post - leaves the queue intact and re-arms the drain.
- * - The queue is bounded, which costs two things an observer has to know about:
+ * - The queue is bounded by two separate ceilings, which cost three things an observer has to know
+ *   about. The first, [maxQueuedEvents], is **not** a bound on the queue: it only ever drops
+ *   tree-shape events, so it holds only while the events it may not touch stay under it.
+ *   [absoluteCeiling] is the one that always holds.
  *   - **State refreshes for one subject are folded.** [onChannelStateUpdated],
  *     [onChannelPermissionsUpdated], [onUserStateUpdated] and [onUserTalkStateUpdated] carry one
  *     live model object and nothing else, and every observer in the tree reads that object's
@@ -90,15 +93,41 @@ import java.util.concurrent.ConcurrentHashMap
  *     - **The newest tree-shape event is never the one dropped.** It is the delivery that shows
  *       everything the dropped ones carried, so when the queue holds nothing else droppable it
  *       grows past the bound rather than throwing that one away.
- *     A queue over its bound that holds no tree-shape event beside the newest therefore grows,
- *     and counts what it did drop in [droppedEvents]. Chat, log, lifecycle and one-shot state
- *     events always arrive - `ChannelDescriptionFragment` and `UserCommentFragment` register an
- *     observer that unregisters itself on the one [onChannelStateUpdated]/[onUserStateUpdated] it
- *     is waiting for, which is why those are folded rather than dropped.
+ *     A queue over this first ceiling that holds no tree-shape event beside the newest therefore
+ *     grows, and counts what it did drop in [droppedEvents].
+ *   - **Above [absoluteCeiling] the oldest event goes, whatever its policy is.** The paragraph
+ *     above is the whole reason this second ceiling exists, and the reason it has to be absolute:
+ *     since only a droppable event may push the first ceiling, the real ceiling there is
+ *     `#undroppable + 1`, and **nothing bounds `#undroppable`**. Twelve of the nineteen events are
+ *     undroppable and two of them are bulk - `ModelHandler.messageUserState` raises
+ *     [onUserConnected] *and* an [onLogInfo] per new user, so a 5 000-user server is at least
+ *     10 000 events nothing may touch, and the count is the server's to choose. A ceiling a server
+ *     can raise is not a ceiling.
+ *
+ *     The exemption is the four connection-lifecycle events - [onConnected], [onConnecting],
+ *     [onDisconnected] and [onTLSHandshakeFailed]. They are the ones whose loss cannot be made
+ *     good by re-reading anything (`MumlaActivity:172` would stay on its connecting screen for
+ *     good), and the only undroppable events whose number is the *connection's* to choose rather
+ *     than the server's - which is what leaves this ceiling bounded by something no server can
+ *     inflate. Everything else goes: chat, log and folded refreshes included.
+ *
+ *     What that costs, plainly. Chat and log lines dropped here are lost for good - `MumlaService`
+ *     accumulates them into an unbounded `mMessageLog`, so this queue is the only place one can go
+ *     missing, and the user sees a gap at the *old* end of the chat pane. A dropped folded refresh
+ *     is the one that can also be felt as a hang: `ChannelDescriptionFragment` and
+ *     `UserCommentFragment` register an observer that unregisters itself on the single
+ *     [onChannelStateUpdated]/[onUserStateUpdated] it is waiting for. The channel list itself is
+ *     unaffected, because every observer of a dropped event rebuilds it from the model anyway.
+ *
+ *     None of that happens before the main thread has failed to drain
+ *     `absoluteCeiling / MAX_EVENTS_PER_SLICE` consecutive slices - 128 of them at the production
+ *     numbers, about a second of delivery work at [SLICE_BUDGET_NANOS] each. A backlog deeper than
+ *     that is not one the UI catches up on, and losing its oldest end is the cheaper half of the
+ *     trade against growing without limit on a server's say-so.
  *
  *   An observer must treat a model event as "something about this changed, read it again", never
- *   as a delta it accumulates. That was already true of every observer in the tree; the bound is
- *   what makes it binding.
+ *   as a delta it accumulates. That was already true of every observer in the tree; the ceilings
+ *   are what make it binding.
  *
  * Kotlin makes this class and its members final, where the Java original was subclassable. That
  * narrowing is intentional: nothing in the tree subclasses [HumlaCallbacks], and the dispatch
@@ -112,7 +141,17 @@ class HumlaCallbacks @JvmOverloads constructor(
 
     private val observers: MutableSet<IHumlaObserver> = Collections.newSetFromMap(ConcurrentHashMap())
     private val lock = Any()
-    private val queue = ArrayDeque<Event>() // guarded by lock
+    // A LinkedHashSet rather than an ArrayDeque because the ceilings remove from the middle: Event
+    // has no equals/hashCode, so this is an identity set that keeps arrival order and removes any
+    // element in constant time. An ArrayDeque's remove(Object) is a scan, and the queue is deepest
+    // exactly when a ceiling runs.
+    private val queue = LinkedHashSet<Event>() // guarded by lock
+    // The Policy.Droppable members of queue, in the same order. Without it, finding the oldest
+    // droppable event means scanning past every undroppable one ahead of it - measured at 177 us
+    // per raise against a queue 11 024 deep, against 1.3 us with it, inside dispatch() under a lock
+    // the protocol thread shares with the audio thread. Every removal from either structure takes a
+    // head, so the two stay in step: see forget().
+    private val droppable = ArrayDeque<Event>() // guarded by lock
     private val folded = HashMap<Any, Event>() // guarded by lock
     private var drainScheduled = false // guarded by lock
     private var dropped = 0L // guarded by lock
@@ -120,27 +159,44 @@ class HumlaCallbacks @JvmOverloads constructor(
     /** How many events are waiting for the delivery thread. Diagnostics; safe from any thread. */
     val queuedEvents: Int get() = synchronized(lock) { queue.size }
 
-    /** How many tree-shape events the bound has dropped. Diagnostics; safe from any thread. */
+    /** How many events either bound has dropped. Diagnostics; safe from any thread. */
     val droppedEvents: Long get() = synchronized(lock) { dropped }
+
+    /**
+     * The ceiling that holds for the queue as a whole, above which the oldest event goes whatever
+     * its policy is - except [Policy.Lifecycle]. See this class's doc for what that costs and why
+     * [maxQueuedEvents] alone is not a bound at all.
+     */
+    val absoluteCeiling: Int =
+        if (maxQueuedEvents > Int.MAX_VALUE / CEILING_FACTOR) Int.MAX_VALUE
+        else maxQueuedEvents * CEILING_FACTOR
 
     /**
      * What the queue may do with an event besides deliver it, decided at the raise site in the
      * overrides at the bottom of this class.
      *
-     * Exactly one of the three applies, and that is why this is a type rather than a key plus a
+     * Exactly one of the four applies, and that is why this is a type rather than a key plus a
      * flag: an event that was folded *and* droppable could be dropped while [folded] still pointed
      * at it, and the next event for that subject would then fold into something already thrown
      * away and never be delivered. Making the combination unrepresentable is cheaper than guarding
      * against it, and leaves nothing behind that no test could reach.
      */
     private sealed interface Policy {
-        /** Delivered as raised: never folded, never dropped. */
+        /** Delivered as raised: never folded, and dropped only by [absoluteCeiling]. */
         data object Plain : Policy
+
+        /**
+         * A connection-lifecycle event, which no ceiling may drop. The only such exemption, and it
+         * is what keeps [absoluteCeiling] bounded by something a server cannot inflate: these four
+         * are raised by the connection's own progress, not by the population of the server, and
+         * losing one cannot be made good by re-reading the model.
+         */
+        data object Lifecycle : Policy
 
         /** A state refresh for [key]; a later refresh for the same key replaces it in place. */
         class Fold(val key: Any) : Policy
 
-        /** A tree-shape event the bound may throw away, oldest first. */
+        /** A tree-shape event the first ceiling may throw away, oldest first. */
         data object Droppable : Policy
     }
 
@@ -166,9 +222,9 @@ class HumlaCallbacks @JvmOverloads constructor(
                 // slice that delivers nothing and re-posts, which is churn rather than progress.
                 while (true) {
                     val event = synchronized(lock) {
-                        queue.removeFirstOrNull()?.also { e ->
-                            (e.policy as? Policy.Fold)?.let { folded.remove(it.key) }
-                        }
+                        val head = queue.iterator()
+                        if (!head.hasNext()) null
+                        else head.next().also { head.remove(); forget(it) }
                     } ?: break
                     deliver(event.deliver)
                     delivered++
@@ -222,45 +278,92 @@ class HumlaCallbacks @JvmOverloads constructor(
             }
             folded[policy.key] = event
         }
-        queue.addLast(event)
-        // Only a droppable event may push the bound, and never over itself. An event that may not
-        // be dropped must not make room by evicting one that may: a burst of chat, log or user
-        // events would otherwise throw away every queued onChannelAdded and then leave nothing to
-        // rebuild from, which is the empty channel list this bound exists to prevent. The queue
-        // grows past the bound instead, exactly as it does for a queue that holds nothing
-        // droppable at all.
+        queue.add(event)
+        if (policy is Policy.Droppable) droppable.addLast(event)
+        // Only a droppable event may push the first ceiling, and never over itself. An event that
+        // may not be dropped must not make room by evicting one that may: a burst of chat, log or
+        // user events would otherwise throw away every queued onChannelAdded and then leave nothing
+        // to rebuild from, which is the empty channel list this ceiling exists to prevent. The
+        // queue grows past it instead, exactly as it does for a queue that holds nothing droppable
+        // at all.
         if (policy is Policy.Droppable) {
             while (queue.size > maxQueuedEvents && dropOldestDroppableExcept(event)) {
-                // Keep going: one raise can only push the queue one over the bound, but a bound
+                // Keep going: one raise can only push the queue one over the ceiling, but a ceiling
                 // that was lowered, or a run of undroppable events that has since drained, can
                 // leave more.
             }
+        }
+        // And the ceiling that does bound the queue, which every policy is subject to. It runs on
+        // every raise, because the events it exists to catch are exactly the ones the loop above
+        // will not look at.
+        while (queue.size > absoluteCeiling && dropOldestUnlessLifecycle()) {
+            // Same reason as above.
         }
     }
 
     /**
      * Caller holds [lock]. Drops the oldest tree-shape event other than [newest], and returns false
      * when there is none - which is how the newest one survives a queue that is full of events the
-     * bound may not touch. It is the one that must: every observer answers it by rebuilding the
-     * whole list from the model, so the newest delivery is the one that shows everything the
-     * dropped ones carried.
+     * first ceiling may not touch. It is the one that must survive: every observer answers it by
+     * rebuilding the whole list from the model, so the newest delivery is the one that shows
+     * everything the dropped ones carried.
      */
     private fun dropOldestDroppableExcept(newest: Event): Boolean {
-        val victim = queue.firstOrNull { it !== newest && it.policy is Policy.Droppable }
-            ?: return false
-        queue.remove(victim)
-        dropped++
+        val victim = droppable.firstOrNull() ?: return false
+        if (victim === newest) return false // it is the only one, since newest was just appended
+        discard(victim)
         return true
+    }
+
+    /**
+     * Caller holds [lock]. Drops the oldest event [Policy.Lifecycle] does not exempt, and returns
+     * false when the queue holds nothing else - at which point it is as short as this ceiling can
+     * make it. The scan is over the exempt events at the head only, and there are never many:
+     * [Policy.Lifecycle] is four events raised by the connection's own progress.
+     */
+    private fun dropOldestUnlessLifecycle(): Boolean {
+        val victim = queue.firstOrNull { it.policy !is Policy.Lifecycle } ?: return false
+        discard(victim)
+        return true
+    }
+
+    /** Caller holds [lock]. Throws [victim] away unheard and counts it. */
+    private fun discard(victim: Event) {
+        queue.remove(victim)
+        forget(victim)
+        dropped++
+    }
+
+    /**
+     * Caller holds [lock]. Drops the index entries of an event that has just left [queue], whether
+     * it was delivered or discarded.
+     *
+     * Leaving a discarded [Policy.Fold] event in [folded] would be the failure that type exists to
+     * make unrepresentable one level down: the next refresh for that subject would fold into an
+     * event nobody holds any more and never be delivered at all.
+     *
+     * [droppable] is popped rather than searched because every event that leaves the queue and is
+     * droppable is [droppable]'s own head. The drain takes the queue's head; both ceilings take the
+     * oldest droppable event, or - for the absolute one - the oldest event that is not
+     * [Policy.Lifecycle], and a lifecycle event is never in [droppable] to be skipped past.
+     */
+    private fun forget(event: Event) {
+        when (val policy = event.policy) {
+            is Policy.Fold -> folded.remove(policy.key)
+            is Policy.Droppable -> droppable.removeFirst()
+            else -> {}
+        }
     }
 
     private fun deliver(event: (IHumlaObserver) -> Unit) {
         for (observer in observers) event(observer)
     }
 
-    override fun onConnected() = dispatch { it.onConnected() }
-    override fun onConnecting() = dispatch { it.onConnecting() }
-    override fun onDisconnected(e: HumlaException?) = dispatch { it.onDisconnected(e) }
-    override fun onTLSHandshakeFailed(chain: Array<X509Certificate>?) = dispatch { it.onTLSHandshakeFailed(chain) }
+    override fun onConnected() = dispatch(Policy.Lifecycle) { it.onConnected() }
+    override fun onConnecting() = dispatch(Policy.Lifecycle) { it.onConnecting() }
+    override fun onDisconnected(e: HumlaException?) = dispatch(Policy.Lifecycle) { it.onDisconnected(e) }
+    override fun onTLSHandshakeFailed(chain: Array<X509Certificate>?) =
+        dispatch(Policy.Lifecycle) { it.onTLSHandshakeFailed(chain) }
     override fun onChannelAdded(channel: IChannel?) =
         dispatch(Policy.Droppable) { it.onChannelAdded(channel) }
     override fun onChannelStateUpdated(channel: IChannel?) =
@@ -301,5 +404,13 @@ class HumlaCallbacks @JvmOverloads constructor(
          * copy of the tree.
          */
         const val MAX_QUEUED_EVENTS = 1_024
+
+        /**
+         * How far above the first ceiling the absolute one sits. Eight puts it at
+         * `8 * 1 024 / 64` = 128 full drain slices, about a second of main-thread delivery work at
+         * [SLICE_BUDGET_NANOS] each: far enough that no burst the UI is meant to render reaches it,
+         * near enough that what it throws away is a backlog the UI was never going to catch up on.
+         */
+        const val CEILING_FACTOR = 8
     }
 }
