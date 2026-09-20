@@ -2,6 +2,7 @@ package se.lublin.mumla.chat
 
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,7 +21,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowBitmapFactory
+import java.security.MessageDigest
+import java.security.MessageDigestSpi
+import java.security.Provider
+import java.security.Security
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -45,8 +52,14 @@ class ChatImageLoaderTest {
         ShadowBitmapFactory.setAllowInvalidImageData(false)
     }
 
+    @Before
+    fun watchTheDigest() {
+        Sha1Probe.install()
+    }
+
     @After
     fun dropTestLoader() {
+        Sha1Probe.uninstall()
         ChatImageLoaders.setForTests(null)
     }
 
@@ -100,7 +113,11 @@ class ChatImageLoaderTest {
     @Test
     fun cancellingOneCallerDoesNotCancelAnotherWaitingOnTheSameFetch() = runTest {
         val work = StandardTestDispatcher(TestCoroutineScheduler()) // advanced by hand, not by runTest
-        val l = ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, work, work, clock::get)
+        // Unconfined for the decode side: loadThumbnail hashes the source on that dispatcher before
+        // it ever reaches the shared fetch, and a TestDispatcher of a *second* scheduler cannot be
+        // switched to from inside runTest's. What this test is about is the fetch, which stays on
+        // `work` and therefore stays parked until this test advances it by hand.
+        val l = ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, work, Dispatchers.Unconfined, clock::get)
         val scrolledAway = async { l.loadThumbnail(url, 240, 240) }
         val stillVisible = async { l.loadThumbnail(url, 240, 240) }
         runCurrent() // both are registered as waiters; the fetch is parked on `work`
@@ -119,7 +136,7 @@ class ChatImageLoaderTest {
     @Test
     fun cancellingTheLastCallerAbandonsTheFetch() = runTest {
         val work = StandardTestDispatcher(TestCoroutineScheduler())
-        val l = ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, work, work, clock::get)
+        val l = ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, work, Dispatchers.Unconfined, clock::get)
         val scrolledAway = async { l.loadThumbnail(url, 240, 240) }
         runCurrent()
 
@@ -360,4 +377,175 @@ class ChatImageLoaderTest {
         ChatImageLoaders.setForTests(stub)
         assertThat(ChatImageLoaders.get(context)).isSameInstanceAs(stub)
     }
+
+    // --- Where the key is computed. cacheKey() hashes the whole source, and for a `data:` source
+    // --- the source *is* the image — megabytes of it. Everything below is about making sure that
+    // --- work never happens on the thread that binds the row.
+
+    /**
+     * The control for the two tests below: they assert that SHA-1 was *not* invoked, or not on a
+     * particular thread, and a count of zero is also what a probe that never took effect looks like.
+     */
+    @Test
+    fun theDigestProbeReallySeesThisClassesHashing() {
+        Sha1Probe.reset()
+        ChatImageLoader.cacheKey("abc")
+        assertThat(Sha1Probe.calls()).isEqualTo(1)
+        assertThat(Sha1Probe.threads()).contains(Thread.currentThread().name.substringBefore(" @"))
+    }
+
+    /**
+     * The length cap is the whole defence against a megabytes-long source, so nothing expensive may
+     * run before it — and hashing the source is the most expensive thing this class does. The error
+     * code alone cannot tell the two orders apart, so the digest itself is counted.
+     */
+    @Test
+    fun anOversizedSourceIsRefusedBeforeItsKeyIsComputed() = runTest(dispatcher) {
+        val l = loader()
+        val source = "data:image/png;base64," + "A".repeat(ChatImageLoader.MAX_SOURCE_LENGTH)
+        Sha1Probe.reset()
+
+        assertThat(l.loadThumbnail(source, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
+        assertThat(l.loadFull(source, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
+
+        assertWithMessage("SHA-1 invocations while refusing a %s character source", source.length)
+            .that(Sha1Probe.calls()).isEqualTo(0)
+    }
+
+    /**
+     * The expensive half: a `data:` source at the cap is 7 MB, and every bind needs its key — cache
+     * hits included, because the key is what the lookup is by. Doing that on the thread that called
+     * `loadThumbnail` is 7 MB allocated and hashed on the main thread per bound row, which is the
+     * "not responding" disease this whole stream exists to cure. So: which threads hashed, and how
+     * much did the caller's thread allocate.
+     */
+    @Test(timeout = 120_000)
+    fun bindingNeverHashesTheSourceOnTheCallersThread() {
+        val small = TestImages.dataUri(TestImages.png(40, 40))
+        val source = small + " ".repeat(ChatImageLoader.MAX_SOURCE_LENGTH - small.length)
+        val callerName = "mumla-test-caller"
+        val caller = Executors.newSingleThreadExecutor { r -> Thread(r, callerName) }
+        try {
+            val l = ChatImageLoader(
+                fetcher, { true }, 8L * 1024 * 1024, Dispatchers.IO, Dispatchers.Default, clock::get,
+            )
+            // First bind: a miss, so the key is computed and the image is decoded.
+            Sha1Probe.reset()
+            val first = caller.submit<ImageResult> { runBlocking { l.loadThumbnail(source, 240, 240) } }.get()
+            assertThat(first).isInstanceOf(ImageResult.Ready::class.java)
+            assertWithMessage("something has to hash the source").that(Sha1Probe.calls()).isAtLeast(1)
+            assertWithMessage("threads that hashed a %s character source on a miss", source.length)
+                .that(Sha1Probe.threads()).doesNotContain(callerName)
+
+            // Second bind: a cache hit. The key is still needed, so this is the common case.
+            Sha1Probe.reset()
+            val second = caller.submit<ImageResult> { runBlocking { l.loadThumbnail(source, 240, 240) } }.get()
+            assertThat(second).isInstanceOf(ImageResult.Ready::class.java)
+            assertWithMessage("a cache hit still needs the key").that(Sha1Probe.calls()).isAtLeast(1)
+            assertWithMessage("threads that hashed a %s character source on a hit", source.length)
+                .that(Sha1Probe.threads()).doesNotContain(callerName)
+        } finally {
+            caller.shutdownNow()
+        }
+    }
+
+    /**
+     * The key is hashed in chunks so that no full UTF-8 copy of a megabytes-long source is ever
+     * allocated. That is only allowed to be cheaper, never different: a chunk boundary that fell
+     * between the halves of a surrogate pair would encode them apart and silently change the key of
+     * every source long enough to have one.
+     */
+    @Test
+    fun theKeyIsTheSha1OfTheWholeSourceHoweverLongItIs() {
+        fun reference(s: String) = MessageDigest.getInstance("SHA-1")
+            .digest(s.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+        listOf(
+            "abc",
+            "",
+            "a".repeat(8_192),
+            "a".repeat(8_191) + "\uD83D\uDE00" + "b".repeat(20_000), // the pair straddles a boundary
+            "\u00e4\u20ac\uD83D\uDE00".repeat(5_000),
+        ).forEach {
+            assertWithMessage("key of a %s character source", it.length)
+                .that(ChatImageLoader.cacheKey(it)).isEqualTo(reference(it))
+        }
+    }
+}
+
+/**
+ * A JCE provider that hands out a recording SHA-1. Installed for the life of each test, it counts
+ * every `MessageDigest.getInstance("SHA-1")` and records the thread that pushed bytes through it —
+ * which is the only way from outside to tell *where* a key was computed, rather than what it was.
+ * The digest itself is delegated to whatever provider would otherwise have answered, so nothing
+ * about the resulting key changes.
+ */
+class RecordingSha1 : MessageDigestSpi() {
+    private val delegate: MessageDigest = Sha1Probe.realSha1()
+
+    init {
+        Sha1Probe.countInstance()
+    }
+
+    override fun engineUpdate(input: Byte) {
+        Sha1Probe.countThread()
+        delegate.update(input)
+    }
+
+    override fun engineUpdate(input: ByteArray, offset: Int, len: Int) {
+        Sha1Probe.countThread()
+        delegate.update(input, offset, len)
+    }
+
+    override fun engineDigest(): ByteArray = delegate.digest()
+
+    override fun engineReset() = delegate.reset()
+}
+
+object Sha1Probe {
+    private const val NAME = "MumlaSha1Probe"
+    private val instances = AtomicInteger()
+    private val threadNames = ConcurrentHashMap.newKeySet<String>()
+
+    @Suppress("DEPRECATION") // the (String, String, String) constructor is not in the Android API
+    private class ProbeProvider : Provider(NAME, 1.0, "records who computes a SHA-1, and where") {
+        init {
+            putService(Service(this, "MessageDigest", "SHA-1", RecordingSha1::class.java.name, null, null))
+        }
+    }
+
+    fun install() {
+        if (Security.getProvider(NAME) == null) Security.insertProviderAt(ProbeProvider(), 1)
+        reset()
+    }
+
+    fun uninstall() = Security.removeProvider(NAME)
+
+    fun reset() {
+        instances.set(0)
+        threadNames.clear()
+    }
+
+    fun calls(): Int = instances.get()
+
+    fun threads(): Set<String> = threadNames.toSet()
+
+    fun countInstance() {
+        instances.incrementAndGet()
+    }
+
+    /**
+     * The *bare* thread name: kotlinx.coroutines renames a thread to "name @coroutine#n" for as long
+     * as a coroutine runs on it, so recording the name verbatim would make every assertion about a
+     * named thread pass for the wrong reason.
+     */
+    fun countThread() {
+        threadNames += Thread.currentThread().name.substringBefore(" @")
+    }
+
+    /** The digest that would have answered without the probe in the way. */
+    fun realSha1(): MessageDigest = Security.getProviders("MessageDigest.SHA-1")
+        .first { it.name != NAME }
+        .let { MessageDigest.getInstance("SHA-1", it) }
 }

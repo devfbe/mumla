@@ -109,15 +109,18 @@ class ChatImageLoader(
      */
     suspend fun loadThumbnail(source: String, maxWidth: Int, maxHeight: Int): ImageResult {
         if (maxWidth <= 0 || maxHeight <= 0) return ImageResult.Skipped
-        val key = thumbnailKey(source, maxWidth, maxHeight)
+        if (source.length > MAX_SOURCE_LENGTH) return ImageResult.Failed(ImageError.TOO_LARGE)
+        val sourceKey = withContext(decodeDispatcher) { cacheKey(source) }
+        val key = thumbnailKey(sourceKey, maxWidth, maxHeight)
         cached(key)?.let { return it }
-        return shared(key) { loadAndCache(key, source, maxWidth, maxHeight) }
+        return shared(key) { loadAndCache(key, source, sourceKey, maxWidth, maxHeight) }
     }
 
     /** Decode bounded by the given size (e.g. the screen); never cached as a bitmap. */
     suspend fun loadFull(source: String, maxWidth: Int, maxHeight: Int): ImageResult {
         if (maxWidth <= 0 || maxHeight <= 0) return ImageResult.Skipped
-        return load(source, maxWidth, maxHeight)
+        if (source.length > MAX_SOURCE_LENGTH) return ImageResult.Failed(ImageError.TOO_LARGE)
+        return load(source, withContext(decodeDispatcher) { cacheKey(source) }, maxWidth, maxHeight)
     }
 
     /**
@@ -130,20 +133,24 @@ class ChatImageLoader(
         // percent-decode and the base64 decode happen. Refusing here as well keeps the work off
         // this call before it even dispatches, and is pinned from both sides.
         if (source.length > MAX_SOURCE_LENGTH) throw ImageFetchException(ImageError.TOO_LARGE)
-        val key = cacheKey(source)
-        lastBytes.get()?.takeIf { it.first == key }?.let { return it.second }
-        val bytes = withContext(ioDispatcher) {
-            when (val parsed = ImageSource.parse(source)) {
-                is ImageSource.Data -> parsed.bytes
-                is ImageSource.Remote -> {
-                    if (!externalImagesAllowed()) throw ImageFetchException(ImageError.EXTERNAL_DISABLED)
-                    fetcher.fetch(parsed.url)
-                }
-                ImageSource.TooLarge -> throw ImageFetchException(ImageError.TOO_LARGE)
-                ImageSource.Unsupported -> throw ImageFetchException(ImageError.UNSUPPORTED)
+        // cacheKey hashes the whole source, and for a `data:` source the source *is* the image.
+        // That belongs on the IO dispatcher with the fetch, never on the thread that bound the row.
+        return withContext(ioDispatcher) { fetchBytes(source, cacheKey(source)) }
+    }
+
+    /** Blocking; [sourceKey] is [cacheKey] of [source], already computed by the caller. */
+    private fun fetchBytes(source: String, sourceKey: String): ByteArray {
+        lastBytes.get()?.takeIf { it.first == sourceKey }?.let { return it.second }
+        val bytes = when (val parsed = ImageSource.parse(source)) {
+            is ImageSource.Data -> parsed.bytes
+            is ImageSource.Remote -> {
+                if (!externalImagesAllowed()) throw ImageFetchException(ImageError.EXTERNAL_DISABLED)
+                fetcher.fetch(parsed.url)
             }
+            ImageSource.TooLarge -> throw ImageFetchException(ImageError.TOO_LARGE)
+            ImageSource.Unsupported -> throw ImageFetchException(ImageError.UNSUPPORTED)
         }
-        lastBytes.set(key to bytes)
+        lastBytes.set(sourceKey to bytes)
         return bytes
     }
 
@@ -183,8 +190,14 @@ class ChatImageLoader(
         }
     }
 
-    private suspend fun loadAndCache(key: String, source: String, maxWidth: Int, maxHeight: Int): ImageResult {
-        val result = load(source, maxWidth, maxHeight)
+    private suspend fun loadAndCache(
+        key: String,
+        source: String,
+        sourceKey: String,
+        maxWidth: Int,
+        maxHeight: Int,
+    ): ImageResult {
+        val result = load(source, sourceKey, maxWidth, maxHeight)
         ttlMillisFor(result)?.let { ttl ->
             val expiry = if (ttl == Long.MAX_VALUE) Long.MAX_VALUE else nowMillis() + ttl
             cache.put(key, Entry(result, expiry))
@@ -210,9 +223,9 @@ class ChatImageLoader(
         else -> Long.MAX_VALUE
     }
 
-    private suspend fun load(source: String, maxWidth: Int, maxHeight: Int): ImageResult = gate.withPermit {
+    private suspend fun load(source: String, sourceKey: String, maxWidth: Int, maxHeight: Int): ImageResult = gate.withPermit {
         val bytes = try {
-            fetchBytes(source)
+            withContext(ioDispatcher) { fetchBytes(source, sourceKey) }
         } catch (e: ImageFetchException) {
             return@withPermit ImageResult.Failed(e.error)
         }
@@ -220,8 +233,8 @@ class ChatImageLoader(
         if (bitmap == null) ImageResult.Failed(ImageError.MALFORMED) else ImageResult.Ready(bitmap)
     }
 
-    private fun thumbnailKey(source: String, maxWidth: Int, maxHeight: Int): String =
-        cacheKey(source) + ":" + maxWidth + "x" + maxHeight
+    private fun thumbnailKey(sourceKey: String, maxWidth: Int, maxHeight: Int): String =
+        sourceKey + ":" + maxWidth + "x" + maxHeight
 
     companion object {
         /** How long a NETWORK/TIMEOUT failure stays cached before the source is tried again. */
@@ -242,11 +255,47 @@ class ChatImageLoader(
 
         private val MAX_CACHE_BYTES = Int.MAX_VALUE.toLong()
 
-        /** Stable, filesystem-safe key for a source; also used as the share file name (Task 8). */
-        fun cacheKey(source: String): String =
-            MessageDigest.getInstance("SHA-1")
-                .digest(source.toByteArray(Charsets.UTF_8))
-                .joinToString("") { "%02x".format(it) }
+        private const val HEX = "0123456789abcdef"
+
+        /** How much of a source is turned into bytes at once; see [cacheKey]. */
+        private const val HASH_CHUNK_CHARS = 8 * 1024
+
+        /**
+         * Stable, filesystem-safe key for a source; also used as the share file name (Task 8).
+         *
+         * The **whole** source is hashed, and that is not negotiable: for a `data:` source the
+         * source is the image, so any key derived from a part of it collides — by pigeonhole, on
+         * inputs an attacker picks — for two sources that differ only in the part not read, and a
+         * collision here shows one participant's image in place of another's and names the shared
+         * file after the wrong one. There is no cheaper key that is equally collision-safe.
+         *
+         * What *is* negotiable is the copy. `source.toByteArray()` would allocate a second
+         * megabytes-long array per call, so the string is fed to the digest in chunks instead,
+         * never splitting a surrogate pair — the halves encode differently apart than together,
+         * which would silently change the key of every source long enough to contain one. The
+         * result is byte for byte the SHA-1 of the source's UTF-8, pinned by
+         * `theKeyIsTheSha1OfTheWholeSourceHoweverLongItIs`.
+         *
+         * This is still O(length) work: callers run it off the thread that binds a row.
+         */
+        fun cacheKey(source: String): String {
+            val digest = MessageDigest.getInstance("SHA-1")
+            var start = 0
+            while (start < source.length) {
+                var end = (start + HASH_CHUNK_CHARS).coerceAtMost(source.length)
+                if (end < source.length && end - 1 > start && source[end - 1].isHighSurrogate()) end--
+                digest.update(source.substring(start, end).toByteArray(Charsets.UTF_8))
+                start = end
+            }
+            val bytes = digest.digest()
+            val hex = CharArray(bytes.size * 2)
+            for (i in bytes.indices) {
+                val b = bytes[i].toInt() and 0xFF
+                hex[i * 2] = HEX[b ushr 4]
+                hex[i * 2 + 1] = HEX[b and 0x0F]
+            }
+            return String(hex)
+        }
     }
 }
 
