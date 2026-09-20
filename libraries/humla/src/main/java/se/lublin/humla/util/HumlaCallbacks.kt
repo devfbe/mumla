@@ -95,8 +95,8 @@ import java.util.concurrent.ConcurrentHashMap
  *       grows past the bound rather than throwing that one away.
  *     A queue over this first ceiling that holds no tree-shape event beside the newest therefore
  *     grows, and counts what it did drop in [droppedEvents].
- *   - **Above [absoluteCeiling] the oldest event goes, whatever its policy is.** The paragraph
- *     above is the whole reason this second ceiling exists, and the reason it has to be absolute:
+ *   - **Above [absoluteCeiling] the oldest event goes, whatever else its policy allows.** The
+ *     paragraph above is the whole reason this second ceiling exists, and the reason it has to be absolute:
  *     since only a droppable event may push the first ceiling, the real ceiling there is
  *     `#undroppable + 1`, and **nothing bounds `#undroppable`**. Twelve of the nineteen events are
  *     undroppable and two of them are bulk - `ModelHandler.messageUserState` raises
