@@ -540,15 +540,38 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `HumlaSession()` (`:747`) read that field. A reset in `onConnected()` still
   leaves a window, because `AudioHandler.initialize()` starts the input thread
   from `onConnectionSynchronized` (`:378-382`), before `onConnected()` (`:392`).
-- **Verify which key action the media-button path delivers before building on it
-  (P, task 4).** `MediaKeyHandler` acts on `ACTION_UP`. `MediaSessionCompat`'s
-  default callback discards everything that is not `ACTION_DOWN`, and Media3
-  ignores `ACTION_UP` before the app sees it. If our path behaves the same, the
-  button does nothing at all and no unit test of that layer can show it. Measure
-  first (log in `onMediaButtonEvent`, `adb shell input keyevent 79` and `85`, plus
-  a real Bluetooth headset — adb alone is not enough, it goes through the input
-  dispatcher rather than the AVRCP stack). If only DOWN arrives, switch to DOWN +
-  `repeatCount == 0` + no `FLAG_CANCELED`, and swallow the matching UP.
+- **The media button acts on `ACTION_DOWN` (P, task 4 — measured, settled).**
+  Task 3 acted on `ACTION_UP`. Measured against the platform code that runs —
+  AOSP API 36 in the `android-all` jar the test suite already uses, and
+  androidx.media 1.8.0 — the answer is not the one the question expected. Both
+  actions do arrive: `MediaSessionService` treats `KEYCODE_HEADSETHOOK` and
+  `KEYCODE_MEDIA_PLAY_PAUSE` as voice keys and tracks the press itself, swallowing
+  the real first DOWN and, on release, synthesizing a DOWN from the UP and
+  dispatching DOWN then UP, both `repeatCount == 0`. Neither androidx layer filters
+  by action. What settles it is the long press: the service starts the voice
+  assistant and stops tracking, after which the remaining DOWN repeats
+  (`repeatCount >= 2`) and the final UP still reach the session — and that UP is
+  **not** canceled, because `handleKeyEventLocked` drops canceled events before
+  dispatch, so nothing canceled ever arrives. Acting on the UP therefore opened
+  the microphone every time the user held the button to summon the assistant.
+  `MediaKeyHandler` now fires on an uncanceled DOWN with `repeatCount == 0` and
+  swallows everything else. **Still open, hardware QA before release:** one press
+  must produce exactly one toggle on a real Bluetooth headset (AVRCP) *and* on a
+  wired one, cross-checked with `adb shell input keyevent 79` and `85` — adb alone
+  is not enough, it goes through the input dispatcher rather than the AVRCP stack.
+  Watch for androidx/media #3083 while doing it (since Media3 1.9.2 a single press
+  can arrive as two `KEYCODE_HEADSETHOOK` events; with toggle semantics that reads
+  as "the button does nothing"). It is deliberately not debounced — a time window
+  cannot tell a duplicate from a deliberate double press, and guessing wrong leaves
+  the microphone open. If it reaches us, the fix belongs at the delivery seam in
+  `MumlaMediaSession`, which can identify it, not in the handler.
+- **Name the two push-to-talk behaviours in the settings UI (P, task 5).** Task 5
+  owns `res/values/preference.xml` and the headset-button preference. With
+  `PREF_PTT_TOGGLE` at its default (`false` = hold), the same physical button is a
+  *hold* while `MumlaActivity` has focus, because the activity sees the key first,
+  and a *toggle* with the screen off, because a headset button cannot be held.
+  That is defensible but it must be said out loud where the user chooses the
+  action, not only in a stream ledger.
 - **Apply the host policy per redirect hop (D, task 6).** `HttpImageFetcher` sets
   `instanceFollowRedirects = true` and follows same-scheme redirects to any host
   without re-entering the gate. A loopback/LAN block that sits only in the gate is
