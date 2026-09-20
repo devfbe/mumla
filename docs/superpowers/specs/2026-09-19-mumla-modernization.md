@@ -638,6 +638,16 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   tasks 5 through 8 are already written against. Revisit only if on-device
   profiling shows dropouts attributable to it; the measurement is in
   `CaptureThreadAllocationTest` so the number does not have to be rediscovered.
+- **Scope the "release must never overlap" rule to what is not a stage (B, task 11).**
+  Two binding texts now contradict each other. `SingleHandleStage` states that
+  `release()` may overlap a frame in flight and is safe — that is the whole purpose
+  of the one lock, and it is measured. The task 11 plan text says the opposite
+  ("the KDoc **requires** that release() never overlaps") and deliberately leaks
+  native state on a join timeout because of it. Both were true when written; only
+  the second still is, and only for the **resampler**, which is not a
+  `SingleHandleStage`. Rewrite the task 11 text to say so before dispatching it.
+  Leaving both sentences standing is how a later reader concludes that release
+  never overlaps anyway and deletes the lock.
 - **Never call into a preprocessor stage while holding `mEncoderLock` (B, task 11).**
   The capture thread will hold `mEncoderLock` around `encode()` and the stage lock
   around `process()`. Nothing takes them in both orders today and nothing may: the
