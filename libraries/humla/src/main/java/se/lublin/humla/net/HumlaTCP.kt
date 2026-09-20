@@ -57,7 +57,7 @@ class HumlaTCP @JvmOverloads constructor(
     private val callbackHandler: Handler = Handler(Looper.getMainLooper()),
 ) : TcpTransport {
     private var listener: TCPConnectionListener? = null
-    private var readExecutor: ExecutorService? = null
+    @Volatile private var readExecutor: ExecutorService? = null
     @Volatile private var sendExecutor: ExecutorService? = null
     @Volatile private var socket: SSLSocket? = null
     private var input: DataInputStream? = null
@@ -84,8 +84,12 @@ class HumlaTCP @JvmOverloads constructor(
         disconnectReported.set(false)
         running = true
         sendExecutor = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-send") }
-        readExecutor = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-read") }
-            .also { it.execute(::readLoop) }
+        // Publish the executor before handing the read loop to it: the loop's finally shuts it down
+        // and would otherwise be able to observe the field still null and leak a live, non-daemon
+        // thread for every connection attempt.
+        val reader = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-read") }
+        readExecutor = reader
+        reader.execute(::readLoop)
     }
 
     private fun readLoop() {
