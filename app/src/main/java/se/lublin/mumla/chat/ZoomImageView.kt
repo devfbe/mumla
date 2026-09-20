@@ -28,6 +28,12 @@ import androidx.core.os.BundleCompat
  * re-clamped into the new bounds instead of being thrown away. The restored state is applied to the
  * first image that arrives, because a dialog restores its views before the image has finished
  * loading; a *second*, genuinely new image resets to the fit like any other.
+ *
+ * Two things the host has to get right for that to work. The view needs an `android:id`, because
+ * View saves no state for a view without one. And nothing may be shown in *this* view before the
+ * image: a placeholder or an error icon is a drawable like any other, it would spend the restored
+ * zoom, and the real image arriving afterwards would count as the second image and reset to the
+ * fit. Those belong in a separate view on top.
  */
 class ZoomImageView @JvmOverloads constructor(
     context: Context,
