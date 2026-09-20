@@ -18,6 +18,8 @@
 package se.lublin.humla.net
 
 import android.net.SSLCertificateSocketFactory
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.google.protobuf.Message
 import se.lublin.humla.util.HumlaException
@@ -27,6 +29,10 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketException
 import java.security.cert.X509Certificate
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLSocket
 
@@ -34,71 +40,90 @@ import javax.net.ssl.SSLSocket
 class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
 
 /**
- * Class to maintain and interface with the TCP connection to a Mumble server.
- * Parses Mumble protobuf packets according to the Mumble protocol specification.
+ * Maintains the TLS/TCP connection to a Mumble server and frames Mumble protobuf packets according
+ * to the Mumble protocol specification.
+ *
+ * Reads on "humla-tcp-read", writes on "humla-tcp-send"; every listener callback is posted to
+ * [callbackHandler], which defaults to the main looper so that today's consumers keep seeing
+ * callbacks exactly where they saw them before.
+ *
+ * onTCPConnectionDisconnect is delivered exactly once per [connect]: either by [disconnect], so the
+ * caller hears about its own request immediately even while the read thread is still stuck in a
+ * connect that has no timeout, or by the read loop when it ends on its own.
  */
-class HumlaTCP(private val socketFactory: HumlaSSLSocketFactory) : HumlaNetworkThread() {
+class HumlaTCP @JvmOverloads constructor(
+    private val socketFactory: HumlaSSLSocketFactory,
+    private val callbackHandler: Handler = Handler(Looper.getMainLooper()),
+) : TcpTransport {
+    private var listener: TCPConnectionListener? = null
+    private var readExecutor: ExecutorService? = null
+    @Volatile private var sendExecutor: ExecutorService? = null
+    @Volatile private var socket: SSLSocket? = null
+    private var input: DataInputStream? = null
+    @Volatile private var output: DataOutputStream? = null
     private var host = ""
     private var port = 0
     private var useTor = false
-    private var tcpSocket: SSLSocket? = null
-    private var dataInput: DataInputStream? = null
-    private var dataOutput: DataOutputStream? = null
-    private var running = false
-    private var connected = false
-    private var listener: TCPConnectionListener? = null
+    @Volatile private var running = false
+    @Volatile private var connected = false
+    private val disconnectReported = AtomicBoolean(true)
 
-    fun setTCPConnectionListener(listener: TCPConnectionListener?) {
+    override val isRunning: Boolean get() = running
+
+    override fun setTCPConnectionListener(listener: TCPConnectionListener?) {
         this.listener = listener
     }
 
     @Throws(ConnectException::class)
-    fun connect(host: String, port: Int, useTor: Boolean) {
+    override fun connect(host: String, port: Int, useTor: Boolean) {
         if (running) throw ConnectException("TCP connection already established!")
         this.host = host
         this.port = port
         this.useTor = useTor
-        startThreads()
+        disconnectReported.set(false)
+        running = true
+        sendExecutor = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-send") }
+        readExecutor = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-read") }
+            .also { it.execute(::readLoop) }
     }
 
-    val isRunning: Boolean get() = running
-
-    override fun run() {
-        running = true
+    private fun readLoop() {
         try {
             Log.i(TAG, "Connecting")
-            val socket = if (useTor) {
+            val tcpSocket = if (useTor) {
                 socketFactory.createTorSocket(host, port, HumlaConnection.TOR_HOST, HumlaConnection.TOR_PORT)
             } else {
                 socketFactory.createSocket(host, port)
             }
-            tcpSocket = socket
-            (SSLCertificateSocketFactory.getDefault(0) as SSLCertificateSocketFactory).setHostname(socket, host)
-            socket.keepAlive = true
-            socket.startHandshake()
+            socket = tcpSocket
+            // disconnect() raced the connect; bail out before the handshake, finally closes the socket.
+            if (!running) return
+
+            (SSLCertificateSocketFactory.getDefault(0) as SSLCertificateSocketFactory).setHostname(tcpSocket, host)
+            tcpSocket.keepAlive = true
+            tcpSocket.startHandshake()
             Log.v(TAG, "Started handshake")
 
-            val input = DataInputStream(socket.inputStream)
-            dataInput = input
-            dataOutput = DataOutputStream(socket.outputStream)
+            val dataInput = DataInputStream(tcpSocket.inputStream)
+            input = dataInput
+            output = DataOutputStream(tcpSocket.outputStream)
+            if (!running) return // disconnect() raced with the handshake; finally closes the socket
 
             Log.v(TAG, "Now listening")
             connected = true
-            listener?.let { l -> executeOnMainThread { l.onTCPConnectionEstablished() } }
+            post { it.onTCPConnectionEstablished() }
 
-            while (connected) {
-                val frame = readFrame(input) ?: continue
-                listener?.let { l -> executeOnMainThread { l.onTCPMessageReceived(frame.type, frame.data.size, frame.data) } }
+            while (connected && running) {
+                val frame = readFrame(dataInput) ?: continue
+                post { it.onTCPMessageReceived(frame.type, frame.data.size, frame.data) }
             }
         } catch (e: SocketException) {
             error("Could not open a connection to the host", e)
         } catch (e: SSLHandshakeException) {
-            // Try and verify certificate manually.
+            // Let the user verify the certificate manually.
             val chain = socketFactory.serverChain
-            val l = listener
-            if (chain != null && l != null) {
-                if (!running) return
-                executeOnMainThread { l.onTLSHandshakeFailed(chain) }
+            if (chain != null && listener != null) {
+                if (running) post { it.onTLSHandshakeFailed(chain) }
             } else {
                 error("Could not verify host certificate", e)
             }
@@ -107,83 +132,101 @@ class HumlaTCP(private val socketFactory: HumlaSSLSocketFactory) : HumlaNetworkT
         } finally {
             connected = false
             try {
-                dataInput?.close()
-                dataOutput?.close()
-                tcpSocket?.close()
+                input?.close()
+                output?.close()
+                socket?.close()
             } catch (e: IOException) {
-                e.printStackTrace()
+                Log.w(TAG, "Error closing TCP socket", e)
             }
             running = false
-            executeOnMainThread { listener?.onTCPConnectionDisconnect() }
-            stopThreads()
+            postDisconnectOnce()
+            sendExecutor?.shutdown()
+            sendExecutor = null
+            readExecutor?.shutdown()
+            readExecutor = null
         }
     }
 
     /**
-     * Attempts to send a protobuf message over TCP. Thread-safe, executes on a single threaded executor.
+     * Attempts to send a protobuf message over TCP. Thread-safe, executes on the send thread.
      * @param message The message to send.
      * @param messageType The type of the message to send.
      */
-    fun sendMessage(message: Message, messageType: HumlaTCPMessageType) {
-        executeOnSendThread {
+    override fun sendMessage(message: Message, messageType: HumlaTCPMessageType) {
+        enqueueSend {
             if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) Log.v(TAG, "OUT: $messageType")
-            try {
-                val out = dataOutput ?: return@executeOnSendThread
-                out.writeShort(messageType.ordinal)
-                out.writeInt(message.serializedSize)
-                message.writeTo(out)
-            } catch (e: IOException) {
-                e.printStackTrace()
-            }
+            val out = output ?: return@enqueueSend
+            out.writeShort(messageType.ordinal)
+            out.writeInt(message.serializedSize)
+            message.writeTo(out)
         }
     }
 
     /**
-     * Attempts to send raw data over TCP. Thread-safe, executes on a single threaded executor.
-     * @param message The data to send.
+     * Attempts to send raw data over TCP. Thread-safe, executes on the send thread.
+     * @param data The data to send.
      * @param length The length of the byte array.
      * @param messageType The type of the message to send.
      */
-    fun sendMessage(message: ByteArray, length: Int, messageType: HumlaTCPMessageType) {
-        executeOnSendThread {
+    override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) {
+        enqueueSend {
             if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) Log.v(TAG, "OUT: $messageType")
-            try {
-                val out = dataOutput ?: return@executeOnSendThread
-                out.writeShort(messageType.ordinal)
-                out.writeInt(length)
-                out.write(message, 0, length)
-            } catch (e: IOException) {
-                e.printStackTrace()
-            }
+            val out = output ?: return@enqueueSend
+            out.writeShort(messageType.ordinal)
+            out.writeInt(length)
+            out.write(data, 0, length)
         }
     }
 
     /**
-     * Attempts to disconnect gracefully on the Tx thread.
-     * Disconnects interrupt the socket listening on the Tx thread, suppressing any exceptions
-     * caused by this request. Any remaining protobuf messages will be dispatched first.
-     *
-     * Suppresses all future errors on this connection.
+     * Attempts to disconnect gracefully: the socket is closed from the send thread, so any protobuf
+     * messages already queued are written first. The read loop then exits and its finally block
+     * reports onTCPConnectionDisconnect exactly once. Suppresses all future errors on this
+     * connection, and is a no-op if the transport is not running.
      */
-    fun disconnect() {
+    override fun disconnect() {
         if (!running) return
         running = false
-        executeOnSendThread {
-            try {
-                tcpSocket?.close()
-            } catch (e: IOException) {
-                e.printStackTrace()
+        enqueueSend { socket?.close() }
+        // Report now rather than from the read loop: createSocket() has no connect timeout, so a
+        // blackholed server can keep the read thread blocked for minutes with no socket to close,
+        // and the caller must not be left believing it is still connected. The read loop's own
+        // attempt is then suppressed, which is what makes the callback exactly-once.
+        postDisconnectOnce()
+    }
+
+    /** Posts onTCPConnectionDisconnect if no one has posted it yet for this connect(). */
+    private fun postDisconnectOnce() {
+        if (disconnectReported.compareAndSet(false, true)) post { it.onTCPConnectionDisconnect() }
+    }
+
+    private fun enqueueSend(block: () -> Unit) {
+        val executor = sendExecutor ?: return
+        try {
+            executor.execute {
+                try {
+                    block()
+                } catch (e: IOException) {
+                    Log.w(TAG, "TCP send failed", e)
+                }
             }
+        } catch (e: RejectedExecutionException) {
+            Log.w(TAG, "TCP send rejected after shutdown")
         }
-        listener?.let { l -> executeOnMainThread { l.onTCPConnectionDisconnect() } }
     }
 
-    private fun error(desc: String, e: Exception) {
+    private fun error(description: String, cause: Exception) {
         if (!running) return // Don't handle errors post-disconnection.
-        val ce = HumlaException(desc, e, HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
-        listener?.let { l -> executeOnMainThread { l.onTCPConnectionFailed(ce) } }
+        val e = HumlaException(description, cause, HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
+        post { it.onTCPConnectionFailed(e) }
     }
 
+    private fun post(block: (TCPConnectionListener) -> Unit) {
+        val l = listener ?: return
+        callbackHandler.post { block(l) }
+    }
+
+    /** Note that all calls are made on the callback handler this transport was given. */
     interface TCPConnectionListener {
         fun onTCPConnectionEstablished()
         fun onTLSHandshakeFailed(chain: Array<X509Certificate>)
@@ -196,9 +239,9 @@ class HumlaTCP(private val socketFactory: HumlaSSLSocketFactory) : HumlaNetworkT
         private val TAG = HumlaTCP::class.java.name
 
         /**
-         * Reads one frame: int16 type, int32 length, payload. Returns null (payload already
-         * consumed) for a type this client does not know, so the stream stays in sync. Lifted
-         * verbatim out of the Java read loop.
+         * Reads one frame: int16 type, int32 length, payload. Returns null (payload consumed) for
+         * a type this client does not know, so the stream stays in sync. Lifted verbatim out of the
+         * Java read loop.
          */
         @JvmStatic
         @Throws(IOException::class)

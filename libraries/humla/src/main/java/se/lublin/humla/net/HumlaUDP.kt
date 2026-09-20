@@ -18,6 +18,7 @@
 package se.lublin.humla.net
 
 import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import java.io.IOException
 import java.net.DatagramPacket
@@ -28,55 +29,70 @@ import java.util.concurrent.BlockingQueue
 import java.util.concurrent.LinkedBlockingQueue
 
 /**
- * Class to maintain and receive packets from the UDP connection to a Mumble server.
- * Public interface is not thread safe.
+ * Receives and sends OCB-AES encrypted voice datagrams over the UDP connection to a Mumble server.
+ *
+ * Receives on "humla-udp-recv", sends on "humla-udp-send" (both existed before this rewrite; they
+ * are the socket loops, not new bare threads). Every listener callback is posted to
+ * [callbackHandler], which defaults to the main looper so that today's consumers keep seeing
+ * callbacks exactly where they saw them before.
+ *
+ * Single-use: [connect] may be called once. UDP recovery restarts by creating a new transport, so
+ * nothing in production reconnects an instance, and the tested path is the production path.
+ * [socketFactory] is the seam a test uses to get hold of the receive socket.
+ *
+ * The public interface is not thread safe.
  *
  * @param cryptState Cryptographic state provider.
  * @param listener Callback target. Messages will be posted on the callback handler given.
  * @param callbackHandler Handler to post listener invocations on.
+ * @param socketFactory Creates the datagram socket the loops run on.
  */
-class HumlaUDP(
+class HumlaUDP @JvmOverloads constructor(
     private val cryptState: CryptState,
     private val listener: UDPConnectionListener,
-    private val callbackHandler: Handler,
-) : Runnable {
-    private var udpSocket: DatagramSocket? = null
+    private val callbackHandler: Handler = Handler(Looper.getMainLooper()),
+    private val socketFactory: () -> DatagramSocket = { DatagramSocket() },
+) : UdpTransport {
     private var host = ""
     private var port = 0
-    private var resolvedHost: InetAddress? = null
+    @Volatile private var resolvedHost: InetAddress? = null
+    @Volatile private var socket: DatagramSocket? = null
     @Volatile private var connected = false
-
-    /** Main datagram thread hosting this runnable. */
-    private val datagramThread = Thread(this)
+    @Volatile private var stopRequested = false
+    private var receiveThread: Thread? = null
 
     /** Unbounded queue of outgoing packets to be sent. */
     private val sendQueue: BlockingQueue<DatagramPacket> = LinkedBlockingQueue()
 
-    fun connect(host: String, port: Int) {
+    override val isRunning: Boolean get() = connected
+
+    override fun connect(host: String, port: Int) {
+        check(receiveThread == null) { "HumlaUDP is single-use; create a new transport to reconnect" }
         this.host = host
         this.port = port
-        datagramThread.start()
+        receiveThread = Thread(::receiveLoop, "humla-udp-recv").also { it.start() }
     }
 
-    val isRunning: Boolean get() = connected
-
-    override fun run() {
-        var outgoingConsumerThread: Thread? = null
-        connected = true
+    private fun receiveLoop() {
+        var sendThread: Thread? = null
+        var udpSocket: DatagramSocket? = null
         try {
             val address = InetAddress.getByName(host)
             resolvedHost = address
-            val socket = DatagramSocket()
-            udpSocket = socket
-            socket.connect(address, port)
+            // Publish the socket before connecting it, so a racing disconnect() can always close it.
+            udpSocket = socketFactory()
+            socket = udpSocket
+            udpSocket.connect(address, port)
             Log.d(TAG, "Created socket")
 
-            // Start outgoing consumer once the UDP socket is open, as a child thread.
-            outgoingConsumerThread = Thread(OutgoingConsumer(socket, sendQueue)).also { it.start() }
+            // Start the outgoing consumer once the UDP socket is open, as a child thread.
+            sendThread = Thread(OutgoingConsumer(udpSocket, sendQueue), "humla-udp-send").also { it.start() }
+            // A disconnect() that arrived while the socket was being built must not be overwritten.
+            connected = !stopRequested
 
             val packet = DatagramPacket(ByteArray(BUFFER_SIZE), BUFFER_SIZE)
             while (connected) {
-                socket.receive(packet)
+                udpSocket.receive(packet)
                 val data = packet.data
                 val length = packet.length
 
@@ -105,8 +121,8 @@ class HumlaUDP(
                 }
             }
         } catch (e: IOException) {
-            // If connected is false, then this is a user-triggered disconnection. Report no error.
-            if (connected) {
+            // If a stop was requested, then this is a user-triggered disconnection. Report no error.
+            if (!stopRequested) {
                 Log.d(TAG, "UDP socket closed unexpectedly")
                 callbackHandler.post { listener.onUDPConnectionError(e) }
             } else {
@@ -115,14 +131,13 @@ class HumlaUDP(
         } finally {
             connected = false
             // Interrupt the outgoing queue consumer thread to avoid sends after socket cleanup.
-            outgoingConsumerThread?.interrupt()
-            // Clear the outgoing queue, in case the caller decides to reconnect with the same socket.
+            sendThread?.interrupt()
             sendQueue.clear()
             udpSocket?.close()
         }
     }
 
-    fun sendMessage(data: ByteArray, length: Int) {
+    override fun sendMessage(data: ByteArray, length: Int) {
         if (!cryptState.isValid) {
             Log.w(TAG, "Invalid cryptstate prior to sendMessage call.")
             return
@@ -131,27 +146,23 @@ class HumlaUDP(
             Log.w(TAG, "Tried to send UDP message without an active connection.")
             return
         }
+        val address = resolvedHost ?: return
         try {
-            val encryptedData = cryptState.encrypt(data, length)
-            val packet = DatagramPacket(encryptedData, encryptedData.size)
-            packet.address = resolvedHost
-            packet.port = port
-            sendQueue.add(packet)
+            val encrypted = cryptState.encrypt(data, length)
+            sendQueue.add(DatagramPacket(encrypted, encrypted.size, address, port))
         } catch (e: GeneralSecurityException) {
-            e.printStackTrace()
+            Log.w(TAG, "Could not encrypt UDP packet", e)
         }
     }
 
-    /** Lazy, non-blocking idempotent disconnect. */
-    fun disconnect() {
+    /** Non-blocking, idempotent. Closing the socket makes the receive loop exit without reporting an error. */
+    override fun disconnect() {
+        stopRequested = true
         connected = false
-        // Closing a socket will trigger an IOException on the consumer thread.
-        udpSocket?.close()
+        socket?.close()
     }
 
-    /**
-     * Note that all connection state related calls are made on the callback handler.
-     */
+    /** Note that all calls are made on the callback handler this transport was given. */
     interface UDPConnectionListener {
         fun onUDPDataReceived(data: ByteArray)
         fun onUDPConnectionError(e: Exception)
@@ -165,16 +176,17 @@ class HumlaUDP(
     ) : Runnable {
         override fun run() {
             Log.d(TAG, "Datagram outbox consumer active")
-            var interrupted = false
-            while (!interrupted) {
-                try {
-                    val packet = queue.take()
-                    socket.send(packet)
-                } catch (e: IOException) {
-                    e.printStackTrace()
+            while (true) {
+                val packet = try {
+                    queue.take()
                 } catch (e: InterruptedException) {
                     // Our datagram thread interrupted us. We should stop reading.
-                    interrupted = true
+                    break
+                }
+                try {
+                    socket.send(packet)
+                } catch (e: IOException) {
+                    Log.w(TAG, "UDP send failed", e)
                 }
             }
             Log.d(TAG, "Datagram outbox consumer shutdown")
