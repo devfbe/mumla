@@ -407,6 +407,20 @@ and reported as passing. They are repo-wide, not stream-specific.
   even when that very thread did the work. This was found only because the
   measured runtime did not fit the claim. Strip the ` @coroutine#` suffix before
   comparing, in every thread assertion.
+- **A Kotlin `var` clashes with any `fun getX`/`fun setX` the interface declares.**
+  `override var isTalking` generates `setTalking(Z)V`, which collides with an
+  interface's own `fun setTalking`; `var service` collides with a Java interface's
+  `getService()` the same way. This has now cost three separate rounds — twice in a
+  brief's test listing and once in a fresh test scaffold — so the rule is: a fake
+  implementing an interface with explicit accessors backs the value in a private
+  field and overrides the accessors, never with a `var`.
+- **A naive SARIF reader counts ten lint errors this project does not have.**
+  `MissingQuantity` is demoted to `warning` in the module's own config, but the
+  *rule default* in the SARIF stays `error`. A script that falls back to the rule
+  default reports ten errors per app variant. Read the `level` on each result, not
+  the rule. Two rounds have reported lint numbers taken this way; the numbers
+  happened to be right because `abortOnError = true` and the build passed, which is
+  the stronger signal to use in the first place.
 - **Robolectric's gesture constants are fixtures, not Android.**
   `ShadowViewConfiguration` hard-codes touch slop 16, paging touch slop 32 and
   double-tap slop 100 at density 1.0, and the 170 px minimum scaling span sits
