@@ -63,8 +63,28 @@ typedef struct {
     int err;
 } aec_result;
 
-/* Runs 5 s of a -6 dB zero-delay echo path and accumulates energies over the last second, i.e.
- * after the adaptive filter has had 4 s to converge. */
+/* Runs 10 s of a -6 dB echo path delayed by 30 ms and accumulates energies over the last
+ * second, i.e. after the adaptive filter has had 9 s to converge.
+ *
+ * Both numbers are load-bearing and were measured, not guessed:
+ *
+ *   - A zero-delay echo path never converges. AEC3 is built around a delay estimator and a
+ *     filter that models a real acoustic path; an echo that arrives in the same frame as its
+ *     reference is not one. This test used to use one, and as a result no arm of the matrix
+ *     below ever converged -- what it measured was AEC3's conservative initial attenuation,
+ *     which suppresses everything alike, so all four arms with a far-end stream read the same
+ *     -24.1 dB and looked like "AEC3 cannot tell a misaligned reference apart". They are not
+ *     the same; nothing had converged. 30 ms is a plausible loudspeaker-to-microphone path on
+ *     a handset; 10, 20, 50 and 100 ms all give the same separation to within 0.05 dB.
+ *
+ *   - 10 s, not 5. At 5 s nothing has converged. At 6 s the misaligned arms still read -23.9 dB
+ *     (i.e. still just the initial attenuation); they fall to -0.9 dB at 7 s and settle by 10 s.
+ *     The run is long enough that the separation is a plateau rather than a moment.
+ *
+ * set_stream_delay_ms is deliberately left at 0 even though the path is 30 ms: AEC3 runs its
+ * own delay estimator, and feeding it the true delay changes none of the figures below by more
+ * than 0.02 dB. The platform hint is an optimisation, not a correctness requirement, which is
+ * worth knowing before Task 3 tries to compute one. */
 static aec_result run_aec(order_t order) {
     aec_result r = {0, 0, 0};
     humla_apm_config cfg = {1, 0, 0, 0, 1};
@@ -72,15 +92,20 @@ static aec_result run_aec(order_t order) {
     if (!apm) { r.err = -1; return r; }
     seed(12345u);
     uint32_t other = 777u;
-    enum { kLag = 20 };
+    enum { kLag = 20, kEchoDelay = 3 };
     int16_t held[kLag][kFrame];
-    for (int n = 0; n < 500; n++) {
+    int16_t echo[kEchoDelay][kFrame];
+    memset(echo, 0, sizeof echo);
+    for (int n = 0; n < 1000; n++) {
         int16_t render[kFrame], capture[kFrame], unrelated[kFrame];
         for (int i = 0; i < kFrame; i++) {
             render[i] = noise();
-            capture[i] = (int16_t)(render[i] / 2); /* echo path: -6 dB, zero delay */
             unrelated[i] = noise_from(&other);
         }
+        /* Echo path: -6 dB, delayed by kEchoDelay frames. The slot about to be overwritten
+         * still holds the render frame from kEchoDelay ticks ago. */
+        for (int i = 0; i < kFrame; i++) capture[i] = (int16_t)(echo[n % kEchoDelay][i] / 2);
+        memcpy(echo[n % kEchoDelay], render, sizeof render);
         double ie = energy(capture, kFrame);
 
         if (order == kOrdered) {
@@ -102,7 +127,7 @@ static aec_result run_aec(order_t order) {
             r.err |= humla_apm_process_capture(apm, capture);
         }
 
-        if (n >= 400) { r.input += ie; r.output += energy(capture, kFrame); }
+        if (n >= 900) { r.input += ie; r.output += energy(capture, kFrame); }
     }
     humla_apm_destroy(apm);
     return r;
@@ -176,46 +201,62 @@ int main(void) {
      * frame that was just recorded and contains its echo. Getting that wrong returns 0 from
      * every call, which is why it is worth a test rather than a comment.
      *
-     * What is actually observable from the output was measured before these thresholds were
-     * chosen, by running the whole matrix below at echo-path gains from -6 dB to -30 dB, with
-     * and without a near-end talker:
+     * Measured on this matrix, 10 s run, last 1 s, -6 dB echo path delayed by 30 ms:
      *
-     *   - far-end fed correctly      : -24.1 dB residual
-     *   - far-end never fed          :  -0.3 dB residual   <- echo cancellation does nothing
-     *   - far-end fed, wrong audio   : -24.1 dB
-     *   - capture fed before render  : -24.1 dB
-     *   - far-end fed 200 ms late    : -24.5 dB
+     *   - far-end fed correctly      : -22.32 dB residual
+     *   - far-end never fed          :  -0.29 dB   <- echo cancellation does nothing
+     *   - far-end fed, wrong audio   :  -0.62 dB   <- likewise
+     *   - capture fed before render  : -22.30 dB   <- AEC3 absorbs this one; see below
+     *   - far-end fed 200 ms late    :  -0.63 dB   <- likewise nothing
      *
-     * Only the first two differ, and they differ by 24 dB. AEC3's nonlinear suppressor gates on
-     * far-end *activity*, so once any far-end stream is being fed it suppresses the echo
-     * whether or not that stream is the one that produced it, and the misalignment cases are
-     * indistinguishable at the output. Asserting a threshold on them would be a test that pins
-     * nothing and breaks on the next upstream bump; they are measured and printed instead, so a
-     * change in AEC3's behaviour is visible in the CI log without being a false failure.
+     * Three of the four wrong wirings therefore separate from the correct one by ~21.7 dB, and
+     * they are asserted, not merely printed. The margins are wide: the correct case attenuates
+     * by a factor of 171 where 16 is required, and the broken cases attenuate by a factor of
+     * 1.2 where anything above 2 would fail. The separation holds at echo-path delays of 10,
+     * 20, 30, 50 and 100 ms and at echo-path gains of -6 dB (21.7 dB apart), -12 dB (15.8 dB)
+     * and -20 dB (8.8 dB).
      *
-     * Repeating the matrix with a near-end talker mixed into the capture frame at the same
-     * level as the echo does not separate them either: everything but "far-end never fed" comes
-     * out around -30 dB, near-end included, because with continuous broadband noise on both
-     * sides AEC3's nearend detector never declares near-end dominance.
+     * This corrects what an earlier revision of this file asserted. It claimed that AEC3 gates
+     * its nonlinear suppressor on far-end *activity* and therefore cannot tell a misaligned
+     * reference from a correct one, and it declined to assert anything about the misaligned
+     * cases on that basis. That was wrong, and it was wrong for an instructive reason: the test
+     * that produced it ran 5 s over a zero-delay echo path, and in that setup no arm of the
+     * matrix converges. The four identical -24.1 dB readings were AEC3's conservative initial
+     * attenuation applied uniformly, not a suppressor decision. The gain of the echo path was
+     * varied, and a near-end talker was tried; the two variables that actually mattered -- how
+     * long the filter is given and whether the echo path has any delay at all -- were held
+     * fixed at values where nothing can converge. Vary either and the cases separate.
      *
-     * The one thing that is both true and load-bearing is therefore asserted hard: if the JNI
-     * layer ever stops feeding the far-end stream, echo cancellation silently stops working,
-     * and this test says so. */
+     * kCaptureFirst is the one wrong wiring that is deliberately NOT asserted as broken, and it
+     * must stay that way. Feeding capture(n) before render(n) advances the reference by exactly
+     * one 10 ms frame; with a real 30 ms echo path the reference still arrives 20 ms ahead of
+     * the echo it belongs to, which is inside the range AEC3's delay estimator is built to
+     * align. It cancels (-22.30 dB) because that is correct behaviour, not because the test is
+     * blind. Do not "fix" this line into an assertion: it would be asserting that AEC3 fails at
+     * something it is supposed to handle, and it would fail the moment the estimator improved.
+     * The ordering still matters in production -- one frame of slack is all there is, and the
+     * JNI layer has no reason to spend it -- but this test cannot be what pins it. */
     static const char *names[] = {"render then capture", "far-end never fed", "far-end mismatched",
                                   "capture before render", "far-end 200 ms late"};
     aec_result r[5];
-    printf("AEC residual, last 1 s of 5 s, -6 dB zero-delay echo path, no near-end talker:\n");
+    printf("AEC residual, last 1 s of 10 s, -6 dB echo path delayed 30 ms, no near-end talker:\n");
     for (int o = 0; o <= (int)kLateRender; o++) {
         r[o] = run_aec((order_t)o);
         CHECK(r[o].err == 0, "every AEC call returns 0 whatever the call order");
         printf("  %-22s : %+6.2f dB\n", names[o], to_db(r[o].output / r[o].input));
     }
-    CHECK(r[kOrdered].output < r[kOrdered].input / 4.0,
-          "render->capture in the right order attenuates the echo by at least 6 dB");
+    CHECK(r[kOrdered].output < r[kOrdered].input / 16.0,
+          "render->capture in the right order attenuates the echo by at least 12 dB");
     CHECK(r[kNoRender].output > r[kNoRender].input / 2.0,
           "with the far-end stream never fed, the echo is NOT cancelled");
+    CHECK(r[kMismatched].output > r[kMismatched].input / 2.0,
+          "with the wrong audio on the far-end stream, the echo is NOT cancelled");
+    CHECK(r[kLateRender].output > r[kLateRender].input / 2.0,
+          "with the far-end stream 200 ms late, the echo is NOT cancelled");
     CHECK(r[kOrdered].output * 4.0 < r[kNoRender].output,
           "feeding the far-end stream is what buys the cancellation");
+    CHECK(r[kOrdered].output * 4.0 < r[kMismatched].output,
+          "feeding the *right* audio on the far-end stream is what buys the cancellation");
 
     /* process_render must not be mistaken for a capture frame: it feeds the reference, it does
      * not produce near-end output, and it must leave the reported capture level alone. */

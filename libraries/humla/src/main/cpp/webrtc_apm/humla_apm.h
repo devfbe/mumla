@@ -14,7 +14,11 @@
  *
  * The far-end frame must be handed over before the near-end frame that will contain its echo.
  * Getting this wrong does not produce an error: every call still returns 0 and echo
- * cancellation simply stops working. tests/test_apm.c pins the difference.
+ * cancellation simply stops working -- silently, and by about 21 dB. tests/test_apm.c asserts
+ * that: feeding no far-end stream, feeding the wrong audio on it, or feeding it 200 ms late all
+ * fail the test. Interleaving capture and render within the same 10 ms tick is the one mistake
+ * AEC3's delay estimator still absorbs, and test_apm.c explains why it is measured rather than
+ * asserted.
  */
 #ifndef HUMLA_APM_H
 #define HUMLA_APM_H
