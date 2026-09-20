@@ -233,6 +233,33 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
+     * The fourth corner of `forceTcp || useTor`, and the only one the other three cannot reach:
+     * over (false,false), (true,false) and (false,true) `||` and `xor` agree. Measured before this
+     * test existed - `forceTcp || useTor` -> `forceTcp xor useTor` SURVIVED all 230 tests, while
+     * the same mutation on the restore condition in UdpHealthMonitor was KILLED(5). So what was
+     * missing was this corner, not the technique: the 2^k rule had been applied correctly one file
+     * over and left unapplied on the predicate this task had just opened up.
+     *
+     * The corner is a user who switched both settings on, and under `xor` it is the worst of the
+     * four: shouldForceTCP() answers false, the connection opens a UDP socket, and the voice of
+     * someone who asked for Tor leaves the device outside the proxy.
+     */
+    @Test
+    fun forcingTcpWhileAlsoRoutingOverTorStillTunnelsTheVoice() {
+        val connection = newConnection()
+        connection.setUseTor(true)
+        val tcp = connection.establish(forceTcp = true)
+
+        connection.feedPings(listOf(0L, 5L, 10L, 15L, 20L), tcp)
+        mainLooper.idle()
+
+        assertThat(tcp.connectUseTor).isTrue()
+        assertThat(transports.udps).isEmpty()
+        assertThat(listener.warnings).isEmpty()
+        assertThat(connection.isUsingUdp).isFalse()
+    }
+
+    /**
      * The other half of that dimension, and the half the brief's test cannot see: forcing TCP
      * *after* the connection is up. `connect()` decides `usingUdp` once, so the judgement is still
      * armed - and the counters it reads stop moving the moment the user forces TCP, because
