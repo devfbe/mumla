@@ -190,3 +190,51 @@ if(HUMLA_HAVE_SANITIZERS)
                                     -P ${CMAKE_CURRENT_SOURCE_DIR}/assert_instrumented.cmake)
   set_tests_properties(apm_is_instrumented PROPERTIES LABELS sanitized)
 endif()
+
+# ---------------------------------------------------------------- the JNI bridges
+# jni_rnnoise.cpp and jni_webrtc_apm.cpp are compiled and executed here through a stand-in
+# JNIEnv (jni_env_stub.h). Everything the JNI layer can get wrong -- a missing length check, a
+# handle freed twice, a bridge wired to the wrong C function -- is invisible from Kotlin and
+# invisible from the C wrappers underneath, and none of it produces an error code. The Android
+# build only proves these files compile and link.
+#
+# The JDK headers are a hard requirement, for the same reason objdump is below: making the test
+# optional would reintroduce the silent shrinkage HUMLA_REQUIRE_SANITIZERS exists to prevent.
+# They come from the nix dev shell (JAVA_HOME), which CI and every developer already has because
+# Gradle needs it. The NDK's jni.h is a different file, but only in ways this test does not
+# depend on: JNINativeInterface's layout is fixed by the JNI specification.
+find_path(HUMLA_JNI_INCLUDE_DIR jni.h HINTS "$ENV{JAVA_HOME}/include")
+find_path(HUMLA_JNI_MD_INCLUDE_DIR jni_md.h
+          HINTS "$ENV{JAVA_HOME}/include/linux" "$ENV{JAVA_HOME}/include/darwin")
+if(NOT HUMLA_JNI_INCLUDE_DIR OR NOT HUMLA_JNI_MD_INCLUDE_DIR)
+  message(FATAL_ERROR
+      "jni.h / jni_md.h not found. Set JAVA_HOME (the nix dev shell does) -- without them the "
+      "JNI bridges would be tested nowhere at all.")
+endif()
+
+set(HUMLA_JNI_BRIDGE_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_jni_bridges.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_rnnoise.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_webrtc_apm.cpp)
+# The bridges include "rnnoise/humla_rnnoise.h" and "webrtc_apm/humla_apm.h", i.e. relative to
+# the cpp/ directory, exactly as they do in the Android build.
+set(HUMLA_JNI_BRIDGE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${HUMLA_JNI_INCLUDE_DIR} ${HUMLA_JNI_MD_INCLUDE_DIR})
+
+add_executable(test_jni_bridges ${HUMLA_JNI_BRIDGE_SOURCES})
+target_include_directories(test_jni_bridges PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+target_link_libraries(test_jni_bridges PRIVATE humla_rnnoise humla_apm m)
+humla_add_labelled_test(jni_bridges test_jni_bridges plain)
+
+if(HUMLA_HAVE_SANITIZERS)
+  # The same bridges against the instrumented libraries. This is where the rnnoise short-buffer
+  # case stops being an assertion about a return value and becomes a trapped heap-buffer-overflow:
+  # jni_env_stub.h hands out array copies that are exact-size malloc blocks, so element 480 of a
+  # 480-element frame is in ASan's redzone. LeakSanitizer additionally catches a bridge that
+  # returns without releasing its array copy.
+  add_executable(test_jni_bridges_asan ${HUMLA_JNI_BRIDGE_SOURCES})
+  target_include_directories(test_jni_bridges_asan PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+  target_compile_options(test_jni_bridges_asan PRIVATE ${HUMLA_SAN_FLAGS})
+  target_link_libraries(test_jni_bridges_asan PRIVATE humla_rnnoise_asan humla_apm_asan m)
+  humla_add_labelled_test(jni_bridges_sanitized test_jni_bridges_asan sanitized)
+endif()
