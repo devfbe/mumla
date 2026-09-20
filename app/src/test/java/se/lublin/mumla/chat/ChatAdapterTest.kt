@@ -200,6 +200,32 @@ class ChatAdapterTest {
     }
 
     @Test
+    fun aPictureAUserSentIsAnImageRowAndNotItsRawMarkup() = runTest {
+        // getItemViewType branches on two booleans, and this is the corner the rest of the suite
+        // never builds: every other image fixture here is an InfoMessage, while the feature's
+        // actual use case is a TextMessage -- MumlaService wraps *every* incoming chat message in
+        // one (MumlaService.java:246), so a picture a user sends arrives as a TextMessage whose
+        // body holds the <img>. Under `content is Image && message is InfoMessage` this row falls
+        // through to the TextHolder, which finds no ChatContent.Text to unwrap and prints the raw
+        // body -- the user sees `look <img src="..."/>` where the picture should be.
+        val adapter = adapter()
+        val sent = text(body = "look <img src=\"$url\"/>")
+        adapter.submitMessages(listOf(sent))
+        idle()
+
+        assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_IMAGE)
+        val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
+        assertThat(holder).isInstanceOf(ChatAdapter.ImageHolder::class.java)
+        val image = holder.itemView.findViewById<ImageView>(R.id.list_chat_item_image)
+        assertThat((image.drawable as BitmapDrawable).bitmap.width).isEqualTo(240)
+        assertThat(holder.itemView.findViewById<TextView>(R.id.list_chat_item_text_before).text.toString())
+            .isEqualTo("look")
+        // The target line is the TextMessage half of the row, and it still gets written.
+        assertThat(holder.target.visibility).isEqualTo(View.VISIBLE)
+        assertThat(holder.target.text.toString()).isEqualTo("alice")
+    }
+
+    @Test
     fun anImageRowShowsABoundedThumbnailAndReportsTaps() = runTest {
         val adapter = adapter()
         adapter.submitMessages(listOf(info("before <img src=\"$url\"/> after")))
