@@ -125,6 +125,30 @@ class ToggleInputModeTest {
     }
 
     /**
+     * `signalAll`, not `signal`. With the one capture thread there is today the two are the same
+     * call, which is why swapping them survived every other test here -- but the difference is not
+     * provably nil: nothing in this class restricts it to one waiter, and task 8's `CapturePipeline`
+     * is the kind of consumer that adds a second. Under `signal()` one of the two threads below
+     * stays parked for good, holding the microphone closed with transmission switched on.
+     */
+    @Test
+    fun `toggling on releases every waiting thread, not just one`() {
+        val mode = ToggleInputMode()
+        val returned = CountDownLatch(2)
+        val threads = List(2) { Thread { mode.waitForInput(); returned.countDown() } }
+        threads.forEach { it.start() }
+
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (threads.count { it.state == Thread.State.WAITING } < 2 && System.nanoTime() - deadline < 0) {
+            Thread.yield()
+        }
+        assertThat(threads.count { it.state == Thread.State.WAITING }).isEqualTo(2)
+
+        mode.setTalkingOn(true)
+        assertThat(returned.await(5, TimeUnit.SECONDS)).isTrue()
+    }
+
+    /**
      * The flag is written by whichever thread owns the button and read unsynchronised by the
      * capture thread in [ToggleInputMode.shouldTransmit]. A missed publication is a JIT outcome,
      * not a value this process can produce on demand, so what is pinned is the **declaration**:
