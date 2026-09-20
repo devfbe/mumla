@@ -43,6 +43,16 @@ class SpeexResamplerTest {
             .containsExactly(1, 16000, 48000, SpeexResampler.DEFAULT_QUALITY).inOrder()
     }
 
+    /** The quality is a parameter; without this the only value any fixture produces is the default. */
+    @Test
+    fun `a quality other than the default reaches speex`() {
+        val api = FakeSpeexResamplerApi()
+
+        SpeexResampler(48000, 16000, quality = 7, api = api)
+
+        assertThat(api.initCalls.single().asList()).containsExactly(1, 48000, 16000, 7).inOrder()
+    }
+
     @Test
     fun `a state speex could not create is refused at construction`() {
         val failure = assertThrows(IllegalStateException::class.java) {

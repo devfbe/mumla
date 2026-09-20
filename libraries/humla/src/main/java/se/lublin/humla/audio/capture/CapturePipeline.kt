@@ -135,10 +135,16 @@ class CapturePipeline @JvmOverloads constructor(
      * Swaps the resampler after the capture source was re-opened at another rate (spec B7 retry)
      * and releases the old one. Passing the resampler that is already installed is a no-op rather
      * than a release of the running one.
+     *
+     * It also re-arms the short-frame log, because the rate limit is "once per reason" and a new
+     * resampler is a new reason. The B7 retry is the only caller, so without this the one case the
+     * log exists for -- the re-opened source producing short frames too -- is the case it stays
+     * silent about.
      */
     fun setResampler(resampler: Resampler?) {
         val old = this.resampler
         this.resampler = resampler
+        shortFrameLogged = false
         if (old !== resampler) old?.release()
     }
 

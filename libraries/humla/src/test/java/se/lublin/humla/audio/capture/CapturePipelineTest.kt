@@ -177,6 +177,25 @@ class CapturePipelineTest {
         assertThat(pipeline.process(constant(5), 480).samples[0]).isEqualTo(5.toShort())
     }
 
+    /** The rate limit is once per reason, and a swapped resampler is a new reason. */
+    @Test
+    fun `a swapped resampler gets its own short-frame log`() {
+        val logs = mutableListOf<String>()
+        val pipeline = CapturePipeline(FakeResampler(1), FakePreprocessor(), ContinuousInputMode(), log = { logs += it })
+
+        pipeline.process(constant(7, 100), 100)
+        pipeline.process(constant(7, 100), 100)
+        assertThat(logs).hasSize(1)
+
+        pipeline.setResampler(FakeResampler(2))
+        pipeline.process(constant(7, 100), 100)
+        pipeline.process(constant(7, 100), 100)
+
+        assertThat(logs).hasSize(2)
+        assertThat(logs[0]).contains("100 of 480")
+        assertThat(logs[1]).contains("200 of 480")
+    }
+
     @Test
     fun `setting the same resampler again does not release it`() {
         val only = FakeResampler(1)
@@ -241,6 +260,82 @@ class CapturePipelineTest {
         val out = pipeline.process(ShortArray(480) { if (it % 2 == 0) 20000 else -20000 }, 480)
         assertThat(out.samples[0]).isEqualTo(Short.MAX_VALUE)
         assertThat(out.samples[1]).isEqualTo(Short.MIN_VALUE)
+    }
+
+    /**
+     * The amplification slider runs **0 to 200 %** (`settings_audio.xml`, `app:max="200"`, divided
+     * by 100 in `Settings.kt`), so a factor below one is a setting a user can choose and the whole
+     * lower half of the range had no fixture: every other boost test sits at 2 or 8. The narrowing
+     * truncates toward zero, which is what `AudioHandler.java:454-464` has always done, so a sample
+     * of 1 attenuates to 0 rather than to 1.
+     */
+    @Test
+    fun `a boost below one attenuates and truncates toward zero`() {
+        val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode(), amplitudeBoost = 0.5f)
+        val input = ShortArray(480)
+        shortArrayOf(1000, -1000, 1, -1, Short.MAX_VALUE, Short.MIN_VALUE).copyInto(input)
+
+        val out = pipeline.process(input, 480)
+
+        assertThat(out.samples[0]).isEqualTo(500.toShort())
+        assertThat(out.samples[1]).isEqualTo((-500).toShort())
+        assertThat(out.samples[2]).isEqualTo(0.toShort())
+        assertThat(out.samples[3]).isEqualTo(0.toShort())
+        assertThat(out.samples[4]).isEqualTo(16383.toShort())    // 16383.5 truncated, not rounded
+        assertThat(out.samples[5]).isEqualTo((-16384).toShort())
+    }
+
+    /** The bottom of the same slider, which is a mute rather than an attenuation. */
+    @Test
+    fun `the bottom of the slider silences the frame`() {
+        val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode(), amplitudeBoost = 0f)
+
+        val out = pipeline.process(constant(20000), 480)
+
+        assertThat(out.transmit).isTrue()
+        for (i in 0 until 480) {
+            assertWithMessage("diverges at sample %s", i).that(out.samples[i]).isEqualTo(0.toShort())
+        }
+    }
+
+    /**
+     * `frameSize` is a constructor parameter and every other test in this class takes the 480
+     * default, so without this one the dimension is closed by construction and a hardcoded 480
+     * anywhere in the file would pass the whole sweep.
+     */
+    @Test
+    fun `the frame is the size it was given, not 480`() {
+        val mode = RecordingInputMode()
+        val logs = mutableListOf<String>()
+        val pipeline = CapturePipeline(null, NoopPreprocessor, mode, frameSize = 160, log = { logs += it })
+
+        val out = pipeline.process(ShortArray(480) { (it + 1).toShort() }, 480)
+
+        assertThat(out.samples).hasLength(160)
+        assertThat(out.length).isEqualTo(160)
+        assertThat(out.samples[159]).isEqualTo(160.toShort())
+        assertThat(mode.lengths).containsExactly(160)
+        assertThat(logs).isEmpty()
+    }
+
+    /**
+     * The copy path's own empty frame: `AudioInput.run` tests `shortsRead > 0` before calling, but
+     * `AudioHandler:430` passes a read count straight through and task 11 replaces it with this.
+     */
+    @Test
+    fun `an input of no samples is judged as no signal and logged`() {
+        val mode = RecordingInputMode()
+        val logs = mutableListOf<String>()
+        val pipeline = CapturePipeline(null, NoopPreprocessor, mode, log = { logs += it })
+
+        pipeline.process(constant(20000), 480)
+        val out = pipeline.process(ShortArray(0), 0)
+
+        assertThat(mode.lengths).containsExactly(480, 0).inOrder()
+        assertThat(mode.scores[1]).isEqualTo(VoiceActivityDetector.NO_SIGNAL)
+        assertThat(out.samples[0]).isEqualTo(0.toShort())
+        assertThat(out.samples[479]).isEqualTo(0.toShort())
+        assertThat(logs.single()).contains("0 of 480")
     }
 
     @Test
