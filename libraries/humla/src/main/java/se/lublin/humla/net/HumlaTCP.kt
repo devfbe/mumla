@@ -47,6 +47,9 @@ class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
  * [callbackHandler], which defaults to the main looper so that today's consumers keep seeing
  * callbacks exactly where they saw them before.
  *
+ * Reusable, one connection at a time: [connect] is refused until the previous connection's read
+ * loop has finished unwinding, which is later than [disconnect] returns.
+ *
  * onTCPConnectionDisconnect is delivered exactly once per [connect]: either by [disconnect], so the
  * caller hears about its own request immediately even while the read thread is still stuck in a
  * connect that has no timeout, or by the read loop when it ends on its own. It is also terminal -
@@ -69,6 +72,17 @@ class HumlaTCP @JvmOverloads constructor(
     @Volatile private var connected = false
     private val disconnectReported = AtomicBoolean(true)
 
+    /**
+     * Held from [connect] until the read loop has fully unwound - which is later than [running]
+     * clears, because [disconnect] clears that immediately while the read thread may still be stuck
+     * in a connect with no timeout. Replaces HumlaNetworkThread's mInitialized flag, which was
+     * cleared at the very end of stopThreads() for exactly this reason: a connect() landing in the
+     * teardown window would have had its disconnect token consumed and its fresh executors shut
+     * down by the outgoing connection's finally block, leaving sendMessage a silent no-op and
+     * nobody reporting a disconnect.
+     */
+    private val inUse = AtomicBoolean(false)
+
     override val isRunning: Boolean get() = running
 
     override fun setTCPConnectionListener(listener: TCPConnectionListener?) {
@@ -77,19 +91,26 @@ class HumlaTCP @JvmOverloads constructor(
 
     @Throws(ConnectException::class)
     override fun connect(host: String, port: Int, useTor: Boolean) {
-        if (running) throw ConnectException("TCP connection already established!")
-        this.host = host
-        this.port = port
-        this.useTor = useTor
-        disconnectReported.set(false)
-        running = true
-        sendExecutor = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-send") }
-        // Publish the executor before handing the read loop to it: the loop's finally shuts it down
-        // and would otherwise be able to observe the field still null and leak a live, non-daemon
-        // thread for every connection attempt.
-        val reader = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-read") }
-        readExecutor = reader
-        reader.execute(::readLoop)
+        if (!inUse.compareAndSet(false, true)) throw ConnectException("TCP connection already established!")
+        try {
+            this.host = host
+            this.port = port
+            this.useTor = useTor
+            disconnectReported.set(false)
+            running = true
+            sendExecutor = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-send") }
+            // Publish the executor before handing the read loop to it: the loop's finally shuts it
+            // down and would otherwise be able to observe the field still null and leak a live,
+            // non-daemon thread for every connection attempt.
+            val reader = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-read") }
+            readExecutor = reader
+            reader.execute(::readLoop)
+        } catch (e: Throwable) {
+            // The read loop never started, so its finally will not release the transport.
+            running = false
+            inUse.set(false)
+            throw e
+        }
     }
 
     private fun readLoop() {
@@ -149,6 +170,7 @@ class HumlaTCP @JvmOverloads constructor(
             sendExecutor = null
             readExecutor?.shutdown()
             readExecutor = null
+            inUse.set(false) // last: only now may a connect() build a new connection on this object
         }
     }
 

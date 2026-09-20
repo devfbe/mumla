@@ -30,6 +30,11 @@ interface TcpTransport {
     val isRunning: Boolean
     fun setTCPConnectionListener(listener: HumlaTCP.TCPConnectionListener?)
 
+    /**
+     * Opens the connection. An instance may be connected again after a previous connection ended,
+     * but not while one is still running or tearing down: an overlapping connect is refused with a
+     * ConnectException.
+     */
     @Throws(ConnectException::class)
     fun connect(host: String, port: Int, useTor: Boolean)
     fun sendMessage(message: Message, messageType: HumlaTCPMessageType)

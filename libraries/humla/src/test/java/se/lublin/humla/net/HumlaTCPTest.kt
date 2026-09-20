@@ -258,4 +258,54 @@ class HumlaTCPTest {
         assertThat(listener.events).isEmpty()
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
+
+    /**
+     * disconnect() clears "running" while the read thread is still unwinding: it may still be stuck
+     * in a connect with no timeout, and its finally still has to report the disconnect and shut the
+     * executors down. A connect() slipping into that window would hand the old finally the new
+     * connection's disconnect token and let it shut down the new connection's executors, after
+     * which sendMessage is a silent no-op and nobody ever reports a disconnect. The Java original
+     * refused this with "Threads already initialized."; the transport is busy until its read loop
+     * is done.
+     */
+    @Test
+    fun aConnectIsRefusedUntilTheReadLoopHasFinishedUnwinding() {
+        val gate = CountDownLatch(1)
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socketFactory.createSocket(any(), any()) } answers { gate.await(); socket }
+        val transport = newTransport(Handler(callbackThread.looper))
+
+        transport.connect("example.invalid", 64738, false)
+        transport.disconnect()
+        assertThat(listener.next()).isEqualTo("disconnect" to "test-tcp-callbacks")
+        assertThat(transport.isRunning).isFalse() // reported and stopped, but not yet torn down
+
+        try {
+            assertThrows(ConnectException::class.java) { transport.connect("example.invalid", 64738, false) }
+        } finally {
+            gate.countDown()
+        }
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        drainCallbacks()
+        assertThat(listener.events).isEmpty()
+        assertThat(listener.disconnects.get()).isEqualTo(1)
+    }
+
+    /** Refusing during teardown must not turn the transport into a one-shot. */
+    @Test
+    fun theTransportConnectsAgainOnceTheReadLoopHasFinished() {
+        every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
+        val transport = newTransport(Handler(callbackThread.looper))
+
+        transport.connect("example.invalid", 64738, false)
+        assertThat(listener.next().first).isEqualTo("failed")
+        assertThat(listener.next().first).isEqualTo("disconnect")
+        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+
+        transport.connect("example.invalid", 64738, false)
+
+        assertThat(listener.next().first).isEqualTo("failed")
+        assertThat(listener.next().first).isEqualTo("disconnect")
+        assertThat(listener.disconnects.get()).isEqualTo(2)
+    }
 }
