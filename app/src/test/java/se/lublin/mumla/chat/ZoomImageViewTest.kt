@@ -300,6 +300,33 @@ class ZoomImageViewTest {
     }
 
     /**
+     * Dragging on after a double-tap must not be a fourth gesture. `ScaleGestureDetector` turns
+     * `isQuickScaleEnabled` on by itself from targetSdk M upwards, which puts a second, continuous
+     * zoom on the same gesture this view's own [ZoomImageView.onDoubleTap] already owns -- two zoom
+     * sources on one gesture, neither chosen nor pinned. Measured before it was turned off: this
+     * drag took the scale from 2.5 to 4.69.
+     *
+     * What is left is the double-tap's own step and nothing else; `GestureDetector` is still in its
+     * double-tap window, so the moves reach `onDoubleTapEvent` rather than `onScroll` and the image
+     * does not pan either. The pan starts with the next gesture, which is
+     * [aCancelDuringADoubleTapDoesNotDeafenTheNextDrag].
+     */
+    @Test
+    fun draggingOnAfterADoubleTapDoesNotKeepZooming() {
+        val view = viewWith(2000, 2000)
+
+        view.touch(MotionEvent.ACTION_DOWN, 1000, 100f, 100f)
+        view.touch(MotionEvent.ACTION_UP, 1020, 100f, 100f)
+        view.touch(MotionEvent.ACTION_DOWN, 1080, 100f, 100f)
+        view.touch(MotionEvent.ACTION_MOVE, 1100, 100f, 180f)
+        view.touch(MotionEvent.ACTION_MOVE, 1120, 100f, 260f)
+        view.touch(MotionEvent.ACTION_MOVE, 1140, 100f, 340f)
+        view.touch(MotionEvent.ACTION_UP, 1160, 100f, 340f)
+
+        assertThat(view.state).isEqualTo(ZoomState(2.5f, 150f, 150f))
+    }
+
+    /**
      * ACTION_CANCEL arriving *during* a double-tap, which is the one the view cannot shrug off.
      *
      * `GestureDetector.mIsDoubleTapping` is cleared only by `cancel()` or by an ACTION_UP; a fresh

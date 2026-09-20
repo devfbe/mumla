@@ -58,7 +58,13 @@ class ZoomImageView @JvmOverloads constructor(
                 return true
             }
         },
-    )
+    ).apply {
+        // Off deliberately. ScaleGestureDetector turns this on by itself from targetSdk M upwards,
+        // which hangs a second, continuous zoom off the double-tap that [onDoubleTap] below already
+        // owns: two zoom sources on one gesture, neither of them chosen. Measured with it on, a
+        // drag after a double-tap ran the scale from 2.5 to 4.69.
+        isQuickScaleEnabled = false
+    }
 
     private val gestureDetector = GestureDetector(
         context,
