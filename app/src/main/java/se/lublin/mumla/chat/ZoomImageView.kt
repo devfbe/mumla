@@ -109,13 +109,18 @@ class ZoomImageView @JvmOverloads constructor(
         applyState()
     }
 
-    override fun onSaveInstanceState(): Parcelable =
-        Bundle().apply {
+    override fun onSaveInstanceState(): Parcelable {
+        // A restore that has not found an image yet lives in pendingRestore, not in state -- and
+        // the dialog loads over the network, so a second rotation inside that window is ordinary.
+        // Saving `state` there would save the default and throw the user's zoom away.
+        val saved = pendingRestore ?: state
+        return Bundle().apply {
             putParcelable(KEY_SUPER, super.onSaveInstanceState())
-            putFloat(KEY_SCALE, state.scale)
-            putFloat(KEY_TX, state.tx)
-            putFloat(KEY_TY, state.ty)
+            putFloat(KEY_SCALE, saved.scale)
+            putFloat(KEY_TX, saved.tx)
+            putFloat(KEY_TY, saved.ty)
         }
+    }
 
     override fun onRestoreInstanceState(state: Parcelable?) {
         if (state !is Bundle) {

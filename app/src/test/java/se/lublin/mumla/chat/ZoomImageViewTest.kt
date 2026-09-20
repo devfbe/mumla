@@ -429,6 +429,29 @@ class ZoomImageViewTest {
         assertThat(after.state).isEqualTo(ZoomState())
     }
 
+    /**
+     * And it survives a *second* rotation taken while the image is still loading. The dialog loads
+     * over the network, so that window is seconds long and is exactly when a phone gets turned; one
+     * round cannot see the bug, because the round that fails is the one that has to save a zoom it
+     * has not applied yet. What is saved is therefore the pending restore where there is one.
+     */
+    @Test
+    fun theZoomSurvivesASecondRotationTakenWhileTheImageIsStillLoading() {
+        val saved = savedStateOf(viewWith(200, 200).apply { zoomBy(2f, 0f, 0f) })
+
+        val firstRotation = ZoomImageView(context).apply { id = SAVED_ID }
+        firstRotation.restoreHierarchyState(saved)
+        firstRotation.layout(0, 0, 400, 400)
+        val savedAgain = SparseArray<Parcelable>().also { firstRotation.saveHierarchyState(it) }
+
+        val secondRotation = ZoomImageView(context).apply { id = SAVED_ID }
+        secondRotation.restoreHierarchyState(savedAgain)
+        secondRotation.layout(0, 0, 400, 400)
+        secondRotation.setImageBitmap(Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888))
+
+        assertThat(secondRotation.state).isEqualTo(ZoomState(2f, 200f, 200f))
+    }
+
     @Test
     fun theZoomIsRestoredImmediatelyWhenTheImageIsAlreadyThere() {
         val saved = savedStateOf(viewWith(200, 200).apply { zoomBy(2f, 0f, 0f) })
