@@ -151,6 +151,13 @@ class HumlaUDP @JvmOverloads constructor(
             return
         }
         if (!connected) {
+            // A deliberate change from the Java original, which set mConnected at the head of run():
+            // packets produced while the host was resolved and the socket built were encrypted and
+            // queued there, and went out once the socket opened, because a connected DatagramSocket
+            // fills in the address a queued packet left null. They are dropped here instead. The
+            // window is one cached DNS lookup plus a socket creation wide, a voice frame held back
+            // over it would be played late anyway, and dropping before encrypt() keeps a connection
+            // that never opens from accumulating packets nobody will ever send.
             Log.w(TAG, "Tried to send UDP message without an active connection.")
             return
         }
