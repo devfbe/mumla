@@ -17,6 +17,7 @@
 
 package se.lublin.mumla.chat
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.text.method.LinkMovementMethod
 import android.view.Gravity
@@ -277,7 +278,22 @@ class ChatAdapter(
          * Stream A's message log appends immutable instances and never edits one, so identity is
          * both the item id and the content check: re-submitting a list rebinds nothing and there
          * are no change payloads.
+         *
+         * Lint's `DiffUtilEquals` flags `===` in [DiffUtil.ItemCallback.areContentsTheSame] because
+         * identity comparison there is usually a bug. It is suppressed rather than obeyed, and `==`
+         * is deliberately *not* used instead:
+         *  * Neither `IChatMessage` implementation overrides `equals`, so `==` is this same check
+         *    wearing a disguise — it would silence the warning without changing one byte of
+         *    behaviour, which is the worse outcome of the two.
+         *  * If either were later turned into a `data class`, `==` would quietly become value
+         *    equality and two messages with the same body and timestamp — the same word typed
+         *    twice — would collapse into one row. `===` cannot do that.
+         *  * The one thing identity cannot see is a message whose [IChatMessage.content] is filled
+         *    in *after* it reached the list. [submitMessages] parses before it submits, so that
+         *    ordering does not arise; it could only be reached by calling `submitList` directly,
+         *    which this class does not support.
          */
+        @SuppressLint("DiffUtilEquals")
         val DIFF: DiffUtil.ItemCallback<IChatMessage> = object : DiffUtil.ItemCallback<IChatMessage>() {
             override fun areItemsTheSame(oldItem: IChatMessage, newItem: IChatMessage) =
                 oldItem === newItem
