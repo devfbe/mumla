@@ -25,14 +25,19 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 /**
- * What [ChannelTest.race] demands of the overlap it produces, so that a reader whose loop never
- * started cannot report no damage and pass (spec 4.04). Measured over four runs of the five tests
- * that use the helper: the lowest any of them produced was 256 overlapping observations of 256
- * taken, the highest 8 069 of 8 344, and the overlap was never below 95% of the reads. A bound of
- * 50 is an order of magnitude under the worst measurement and still tells a future change that
- * closes the window from one that does not.
+ * What the two race helpers in this file demand of the overlap they produce, so that a reader whose
+ * loop never started cannot report no damage and pass (spec 4.04).
+ *
+ * Measured with the whole humla suite running, which is the loaded machine this has to survive, over
+ * three runs of the five tests: the four that use [ChannelTest.race] produced between 879 and 9 219
+ * overlapping observations, and `aRelinkIsNeverSeenHalfDone`, whose writer is 50 inserts per
+ * iteration and therefore the slowest, between 189 and 399. A bound of 50 is a factor of 3.8 under
+ * the worst of those and still tells a change that closes the window from one that does not.
  */
 private const val MIN_OVERLAPPING_READS = 50
+
+/** How many observations `aRelinkIsNeverSeenHalfDone` takes while the relinker runs. */
+private const val OBSERVATIONS = 20_000
 
 /**
  * The three lists a [Channel] owns are written on the protocol thread and read on the main thread,
@@ -211,33 +216,33 @@ class ChannelTest {
         root.setLinks(linked)
 
         val partials = AtomicInteger()
-        val overlaps = AtomicInteger()
         val relinks = AtomicInteger()
         val done = AtomicBoolean(false)
+        // The reader is this thread and takes a fixed number of observations, and the writer runs
+        // until it has them. The other way round - a writer with a fixed count and a reader that
+        // spins until it stops - looks equivalent and is not: a relink holds the monitor for 50
+        // sorted inserts while a read holds it for one copy, so the reader is starved by the very
+        // lock it is here to observe and its share is whatever the scheduler leaves it. Measured
+        // on that shape, over eight runs: 21 to 399 reads, a spread wide enough that any bound
+        // worth asserting is also a bound that fails on a good day. This way the observations are
+        // fixed and it is the writer's count that comes out variable - and the writer, being the
+        // greedy one, is never the starved side.
         val writer = thread(name = "relinker") {
-            try {
-                repeat(20_000) {
-                    root.setLinks(linked)
-                    relinks.incrementAndGet()
-                }
-            } finally {
-                done.set(true)
-            }
-        }
-        val reader = thread(name = "link-reader") {
             while (!done.get()) {
-                val relinksAtStart = relinks.get()
-                if (root.getLinks().size != linked.size) partials.incrementAndGet()
-                if (relinks.get() > relinksAtStart) overlaps.incrementAndGet()
+                root.setLinks(linked)
+                relinks.incrementAndGet()
             }
         }
+        repeat(OBSERVATIONS) {
+            if (root.getLinks().size != linked.size) partials.incrementAndGet()
+        }
+        done.set(true)
         writer.join()
-        reader.join()
 
         assertThat(partials.get()).isEqualTo(0)
-        // Same reason as [race]: a count of zero partial reads proves nothing about a reader that
-        // never read while the writer was rebuilding, so count the reads that did overlap one.
-        assertThat(overlaps.get()).isAtLeast(MIN_OVERLAPPING_READS)
+        // Every one of the observations above was taken between the writer's first relink and its
+        // last, so what is left to establish is that there were relinks to overlap (spec 4.04).
+        assertThat(relinks.get()).isAtLeast(MIN_OVERLAPPING_READS)
     }
 
     /**
