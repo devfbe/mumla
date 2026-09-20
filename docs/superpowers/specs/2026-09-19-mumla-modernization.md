@@ -352,12 +352,28 @@ flake spec 4.05 warns about; a *ratio* is not. Measured here on a queue scan:
 taking the victim by index costs 1 106 ns at depth 1 024 and 1 695 ns at 8 192 —
 **1.53x for 8x the depth** — while the scan it replaced costs 57 889 ns and
 279 528 ns, **4.83x**. The assertion is "the 8x deeper one must not cost 4x as
-much", which no slow machine can fail and no linear scan can pass. Two caveats
-from the round that produced it: put the ratio assertion **first**, because an
-absolute bound placed ahead of it fires under the same mutation and hides it (that
-shadowing happened here and was fixed one commit later in a different file); and
-watch the margin — 2.5x between the real ratio and the threshold was the tightest
-number in that round.
+much". Three caveats, the third measured after this entry was first written:
+
+1. **Put the ratio assertion first.** An absolute bound placed ahead of it fires
+   under the same mutation and reports its own number, so the ratio line is never
+   reached (that shadowing happened here and was fixed one commit later in a
+   different file).
+2. **Watch the margin.** 2.5x between the real ratio and the threshold was the
+   tightest number in the round that produced this entry.
+3. **"No linear scan can pass a ratio" is a property of the spread and the
+   warm-up, not of ratios.** Unshadowing the assertion above showed it had been
+   toothless as well as hidden: at its 8x spread the scan mutation measured
+   **2.77x, 3.99x, 3.54x and 2.95x — under a 4x threshold in four runs out of
+   four**, and only the absolute bound ever fired. Two causes. The *shallow* half
+   was paying for JIT compilation of the whole raise path (16 430–20 585 ns for a
+   1 024-element scan, against 7–8 ns per element once warm), which inflates the
+   number the ratio divides by — and inflates it only in the mutated build, where
+   the scan is what gets compiled. And an 8x spread is too narrow for the fixed
+   cost per raise to disappear from the shallow reading. A **discarded warm-up
+   measurement** and a **64x spread** fixed both: the index then measures 0.50x–
+   1.57x for 64x the depth and the scan 11.4x–24.8x, against a threshold of 8.
+   So: discard one measurement before the first one that counts, and choose the
+   spread so the shallow reading is dominated by the thing being measured.
 
 **Sweep by effect, too.** The enumeration recipes above are all *input*-shaped —
 "for every setting the file reads", "every input the file branches on" — so they
@@ -547,6 +563,66 @@ was not merely too big; it named the wrong bottleneck, and the file that names
 bottlenecks is the one every stream reads. Grepping the call site is not reading it:
 count what stands in front of it, and prefer a measurement to a count.
 
+**A line whose comment explains what would break without it is a line for which a
+test has probably not been written.** The explanation is the substitute: writing
+the failure out precisely feels like accounting for it, and — unlike running a
+mutation — it produces no output that can contradict you. This is the summary case
+one level down. It is not a sentence that over-generalises; it is a sentence that
+is *correct*, and whose correctness stood in for a measurement. It is also
+greppable, which is why it earns a rule: **on writing such a comment, delete the
+line, run the suite, and only then write the comment, with the result in it.**
+
+Two things make it easier to believe, and both are about granularity:
+
+- **A pinned sibling branch lends the whole function an air of coverage.** The
+  mutation granularity one reaches for is the function. `forget()` is one `when`
+  with two arms; the droppable arm is obviously load-bearing and obviously pinned,
+  so at function granularity `forget()` looks tested — while deleting the *fold*
+  arm kept the whole suite green. This is 4.04's "two guards over one observable
+  read as one guard", in the sibling case: two branches in one function, only one
+  of which anything reads back. Sweep by field, sweep by effect — and inside a
+  function, sweep **by arm**.
+- **A run-time remnant inherits the sense of already-being-proved from the type
+  that carries the rest.** The arm arrived in a refactor whose argument was
+  structural ("make a folded-and-droppable event unrepresentable"). What the type
+  system carries is proved by the type system. What it does not carry is proved by
+  nothing, and looks identical in the diff.
+
+And the honest note about how each of this round's two findings was made: the
+shadowed ratio assertion surfaced **while a mutation was already running for
+another reason** — an output that was being read anyway produced it, not judgement.
+The unpinned arm needed a mutation nothing else in the round would have produced.
+Findings that cost nothing do not tell you the sweep is working.
+
+**A guard whose premise is false is invisible from both sides, and the answer is to
+delete it and pin the premise.** Mutation testing asks whether removing a line
+turns a test red. It cannot distinguish "nothing reads this line" from "this line
+never did anything", and the second case also refuses to be pinned: an attempt to
+write the test goes red against correct production code. Measured here on
+`state != newState.constantState` in a talk-state repaint — the icons are layer
+lists, and `LayerDrawable.getConstantState()` hands back its **own state, freshly
+copied per instance**, so two lookups of the same resource never share one. The
+comparison was true on every call; the guard had never once suppressed a repaint.
+The move is not to pin it and not to leave it: **delete it** (behaviour-identical,
+and it removed a latent dereference with it) and write the premise down as its own
+test — *two lookups of one icon never share a constant state* — so that a framework
+or resource change turns that red instead of silently giving the dead guard a job.
+Note the order this is discovered in: the tell was that **writing the pinning test
+produced a RED against correct code**. A test you cannot write is evidence about
+the production line, not about your scaffolding.
+
+**Sweep the fakes' outputs as well as the production file's inputs.** The
+enumeration recipes point at the production file, and a dimension can be closed off
+by the **test double** instead: the fake returns a constant, so every corner behind
+that input is unreachable and the enumeration never notices, because the production
+file does branch on it. Here `FakeUser.getTexture()` was a constant `null` — so
+avatars, a whole dimension, had never been rendered in a test, and the branch's
+success case had never run. This is the third instance of the same shape (a mock
+returning a constant `emptyList()`, a fake that could not express a null user, this
+one), which makes it a rule rather than an anecdote: **for every input the
+production file branches on, name the fake that produces it and check it can
+produce more than one value.**
+
 ### 4.05 Testing hazards that have already produced a false green
 
 Both were caught in this project, each after a test had been written, reviewed
@@ -610,6 +686,30 @@ and reported as passing. They are repo-wide, not stream-specific.
   here burned twenty minutes before anyone noticed. Pass `--timeout` to `ctest`,
   and treat a sweep that produces no output as a result to investigate rather than
   a run to repeat.
+- **A naive sequence assertion over hundreds of thousands of elements is expensive
+  enough to look like a hang — and that is a different entry from the one above.**
+  The `ctest` case above is a real hang. This one was written here as one and was
+  not; it was measured twice, in two streams, and both readings say the same thing.
+  Two ~3 000 000-element `List<Short>` handed to `isEqualTo` with a **single** sample
+  differing: **273 s and a 43 MB failure message**, against 0.1 s for that test green
+  and ~12 s for the whole module. (A smaller pairing measured 29 s against a 12–15 s
+  baseline — same shape, same conclusion.) It fails, with output. But under a
+  per-test timeout below that, it becomes a timeout instead of a diagnosis, and the
+  message goes into the XML, the HTML report and the CI log.
+  Two riders, both learned by getting them wrong first. The divergence has to be
+  **content-only**: seed it by changing a count and the cheap size assertion fires
+  ahead of the comparison, the expensive one never runs, and you conclude the form
+  is fine (12 s, 152 characters of output). And the right form is an index loop that
+  reports the **first** diverging index — `diverges at sample %s` — which costs
+  nothing and says more.
+- **Under Robolectric's legacy graphics, `BitmapFactory` decodes anything.** Hand it
+  arbitrary bytes and it returns a `Bitmap` rather than null, so the corner "these
+  bytes do not decode" — exactly the one a `yes, decoding can fail` comment is
+  written over — is **unwritable**, and the attempt goes red against correct code.
+  The success case then passes for the wrong reason. `@GraphicsMode(NATIVE)` on that
+  one test makes it expressible; note it is per-test, because native graphics is
+  slower and not needed by its neighbours. Same family as `inJustDecodeBounds`,
+  which legacy graphics does not implement at all.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
@@ -829,12 +929,27 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   key that did nothing, the AGC setting that never reached Speex, the preference
   whose default disagreed with its XML. Adding one deliberately is not available.
   **AEC3, AGC2 and the high-pass stay on.** AGC2 in particular, because it is the
-  **only** gain control left in the project — Speex's is dead code in the
-  fixed-point build — so switching it off would silently remove a feature. The
-  high-pass helps the canceller and costs nothing.
+  only **automatic** gain control **inside the capture chain, today** — Speex's is
+  dead code in the fixed-point build (`FIXED_POINT` at `CMakeLists.txt:92,108`,
+  `SET_AGC` under `#ifndef FIXED_POINT`). The axis matters, because the first
+  version of this sentence said "the only gain control left in the project" and
+  that is false in two directions: `AudioHandler.java:454-458` applies
+  `mAmplitudeBoost` on the capture path today, and **B6 requires adding Android's
+  `AutomaticGainControl` as a settings toggle** — a binding sibling requirement the
+  unqualified sentence contradicted. The high-pass helps the canceller and costs
+  nothing.
+  **Second consequence, and it is not cosmetic: the VAD threshold moves.**
+  `humla_apm.cpp:88-91` measures `last_level_dbfs` on the **processed** frame, i.e.
+  after NS and AGC2. With NS off, every non-speech frame measures louder — and in
+  the configuration NS=`NONE` + echo=`WEBRTC`, `LevelToProbability` (−50…−20 dBFS)
+  is the **only** opinion in the chain, which is what task 7 gates transmission on.
+  Task 7 owns re-checking that window against the new levels; it must not meet this
+  as a surprise.
   The constant is named and its test compares against a written-out literal, so
   each of the four flags going the other way turns a test red. That is what makes
-  this decision reversible on purpose rather than by accident.
+  this decision reversible on purpose rather than by accident. Measured: the
+  production change alone turns `the apm is built for echo cancellation at 48 kHz`
+  red, which is the property the decision claims for itself.
 - **Drop `SET_VAD` and `SET_PROB_START` from the Speex stage (B, decided).** Both
   are answered by the library and both are **observably inert for this stage**:
   `vad_enabled`, `speech_prob_start` and `speech_prob_continue` are read in exactly
@@ -907,6 +1022,34 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   **different icon in the two lists**. Both chains are now pinned, so the
   divergence is documented rather than merely present — but nobody ever decided
   it. Decide it in task 8, which opens the overlay anyway.
+- **The observer queue's ceiling rests on thread confinement, which task 6 is
+  about to break (A, task 6 — contract).** `HumlaCallbacks.absoluteCeiling` drops
+  the oldest event whatever its policy, with one exemption: the four
+  connection-lifecycle events. The invariant is therefore not `size <= ceiling`
+  but **`queuedEvents <= max(absoluteCeiling, number of lifecycle events
+  enqueued)`**, and the second term is only small for one reason: all four are
+  raised *on the delivery thread itself*. `HumlaConnection` posts every listener
+  callback to its `mainHandler` (`deliverDisconnected`, `notifyListener`),
+  `HumlaTCP` posts `onTLSHandshakeFailed` to its callback handler,
+  `HumlaService.connect()` raises `onConnecting` on main, and `setReconnecting()`
+  posts the retry to a main `Handler`. While that thread is stuck — the only state
+  in which the queue grows at all — no lifecycle event can arrive to grow it.
+  The argument first written into the code (*"their number is the connection's to
+  choose rather than the server's"*) is **false** and must not be relied on:
+  `onConnectionDisconnected` turns a `CONNECTION_ERROR` into
+  `setReconnecting(true)`, which posts `connect()` after the auto-reconnect delay,
+  and every cycle raises `onConnecting` and `onDisconnected` again — there is no
+  attempt cap in the production path, since the session state machine that adds one
+  is tasks 6, 9 and 12. **The contract for task 6:** it owns `HumlaConnection.kt`
+  and is the first task that can give the connection a handler that is not
+  `HumlaCallbacks`'s. The moment those are two threads, this exemption has no
+  argument left and the queue has no bound; the same goes for tasks 9 and 12. Two
+  things to do then, both cheap: re-derive the exemption or drop it, and re-cost
+  `dropOldestUnlessLifecycle()`, whose scan over the exempt prefix is O(L) per
+  raise under the lock the protocol thread shares with the audio thread — today
+  unreachable for the confinement reason and for no other, and **not** covered by
+  `findingTheOldestDroppableEventDoesNotScanTheQueue`, which fills with `onLogInfo`
+  and stops that loop at element 0.
 - **Correction to the adapter ruling above, twice corrected (P, task 6 review,
   binding).** The first correction named the right winner and the wrong runner-up.
   What an independent paired run on one machine measures — one machine, one
@@ -982,7 +1125,12 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   good**, with a `Log.w` as the only trace. The server does not resend that frame.
   Ruling: attach a rejected channel to the **root** instead of leaving it
   parentless. The tree stays finite and acyclic, and the channel stays visible in
-  the wrong place rather than invisibly absent.
+  the wrong place rather than invisibly absent. **Owner: A, task 6**, as a rider —
+  it is a few lines in `ModelHandler.java`, no other stream owns that file, and no
+  later brief goes near the frame boundary where the guard sits. The contract
+  paragraph in the core ledger that reads *"the same state as a channel whose
+  parent frame has not arrived yet"* is **withdrawn**: one heals on the next frame
+  and the other never does, which is the whole point.
 
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
