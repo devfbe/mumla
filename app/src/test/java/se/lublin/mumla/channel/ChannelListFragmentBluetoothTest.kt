@@ -53,6 +53,13 @@ class ChannelListFragmentBluetoothTest {
      * `var`s, or they would generate the interfaces' own getters), plus a count of the menu
      * invalidations -- the only way the fragment's "the preference moved, redraw the item" effect
      * can be read back.
+     *
+     * Granularity, so nobody reads more into that counter than it holds: it counts *the call*,
+     * not a redraw. Robolectric's action bar does not rebuild the menu off an
+     * `invalidateOptionsMenu()`, so what these assertions guarantee is "the fragment asked for
+     * the menu to be rebuilt", and what draws the tick afterwards is
+     * `onPrepareOptionsMenu` -- which the tests call themselves, through `prepared()`. The two
+     * are pinned separately on purpose; at this level there is nothing finer to read.
      */
     class RecordingHostActivity : AppCompatActivity(), HumlaServiceProvider, DatabaseProvider {
         private var bound: IMumlaService? = null
@@ -151,6 +158,24 @@ class ChannelListFragmentBluetoothTest {
                 if (granted) PackageManager.PERMISSION_GRANTED else PackageManager.PERMISSION_DENIED
             },
         )
+    }
+
+    /**
+     * The nine `isChecked` assertions in this class cannot see this, and that is the whole
+     * reason it is written out: `MenuItemImpl.setChecked`/`isChecked` store and return the
+     * CHECKED flag whether or not the CHECKABLE flag is set, so every one of them stays green
+     * with `android:checkable` gone from the item -- while the item draws no tick at all and
+     * the user taps "Bluetooth" and gets no confirmation that the stored wish was taken.
+     *
+     * The attribute predates this task; what this task did was make it load-bearing. The tick
+     * used to come from `usingBluetoothSco()` and only ever appeared on a live connection.
+     *
+     * No other assertion is allowed in front of this one: an earlier failure would shadow it
+     * and the coverage would be mis-attributed (spec 4.05).
+     */
+    @Test
+    fun theItemIsCheckableAndNotMerelyRememberingATick() {
+        assertThat(prepared().isCheckable).isTrue()
     }
 
     @Test
