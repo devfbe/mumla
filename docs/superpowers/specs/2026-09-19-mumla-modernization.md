@@ -397,7 +397,11 @@ away in a method the diff never went near, and under the narrower reading it nev
 entered the list. Consequence, measured: all eleven tests in that class were
 driving a button the fragment had set to `GONE`, and only worked because the test
 helper dispatched touches directly, bypassing hit-testing. The unit is the file the
-test class hosts. A test class that never
+test class hosts. The unit is **every input the file
+branches on**, not only the ones that look like settings: the round that missed
+the fourth corner above had read "setting" as "Preference", and the two inputs
+that mattered were constructor parameters of a data class — which reach the file
+by exactly the path the user operates. A test class that never
 writes a preference the file reads is testing exactly one configuration, and the
 sweep will confirm whatever that configuration does.
 
@@ -442,12 +446,22 @@ had survived mutation for exactly this reason, invisible everywhere except in th
 window where the audio thread is still handing over frames. That is the window
 that matters.
 
-**Mutate a compound condition clause by clause.** `if (a && b && c)` is three
-guards wearing one pair of brackets, and removing the whole condition kills a test
-while removing `b` alone may not. A sweep that treats the `if` as one unit reports
-a clean result over a passenger. Done properly on one file here: 8 of 8
-sub-clauses each killed a test on their own, which is the statement worth making —
-not "the condition is covered".
+**Mutate a compound condition clause by clause — and know what that does not
+prove.** `if (a && b && c)` is three guards wearing one pair of brackets, and
+removing the whole condition kills a test while removing `b` alone may not. A
+sweep that treats the `if` as one unit reports a clean result over a passenger.
+Done properly on one file here: 8 of 8 sub-clauses each killed a test on their
+own.
+
+**But clause-wise mutation and input-space coverage are orthogonal, and reading
+the first as if it covered the second has already cost a round.** A clause sweep
+proves every clause carries weight; it proves **nothing about the operator that
+joins them**. `||` mutated to `xor` survived a file whose clause sweep was
+complete, because over three of the four corners of a two-boolean input space the
+two operators agree — and the test class never wrote the fourth corner. For a
+compound condition over k booleans the requirement is **2^k inputs, not k
+mutations**. The consequence in that case: a user who switched on both Android
+audio effects got neither, silently.
 
 And the tool: do not run the suite once. **Mutate each guard on its own and
 require exactly one test to go red.** Here that costs about eleven seconds a run.
@@ -492,6 +506,14 @@ and reported as passing. They are repo-wide, not stream-specific.
   (`i % 2` for the branch and `i % size` for the element, so even indices only
   ever added and odd ones only ever removed something absent), not the memory
   model. Check the writer before believing the architecture.
+- **`FileProvider` caches its parsed roots per authority for the life of the JVM,
+  and Robolectric gives every test *method* a fresh data directory.** The second
+  method in a class that calls `getUriForFile` is answered by a strategy built for
+  the first method's `cacheDir` and dies with `Failed to find configured root`.
+  Measured: **7 of 13 tests failed, and which ones depended on JUnit's method
+  order** — a perfect "looks covered, isn't" if the six survivors had been the ones
+  under inspection. Clear the static cache by reflection in `@Before`. On a device
+  the directory does not move, so this is a harness fix only.
 - **A hot-window-only allocation measurement is a lie.** HotSpot's C2
   scalar-replaces the `Iterator` of a `for (x in aList)`, so a chain that really
   allocates reads **0.000 B** in a warmed-up window and passes. The same code in a
@@ -596,6 +618,27 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   the path newly reachable from `onDestroy()` as well. This is an unmet acceptance
   item, not an observation, and it is the second half of the "not responding" root
   cause -- task 4 fixed the first half by moving parsing off main.
+- **The decoder must stop holding two bitmaps, before integration (D, binding).**
+  Task 8 measured what the K=2 ruling above did not: `BoundedBitmapDecoder` samples
+  by powers of two and then calls `Bitmap.createScaledBitmap`, so the sampled
+  intermediate **and** the result are alive during that call. Sampling stops as soon
+  as one more halving would undershoot, leaving the intermediate in [1x, 2x) of the
+  target per axis — up to **4x the pixels**, so a **peak of 5x the bitmap that is
+  kept**. Measured with `shadowOf(bitmap).createdFromBitmap`, pinned permanently:
+  final 2 402 640 B, intermediate 9 612 964 B, peak 12 015 604 B, ratio exactly 5.00,
+  and the worst case sits just above a halving boundary.
+  Scaled to a 1080x2340 phone: **K=2 peaks at ~193 MiB**, K=1 at ~48 MiB — against
+  the 128 MiB `heapgrowthlimit` floor this spec itself named as the criterion. So
+  the criterion, applied to the *peak* rather than the retained bitmap, chooses K=1.
+  Reachable from one chat message: a ~4319x9359 image under the 5 MiB fetch cap is
+  about 1.04 bits per pixel, ordinary JPEG territory, and nothing catches
+  `OutOfMemoryError` on the way out.
+  **Ruling: keep K=2 and fix the decoder**, rather than halve the decode and leave a
+  decoder that transiently holds five times what it returns — that is wrong at any
+  K, and task 10's send path will meet the same peak. Decode straight to the target
+  (`inScaled`/`inDensity`/`inTargetDensity`, or `inBitmap` reuse) so the second
+  bitmap never exists; then K=2 costs the 40.4 MB the ruling assumed. This is a
+  precondition for integrating stream D.
 - **Decide the zoom ceiling against the decoder, not by taste (D, tasks 7 and 8).**
   `MAX_SCALE = 5` came from the plan and nobody checked it against what the
   decoder produces. The chain, read out of the code: the viewer calls
@@ -684,6 +727,31 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `release()` can now block for one native call (~0.3 ms at 48 kHz), so spec §4's
   "shutdown returns within 3 s" has a real dependency where it had a free
   operation.
+- **Drop `SET_VAD` and `SET_PROB_START` from the Speex stage (B, decided).** Both
+  are answered by the library and both are **observably inert for this stage**:
+  `vad_enabled`, `speech_prob_start` and `speech_prob_continue` are read in exactly
+  one place, the hysteresis at `preprocess.c:993-1002`, and that decides only the
+  **return value of `speex_preprocess_run`** — which the stage discards in favour of
+  reading `GET_PROB` directly. Spec B9 names the `GET_PROB_START`→`SET_PROB_START`
+  fix because the legacy code issued a *get* where a *set* was meant; the purpose of
+  that fix was to make the hysteresis work, and this stage does not use the
+  hysteresis. Reading the probability directly is strictly better than configuring a
+  threshold on a value that is thrown away. And the continue half **cannot be set at
+  all** through the bridge's allow list, so speex's hysteresis could only ever be
+  half-configured here. Two configuration calls whose own KDoc explains that nothing
+  observable depends on them are the licence pattern in call form. B9 is satisfied
+  by the direct read; say so where the calls used to be.
+- **Three Speex control calls are dead and must not be reissued (B, measured).**
+  `SET_AGC` (2) and `SET_AGC_TARGET` (46) return −1: the whole block sits behind
+  `#ifndef FIXED_POINT` (`preprocess.c:1057,1193`) and `CMakeLists.txt:108` defines
+  `FIXED_POINT` for this target. `SET_DEREVERB` (8) is answered but sets a field
+  **nothing in `preprocess.c` ever reads**. And `SET_PROB_CONTINUE` (16) is not on
+  the bridge's allow list at all, so it is refused before it reaches speex — the
+  plan's own listing calls it, and the plan's own fake would have recorded the
+  refused call as a *successful* set. Name every request through
+  `SpeexPreprocessNative`'s constants, which the bridge documents its allow list as
+  mirroring: a refused request then has no constant to spell it with and **does not
+  compile**.
 - **Do not throw from the capture thread (B, task 6).** Task 6's planned
   `RnnoisePreprocessor` test requires `process` to throw `IllegalArgumentException`
   on a 441-sample frame. That is an exception once per frame from the audio thread,
@@ -697,6 +765,14 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `CapturePreprocessorFactory`. Assert the *identity* of what the factory returns,
   not that the output frame is unchanged.
 
+- **`MumlaService` is exported with no permission (A, needs a decision).**
+  `AndroidManifest.xml:84-88`: `android:exported="true"` and no permission
+  attribute, so **any installed app can start or bind the Mumble service**.
+  Pre-existing and possibly deliberate — external clients may rely on it — but it
+  has never been decided, and it sits three lines from the new private
+  `FileProvider` that is carefully locked down. Stream A owns `MumlaService`.
+  Either narrow it (a signature permission, or `exported="false"` if nothing
+  external binds) or write down why it stays open.
 - **Coalesce the adapter's own rebuilds (P, task 6).** With the observer queue
   bounded, the largest remaining main-thread cost is not in the model any more —
   it is `ChannelListAdapter.updateChannels()`, which is O(n·depth) and runs *in
@@ -717,20 +793,36 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `getItem(position)` read two *different* snapshots — a user leaving between them
   is an `IndexOutOfBoundsException`. That was equally racy before the guarded model
   and copy-on-read does not fix it; the adapter has to hold one snapshot.
-- **Two facts the model now guarantees, for everyone who reads it (A, binding).**
-  These were settled in task 5 and would otherwise live only in a gitignored
-  ledger. (a) **The observer queue is bounded and folding**, so "nothing is ever
-  dropped" — task 2's contract — is no longer true: refresh events for one subject
-  fold in place, and the three tree-shape events may be dropped oldest-first when
-  the queue is over its bound, though never the newest of them and never at the
-  hands of an undroppable event. An observer must therefore treat a model event as
-  "read this again", never as a delta it accumulates. (b) **The channel tree is
-  finite and acyclic by construction**: `ModelHandler` refuses a `ChannelState`
-  whose parent is the channel itself or one of its descendants, and one that would
-  sit deeper than 256 below the root. The channel keeps its name and its place in
-  the map and simply has no parent — the same state as one whose parent frame has
-  not arrived yet. That is one guard at the frame boundary instead of a depth check
-  at every read, and it is why recursive walks of the tree need none.
+- **Two model facts, both corrected after measurement (A, binding).** I wrote the
+  first version of this entry from a task report and both halves were wrong. The
+  measured truth:
+  (a) **The observer queue is *not* bounded.** Trimming now runs only when the
+  arriving event is itself droppable — which fixed a real starvation bug, but means
+  the ceiling is `#undroppable + 1` and nothing bounds `#undroppable`. Twelve of
+  the nineteen observer events are undroppable, and two of them are bulk traffic
+  during a sync: a 5 000-user server produces **at least 10 000** of them
+  (`onUserConnected` plus an `onLogInfo` per user). Measured consequence: the
+  trim scan is no longer capped either — **2.1 ms inside one `dispatch()` while
+  holding the lock** in the real sync ordering, and **100 µs per enqueue in the
+  steady state against 0.2 µs before**, on a lock the protocol thread shares with
+  the audio thread. What *is* bounded is the population of the three tree-shape
+  events. A second, absolute ceiling is still owed, and until it exists the honest
+  statement is: **bounded in droppable events, unbounded in total, and the newest
+  tree-shape event is never dropped.** An observer must still treat a model event
+  as "read this again", never as a delta it accumulates.
+  (b) **A rejected parent is permanent, not "the same as one that has not arrived
+  yet".** `ModelHandler` refuses a `ChannelState` whose parent is the channel
+  itself or one of its descendants, or that would sit deeper than 256 below the
+  root — and that part is right, cheap (measured: 3.1 ms across a whole
+  5 000-frame sync even in the worst shape the guard permits, because the walk is
+  upward and depth-capped, not a subtree walk) and correctly placed at the one
+  bottleneck. But the channel is then parentless, `ChannelListAdapter` only ever
+  walks downward from the root channels, and nothing in the app iterates the
+  channel map — so **the channel and every user in it disappear from the list for
+  good**, with a `Log.w` as the only trace. The server does not resend that frame.
+  Ruling: attach a rejected channel to the **root** instead of leaving it
+  parentless. The tree stays finite and acyclic, and the channel stays visible in
+  the wrong place rather than invisibly absent.
 
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
