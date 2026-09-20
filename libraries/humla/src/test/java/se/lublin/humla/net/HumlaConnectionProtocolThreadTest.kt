@@ -463,6 +463,32 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
+     * [HumlaConnection.sendUDPMessage] behind a disconnect. This is the send path that does *not*
+     * go through [HumlaConnection.sendTCPMessage]: both of its branches hand the bytes to a
+     * transport directly, so its own [HumlaConnection.isConnected] check is the only thing between a
+     * voice packet and a socket the user has already asked to close. It went unpinned because the
+     * teardown drops both transports a moment later, which makes the guard invisible everywhere
+     * except in the window the teardown has not reached yet - and that is the window in which the
+     * audio thread is still handing over frames.
+     */
+    @Test
+    fun aVoicePacketSentBehindADisconnectReachesNeitherTransport() {
+        val tcp = connectAndEstablish(forceTcp = false)
+        awaitUntil(description = "udp started") { transports.udps.isNotEmpty() }
+        val udp = transports.udps[0]
+        val tcpSentBefore = tcp.sent.toList()
+
+        inTheTeardownWindow(tcp) {
+            connection.sendUDPMessage(voiceDatagram, voiceDatagram.size, true) // straight to UDP
+            connection.setForceTCP(true)
+            connection.sendUDPMessage(voiceDatagram, voiceDatagram.size, false) // tunneled over TCP
+        }
+
+        assertThat(udp.sent).isEmpty()
+        assertThat(tcp.sent).containsExactlyElementsIn(tcpSentBefore).inOrder()
+    }
+
+    /**
      * [HumlaConnection.onTCPConnectionFailed] behind a disconnect: it recorded the failure as this
      * connection's error after the disconnect had already been reported as clean, so the consumer
      * saw a null reason and a non-null [HumlaConnection.error] for the same connection.

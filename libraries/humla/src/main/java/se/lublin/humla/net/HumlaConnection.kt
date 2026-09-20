@@ -197,10 +197,15 @@ class HumlaConnection @JvmOverloads constructor(
      * Sends the pings and reschedules itself. It replaces the ScheduledExecutorService the Java
      * kept for this one task: the protocol thread is already there and already owns the send path,
      * so a second thread bought nothing but a shutdown to get wrong.
+     *
+     * No entry guard of its own. It had one, and three other things already did its job: the
+     * teardown removes this callback before it quits the looper, quitSafely refuses the reschedule
+     * afterwards, and every byte [sendPings] produces leaves through [sendTCPMessage] or
+     * [sendUDPMessage], which make the [isConnected] decision at the one place a send is
+     * observable. A fourth copy of it was a branch no test could fail on.
      */
     private val pingRunnable = object : Runnable {
         override fun run() {
-            if (!isConnected) return
             sendPings()
             protocolHandler.postDelayed(this, PING_INTERVAL_MILLIS)
         }
@@ -618,7 +623,12 @@ class HumlaConnection @JvmOverloads constructor(
         tcp?.sendMessage(message, messageType)
     }
 
-    /** Sends a datagram over UDP, or tunnels it through TCP unless [force]. */
+    /**
+     * Sends a datagram over UDP, or tunnels it through TCP unless [force].
+     *
+     * The [isConnected] check here is not the one [sendTCPMessage] makes: both branches below hand
+     * the bytes to a transport directly, so this is the only gate on the voice path.
+     */
     fun sendUDPMessage(data: ByteArray, length: Int, force: Boolean) {
         if (!isConnected) return
         require(length <= data.size) { "Requested length $length is longer than available data length ${data.size}!" }
@@ -634,14 +644,15 @@ class HumlaConnection @JvmOverloads constructor(
 
     /** Asks the server to tunnel future voice packets over TCP. */
     private fun enableForceTCP() {
-        if (!isConnected) return
+        // No isConnected check: the send below is this method's only effect and makes that same
+        // decision, so a check here would be a branch nothing could tell from its absence.
         val utb = Mumble.UDPTunnel.newBuilder()
         utb.packet = ByteString.copyFrom(ByteArray(3))
         sendTCPMessage(utb.build(), HumlaTCPMessageType.UDPTunnel)
     }
 
     fun sendAccessTokens(tokens: Collection<String>) {
-        if (!isConnected) return
+        // Same as enableForceTCP: sendTCPMessage is the only effect and the only real guard.
         val ab = Mumble.Authenticate.newBuilder()
         ab.addAllTokens(tokens)
         sendTCPMessage(ab.build(), HumlaTCPMessageType.Authenticate)
