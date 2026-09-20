@@ -46,9 +46,13 @@ interface SpeexJitterApi {
 }
 
 object SpeexJitterNative : SpeexJitterApi {
+    // The first five are statuses [get] returns, the last three are [ctl] requests; only the
+    // requests are on the bridge's allow list.
     const val JITTER_BUFFER_OK = 0
     const val JITTER_BUFFER_MISSING = 1
-    const val JITTER_BUFFER_INCOMPLETE = 2
+
+    /** speexdsp's own name for 2 (`speex_jitter.h:74`); libspeex called it `INCOMPLETE`. */
+    const val JITTER_BUFFER_INSERTION = 2
     const val JITTER_BUFFER_INTERNAL_ERROR = -1
     const val JITTER_BUFFER_BAD_ARGUMENT = -2
     const val JITTER_BUFFER_SET_MARGIN = 0
