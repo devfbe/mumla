@@ -233,13 +233,20 @@ class ChatAdapter(
      * that is non-empty but names nothing used to render as "Unknown" and stop there. Here it falls
      * through to the next target kind and finally to the actor, which is strictly more informative,
      * and the actor is no longer passed to `setText` as a raw null.
+     *
+     * The three lists are read without a null check because they cannot be null: `Message` -- the
+     * only `IMessage` implementation in production -- returns each one through
+     * `Collections.unmodifiableList`, which throws on a null field rather than handing one back.
+     * The `?.` that used to stand here guarded a branch nothing could reach. The `channel?.name`,
+     * `user?.name` and `actorName ?:` checks below are a different matter: those are nullable
+     * fields, every one of them is reachable, and the test above walks all four outcomes.
      */
     private fun targetLabel(context: Context, message: IMessage): String {
-        val channel = message.targetChannels?.firstOrNull() ?: message.targetTrees?.firstOrNull()
+        val channel = message.targetChannels.firstOrNull() ?: message.targetTrees.firstOrNull()
         if (channel?.name != null) {
             return context.getString(R.string.chat_message_to, message.actorName, channel.name)
         }
-        val user = message.targetUsers?.firstOrNull()
+        val user = message.targetUsers.firstOrNull()
         if (user?.name != null) {
             return context.getString(R.string.chat_message_to, message.actorName, user.name)
         }

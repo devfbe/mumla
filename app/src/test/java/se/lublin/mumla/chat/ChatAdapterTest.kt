@@ -312,6 +312,11 @@ class ChatAdapterTest {
             text(actorName = null),
             // Present but nameless: the old ListView adapter printed "Unknown" here and stopped.
             text(channels = listOf(channel(null)), users = listOf(User(3, "bob"))),
+            // The same corner one target kind further down, which nothing used to build: a user
+            // that is there but has no name. Without the `?.name` on the user check this renders
+            // "alice -> null", the raw-null-into-setText defect this adapter exists to have fixed.
+            text(users = listOf(User(3, null))),
+            text(actorName = null, users = listOf(User(3, null))),
         )
         adapter.submitMessages(messages)
         idle()
@@ -324,7 +329,36 @@ class ChatAdapterTest {
             "alice",
             activity.getString(R.string.unknown),
             "alice → bob",
+            "alice",
+            activity.getString(R.string.unknown),
         ).inOrder()
+    }
+
+    @Test
+    fun aMessageNeverHandsOutANullTargetList() = runTest {
+        // The premise under targetLabel reading the three target lists without a null check.
+        // Message wraps each one in Collections.unmodifiableList, so every Message the app can
+        // build answers non-null -- and one built with a null list *throws* there rather than
+        // answering null, so even that corner never reaches a null branch. Message is the only
+        // IMessage implementation in production (the one other implementation in the repo is a
+        // fake in NotificationPostingTest, which never meets this adapter).
+        val full = Message(7, "alice", listOf(channel("Root")), listOf(channel("Sub")), listOf(User(3, "bob")), "hi")
+        val empty = Message("just a body")
+        for (message in listOf(full, empty)) {
+            assertThat(message.targetChannels).isNotNull()
+            assertThat(message.targetTrees).isNotNull()
+            assertThat(message.targetUsers).isNotNull()
+        }
+
+        val nulls = Message(7, "alice", null, null, null, "hi")
+        for (read in listOf<() -> Any?>({ nulls.targetChannels }, { nulls.targetTrees }, { nulls.targetUsers })) {
+            try {
+                read()
+                fail("a null target list came back as null instead of throwing")
+            } catch (expected: NullPointerException) {
+                // The point: unreadable, not null.
+            }
+        }
     }
 
     @Test
