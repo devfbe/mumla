@@ -892,7 +892,8 @@ class HumlaConnection @JvmOverloads constructor(
         // in HumlaUDPTest.aSendAfterTheThreadDiedDoesNotBurnASequenceNumber.
         //
         // Deleting it alone left all 237 tests green; deleting `usingUdp = false` alone is
-        // KILLED(2). Field sweep over `udp`: the teardown's `udp?.disconnect()` and
+        // KILLED(4) - c35487cb's body has the run, and two later sweeps reproduced the same four.
+        // Field sweep over `udp`: the teardown's `udp?.disconnect()` and
         // sendUDPMessage's read are its only readers, and neither can tell the clear apart from its
         // absence in anything the user or the server sees - the first would call disconnect() a
         // second time on a transport that already closed its own socket, the second hands bytes to
