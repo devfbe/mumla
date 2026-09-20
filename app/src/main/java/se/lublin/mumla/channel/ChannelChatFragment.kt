@@ -344,7 +344,8 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         }
     }
 
-    private fun confirmImage(bitmap: Bitmap) {
+    @VisibleForTesting
+    internal fun confirmImage(bitmap: Bitmap) {
         val preview = ImageView(requireContext()).apply {
             setImageBitmap(bitmap)
             adjustViewBounds = true

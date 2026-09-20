@@ -1,16 +1,23 @@
 package se.lublin.mumla.channel
 
+import android.content.DialogInterface
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Looper
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.ImageView
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -21,8 +28,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
+import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IChannel
@@ -33,6 +43,10 @@ import se.lublin.humla.model.User
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.IHumlaObserver
 import se.lublin.mumla.R
+import se.lublin.mumla.chat.ChatAdapter
+import se.lublin.mumla.chat.ChatImageLoader
+import se.lublin.mumla.chat.ChatImageLoaders
+import se.lublin.mumla.chat.ImageResult
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.service.IMumlaService
@@ -474,4 +488,290 @@ class ChannelChatFragmentTest {
 
     private fun settings(imageMessageLength: Int): ServerSettings =
         mockk(relaxed = true) { every { getImageMessageLength() } returns imageMessageLength }
+
+    // ---- corners the first fixture set could not express ------------------------------------
+
+    /**
+     * `isConnected()` and the throw inside `HumlaSession()` are **the same condition** in
+     * production — both read `mConnectionState == CONNECTED` — and a mock that lets them disagree
+     * closes off every branch behind the pair. This is the coupled state; the race below is the
+     * uncoupled one, and both are real.
+     */
+    private fun disconnect() {
+        every { service.isConnected } returns false
+        every { service.HumlaSession() } throws HumlaDisconnectedException()
+    }
+
+    @Test
+    fun theHintIsLeftAloneWhileDisconnected() {
+        launch()
+        val before = editor.hint.toString()
+        disconnect()
+        fragment.onChatTargetSelected(ChatTargetProvider.ChatTarget(user("Ann")))
+        assertThat(editor.hint.toString()).isEqualTo(before)
+    }
+
+    @Test
+    fun aChannelJoinArrivingAfterTheDisconnectIsIgnored() {
+        every { session.sessionUser } returns user("Me", session = 7)
+        launch()
+        val self = session.sessionUser
+        disconnect()
+        observer.onUserJoinedChannel(self, channel("Lounge"), channel("Root"))
+    }
+
+    /**
+     * `updateChatTargetText` is public API, so it can be called before the view exists — and the
+     * lateinit field behind it would then throw. Nothing in the fragment reaches it that early
+     * today, which is exactly why this is written down rather than left to a call site.
+     */
+    @Test
+    fun theHintIsSafeToUpdateBeforeThereIsAView() {
+        ChannelChatFragment().updateChatTargetText(null)
+    }
+
+    /** The listener is the only way a target chosen elsewhere reaches the hint. */
+    @Test
+    fun theTargetListenerIsHeldOnlyWhileResumed() {
+        launch()
+        assertThat(parent.listeners).contains(fragment)
+        controller.pause()
+        assertThat(parent.listeners).doesNotContain(fragment)
+        controller.resume()
+        assertThat(parent.listeners).contains(fragment)
+    }
+
+    @Test
+    fun theClearMenuItemClearsTheLog() {
+        log += info("older")
+        launch()
+        val item: MenuItem = mockk(relaxed = true) { every { itemId } returns R.id.menu_clear_chat }
+        assertThat(fragment.onOptionsItemSelected(item)).isTrue()
+        drain { itemCount() == 0 }
+        verify { service.clearMessageLog() }
+    }
+
+    // ---- the storage permission, which only one SDK level asks for --------------------------
+
+    private fun tapUpload() {
+        val button = fragment.requireView().findViewById<ImageButton>(R.id.chatImageSend)
+        // performClick ignores both isEnabled and visibility, so the state is asserted rather than
+        // assumed: an inert button would otherwise report this branch as working.
+        assertThat(button.isEnabled).isTrue()
+        assertThat(button.visibility).isEqualTo(View.VISIBLE)
+        button.performClick()
+        idle()
+    }
+
+    private fun startedAction(): String? =
+        shadowOf(activity).nextStartedActivityForResult?.intent?.action
+
+    @Test
+    @Config(sdk = [31])
+    fun onAndroid12TheUploadButtonAsksForStoragePermissionFirst() {
+        launch()
+        tapUpload()
+        assertThat(startedAction()).isEqualTo("android.content.pm.action.REQUEST_PERMISSIONS")
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun fromAndroid13OnTheUploadButtonOpensThePickerDirectly() {
+        launch()
+        tapUpload()
+        assertThat(startedAction()).isEqualTo(Intent.ACTION_GET_CONTENT)
+    }
+
+    @Test
+    @Config(sdk = [31])
+    fun onAndroid12AGrantedStoragePermissionGoesStraightToThePicker() {
+        shadowOf(RuntimeEnvironment.getApplication())
+            .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        launch()
+        tapUpload()
+        assertThat(startedAction()).isEqualTo(Intent.ACTION_GET_CONTENT)
+    }
+
+    // ---- the confirmation dialog, which nothing else reads back -----------------------------
+
+    private fun latestDialog(): AlertDialog = ShadowDialog.getLatestDialog() as AlertDialog
+
+    @Test
+    fun theConfirmationShowsThePickedImageAndSendsOnlyOnOk() {
+        every { session.serverSettings } returns settings(0)
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        launch()
+        fragment.confirmImage(smallBitmap())
+        idle()
+        val dialog = latestDialog()
+        assertThat(dialog.isShowing).isTrue()
+        val preview = dialog.window!!.decorView.firstImageView()
+        assertThat(preview).isNotNull()
+        assertThat(preview!!.contentDescription.toString())
+            .isEqualTo(activity.getString(R.string.image_confirm_send))
+        assertThat(preview.adjustViewBounds).isTrue()
+        assertThat(preview.scaleType).isEqualTo(ImageView.ScaleType.FIT_CENTER)
+        assertThat(preview.maxHeight).isEqualTo(activity.resources.displayMetrics.heightPixels / 3)
+
+        dialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
+        idle()
+        verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
+    }
+
+    @Test
+    fun theConfirmationSendsOnOk() {
+        every { session.serverSettings } returns settings(0)
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        launch()
+        fragment.confirmImage(smallBitmap())
+        idle()
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        drain { runCatching { verify { session.sendChannelTextMessage(any(), any(), any()) } }.isSuccess }
+    }
+
+    private fun View.firstImageView(): ImageView? {
+        if (this is ImageView && contentDescription != null) return this
+        if (this is ViewGroup) {
+            for (i in 0 until childCount) getChildAt(i).firstImageView()?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * The hint is what the compose box is as wide as, so a changed hint has to reach layout. The
+     * explicit `requestLayout()` the old fragment carried a comment for is measured here rather
+     * than explained: see the fragment for what the measurement said.
+     */
+    @Test
+    fun changingTheHintAsksForAFreshLayout() {
+        launch()
+        val root = activity.findViewById<View>(android.R.id.content)
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY),
+        )
+        root.layout(0, 0, 1080, 1920)
+        assertThat(editor.isLayoutRequested).isFalse()
+        fragment.onChatTargetSelected(ChatTargetProvider.ChatTarget(user("Ann")))
+        assertThat(editor.isLayoutRequested).isTrue()
+    }
+
+    /**
+     * The server does not echo a message back to its sender, so this call is the only thing that
+     * puts what you just typed into your own log. Found by mutation: dropping it left all 32 tests
+     * green while the sent message vanished from the screen.
+     */
+    @Test
+    fun aSentMessageAppearsInTheListImmediately() {
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("hi there")
+        launch()
+        editor.setText("hi there")
+        sendButton.performClick()
+        drain { itemCount() == 1 }
+        assertThat(itemCount()).isEqualTo(1)
+    }
+
+    // ---- corners the mutation sweep pointed at ----------------------------------------------
+
+    /**
+     * Rebinding replaces the log; it does not append it. Reached on every reconnect, and without
+     * the clear the whole history is on screen twice.
+     */
+    @Test
+    fun rebindingReplacesTheLogRatherThanAppendingIt() {
+        log += info("a")
+        log += info("b")
+        launch()
+        observer.onLogInfo("live")
+        drain { itemCount() == 3 }
+        fragment.setServiceBound(false)
+        fragment.setServiceBound(true)
+        drain { itemCount() == 2 }
+        assertThat(itemCount()).isEqualTo(2)
+    }
+
+    /** The list is read newest-last, so it has to sit at the bottom rather than the top. */
+    @Test
+    fun theListSticksToTheNewestMessage() {
+        launch()
+        assertThat((list.layoutManager as LinearLayoutManager).stackFromEnd).isTrue()
+    }
+
+    /**
+     * Detaching the adapter is what recycles the bound rows, which is what cancels their thumbnail
+     * coroutines — `RecyclerView.setAdapter(null)` runs `onViewRecycled` over the whole window.
+     */
+    @Test
+    fun theViewTeardownDetachesTheAdapter() {
+        launch()
+        val recycler = list
+        activity.supportFragmentManager.beginTransaction().remove(parent).commitNow()
+        idle()
+        assertThat(recycler.adapter).isNull()
+    }
+
+    /**
+     * `onUserJoinedChannel` is declared with a nullable user, and the session user is null until
+     * the server has named it — so `null == null` is a reachable pair, and without the explicit
+     * `user != null` the hint would follow a channel change that is not the local user's.
+     */
+    @Test
+    fun aChannelJoinWithNoUserAndNoSessionUserIsIgnored() {
+        every { session.sessionUser } returns null
+        launch()
+        val before = editor.hint.toString()
+        every { session.sessionChannel } returns channel("Lounge")
+        observer.onUserJoinedChannel(null, channel("Lounge"), channel("Root"))
+        assertThat(editor.hint.toString()).isEqualTo(before)
+    }
+
+    /**
+     * An exception escaping a `lifecycleScope.launch` is not a failed test, it is a dead app: the
+     * default handler for an unhandled coroutine exception is the thread's. So the catch around
+     * the encode is measured by watching that handler, which is the only place its absence shows.
+     */
+    @Test
+    fun aDisconnectWhileEncodingDoesNotEscapeTheCoroutine() {
+        val escaped = mutableListOf<Throwable>()
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, e -> escaped += e }
+        try {
+            every { session.serverSettings } returns settings(0)
+            launch()
+            every { service.HumlaSession() } throws HumlaDisconnectedException()
+            fragment.sendImage(smallBitmap())
+            drain { progress.visibility == View.GONE }
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(previous)
+        }
+        assertThat(escaped).isEmpty()
+    }
+
+    /**
+     * The one test in this class that binds an image row, and so the only one that runs anything in
+     * the scope the adapter was handed. `lifecycleScope` is `Dispatchers.Main.immediate`, so a
+     * coroutine started from the main thread runs inline up to its first real suspension: with a
+     * loader that answers without suspending, the bitmap is on the view **before
+     * `bindViewHolder` returns**. A scope on a background dispatcher cannot do that, because the
+     * body would first have to be handed to another thread.
+     */
+    @Test
+    fun theAdapterIsGivenAScopeThatDispatchesOnTheMainThread() {
+        val bitmap = smallBitmap()
+        val loader = mockk<ChatImageLoader>()
+        coEvery { loader.loadThumbnail(any(), any(), any()) } returns ImageResult.Ready(bitmap)
+        ChatImageLoaders.setForTests(loader)
+        try {
+            log += info("<img src=\"data:image/png;base64,AAAA\"/>")
+            launch()
+            drain { itemCount() == 1 }
+            val adapter = list.adapter as ChatAdapter
+            assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_IMAGE)
+            val holder = adapter.createViewHolder(list, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
+            adapter.bindViewHolder(holder, 0)
+            assertThat(holder.image.drawable).isNotNull()
+        } finally {
+            ChatImageLoaders.setForTests(null)
+        }
+    }
 }
