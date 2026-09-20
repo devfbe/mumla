@@ -128,14 +128,7 @@ static void test_resampler(Env& env) {
         CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
     }
     {
-        /* Lying caller: counts far beyond both arrays. Clamped, not obeyed.
-         *
-         * This one arm is pinned by the SANITIZED build alone, and the distinction was measured,
-         * not assumed: with the clamp removed, ASan reports a heap-buffer-overflow at
-         * resample.c:947, but the plain binary passes -- speex writes back a consumed count that
-         * happens to stay under 480, so the assertions below see nothing wrong. If the sanitized
-         * half of this directory is ever switched off, this case stops testing anything. The
-         * preprocessor and jitter arms do fail in both builds. */
+        /* Lying caller: counts far beyond both arrays. Clamped, not obeyed. */
         Array<jshort> in(480), out(160);
         Array<jint> inLen(1), outLen(1);
         inLen[0] = 48000;
@@ -144,6 +137,39 @@ static void test_resampler(Env& env) {
                    out.as<jshortArray>(), outLen.as<jintArray>());
         CHECK(inLen[0] <= 480, "an input count larger than the input array is clamped to it");
         CHECK(outLen[0] <= 160, "an output count larger than the output array is clamped to it");
+    }
+    /* The arm above lies about both counts, and that is not enough to hold either clamp down:
+     * each one keeps the other's overrun out of reach, because speex stops as soon as the first
+     * of the two budgets runs out. Measured, three runs: with only the input clamp deleted both
+     * binaries pass, with only the output clamp deleted both binaries pass, and only deleting
+     * both at once produces a SEGV. So a later edit that drops one line as obviously redundant
+     * ("the output array is ours anyway") passes the whole suite in both builds.
+     *
+     * The two arms below are asymmetric on purpose: each lies about exactly one count and gives
+     * the other array room to spare, so exactly one clamp is load bearing in each. Deleting
+     * either line alone then fails BOTH builds -- the plain one on a signal, the sanitized one on
+     * a heap-buffer-overflow inside resample.c. */
+    {
+        /* Only the input clamp carries: out really can hold the 16000 samples asked for. */
+        Array<jshort> in(480), out(16000);
+        Array<jint> inLen(1), outLen(1);
+        inLen[0] = 48000;
+        outLen[0] = 16000;
+        RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), inLen.as<jintArray>(),
+                   out.as<jshortArray>(), outLen.as<jintArray>());
+        CHECK(inLen[0] <= 480, "an input count is clamped even when the output array has room");
+        CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
+    }
+    {
+        /* Only the output clamp carries: inLen is honest, outLen is 100x the output array. */
+        Array<jshort> in(4800), out(160);
+        Array<jint> inLen(1), outLen(1);
+        inLen[0] = 4800;
+        outLen[0] = 16000;
+        RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), inLen.as<jintArray>(),
+                   out.as<jshortArray>(), outLen.as<jintArray>());
+        CHECK(outLen[0] <= 160, "an output count is clamped even when the input count is honest");
+        CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
     }
     {
         Array<jshort> in(480), out(160);
