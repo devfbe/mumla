@@ -114,9 +114,18 @@ class ChatImageLoader(
 
     /**
      * Guarded by `synchronized(inFlight)`. Nothing inside those sections suspends *or fetches*: the
-     * shared job is created lazily and started outside the monitor, because on an immediate
-     * dispatcher a coroutine's body runs inline and the whole blocking fetch would otherwise happen
-     * with this lock held — a process-wide lock around the network, one dispatcher change away.
+     * shared job is created [CoroutineStart.LAZY] and it is [Deferred.await], outside the monitor,
+     * that starts it, because on an immediate dispatcher a coroutine's body runs inline and the
+     * whole blocking fetch would otherwise happen with this lock held — a process-wide lock around
+     * the network, one dispatcher change away.
+     *
+     * **What would break this map is a path that takes an entry out of the monitor and then does not
+     * await it.** A "peek" helper, an early `return` between the monitor and the `try`, a `?:` that
+     * short-circuits past it: [shared] increments `waiters` inside the monitor, and the `finally`
+     * around the `await` is the only thing that ever decrements it. A caller that leaves in between
+     * leaks a waiter, so the count never reaches zero again, the job is never cancelled and the key
+     * stays in this map for the life of the process. The increment and the await are one path; they
+     * must stay one.
      */
     private val inFlight = HashMap<String, Shared>()
 
@@ -201,22 +210,29 @@ class ChatImageLoader(
      */
     private suspend fun shared(key: String, produce: suspend () -> ImageResult): ImageResult {
         val entry = synchronized(inFlight) {
-            // `isCompleted`, not `isActive`: a lazily created job has not started yet, and a caller
-            // that arrived in that window has to join it rather than start a second fetch. Both a
+            // `isCompleted`, not `isActive`, and the reason is the NEW half: a job created LAZY has
+            // not started, so it is not active either, and `isActive` would read that window as
+            // "nothing is running" and start a second fetch and decode of the same source. Both a
             // finished and a cancelled job are completed, and neither may be handed to a new caller.
-            // Untested, deliberately: a cancelled entry is removed inside the same critical section
-            // that cancels it, and re-awaiting a finished one returns the same result, so no
-            // observable failure could be built for dropping this. It is a guard, not a covered path.
+            // Untested, deliberately, and the halves fail differently. A cancelled entry is removed
+            // inside the same critical section that cancels it and re-awaiting a finished one
+            // returns the same result, so those two have no observable failure at all. The NEW half
+            // does have one — the same work done twice — but both callers still get a correct
+            // result, so what a regression here costs is a duplicate load, not an answer.
             val running = inFlight[key]?.takeIf { !it.job.isCompleted }
             val shared = running ?: Shared().also {
                 inFlight[key] = it
+                // LAZY so that nothing can run while this monitor is held; see [inFlight].
                 it.job = scope.async(start = CoroutineStart.LAZY) { produce() }
             }
             shared.waiters++
             shared
         }
-        entry.job.start() // outside the monitor; a no-op for everyone but the first caller
         try {
+            // await() starts the LAZY job itself (JobSupport.awaitInternal -> startInternal) and it
+            // does so here, outside the monitor, which is the only property that matters. An
+            // explicit start() before this line would be a no-op for every caller including the
+            // first, so there is none.
             return entry.job.await()
         } finally {
             synchronized(inFlight) {
