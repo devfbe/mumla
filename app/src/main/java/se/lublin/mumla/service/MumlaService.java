@@ -348,7 +348,10 @@ public class MumlaService extends HumlaService implements
             e.printStackTrace();
         }
 
-        mMediaSession.detach(this);
+        // Null-checked like every other teardown in this method: it is the last thing onCreate
+        // builds, so anything that throws earlier -- the TTS constructor above it, say -- gets
+        // here with the field still null.
+        if (mMediaSession != null) mMediaSession.detach(this);
         unregisterObserver(mObserver);
         if(mTTS != null) mTTS.shutdown();
         mMessageLog = null;

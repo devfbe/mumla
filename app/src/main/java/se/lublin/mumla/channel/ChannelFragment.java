@@ -76,8 +76,6 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
     /** Chat target listeners, notified when the chat target is changed. */
     private List<OnChatTargetSelectedListener> mChatTargetListeners = new ArrayList<OnChatTargetSelectedListener>();
 
-    /** True iff the talk button has been hidden (e.g. when muted) */
-    private boolean mTalkButtonHidden;
     /** True while a touch is down on the talk button, i.e. while this fragment holds transmission. */
     private boolean mTalkButtonHeld;
 
@@ -354,7 +352,6 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
 
     private void setTalkButtonHidden(final boolean hidden) {
         mTalkView.setVisibility(hidden ? View.GONE : View.VISIBLE);
-        mTalkButtonHidden = hidden;
     }
 
     @Override
