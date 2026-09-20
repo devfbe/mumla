@@ -359,6 +359,30 @@ shadowing happened here and was fixed one commit later in a different file); and
 watch the margin — 2.5x between the real ratio and the threshold was the tightest
 number in that round.
 
+**Sweep by effect, too.** The enumeration recipes above are all *input*-shaped —
+"for every setting the file reads", "every input the file branches on" — so they
+structurally cannot produce a line whose result the file never reads back. That is
+the third step of the same progression: sweep by field covers your own state,
+borrowed state covers your delegates' state, and this covers **state you write into
+an object that is not yours and never read again** — a Window, a Dialog, a
+theme or style, view flags, intent flags, layout params.
+
+The rule: **for every call the file makes into an object it does not own, name the
+test that reads the result back.** If there is none, the line is unpinned however
+many mutations the input dimensions have survived. A mutation in a load path goes
+red because some test reads what it produced; a mutation on a window never goes
+red, because nobody reads the window.
+
+It is how a sweep can be complete and blind at once. Measured here: a viewer
+enumerated its load outcomes, its arguments, its display metrics and its
+dispatchers — four dimensions, all clean — and never touched the fifth, which was
+literally the thing the user asked for (fullscreen). And the sharpener: a line
+missing from that enumeration is not merely unchecked, it can **mask** the
+assertion that would have been the real one. Here `setLayout(MATCH_PARENT, …)` in
+`onStart` was a no-op — `PhoneWindow.generateLayout()` already does it for a
+non-floating window — and while it stood there, the theme attribute that actually
+produces fullscreen could not be made to fail.
+
 **A label or a comparison must name the dimension it holds along, or it is a
 mechanism description wearing a guarantee's clothes.** Two sentences from one task
 report were copied into this spec as binding guarantees and both were measured
