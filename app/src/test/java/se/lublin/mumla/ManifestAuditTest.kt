@@ -146,21 +146,24 @@ class ManifestAuditTest {
      * or removed), not on a bug -- there is no running-app behavior that exercises Auto Backup
      * under Robolectric.
      *
-     * The test resolves `@xml/backup_rules` by resource name rather than through
-     * `ApplicationInfo.dataExtractionRulesRes`: that field exists on the framework class Robolectric
-     * runs against (confirmed empirically and by inspecting its android-all jar with `javap`) but
-     * Robolectric's manifest/package parsing does not populate it from
-     * `android:dataExtractionRules` -- it read back as 0 even though the merged manifest
-     * (`app/build/intermediates/merged_manifests/.../AndroidManifest.xml`) correctly contains
-     * `android:dataExtractionRules="@xml/backup_rules"`. That attribute-to-resource wiring is
-     * instead verified two other ways: by reading the merged manifest directly (done for this
-     * task's report), and by Android Lint's own backup-related checks, which parse the manifest
-     * and the referenced resource independently of Robolectric and reported zero findings after
-     * this change. What this test *can* and does pin under Robolectric is the resource's own
-     * content, which is the part a careless future edit is most likely to break silently.
+     * IMPORTANT, and named accordingly: this test pins only the *content* of
+     * `res/xml/backup_rules.xml`, resolved by resource name
+     * (`context.resources.getIdentifier`) rather than through
+     * `ApplicationInfo.dataExtractionRulesRes` -- that field exists on the framework class
+     * Robolectric runs against (confirmed empirically and by inspecting its android-all jar with
+     * `javap`) but Robolectric's manifest/package parsing does not populate it from
+     * `android:dataExtractionRules`, so it cannot be used to check the wiring here. Because this
+     * test resolves the resource by name, it does **not** verify that the manifest's
+     * `android:dataExtractionRules` attribute still points at it: measured directly (stripping the
+     * attribute from the manifest and rerunning this test), it keeps passing. The
+     * attribute-to-resource wiring is instead enforced by build's lint configuration
+     * (`app/build.gradle`'s `lint { error 'DataExtractionRules' }`, added specifically because the
+     * default warning severity does not fail the build under `abortOnError`), not by this test.
+     * See the task report for the evidence that the raised check actually fails the build when the
+     * attribute is removed, and passes when it is present.
      */
     @Test
-    fun cloudBackupExcludesEverythingButDeviceTransferIsUnrestricted() {
+    fun theBackupRulesFileExcludesCloudBackupButNotDeviceTransfer() {
         val resourceId = context.resources.getIdentifier("backup_rules", "xml", context.packageName)
         assertWithMessage("res/xml/backup_rules.xml resolves").that(resourceId).isNotEqualTo(0)
 

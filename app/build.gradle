@@ -162,6 +162,13 @@ android {
         // translation files, so this check reports but does not fail the build. It stays enabled
         // for the English source, where it would be a real error we can fix.
         warning 'MissingQuantity'
+        // Default severity is warning, which abortOnError does not gate. Raised to error so a
+        // missing/misspelled android:dataExtractionRules attribute (e.g. res/xml/backup_rules.xml
+        // becoming unreferenced) fails the build instead of silently re-enabling cloud backup of
+        // server passwords and the client certificate. ManifestAuditTest's
+        // theBackupRulesFileExcludesCloudBackupButNotDeviceTransfer resolves the rules resource by
+        // name, so it cannot see this wiring break; this lint check is what actually enforces it.
+        error 'DataExtractionRules'
         explainIssues = true
         ignoreWarnings = false
         quiet = false
