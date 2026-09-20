@@ -786,6 +786,13 @@ and reported as passing. They are repo-wide, not stream-specific.
   `daemon has been stopped` and re-run rather than record a verdict**, keep tooling
   in a per-agent subfolder of the scratchpad, and treat a baseline that fails as a
   reason to stop rather than a data point.
+- **A test or lint count summed off disk includes reports the run did not produce.**
+  `build/**/reports` keeps the previous flavour's results, so a counter that globs
+  them reports a total no single command produced. Seen twice in one task: a gate
+  that runs exactly two test tasks (**388** tests) was recorded as **1 388**, and a
+  lint count over "all five reports" included four flavours that gate never built.
+  Neither number was wrong on purpose and both read as authoritative. Count what
+  **this** invocation wrote — or clean first — and name the command that produced it.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
