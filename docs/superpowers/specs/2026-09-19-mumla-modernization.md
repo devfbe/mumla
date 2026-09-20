@@ -552,6 +552,48 @@ given a single writing thread rather than a corrected comment, and the host fiel
 stopped being cleared on teardown rather than being null-checked — `getByName`
 resolves both `null` and `""` to loopback, so only never resetting it is safe.
 
+**A cost claim about a call site must count the guards between the entry and the
+call.** Same discipline as mutating a compound condition clause by clause, applied
+to *reading* instead of testing. Written into this spec as binding: "`onBindViewHolder`
+called it twice per row, two full subtree walks per row bound." Two guards sat
+between the method entry and those calls — a short-circuiting `||` and an
+`if (mShowChannelUserCount)` whose setting is off by default — and with them counted,
+the true figure is **0.75 node visits per row**, a ninth of one rebuild. The number
+was not merely too big; it named the wrong bottleneck, and the file that names
+bottlenecks is the one every stream reads. Grepping the call site is not reading it:
+count what stands in front of it, and prefer a measurement to a count.
+
+**A line whose comment explains what would break without it is a line for which a
+test has probably not been written.** The explanation is the substitute: writing
+the failure out precisely feels like accounting for it, and — unlike running a
+mutation — it produces no output that can contradict you. This is the summary case
+one level down. It is not a sentence that over-generalises; it is a sentence that
+is *correct*, and whose correctness stood in for a measurement. It is also
+greppable, which is why it earns a rule: **on writing such a comment, delete the
+line, run the suite, and only then write the comment, with the result in it.**
+
+Two things make it easier to believe, and both are about granularity:
+
+- **A pinned sibling branch lends the whole function an air of coverage.** The
+  mutation granularity one reaches for is the function. `forget()` is one `when`
+  with two arms; the droppable arm is obviously load-bearing and obviously pinned,
+  so at function granularity `forget()` looks tested — while deleting the *fold*
+  arm kept the whole suite green. This is 4.04's "two guards over one observable
+  read as one guard", in the sibling case: two branches in one function, only one
+  of which anything reads back. Sweep by field, sweep by effect — and inside a
+  function, sweep **by arm**.
+- **A run-time remnant inherits the sense of already-being-proved from the type
+  that carries the rest.** The arm arrived in a refactor whose argument was
+  structural ("make a folded-and-droppable event unrepresentable"). What the type
+  system carries is proved by the type system. What it does not carry is proved by
+  nothing, and looks identical in the diff.
+
+And the honest note about how each of this round's two findings was made: the
+shadowed ratio assertion surfaced **while a mutation was already running for
+another reason** — an output that was being read anyway produced it, not judgement.
+The unpinned arm needed a mutation nothing else in the round would have produced.
+Findings that cost nothing do not tell you the sweep is working.
+
 ### 4.05 Testing hazards that have already produced a false green
 
 Both were caught in this project, each after a test had been written, reviewed
@@ -834,12 +876,27 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   key that did nothing, the AGC setting that never reached Speex, the preference
   whose default disagreed with its XML. Adding one deliberately is not available.
   **AEC3, AGC2 and the high-pass stay on.** AGC2 in particular, because it is the
-  **only** gain control left in the project — Speex's is dead code in the
-  fixed-point build — so switching it off would silently remove a feature. The
-  high-pass helps the canceller and costs nothing.
+  only **automatic** gain control **inside the capture chain, today** — Speex's is
+  dead code in the fixed-point build (`FIXED_POINT` at `CMakeLists.txt:92,108`,
+  `SET_AGC` under `#ifndef FIXED_POINT`). The axis matters, because the first
+  version of this sentence said "the only gain control left in the project" and
+  that is false in two directions: `AudioHandler.java:454-458` applies
+  `mAmplitudeBoost` on the capture path today, and **B6 requires adding Android's
+  `AutomaticGainControl` as a settings toggle** — a binding sibling requirement the
+  unqualified sentence contradicted. The high-pass helps the canceller and costs
+  nothing.
+  **Second consequence, and it is not cosmetic: the VAD threshold moves.**
+  `humla_apm.cpp:88-91` measures `last_level_dbfs` on the **processed** frame, i.e.
+  after NS and AGC2. With NS off, every non-speech frame measures louder — and in
+  the configuration NS=`NONE` + echo=`WEBRTC`, `LevelToProbability` (−50…−20 dBFS)
+  is the **only** opinion in the chain, which is what task 7 gates transmission on.
+  Task 7 owns re-checking that window against the new levels; it must not meet this
+  as a surprise.
   The constant is named and its test compares against a written-out literal, so
   each of the four flags going the other way turns a test red. That is what makes
-  this decision reversible on purpose rather than by accident.
+  this decision reversible on purpose rather than by accident. Measured: the
+  production change alone turns `the apm is built for echo cancellation at 48 kHz`
+  red, which is the property the decision claims for itself.
 - **Drop `SET_VAD` and `SET_PROB_START` from the Speex stage (B, decided).** Both
   are answered by the library and both are **observably inert for this stage**:
   `vad_enabled`, `speech_prob_start` and `speech_prob_continue` are read in exactly
@@ -912,15 +969,59 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   **different icon in the two lists**. Both chains are now pinned, so the
   divergence is documented rather than merely present — but nobody ever decided
   it. Decide it in task 8, which opens the overlay anyway.
-- **Correction to the adapter ruling above: the cause named there is not the main
-  one.** Measured in a paired run on one machine: coalescing rebuilds took a
-  5 000-event sync from **1 376.9 ms to 0.4 ms**, while the O(n·depth)→O(n) count
-  fix makes a single rebuild only about twice as fast (351.6 µs → 165.5 µs). The
-  33 179 count visits per rebuild are cheap — field reads, no allocation. Where
-  `getSubchannelUserCount()` really dominates is a place the ruling never
-  mentioned: **`onBindViewHolder` called it twice per channel row**, i.e. two full
-  subtree walks for every row bound **while scrolling**. That is now zero, because
-  the counts ride on the node.
+- **The observer queue's ceiling rests on thread confinement, which task 6 is
+  about to break (A, task 6 — contract).** `HumlaCallbacks.absoluteCeiling` drops
+  the oldest event whatever its policy, with one exemption: the four
+  connection-lifecycle events. The invariant is therefore not `size <= ceiling`
+  but **`queuedEvents <= max(absoluteCeiling, number of lifecycle events
+  enqueued)`**, and the second term is only small for one reason: all four are
+  raised *on the delivery thread itself*. `HumlaConnection` posts every listener
+  callback to its `mainHandler` (`deliverDisconnected`, `notifyListener`),
+  `HumlaTCP` posts `onTLSHandshakeFailed` to its callback handler,
+  `HumlaService.connect()` raises `onConnecting` on main, and `setReconnecting()`
+  posts the retry to a main `Handler`. While that thread is stuck — the only state
+  in which the queue grows at all — no lifecycle event can arrive to grow it.
+  The argument first written into the code (*"their number is the connection's to
+  choose rather than the server's"*) is **false** and must not be relied on:
+  `onConnectionDisconnected` turns a `CONNECTION_ERROR` into
+  `setReconnecting(true)`, which posts `connect()` after the auto-reconnect delay,
+  and every cycle raises `onConnecting` and `onDisconnected` again — there is no
+  attempt cap in the production path, since the session state machine that adds one
+  is tasks 6, 9 and 12. **The contract for task 6:** it owns `HumlaConnection.kt`
+  and is the first task that can give the connection a handler that is not
+  `HumlaCallbacks`'s. The moment those are two threads, this exemption has no
+  argument left and the queue has no bound; the same goes for tasks 9 and 12. Two
+  things to do then, both cheap: re-derive the exemption or drop it, and re-cost
+  `dropOldestUnlessLifecycle()`, whose scan over the exempt prefix is O(L) per
+  raise under the lock the protocol thread shares with the audio thread — today
+  unreachable for the confinement reason and for no other, and **not** covered by
+  `findingTheOldestDroppableEventDoesNotScanTheQueue`, which fills with `onLogInfo`
+  and stops that loop at element 0.
+- **Correction to the adapter ruling above, twice corrected (P, task 6 review,
+  binding).** The first correction named the right winner and the wrong runner-up.
+  What an independent paired run on one machine measures — one machine, one
+  best-of-N, a sample and not a constant:
+  - **Coalescing is effectively the whole win.** 5 000-event sync: 2 174.4 ms →
+    0.4 ms. Decomposed: coalescing alone ≈ 0.37 ms (99.98 % of the gain); the
+    O(n·depth)→O(n) count fix alone leaves ≈ 5 000 × 243.7 µs = **1 218 ms** —
+    44 % cheaper and still an ANR.
+  - **The count fix halves a single rebuild** (374.7 µs → 243.7 µs) and takes the
+    recursive count visits from **33 179 to 0** per rebuild, exactly.
+  - **"`onBindViewHolder` called it twice per channel row, two full subtree walks
+    per row" is false in all four corners.** Java `||` short-circuits, so a channel
+    that *has* subchannels never reaches the call in `ChannelListAdapter.java:135-136`,
+    and a leaf's "subtree walk" is one node; the second call sits behind
+    `mShowChannelUserCount`, whose default is `false` (`Settings.kt:317`). Measured
+    over all 4 997 visible rows of a 5 000-channel tree: **3 747 node visits with
+    the setting at its default — 0.75 per row, one ninth of a single rebuild** —
+    and 36 926 with it on, i.e. ≈ 1.1 rebuilds for scrolling the *entire* list,
+    against the thousands of rebuilds per sync the old code did. Binding never
+    dominated. Moving the counts onto the node takes it to zero, which is worth
+    having and is not where the block was.
+  - Minor: "the count visits are cheap — field reads, no allocation" is also not
+    quite right. `Channel.getSubchannelUserCount()` (`Channel.java:188-194`)
+    for-eaches `mSubchannels`, so one `Iterator` per visit. It does not move the
+    measured 374.7 → 243.7.
 
 - **Coalesce the adapter's own rebuilds (P, task 6).** With the observer queue
   bounded, the largest remaining main-thread cost is not in the model any more —
@@ -984,34 +1085,6 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   already inside the objects the queue retains. A cap needs a policy for what to
   drop or fold, and events that are pure state refreshes for one user or channel
   are the ones that coalesce.
-- **The observer queue's ceiling rests on thread confinement, which task 6 is
-  about to break (A, task 6 — contract).** `HumlaCallbacks.absoluteCeiling` drops
-  the oldest event whatever its policy, with one exemption: the four
-  connection-lifecycle events. The invariant is therefore not `size <= ceiling`
-  but **`queuedEvents <= max(absoluteCeiling, number of lifecycle events
-  enqueued)`**, and the second term is only small for one reason: all four are
-  raised *on the delivery thread itself*. `HumlaConnection` posts every listener
-  callback to its `mainHandler` (`deliverDisconnected`, `notifyListener`),
-  `HumlaTCP` posts `onTLSHandshakeFailed` to its callback handler,
-  `HumlaService.connect()` raises `onConnecting` on main, and `setReconnecting()`
-  posts the retry to a main `Handler`. While that thread is stuck — the only state
-  in which the queue grows at all — no lifecycle event can arrive to grow it.
-  The argument first written into the code (*"their number is the connection's to
-  choose rather than the server's"*) is **false** and must not be relied on:
-  `onConnectionDisconnected` turns a `CONNECTION_ERROR` into
-  `setReconnecting(true)`, which posts `connect()` after the auto-reconnect delay,
-  and every cycle raises `onConnecting` and `onDisconnected` again — there is no
-  attempt cap in the production path, since the session state machine that adds one
-  is tasks 6, 9 and 12. **The contract for task 6:** it owns `HumlaConnection.kt`
-  and is the first task that can give the connection a handler that is not
-  `HumlaCallbacks`'s. The moment those are two threads, this exemption has no
-  argument left and the queue has no bound; the same goes for tasks 9 and 12. Two
-  things to do then, both cheap: re-derive the exemption or drop it, and re-cost
-  `dropOldestUnlessLifecycle()`, whose scan over the exempt prefix is O(L) per
-  raise under the lock the protocol thread shares with the audio thread — today
-  unreachable for the confinement reason and for no other, and **not** covered by
-  `findingTheOldestDroppableEventDoesNotScanTheQueue`, which fills with `onLogInfo`
-  and stops that loop at element 0.
 - **One lock across both audio streams (B, task 4 — DISCHARGED).**
   *Re-addressed and closed.* This entry named tasks 5 and 6, which **cannot**
   discharge it: they own `SpeexPreprocessor.kt`, `RnnoisePreprocessor.kt` and
