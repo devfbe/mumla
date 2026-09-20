@@ -205,6 +205,11 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     override fun onPrepareOptionsMenu(menu: Menu) {
         super.onPrepareOptionsMenu(menu)
 
+        // The stored wish, not the live SCO state: the link is torn down on every dropped
+        // connection and the item has to keep showing what the user asked for -- including
+        // while the connection is down, which is when they are most likely to look at it.
+        menu.findItem(R.id.menu_bluetooth).isChecked = bluetoothToggle.isEnabled
+
         val muteItem = menu.findItem(R.id.menu_mute_button)
         val deafenItem = menu.findItem(R.id.menu_deafen_button)
 
@@ -230,11 +235,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
                 muteItem.icon?.mutate()?.setColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
                 deafenItem.icon?.mutate()?.setColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
             }
-
-            // The stored wish, not the live SCO state: the link is torn down on every dropped
-            // connection and the item has to keep showing what the user asked for.
-            val bluetoothItem = menu.findItem(R.id.menu_bluetooth)
-            bluetoothItem.isChecked = bluetoothToggle.isEnabled
         }
     }
 
@@ -285,6 +285,19 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        // Ahead of the connection guard: the headset is a preference, not a session operation,
+        // and the moment it is worth switching on is the one where auto-reconnect is still
+        // working -- where every branch below this would silently do nothing.
+        if (item.itemId == R.id.menu_bluetooth) {
+            when (bluetoothToggle.toggle()) {
+                BluetoothScoToggle.Result.Enabled -> item.isChecked = true
+                BluetoothScoToggle.Result.Disabled -> item.isChecked = false
+                BluetoothScoToggle.Result.PermissionNeeded ->
+                    bluetoothPermissionRequester.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            return true
+        }
+
         val service = service
         if (service == null || !service.isConnected) {
             return super.onOptionsItemSelected(item)
@@ -310,15 +323,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
                 true
             }
             R.id.menu_search -> false
-            R.id.menu_bluetooth -> {
-                when (bluetoothToggle.toggle()) {
-                    BluetoothScoToggle.Result.Enabled -> item.isChecked = true
-                    BluetoothScoToggle.Result.Disabled -> item.isChecked = false
-                    BluetoothScoToggle.Result.PermissionNeeded ->
-                        bluetoothPermissionRequester.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                }
-                true
-            }
             else -> super.onOptionsItemSelected(item)
         }
     }

@@ -246,6 +246,59 @@ class ChannelListFragmentBluetoothTest {
         assertThat(activity.invalidationCount()).isEqualTo(before + 1)
     }
 
+    /**
+     * The one moment the user most wants this switch is the one the old code refused it: while
+     * auto-reconnect is working, `service.isConnected` is false, the fragment is still on screen,
+     * and the whole `onOptionsItemSelected` body was behind that guard -- the tap did nothing and
+     * said nothing. The wish is a preference; it does not need a session.
+     */
+    @Test
+    fun theItemWorksWhileTheConnectionIsDown() {
+        every { service.isConnected } returns false
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+
+        val item = tapBluetooth()
+
+        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(item.isChecked).isTrue()
+        assertThat(prepared().isChecked).isTrue()
+    }
+
+    @Test
+    fun theItemWorksBeforeTheServiceIsEvenBound() {
+        activity.bind(null)
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+
+        val item = tapBluetooth()
+
+        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(item.isChecked).isTrue()
+        assertThat(prepared().isChecked).isTrue()
+    }
+
+    @Test
+    fun tappingItConsumesTheEventAndTappingAnythingElseDoesNotReachIt() {
+        // The branch sits ahead of the connection guard now, so its own item test is the only
+        // thing keeping every other menu item out of it -- and the item still has to be consumed
+        // here, or the tap travels on to the activity and toggles nothing twice.
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        val menu = inflatedMenu()
+        @Suppress("DEPRECATION")
+        fragment.onPrepareOptionsMenu(menu)
+
+        @Suppress("DEPRECATION")
+        val consumed = fragment.onOptionsItemSelected(menu.findItem(R.id.menu_bluetooth))
+
+        assertThat(consumed).isTrue()
+        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+
+        @Suppress("DEPRECATION")
+        fragment.onOptionsItemSelected(menu.findItem(R.id.menu_mute_button))
+
+        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        verify { session.setSelfMuteDeafState(true, false) }
+    }
+
     @Test
     fun theItemNeverTouchesTheAudioStackItself() {
         // Routing is the service's job, off the preference, on every (re)connection. A fragment
