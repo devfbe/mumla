@@ -36,6 +36,13 @@ interface SpeexPreprocessApi {
      * [frame] must hold at least the [frameSize] the state was created with. speex writes that
      * many samples whatever the array's real length is, so a shorter array is refused with -1
      * rather than overrun -- this used to be a live crash at ultra-wideband.
+     *
+     * **Do not wrap this in a `Boolean`.** An adapter of the shape `fun run(...): Boolean =
+     * native.run(...) != 0` maps -1 to `true`, i.e. it reports the most confident possible "this
+     * is speech" for the one case where speex never looked at the frame at all. The -1 is not
+     * hypothetical: a capture buffer shorter than the state's frame size produces it, and a
+     * caller that gates transmission on the answer would key the microphone open on a refusal.
+     * Callers must branch on `< 0` before they touch the other two values.
      */
     fun run(state: Long, frame: ShortArray): Int
 

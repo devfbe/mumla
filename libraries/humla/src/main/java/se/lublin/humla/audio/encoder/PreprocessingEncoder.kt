@@ -41,8 +41,12 @@ class PreprocessingEncoder @JvmOverloads constructor(
         api.ctlInt(state, SpeexPreprocessNative.SPEEX_PREPROCESS_SET_DEREVERB, arg)
         arg[0] = 30000
         api.ctlInt(state, SpeexPreprocessNative.SPEEX_PREPROCESS_SET_AGC_TARGET, arg)
-        // Increase VAD difficulty. NOTE: request id is GET_PROB_START as in the original;
-        // stream B (spec B9) corrects this to SET_PROB_START.
+        // Increase VAD difficulty. NOTE: request id is GET_PROB_START as in the original, so this
+        // reads the threshold into arg instead of raising it. Stream B does not repair it here: it
+        // replaces this class with a capture chain whose Speex stage issues neither GET_PROB_START
+        // nor SET_PROB_START, because both only configure the hysteresis behind
+        // speex_preprocess_run's return value -- which this class discards too. See
+        // SpeexPreprocessor's KDoc and spec 4.1.
         arg[0] = 99
         api.ctlInt(state, SpeexPreprocessNative.SPEEX_PREPROCESS_GET_PROB_START, arg)
     }
