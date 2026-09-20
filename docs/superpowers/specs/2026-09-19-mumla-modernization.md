@@ -1320,6 +1320,24 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   parent frame has not arrived yet"* is **withdrawn**: one heals on the next frame
   and the other never does, which is the whole point.
 
+- **Denying `BLUETOOTH_CONNECT` must not take the headset away (P, task 7 review, decided).**
+  The permission is requested because spec P3 says so and because the store listing has
+  carried the Nearby-devices entry since task 2 — that justification stands. But the
+  implementation went further than P3 asked: `shouldRouteToBluetooth = wish && hasPermission`
+  **refuses to route** without it. Measured against the SDK's own annotation database
+  (`platforms/android-36/data/annotations.zip`): of 26 annotated `AudioManager` members,
+  exactly four carry a `RequiresPermission` and `startBluetoothSco()` is not among them;
+  `BLUETOOTH_CONNECT` appears on 136 members, 130 of them under `android.bluetooth.*`, none
+  in `android.media`. The same holds for `setCommunicationDevice`, which A8 migrates to.
+  So a user on API 31+ who denies the dialog loses a headset that, by the platform's own
+  documentation, would have worked — and before this task the menu item asked for nothing.
+  **Ruling: keep asking, stop gating.** Route on the wish alone, and wrap the call so a
+  `SecurityException` from an OEM that does enforce it is caught, reported once in the chat
+  log and does not crash. That keeps the feature for the deny case, stays safe where the
+  platform is stricter than its own annotations, and removes a behaviour regression nobody
+  decided to make. "Absent from the annotation database" is not "never throws anywhere",
+  which is exactly why the call is wrapped rather than trusted.
+
 - **The Bluetooth wish has exactly one carrier, and it is the preference (P task 7 /
   A task 8, binding).** After P7 the wish lives in `pref_bluetooth_sco` on disk and
   survives a reconnect — which is the whole point, since the user's complaint was
@@ -1335,6 +1353,29 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   caller was the menu path P7 deleted), so whoever displays the wish reads the
   preference — otherwise the UI has two truths again, which is the defect class this
   whole project has been removing.
+
+- **Measured: the Gradle knobs do not work, so the lever is fewer invocations (process).**
+  Paired runs on one machine, `:libraries:humla:testDebugUnitTest`: `maxParallelForks`
+  1 → 6 is **22/24 s against 20/25 s, i.e. nothing**; the **configuration cache is worse**,
+  35–45 s against 22–24 s, because AGP pays more to serialize the model than the cache
+  returns; a no-op invocation with everything up to date still costs **7 s**. So the test
+  execution is not the bottleneck, the invocation is, and no setting fixes it.
+  Two rules follow, and they are binding on every dispatch:
+  1. **Never `--rerun-tasks` for a mutation run — use `--rerun` on the one test task.**
+     `--rerun-tasks` re-runs the entire graph including the CMake native build for
+     **three ABIs**, which is the most expensive thing in this project, to answer a
+     question about one test class. Several reviewers did exactly this, 20–55 times
+     per task.
+  2. **The full gate runs once, at the end of the task.** `assembleFossDebug` plus lint
+     is the proof that the app still builds; it is not an iteration step. Mutations run
+     the single relevant test task and nothing else.
+  What is *not* worth doing, measured: forks, the configuration cache, and narrowing the
+  ABI list — the native artefacts are cached anyway unless the stream touches C++, which
+  only stream B does.
+  For wall clock the remaining lever is **more concurrent agents, not faster builds**.
+  Structure that allows it: a review is read-only by mandate, so it runs in a **detached
+  worktree at the commit under review**, which frees the stream's own worktree for the
+  next implementer. Two agents per stream instead of one.
 
 - **Measured: where the context actually goes, and what was done about it (process).**
   Across 135 subagent runs, 5.13 M tokens of tool output: **Bash 87.5 %, Read 11.6 %**.
