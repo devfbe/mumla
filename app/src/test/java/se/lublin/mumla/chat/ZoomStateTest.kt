@@ -89,6 +89,25 @@ class ZoomStateTest {
         assertThat(justOver.tx).isEqualTo(200f)
     }
 
+    /**
+     * The `tx * k` half of the focus arithmetic: zooming an *already panned* state has to carry the
+     * existing offset along with the scale, or the image slides out from under the fingers -- a real
+     * pinch is many small `onScale` calls and every one after the first starts from `tx != 0`.
+     *
+     * Nothing else in this file pins it. Every other zoom test starts from `ZoomState()` (`tx = 0`,
+     * where `tx * k == tx`) or uses `factor = 1` (where `k == 1`, same thing), and the one view-level
+     * test that would reach it asserts *after* [clamped] has pulled both the correct and the mutated
+     * value to the same 0. Focus on the centre here, so the `(focusX - viewWidth / 2)` term is 0 and
+     * the offset is the only thing the numbers can come from.
+     */
+    @Test
+    fun zoomingAnAlreadyPannedStateScalesTheOffsetWithIt() {
+        val zoomed = ZoomState(scale = 2f, tx = 100f, ty = -50f).scaledBy(2f, 200f, 200f, 400f, 400f)
+        assertThat(zoomed.scale).isEqualTo(4f)
+        assertThat(zoomed.tx).isEqualTo(200f)
+        assertThat(zoomed.ty).isEqualTo(-100f)
+    }
+
     /** Clamping is the view's business; [ZoomState.scaledBy] deliberately does not do it. */
     @Test
     fun scalingDoesNotClampTheOffsets() {
