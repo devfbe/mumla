@@ -346,6 +346,27 @@ Three handles follow from it:
    not at N call sites. One mechanism has one mutation; N guards have N mutations,
    of which N−1 tend to be invisible.
 
+**"No test can distinguish this" is only writable after the mutation that would
+distinguish it has been run.** An unproven unpinnability claim is more expensive
+than none: it replaces the measurement with an assertion and immunises exactly the
+spot that needed measuring. It also has to name **which single mutation** it means.
+Learned the hard way: a KDoc here said "nothing pinnable" about a *lock-nesting*
+detail, and the next reader — its own author — took it as a licence covering the
+whole `synchronized` block and never mutated it. The lock turned out to be
+unpinned and load-bearing; removing it alone threw a `NullPointerException` on the
+main thread in three runs out of three. Same shape as the unscoped "no observable
+found" sentence, except this one stopped its writer from taking the measurement
+that would have refuted it.
+
+**A test-author defect is a defect of the form, not of the site.** Whoever finds
+one greps the file for every other occurrence of the idiom **before committing**,
+rather than repairing the places currently under the nose. Here a broken race
+writer (`i % 2` choosing the branch beside `i % size` choosing the element, so
+even iterations only ever added and odd ones only ever removed something absent)
+was diagnosed correctly, fixed in the two neighbouring tests that looked alike,
+and missed in the third — because the repair followed the shape of the code rather
+than the property. One grep; three rounds.
+
 **A surviving guard marks an unexplored dimension, not just an unpinned line.**
 When a condition survives mutation, do not only ask "can I pin this?" — ask **what
 else in this file branches on the same condition, and what am I about to add that
@@ -376,7 +397,11 @@ away in a method the diff never went near, and under the narrower reading it nev
 entered the list. Consequence, measured: all eleven tests in that class were
 driving a button the fragment had set to `GONE`, and only worked because the test
 helper dispatched touches directly, bypassing hit-testing. The unit is the file the
-test class hosts. A test class that never
+test class hosts. The unit is **every input the file
+branches on**, not only the ones that look like settings: the round that missed
+the fourth corner above had read "setting" as "Preference", and the two inputs
+that mattered were constructor parameters of a data class — which reach the file
+by exactly the path the user operates. A test class that never
 writes a preference the file reads is testing exactly one configuration, and the
 sweep will confirm whatever that configuration does.
 
@@ -421,12 +446,22 @@ had survived mutation for exactly this reason, invisible everywhere except in th
 window where the audio thread is still handing over frames. That is the window
 that matters.
 
-**Mutate a compound condition clause by clause.** `if (a && b && c)` is three
-guards wearing one pair of brackets, and removing the whole condition kills a test
-while removing `b` alone may not. A sweep that treats the `if` as one unit reports
-a clean result over a passenger. Done properly on one file here: 8 of 8
-sub-clauses each killed a test on their own, which is the statement worth making —
-not "the condition is covered".
+**Mutate a compound condition clause by clause — and know what that does not
+prove.** `if (a && b && c)` is three guards wearing one pair of brackets, and
+removing the whole condition kills a test while removing `b` alone may not. A
+sweep that treats the `if` as one unit reports a clean result over a passenger.
+Done properly on one file here: 8 of 8 sub-clauses each killed a test on their
+own.
+
+**But clause-wise mutation and input-space coverage are orthogonal, and reading
+the first as if it covered the second has already cost a round.** A clause sweep
+proves every clause carries weight; it proves **nothing about the operator that
+joins them**. `||` mutated to `xor` survived a file whose clause sweep was
+complete, because over three of the four corners of a two-boolean input space the
+two operators agree — and the test class never wrote the fourth corner. For a
+compound condition over k booleans the requirement is **2^k inputs, not k
+mutations**. The consequence in that case: a user who switched on both Android
+audio effects got neither, silently.
 
 And the tool: do not run the suite once. **Mutate each guard on its own and
 require exactly one test to go red.** Here that costs about eleven seconds a run.
@@ -492,13 +527,21 @@ and reported as passing. They are repo-wide, not stream-specific.
   here burned twenty minutes before anyone noticed. Pass `--timeout` to `ctest`,
   and treat a sweep that produces no output as a result to investigate rather than
   a run to repeat.
-- **A naive SARIF reader counts ten lint errors this project does not have.**
-  `MissingQuantity` is demoted to `warning` in the module's own config, but the
-  *rule default* in the SARIF stays `error`. A script that falls back to the rule
-  default reports ten errors per app variant. Read the `level` on each result, not
-  the rule. Two rounds have reported lint numbers taken this way; the numbers
-  happened to be right because `abortOnError = true` and the build passed, which is
-  the stronger signal to use in the first place.
+- **Read a SARIF result's *effective* level, and trust the build's exit status more.**
+  An earlier version of this entry said to read each result's `level` rather than
+  the rule default. That is **wrong as a general rule, and it was measured**: in
+  `lint-results-fossDebug.sarif`, **10 of 325 results carry a `level` field at
+  all**, and they are exactly the `MissingQuantity` hits the module's own config
+  demotes. Every other result omits `level` and inherits from
+  `rules[ruleId].defaultConfiguration.level`. A counter that reads `result.level`
+  with a "warning" fallback therefore reports **0 errors for a build lint fails** —
+  demonstrated by deleting an unused string, which produced 23 `ExtraTranslation`
+  results, none of them carrying a `level`, rule default `error`, `Lint found 23
+  errors`, build aborted. The correct formulation is **effective level =
+  `result.level` if present, otherwise the rule's default** — and the gradle task's
+  exit status stays the real gate. Earlier rounds' "0 errors" claims are safe
+  because those builds passed, but the method they cite would not have caught a
+  regression.
 - **Robolectric's gesture constants are fixtures, not Android.**
   `ShadowViewConfiguration` hard-codes touch slop 16, paging touch slop 32 and
   double-tap slop 100 at density 1.0, and the 170 px minimum scaling span sits
@@ -688,6 +731,21 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   `getItem(position)` read two *different* snapshots — a user leaving between them
   is an `IndexOutOfBoundsException`. That was equally racy before the guarded model
   and copy-on-read does not fix it; the adapter has to hold one snapshot.
+- **Two facts the model now guarantees, for everyone who reads it (A, binding).**
+  These were settled in task 5 and would otherwise live only in a gitignored
+  ledger. (a) **The observer queue is bounded and folding**, so "nothing is ever
+  dropped" — task 2's contract — is no longer true: refresh events for one subject
+  fold in place, and the three tree-shape events may be dropped oldest-first when
+  the queue is over its bound, though never the newest of them and never at the
+  hands of an undroppable event. An observer must therefore treat a model event as
+  "read this again", never as a delta it accumulates. (b) **The channel tree is
+  finite and acyclic by construction**: `ModelHandler` refuses a `ChannelState`
+  whose parent is the channel itself or one of its descendants, and one that would
+  sit deeper than 256 below the root. The channel keeps its name and its place in
+  the map and simply has no parent — the same state as one whose parent frame has
+  not arrived yet. That is one guard at the frame boundary instead of a depth check
+  at every read, and it is why recursive walks of the tree need none.
+
 - **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
   is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
   owner of the cap, but the Stream A plan's task 6 is UDP recovery and does not
