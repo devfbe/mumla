@@ -623,6 +623,24 @@ one), which makes it a rule rather than an anecdote: **for every input the
 production file branches on, name the fake that produces it and check it can
 produce more than one value.**
 
+**A mutation sweep inherits the blind spots of the fixture set.** It measures
+whether the tests can *see* a change; it cannot tell you that a branch's
+discriminating input never appears in any test at all. Fifty-six mutants, all
+killed — and every one of them had been sampled from one half of a two-boolean
+input space, because every image fixture in the suite was an `InfoMessage` and none
+was the `TextMessage` that a user sending a picture actually produces. The corner
+that was missing was the feature's main use case, and the mutation that breaks it
+survived all 27 tests.
+The tell is the one §4.04 already gives — enumerate the corners **from the
+production file** — but this is the case where the enumeration has to reach the
+**fixtures**: for each corner, name the fixture that *is* that corner, not the
+parameter that could be set to it.
+And the method for reporting one, because it separates two very different things:
+**write the test, run it on HEAD, then run it under the mutation.** Passing on HEAD
+and failing under the mutation proves a pure coverage hole. Failing on HEAD would
+have proved a live defect. Saying which one it is costs one extra run and is the
+difference between "the evidence is missing" and "the app is broken".
+
 ### 4.05 Testing hazards that have already produced a false green
 
 Both were caught in this project, each after a test had been written, reviewed
@@ -741,6 +759,16 @@ and reported as passing. They are repo-wide, not stream-specific.
   off as covered by `clickable` — and under the mutation the test failed at the
   earlier `isClickable` assertion, so the `isFocusable` line never ran. The cover
   did not exist. Check by running the mutation, not by reading the test.
+- **One Gradle daemon is shared across every worktree in this session, and another
+  agent's `--stop` reads as a passing baseline.** Measured: a mutation batch died on
+  `Gradle build daemon has been stopped: stop command received`, and the harness
+  filed the **baseline** run as a failure — which in a sweep means every mutation
+  after it is recorded as KILLED. Same class as the shared scratchpad that had a
+  mutation script overwritten under a running agent, one level up: it does not
+  corrupt one number, it inverts every verdict in the batch. So: **detect
+  `daemon has been stopped` and re-run rather than record a verdict**, keep tooling
+  in a per-agent subfolder of the scratchpad, and treat a baseline that fails as a
+  reason to stop rather than a data point.
 - **Read a SARIF result's *effective* level, and trust the build's exit status more.**
   An earlier version of this entry said to read each result's `level` rather than
   the rule default. That is **wrong as a general rule, and it was measured**: in
