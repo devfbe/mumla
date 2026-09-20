@@ -21,6 +21,7 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import java.lang.management.ManagementFactory
+import se.lublin.humla.audio.native.SpeexPreprocessApi
 
 /**
  * The capture path runs on the audio thread once every 10 ms. Every byte it allocates there is a
@@ -58,6 +59,21 @@ class CaptureThreadAllocationTest {
         }
 
         override fun release() = Unit
+    }
+
+    /**
+     * Answers like `jni_speexdsp.cpp` does and allocates nothing itself, so what a stage built on
+     * it measures is the stage. `FakeSpeexPreprocessApi` cannot be used here: it records every
+     * call into a list, which allocates on the frame path and would be measured as the stage's.
+     */
+    private class SilentSpeexApi : SpeexPreprocessApi {
+        override fun init(frameSize: Int, sampleRate: Int): Long = 1L
+        override fun run(state: Long, frame: ShortArray): Int = 0
+        override fun ctlInt(state: Long, request: Int, value: IntArray): Int {
+            value[0] = 50
+            return 0
+        }
+        override fun destroy(state: Long) = Unit
     }
 
     private class SilentHandleStage : SingleHandleStage(1L, "allocation test stage"), FarEndSink {
@@ -103,6 +119,49 @@ class CaptureThreadAllocationTest {
             .that(maxOf(captureCold, captureHot)).isLessThan(HALF_AN_OBJECT)
         assertWithMessage("SingleHandleStage's far-end path allocates on the audio thread")
             .that(maxOf(renderCold, renderHot)).isLessThan(HALF_AN_OBJECT)
+    }
+
+    /**
+     * The first real stage, and the first one that *computes* a probability -- which the test
+     * above deliberately does not cover, because a computed `Float?` is a 16 B box per frame and
+     * the skeleton never makes one.
+     *
+     * [SpeexPreprocessor] does not pay it: `SPEEX_PREPROCESS_GET_PROB` answers an integer percent,
+     * so the whole range of its return values is 101 pre-boxed objects, and the `int` it passes to
+     * `ctlInt` travels in an array the stage allocates once. Four runs on this machine: cold
+     * 0.066 B x3 and 0.185 B once, hot 0.000 B every run -- a fixed cost per window (528 B and
+     * 1 480 B over 8 000 calls), not a cost per frame.
+     *
+     * Both windows are measured, and here the cold one is not merely the load-bearing half, it is
+     * the **only** half that works. Returning `coerceIn(0, 100) / 100f` directly instead of the
+     * table -- the same behaviour, one `java.lang.Float` per frame -- measures **16.066 B cold and
+     * 2.451 B hot**: C2 scalar-replaces about six boxes in seven once the loop is hot, so the hot
+     * reading lands under this file's threshold and a hot-only test would have called that defect
+     * green. ART does no such elimination.
+     */
+    @Test
+    fun `the speex stage allocates nothing per frame`() {
+        assertThat(threads.isThreadAllocatedMemorySupported).isTrue()
+        assertThat(threads.isThreadAllocatedMemoryEnabled).isTrue()
+
+        val sink = arrayOfNulls<Any>(1)
+        val instrument = hot { sink[0] = ShortArray(FRAME_SIZE) }
+        assertWithMessage("the allocation counter is not counting; every result below would be a false green")
+            .that(instrument).isAtLeast(FRAME_SIZE.toDouble())
+
+        val frame = ShortArray(FRAME_SIZE)
+        val stage = SpeexPreprocessor(SilentSpeexApi())
+
+        val speexCold = cold { stage.process(frame) }
+        val speexHot = hot { stage.process(frame) }
+
+        println(
+            "allocation per 10 ms frame (cold / hot): instrument baseline ${"%.1f".format(instrument)} B, " +
+                "SpeexPreprocessor ${"%.3f".format(speexCold)} / ${"%.3f".format(speexHot)} B"
+        )
+
+        assertWithMessage("SpeexPreprocessor.process allocates on the audio thread")
+            .that(maxOf(speexCold, speexHot)).isLessThan(HALF_AN_OBJECT)
     }
 
     /**
