@@ -41,6 +41,26 @@ class MediaKeyHandler(
     }
 
     companion object {
+        /**
+         * Each handled key toggles on its own; there is deliberately no debounce, neither across
+         * keys nor within one key.
+         *
+         * One press can be delivered twice. androidx/media issue #3083 reports that since Media3
+         * 1.9.2 a single press arrives as two [KeyEvent.KEYCODE_HEADSETHOOK] events, reproducible
+         * with `adb shell input keyevent 79`, on among others a Pixel 9a (API 36) and a Samsung
+         * SM-T220. That is repeated delivery of the *same* keycode; for the cross-key case (one
+         * press producing both HEADSETHOOK and MEDIA_PLAY_PAUSE) no evidence was found. Whether it
+         * reaches us is unverified: that report is about Media3's dispatch and we receive keys
+         * through MediaSessionCompat, so it is one more thing for Task 4 to measure on real
+         * hardware alongside the ACTION_DOWN/ACTION_UP question.
+         *
+         * It is not debounced here regardless. A time-window filter cannot distinguish a duplicated
+         * event from a deliberate quick double press, and the two want opposite outcomes: a real
+         * double press is meant to end in the *other* state, so swallowing the second event leaves
+         * the microphone open -- precisely the failure this feature must never cause. Dropping a
+         * duplicate belongs at the delivery seam that can identify it as one, which is also the
+         * only place it can be observed.
+         */
         val HANDLED_KEYS: Set<Int> = setOf(
             KeyEvent.KEYCODE_HEADSETHOOK,
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
