@@ -151,6 +151,44 @@ class ChatImageLoaderTest {
         assertThat(fetched).isEmpty()
     }
 
+    /**
+     * The shared job is created with `scope.async { … }` while `synchronized(inFlight)` is held, and
+     * on an immediate dispatcher a coroutine's body runs inline — so the whole fetch, blocking socket
+     * read included, would run under that monitor and every other bind in the process would queue
+     * behind it. With `Dispatchers.IO` it does not happen, which is exactly why "nothing suspends
+     * inside those sections" could stay wrong: the loader is one dispatcher change away from a
+     * process-wide lock around the network.
+     */
+    @Test(timeout = 60_000)
+    fun aFetchInProgressDoesNotKeepOtherBindsOut() {
+        val inFetch = CountDownLatch(1)
+        val otherBindDone = CountDownLatch(1)
+        val otherBindGotThrough = AtomicBoolean(false)
+        fetcher = ImageFetcher { url ->
+            if (url.endsWith("held.png")) {
+                inFetch.countDown()
+                otherBindGotThrough.set(otherBindDone.await(5, TimeUnit.SECONDS))
+            }
+            remoteBody
+        }
+        val l = ChatImageLoader(
+            fetcher, { true }, 8L * 1024 * 1024, Dispatchers.Unconfined, Dispatchers.Unconfined, clock::get,
+        )
+        val other = Thread {
+            if (inFetch.await(10, TimeUnit.SECONDS)) {
+                runBlocking { l.loadThumbnail("https://x.org/other.png", 240, 240) }
+                otherBindDone.countDown()
+            }
+        }
+        other.start()
+
+        runBlocking { l.loadThumbnail("https://x.org/held.png", 240, 240) }
+        other.join(10_000)
+
+        assertWithMessage("a second bind could not start while the first was inside the fetcher")
+            .that(otherBindGotThrough.get()).isTrue()
+    }
+
     @Test
     fun malformedBytesFailAndTheFailureIsCached() = runTest(dispatcher) {
         remoteBody = "garbage".toByteArray()

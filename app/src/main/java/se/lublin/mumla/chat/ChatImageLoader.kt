@@ -6,6 +6,7 @@ import android.util.LruCache
 import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -94,7 +95,12 @@ class ChatImageLoader(
         maxConcurrentLoads.also { require(it > 0) { "maxConcurrentLoads must be positive, was $it" } },
     )
 
-    /** Guarded by `synchronized(inFlight)`. Nothing suspends inside those sections. */
+    /**
+     * Guarded by `synchronized(inFlight)`. Nothing inside those sections suspends *or fetches*: the
+     * shared job is created lazily and started outside the monitor, because on an immediate
+     * dispatcher a coroutine's body runs inline and the whole blocking fetch would otherwise happen
+     * with this lock held — a process-wide lock around the network, one dispatcher change away.
+     */
     private val inFlight = HashMap<String, Shared>()
 
     /** The most recently fetched source and its bytes, so the viewer's share action can reuse them. */
@@ -170,14 +176,18 @@ class ChatImageLoader(
      */
     private suspend fun shared(key: String, produce: suspend () -> ImageResult): ImageResult {
         val entry = synchronized(inFlight) {
-            val running = inFlight[key]?.takeIf { it.job.isActive }
+            // `isCompleted`, not `isActive`: a lazily created job has not started yet, and a caller
+            // that arrived in that window has to join it rather than start a second fetch. Both a
+            // finished and a cancelled job are completed, and neither may be handed to a new caller.
+            val running = inFlight[key]?.takeIf { !it.job.isCompleted }
             val shared = running ?: Shared().also {
                 inFlight[key] = it
-                it.job = scope.async { produce() }
+                it.job = scope.async(start = CoroutineStart.LAZY) { produce() }
             }
             shared.waiters++
             shared
         }
+        entry.job.start() // outside the monitor; a no-op for everyone but the first caller
         try {
             return entry.job.await()
         } finally {
