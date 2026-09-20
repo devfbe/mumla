@@ -305,16 +305,18 @@ class HumlaTCP @JvmOverloads constructor(
      * late onTCPConnectionEstablished - can still complete afterwards. The consumer has torn its
      * message handlers down by then, so anything arriving behind the disconnect is dropped here.
      *
-     * The check below only skips work: what decides is [disconnectDelivered], read inside the
-     * posted runnable. Reading the flag and queueing the callback are two steps, and a disconnect()
-     * running to completion between them would queue the terminal callback first and this one
-     * behind it. Deciding at delivery - the handler is FIFO, so this callback ran before the
-     * disconnect or it did not - is what makes "terminal" hold literally rather than almost always.
+     * The decision is made inside the posted runnable, and only there. Checking before queueing
+     * cannot decide it: reading the flag and queueing the callback are two steps, and a
+     * disconnect() running to completion between them gets its terminal callback queued first and
+     * this one behind it. At delivery the handler's FIFO order has already settled the question -
+     * this callback ran before the disconnect or it did not - which is what makes "terminal" hold
+     * literally rather than almost always. A pre-check would now only save queueing a runnable
+     * that drops itself, at the price of a branch no test can reach.
+     *
      * The disconnect report itself does not come through here; it goes straight to [deliver], or it
      * would suppress itself.
      */
     private fun post(block: (TCPConnectionListener) -> Unit) {
-        if (disconnectReported.get()) return
         deliver { if (!disconnectDelivered.get()) block(it) }
     }
 
