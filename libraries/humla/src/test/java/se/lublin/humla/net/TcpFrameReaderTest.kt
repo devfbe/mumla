@@ -142,10 +142,14 @@ class TcpFrameReaderTest {
         assertThat(thrown).isNotInstanceOf(EOFException::class.java)
     }
 
-    /** Mumble frames stay well below 8 MiB; a larger one must be refused before it is allocated. */
+    /**
+     * Mumble's own limit, in Connection.cpp: a server drops the connection for a packet above
+     * 0x7fffff and refuses to send one, so the first length no server will ever produce must be
+     * refused before it is allocated.
+     */
     @Test
     fun aLengthBeyondTheProtocolMaximumIsRefusedBeforeAllocating() {
-        val input = DataInputStream(ByteArrayInputStream(header(3, 8 * 1024 * 1024 + 1)))
+        val input = DataInputStream(ByteArrayInputStream(header(3, 0x7fffff + 1)))
 
         val thrown = assertThrows(IOException::class.java) { HumlaTCP.readFrame(input) }
 
@@ -153,10 +157,10 @@ class TcpFrameReaderTest {
         assertThat(thrown).isNotInstanceOf(EOFException::class.java)
     }
 
-    /** The largest frame the protocol allows is still a valid frame. */
+    /** The largest frame the protocol allows - 8 MiB minus one byte - is still a valid frame. */
     @Test
     fun aFrameOfExactlyTheProtocolMaximumIsAccepted() {
-        val payload = ByteArray(8 * 1024 * 1024)
+        val payload = ByteArray(0x7fffff)
         val input = stream(frame(3, payload))
 
         val read = HumlaTCP.readFrame(input)!!

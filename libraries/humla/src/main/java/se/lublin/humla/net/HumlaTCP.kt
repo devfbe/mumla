@@ -314,8 +314,13 @@ class HumlaTCP @JvmOverloads constructor(
     companion object {
         private val TAG = HumlaTCP::class.java.name
 
-        /** Largest frame the Mumble protocol allows; anything above it is a broken peer. */
-        private const val MAX_FRAME_LENGTH = 8 * 1024 * 1024
+        /**
+         * Largest frame the Mumble protocol allows; anything above it is a broken peer. Mumble's
+         * Connection.cpp uses this same bound at both ends - socketRead() drops the connection for
+         * a packet above 0x7fffff, messageToNetwork() refuses to send one - so 8 MiB minus one
+         * byte, not 8 MiB, is the number no server will ever exceed.
+         */
+        private const val MAX_FRAME_LENGTH = 0x7fffff
 
         /**
          * Reads one frame: int16 type, int32 length, payload. Returns null (payload consumed) for
