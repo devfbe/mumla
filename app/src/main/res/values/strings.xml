@@ -228,6 +228,15 @@
     <string name="app_news_items_v3_7_3">• Make PTT hot corner visible on Android 12 and later, and on dark and light background\n
 • Make the Back-button ask to disconnect from server again on Android 16+\n</string>
 
+    <!-- Chat images (spec D2/D3) -->
+    <string name="chat_image_open">Open image</string>
+    <string name="chat_image_share">Share image</string>
+    <string name="chat_image_close">Close</string>
+    <string name="chat_image_load_failed">Image could not be loaded</string>
+    <!-- Spoken by a screen reader for the picture filling the viewer. Not "Open image": that one
+         labels the thumbnail in the chat log, which opens this screen when it is activated. -->
+    <string name="chat_image_viewer_image">Image</string>
+
     <!-- Used only by flavor "goog" -->
     <string name="donate_dialog_title_goog">Enjoying Mumla?</string>
     <string name="donate_dialog_message_goog">Thank you for using Mumla! Please consider making a small donation to help keep Mumla alive — and to remove this message.</string>

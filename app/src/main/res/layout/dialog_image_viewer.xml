@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The image view must keep its android:id and must be the *only* thing ever put in it: without an
+    id View.dispatchSaveInstanceState stores nothing, and any placeholder with an intrinsic size
+    spends the restored zoom before the real image arrives. That is why the spinner and the failure
+    message are siblings rather than drawables on the image. Both pinned by
+    `theZoomSurvivesTwoRecreationsWhileTheImageIsStillLoading`.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <se.lublin.mumla.chat.ZoomImageView
+        android:id="@+id/image_viewer_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@string/chat_image_viewer_image" />
+
+    <ProgressBar
+        android:id="@+id/image_viewer_progress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center" />
+
+    <TextView
+        android:id="@+id/image_viewer_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:textColor="@android:color/white"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/image_viewer_share"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/chat_image_share"
+            android:src="@android:drawable/ic_menu_share"
+            app:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/image_viewer_close"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/chat_image_close"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            app:tint="@android:color/white" />
+    </LinearLayout>
+</FrameLayout>
