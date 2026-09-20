@@ -65,11 +65,10 @@ class SpeexPreprocessorTest {
     // ------------------------------------------------------------------ the control calls
 
     @Test
-    fun `enables denoise and vad, never agc or dereverb`() {
+    fun `enables denoise, never agc or dereverb`() {
         SpeexPreprocessor(api)
 
         assertThat(api.setCalls).contains(R.SET_DENOISE to 1)
-        assertThat(api.setCalls).contains(R.SET_VAD to 1)
         // SET_AGC and SET_AGC_TARGET are on the bridge's allow list but compiled out of this
         // fixed-point libspeexdsp (preprocess.c:1057, 1193), so both answer -1 and today's
         // PreprocessingEncoder sets an AGC that does not exist. SET_DEREVERB is answered, but
@@ -78,14 +77,30 @@ class SpeexPreprocessorTest {
             .containsNoneOf(R.SET_AGC, R.SET_AGC_TARGET, R.SET_DEREVERB)
     }
 
+    /**
+     * Spec B9 asks for the `GET_PROB_START` → `SET_PROB_START` fix, and this stage satisfies it by
+     * issuing **neither**: both the wrong request and the right one configure speex's own VAD
+     * hysteresis (`preprocess.c:993-1002`), which decides nothing but the return value of
+     * `speex_preprocess_run` -- and this stage discards that in favour of reading `GET_PROB`, the
+     * number the hysteresis is derived from. The point of the fix was to make the hysteresis work;
+     * reading the probability itself is strictly more than that.
+     *
+     * So this is not "the threshold happens to be unset". It is the assertion that the correction
+     * B9 names must not be re-added here, which is why it names the request the legacy code got
+     * wrong as well as the one it meant.
+     */
     @Test
-    fun `uses the SET request for the start probability, not the GET request`() {
-        SpeexPreprocessor(api)
+    fun `B9 is satisfied by reading the probability, not by setting a threshold on it`() {
+        val stage = SpeexPreprocessor(api)
+        api.probability = 42
 
-        // PreprocessingEncoder.kt passes GET_PROB_START (15) where SET_PROB_START (14) was meant,
-        // so it reads the threshold into its argument array instead of raising it.
-        assertThat(api.setCalls.map { it.first }).contains(R.SET_PROB_START)
-        assertThat(api.attemptedRequests).doesNotContain(R.GET_PROB_START)
+        val probability = stage.process(ShortArray(FRAME))
+
+        assertThat(probability).isEqualTo(0.42f)
+        assertThat(api.getRequests).containsExactly(R.GET_PROB)
+        assertWithMessage("neither the legacy request nor its correction belongs in this stage")
+            .that(api.attemptedRequests)
+            .containsNoneOf(R.GET_PROB_START, R.SET_PROB_START, R.SET_VAD)
     }
 
     /**
@@ -107,7 +122,7 @@ class SpeexPreprocessorTest {
         // The whole set, at one bottleneck: a request added anywhere in this stage lands here
         // whether or not anyone remembered to widen the checks above.
         assertThat(api.attemptedRequests).containsExactly(
-            R.SET_DENOISE, R.SET_VAD, R.SET_PROB_START, R.SET_NOISE_SUPPRESS, R.GET_PROB,
+            R.SET_DENOISE, R.SET_NOISE_SUPPRESS, R.GET_PROB,
         ).inOrder()
     }
 
