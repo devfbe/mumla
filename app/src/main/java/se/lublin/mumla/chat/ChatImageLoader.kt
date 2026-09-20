@@ -126,9 +126,9 @@ class ChatImageLoader(
      * download it twice.
      */
     suspend fun fetchBytes(source: String): ByteArray {
-        // ImageSource.parse decodes a whole base64 payload before anything bounded sees it, so the
-        // source string's length is the only place left to bound it. At 3/4 of a byte per character
-        // this cap is the fetcher's 5 MiB, reached from the other side.
+        // ImageSource.parse enforces the same cap and is the authoritative one — it is where the
+        // percent-decode and the base64 decode happen. Refusing here as well keeps the work off
+        // this call before it even dispatches, and is pinned from both sides.
         if (source.length > MAX_SOURCE_LENGTH) throw ImageFetchException(ImageError.TOO_LARGE)
         val key = cacheKey(source)
         lastBytes.get()?.takeIf { it.first == key }?.let { return it.second }
@@ -139,6 +139,7 @@ class ChatImageLoader(
                     if (!externalImagesAllowed()) throw ImageFetchException(ImageError.EXTERNAL_DISABLED)
                     fetcher.fetch(parsed.url)
                 }
+                ImageSource.TooLarge -> throw ImageFetchException(ImageError.TOO_LARGE)
                 ImageSource.Unsupported -> throw ImageFetchException(ImageError.UNSUPPORTED)
             }
         }
@@ -227,11 +228,11 @@ class ChatImageLoader(
         const val TRANSIENT_ERROR_TTL_MS = 30_000L
 
         /**
-         * Longest source string that is even looked at. Base64 costs four characters per three
-         * bytes, so this bounds a `data:` payload at 5.25 MiB — the same order as the fetcher's cap
-         * on a remote body, and the only bound there is on an inline one.
+         * Longest source string that is even looked at; see [ImageSource.MAX_SOURCE_LENGTH], which
+         * owns the bound because it owns the allocations. Repeated here only so that this class's
+         * own early refusal and the parser's cannot drift apart.
          */
-        const val MAX_SOURCE_LENGTH = 7_000_000
+        const val MAX_SOURCE_LENGTH = ImageSource.MAX_SOURCE_LENGTH
 
         /** In flight at once. Each one costs up to [HttpImageFetcher]'s cap, so this bounds memory. */
         const val DEFAULT_MAX_CONCURRENT_LOADS = 3

@@ -1,7 +1,10 @@
 package se.lublin.mumla.chat
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
+import com.sun.management.ThreadMXBean
 import org.junit.Test
+import java.lang.management.ManagementFactory
 
 class ImageSourceTest {
 
@@ -169,5 +172,52 @@ class ImageSourceTest {
     fun authoritiesWithoutAHostStayRemoteAndAreTheFetchersProblem() {
         assertThat(ImageSource.parse("http://@:8080/a.png")).isEqualTo(ImageSource.Remote("http://@:8080/a.png"))
         assertThat(ImageSource.parse("http://user:pass@/a.png")).isEqualTo(ImageSource.Remote("http://user:pass@/a.png"))
+    }
+
+    // --- The length cap. It exists to stop an allocation, not to name an error, so what it has to
+    // --- prevent lives inside this parser and nowhere else.
+
+    /**
+     * `HtmlUtils.percentDecode` builds a `StringBuilder` of the input's length and then a
+     * `toString()` of it — two more full-size copies — and `Base64.getMimeDecoder().decode`
+     * materialises the whole payload as a byte array. Those three allocations are the reason the cap
+     * exists. A test that only reads the returned value cannot tell a refusal that skipped all of
+     * them from one that did them all and threw the result away: both say `TooLarge`. So this
+     * measures what the JVM really allocated on this thread. Moving the cap below the decode leaves
+     * the return value untouched and this assertion red, which is the whole point of writing it this
+     * way.
+     */
+    @Test
+    fun anOversizedSourceIsRefusedWithoutAllocatingACopyOfIt() {
+        // The '%' is what makes percentDecode do its work instead of returning the input unchanged.
+        val source = "data:image/png;base64,%41" + "A".repeat(ImageSource.MAX_SOURCE_LENGTH)
+        val threads = ManagementFactory.getThreadMXBean() as ThreadMXBean
+        assertWithMessage("this JVM must account per-thread allocation for the measurement below")
+            .that(threads.isThreadAllocatedMemoryEnabled).isTrue()
+
+        val before = threads.currentThreadAllocatedBytes
+        val parsed = ImageSource.parse(source)
+        val allocated = threads.currentThreadAllocatedBytes - before
+
+        assertThat(parsed).isEqualTo(ImageSource.TooLarge)
+        assertWithMessage("bytes allocated by parse() for a %s character source", source.length)
+            .that(allocated).isLessThan(source.length.toLong())
+    }
+
+    /** The cap itself, from both sides, so it cannot drift by one in either direction. */
+    @Test
+    fun aSourceExactlyAtTheLengthLimitIsStillParsed() {
+        val head = "data:image/png;base64,"
+        val atLimit = head + "A".repeat(ImageSource.MAX_SOURCE_LENGTH - head.length)
+        assertThat(atLimit.length).isEqualTo(ImageSource.MAX_SOURCE_LENGTH)
+        assertThat(ImageSource.parse(atLimit)).isInstanceOf(ImageSource.Data::class.java)
+        assertThat(ImageSource.parse(atLimit + "A")).isEqualTo(ImageSource.TooLarge)
+    }
+
+    /** A remote URL is not decoded at all, but it is still a string the cap has an opinion about. */
+    @Test
+    fun anOversizedRemoteUrlIsTooLargeRatherThanRemote() {
+        assertThat(ImageSource.parse("https://x.invalid/" + "a".repeat(ImageSource.MAX_SOURCE_LENGTH)))
+            .isEqualTo(ImageSource.TooLarge)
     }
 }
