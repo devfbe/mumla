@@ -44,6 +44,7 @@ import java.security.NoSuchProviderException
 import java.security.UnrecoverableKeyException
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
+import java.util.EnumMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -184,6 +185,9 @@ class HumlaConnection @JvmOverloads constructor(
     private var disconnectReported = false
     @Volatile private var startTimestamp = 0L // Time that the connection was initiated in nanoseconds
     private val cryptState = CryptState()
+
+    /** Protocol thread only; see [warn]. */
+    private val lastWarnedMicros = EnumMap<ConnectionWarning, Long>(ConnectionWarning::class.java)
 
     // Latency
     @Volatile private var udpLatency = 0L
@@ -653,7 +657,28 @@ class HumlaConnection @JvmOverloads constructor(
         disconnect()
     }
 
+    /**
+     * Tells the user something about the connection, at most once per [ConnectionWarning] per
+     * [WARNING_REPEAT_MICROS]. Protocol thread only - all three call sites run there, which is why
+     * the map needs no synchronisation.
+     *
+     * The suppression is not what keeps the route from flapping; [UdpHealthMonitor]'s hysteresis is,
+     * and this is the second line. A decision can be wrong once without the user's chat log paying
+     * for it every five seconds, which is what a real device did: two warnings a minute is the most
+     * a human reading a log learns from one repeated sentence.
+     *
+     * Scope of the claim: this de-duplicates by *warning*, not by cause. A second genuine UDP thread
+     * failure inside the interval leaves no line in the log - the route change and the restart both
+     * still happen, and logcat still carries it.
+     */
     private fun warn(warning: ConnectionWarning) {
+        val now = elapsed
+        val last = lastWarnedMicros[warning]
+        if (last != null && now - last < WARNING_REPEAT_MICROS) {
+            Log.d(TAG, "Suppressing a repeat of $warning")
+            return
+        }
+        lastWarnedMicros[warning] = now
         notifyListener { onConnectionWarning(warning) }
     }
 
@@ -905,6 +930,9 @@ class HumlaConnection @JvmOverloads constructor(
         private val TAG: String = HumlaConnection::class.java.name
         private const val PROTOCOL_THREAD_NAME = "humla-protocol"
         private const val PING_INTERVAL_MILLIS = 5_000L
+
+        /** How long an identical [ConnectionWarning] stays suppressed after one was delivered. */
+        private const val WARNING_REPEAT_MICROS = 60_000_000L
 
         /**
          * The warning a [UdpHealthMonitor.Decision] carries when it takes voice off UDP, or null

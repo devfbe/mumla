@@ -501,6 +501,85 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(tcp.sent).contains(HumlaTCPMessageType.UDPTunnel)
     }
 
+    /**
+     * The whole loop at the connection, as it was observed: UDP voice arriving continuously in both
+     * directions and the reply to our own UDP ping never coming back. On the device this produced
+     * "Switching to TCP mode" and "Switching back to UDP mode" alternately every five seconds for
+     * the length of the call.
+     *
+     * Two things are asserted, because two separate mistakes made it: the route must settle, and
+     * the chat log must not be filled even if a decision is taken twice. This test is RED on HEAD -
+     * it is a live defect, not a coverage hole - and it could not have been written before this
+     * round, because FakeUdpTransport dropped the crypt state and localGood could not move at all.
+     */
+    @Test
+    fun aMissingUdpPingReplyDoesNotFlapTheRouteWhileVoiceKeepsArriving() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+        tcp.simulateMessage(
+            HumlaTCPMessageType.ServerSync,
+            Mumble.ServerSync.newBuilder().setSession(1).build().toByteArray()
+        )
+        awaitUntil(description = "first udp ping sent") { udp.sent.isNotEmpty() }
+
+        var good = 0
+        for (t in 0L..120L step 5) {
+            repeat(4) {
+                udp.simulateDatagram(udpVoice()) // decrypts, counts, answers no ping
+                good += 1
+            }
+            connection.drainProtocolQueue("voice at $t s handled")
+            connection.feedPings(listOf(t), tcp, good = good)
+        }
+        mainLooper.idle()
+
+        assertThat(connection.isUsingUdp).isTrue()
+        assertThat(listener.warnings).isEmpty()
+    }
+
+    /**
+     * The third mistake on its own: a decision that turns out wrong must not be able to fill the
+     * chat log, whoever raises it. Identical warnings inside one suppression interval are delivered
+     * once. Scope of the claim: this de-duplicates by warning, not by cause - a second genuine UDP
+     * thread failure inside the interval is silent in the log, and the route change still happens.
+     */
+    @Test
+    fun anIdenticalWarningInsideTheSuppressionIntervalIsDeliveredOnce() {
+        val connection = newConnection()
+        connection.establish()
+        val udp = connection.firstUdp()
+
+        udp.simulateError(IOException("down"))
+        awaitUntil(description = "switched to tcp") { !connection.isUsingUdp }
+        connection.drainProtocolQueue("first failure handled")
+        shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(1))
+        awaitUntil(description = "udp restarted") { transports.udps.size == 2 }
+
+        atSeconds(2)
+        transports.udps[1].simulateError(IOException("down again"))
+        connection.drainProtocolQueue("second failure handled")
+        mainLooper.idle()
+
+        assertThat(listener.warnings).containsExactly(ConnectionWarning.UDP_THREAD_FAILED)
+
+        // And it is an interval, not a mute button. Without this half, "never warn twice" passes.
+        shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(2))
+        awaitUntil(description = "udp restarted twice") { transports.udps.size == 3 }
+        atSeconds(70)
+        transports.udps[2].simulateError(IOException("still down"))
+        connection.drainProtocolQueue("third failure handled")
+        mainLooper.idle()
+
+        assertThat(listener.warnings)
+            .containsExactly(ConnectionWarning.UDP_THREAD_FAILED, ConnectionWarning.UDP_THREAD_FAILED)
+    }
+
+    /** A datagram shaped like voice: it decrypts and it counts, and it tells the monitor nothing. */
+    private fun udpVoice(): ByteArray = ByteArray(16).also {
+        it[0] = ((HumlaUDPMessageType.UDPVoiceOpus.ordinal shl 5) and 0xFF).toByte()
+    }
+
     /** A datagram shaped like the server's answer to our UDP ping: type nibble, then the echo. */
     private fun udpPingReply(sentAtMicros: Long): ByteArray = ByteArray(9).also {
         it[0] = ((HumlaUDPMessageType.UDPPing.ordinal shl 5) and 0xFF).toByte()

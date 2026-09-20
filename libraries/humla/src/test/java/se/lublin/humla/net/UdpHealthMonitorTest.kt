@@ -125,13 +125,94 @@ class UdpHealthMonitorTest {
         assertThat(monitor.onTcpPing(seconds(20), 1, 5, usingUdp = false)).isEqualTo(Decision.KEEP)
     }
 
+    /**
+     * The ping timeout is what catches a link the window cannot see yet, and it still has to fire
+     * before the window is full - that is the whole reason it sits ahead of the window test. What
+     * it may not do any more is fire while both counters are moving; this history has ours moving
+     * and the server's frozen, which is the firewall case the timeout was written for.
+     *
+     * Was `...EvenWithTraffic`, with both counters climbing, and that history is now KEEP by
+     * design: see aLinkThatCarriesVoiceBothWaysIsNotTakenOffUdpForAMissingPingReply.
+     */
     @Test
-    fun missingPingReplyForFifteenSecondsSwitchesToTcpEvenWithTraffic() {
+    fun missingPingReplyForFifteenSecondsSwitchesToTcpWhenOnlyOneDirectionCarries() {
         monitor.onUdpPingSent(seconds(0))
         monitor.onUdpPingReply(seconds(1))
-        assertThat(monitor.onTcpPing(seconds(15), 30, 30, usingUdp = true)).isEqualTo(Decision.KEEP)
+        assertThat(monitor.onTcpPing(seconds(15), 30, 0, usingUdp = true)).isEqualTo(Decision.KEEP)
 
-        assertThat(monitor.onTcpPing(seconds(17), 34, 34, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
+        assertThat(monitor.onTcpPing(seconds(17), 34, 0, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
+    }
+
+    /**
+     * The fourth corner of `localDelta > 0 && remoteDelta > 0`, the predicate the ping timeout is
+     * now measured against: the server hears us, nothing comes back, and no ping is answered
+     * either. The timeout has to fire here, and before the window is full, which is the whole
+     * reason it sits in front of the window test.
+     *
+     * Written out rather than mutated clause by clause, for the reason the restore condition's KDoc
+     * gives: over (F,F) and (T,T) `&&` and `||` agree, so two corners prove nothing about the
+     * operator. (F,F) is pingTimeoutCountsFromTheFirstPingWhenNoReplyEverArrived, (T,F) is
+     * missingPingReplyForFifteenSecondsSwitchesToTcpWhenOnlyOneDirectionCarries, and (T,T) is the
+     * flap below.
+     */
+    @Test
+    fun missingPingReplySwitchesToTcpWhenOnlyTheServerCanHearUs() {
+        monitor.onUdpPingSent(seconds(0))
+        monitor.onUdpPingReply(seconds(1))
+        assertThat(monitor.onTcpPing(seconds(15), 0, 30, usingUdp = true)).isEqualTo(Decision.KEEP)
+
+        assertThat(monitor.onTcpPing(seconds(17), 0, 34, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
+    }
+
+    /**
+     * Measured on a Galaxy S25 against a real Mumble server: SWITCH_TO_TCP_PING_TIMEOUT and
+     * RESTORE_UDP alternating at the TCP ping's own five second rate, for as long as the call
+     * lasted, filling the user's chat log. Voice worked the whole time - logcat showed packets
+     * decrypting continuously - and only the *reply to our UDP ping* never came back.
+     *
+     * The loop is closed by the two halves of onTcpPing never seeing each other: the timeout is
+     * gated on `usingUdp` and the restore lives in the `else` of the same `if`, so while UDP is on
+     * the missing reply switches it off, and while it is off the window deltas - still climbing,
+     * because switchToTcp only changes the route and sendPings keeps pinging - switch it back on.
+     *
+     * The rule this pins: the reply to a single packet is evidence of last resort. While both
+     * counters testify that UDP carries in both directions, no missing reply may take voice off it.
+     */
+    @Test
+    fun aLinkThatCarriesVoiceBothWaysIsNotTakenOffUdpForAMissingPingReply() {
+        monitor.onUdpPingSent(seconds(0)) // and no reply ever arrives
+        var usingUdp = true
+        var good = 0
+        val decisions = mutableListOf<Pair<Long, Decision>>()
+        for (t in 0L..120L step 5) {
+            good += 4 // four packets decrypted each way per five seconds, both directions
+            val d = monitor.onTcpPing(seconds(t), good, good, usingUdp)
+            if (d != Decision.KEEP) {
+                decisions += t to d
+                usingUdp = d == Decision.RESTORE_UDP
+            }
+        }
+
+        assertThat(decisions).isEmpty()
+    }
+
+    /**
+     * The second half of the same defect, and the one that bounds it whatever the first half
+     * misses: two state changes inside one window are a fault of the procedure, never a state of
+     * the network. A window is the shortest history this class can judge at all, so a decision
+     * taken on one is not allowed to be reversed on evidence it already had.
+     *
+     * Here the counters alone would restore five seconds after the switch, off a window that is
+     * still full from before it.
+     */
+    @Test
+    fun aDecisionIsNotReversedWithinOneWindowOfTakingIt() {
+        for (t in 0L..15L step 5) monitor.onTcpPing(seconds(t), 0, 0, usingUdp = true)
+        assertThat(monitor.onTcpPing(seconds(20), 0, 0, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_BOTH)
+
+        assertThat(monitor.onTcpPing(seconds(25), 50, 50, usingUdp = false)).isEqualTo(Decision.KEEP)
+        assertThat(monitor.onTcpPing(seconds(35), 100, 100, usingUdp = false)).isEqualTo(Decision.KEEP)
+        assertThat(monitor.onTcpPing(seconds(40), 150, 150, usingUdp = false)).isEqualTo(Decision.RESTORE_UDP)
     }
 
     /**

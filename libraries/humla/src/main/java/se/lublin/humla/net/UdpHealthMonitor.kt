@@ -26,9 +26,21 @@ package se.lublin.humla.net
  *   cumulative, so the check this replaces ("either count is still zero") answered a question about
  *   the whole session: a connection that carried one packet in its first second and nothing since
  *   read as healthy for as long as it lasted. A delta over a sliding window asks about now.
- * - **No reply to a UDP ping for [pingTimeoutMicros].** The window above cannot see this on its
- *   own, because the counters it reads keep climbing while voice still arrives - a firewall that
- *   drops our side of the flow shows up here first.
+ * - **No reply to a UDP ping for [pingTimeoutMicros], while the window does not vouch for the
+ *   link.** It is evidence of last resort, and the qualification is the whole of it. The reason
+ *   first written here - "the counters keep climbing while voice still arrives" - does not survive
+ *   reading what the counters are: `remoteGood` is what the *server* decrypted, so if it climbs the
+ *   server is hearing us, and a link whose counters both climb is carrying voice in both
+ *   directions by definition. Measured on a Galaxy S25 against a real server: voice worked
+ *   throughout and the reply to our own UDP ping never once came back, and this half took the call
+ *   off UDP every fifteen seconds. So the timeout may fire only where the window is silent in at
+ *   least one direction - which is the firewall case it was written for, and it still fires there
+ *   before a full window has accumulated.
+ *
+ * On top of both, **hysteresis**: a decision is not reversed inside one window of taking it. A
+ * window is the shortest history this class can judge, so reversing a decision sooner is reversing
+ * it on evidence it already had. Two state changes inside one window are always a fault of the
+ * procedure, never a state of the network.
  *
  * All times are microseconds on the connection's clock ([HumlaConnection.elapsed]), which only ever
  * moves forward. Not thread-safe: the protocol thread raises every event and reads every decision.
@@ -45,6 +57,9 @@ class UdpHealthMonitor(
     private val samples = ArrayDeque<Sample>()
     private var firstPingSentMicros = -1L
     private var lastPingReplyMicros = -1L
+
+    /** When the last state-changing decision was handed out, or -1 if none has been. */
+    private var lastChangeMicros = -1L
 
     init {
         // A zero or negative window is not a crash, which is what makes it worth refusing: the trim
@@ -94,19 +109,43 @@ class UdpHealthMonitor(
         // for the rest of the session. aWindowOfLatePingsStillReachesADecision is the difference.
         while (samples.size > 1 && nowMicros - samples[1].atMicros >= windowMicros) samples.removeFirst()
 
-        // Ahead of the window test on purpose: a ping that never comes back is decidable from the
-        // first send onwards, and waiting for a full window of samples would add five seconds of
-        // one-way voice to every one of these.
-        if (usingUdp && firstPingSentMicros >= 0) {
+        val first = samples.first()
+        val localDelta = localGood - first.localGood
+        val remoteDelta = remoteGood - first.remoteGood
+        // Positive evidence needs no full window. "Silent for a window" is a claim that needs the
+        // whole window under it; "carrying right now" needs one counted packet each way, and the
+        // two are not symmetric. This is what the ping timeout is measured against.
+        val carriesBothWays = localDelta > 0 && remoteDelta > 0
+
+        val decision = decide(nowMicros, usingUdp, first, localDelta, remoteDelta, carriesBothWays)
+        if (decision == Decision.KEEP) return decision
+        // Every non-KEEP decision here is a state change: the switch arms are reachable only while
+        // UDP is in use and RESTORE_UDP only while it is not, so one counter serves both directions
+        // of the lockout.
+        if (lastChangeMicros >= 0 && nowMicros - lastChangeMicros < windowMicros) return Decision.KEEP
+        lastChangeMicros = nowMicros
+        return decision
+    }
+
+    private fun decide(
+        nowMicros: Long,
+        usingUdp: Boolean,
+        first: Sample,
+        localDelta: Int,
+        remoteDelta: Int,
+        carriesBothWays: Boolean,
+    ): Decision {
+        // Still ahead of the window test: a link that is silent one way and answers no ping is
+        // decidable from the first send onwards, and waiting for a full window would add five
+        // seconds of one-way voice to every one of these. What changed is `!carriesBothWays`, and
+        // it is the fix for a measured flap - see the class doc.
+        if (usingUdp && firstPingSentMicros >= 0 && !carriesBothWays) {
             val reference = if (lastPingReplyMicros >= 0) lastPingReplyMicros else firstPingSentMicros
             if (nowMicros - reference > pingTimeoutMicros) return Decision.SWITCH_TO_TCP_PING_TIMEOUT
         }
 
-        val first = samples.first()
         if (nowMicros - first.atMicros < windowMicros) return Decision.KEEP // window not full yet
 
-        val localDelta = localGood - first.localGood
-        val remoteDelta = remoteGood - first.remoteGood
         return if (usingUdp) {
             when {
                 localDelta == 0 && remoteDelta == 0 -> Decision.SWITCH_TO_TCP_BOTH
@@ -117,7 +156,7 @@ class UdpHealthMonitor(
         } else {
             // Both directions, because voice that only goes one way is not a working connection -
             // and `and` rather than `or` is a claim about the two corners where they disagree, which
-            // doesNotRestoreUdpWhenOnlyThe{Receiving,Sending}DirectionRecovers are.
+            // doNotRestoreUdpWhenOnlyThe{Receiving,Sending}DirectionRecovers are.
             if (localDelta > restoreThreshold && remoteDelta > restoreThreshold) Decision.RESTORE_UDP else Decision.KEEP
         }
     }
