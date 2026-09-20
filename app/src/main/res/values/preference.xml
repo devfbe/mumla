@@ -125,4 +125,12 @@
     <string name="pref_show_user_count_summary">Shows the number of users in channel subtrees.</string>
     <string name="pref_start_up_in_pinned_mode">Pinned channels mode</string>
     <string name="pref_start_upIn_pinned_mode_sum">Enables \"Pinned channels\" mode after connecting (hides channels that are not pinned).</string>
+
+    <!-- Controls (headset / Bluetooth media buttons) -->
+    <string name="controls">Controls</string>
+    <string name="mediaButtonAction">Headset button</string>
+    <string name="mediaButtonActionSum">What the play/pause button of a wired or Bluetooth headset does while you are connected, including when the screen is off. Tap it: a button you hold down does nothing at all, because Android gives a long press to the voice assistant. And it toggles — one tap switches on, the next switches off — while the on-screen and physical push-to-talk keys transmit only as long as you hold them, unless \"Sticky Push-to-talk button\" is on.</string>
+    <string name="mediaButtonActionNone">Nothing — leave the media keys to your music app</string>
+    <string name="mediaButtonActionAuto">Toggle push-to-talk, or mute in the other transmit modes</string>
+    <string name="mediaButtonActionMute">Toggle mute</string>
 </resources>

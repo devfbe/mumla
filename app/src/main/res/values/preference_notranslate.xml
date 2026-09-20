@@ -97,6 +97,20 @@
         <item>system</item>
     </string-array>
 
+    <string-array name="mediaButtonActionNames">
+        <item>@string/mediaButtonActionNone</item>
+        <item>@string/mediaButtonActionAuto</item>
+        <item>@string/mediaButtonActionMute</item>
+    </string-array>
+
+    <!-- Must stay in lockstep with MediaButtonAction.prefValue; pinned by
+         MediaButtonActionResourcesTest. -->
+    <string-array name="mediaButtonActionValues">
+        <item>none</item>
+        <item>auto</item>
+        <item>mute</item>
+    </string-array>
+
     <string name="copyright">Copyright &#169; Daniel Lublin mumla@lublin.se\nCopyright &#169; 2014–2017 Andrew Comminos\nhttps://mumla-app.gitlab.io</string>
     <string name="project_link">https://mumla-app.gitlab.io</string>
     <string name="acknowledgements_link">https://gitlab.com/quite/mumla/-/graphs/master</string>

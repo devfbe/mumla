@@ -81,4 +81,21 @@
         android:summary="@string/pref_start_upIn_pinned_mode_sum"
         android:title="@string/pref_start_up_in_pinned_mode"
         app:iconSpaceReserved="false" />
+
+    <PreferenceCategory
+        android:key="controls_settings"
+        android:title="@string/controls"
+        app:iconSpaceReserved="false">
+        <!-- android:defaultValue must equal Settings.DEFAULT_MEDIA_BUTTON_ACTION: the XML
+             default is only ever written by this screen, so every other reader falls back to
+             the constant. MediaButtonActionResourcesTest holds the two together. -->
+        <ListPreference
+            android:defaultValue="auto"
+            android:entries="@array/mediaButtonActionNames"
+            android:entryValues="@array/mediaButtonActionValues"
+            android:key="media_button_action"
+            android:summary="@string/mediaButtonActionSum"
+            android:title="@string/mediaButtonAction"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
 </PreferenceScreen>
