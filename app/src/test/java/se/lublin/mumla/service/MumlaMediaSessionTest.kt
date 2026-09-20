@@ -208,23 +208,33 @@ class MumlaMediaSessionTest {
     }
 
     /**
-     * HumlaCallbacks invokes observers on whatever thread fired the event, and MediaSessionCompat
-     * has to be built and driven from a looper thread. So an observer callback that arrives
-     * elsewhere is posted, not run where it landed -- pinned here by watching that nothing has
-     * happened until the main looper is idled.
+     * HumlaCallbacks dispatches on whatever thread fired the event, and MediaSessionCompat has to
+     * be built and driven from a looper thread -- so a callback landing elsewhere is posted, not
+     * run where it landed, pinned by watching that nothing happens until the looper is idled.
+     *
+     * It is `onDisconnected` that really lands elsewhere: HumlaConnection calls
+     * onConnectionDisconnected from the socket thread it is standing on, in
+     * `handleFatalException`, `onTCPConnectionDisconnect` and `onTLSHandshakeFailed`.
+     * `onConnected` does not -- its only caller, `HumlaService.onConnectionSynchronized`, is
+     * itself invoked from a Runnable HumlaConnection posts to the main looper -- so a test that
+     * starts a worker thread for `onConnected` drives a thread production never uses and would
+     * stay green whatever the production code did. This one uses the callback that can arrive off
+     * main, and it is the only one in this file that starts a thread.
      */
     @Test
-    fun observerCallbacksFromAnotherThreadAreMovedToTheMainLooper() {
+    fun aDisconnectFromTheSocketThreadIsMovedToTheMainLooper() {
         var observer: IHumlaObserver? = null
         mediaSession.attach(serviceCapturing { observer = it })
-
-        val worker = Thread { observer!!.onConnected() }
-        worker.start()
-        worker.join()
-
-        assertThat(mediaSession.isActive).isFalse()
-        shadowOf(Looper.getMainLooper()).idle()
+        observer!!.onConnected()
         assertThat(mediaSession.isActive).isTrue()
+
+        val socketThread = Thread { observer!!.onDisconnected(null) }
+        socketThread.start()
+        socketThread.join()
+
+        assertThat(mediaSession.isActive).isTrue()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertThat(mediaSession.isActive).isFalse()
     }
 
     @Test
@@ -357,34 +367,6 @@ class MumlaMediaSessionTest {
         owner.deactivate()
 
         verify(exactly = 1) { handedOut.release() }
-    }
-
-    /**
-     * The same question one object further out: the main looper holds our posted observer
-     * callbacks, and `detach` is the only place that can hand them back. `onConnected` arrives on
-     * the protocol thread and is posted; `MumlaService.onDestroy` runs `detach` on main. A post
-     * still queued at that moment would build a session *after* the only code that could release
-     * it has run -- a live STATE_PLAYING session with no reference left anywhere.
-     */
-    @Test
-    fun aConnectStillQueuedAtDetachDoesNotOutliveIt() {
-        var built = 0
-        var observer: IHumlaObserver? = null
-        val owner = MumlaMediaSession(context, target, Settings.getInstance(context)) { c, tag ->
-            built++
-            MediaSessionCompat(c, tag)
-        }
-        val service = serviceCapturing { observer = it }
-        owner.attach(service)
-        val worker = Thread { observer!!.onConnected() }
-        worker.start()
-        worker.join()
-
-        owner.detach(service)
-        shadowOf(Looper.getMainLooper()).idle()
-
-        assertThat(built).isEqualTo(0)
-        assertThat(owner.sessionToken).isNull()
     }
 
     /**

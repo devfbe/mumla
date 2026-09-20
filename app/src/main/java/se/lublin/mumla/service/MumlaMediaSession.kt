@@ -46,7 +46,7 @@ class MumlaMediaSession @JvmOverloads constructor(
     private var connected = false
 
     /** Identifies this instance's posts on [mainHandler] so [detach] can drop just those. */
-    private val OBSERVER_POSTS = Any()
+    private val observerPosts = Any()
 
     /** Public for tests; the framework calls it on [mainHandler]. */
     val callback: MediaSessionCompat.Callback = object : MediaSessionCompat.Callback() {
@@ -101,13 +101,25 @@ class MumlaMediaSession @JvmOverloads constructor(
         service.unregisterObserver(observer)
         PreferenceManager.getDefaultSharedPreferences(context)
             .unregisterOnSharedPreferenceChangeListener(preferenceListener)
-        // The main looper is holding state of ours too: every observer callback [onMain] posted
-        // and has not run yet. Unregistering stops new ones, not queued ones, and a queued
-        // onConnected running after this point would build a session after the only code that
-        // could release it has finished -- so it is dropped here, by the token it was posted
-        // under. Scoped to that token on purpose: [mainHandler] is also the handler the framework
-        // dispatches media buttons on, and those are not ours to cancel.
-        mainHandler.removeCallbacksAndMessages(OBSERVER_POSTS)
+        // The main looper can be holding a callback of ours: onDisconnected arrives raw from the
+        // socket thread -- HumlaConnection calls onConnectionDisconnected where it stands, in
+        // handleFatalException, onTCPConnectionDisconnect and onTLSHandshakeFailed -- so [onMain]
+        // posts it, and unregistering stops new ones but not queued ones. They are dropped here
+        // by the token they were posted under. Scoped to that token on purpose: [mainHandler] is
+        // also the handler the framework dispatches media buttons on, and those are not ours to
+        // cancel.
+        //
+        // Measured, so nobody overrates this line: it survives mutation, and that is the map of a
+        // hole rather than a loose end. What it drops is a `deactivate`, and the next line runs
+        // one anyway, so it has no observable of its own today. The callback that would matter --
+        // a queued onConnected building a session after the only code that could release it has
+        // finished -- cannot be queued at all: HumlaService.onConnectionSynchronized is its only
+        // caller and already runs inside a Runnable posted to the main looper by HumlaConnection,
+        // HumlaCallbacks dispatches synchronously, and [detach] runs on main as well. That
+        // serialization, not this sweep, is what guarantees the observer is unregistered before
+        // any connect could be delivered. The sweep stays because it is what closes the hole the
+        // moment either of those two facts moves.
+        mainHandler.removeCallbacksAndMessages(observerPosts)
         deactivate()
     }
 
@@ -132,10 +144,13 @@ class MumlaMediaSession @JvmOverloads constructor(
         if (session != null) return
         session = sessionFactory(context, TAG).apply {
             // Not mutation-tested, and it cannot be: dropping the handler makes
-            // MediaSessionCompat build its own from the calling thread's looper, and under
-            // Robolectric the calling thread *is* the main looper, so the two are the same
-            // object. It is passed explicitly because in production this runs on whatever thread
-            // the Humla observer fired on.
+            // MediaSessionCompat build its own from the calling thread's looper, which under
+            // Robolectric is the main looper -- a *different* Handler on the same Looper, and two
+            // handlers on one looper are indistinguishable in delivery. Nor is the explicit
+            // handler a thread necessity: [ensureSession] only ever runs on main, both through
+            // [onMain] and from the preference listener, which SharedPreferences also delivers
+            // there. It is belt and braces against that stopping being true, not a fix for a
+            // thread this code is on.
             setCallback(callback, mainHandler)
             setPlaybackState(
                 PlaybackStateCompat.Builder()
@@ -177,11 +192,17 @@ class MumlaMediaSession @JvmOverloads constructor(
     private fun releaseSession() {
         val released = session ?: return
         // No `isActive = false` before this. Measured against androidx.media 1.8.0:
-        // MediaSessionCompat.setActive is nothing but MediaSession.setActive, which moves the
-        // record inside the system's priority stack, while release() takes the record out of that
-        // stack altogether -- and release() does not call setActive itself. In-process there is no
-        // reader either, since the reference is dropped on the next line. It named no observable
-        // that release() does not already cover (spec 4.04), so it is gone rather than pinned.
+        // MediaSessionCompat.setActive calls MediaSession.setActive, which moves the record inside
+        // the system's priority stack, while release() takes the record out of that stack
+        // altogether -- and release() does not call setActive itself. The public setActive does
+        // one thing more, and it is the one that could have made this observable: afterwards it
+        // walks mActiveListeners and calls onActiveChanged(), which release() does not do. That
+        // list is empty here -- addOnActiveChangeListener is @RestrictTo and only
+        // MediaBrowserServiceCompat registers one, and this tree has no MediaBrowserService, no
+        // addOnActiveChangeListener and no MediaButtonReceiver. In-process there is no reader
+        // either, since the reference is dropped on the next line. So the call named no observable
+        // that release() does not already cover (spec 4.04), and it is gone rather than pinned;
+        // adding a session listener would put it back on the table.
         released.release()
         session = null
         target.stopTalking()
@@ -191,7 +212,7 @@ class MumlaMediaSession @JvmOverloads constructor(
         if (Looper.myLooper() == Looper.getMainLooper()) {
             block()
         } else {
-            mainHandler.postAtTime(block, OBSERVER_POSTS, SystemClock.uptimeMillis())
+            mainHandler.postAtTime(block, observerPosts, SystemClock.uptimeMillis())
         }
     }
 
