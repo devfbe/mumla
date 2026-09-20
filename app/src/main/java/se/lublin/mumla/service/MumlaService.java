@@ -385,6 +385,16 @@ public class MumlaService extends HumlaService implements
             setSelfMuteDeafState(mSettings.isMuted(), mSettings.isDeafened());
         }
 
+        // The Bluetooth headset is a stored wish, not a live state (spec P2): SCO is torn down
+        // by onConnectionDisconnected on every dropped connection, auto-reconnect included, so
+        // this is where it comes back. It sits beside the other restore and ahead of the overlay
+        // and sensor work on purpose: WindowManager.addView and the proximity wake lock can both
+        // throw, and anything that throws in front of this line reproduces the complaint this
+        // task exists to close.
+        if (mSettings.isBluetoothScoEnabled()) {
+            applyBluetoothSco(true);
+        }
+
         ContextCompat.registerReceiver(this, mTalkReceiver,
                 new IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK), ContextCompat.RECEIVER_EXPORTED);
 
@@ -394,13 +404,6 @@ public class MumlaService extends HumlaService implements
         // Configure proximity sensor
         if (mSettings.isHandsetMode()) {
             setProximitySensorOn(true);
-        }
-
-        // The Bluetooth headset is a stored wish, not a live state (spec P2): SCO is torn down
-        // by onConnectionDisconnected on every dropped connection, auto-reconnect included, so
-        // this is where it comes back.
-        if (mSettings.isBluetoothScoEnabled()) {
-            applyBluetoothSco(true);
         }
     }
 

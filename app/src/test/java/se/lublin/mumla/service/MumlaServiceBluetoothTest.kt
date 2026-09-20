@@ -80,6 +80,9 @@ class MumlaServiceBluetoothTest {
         Class.forName("se.lublin.humla.HumlaService").getDeclaredField(name)
             .apply { isAccessible = true }
 
+    private fun mumlaField(name: String) =
+        MumlaService::class.java.getDeclaredField(name).apply { isAccessible = true }
+
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
@@ -181,6 +184,39 @@ class MumlaServiceBluetoothTest {
 
         assertThat(receiver.stopCount()).isEqualTo(1)
         assertThat(warnings()).containsExactly(app.getString(R.string.bluetooth_sco_refused))
+    }
+
+    /**
+     * M1 from the review. The restore used to be the *last* statement of the hook, behind
+     * `registerReceiver`, `mHotCorner.setShown(true)` and `setProximitySensorOn(true)`. Anything
+     * that throws in front of it -- `WindowManager.addView` and the proximity wake lock both can
+     * -- skips it and reproduces the user's complaint exactly: reconnected, and no headset. No
+     * triggering case was found in the field (`setShown` checks `canDrawOverlays` and returns
+     * early), so this pins an ordering rather than repairing a live defect, and the ordering
+     * costs nothing.
+     *
+     * The exception is not handled by the hook and is not meant to be; what this reads back is
+     * what had already happened when it was thrown.
+     */
+    @Test
+    fun aLaterStepThatThrowsDoesNotCostTheHeadset() {
+        settings.setBluetoothScoEnabled(true)
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        preferences().edit()
+            .putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_TOP_LEFT).commit()
+        val hotCorner = mockk<MumlaHotCorner>(relaxed = true)
+        every { hotCorner.setShown(any()) } throws RuntimeException("addView refused")
+        mumlaField("mHotCorner").set(service, hotCorner)
+        connect()
+
+        try {
+            service.onConnectionSynchronized()
+            throw AssertionError("the hot corner was supposed to throw; this test proves nothing")
+        } catch (expected: RuntimeException) {
+            // what matters is the state it was thrown in
+        }
+
+        assertThat(receiver.startCount()).isEqualTo(1)
     }
 
     @Test
