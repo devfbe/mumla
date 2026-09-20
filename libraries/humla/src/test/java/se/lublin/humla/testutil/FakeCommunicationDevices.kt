@@ -27,12 +27,24 @@ import se.lublin.humla.session.CommunicationDevices
  * Distinct ids are the point of it. Robolectric's `AudioDeviceInfoBuilder` has no `setId`, so every
  * device it builds carries the same one and "the first SCO device" cannot be told from "any SCO
  * device" there; it can here.
+ *
+ * [notifiesOnChange] defaults to **false**, and that is the production ordering rather than a
+ * convenience. `AndroidCommunicationDevices` hands `AudioManager` an Executor that posts to the
+ * main looper, and [ScoRouter] is main-thread-only, so while `apply()` is running the platform's
+ * own callback cannot run: `select` and `clear` return with the route already changed and the event
+ * still queued. A fake that notifies inline models a state production cannot reach, and it hides
+ * the only thing that reports the change in time - see
+ * ScoRouterTest.applyReportsTheRouteItselfWhenTheSeamHasNotRaisedItsEventYet, which is the test the
+ * inline default had made unwritable.
  */
 class FakeCommunicationDevices : CommunicationDevices {
     /** device id -> AudioDeviceInfo type, in the order the platform would report them. */
     val available = linkedMapOf<Int, Int>()
     var selectedId: Int? = null
     var selectResult = true
+
+    /** Whether [select] and [clear] raise the change event inline; see the class doc. */
+    var notifiesOnChange = false
     var listener: (() -> Unit)? = null
     val selectCalls = mutableListOf<Int>()
     var clearCalls = 0
@@ -45,14 +57,14 @@ class FakeCommunicationDevices : CommunicationDevices {
         selectCalls += id
         if (!selectResult) return false
         selectedId = id
-        listener?.invoke()
+        if (notifiesOnChange) listener?.invoke()
         return true
     }
 
     override fun clear() {
         clearCalls++
         selectedId = null
-        listener?.invoke()
+        if (notifiesOnChange) listener?.invoke()
     }
 
     override fun currentType(): Int? = selectedId?.let { available[it] }

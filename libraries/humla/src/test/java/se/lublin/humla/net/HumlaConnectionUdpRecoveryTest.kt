@@ -600,6 +600,19 @@ class HumlaConnectionUdpRecoveryTest {
 
         assertThat(listener.warnings)
             .containsExactly(ConnectionWarning.UDP_THREAD_FAILED, ConnectionWarning.UDP_THREAD_FAILED)
+
+        // And the interval runs from the last delivery, not from the start of the connection.
+        // Found by mutation: without this half, deleting `lastWarnedMicros = now` left all 294
+        // tests green - every earlier delivery here happens at t=0, where an unwritten field and a
+        // written one hold the same value and every later comparison agrees.
+        shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(4))
+        awaitUntil(description = "udp restarted three times") { transports.udps.size == 4 }
+        atSeconds(100)
+        transports.udps[3].simulateError(IOException("down for a fourth time"))
+        connection.drainProtocolQueue("fourth failure handled")
+        mainLooper.idle()
+
+        assertThat(listener.warnings).hasSize(2)
     }
 
     /**

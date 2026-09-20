@@ -86,30 +86,44 @@ class AndroidCommunicationDevices(
 
     override fun currentType(): Int? = guarded(null) { audioManager.communicationDevice?.type }
 
+    /**
+     * One writer for [changeListener], deliberately. The obvious shape - unregister, clear the
+     * field, register, set the field - has a `changeListener = null` in the middle whose only
+     * consequence is whether a later teardown asks the platform to remove a listener it has
+     * already removed, which no test can see; measured, deleting it left all 294 tests green.
+     * Written as a single assignment there is no such line to leave behind.
+     */
     override fun setOnChangedListener(listener: (() -> Unit)?) {
-        changeListener?.let {
-            try {
-                audioManager.removeOnCommunicationDeviceChangedListener(it)
-            } catch (e: SecurityException) {
-                reportDenial(e)
-            } catch (e: RuntimeException) {
-                Log.w(TAG, "Could not remove communication device listener", e)
-            }
-        }
-        changeListener = null
-        if (listener == null) return
-        val platformListener = AudioManager.OnCommunicationDeviceChangedListener { listener() }
+        changeListener?.let { unregister(it) }
+        changeListener = listener?.let { register(it) }
+    }
+
+    private fun unregister(platformListener: AudioManager.OnCommunicationDeviceChangedListener) {
         try {
+            audioManager.removeOnCommunicationDeviceChangedListener(platformListener)
+        } catch (e: SecurityException) {
+            reportDenial(e)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Could not remove communication device listener", e)
+        }
+    }
+
+    /** The registered platform listener, or null if this build refused the registration. */
+    private fun register(listener: () -> Unit): AudioManager.OnCommunicationDeviceChangedListener? {
+        val platformListener = AudioManager.OnCommunicationDeviceChangedListener { listener() }
+        return try {
             audioManager.addOnCommunicationDeviceChangedListener(
                 Executor { mainHandler.post(it) },
                 platformListener,
             )
-            changeListener = platformListener
+            platformListener
         } catch (e: SecurityException) {
             reportDenial(e)
+            null
         } catch (e: RuntimeException) {
             // Some vendor builds throw here; SCO still works, only automatic route updates are lost.
             Log.w(TAG, "Communication device listener unavailable", e)
+            null
         }
     }
 

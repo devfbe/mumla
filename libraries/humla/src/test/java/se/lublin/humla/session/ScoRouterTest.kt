@@ -165,6 +165,45 @@ class ScoRouterTest {
         assertThat(activeChanges).containsExactly(true, false, true).inOrder()
     }
 
+    /**
+     * The production ordering, and the one the fake could not express until it was given the knob:
+     * `AudioManager`'s callback is posted to the main looper and [ScoRouter] is main-thread-only,
+     * so while `apply()` runs the platform event cannot. `select` returns with the route already
+     * changed and the event still queued, and the only thing that tells the listener in time is
+     * [ScoRouter.apply]'s own closing check.
+     *
+     * Found by mutation: deleting that closing call left all 294 tests green, because every seam
+     * in the suite raised the event inline - a dimension closed off by the double, not by the
+     * production file.
+     */
+    @Test
+    fun applyReportsTheRouteItselfWhenTheSeamHasNotRaisedItsEventYet() {
+        devices.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+
+        router.wanted = true
+        router.apply()
+        assertThat(activeChanges).containsExactly(true)
+
+        router.wanted = false
+        router.apply()
+        assertThat(activeChanges).containsExactly(true, false).inOrder()
+    }
+
+    /**
+     * And the other ordering: the seam raises the event as well. Both reports describe one
+     * transition, so the listener still hears it once.
+     */
+    @Test
+    fun applyReportsOneTransitionWhenTheSeamRaisesTheEventToo() {
+        devices.notifiesOnChange = true
+        devices.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+
+        router.wanted = true
+        router.apply()
+
+        assertThat(activeChanges).containsExactly(true)
+    }
+
     @Test
     fun systemRouteChangesAreReportedOncePerTransition() {
         devices.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO

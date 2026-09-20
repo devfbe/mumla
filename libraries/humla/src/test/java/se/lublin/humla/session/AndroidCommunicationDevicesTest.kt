@@ -87,6 +87,25 @@ class AndroidCommunicationDevicesTest {
         shadowOf(audioManager).setAvailableCommunicationDevices(emptyList())
 
         assertThat(devices.select(42)).isFalse()
+        assertThat(devices.currentType()).isNull()
+    }
+
+    /**
+     * The same refusal with a device present, which is the corner that tells "the device with this
+     * id" apart from "the first device". Found by mutation: with only the empty-list case above,
+     * dropping the `it.id == id` test from the lookup left all 294 tests green, because an empty
+     * list answers null either way. `ShadowAudioManager.setCommunicationDevice` does not check
+     * availability, so under that mutation this call routes the user to a device nobody asked for
+     * and returns true.
+     */
+    @Test
+    fun selectingAnIdThatIsNotTheAvailableOnesFails() {
+        val device = sco()
+        shadowOf(audioManager).setAvailableCommunicationDevices(listOf(device))
+        val present = devices.availableIdsOfType(AudioDeviceInfo.TYPE_BLUETOOTH_SCO).single()
+
+        assertThat(devices.select(present + 1)).isFalse()
+        assertThat(devices.currentType()).isNull()
     }
 
     /**
