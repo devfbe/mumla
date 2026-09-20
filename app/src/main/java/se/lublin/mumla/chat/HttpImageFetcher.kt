@@ -11,6 +11,7 @@ import java.net.URL
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -85,11 +86,14 @@ class HttpImageFetcher(
         // needs a second pair of hands: without this, a server that dribbles response headers
         // blocks in getResponseCode() for as long as it likes, whatever the budget says.
         val expired = AtomicBoolean(false)
-        val watchdog = WATCHDOG.schedule({
-            expired.set(true)
-            runCatching { connection.disconnect() }
-        }, remainingMs(deadline), TimeUnit.MILLISECONDS)
+        var watchdog: ScheduledFuture<*>? = null
         try {
+            // Scheduled inside the try, so that the connection is covered from the moment it
+            // exists: a rejected task would otherwise escape unchecked and leak the connection.
+            watchdog = WATCHDOG.schedule({
+                expired.set(true)
+                runCatching { connection.disconnect() }
+            }, remainingMs(deadline), TimeUnit.MILLISECONDS)
             connection.connectTimeout = connectTimeoutMs
             connection.readTimeout = clampedReadTimeout(deadline)
             connection.instanceFollowRedirects = true
@@ -113,7 +117,7 @@ class HttpImageFetcher(
             // ImageFetchException and nothing else, so nothing unchecked may escape here.
             throw ImageFetchException(if (expired.get()) ImageError.TIMEOUT else ImageError.NETWORK, e)
         } finally {
-            watchdog.cancel(false)
+            watchdog?.cancel(false)
             // The watchdog thread may be inside disconnect() at the same moment. The platform's
             // implementation is unsynchronised and re-reads its connection field after checking it
             // for null, so the loser of that race can throw — and an unchecked exception thrown
