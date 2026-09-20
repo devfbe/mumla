@@ -60,6 +60,17 @@ public class MumlaOverlay {
         }
 
         @Override
+        public void onUserRemoved(IUser user, String reason) {
+            // The adapter holds a snapshot of the channel's users and refreshes it here; without
+            // this, a user who disconnects or is kicked while the overlay is open leaves a row
+            // standing in it until some other event happens to refresh the list. Unconditional,
+            // like onUserTalkStateUpdated above: by the time a user is removed the model may no
+            // longer be able to say which channel they were in, and re-reading one channel's user
+            // list is what the adapter does anyway.
+            mChannelAdapter.notifyDataSetChanged();
+        }
+
+        @Override
         public void onUserJoinedChannel(IUser user, IChannel newChannel, IChannel oldChannel) {
             int selfSession;
             try {

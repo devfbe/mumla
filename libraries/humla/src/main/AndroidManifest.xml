@@ -25,14 +25,20 @@
     <!-- Needed for ConnectivityManager, at least -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <application android:allowBackup="true">
-        <service android:name=".HumlaService"
-                 android:exported="true">
-            <intent-filter>
-                <action android:name="se.lublin.humla.ACTION_CONNECT"/>
-                <action android:name="se.lublin.humla.ACTION_DISCONNECT"/>
-            </intent-filter>
-        </service>
-    </application>
+    <!--
+      HumlaService is not declared as a component here: MumlaService (in the app module) is
+      the only concrete instance the app uses, targeted with an explicit intent, so a
+      standalone declaration of the base class exists only to be an exported attack surface.
+      Its ACTION_CONNECT/ACTION_DISCONNECT intent filters were never reachable from the app's
+      own connect flow, and the declared ACTION_CONNECT string did not even match the
+      constant HumlaService checks in onStartCommand, so no external caller could have
+      relied on them working.
+    -->
+    <!--
+      No <application> element: backup posture (android:allowBackup, android:dataExtractionRules)
+      is owned by the app module's manifest, since a single boolean/resource attribute can only
+      have one value in the merged manifest. Declaring allowBackup here as well risked a stale
+      value silently overriding, or conflicting with, the app module's.
+    -->
 
 </manifest>

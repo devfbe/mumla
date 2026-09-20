@@ -149,6 +149,14 @@ android {
                 // ApplicationSharedMemory goes through it, so without this every Robolectric test
                 // dies in setUpApplicationState.
                 jvmArgs '--add-opens=java.base/jdk.internal.access=ALL-UNNAMED'
+                // Gradle's default test worker heap is 512m and the whole module runs in one
+                // worker. Robolectric holds the framework resources of every @Config(sdk = ...)
+                // it has seen, so the cost grows with the suite and not with the test: measured
+                // here, NotificationPostingTest died with "OutOfMemoryError: Failed to load
+                // android-all-instrumented-13" in the full run and passed on its own, at a suite
+                // size of 226. That is a harness limit reading as eight red tests, which is the
+                // shape section 4.05 warns about, so it is raised rather than worked around.
+                maxHeapSize = '1g'
             }
         }
     }
@@ -162,6 +170,13 @@ android {
         // translation files, so this check reports but does not fail the build. It stays enabled
         // for the English source, where it would be a real error we can fix.
         warning 'MissingQuantity'
+        // Default severity is warning, which abortOnError does not gate. Raised to error so a
+        // missing/misspelled android:dataExtractionRules attribute (e.g. res/xml/backup_rules.xml
+        // becoming unreferenced) fails the build instead of silently re-enabling cloud backup of
+        // server passwords and the client certificate. ManifestAuditTest's
+        // theBackupRulesFileExcludesCloudBackupButNotDeviceTransfer resolves the rules resource by
+        // name, so it cannot see this wiring break; this lint check is what actually enforces it.
+        error 'DataExtractionRules'
         explainIssues = true
         ignoreWarnings = false
         quiet = false
@@ -186,6 +201,7 @@ dependencies {
     implementation libs.androidx.core.ktx
     implementation libs.androidx.documentfile
     implementation libs.androidx.fragment
+    implementation libs.androidx.media
     implementation libs.androidx.recyclerview
     implementation libs.androidx.exifinterface
     implementation libs.material

@@ -184,6 +184,25 @@ class Settings private constructor(context: Context) {
         preferences.edit().putStringSet(PREF_NEWS_SHOWN_VERSIONS, HashSet()).apply()
     }
 
+    fun isBluetoothScoEnabled(): Boolean =
+        preferences.getBoolean(PREF_BLUETOOTH_SCO, DEFAULT_BLUETOOTH_SCO)
+
+    fun setBluetoothScoEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(PREF_BLUETOOTH_SCO, enabled).apply()
+    }
+
+    fun getMediaButtonAction(): MediaButtonAction =
+        MediaButtonAction.fromPrefValue(
+            preferences.getString(PREF_MEDIA_BUTTON_ACTION, DEFAULT_MEDIA_BUTTON_ACTION)
+        )
+
+    fun isBatteryOptimizationAsked(): Boolean =
+        preferences.getBoolean(PREF_BATTERY_OPTIMIZATION_ASKED, DEFAULT_BATTERY_OPTIMIZATION_ASKED)
+
+    fun setBatteryOptimizationAsked(asked: Boolean) {
+        preferences.edit().putBoolean(PREF_BATTERY_OPTIMIZATION_ASKED, asked).apply()
+    }
+
     companion object {
         const val PREF_INPUT_METHOD = "audioInputMethod"
         /** Voice activity transmits depending on the amplitude of user input. */
@@ -301,6 +320,18 @@ class Settings private constructor(context: Context) {
         const val DEFAULT_START_UP_IN_PINNED_MODE = false
 
         const val PREF_NEWS_SHOWN_VERSIONS = "newsShownVersions"
+
+        /** Route audio through a Bluetooth headset (SCO) whenever connected. Spec P2. */
+        const val PREF_BLUETOOTH_SCO = "pref_bluetooth_sco"
+        const val DEFAULT_BLUETOOTH_SCO = false
+
+        /** Headset / AVRCP media button behavior, one of [MediaButtonAction.prefValue]. Spec P1. */
+        const val PREF_MEDIA_BUTTON_ACTION = "media_button_action"
+        const val DEFAULT_MEDIA_BUTTON_ACTION = "auto"
+
+        /** True once the battery-optimization exemption has been offered. Spec P4. */
+        const val PREF_BATTERY_OPTIMIZATION_ASKED = "battery_optimization_asked"
+        const val DEFAULT_BATTERY_OPTIMIZATION_ASKED = false
 
         @JvmStatic
         fun getInstance(context: Context): Settings = Settings(context)

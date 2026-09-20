@@ -75,6 +75,9 @@ public class MumlaService extends HumlaService implements
     private MumlaConnectionNotification mNotification;
     private MumlaMessageNotification mMessageNotification;
     private MumlaReconnectNotification mReconnectNotification;
+
+    /** Headset / AVRCP media buttons while connected (stream P). */
+    private MumlaMediaSession mMediaSession;
     /** Channel view overlay. */
     private MumlaOverlay mChannelOverlay;
     /** Proximity lock for handset mode. */
@@ -90,6 +93,8 @@ public class MumlaService extends HumlaService implements
     private boolean mErrorShown;
     private List<IChatMessage> mMessageLog;
     private boolean mSuppressNotifications;
+    /** Set once a device has refused to route SCO, so the chat log says it once and not per reconnect. */
+    private boolean mBluetoothScoRefused;
 
     private TextToSpeech mTTS;
     private TextToSpeech.OnInitListener mTTSInitListener = new TextToSpeech.OnInitListener() {
@@ -316,6 +321,9 @@ public class MumlaService extends HumlaService implements
             mTTS = new TextToSpeech(this, mTTSInitListener);
 
         mTalkReceiver = new TalkBroadcastReceiver(this);
+
+        mMediaSession = new MumlaMediaSession(this, new HumlaMediaKeyTarget(this), mSettings);
+        mMediaSession.attach(this);
     }
 
     @Override
@@ -342,6 +350,10 @@ public class MumlaService extends HumlaService implements
             e.printStackTrace();
         }
 
+        // Null-checked like every other teardown in this method: it is the last thing onCreate
+        // builds, so anything that throws earlier -- the TTS constructor above it, say -- gets
+        // here with the field still null.
+        if (mMediaSession != null) mMediaSession.detach(this);
         unregisterObserver(mObserver);
         if(mTTS != null) mTTS.shutdown();
         mMessageLog = null;
@@ -373,6 +385,16 @@ public class MumlaService extends HumlaService implements
             setSelfMuteDeafState(mSettings.isMuted(), mSettings.isDeafened());
         }
 
+        // The Bluetooth headset is a stored wish, not a live state (spec P2): SCO is torn down
+        // by onConnectionDisconnected on every dropped connection, auto-reconnect included, so
+        // this is where it comes back. It sits beside the other restore and ahead of the overlay
+        // and sensor work on purpose: WindowManager.addView and the proximity wake lock can both
+        // throw, and anything that throws in front of this line reproduces the complaint this
+        // task exists to close.
+        if (mSettings.isBluetoothScoEnabled()) {
+            applyBluetoothSco(true);
+        }
+
         ContextCompat.registerReceiver(this, mTalkReceiver,
                 new IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK), ContextCompat.RECEIVER_EXPORTED);
 
@@ -382,6 +404,32 @@ public class MumlaService extends HumlaService implements
         // Configure proximity sensor
         if (mSettings.isHandsetMode()) {
             setProximitySensorOn(true);
+        }
+    }
+
+    /**
+     * Start or stop the headset link, and survive a device that enforces BLUETOOTH_CONNECT on
+     * android.media although the platform's own annotation database declares it on
+     * android.bluetooth.* only (spec 4.1: keep asking, stop gating). Absent from the database is
+     * not "never thrown anywhere", so the call is wrapped rather than trusted.
+     *
+     * Reported once per service lifetime: this runs on every synchronization, and auto-reconnect
+     * can run it many times over one broken network. A chat log that repeats the same line after
+     * every reconnect buries the message it is trying to deliver.
+     */
+    private void applyBluetoothSco(boolean wanted) {
+        try {
+            if (wanted) {
+                enableBluetoothSco();
+            } else {
+                disableBluetoothSco();
+            }
+        } catch (SecurityException e) {
+            Log.w(TAG, "bluetooth sco refused by the platform: " + e);
+            if (!mBluetoothScoRefused) {
+                mBluetoothScoRefused = true;
+                logWarning(getString(R.string.bluetooth_sco_refused));
+            }
         }
     }
 
@@ -469,6 +517,11 @@ public class MumlaService extends HumlaService implements
                 break;
             case Settings.PREF_FRAMES_PER_PACKET:
                 changedExtras.putInt(EXTRAS_FRAMES_PER_PACKET, mSettings.getFramesPerPacket());
+                break;
+            case Settings.PREF_BLUETOOTH_SCO:
+                if (isSynchronized()) {
+                    applyBluetoothSco(mSettings.isBluetoothScoEnabled());
+                }
                 break;
             case Settings.PREF_CERT_ID:
             case Settings.PREF_FORCE_TCP:

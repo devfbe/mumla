@@ -198,6 +198,8 @@
     <string name="grant_perm_notifications">Please grant permission to send notifications.</string>
     <string name="grant_perm_storage">Please grant external storage permission.</string>
     <string name="grant_perm_draw_over_apps">Please grant permission to display over other apps.</string>
+    <string name="bluetooth_perm_denied">Bluetooth headset stays switched on. Without the Nearby devices permission, some devices will refuse to route audio to it.</string>
+    <string name="bluetooth_sco_refused">This device refused to route audio to a Bluetooth headset. Grant the Nearby devices permission in the system settings and reconnect.</string>
     <string name="orbot_not_installed">The Orbot app is not installed. Not using Tor.</string>
     <string name="orbot_tor_failed">Could not connect to local Tor proxy on port %d (SOCKS).\n\nPlease ensure the Orbot app is running.</string>
     <string name="default_">Default</string>

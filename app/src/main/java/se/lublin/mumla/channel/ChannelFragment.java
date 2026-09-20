@@ -76,8 +76,8 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
     /** Chat target listeners, notified when the chat target is changed. */
     private List<OnChatTargetSelectedListener> mChatTargetListeners = new ArrayList<OnChatTargetSelectedListener>();
 
-    /** True iff the talk button has been hidden (e.g. when muted) */
-    private boolean mTalkButtonHidden;
+    /** True while a touch is down on the talk button, i.e. while this fragment holds transmission. */
+    private boolean mTalkButtonHeld;
 
     private HumlaObserver mObserver = new HumlaObserver() {
         @Override
@@ -163,12 +163,31 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
+                        mTalkButtonHeld = true;
                         if (getService() != null) {
                             getService().onTalkKeyDown();
                         }
                         break;
                     case MotionEvent.ACTION_UP:
+                        mTalkButtonHeld = false;
                         if (getService() != null) {
+                            getService().onTalkKeyUp();
+                        }
+                        break;
+                    // A parent that takes the gesture over -- the navigation drawer being dragged
+                    // open, or the system's back gesture, both of which start in the left edge zone
+                    // this full-width button sits in -- sends ACTION_CANCEL instead of ACTION_UP.
+                    // In hold mode that still has to release the press, or transmission sticks on;
+                    // it used to be papered over by resetting the talk state from MumlaActivity's
+                    // drawer listener. In toggle mode onTalkKeyUp() is not a release but the action
+                    // itself -- the ACTION_DOWN above did nothing, because onTalkKeyDown() is gated
+                    // on !isPushToTalkToggle() -- and an aborted gesture must not perform the
+                    // action, exactly as a Button does not fire onClick on a cancel. So the cancel
+                    // carries the same guard the drawer listener carried.
+                    case MotionEvent.ACTION_CANCEL:
+                        mTalkButtonHeld = false;
+                        if (getService() != null
+                                && !Settings.getInstance(getActivity()).isPushToTalkToggle()) {
                             getService().onTalkKeyUp();
                         }
                         break;
@@ -247,12 +266,16 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
     @Override
     public void onPause() {
         super.onPause();
-        if (getService() != null && getService().isConnected() &&
+        // Release what this fragment's button is holding, and nothing else. Pausing while the
+        // button is pressed would otherwise leave transmission on, since the press can no longer
+        // be released -- but a talk state set anywhere else, by a headset media key with the
+        // screen off above all, is not ours to switch off just because the user picked the phone
+        // up.
+        if (mTalkButtonHeld && getService() != null && getService().isConnected() &&
             !Settings.getInstance(getActivity()).isPushToTalkToggle()) {
-            // XXX: This ensures that push to talk is disabled when we pause.
-            // We don't want to leave the talk state active if the fragment is paused while pressed.
             getService().HumlaSession().setTalkingState(false);
         }
+        mTalkButtonHeld = false;
     }
 
     @Override
@@ -329,7 +352,6 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
 
     private void setTalkButtonHidden(final boolean hidden) {
         mTalkView.setVisibility(hidden ? View.GONE : View.VISIBLE);
-        mTalkButtonHidden = hidden;
     }
 
     @Override
