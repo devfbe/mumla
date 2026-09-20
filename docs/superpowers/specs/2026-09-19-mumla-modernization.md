@@ -337,6 +337,17 @@ These were found by implementers and reviewers after the plans were written. The
 are binding on the tasks named, and they live here rather than in a stream ledger
 because `.superpowers/sdd/` is gitignored — a ledger disappears with its worktree.
 
+- **Bound and coalesce the observer queue (A, task 5).** `HumlaCallbacks`'s queue
+  is unbounded. Task 2 wrote that down as a known limit and named "task 6" as the
+  owner of the cap, but the Stream A plan's task 6 is UDP recovery and does not
+  own `util/HumlaCallbacks.kt` — after task 2, no task in the plan does. The limit
+  stopped being theoretical with task 4, which is what lets the protocol thread
+  outrun the main thread: measured, a 5 000-channel sync parks 5 000 lambdas in
+  the queue while main is busy, each one retaining a `Channel`. Task 5 takes this
+  on because it is the task that makes `Channel`/`User` reads cheap, so it is
+  already inside the objects the queue retains. A cap needs a policy for what to
+  drop or fold, and events that are pure state refreshes for one user or channel
+  are the ones that coalesce.
 - **One lock across both audio streams (B, tasks 5–6).** The WebRTC APM has two
   audio threads: `processRender` on the playback thread and `processCapture` on
   the capture thread. `AudioHandler.java:220-225,467-482` serialises `encode()`
