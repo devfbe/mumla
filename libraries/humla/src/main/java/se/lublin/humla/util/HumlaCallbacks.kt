@@ -70,7 +70,8 @@ import java.util.concurrent.ConcurrentHashMap
  * - The queue is bounded by two separate ceilings, which cost three things an observer has to know
  *   about. The first, [maxQueuedEvents], is **not** a bound on the queue: it only ever drops
  *   tree-shape events, so it holds only while the events it may not touch stay under it.
- *   [absoluteCeiling] is the one that always holds.
+ *   [absoluteCeiling] is the one that holds, and it holds up to the events it exempts:
+ *   `queue.size <= max(absoluteCeiling, number of Policy.Lifecycle events enqueued)`.
  *   - **State refreshes for one subject are folded.** [onChannelStateUpdated],
  *     [onChannelPermissionsUpdated], [onUserStateUpdated] and [onUserTalkStateUpdated] carry one
  *     live model object and nothing else, and every observer in the tree reads that object's
@@ -105,19 +106,46 @@ import java.util.concurrent.ConcurrentHashMap
  *     can raise is not a ceiling.
  *
  *     The exemption is the four connection-lifecycle events - [onConnected], [onConnecting],
- *     [onDisconnected] and [onTLSHandshakeFailed]. They are the ones whose loss cannot be made
- *     good by re-reading anything (`MumlaActivity:172` would stay on its connecting screen for
- *     good), and the only undroppable events whose number is the *connection's* to choose rather
- *     than the server's - which is what leaves this ceiling bounded by something no server can
- *     inflate. Everything else goes: chat, log and folded refreshes included.
+ *     [onDisconnected] and [onTLSHandshakeFailed]. Losing one of them is expensive
+ *     (`MumlaActivity`'s observer would stay on its connecting screen for good), but that is not
+ *     what makes them safe to exempt, because it is not exclusive: [onPermissionDenied] carries a
+ *     `reason` string that is in no model either, and so do chat and log.
  *
- *     What that costs, plainly. Chat and log lines dropped here are lost for good - `MumlaService`
- *     accumulates them into an unbounded `mMessageLog`, so this queue is the only place one can go
- *     missing, and the user sees a gap at the *old* end of the chat pane. A dropped folded refresh
- *     is the one that can also be felt as a hang: `ChannelDescriptionFragment` and
- *     `UserCommentFragment` register an observer that unregisters itself on the single
- *     [onChannelStateUpdated]/[onUserStateUpdated] it is waiting for. The channel list itself is
- *     unaffected, because every observer of a dropped event rebuilds it from the model anyway.
+ *     **What makes them safe to exempt is that they are confined to the delivery thread.** All
+ *     four are raised on [handler]'s own thread: `HumlaConnection` posts every listener callback
+ *     to its `mainHandler` (`deliverDisconnected`, `notifyListener`), `HumlaTCP` posts
+ *     `onTLSHandshakeFailed` to its callback handler, `HumlaService.connect()` raises
+ *     [onConnecting] on main, and `HumlaService.setReconnecting()` posts the retry to a main
+ *     `Handler`. So for as long as that thread is stuck - the only condition under which this
+ *     queue grows at all - **no lifecycle event can arrive to grow it**, and the invariant above
+ *     is `absoluteCeiling` plus whatever handful was already queued when the thread stopped
+ *     turning. Everything else goes: chat, log and folded refreshes included.
+ *
+ *     It is worth saying what does *not* hold it up, because it reads as if it should: the count
+ *     is **not** the connection's to choose rather than the server's. `HumlaService`
+ *     `onConnectionDisconnected` turns a `CONNECTION_ERROR` into `setReconnecting(true)`, which
+ *     posts `connect()` after the auto-reconnect delay, and each cycle raises [onConnecting] and
+ *     [onDisconnected] again. There is no attempt cap in the production path today - the session
+ *     state machine that adds one is tasks 6, 9 and 12 - so over a long enough disconnect loop the
+ *     server does choose the number. Confinement is what carries this, and it is the thing that
+ *     has to be rechecked when [handler] and the connection's own handler stop being one thread.
+ *
+ *     What that costs, plainly.
+ *     - **Chat.** A dropped [onMessageLogged] is lost for good: `MumlaService` accumulates chat
+ *       into an unbounded `mMessageLog` from this callback, so this queue is the only place one
+ *       can go missing, and the user sees a gap at the *old* end of the chat pane. Log lines are
+ *       lost here too, but this queue is not their only loss - `HumlaService.logInfo` already
+ *       discards every info line raised before synchronisation.
+ *     - **A folded refresh**, which is the one that can also be felt as a hang:
+ *       `ChannelDescriptionFragment` and `UserCommentFragment` register an observer that
+ *       unregisters itself on the single [onChannelStateUpdated]/[onUserStateUpdated] it is
+ *       waiting for.
+ *     - **An avatar.** [onUserConnected] is [Policy.Plain], so this ceiling may throw it away, and
+ *       with it the `requestAvatar` that `MumlaService` answers it with. The avatar stays blank
+ *       until some later `UserState` frame for that user arrives, which `MumlaService` answers
+ *       with a second `requestAvatar` - often, but not reliably.
+ *     The channel list itself is unaffected, because every observer of a dropped tree-shape event
+ *     rebuilds it from the model anyway.
  *
  *     None of that happens before the main thread has failed to drain
  *     `absoluteCeiling / MAX_EVENTS_PER_SLICE` consecutive slices - 128 of them at the production
@@ -164,7 +192,9 @@ class HumlaCallbacks @JvmOverloads constructor(
 
     /**
      * The ceiling that holds for the queue as a whole, above which the oldest event goes whatever
-     * its policy is - except [Policy.Lifecycle]. See this class's doc for what that costs and why
+     * its policy is - except [Policy.Lifecycle]. Stated exactly, the invariant is
+     * `queuedEvents <= max(absoluteCeiling, number of Policy.Lifecycle events enqueued)`; see this
+     * class's doc for why the second term stays small, what the ceiling costs, and why
      * [maxQueuedEvents] alone is not a bound at all.
      */
     val absoluteCeiling: Int =
@@ -186,10 +216,12 @@ class HumlaCallbacks @JvmOverloads constructor(
         data object Plain : Policy
 
         /**
-         * A connection-lifecycle event, which no ceiling may drop. The only such exemption, and it
-         * is what keeps [absoluteCeiling] bounded by something a server cannot inflate: these four
-         * are raised by the connection's own progress, not by the population of the server, and
-         * losing one cannot be made good by re-reading the model.
+         * A connection-lifecycle event, which no ceiling may drop. The only such exemption, and
+         * what keeps [absoluteCeiling] a bound despite it is **thread confinement**: all four are
+         * raised on [handler]'s own thread, so none can arrive while that thread is stuck, which
+         * is the only state in which the queue grows. Not "their number is the connection's to
+         * choose" - a reconnect loop raises two of them per attempt and nothing caps the attempts
+         * yet. See this class's doc.
          */
         data object Lifecycle : Policy
 
@@ -318,8 +350,19 @@ class HumlaCallbacks @JvmOverloads constructor(
     /**
      * Caller holds [lock]. Drops the oldest event [Policy.Lifecycle] does not exempt, and returns
      * false when the queue holds nothing else - at which point it is as short as this ceiling can
-     * make it. The scan is over the exempt events at the head only, and there are never many:
-     * [Policy.Lifecycle] is four events raised by the connection's own progress.
+     * make it.
+     *
+     * This scans the exempt prefix, under a lock the protocol thread shares with the audio thread,
+     * and with L lifecycle events at the head every raise costs O(L) - the same shape the
+     * [droppable] index exists to remove. What keeps L small is **not** that `Policy.Lifecycle` is
+     * four event *types*; four types say nothing about how many *instances* queue up. It is that
+     * all four are raised on [handler]'s own thread, so none can be added while that thread is
+     * stuck, which is the only state in which anything queues at all. Reachable prefixes are
+     * therefore whatever was in flight when the thread stopped turning.
+     *
+     * That reason is the one to recheck when [handler] stops being the thread the connection
+     * posts on. `findingTheOldestDroppableEventDoesNotScanTheQueue` does not cover this scan: it
+     * fills with `onLogInfo`, so this loop stops at element 0 in every iteration it measures.
      */
     private fun dropOldestUnlessLifecycle(): Boolean {
         val victim = queue.firstOrNull { it.policy !is Policy.Lifecycle } ?: return false

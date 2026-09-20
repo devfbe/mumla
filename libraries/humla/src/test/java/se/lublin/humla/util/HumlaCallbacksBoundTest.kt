@@ -318,7 +318,9 @@ class HumlaCallbacksBoundTest {
      * `#undroppable`**: twelve of the nineteen events are undroppable and two of them are bulk,
      * because `ModelHandler.messageUserState` raises `onUserConnected` *and* an `onLogInfo` per new
      * user. A 5 000-user server is therefore at least 10 000 events nothing may touch, and the
-     * count is the server's to choose.
+     * count is the server's to choose. The exact invariant the ceiling does give is
+     * `queuedEvents <= max(absoluteCeiling, number of lifecycle events enqueued)`, and
+     * [aConnectionLifecycleEventSurvivesTheCeilingThatSwallowsTheBulk] is the second term.
      */
     @Test
     fun undroppableEventsCannotPushTheQueuePastTheAbsoluteCeiling() {
@@ -353,11 +355,14 @@ class HumlaCallbacksBoundTest {
     }
 
     /**
-     * The one exemption, and why it is the only one: an absolute ceiling that may throw away
-     * `onConnected` would leave `MumlaActivity` (`:172`) on its connecting screen for good, and
-     * nothing in the model can be re-read to recover it. The four connection-lifecycle events are
-     * also the only undroppable ones whose count is the *connection's* to choose rather than the
-     * server's, so exempting them leaves the ceiling bounded by something no server can inflate.
+     * The one exemption, and why it is affordable: an absolute ceiling that may throw away
+     * `onConnected` would leave `MumlaActivity`'s observer on its connecting screen for good, and
+     * nothing in the model can be re-read to recover it. What keeps the ceiling a bound in spite
+     * of the exemption is that all four lifecycle events are raised on the delivery thread itself,
+     * so none can arrive while that thread is stuck - which is the only state in which this queue
+     * grows. It is *not* that their count is the connection's rather than the server's to choose:
+     * a reconnect loop raises `onConnecting` and `onDisconnected` per attempt and nothing caps the
+     * attempts yet. See `HumlaCallbacks`'s class doc.
      */
     @Test
     fun aConnectionLifecycleEventSurvivesTheCeilingThatSwallowsTheBulk() {
