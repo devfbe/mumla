@@ -146,7 +146,13 @@ class ZoomImageViewTest {
 
     // --- the three "there is nothing to fit yet" cases ------------------------------------------
 
-    /** A view that has not been measured has a width of 0. It must skip, not throw and not divide. */
+    /**
+     * A view that has not been measured has a width of 0. It must skip, not throw and not divide.
+     *
+     * And it must not *remember* the zoom either: a focus point means nothing without a frame to
+     * measure it in, so a zoom asked for at that moment would be stored around a centre of (0, 0)
+     * and land as a bogus offset at the first layout. What the first layout shows is the fit.
+     */
     @Test
     fun zoomingAnUnmeasuredViewIsIgnored() {
         val view = ZoomImageView(context)
@@ -155,10 +161,27 @@ class ZoomImageViewTest {
         view.zoomBy(2f, 0f, 0f)
         view.panBy(10f, 10f)
 
+        assertThat(view.state).isEqualTo(ZoomState())
         assertThat(view.imageMatrix.isIdentity).isTrue()
-        // The size arrives later; the pending zoom is not applied retroactively, the fit is.
         view.layout(0, 0, 400, 400)
-        assertThat(values(view)[Matrix.MSCALE_X]).isEqualTo(4f)
+        assertThat(values(view)[Matrix.MSCALE_X]).isEqualTo(2f)
+        assertThat(view.state).isEqualTo(ZoomState())
+    }
+
+    /** Same for an image that is not there yet: the zoom has nothing to be relative to. */
+    @Test
+    fun zoomingBeforeTheImageArrivesIsIgnored() {
+        val view = ZoomImageView(context)
+        view.layout(0, 0, 400, 400)
+
+        view.zoomBy(2f, 200f, 200f)
+        view.panBy(10f, 10f)
+
+        // asserted before the image arrives: setImageBitmap would reset the state anyway and hide
+        // the difference between "ignored" and "forgotten a moment later".
+        assertThat(view.state).isEqualTo(ZoomState())
+        view.setImageBitmap(Bitmap.createBitmap(200, 100, Bitmap.Config.ARGB_8888))
+        assertThat(values(view)[Matrix.MSCALE_X]).isEqualTo(2f)
     }
 
     /** A ColorDrawable reports an intrinsic size of -1. */

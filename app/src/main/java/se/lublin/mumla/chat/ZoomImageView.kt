@@ -122,20 +122,38 @@ class ZoomImageView @JvmOverloads constructor(
         applyState()
     }
 
+    /**
+     * Scales around ([focusX], [focusY]) in view coordinates. Ignored while there is nothing to be
+     * relative to: a focus point means nothing without a measured view, and a scale means nothing
+     * without an image, so remembering either would only land as a bogus offset at the first
+     * layout.
+     */
     fun zoomBy(factor: Float, focusX: Float, focusY: Float) {
+        if (!canFit()) return
         state = state.scaledBy(factor, focusX, focusY, width.toFloat(), height.toFloat())
         applyState()
     }
 
+    /** Moves the image by ([dx], [dy]) view pixels, within the bounds. Ignored as [zoomBy] is. */
     fun panBy(dx: Float, dy: Float) {
+        if (!canFit()) return
         state = state.pannedBy(dx, dy)
         applyState()
     }
 
+    /**
+     * Whether there is an image with a size, in a view with a size. One predicate for all three
+     * callers, so "not ready yet" cannot come to mean two different things in the same class.
+     */
+    private fun canFit(): Boolean {
+        val d = drawable ?: return false
+        if (width == 0 || height == 0) return false
+        return d.intrinsicWidth > 0 && d.intrinsicHeight > 0
+    }
+
     private fun applyState() {
-        val d = drawable ?: return
-        if (width == 0 || height == 0) return
-        if (d.intrinsicWidth <= 0 || d.intrinsicHeight <= 0) return
+        if (!canFit()) return
+        val d = checkNotNull(drawable)
         pendingRestore?.let {
             state = it
             pendingRestore = null
