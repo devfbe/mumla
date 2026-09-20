@@ -653,6 +653,20 @@ it.** The same author who spelled out "2^k inputs, not k mutations" in a test's 
 and satisfied it exactly for one compound condition, left the four-corner gap open on
 the predicate he had just opened up two files away. A rule is a grep, not a habit.
 
+**A measured number without the history that produced it is not reproducible, and the
+disagreement it settles may be settled for the wrong reason.** An implementer overruled a
+ruling of mine with "two switches with your condition, none without it". The reviewer set
+out to reproduce it, predicted he could not, and **the measurement refuted his prediction**
+— but only on a history one lost first ping-reply away from the one the ledger described.
+On the history as written, *both* conditions give zero, because the trim makes "a full
+window has accumulated" and "twenty seconds have passed" coincide at exactly the moment
+the timeout first comes due; the ruling would have been a no-op there. The implementer's
+case stands, and for a better reason than he gave: his condition is **robust against the
+offset between the first ping and the first sample**, which production does not control.
+So: **write the history next to the number.** A number that survives only on the history
+its author had in mind is a claim about that author, not about the code — and the right
+reason, found by the person who tried to refute it, is worth more than the number.
+
 **A mutation sweep inherits the blind spots of the fixture set.** It measures
 whether the tests can *see* a change; it cannot tell you that a branch's
 discriminating input never appears in any test at all. Fifty-six mutants, all
