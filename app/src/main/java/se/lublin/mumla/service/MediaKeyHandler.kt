@@ -16,8 +16,9 @@ class MediaKeyHandler(
     /**
      * @return true if the event was consumed. Every other event of a handled key -- the matching
      * UP, repeats, canceled events -- is consumed without acting; the action fires on an
-     * uncanceled ACTION_DOWN with repeatCount 0, of which the platform delivers exactly one per
-     * press.
+     * uncanceled ACTION_DOWN with repeatCount 0, of which the platform delivers at most one per
+     * press -- one for a press that stays short, and none at all for a long press, as the next
+     * paragraph explains.
      *
      * Acting on the DOWN rather than the UP is measured, not assumed. AOSP API 36's
      * MediaSessionService tracks HEADSETHOOK and MEDIA_PLAY_PAUSE itself (they are its "voice

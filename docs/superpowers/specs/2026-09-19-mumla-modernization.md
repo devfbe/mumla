@@ -555,10 +555,22 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   dispatch, so nothing canceled ever arrives. Acting on the UP therefore opened
   the microphone every time the user held the button to summon the assistant.
   `MediaKeyHandler` now fires on an uncanceled DOWN with `repeatCount == 0` and
-  swallows everything else. **Still open, hardware QA before release:** one press
+  swallows everything else. The price of that trade is that a **held** button does
+  nothing at all: once the press produces repeats, either `handleLongPressLocked`
+  or `cancelTrackingIfNeeded`'s `repeatCount > 1 && !mIsLongPressing` branch runs,
+  `needTracking` then returns `false`, and all that reaches the session is DOWN
+  repeats (`repeatCount >= 2`) and the final UP — every one of them swallowed. A
+  press held past the key-repeat threshold (~400 ms) therefore produces **zero**
+  toggles. That is the right trade, but it is a new route to the complaint this
+  feature exists to fix ("I pressed it and nobody heard me"), which is why task 5
+  has to name it in the UI. **Still open, hardware QA before release:** one press
   must produce exactly one toggle on a real Bluetooth headset (AVRCP) *and* on a
   wired one, cross-checked with `adb shell input keyevent 79` and `85` — adb alone
   is not enough, it goes through the input dispatcher rather than the AVRCP stack.
+  Confirm the held-button behaviour in the same pass: a long press must summon the
+  assistant (or do nothing) and must never open the microphone, and a press that
+  the user *means* as a toggle must be short enough to stay under the repeat
+  threshold.
   Watch for androidx/media #3083 while doing it (since Media3 1.9.2 a single press
   can arrive as two `KEYCODE_HEADSETHOOK` events; with toggle semantics that reads
   as "the button does nothing"). It is deliberately not debounced — a time window
@@ -571,7 +583,12 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   *hold* while `MumlaActivity` has focus, because the activity sees the key first,
   and a *toggle* with the screen off, because a headset button cannot be held.
   That is defensible but it must be said out loud where the user chooses the
-  action, not only in a stream ledger.
+  action, not only in a stream ledger. The same preference must also say **tap,
+  do not hold**: the handler acts on the first `ACTION_DOWN` with `repeatCount 0`,
+  so a button held past the key-repeat threshold produces no toggle at all (see
+  the `ACTION_DOWN` entry above). A user who holds the headset button the way they
+  hold the on-screen one gets silence and no feedback, which is exactly the
+  complaint that started this work.
 - **Apply the host policy per redirect hop (D, task 6).** `HttpImageFetcher` sets
   `instanceFollowRedirects = true` and follows same-scheme redirects to any host
   without re-entering the gate. A loopback/LAN block that sits only in the gate is
