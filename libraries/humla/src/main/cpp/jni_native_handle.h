@@ -38,8 +38,21 @@
  * bridge is a valid pointer to the wrong kind of cell -- a type-confused dereference that returns
  * plausible nonsense -- and an invented or uninitialised jlong is a segmentation fault with no
  * Java stack trace. The reachable ways to get there are a swapped argument in an adapter and a
- * field read before it is assigned; both are Kotlin-side mistakes that no native check can catch
- * without a lock or a side table on the audio path.
+ * field read before it is assigned, both Kotlin-side mistakes.
+ *
+ * Note what the reason for that is, because it is easy to write down the wrong one. It is NOT
+ * that a check would be incomplete. The complete check is already in this file: release()'s
+ * cells_.find(cell) compares pointer VALUES and never dereferences the handle, so it catches both
+ * the invented jlong and the other bridge's -- which is more than a marker word inside the cell
+ * could do, since reading a marker means dereferencing the very pointer in question. The reason
+ * get() does not do it is the mutex: get() runs on the audio thread, which must not block. Cost,
+ * not coverage. Anything that closed it here -- a lock, a lock-free side table, a generation
+ * counter read under one -- would be paid per frame.
+ *
+ * Which means the place where this contract can actually be enforced is Kotlin: one handle in one
+ * private field of one owner, with the adapter's own tests holding that down. Repeating the
+ * sentence in three files (here, RnnoiseNative.kt, WebRtcApmNative.kt) documents a rule that
+ * nothing checks; it is worth it only until the adapters exist.
  *
  * What this does NOT do either is make release() safe to call *concurrently* with a process()
  * call that is already inside the native object. Closing that would mean either a lock on the
@@ -74,6 +87,12 @@ class HandleTable {
         // Release, not relaxed: get() loads with acquire, and an acquire has nothing to
         // synchronise with unless the store that publishes the pointer is a release. On arm64
         // that is one STLR instead of one STR, off the audio path -- add() runs per session.
+        //
+        // Nothing in this repository can pin this line, and nothing here should claim to. The
+        // host tests run on x86_64, whose TSO model compiles a relaxed store and a release store
+        // to the same MOV, so weakening this to relaxed keeps every ctest green -- on the host,
+        // and only on the host. The argument for it is the memory model, not a measurement;
+        // a device test on arm64 with two threads would be the measurement.
         cell->object.store(object, std::memory_order_release);
         try {
             std::lock_guard<std::mutex> lock(mutex_);

@@ -52,6 +52,12 @@ interface SpeexPreprocessApi {
      * A -1 can also mean that libspeexdsp does not implement the request in this build: its AGC
      * controls (`SPEEX_PREPROCESS_SET_AGC`, `SPEEX_PREPROCESS_SET_AGC_TARGET`) are compiled out of
      * a fixed-point build, which is what this library is.
+     *
+     * The two are not distinguishable, and deliberately so. `speex_preprocess_ctl` answers -1 for
+     * a request it does not know, this returns its status unchanged, and there is no spare value
+     * left: a code invented here could collide with a future libspeexdsp return. [SpeexJitterApi]
+     * does not have the problem -- `jitter_buffer_ctl` answers -1 while the bridge refuses with
+     * `JITTER_BUFFER_BAD_ARGUMENT` (-2) -- so the two `ctl` entry points really do differ here.
      */
     fun ctlInt(state: Long, request: Int, value: IntArray): Int
     fun destroy(state: Long)
