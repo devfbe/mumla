@@ -55,7 +55,18 @@ class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
  * connect that has no timeout, or by the read loop when it ends on its own. It is also terminal -
  * no callback of this connection follows it, however far the read thread still has to unwind. That
  * is decided when a callback is delivered, not when it is queued, so it holds for one that was
- * already on its way when the disconnect happened.
+ * already on its way when the disconnect happened; and it is decided against that connection's own
+ * disconnect, so a disconnect still in flight cannot silence the connection after it.
+ *
+ * Before adding another state flag here, ask of it: which thread closes its window, and does
+ * anything fence that thread in? [running], [connected], [disconnectReported] and [inUse] are all
+ * opened and closed on the connect/read side, so [inUse] - released last, in the read loop's
+ * finally - keeps their windows inside one connection. A flag whose closing edge runs on the
+ * callback handler has no such fence: it outlives its connection and resetting it in [connect]
+ * does not help, because the previous connection's setter arrives afterwards. Make that state per
+ * connection instead, the way [epoch] is. Asking it per invariant rather than per symbol is what
+ * finds this, and a test only sees it if it crosses the connection boundary - which is why three
+ * flags in a row got here with a green suite.
  */
 class HumlaTCP @JvmOverloads constructor(
     private val socketFactory: HumlaSSLSocketFactory,
