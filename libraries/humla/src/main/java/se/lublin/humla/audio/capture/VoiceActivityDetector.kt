@@ -62,12 +62,65 @@ fun interface NanoClock {
  */
 class VoiceActivityDetector(
     config: VadConfig,
+    /**
+     * How long one frame is. Ten milliseconds, because [CapturePipeline] resamples to
+     * `AudioHandler.SAMPLE_RATE` and hands down `SAMPLE_RATE / 100` samples; it is a constructor
+     * parameter rather than a constant so that the settings screen's preview, which may run at a
+     * source rate the resampler was not built for, can say so instead of mis-scaling every time
+     * constant in [AdaptiveVadTracker].
+     *
+     * It sits in front of [clock] so that `VoiceActivityDetector(config) { nanos }` keeps binding
+     * its trailing lambda to the clock, which four test classes rely on.
+     */
+    private val frameMs: Float = DEFAULT_FRAME_MS,
     private val clock: NanoClock = NanoClock(System::nanoTime),
 ) {
     @Volatile
     var config: VadConfig = config
 
     private var talking = false
+
+    /**
+     * How many consecutive frames have been over the threshold. The transient guard: see
+     * [VadConfig.onsetFrames].
+     */
+    private var consecutive = 0
+
+    private val tracker = AdaptiveVadTracker(
+        initialFloorDbfs =
+            if (config.adaptiveFloor) AdaptiveVadTracker.DEFAULT_FLOOR_DBFS else config.manualFloorDbfs,
+    )
+
+    /**
+     * This frame's level in dBFS, for the level meter (spec B10). Written on every frame in every
+     * mode -- it is derived from [amplitudeScore], which the detector computes anyway, so it costs
+     * one subtraction and one multiplication rather than a second pass over the frame. That is also
+     * what makes it *one* reading of the frame's energy rather than two: the meter and the gate
+     * cannot drift apart because there is only one loop.
+     */
+    @Volatile
+    var lastLevelDbfs: Float = NO_SIGNAL_DBFS
+        private set
+
+    /** The tracked noise floor, for the meter's lower mark. */
+    val floorDbfs: Float get() = tracker.floorDbfs
+
+    /** The tracked speech peak, for the meter's upper mark. */
+    val speechDbfs: Float get() = tracker.speechDbfs
+
+    /** Where the gate opens, for the meter's threshold mark. */
+    val thresholdDbfs: Float get() = tracker.thresholdDbfs(config.snrFraction)
+
+    /** True while the talker and the room are too close together for the gate to do its job. */
+    val tooClose: Boolean get() = tracker.tooClose
+
+    /** The user's "measure again": forget both estimates and start from the assumed gap. */
+    fun recalibrate() {
+        val c = config
+        tracker.reset(
+            if (c.adaptiveFloor) AdaptiveVadTracker.DEFAULT_FLOOR_DBFS else c.manualFloorDbfs
+        )
+    }
 
     /**
      * When the hold expires, not when voice was last heard. Seeded from the clock so that the
@@ -86,15 +139,29 @@ class VoiceActivityDetector(
      */
     fun isVoice(pcm: ShortArray, length: Int, probability: Float?): Boolean {
         val c = config
-        val score = when (c.mode) {
-            VadMode.AMPLITUDE -> amplitudeScore(pcm, length)
-            VadMode.PROBABILITY -> probability ?: amplitudeScore(pcm, length)
+        val level = amplitudeScore(pcm, length)
+        val levelDbfs = scoreToDbfs(level)
+        lastLevelDbfs = levelDbfs
+        if (!c.adaptiveFloor) tracker.setFloor(c.manualFloorDbfs)
+        val detected = when (c.mode) {
+            VadMode.AMPLITUDE -> level >= (if (talking) c.stopThreshold else c.startThreshold)
+            VadMode.PROBABILITY ->
+                (probability ?: level) >= (if (talking) c.stopThreshold else c.startThreshold)
+            VadMode.ADAPTIVE -> {
+                val start = tracker.thresholdDbfs(c.snrFraction)
+                levelDbfs >= (if (talking) start - c.hysteresisDb else start)
+            }
         }
+        // The onset is demanded only while the gate is shut. Inside a word the hold is what carries
+        // the gate over a gap, and charging the onset again there would clip every second syllable.
+        consecutive = if (detected) consecutive + 1 else 0
+        val accepted = detected && (talking || consecutive >= c.onsetFrames)
         val now = clock.nanoTime()
-        val threshold = if (talking) c.stopThreshold else c.startThreshold
-        val detected = score >= threshold
-        if (detected) holdUntilNanos = now + c.holdTimeMs * 1_000_000L
-        talking = detected || now - holdUntilNanos < 0L
+        if (accepted) holdUntilNanos = now + c.holdTimeMs * 1_000_000L
+        talking = accepted || now - holdUntilNanos < 0L
+        // After the decision, never before it: the threshold this frame was judged against has to
+        // be the one the previous frames produced, or the estimator grades its own homework.
+        tracker.update(levelDbfs, talking, frameMs, learnFloor = c.adaptiveFloor)
         return talking
     }
 
@@ -144,5 +211,26 @@ class VoiceActivityDetector(
          * meter has to draw this value, and a negative infinity is not a pixel.
          */
         const val NO_SIGNAL = -1f
+
+        /**
+         * The same frame energy as [amplitudeScore], on the scale [VadMode.ADAPTIVE] and the level
+         * meter are written in. It is the legacy curve solved for the level rather than a second
+         * measurement, so the two can never disagree -- which matters because the settings screen
+         * shows both at once.
+         */
+        @JvmStatic
+        fun levelDbfs(pcm: ShortArray, length: Int): Float = scoreToDbfs(amplitudeScore(pcm, length))
+
+        private fun scoreToDbfs(score: Float): Float = (score - 1f) * 96f
+
+        /**
+         * What [levelDbfs] answers for a frame with no samples: [NO_SIGNAL] on the dBFS scale,
+         * i.e. -192. Finite, and below [AdaptiveVadTracker.MIN_FLOOR_DBFS], so it can neither be
+         * drawn as an infinity nor drag a floor estimate anywhere it is allowed to go.
+         */
+        const val NO_SIGNAL_DBFS = (NO_SIGNAL - 1f) * 96f
+
+        /** Ten milliseconds: `AudioHandler.FRAME_SIZE` samples at `AudioHandler.SAMPLE_RATE`. */
+        const val DEFAULT_FRAME_MS = 10f
     }
 }

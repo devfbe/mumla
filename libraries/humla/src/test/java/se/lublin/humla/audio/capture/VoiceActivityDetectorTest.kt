@@ -342,7 +342,7 @@ class VoiceActivityDetectorTest {
     @Test
     fun `every vad mode keeps its on-disk value`() {
         assertThat(VadMode.entries.associate { it.name to it.preferenceValue })
-            .containsExactly("AMPLITUDE", "amplitude", "PROBABILITY", "probability")
+            .containsExactly("AMPLITUDE", "amplitude", "PROBABILITY", "probability", "ADAPTIVE", "adaptive")
         assertThat(VadMode.entries.map { it.preferenceValue }).containsNoDuplicates()
         for (mode in VadMode.entries) {
             assertThat(VadMode.fromPreferenceValue(mode.preferenceValue)).isEqualTo(mode)
