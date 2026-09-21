@@ -214,6 +214,15 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         // while the connection is down, which is when they are most likely to look at it.
         menu.findItem(R.id.menu_bluetooth).isChecked = bluetoothToggle.isEnabled
 
+        // Echo cancellation, live: writing the preference reaches
+        // MumlaService.onSharedPreferenceChanged -> configureExtras, which reloads the
+        // audio subsystem when it is initialized. Same three values as the settings screen.
+        when (settings.getEchoCancellationMethod()) {
+            "system" -> menu.findItem(R.id.menu_echo_system)
+            "webrtc" -> menu.findItem(R.id.menu_echo_webrtc)
+            else -> menu.findItem(R.id.menu_echo_none)
+        }?.isChecked = true
+
         val muteItem = menu.findItem(R.id.menu_mute_button)
         val deafenItem = menu.findItem(R.id.menu_deafen_button)
 
@@ -292,6 +301,17 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         // Ahead of the connection guard: the headset is a preference, not a session operation,
         // and the moment it is worth switching on is the one where auto-reconnect is still
         // working -- where every branch below this would silently do nothing.
+        val echo = when (item.itemId) {
+            R.id.menu_echo_none -> "none"
+            R.id.menu_echo_system -> "system"
+            R.id.menu_echo_webrtc -> "webrtc"
+            else -> null
+        }
+        if (echo != null) {
+            settings.setEchoCancellationMethod(echo)
+            item.isChecked = true
+            return true
+        }
         if (item.itemId == R.id.menu_bluetooth) {
             when (bluetoothToggle.toggle()) {
                 BluetoothScoToggle.Result.Enabled -> item.isChecked = true

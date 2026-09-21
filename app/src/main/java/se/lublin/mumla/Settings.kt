@@ -150,6 +150,11 @@ class Settings private constructor(context: Context) {
     fun getEchoCancellationMethod(): String =
         preferences.getString(PREF_ECHO_CANCELLATION_METHOD, DEFAULT_ECHO_CANCELLATION_METHOD)!!
 
+    /** Written by the channel-list menu so the chain can be switched without a restart. */
+    fun setEchoCancellationMethod(method: String) {
+        preferences.edit().putString(PREF_ECHO_CANCELLATION_METHOD, method).apply()
+    }
+
     fun shouldStayAwake(): Boolean = preferences.getBoolean(PREF_STAY_AWAKE, DEFAULT_STAY_AWAKE)
 
     fun setDefaultCertificateId(defaultCertificateId: Long) {
