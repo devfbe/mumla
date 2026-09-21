@@ -61,11 +61,11 @@ class HumlaServiceTransmitResetTest {
         val frame = ShortArray(480)
 
         mode.setTalkingOn(true)
-        assertThat(mode.isTalkingOn).isTrue()
-        assertThat(mode.shouldTransmit(frame, frame.size)).isTrue()
+        assertThat(mode.isTalkingOn()).isTrue()
+        assertThat(mode.shouldTransmit(frame, frame.size, null)).isTrue()
 
         mode.setTalkingOn(false)
-        assertThat(mode.isTalkingOn).isFalse()
-        assertThat(mode.shouldTransmit(frame, frame.size)).isFalse()
+        assertThat(mode.isTalkingOn()).isFalse()
+        assertThat(mode.shouldTransmit(frame, frame.size, null)).isFalse()
     }
 }

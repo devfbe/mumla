@@ -340,6 +340,7 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_LOCAL_IGNORE_HISTORY to true,
             HumlaService.EXTRAS_ENABLE_PREPROCESSOR to false,
             HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD to false,
+            HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD to false,
         )
 
         assertThat(declaredExtraKeys()).containsExactlyElementsIn(reconnectNeeded.keys)
@@ -470,7 +471,7 @@ class HumlaServiceCharacterizationTest {
         service.setTalkingState(true)
 
         val mode = field(builder(service), "mInputMode") as ToggleInputMode
-        assertThat(mode.isTalkingOn).isTrue()
+        assertThat(mode.isTalkingOn()).isTrue()
         assertThat(service.isTalking()).isTrue()
     }
 
@@ -481,7 +482,8 @@ class HumlaServiceCharacterizationTest {
 
         service.configureExtras(Bundle().apply { putFloat(HumlaService.EXTRAS_DETECTION_THRESHOLD, 0.25f) })
 
-        assertThat(field(field(service, "mActivityInputMode")!!, "mVADThreshold")).isEqualTo(0.25f)
+        val mode = field(service, "mActivityInputMode") as ActivityInputMode
+        assertThat(mode.vadConfig.startThreshold).isEqualTo(0.25f)
     }
 
     /**

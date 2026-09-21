@@ -130,10 +130,7 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
             .setInputMode(params.inputMode)
             .setEncodeListener(encodeListener)
             .setTalkingListener(outputListener)
-            // Stream B hook (<= 4 lines): .setNoiseSuppression(config.noiseSuppression)
-            // .setEchoCancellation(config.echoCancellationMode)
-            // .setVadConfig(VadConfig(config.vadMode, config.vadStart, config.vadStop, config.vadHoldMs))
-            // .setAudioEffects(config.androidNoiseSuppressor, config.androidAgc)
+            .setNoiseSuppressionMethod(config.noiseSuppression)
 }
 
 /** Dresses an [AudioHandler] as a [ManagedAudio]; every member but the warning channel delegates. */

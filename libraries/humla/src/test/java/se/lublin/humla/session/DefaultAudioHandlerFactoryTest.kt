@@ -96,6 +96,7 @@ class DefaultAudioHandlerFactoryTest {
             preprocessorEnabled = true,
             legacyEchoCancellationMethod = "speex",
             bluetoothActive = true,
+            noiseSuppression = "rnnoise",
         )
 
         val builder = factory.builder(
@@ -116,6 +117,7 @@ class DefaultAudioHandlerFactoryTest {
             "mHalfDuplexEnabled" to true,
             "mPreprocessorEnabled" to true,
             "mEchoCancellationMethod" to "speex",
+            "mNoiseSuppressionMethod" to "rnnoise",
             "mInputMode" to inputMode,
             "mEncodeListener" to encodeListener,
             "mTalkingListener" to outputListener,
