@@ -100,6 +100,12 @@ android {
             all {
                 // See app/build.gradle: Robolectric needs jdk.internal.access opened on JDK 21.
                 jvmArgs '--add-opens=java.base/jdk.internal.access=ALL-UNNAMED'
+                // Gradle's default worker heap is 512m and Robolectric keeps the framework
+                // resources of every @Config(sdk = ...) it has loaded, so the cost grows with the
+                // suite rather than with the test that pays it -- and which class dies depends on
+                // execution order, so the red test names the wrong file (spec 4.05). The app
+                // module raised this at 226 tests; this one is past 645.
+                maxHeapSize = '1g'
             }
         }
     }

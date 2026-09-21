@@ -230,11 +230,4 @@ class SettingsAudioTest {
             }
         }
     }
-
-    @Test
-    fun `the level strip in the channel list is a preference and defaults to off`() {
-        assertThat(settings.isLevelStripShown()).isFalse()
-        settings.setLevelStripShown(true)
-        assertThat(settings.isLevelStripShown()).isTrue()
-    }
 }

@@ -154,7 +154,7 @@ class AudioTestSession(
             if (read < 0) break
             if (read == 0) continue
             val frame = pipe.process(buffer, read)
-            if (++count % readingIntervalFrames == 0) onReading(read())
+            if (++count % readingIntervalFrames == 0) onReading(currentReading())
             snk?.write(if (frame.transmit) frame.samples else silence, frame.length)
         }
         src.stop()
@@ -165,7 +165,7 @@ class AudioTestSession(
      * second measurement of the frame anywhere in this class: two readings of one quantity is how
      * a meter ends up showing a number the gate does not act on.
      */
-    private fun read(): MeterReading {
+    private fun currentReading(): MeterReading {
         val level = detector.lastLevelDbfs
         val voice = detector.isTalking
         return when (vadConfig.mode) {
@@ -235,7 +235,15 @@ class AudioTestSession(
     companion object {
         private const val TAG = "AudioTestSession"
         private const val THREAD_NAME = "mumla-audio-test"
-        private const val JOIN_TIMEOUT_MS = 2000L
+        /**
+         * **Half of `AudioInput`'s, because this join happens on the main thread.** `stop()` is
+         * called from `onPause` and from every settings change, and this project already has an
+         * ANR complaint against it. There is nothing for the capture thread to do but notice
+         * `running == false`, and `source.stop()` has already unblocked its read; if it has not
+         * returned within half a second the recorder is wedged and waiting longer will not free
+         * it. Same ruling as spec B8's join timeout, one level down: log and release anyway.
+         */
+        private const val JOIN_TIMEOUT_MS = 500L
 
         /** Five frames is 50 ms, i.e. 20 readings a second -- above what a bar can show anyway. */
         const val DEFAULT_READING_INTERVAL_FRAMES = 5

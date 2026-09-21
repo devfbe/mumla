@@ -231,13 +231,6 @@ class Settings private constructor(context: Context) {
         automaticGainControl = preferences.getBoolean(PREF_ANDROID_AGC, DEFAULT_ANDROID_AGC),
     )
 
-    /** Spec B10: the narrow live level strip over the channel list. Off by default; off is off. */
-    fun isLevelStripShown(): Boolean = preferences.getBoolean(PREF_LEVEL_STRIP, DEFAULT_LEVEL_STRIP)
-
-    fun setLevelStripShown(shown: Boolean) {
-        preferences.edit().putBoolean(PREF_LEVEL_STRIP, shown).apply()
-    }
-
     fun getEchoCancellationMethod(): String =
         preferences.getString(PREF_ECHO_CANCELLATION_METHOD, DEFAULT_ECHO_CANCELLATION_METHOD)!!
 
@@ -463,8 +456,6 @@ class Settings private constructor(context: Context) {
         const val PREF_ANDROID_AGC = "android_agc"
         const val DEFAULT_ANDROID_AGC = false
 
-        const val PREF_LEVEL_STRIP = "level_strip"
-        const val DEFAULT_LEVEL_STRIP = false
 
         /**
          * Still "none", and **blocked from moving** until the playback route is fixed.

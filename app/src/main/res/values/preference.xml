@@ -133,7 +133,6 @@
     <string name="inputLevelMeterTooClose">Your voice is barely above the room. Move closer to the phone or make it quieter.</string>
     <string name="audioLoopbackTest">Listen to myself</string>
     <string name="audioLoopbackTestSum">Plays your processed voice back while this is on. Use headphones — over the loudspeaker this will howl.</string>
-    <string name="levelStrip">Level bar</string>
     <string name="hidePtt">Hide push-to-talk button</string>
     <string name="hidePttSum">Only useful if you use Push-to-talk corner or physical key.</string>
     <string name="useTts">Text-to-speech</string>
