@@ -99,6 +99,60 @@
         <item>webrtc</item>
     </string-array>
 
+    <string-array name="noiseSuppressionNames">
+        <item>@string/noiseSuppressionNone</item>
+        <item>@string/noiseSuppressionLight</item>
+        <item>@string/noiseSuppressionStrong</item>
+    </string-array>
+
+    <!-- Must stay in lockstep with NoiseSuppressionMode.preferenceValue. -->
+    <string-array name="noiseSuppressionValues">
+        <item>none</item>
+        <item>speex</item>
+        <item>rnnoise</item>
+    </string-array>
+
+    <string-array name="speexNoiseSuppressNames">
+        <item>@string/speexNoiseSuppressLow</item>
+        <item>@string/speexNoiseSuppressMedium</item>
+        <item>@string/speexNoiseSuppressHigh</item>
+    </string-array>
+
+    <!-- Must stay in lockstep with SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB. -->
+    <string-array name="speexNoiseSuppressValues">
+        <item>-15</item>
+        <item>-25</item>
+        <item>-35</item>
+    </string-array>
+
+    <string-array name="vadModeNames">
+        <item>@string/vadModeAdaptive</item>
+        <item>@string/vadModeAmplitude</item>
+        <item>@string/vadModeProbability</item>
+    </string-array>
+
+    <!-- Must stay in lockstep with VadMode.preferenceValue. -->
+    <string-array name="vadModeValues">
+        <item>adaptive</item>
+        <item>amplitude</item>
+        <item>probability</item>
+    </string-array>
+
+    <string-array name="vadOnsetNames">
+        <item>@string/vadOnsetOff</item>
+        <item>@string/vadOnset2</item>
+        <item>@string/vadOnset3</item>
+        <item>@string/vadOnset4</item>
+    </string-array>
+
+    <!-- Frames of 10 ms; 1 is "open on the first frame", i.e. the behaviour before this version. -->
+    <string-array name="vadOnsetValues">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+    </string-array>
+
     <string-array name="mediaButtonActionNames">
         <item>@string/mediaButtonActionNone</item>
         <item>@string/mediaButtonActionAuto</item>

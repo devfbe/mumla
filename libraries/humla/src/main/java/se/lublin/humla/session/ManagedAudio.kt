@@ -131,6 +131,9 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
             .setEncodeListener(encodeListener)
             .setTalkingListener(outputListener)
             .setNoiseSuppressionMethod(config.noiseSuppression)
+            .setSpeexNoiseSuppressDb(config.speexNoiseSuppressDb)
+            .setAndroidNoiseSuppressor(config.androidNoiseSuppressor)
+            .setAndroidAutomaticGainControl(config.androidAgc)
 }
 
 /** Dresses an [AudioHandler] as a [ManagedAudio]; every member but the warning channel delegates. */

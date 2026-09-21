@@ -26,6 +26,7 @@ import android.os.AsyncTask;
 import java.util.ArrayList;
 
 import se.lublin.humla.HumlaService;
+import se.lublin.humla.audio.capture.VadConfigBundle;
 import se.lublin.humla.model.Server;
 import se.lublin.mumla.BuildConfig;
 import se.lublin.mumla.R;
@@ -65,7 +66,11 @@ public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
         connectIntent.putExtra(HumlaService.EXTRAS_SERVER, server);
         connectIntent.putExtra(HumlaService.EXTRAS_CLIENT_NAME, mContext.getString(R.string.app_name)+" "+ BuildConfig.VERSION_NAME);
         connectIntent.putExtra(HumlaService.EXTRAS_TRANSMIT_MODE, inputMethod);
-        connectIntent.putExtra(HumlaService.EXTRAS_DETECTION_THRESHOLD, mSettings.getDetectionThreshold());
+        // The whole voice-gate configuration, not just the legacy slider: EXTRAS_DETECTION_THRESHOLD
+        // cannot express a mode, a hold, an onset or a hand-set floor, and setThreshold is a no-op
+        // outside amplitude mode. Two sources for one setting would be one of them lying.
+        connectIntent.putExtra(HumlaService.EXTRAS_VAD_CONFIG,
+                VadConfigBundle.toBundle(mSettings.getVadConfig()));
         connectIntent.putExtra(HumlaService.EXTRAS_AMPLITUDE_BOOST, mSettings.getAmplitudeBoostMultiplier());
         connectIntent.putExtra(HumlaService.EXTRAS_AUTO_RECONNECT, mSettings.isAutoReconnectEnabled());
         connectIntent.putExtra(HumlaService.EXTRAS_AUTO_RECONNECT_DELAY, MumlaService.RECONNECT_DELAY);
@@ -84,6 +89,12 @@ public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
         connectIntent.putExtra(HumlaService.EXTRAS_HALF_DUPLEX, mSettings.isHalfDuplex());
         connectIntent.putExtra(HumlaService.EXTRAS_ENABLE_PREPROCESSOR, mSettings.isPreprocessorEnabled());
         connectIntent.putExtra(HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD, mSettings.getEchoCancellationMethod());
+        connectIntent.putExtra(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD, mSettings.getNoiseSuppressionMethod());
+        connectIntent.putExtra(HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB, mSettings.getSpeexNoiseSuppressDb());
+        connectIntent.putExtra(HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR,
+                mSettings.getAndroidAudioEffects().getNoiseSuppressor());
+        connectIntent.putExtra(HumlaService.EXTRAS_ANDROID_AGC,
+                mSettings.getAndroidAudioEffects().getAutomaticGainControl());
         if (server.isSaved()) {
             ArrayList<Integer> muteHistory = (ArrayList<Integer>) mDatabase.getLocalMutedUsers(server.getId());
             ArrayList<Integer> ignoreHistory = (ArrayList<Integer>) mDatabase.getLocalIgnoredUsers(server.getId());

@@ -341,6 +341,10 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_ENABLE_PREPROCESSOR to false,
             HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD to false,
             HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD to false,
+            HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB to false,
+            HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR to false,
+            HumlaService.EXTRAS_ANDROID_AGC to false,
+            HumlaService.EXTRAS_VAD_CONFIG to false,
         )
 
         assertThat(declaredExtraKeys()).containsExactlyElementsIn(reconnectNeeded.keys)

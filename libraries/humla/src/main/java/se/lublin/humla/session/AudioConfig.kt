@@ -51,6 +51,8 @@ data class AudioConfig(
     /** True while a Bluetooth SCO route is the active communication device. */
     val bluetoothActive: Boolean = false,
     val noiseSuppression: String = "none",
+    /** Spec B9: how deep the Speex denoiser may cut. One of the three supported steps. */
+    val speexNoiseSuppressDb: Int = -25,
     /** Spec 4 `EXTRAS_ECHO_CANCELLATION` value ("none"/"android"/"webrtc"); the one stream B reads. */
     val echoCancellationMode: String = "none",
     val vadMode: String = "amplitude",

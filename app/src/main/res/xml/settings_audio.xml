@@ -47,6 +47,56 @@
     <PreferenceCategory android:title="@string/voiceActivitySettings"
         android:key="vad_settings"
         app:iconSpaceReserved="false">
+        <ListPreference
+            android:key="vad_mode"
+            android:defaultValue="adaptive"
+            android:entries="@array/vadModeNames"
+            android:entryValues="@array/vadModeValues"
+            android:title="@string/vadMode"
+            android:summary="@string/vadModeSum"
+            app:iconSpaceReserved="false"/>
+
+        <!-- InputLevelMeterPreference does not exist until the second half of this task; lint's
+             MissingClass check is an error (abortOnError), so the entry lands with the class.
+        <se.lublin.mumla.preference.InputLevelMeterPreference
+            android:key="input_level_meter"
+            android:persistent="false"
+            android:title="@string/inputLevelMeter"
+            android:summary="@string/inputLevelMeterSum"
+            app:iconSpaceReserved="false"/>
+        -->
+
+        <!-- Adaptive mode: a fraction of the measured speech-to-floor gap, not a loudness. -->
+        <se.lublin.mumla.preference.SeekBarDialogPreference
+            app:multiplier="1"
+            android:defaultValue="65"
+            android:key="vad_sensitivity"
+            app:min="0"
+            app:max="100"
+            android:text="%"
+            android:summary="@string/vadSensitivitySum"
+            android:title="@string/vadSensitivity"
+            app:iconSpaceReserved="false"/>
+
+        <CheckBoxPreference
+            android:key="vad_adaptive_floor"
+            android:defaultValue="true"
+            android:title="@string/vadAdaptiveFloor"
+            android:summary="@string/vadAdaptiveFloorSum"
+            app:iconSpaceReserved="false"/>
+
+        <se.lublin.mumla.preference.SeekBarDialogPreference
+            app:multiplier="1"
+            android:defaultValue="45"
+            android:key="vad_floor_db"
+            app:min="20"
+            app:max="90"
+            android:text=" dB below full scale"
+            android:summary="@string/vadFloorSum"
+            android:title="@string/vadFloor"
+            app:iconSpaceReserved="false"/>
+
+        <!-- Classic mode: the legacy level slider, left on disk so switching back restores it. -->
         <!-- multiplier was previously 0.1, but never made sense, never worked -->
         <se.lublin.mumla.preference.SeekBarDialogPreference
             app:multiplier="1"
@@ -55,6 +105,48 @@
             app:max="100"
             android:summary="@string/detectionThresholdSum"
             android:title="@string/detectionThreshold"
+            app:iconSpaceReserved="false"/>
+
+        <!-- Speech-model mode. -->
+        <se.lublin.mumla.preference.SeekBarDialogPreference
+            app:multiplier="1"
+            android:defaultValue="60"
+            android:key="vad_start"
+            app:max="100"
+            android:text="%"
+            android:summary="@string/vadStartSum"
+            android:title="@string/vadStart"
+            app:iconSpaceReserved="false"/>
+
+        <se.lublin.mumla.preference.SeekBarDialogPreference
+            app:multiplier="1"
+            android:defaultValue="30"
+            android:key="vad_stop"
+            app:max="100"
+            android:text="%"
+            android:summary="@string/vadStopSum"
+            android:title="@string/vadStop"
+            app:iconSpaceReserved="false"/>
+
+        <!-- Every mode. -->
+        <ListPreference
+            android:key="vad_onset_frames"
+            android:defaultValue="2"
+            android:entries="@array/vadOnsetNames"
+            android:entryValues="@array/vadOnsetValues"
+            android:title="@string/vadOnset"
+            android:summary="@string/vadOnsetSum"
+            app:iconSpaceReserved="false"/>
+
+        <se.lublin.mumla.preference.SeekBarDialogPreference
+            app:multiplier="10"
+            android:defaultValue="250"
+            android:key="vad_hold_ms"
+            app:min="0"
+            app:max="200"
+            android:text=" ms"
+            android:summary="@string/vadHoldSum"
+            android:title="@string/vadHold"
             app:iconSpaceReserved="false"/>
     </PreferenceCategory>
 
@@ -134,11 +226,22 @@
             android:entryValues="@array/audio_per_packet_values"
             app:iconSpaceReserved="false"/>
 
-        <CheckBoxPreference
-            android:key="preprocessor_enabled"
-            android:title="@string/preprocessor_enabled"
-            android:summary="@string/preprocessor_enabled_sum"
-            android:defaultValue="true"
+        <ListPreference
+            android:key="noise_suppression_method"
+            android:defaultValue="rnnoise"
+            android:entries="@array/noiseSuppressionNames"
+            android:entryValues="@array/noiseSuppressionValues"
+            android:title="@string/noiseSuppression"
+            android:summary="@string/noiseSuppressionSum"
+            app:iconSpaceReserved="false"/>
+
+        <ListPreference
+            android:key="speex_noise_suppress_db"
+            android:defaultValue="-25"
+            android:entries="@array/speexNoiseSuppressNames"
+            android:entryValues="@array/speexNoiseSuppressValues"
+            android:title="@string/speexNoiseSuppress"
+            android:summary="@string/speexNoiseSuppressSum"
             app:iconSpaceReserved="false"/>
 
         <ListPreference
@@ -149,6 +252,20 @@
             android:summary="@string/echoCancellationMethodSum"
             android:title="@string/echoCancellationMethod"
             app:iconSpaceReserved="false" />
+
+        <CheckBoxPreference
+            android:key="android_noise_suppressor"
+            android:defaultValue="false"
+            android:title="@string/androidNoiseSuppressor"
+            android:summary="@string/androidNoiseSuppressorSum"
+            app:iconSpaceReserved="false"/>
+
+        <CheckBoxPreference
+            android:key="android_agc"
+            android:defaultValue="false"
+            android:title="@string/androidAgc"
+            android:summary="@string/androidAgcSum"
+            app:iconSpaceReserved="false"/>
 
         <CheckBoxPreference
             android:defaultValue="false"

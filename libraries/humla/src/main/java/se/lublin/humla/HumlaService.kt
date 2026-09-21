@@ -35,6 +35,7 @@ import org.minidns.dnsserverlookup.android21.AndroidUsingLinkProperties
 import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.BluetoothScoReceiver
 import se.lublin.humla.audio.encoder.CELT7Encoder
+import se.lublin.humla.audio.capture.VadConfigBundle
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.IInputMode
@@ -662,10 +663,26 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         if (extras.containsKey(EXTRAS_ECHO_CANCELLATION_METHOD)) {
             mAudioBuilder.setEchoCancellationMethod(extras.getString(EXTRAS_ECHO_CANCELLATION_METHOD))
         }
+        if (extras.containsKey(EXTRAS_SPEEX_NOISE_SUPPRESS_DB)) {
+            mAudioBuilder.setSpeexNoiseSuppressDb(extras.getInt(EXTRAS_SPEEX_NOISE_SUPPRESS_DB))
+        }
+        if (extras.containsKey(EXTRAS_ANDROID_NOISE_SUPPRESSOR)) {
+            mAudioBuilder.setAndroidNoiseSuppressor(extras.getBoolean(EXTRAS_ANDROID_NOISE_SUPPRESSOR))
+        }
+        if (extras.containsKey(EXTRAS_ANDROID_AGC)) {
+            mAudioBuilder.setAndroidAutomaticGainControl(extras.getBoolean(EXTRAS_ANDROID_AGC))
+        }
+        if (extras.containsKey(EXTRAS_VAD_CONFIG)) {
+            // The one object that outlives a rebuild, which is why this needs no rebuild at all.
+            mActivityInputMode.setVadConfig(
+                VadConfigBundle.fromBundle(extras.getBundle(EXTRAS_VAD_CONFIG) ?: Bundle())
+            )
+        }
 
-        // Reload audio subsystem if initialized
+        // Reload audio subsystem if initialized -- but only for a change that cannot reach the
+        // running objects. See LIVE_AUDIO_EXTRAS.
         val audioHandler = mAudioHandler
-        if (audioHandler != null && audioHandler.isInitialized) {
+        if (audioHandler != null && audioHandler.isInitialized && requiresAudioRebuild(extras.keySet())) {
             createAudioHandler()
             Log.i(TAG, "Audio subsystem reloaded after settings change.")
         }
@@ -1199,5 +1216,46 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         const val EXTRAS_ENABLE_PREPROCESSOR = "enable_preprocessor"
         const val EXTRAS_NOISE_SUPPRESSION_METHOD = "noise_suppression_method"
         const val EXTRAS_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
+
+        /**
+         * A [Bundle] carrying a whole [se.lublin.humla.audio.capture.VadConfig], see
+         * [se.lublin.humla.audio.capture.VadConfigBundle].
+         *
+         * One extra rather than one per slider, and it supersedes [EXTRAS_DETECTION_THRESHOLD] for
+         * any caller that knows about it: the threshold alone cannot express a mode, a hold, an
+         * onset or a hand-set floor, and `setThreshold` is deliberately a no-op outside
+         * [se.lublin.humla.audio.capture.VadMode.AMPLITUDE]. The older extra stays because it is
+         * public API of this library and because it still means exactly what it always meant.
+         */
+        const val EXTRAS_VAD_CONFIG = "vad_config"
+
+        /** One of `SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB` (spec B9). */
+        const val EXTRAS_SPEEX_NOISE_SUPPRESS_DB = "speex_noise_suppress_db"
+
+        /** `android.media.audiofx.NoiseSuppressor` on the recorder's session (spec B6). */
+        const val EXTRAS_ANDROID_NOISE_SUPPRESSOR = "android_noise_suppressor"
+
+        /** `android.media.audiofx.AutomaticGainControl` on the recorder's session (spec B6). */
+        const val EXTRAS_ANDROID_AGC = "android_agc"
+
+        /**
+         * The extras that reach the *running* audio objects, so a bundle containing only these
+         * must not rebuild the pipeline.
+         *
+         * Rebuilding costs a measured 110 ms with the microphone dead in the middle of it, and
+         * before this every extra paid it -- dragging the detection-threshold slider tore down and
+         * rebuilt the whole capture chain per step, to deliver a value that
+         * `ActivityInputMode.setThreshold` applies to a live object in nanoseconds.
+         */
+        @JvmField
+        val LIVE_AUDIO_EXTRAS: Set<String> = setOf(EXTRAS_DETECTION_THRESHOLD, EXTRAS_VAD_CONFIG)
+
+        /**
+         * @return true unless every key in [keys] is one of [LIVE_AUDIO_EXTRAS]. An **empty** set
+         *   answers false, which is the same answer `configureExtras` already gives it by never
+         *   being reached with an empty bundle.
+         */
+        @JvmStatic
+        fun requiresAudioRebuild(keys: Set<String>): Boolean = keys.any { it !in LIVE_AUDIO_EXTRAS }
     }
 }

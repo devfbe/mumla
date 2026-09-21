@@ -458,23 +458,18 @@ public class MumlaService extends HumlaService implements
      */
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        Bundle changedExtras = new Bundle();
+        // Everything that is an audio extra lives in one function, so that "is this switch on the
+        // settings screen connected to anything?" has an answer a test can read. What stays below
+        // is the cases whose effect is not an extra.
+        Bundle changedExtras = AudioPreferenceExtras.extrasFor(key, mSettings);
         boolean requiresReconnect = false;
         switch (key) {
             case Settings.PREF_INPUT_METHOD:
-                /* Convert input method defined in settings to an integer format used by Humla. */
-                int inputMethod = mSettings.getHumlaInputMethod();
-                changedExtras.putInt(HumlaService.EXTRAS_TRANSMIT_MODE, inputMethod);
-                mChannelOverlay.setPushToTalkShown(inputMethod == Constants.TRANSMIT_PUSH_TO_TALK);
+                mChannelOverlay.setPushToTalkShown(
+                        mSettings.getHumlaInputMethod() == Constants.TRANSMIT_PUSH_TO_TALK);
                 break;
             case Settings.PREF_HANDSET_MODE:
                 setProximitySensorOn(isConnectionEstablished() && mSettings.isHandsetMode());
-                changedExtras.putInt(HumlaService.EXTRAS_AUDIO_STREAM, mSettings.isHandsetMode() ?
-                                     AudioManager.STREAM_VOICE_CALL : AudioManager.STREAM_MUSIC);
-                break;
-            case Settings.PREF_THRESHOLD:
-                changedExtras.putFloat(HumlaService.EXTRAS_DETECTION_THRESHOLD,
-                        mSettings.getDetectionThreshold());
                 break;
             case Settings.PREF_HOT_CORNER_KEY:
                 mHotCorner.setGravity(mSettings.getHotCornerGravity());
@@ -491,36 +486,8 @@ public class MumlaService extends HumlaService implements
             case Settings.PREF_SHORT_TTS_MESSAGES:
                 mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled();
                 break;
-            case Settings.PREF_AMPLITUDE_BOOST:
-                changedExtras.putFloat(EXTRAS_AMPLITUDE_BOOST,
-                        mSettings.getAmplitudeBoostMultiplier());
-                break;
-            case Settings.PREF_HALF_DUPLEX:
-                changedExtras.putBoolean(EXTRAS_HALF_DUPLEX, mSettings.isHalfDuplex());
-                break;
-            case Settings.PREF_PREPROCESSOR_ENABLED:
-                changedExtras.putBoolean(EXTRAS_ENABLE_PREPROCESSOR,
-                        mSettings.isPreprocessorEnabled());
-                break;
-            case Settings.PREF_NOISE_SUPPRESSION_METHOD:
-                changedExtras.putString(EXTRAS_NOISE_SUPPRESSION_METHOD,
-                        mSettings.getNoiseSuppressionMethod());
-                break;
-            case Settings.PREF_ECHO_CANCELLATION_METHOD:
-                changedExtras.putString(EXTRAS_ECHO_CANCELLATION_METHOD,
-                        mSettings.getEchoCancellationMethod());
-                break;
             case Settings.PREF_PTT_SOUND:
                 mPTTSoundEnabled = mSettings.isPttSoundEnabled();
-                break;
-            case Settings.PREF_INPUT_QUALITY:
-                changedExtras.putInt(EXTRAS_INPUT_QUALITY, mSettings.getInputQuality());
-                break;
-            case Settings.PREF_INPUT_RATE:
-                changedExtras.putInt(EXTRAS_INPUT_RATE, mSettings.getInputSampleRate());
-                break;
-            case Settings.PREF_FRAMES_PER_PACKET:
-                changedExtras.putInt(EXTRAS_FRAMES_PER_PACKET, mSettings.getFramesPerPacket());
                 break;
             case Settings.PREF_BLUETOOTH_SCO:
                 if (isSynchronized()) {

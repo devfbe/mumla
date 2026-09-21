@@ -22,6 +22,13 @@ import android.content.SharedPreferences
 import android.view.Gravity
 import androidx.preference.PreferenceManager
 import se.lublin.humla.Constants
+import se.lublin.humla.audio.capture.AdaptiveVadTracker
+import se.lublin.humla.audio.capture.AndroidAudioEffects
+import se.lublin.humla.audio.capture.EchoCancellationMode
+import se.lublin.humla.audio.capture.NoiseSuppressionMode
+import se.lublin.humla.audio.capture.SpeexPreprocessor
+import se.lublin.humla.audio.capture.VadConfig
+import se.lublin.humla.audio.capture.VadMode
 
 /**
  * Settings class for universal access to the app's preferences.
@@ -151,12 +158,84 @@ class Settings private constructor(context: Context) {
         preferences.getString(PREF_NOISE_SUPPRESSION_METHOD,
             if (isPreprocessorEnabled()) "rnnoise" else "none")!!
 
-    /** Written by the channel-list menu so the chain can be switched without a restart. */
+    /**
+     * Written by the channel-list menu and by the audio settings screen, so the chain can be
+     * switched without a restart.
+     *
+     * **One key, deliberately.** The first version of this also wrote [PREF_PREPROCESSOR_ENABLED]
+     * to keep the legacy flag in step, and every key written is a `configureExtras` of its own:
+     * one tap rebuilt the whole audio chain twice, measured 93 ms apart, with the microphone dead
+     * in between. The legacy flag is only ever *read* now, by [getNoiseSuppressionMode], and only
+     * while the new key has never been written.
+     */
     fun setNoiseSuppressionMethod(method: String) {
-        preferences.edit()
-            .putString(PREF_NOISE_SUPPRESSION_METHOD, method)
-            .putBoolean(PREF_PREPROCESSOR_ENABLED, method != "none")
-            .apply()
+        preferences.edit().putString(PREF_NOISE_SUPPRESSION_METHOD, method).apply()
+    }
+
+    /**
+     * Spec B2/B3. The stored value wins; an installation that has never seen this key keeps what it
+     * has been running, which is what the legacy `preprocessor_enabled` checkbox decided.
+     */
+    fun getNoiseSuppressionMode(): NoiseSuppressionMode =
+        NoiseSuppressionMode.fromPreferenceValue(getNoiseSuppressionMethod())
+
+    /** Spec B9. Anything outside [SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB] is the default. */
+    fun getSpeexNoiseSuppressDb(): Int {
+        val stored = preferences.getString(PREF_SPEEX_NOISE_SUPPRESS_DB, null)?.toIntOrNull()
+        return if (stored != null && stored in SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB) stored
+        else DEFAULT_SPEEX_NOISE_SUPPRESS_DB
+    }
+
+    fun getEchoCancellationMode(): EchoCancellationMode =
+        EchoCancellationMode.fromPreferenceValue(getEchoCancellationMethod())
+
+    fun getVadMode(): VadMode = VadMode.fromPreferenceValue(preferences.getString(PREF_VAD_MODE, DEFAULT_VAD_MODE))
+
+    /**
+     * The whole voice-gate configuration as one value, so that a settings change reaches the
+     * running detector in one call instead of one call per slider.
+     *
+     * Every read is clamped here rather than at the detector: [VadConfig]'s constructor throws on a
+     * value out of range, and a preference file is user-writable in a debug build and survives a
+     * downgrade. A crash on startup because a slider holds 140 is not a better answer than 100.
+     */
+    fun getVadConfig(): VadConfig {
+        val holdMs = preferences.getInt(PREF_VAD_HOLD_MS, DEFAULT_VAD_HOLD_MS)
+            .coerceIn(0, MAX_VAD_HOLD_MS).toLong()
+        // A ListPreference, so the value on disk is a string even though it counts frames.
+        val onsetFrames = (preferences.getString(PREF_VAD_ONSET_FRAMES, null)?.toIntOrNull()
+            ?: DEFAULT_VAD_ONSET_FRAMES).coerceIn(1, MAX_VAD_ONSET_FRAMES)
+        return when (getVadMode()) {
+            VadMode.AMPLITUDE -> VadConfig.amplitude(getDetectionThreshold(), holdMs, onsetFrames)
+            VadMode.PROBABILITY -> {
+                val start = preferences.getInt(PREF_VAD_START, DEFAULT_VAD_START).coerceIn(0, 100) / 100f
+                val stop = (preferences.getInt(PREF_VAD_STOP, DEFAULT_VAD_STOP).coerceIn(0, 100) / 100f)
+                    .coerceAtMost(start)
+                VadConfig(VadMode.PROBABILITY, start, stop, holdMs, onsetFrames = onsetFrames)
+            }
+            VadMode.ADAPTIVE -> VadConfig.adaptive(
+                snrFraction = preferences.getInt(PREF_VAD_SENSITIVITY, DEFAULT_VAD_SENSITIVITY)
+                    .coerceIn(0, 100) / 100f,
+                holdTimeMs = holdMs,
+                onsetFrames = onsetFrames,
+                adaptiveFloor = preferences.getBoolean(PREF_VAD_ADAPTIVE_FLOOR, DEFAULT_VAD_ADAPTIVE_FLOOR),
+                manualFloorDbfs = (-preferences.getInt(PREF_VAD_FLOOR_DB, DEFAULT_VAD_FLOOR_DB).toFloat())
+                    .coerceIn(AdaptiveVadTracker.MIN_FLOOR_DBFS, AdaptiveVadTracker.MAX_FLOOR_DBFS),
+            )
+        }
+    }
+
+    /** Spec B6: the two `android.media.audiofx` effects attached to the recorder's session. */
+    fun getAndroidAudioEffects(): AndroidAudioEffects = AndroidAudioEffects(
+        noiseSuppressor = preferences.getBoolean(PREF_ANDROID_NOISE_SUPPRESSOR, DEFAULT_ANDROID_NOISE_SUPPRESSOR),
+        automaticGainControl = preferences.getBoolean(PREF_ANDROID_AGC, DEFAULT_ANDROID_AGC),
+    )
+
+    /** Spec B10: the narrow live level strip over the channel list. Off by default; off is off. */
+    fun isLevelStripShown(): Boolean = preferences.getBoolean(PREF_LEVEL_STRIP, DEFAULT_LEVEL_STRIP)
+
+    fun setLevelStripShown(shown: Boolean) {
+        preferences.edit().putBoolean(PREF_LEVEL_STRIP, shown).apply()
     }
 
     fun getEchoCancellationMethod(): String =
@@ -326,6 +405,66 @@ class Settings private constructor(context: Context) {
 
         const val PREF_NOISE_SUPPRESSION_METHOD = "noise_suppression_method"
         const val PREF_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
+
+        /** Stored as a string because it is a ListPreference; spec B9 allows -15/-25/-35. */
+        const val PREF_SPEEX_NOISE_SUPPRESS_DB = "speex_noise_suppress_db"
+        const val DEFAULT_SPEEX_NOISE_SUPPRESS_DB = -25
+
+        /**
+         * One of [VadMode.preferenceValue].
+         *
+         * **The default is the new mode, and that is a user-visible change rather than a silent
+         * one.** `VadConfig`'s KDoc refuses a default that takes a working slider away from someone
+         * who never saw the new key -- the objection is to a control that silently stops doing
+         * anything. Here the settings screen shows the mode, explains what the slider means in it,
+         * disables the controls the mode does not use, and leaves `vadThreshold` on disk, so
+         * switching back restores the old calibration exactly. What made the objection bite was
+         * *silence*, and the screen is the answer to it.
+         */
+        const val PREF_VAD_MODE = "vad_mode"
+        const val DEFAULT_VAD_MODE = "adaptive"
+
+        /** Percent; the fraction of the measured speech-to-floor gap a frame has to clear. */
+        const val PREF_VAD_SENSITIVITY = "vad_sensitivity"
+        const val DEFAULT_VAD_SENSITIVITY = 65
+
+        const val PREF_VAD_ADAPTIVE_FLOOR = "vad_adaptive_floor"
+        const val DEFAULT_VAD_ADAPTIVE_FLOOR = true
+
+        /** dB **below** full scale, so the slider can stay positive. 45 means -45 dBFS. */
+        const val PREF_VAD_FLOOR_DB = "vad_floor_db"
+        const val DEFAULT_VAD_FLOOR_DB = 45
+
+        /** Percent, [VadMode.PROBABILITY] only. */
+        const val PREF_VAD_START = "vad_start"
+        const val DEFAULT_VAD_START = 60
+        const val PREF_VAD_STOP = "vad_stop"
+        const val DEFAULT_VAD_STOP = 30
+
+        const val PREF_VAD_HOLD_MS = "vad_hold_ms"
+        const val DEFAULT_VAD_HOLD_MS = 250
+
+        /** Two seconds of hold is already longer than any pause inside a word. */
+        const val MAX_VAD_HOLD_MS = 2000
+
+        /**
+         * The transient guard, in 10 ms frames. Two by default here while the library keeps one,
+         * because a library default that changes every caller is the silent migration this project
+         * refuses; this is the user-facing default and the settings screen explains it.
+         */
+        const val PREF_VAD_ONSET_FRAMES = "vad_onset_frames"
+        const val DEFAULT_VAD_ONSET_FRAMES = 2
+
+        /** Five frames is 50 ms of a word's beginning, which is already audible as a clipped word. */
+        const val MAX_VAD_ONSET_FRAMES = 5
+
+        const val PREF_ANDROID_NOISE_SUPPRESSOR = "android_noise_suppressor"
+        const val DEFAULT_ANDROID_NOISE_SUPPRESSOR = false
+        const val PREF_ANDROID_AGC = "android_agc"
+        const val DEFAULT_ANDROID_AGC = false
+
+        const val PREF_LEVEL_STRIP = "level_strip"
+        const val DEFAULT_LEVEL_STRIP = false
 
         /**
          * Still "none", and **blocked from moving** until the playback route is fixed.

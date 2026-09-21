@@ -65,6 +65,9 @@ object CaptureWiring {
      *   [EchoCancellationMode.ANDROID] is the platform effect that `PcmCaptureSource` attaches to
      *   the recorder, and the two are alternatives of one setting, so they can never both be on.
      *   Cascading them would be worse than either.
+     * @param speexNoiseSuppressDb how deep the Speex denoiser may cut (spec B9). It sits in front
+     *   of [logger] so that `AudioHandler`'s Java call site reaches it through a generated
+     *   `@JvmOverloads` overload instead of having to pass a resampler lambda.
      * @param logger where a stage that could not be built is reported, in the user's chat log.
      */
     @JvmStatic
@@ -75,6 +78,7 @@ object CaptureWiring {
         amplitudeBoost: Float,
         noise: NoiseSuppressionMode,
         echo: EchoCancellationMode,
+        speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB,
         logger: HumlaLogger? = null,
         factory: CapturePreprocessorFactory? = null,
         newResampler: (Int, Int) -> Resampler = { from, to -> SpeexResampler(from, to) },
@@ -83,7 +87,7 @@ object CaptureWiring {
             Log.w(TAG, message)
             logger?.logWarning(message)
         }
-        val chain = (factory ?: CapturePreprocessorFactory(log = log)).create(noise, echo)
+        val chain = (factory ?: CapturePreprocessorFactory(log = log)).create(noise, echo, speexNoiseSuppressDb)
         // The fallback the whole factory exists for, read back rather than assumed: a missing .so
         // or a native allocation failure leaves NoopPreprocessor, capture keeps running, and the
         // user is told instead of wondering why the noise is still there.

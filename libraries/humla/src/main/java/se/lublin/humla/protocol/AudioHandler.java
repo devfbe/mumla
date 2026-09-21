@@ -34,6 +34,7 @@ import se.lublin.humla.audio.capture.CapturePipeline;
 import se.lublin.humla.audio.capture.CaptureWiring;
 import se.lublin.humla.audio.capture.EchoCancellationMode;
 import se.lublin.humla.audio.capture.NoiseSuppressionMode;
+import se.lublin.humla.audio.capture.SpeexPreprocessor;
 import se.lublin.humla.audio.encoder.CELT11Encoder;
 import se.lublin.humla.audio.encoder.CELT7Encoder;
 import se.lublin.humla.audio.encoder.IEncoder;
@@ -106,6 +107,9 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private boolean mHalfDuplex;
     private boolean mPreprocessorEnabled;
     private final String mNoiseSuppressionMethod;
+    private final int mSpeexNoiseSuppressDb;
+    /** Spec B6: the platform effects the user switched on, attached to the recorder's session. */
+    private final AndroidAudioEffects mAndroidAudioEffects;
     private String mEchoCancellationMethod;
     /** The last observed talking state. False if muted, or the input mode is not active. */
     private boolean mTalking;
@@ -118,7 +122,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
                         IInputMode inputMode, byte targetId, float amplitudeBoost,
                         boolean bluetoothEnabled, boolean halfDuplexEnabled,
                         boolean preprocessorEnabled, String echoCancellationMethod,
-                        String noiseSuppressionMethod,
+                        String noiseSuppressionMethod, int speexNoiseSuppressDb,
+                        AndroidAudioEffects androidAudioEffects,
                         AudioEncodeListener encodeListener,
                         AudioOutput.AudioOutputListener outputListener) throws AudioInitializationException, NativeAudioException {
         mContext = context;
@@ -133,6 +138,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         mHalfDuplex = halfDuplexEnabled;
         mPreprocessorEnabled = preprocessorEnabled;
         mNoiseSuppressionMethod = noiseSuppressionMethod;
+        mSpeexNoiseSuppressDb = speexNoiseSuppressDb;
+        mAndroidAudioEffects = androidAudioEffects != null ? androidAudioEffects : NO_ANDROID_EFFECTS;
         mEchoCancellationMethod = echoCancellationMethod;
         mEncodeListener = encodeListener;
         mOutputListener = outputListener;
@@ -157,7 +164,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         // the built-in speaker when handset mode is off, track on the communication stream), not
         // here. Settings.DEFAULT_ECHO_CANCELLATION_METHOD and EchoCancellationDefaultRouteTest
         // hold the default at "none" until it lands.
-        if (AudioSourcePolicy.needsCommunicationMode(NO_ANDROID_EFFECTS, echo)) {
+        if (AudioSourcePolicy.needsCommunicationMode(mAndroidAudioEffects, echo)) {
             mAudioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
             // Keep playback audible: in MODE_IN_COMMUNICATION the route follows the
             // communication device, which defaults to the earpiece. Select the built-in
@@ -178,13 +185,13 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
                 }
             }
         }
-        mAudioSource = AudioSourcePolicy.resolve(audioSource, NO_ANDROID_EFFECTS, echo);
+        mAudioSource = AudioSourcePolicy.resolve(audioSource, mAndroidAudioEffects, echo);
 
         if (mContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
             throw new AudioInitializationException("RECORD_AUDIO permission not granted");
         }
-        mInput = new AudioInput(this, mAudioSource, mSampleRate, mEchoCancellationMethod);
+        mInput = new AudioInput(this, mAudioSource, mSampleRate, mEchoCancellationMethod, mAndroidAudioEffects);
         // The existing `preprocessor_enabled` switch keeps its meaning -- "suppress noise" -- and
         // changes what does the suppressing: RNNoise instead of speex inside the encoder. The echo
         // setting picks between the platform canceller, which AudioInput attaches to the
@@ -200,7 +207,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
                 mNoiseSuppressionMethod != null
                         ? NoiseSuppressionMode.fromPreferenceValue(mNoiseSuppressionMethod)
                         : (mPreprocessorEnabled ? NoiseSuppressionMode.RNNOISE : NoiseSuppressionMode.NONE),
-                echo, mLogger);
+                echo, mSpeexNoiseSuppressDb, mLogger);
         mCapturePipeline = wiring.getPipeline();
         mOutput = new AudioOutput(mOutputListener, wiring.getFarEnd());
     }
@@ -601,6 +608,9 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         private boolean mHalfDuplexEnabled;
         private boolean mPreprocessorEnabled;
         private String mEchoCancellationMethod;
+        private int mSpeexNoiseSuppressDb = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB;
+        private boolean mAndroidNoiseSuppressor;
+        private boolean mAndroidAutomaticGainControl;
         private IInputMode mInputMode;
         private AudioEncodeListener mEncodeListener;
         private AudioOutput.AudioOutputListener mTalkingListener;
@@ -672,6 +682,21 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             return this;
         }
 
+        public Builder setSpeexNoiseSuppressDb(int speexNoiseSuppressDb) {
+            mSpeexNoiseSuppressDb = speexNoiseSuppressDb;
+            return this;
+        }
+
+        public Builder setAndroidNoiseSuppressor(boolean enabled) {
+            mAndroidNoiseSuppressor = enabled;
+            return this;
+        }
+
+        public Builder setAndroidAutomaticGainControl(boolean enabled) {
+            mAndroidAutomaticGainControl = enabled;
+            return this;
+        }
+
         public Builder setEncodeListener(AudioEncodeListener encodeListener) {
             mEncodeListener = encodeListener;
             return this;
@@ -696,7 +721,9 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
                     mInputSampleRate, mTargetBitrate, mTargetFramesPerPacket, mInputMode, targetId,
                     mAmplitudeBoost, mBluetoothEnabled, mHalfDuplexEnabled,
                     mPreprocessorEnabled, mEchoCancellationMethod,
-                    mNoiseSuppressionMethod, mEncodeListener, mTalkingListener);
+                    mNoiseSuppressionMethod, mSpeexNoiseSuppressDb,
+                    new AndroidAudioEffects(mAndroidNoiseSuppressor, mAndroidAutomaticGainControl),
+                    mEncodeListener, mTalkingListener);
             handler.initialize(self, maxBandwidth, codec);
             return handler;
         }

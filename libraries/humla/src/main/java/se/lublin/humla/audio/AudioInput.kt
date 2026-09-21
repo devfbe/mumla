@@ -22,6 +22,7 @@ import android.os.Process
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import se.lublin.humla.audio.capture.AndroidAudioRecordSource
+import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.CaptureRequest
 import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.capture.EchoCancellationMode
@@ -68,12 +69,14 @@ class AudioInput(
         audioSource: Int,
         targetSampleRate: Int,
         echoCancellationMethod: String,
+        effects: AndroidAudioEffects = AndroidAudioEffects(),
     ) : this(
         listener,
         AndroidAudioRecordSource.Factory().open(
             CaptureRequest(
                 audioSource = audioSource,
                 targetSampleRate = targetSampleRate,
+                effects = effects,
                 echo = EchoCancellationMode.fromPreferenceValue(echoCancellationMethod),
             ),
         ),
