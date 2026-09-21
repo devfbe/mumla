@@ -289,8 +289,11 @@ class AdaptiveVoiceGateTest {
         val d = detector(VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1))
         d.run(-10f, 500)
         d.recalibrate()
+        // The reset belongs to the capture thread, so it lands on the next frame, not on the call.
+        assertThat(d.thresholdDbfs).isNotWithin(0.01f).of(-32f)
+        d.run(-10f, 1)
         assertThat(d.floorDbfs).isEqualTo(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS)
-        assertThat(d.thresholdDbfs).isWithin(0.01f).of(-32f)
+        assertThat(d.speechDbfs).isWithin(0.01f).of(-10f)
     }
 
     /** The meter draws these; a mode with no tracker has to answer rather than throw. */

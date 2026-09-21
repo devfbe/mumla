@@ -78,7 +78,20 @@ class VoiceActivityDetector(
     @Volatile
     var config: VadConfig = config
 
+    /**
+     * `@Volatile` because the level meter reads it from the main thread while the capture thread
+     * writes it, and because a stale `false` there is a bar that says "not sending" while the
+     * microphone is sending -- which is exactly the question the meter exists to answer.
+     */
+    @Volatile
     private var talking = false
+
+    /** Whether the gate is currently open, for the level meter (spec B10). */
+    val isTalking: Boolean get() = talking
+
+    /** Set by [recalibrate] on any thread, acted on by the capture thread at the next frame. */
+    @Volatile
+    private var recalibrateRequested = false
 
     /**
      * How many consecutive frames have been over the threshold. The transient guard: see
@@ -114,12 +127,18 @@ class VoiceActivityDetector(
     /** True while the talker and the room are too close together for the gate to do its job. */
     val tooClose: Boolean get() = tracker.tooClose
 
-    /** The user's "measure again": forget both estimates and start from the assumed gap. */
+    /**
+     * The user's "measure again": forget both estimates and start from the assumed gap again.
+     *
+     * It **requests** the reset rather than performing it, because the tracker belongs to the
+     * capture thread and this is called from the main thread. Doing it here would be two threads
+     * writing one estimator, which is the race that has no deterministic observable and therefore
+     * no test -- so it is removed by construction instead of being commented about. The reset
+     * happens on the next frame; with a running microphone that is at most 10 ms away, and with a
+     * stopped one there is nothing to reset.
+     */
     fun recalibrate() {
-        val c = config
-        tracker.reset(
-            if (c.adaptiveFloor) AdaptiveVadTracker.DEFAULT_FLOOR_DBFS else c.manualFloorDbfs
-        )
+        recalibrateRequested = true
     }
 
     /**
@@ -139,6 +158,10 @@ class VoiceActivityDetector(
      */
     fun isVoice(pcm: ShortArray, length: Int, probability: Float?): Boolean {
         val c = config
+        if (recalibrateRequested) {
+            recalibrateRequested = false
+            tracker.reset(if (c.adaptiveFloor) AdaptiveVadTracker.DEFAULT_FLOOR_DBFS else c.manualFloorDbfs)
+        }
         val level = amplitudeScore(pcm, length)
         val levelDbfs = scoreToDbfs(level)
         lastLevelDbfs = levelDbfs

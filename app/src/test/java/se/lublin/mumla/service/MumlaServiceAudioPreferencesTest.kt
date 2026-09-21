@@ -172,6 +172,9 @@ class MumlaServiceAudioPreferencesTest {
     fun `every key on the audio settings screen is either wired or exempt with a reason`() {
         val exempt = mapOf(
             "vad_settings" to "a PreferenceCategory, not a setting",
+            "input_level_meter" to "not persisted: the settings screen's own live meter",
+            "audio_loopback_test" to "not persisted: the settings screen's own monitor switch",
+            "vad_recalibrate" to "not persisted: restarts the settings screen's own measurement",
             "ptt_settings" to "a PreferenceCategory, not a setting",
             "talkKey" to "read by the overlay and the PTT button, not by the audio chain",
             "hotCorner" to "read by MumlaService's hot corner, in its own case",

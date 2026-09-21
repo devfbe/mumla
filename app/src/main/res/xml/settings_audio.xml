@@ -56,15 +56,12 @@
             android:summary="@string/vadModeSum"
             app:iconSpaceReserved="false"/>
 
-        <!-- InputLevelMeterPreference does not exist until the second half of this task; lint's
-             MissingClass check is an error (abortOnError), so the entry lands with the class.
         <se.lublin.mumla.preference.InputLevelMeterPreference
             android:key="input_level_meter"
             android:persistent="false"
             android:title="@string/inputLevelMeter"
             android:summary="@string/inputLevelMeterSum"
             app:iconSpaceReserved="false"/>
-        -->
 
         <!-- Adaptive mode: a fraction of the measured speech-to-floor gap, not a loudness. -->
         <se.lublin.mumla.preference.SeekBarDialogPreference
@@ -136,6 +133,21 @@
             android:entryValues="@array/vadOnsetValues"
             android:title="@string/vadOnset"
             android:summary="@string/vadOnsetSum"
+            app:iconSpaceReserved="false"/>
+
+        <Preference
+            android:key="vad_recalibrate"
+            android:persistent="false"
+            android:title="@string/vadRecalibrate"
+            android:summary="@string/vadRecalibrateSum"
+            app:iconSpaceReserved="false"/>
+
+        <SwitchPreferenceCompat
+            android:key="audio_loopback_test"
+            android:persistent="false"
+            android:defaultValue="false"
+            android:title="@string/audioLoopbackTest"
+            android:summary="@string/audioLoopbackTestSum"
             app:iconSpaceReserved="false"/>
 
         <se.lublin.mumla.preference.SeekBarDialogPreference
