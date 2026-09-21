@@ -217,6 +217,12 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         // Echo cancellation, live: writing the preference reaches
         // MumlaService.onSharedPreferenceChanged -> configureExtras, which reloads the
         // audio subsystem when it is initialized. Same three values as the settings screen.
+        when (settings.getNoiseSuppressionMethod()) {
+            "speex" -> menu.findItem(R.id.menu_noise_speex)
+            "none" -> menu.findItem(R.id.menu_noise_none)
+            else -> menu.findItem(R.id.menu_noise_rnnoise)
+        }?.isChecked = true
+
         when (settings.getEchoCancellationMethod()) {
             "system" -> menu.findItem(R.id.menu_echo_system)
             "webrtc" -> menu.findItem(R.id.menu_echo_webrtc)
@@ -301,6 +307,17 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         // Ahead of the connection guard: the headset is a preference, not a session operation,
         // and the moment it is worth switching on is the one where auto-reconnect is still
         // working -- where every branch below this would silently do nothing.
+        val noise = when (item.itemId) {
+            R.id.menu_noise_none -> "none"
+            R.id.menu_noise_speex -> "speex"
+            R.id.menu_noise_rnnoise -> "rnnoise"
+            else -> null
+        }
+        if (noise != null) {
+            settings.setNoiseSuppressionMethod(noise)
+            item.isChecked = true
+            return true
+        }
         val echo = when (item.itemId) {
             R.id.menu_echo_none -> "none"
             R.id.menu_echo_system -> "system"

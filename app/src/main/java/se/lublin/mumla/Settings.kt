@@ -147,6 +147,18 @@ class Settings private constructor(context: Context) {
 
     fun isPreprocessorEnabled(): Boolean = preferences.getBoolean(PREF_PREPROCESSOR_ENABLED, DEFAULT_PREPROCESSOR_ENABLED)
 
+    fun getNoiseSuppressionMethod(): String =
+        preferences.getString(PREF_NOISE_SUPPRESSION_METHOD,
+            if (isPreprocessorEnabled()) "rnnoise" else "none")!!
+
+    /** Written by the channel-list menu so the chain can be switched without a restart. */
+    fun setNoiseSuppressionMethod(method: String) {
+        preferences.edit()
+            .putString(PREF_NOISE_SUPPRESSION_METHOD, method)
+            .putBoolean(PREF_PREPROCESSOR_ENABLED, method != "none")
+            .apply()
+    }
+
     fun getEchoCancellationMethod(): String =
         preferences.getString(PREF_ECHO_CANCELLATION_METHOD, DEFAULT_ECHO_CANCELLATION_METHOD)!!
 
@@ -312,6 +324,7 @@ class Settings private constructor(context: Context) {
         const val PREF_PREPROCESSOR_ENABLED = "preprocessor_enabled"
         const val DEFAULT_PREPROCESSOR_ENABLED = true
 
+        const val PREF_NOISE_SUPPRESSION_METHOD = "noise_suppression_method"
         const val PREF_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
 
         /**

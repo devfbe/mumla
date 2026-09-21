@@ -105,6 +105,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private boolean mBluetoothOn;
     private boolean mHalfDuplex;
     private boolean mPreprocessorEnabled;
+    private final String mNoiseSuppressionMethod;
     private String mEchoCancellationMethod;
     /** The last observed talking state. False if muted, or the input mode is not active. */
     private boolean mTalking;
@@ -117,6 +118,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
                         IInputMode inputMode, byte targetId, float amplitudeBoost,
                         boolean bluetoothEnabled, boolean halfDuplexEnabled,
                         boolean preprocessorEnabled, String echoCancellationMethod,
+                        String noiseSuppressionMethod,
                         AudioEncodeListener encodeListener,
                         AudioOutput.AudioOutputListener outputListener) throws AudioInitializationException, NativeAudioException {
         mContext = context;
@@ -130,6 +132,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         mBluetoothOn = bluetoothEnabled;
         mHalfDuplex = halfDuplexEnabled;
         mPreprocessorEnabled = preprocessorEnabled;
+        mNoiseSuppressionMethod = noiseSuppressionMethod;
         mEchoCancellationMethod = echoCancellationMethod;
         mEncodeListener = encodeListener;
         mOutputListener = outputListener;
@@ -194,7 +197,9 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         // -22.32 dB with the reference fed (task 2).
         CaptureWiring.Wiring wiring = CaptureWiring.wire(
                 mInput.getSampleRate(), mInputMode, mAmplitudeBoost,
-                mPreprocessorEnabled ? NoiseSuppressionMode.RNNOISE : NoiseSuppressionMode.NONE,
+                mNoiseSuppressionMethod != null
+                        ? NoiseSuppressionMode.fromPreferenceValue(mNoiseSuppressionMethod)
+                        : (mPreprocessorEnabled ? NoiseSuppressionMode.RNNOISE : NoiseSuppressionMode.NONE),
                 echo, mLogger);
         mCapturePipeline = wiring.getPipeline();
         mOutput = new AudioOutput(mOutputListener, wiring.getFarEnd());
@@ -650,6 +655,13 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             return this;
         }
 
+        private String mNoiseSuppressionMethod;
+
+        public Builder setNoiseSuppressionMethod(String method) {
+            mNoiseSuppressionMethod = method;
+            return this;
+        }
+
         public Builder setPreprocessorEnabled(boolean preprocessorEnabled) {
             mPreprocessorEnabled = preprocessorEnabled;
             return this;
@@ -683,7 +695,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             AudioHandler handler = new AudioHandler(mContext, mLogger, mAudioStream, mAudioSource,
                     mInputSampleRate, mTargetBitrate, mTargetFramesPerPacket, mInputMode, targetId,
                     mAmplitudeBoost, mBluetoothEnabled, mHalfDuplexEnabled,
-                    mPreprocessorEnabled, mEchoCancellationMethod, mEncodeListener, mTalkingListener);
+                    mPreprocessorEnabled, mEchoCancellationMethod,
+                    mNoiseSuppressionMethod, mEncodeListener, mTalkingListener);
             handler.initialize(self, maxBandwidth, codec);
             return handler;
         }

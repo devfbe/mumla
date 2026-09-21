@@ -58,6 +58,8 @@ public class AudioOutput implements Runnable, AudioOutputSpeech.TalkStateListene
     private final Object mInactiveLock = new Object(); // Lock that the audio thread waits on when there's no audio to play. Wake when we get a frame.
     private final Lock mPacketLock;
     private boolean mRunning = false;
+    private boolean mWoken = false; // set by every notify() on mInactiveLock
+
     private Handler mMainHandler;
     private AudioOutputListener mListener;
     private final IAudioMixer<float[], short[]> mMixer;
@@ -115,6 +117,7 @@ public class AudioOutput implements Runnable, AudioOutputSpeech.TalkStateListene
 
         mRunning = false;
         synchronized (mInactiveLock) {
+            mWoken = true;
             mInactiveLock.notify(); // Wake inactive lock if active
         }
         try {
@@ -167,11 +170,35 @@ public class AudioOutput implements Runnable, AudioOutputSpeech.TalkStateListene
                     mAudioTrack.pause();
 
                     try {
-                        mInactiveLock.wait();
+                        if (mFarEnd != null) {
+                            // AEC3 estimates the delay between what the speaker plays and what the
+                            // microphone hears, and it estimates it from a *continuous* reference.
+                            // Letting the stream stop here is what makes the first fragment of a
+                            // word leak through after a silence: the filter has to re-converge.
+                            // Silence at the real-time rate keeps that estimate alive, and costs
+                            // one wakeup per buffer (120 ms at 48 kHz) while nobody is speaking.
+                            // mWoken separates a real frame arriving from the timeout; without it
+                            // a timed wait cannot tell the two apart -- and it also closes a
+                            // pre-existing lost-notify hole, where a notify() landing before this
+                            // block was entered left the thread waiting forever.
+                            java.util.Arrays.fill(mix, (short) 0);
+                            final long tickMs = Math.max(1L, (mBufferSize * 1000L)
+                                    / AudioHandler.SAMPLE_RATE);
+                            mWoken = false;
+                            while (mRunning && !mWoken) {
+                                mInactiveLock.wait(tickMs);
+                                if (!mWoken) {
+                                    mFarEnd.push(mix, mBufferSize);
+                                }
+                            }
+                        } else {
+                            mInactiveLock.wait();
+                        }
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
 
+                    mWoken = false;
                     mAudioTrack.play();
                 }
                 Log.v(TAG, "Resuming thread.");
@@ -263,6 +290,7 @@ public class AudioOutput implements Runnable, AudioOutputSpeech.TalkStateListene
             aop.addFrameToBuffer(dataBuffer, msgFlags, seq);
 
             synchronized (mInactiveLock) {
+                mWoken = true;
                 mInactiveLock.notify();
             }
         }

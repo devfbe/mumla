@@ -656,6 +656,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         if (extras.containsKey(EXTRAS_ENABLE_PREPROCESSOR)) {
             mAudioBuilder.setPreprocessorEnabled(extras.getBoolean(EXTRAS_ENABLE_PREPROCESSOR))
         }
+        if (extras.containsKey(EXTRAS_NOISE_SUPPRESSION_METHOD)) {
+            mAudioBuilder.setNoiseSuppressionMethod(extras.getString(EXTRAS_NOISE_SUPPRESSION_METHOD))
+        }
         if (extras.containsKey(EXTRAS_ECHO_CANCELLATION_METHOD)) {
             mAudioBuilder.setEchoCancellationMethod(extras.getString(EXTRAS_ECHO_CANCELLATION_METHOD))
         }
@@ -1194,6 +1197,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         /** A list of users that should be local ignored upon connection. */
         const val EXTRAS_LOCAL_IGNORE_HISTORY = "local_ignore_history"
         const val EXTRAS_ENABLE_PREPROCESSOR = "enable_preprocessor"
+        const val EXTRAS_NOISE_SUPPRESSION_METHOD = "noise_suppression_method"
         const val EXTRAS_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
     }
 }
