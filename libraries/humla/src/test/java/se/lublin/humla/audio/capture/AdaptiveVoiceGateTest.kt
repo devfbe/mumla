@@ -136,14 +136,26 @@ class AdaptiveVoiceGateTest {
         }
     }
 
-    /** A gap inside a word must not pay the onset cost again; that is what the hold is for. */
+    /**
+     * A gap inside a word must not pay the onset cost again; that is what the hold is for.
+     *
+     * **The hold is also what made the first version of this test toothless, and a mutation said
+     * so.** With a 100 ms hold and three demanded frames, dropping the `talking ||` arm changed
+     * nothing any assertion could see: the gate stayed open through the gap on the hold alone, and
+     * by the time the hold could have expired the onset counter had caught up again. The two
+     * versions only differ where the hold runs out **before** `onsetFrames` consecutive frames have
+     * accumulated -- 20 ms of hold against four demanded frames. Same shape as spec 4.05's
+     * shadowed assertion, one level up: the fixture, not the assertion, was doing the covering.
+     */
     @Test
     fun `the onset is only demanded while the gate is shut`() {
-        val d = detector(VadConfig.adaptive(holdTimeMs = 100, onsetFrames = 3))
+        val d = detector(VadConfig.adaptive(holdTimeMs = 20, onsetFrames = 4))
         d.run(-60f, 20)
-        d.run(-20f, 3)
-        // One quiet frame inside the hold, then one loud one: open again immediately.
+        assertThat(d.run(-20f, 4).last()).isTrue()
+        // One quiet frame, carried by the hold, then one loud one: open again immediately, on the
+        // first frame rather than on the fourth, and past the point where the hold has expired.
         assertThat(d.run(-60f, 1)).containsExactly(true)
+        assertThat(d.run(-20f, 1)).containsExactly(true)
         assertThat(d.run(-20f, 1)).containsExactly(true)
     }
 
@@ -284,16 +296,54 @@ class AdaptiveVoiceGateTest {
         assertThat(d.thresholdDbfs - learnedFloor).isLessThan(learnedGap)
     }
 
+    /**
+     * **Both estimates have to have moved before the reset, and the first version of this test
+     * moved neither.** It drove the detector with a loud constant level, which transmits on every
+     * frame -- so the floor was never learned and stayed at its fresh value, and the speech peak
+     * jumped straight back to that level on the frame after the reset. Emptying `recalibrate()`
+     * left it green. A quiet run moves the floor; a loud burst moves the peak; then the reset has
+     * something to undo.
+     */
     @Test
     fun `recalibrating puts the estimates back to the fresh state`() {
         val d = detector(VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1))
-        d.run(-10f, 500)
+        d.run(-70f, 200)
+        d.run(-10f, 50)
+        assertThat(d.floorDbfs).isLessThan(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS - 5f)
+        assertThat(d.speechDbfs).isWithin(0.1f).of(-10f)
+
         d.recalibrate()
         // The reset belongs to the capture thread, so it lands on the next frame, not on the call.
-        assertThat(d.thresholdDbfs).isNotWithin(0.01f).of(-32f)
-        d.run(-10f, 1)
-        assertThat(d.floorDbfs).isEqualTo(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS)
-        assertThat(d.speechDbfs).isWithin(0.01f).of(-10f)
+        assertThat(d.floorDbfs).isLessThan(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS - 5f)
+        d.run(-70f, 1)
+        assertThat(d.floorDbfs).isWithin(0.3f).of(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS)
+        assertThat(d.speechDbfs - d.floorDbfs).isWithin(0.3f).of(AdaptiveVadTracker.DEFAULT_GAP_DB)
+    }
+
+    /**
+     * H1-16 and H1-17 of the sweep: switching from the tracked floor to a hand-set one **while the
+     * detector is running** is the case the manual-floor test could not reach, because it built the
+     * detector with the manual floor already set and then fed it levels loud enough to transmit --
+     * so neither `setFloor` nor `learnFloor` had anything to do.
+     */
+    @Test
+    fun `switching to a hand-set floor moves the floor that was learned`() {
+        val d = detector(VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1))
+        d.run(-70f, 200)
+        assertThat(d.floorDbfs).isLessThan(-50f)
+
+        d.config = VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1, adaptiveFloor = false, manualFloorDbfs = -40f)
+        d.run(-70f, 1)
+        assertThat(d.floorDbfs).isEqualTo(-40f)
+    }
+
+    @Test
+    fun `a hand-set floor is not learned away by a quiet room`() {
+        val d = detector(
+            VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1, adaptiveFloor = false, manualFloorDbfs = -40f)
+        )
+        d.run(-80f, 500)
+        assertThat(d.floorDbfs).isEqualTo(-40f)
     }
 
     /** The meter draws these; a mode with no tracker has to answer rather than throw. */
