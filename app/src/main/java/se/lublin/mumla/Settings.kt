@@ -154,6 +154,20 @@ class Settings private constructor(context: Context) {
 
     fun isPreprocessorEnabled(): Boolean = preferences.getBoolean(PREF_PREPROCESSOR_ENABLED, DEFAULT_PREPROCESSOR_ENABLED)
 
+    /**
+     * The stream playback belongs on. Handset mode means the earpiece, so it is a voice call.
+     * And any echo canceller puts the AudioManager into MODE_IN_COMMUNICATION, where the
+     * platform routes *and* the volume rocker follow the voice-call stream whatever
+     * setVolumeControlStream said -- a media-stream track then plays on a route nobody can
+     * adjust, which is what "I cannot turn Mumla up" reduces to. One rule, read from three
+     * places (ServerConnectTask, AudioPreferenceExtras, MumlaActivity) so they cannot drift.
+     */
+    fun getPlaybackStream(): Int =
+        if (isHandsetMode() || getEchoCancellationMethod() != "none")
+            android.media.AudioManager.STREAM_VOICE_CALL
+        else
+            android.media.AudioManager.STREAM_MUSIC
+
     fun getNoiseSuppressionMethod(): String =
         preferences.getString(PREF_NOISE_SUPPRESSION_METHOD,
             if (isPreprocessorEnabled()) "rnnoise" else "none")!!

@@ -85,7 +85,7 @@ object AudioPreferenceExtras {
                 extras.putInt(HumlaService.EXTRAS_TRANSMIT_MODE, settings.getHumlaInputMethod())
             Settings.PREF_HANDSET_MODE -> extras.putInt(
                 HumlaService.EXTRAS_AUDIO_STREAM,
-                if (settings.isHandsetMode()) AudioManager.STREAM_VOICE_CALL else AudioManager.STREAM_MUSIC,
+                settings.getPlaybackStream(),
             )
             Settings.PREF_AMPLITUDE_BOOST ->
                 extras.putFloat(HumlaService.EXTRAS_AMPLITUDE_BOOST, settings.getAmplitudeBoostMultiplier())
@@ -95,8 +95,13 @@ object AudioPreferenceExtras {
                 extras.putString(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD, settings.getNoiseSuppressionMethod())
             Settings.PREF_SPEEX_NOISE_SUPPRESS_DB ->
                 extras.putInt(HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB, settings.getSpeexNoiseSuppressDb())
-            Settings.PREF_ECHO_CANCELLATION_METHOD ->
+            Settings.PREF_ECHO_CANCELLATION_METHOD -> {
                 extras.putString(HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD, settings.getEchoCancellationMethod())
+                // The canceller decides the audio mode, and the mode decides which stream the
+                // platform routes and the volume rocker adjusts. Both go in one branch on
+                // purpose: two branches for one key in a `when` means the second is dead code.
+                extras.putInt(HumlaService.EXTRAS_AUDIO_STREAM, settings.getPlaybackStream())
+            }
             Settings.PREF_ANDROID_NOISE_SUPPRESSOR -> extras.putBoolean(
                 HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR,
                 settings.getAndroidAudioEffects().noiseSuppressor,

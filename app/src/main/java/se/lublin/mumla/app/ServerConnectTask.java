@@ -59,8 +59,7 @@ public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
 
         int audioSource = mSettings.isHandsetMode() ?
                 MediaRecorder.AudioSource.DEFAULT : MediaRecorder.AudioSource.MIC;
-        int audioStream = mSettings.isHandsetMode() ?
-                AudioManager.STREAM_VOICE_CALL : AudioManager.STREAM_MUSIC;
+        int audioStream = mSettings.getPlaybackStream();
 
         Intent connectIntent = new Intent(mContext, MumlaService.class);
         connectIntent.putExtra(HumlaService.EXTRAS_SERVER, server);
