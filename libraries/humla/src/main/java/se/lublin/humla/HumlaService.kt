@@ -187,7 +187,17 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     /** Test seam: builds the audio pipeline; stream B swaps in its own factory. */
     var audioFactory: AudioHandlerFactory = DefaultAudioHandlerFactory()
 
-    /** Test seam: null means "wrap the platform AudioManager in [onCreate]". */
+    /**
+     * The communication-device seam: null before `onCreate`, and from `onCreate` on **the** handle
+     * to the platform's routing API for this service life. A test sets it to a fake beforehand;
+     * [onCreate] fills it with an [AndroidCommunicationDevices] when nothing did.
+     *
+     * Kept reachable on purpose. [ScoRouter] asks it for one device type, but the seam itself is
+     * generic - `availableIdsOfType(type)` plus `select(id)` is the whole of what
+     * `AudioManager.getAvailableCommunicationDevices()`/`setCommunicationDevice()` offer - so a
+     * later "pick the output the way the phone app does" chooser docks here, beside the router,
+     * without re-plumbing onCreate. See contracts.md.
+     */
     var communicationDevices: CommunicationDevices? = null
 
     /**
@@ -320,13 +330,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // One instance for one service life, which is what makes AndroidCommunicationDevices report
         // a platform refusal once rather than on every route decision (task 8 contract). The
         // callback has no default so that this line cannot be left out in silence.
-        mScoRouter = ScoRouter(
-            communicationDevices ?: AndroidCommunicationDevices(
-                getSystemService(AUDIO_SERVICE) as AudioManager,
-                mHandler,
-            ) { logWarningOnce(getString(R.string.bluetooth_sco_denied)) },
-            mScoRouterListener,
-        )
+        val devices = communicationDevices ?: AndroidCommunicationDevices(
+            getSystemService(AUDIO_SERVICE) as AudioManager,
+            mHandler,
+        ) { logWarningOnce(getString(R.string.bluetooth_sco_denied)) }
+        communicationDevices = devices
+        mScoRouter = ScoRouter(devices, mScoRouterListener)
         mToggleInputMode = ToggleInputMode()
         mActivityInputMode = ActivityInputMode(0f) // FIXME: reasonable default
         mContinuousInputMode = ContinuousInputMode()
