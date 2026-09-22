@@ -40,6 +40,7 @@ import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ConnectionWarning
+import se.lublin.humla.session.AudioConfig
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.HumlaObserver
@@ -104,8 +105,8 @@ class HumlaServiceCharacterizationTest {
         throw AssertionError("no field $name on ${target.javaClass}")
     }
 
-    /** The builder the service configures. Every extra that touches audio lands in one of its fields. */
-    private fun builder(service: HumlaService): Any = field(service, "mAudioBuilder")!!
+    /** The input mode in force. Task A9b replaced `mAudioBuilder.mInputMode` with this field. */
+    private fun inputMode(service: HumlaService): Any = field(service, "mInputMode")!!
 
     /** Writes a private field by name. Used only to reach a state the public API cannot produce. */
     private fun setField(target: Any, name: String, value: Any?) {
@@ -389,12 +390,14 @@ class HumlaServiceCharacterizationTest {
     }
 
     /**
-     * Effect pass over the fifteen `AudioHandler.Builder` setters: four wired in `onCreate` and
-     * eleven driven by extras. The builder has no getters, so its fields are the only reader — and
-     * without this test every one of those lines is a one-line delegation nothing reads back.
+     * Effect pass over every extra that configures audio. Task A9b replaced the
+     * `AudioHandler.Builder` the service used to hold with an immutable [AudioConfig]; the setters
+     * this test used to read back by reflection are now `DefaultAudioHandlerFactory.builder`'s and
+     * are pinned there, so what is left here is the mapping this file owns - bundle key to config
+     * field, fourteen of them, plus the two that write into live objects instead.
      */
     @Test
-    fun everyAudioExtraLandsInTheAudioBuilder() {
+    fun everyAudioExtraLandsInTheAudioConfig() {
         val service = service()
         val extras = Bundle().apply {
             putFloat(HumlaService.EXTRAS_AMPLITUDE_BOOST, 1.5f)
@@ -405,30 +408,36 @@ class HumlaServiceCharacterizationTest {
             putInt(HumlaService.EXTRAS_FRAMES_PER_PACKET, 4)
             putBoolean(HumlaService.EXTRAS_ENABLE_PREPROCESSOR, true)
             putString(HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD, "speex")
-            putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_CONTINUOUS)
+            putString(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD, "rnnoise")
+            putInt(HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB, -40)
+            putBoolean(HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR, true)
+            putBoolean(HumlaService.EXTRAS_ANDROID_AGC, true)
+            putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK)
             putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true)
         }
 
         service.configureExtras(extras)
 
-        val b = builder(service)
-        // onCreate's four.
-        assertThat(field(b, "mContext")).isSameInstanceAs(service)
-        assertThat(field(b, "mLogger")).isSameInstanceAs(service)
-        assertThat(field(b, "mEncodeListener")).isNotNull()
-        assertThat(field(b, "mTalkingListener")).isNotNull()
-        // configureExtras's eleven.
-        assertThat(field(b, "mAmplitudeBoost")).isEqualTo(1.5f)
-        assertThat(field(b, "mInputSampleRate")).isEqualTo(48000)
-        assertThat(field(b, "mTargetBitrate")).isEqualTo(40000)
-        assertThat(field(b, "mAudioSource")).isEqualTo(7)
-        assertThat(field(b, "mAudioStream")).isEqualTo(3)
-        assertThat(field(b, "mTargetFramesPerPacket")).isEqualTo(4)
-        assertThat(field(b, "mPreprocessorEnabled")).isEqualTo(true)
-        assertThat(field(b, "mEchoCancellationMethod")).isEqualTo("speex")
-        assertThat(field(b, "mInputMode")).isSameInstanceAs(field(service, "mContinuousInputMode"))
-        // The fifteenth, mBluetoothEnabled, is written only by the SCO callbacks; see below.
-        assertThat(field(b, "mBluetoothEnabled")).isEqualTo(false)
+        assertThat(service.getAudioConfigForTest()).isEqualTo(
+            AudioConfig(
+                amplitudeBoost = 1.5f,
+                inputSampleRate = 48000,
+                targetBitrate = 40000,
+                audioSource = 7,
+                audioStream = 3,
+                targetFramesPerPacket = 4,
+                preprocessorEnabled = true,
+                legacyEchoCancellationMethod = "speex",
+                noiseSuppression = "rnnoise",
+                speexNoiseSuppressDb = -40,
+                androidNoiseSuppressor = true,
+                androidAgc = true,
+                transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+                halfDuplexRequested = true,
+            )
+        )
+        // The one field no extra writes: the SCO route decides it, not a setting.
+        assertThat(service.getAudioConfigForTest().bluetoothActive).isFalse()
     }
 
     /**
@@ -448,7 +457,7 @@ class HumlaServiceCharacterizationTest {
             service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, mode) })
 
             assertThat(service.getTransmitMode()).isEqualTo(mode)
-            assertThat(field(builder(service), "mInputMode")).isInstanceOf(type)
+            assertThat(inputMode(service)).isInstanceOf(type)
         }
     }
 
@@ -466,7 +475,7 @@ class HumlaServiceCharacterizationTest {
      * fresh one: the toggle the audio thread consults is the toggle a key press writes.
      */
     @Test
-    fun thePushToTalkModeHandedToTheBuilderIsTheOneIsTalkingReads() {
+    fun thePushToTalkModeHandedToTheAudioPipelineIsTheOneIsTalkingReads() {
         val service = service()
         service.configureExtras(
             Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK) }
@@ -474,7 +483,7 @@ class HumlaServiceCharacterizationTest {
 
         service.setTalkingState(true)
 
-        val mode = field(builder(service), "mInputMode") as ToggleInputMode
+        val mode = inputMode(service) as ToggleInputMode
         assertThat(mode.isTalkingOn()).isTrue()
         assertThat(service.isTalking()).isTrue()
     }
@@ -516,35 +525,12 @@ class HumlaServiceCharacterizationTest {
     }
 
     /**
-     * Half duplex reads `EXTRAS_TRANSMIT_MODE` out of **the same bundle**, not out of the mode the
-     * service is in. A settings write that carries only the half-duplex flag therefore always
-     * resolves to `false`, because a bundle without the key answers 0 (= voice activity).
-     *
-     * This is a pre-existing defect, not a decision. It is characterized here rather than fixed:
-     * task A9a is behaviour-preserving, and the repair is handed to A9b, which already owns the
-     * same finding for `AudioConfig.halfDuplex` (stream core contracts, task 7 block).
+     * **Repaired in task A9b; the test that pinned the defect is now
+     * `HumlaServiceAudioTest.halfDuplexOnlyAppliesToPushToTalk`.** Half duplex used to read
+     * `EXTRAS_TRANSMIT_MODE` out of **the same bundle**, which answers 0 - voice activity - when
+     * the bundle does not carry it, so a settings write that changed only the half-duplex flag
+     * always resolved to false. `AudioConfig.halfDuplex` reads the mode in force instead.
      */
-    @Test
-    fun halfDuplexReadsTheTransmitModeOfItsOwnBundleAndNotTheServiceState() {
-        val service = service()
-        service.configureExtras(
-            Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK) }
-        )
-
-        // In push-to-talk, but the bundle does not say so: resolves to false.
-        service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true) })
-        assertThat(field(builder(service), "mHalfDuplexEnabled")).isEqualTo(false)
-
-        // The same write, with the mode repeated in the bundle: resolves to true.
-        service.configureExtras(
-            Bundle().apply {
-                putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true)
-                putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK)
-            }
-        )
-        assertThat(field(builder(service), "mHalfDuplexEnabled")).isEqualTo(true)
-    }
-
     /** The brief's third characterization: a transmit mode change is visible without a reconnect. */
     @Test
     fun transmitModeExtraIsReflectedImmediately() {
@@ -763,28 +749,17 @@ class HumlaServiceCharacterizationTest {
     }
 
     /**
-     * Two things this pins that the guard above does not, and both are pre-existing defects that
-     * A9a carries over unchanged and hands to A9b:
+     * **Both defects this pinned are repaired in task A9b.**
      *
-     * 1. **The guard is `(targetId & ~0x1F) > 0`, not `!= 0`.** For a *negative* byte the masked
-     *    value is negative, so the comparison is false and the id passes — `0x80` is accepted as a
-     *    voice target although it is nowhere near five bits. `require(masked == 0)` would refuse
-     *    it, which is why the conversion must not "tidy" this line.
-     * 2. **`mAudioHandler.setVoiceTargetId` is dereferenced unconditionally.** Setting a voice
-     *    target while disconnected throws NullPointerException rather than doing nothing, so the
-     *    NPE below is the evidence that the id got *past* the guard — and a conversion that writes
-     *    `mAudioHandler?.setVoiceTargetId(...)` silently turns this crash into a no-op.
+     * 1. The guard was `(targetId & ~0x1F) > 0`, not `!= 0`: for a *negative* byte the masked
+     *    value is negative too, so `0x80` passed a check that says "at most 5 bits". It is `!= 0`
+     *    now, and `HumlaServiceAudioTest.aVoiceTargetIdThatDoesNotFitInFiveBitsIsRefused` walks
+     *    0x20, 0x80 and 0xFF through it.
+     * 2. `mAudioHandler` was dereferenced unconditionally, so setting a voice target while
+     *    disconnected threw NullPointerException. It goes to [se.lublin.humla.session.AudioController]
+     *    now, which posts and drops it when no pipeline is up -
+     *    `HumlaServiceAudioTest.aVoiceTargetSetWhileDisconnectedIsHarmless`.
      */
-    @Test
-    fun aNegativeVoiceTargetIdPassesTheFiveBitGuard() {
-        val service = service()
-
-        // Past the guard, into the unguarded audio handler: NPE, not IllegalArgumentException.
-        assertThrows(NullPointerException::class.java) { service.setVoiceTargetId(0x80.toByte()) }
-        // And a legal id takes exactly the same route.
-        assertThrows(NullPointerException::class.java) { service.setVoiceTargetId(0x1F) }
-    }
-
     /** Freeing a slot that was never taken is harmless, and whispering is off while disconnected. */
     @Test
     fun unregisteringAWhisperTargetThatWasNeverRegisteredIsHarmless() {
@@ -845,8 +820,7 @@ class HumlaServiceCharacterizationTest {
             Triple("removeChannel", npe) { service.removeChannel(1) },
             Triple("setMuteDeafState", npe) { service.setMuteDeafState(1, true, false) },
             Triple("setSelfMuteDeafState", npe) { service.setSelfMuteDeafState(true, false) },
-            // via getModelHandler()/getAudioHandler()/getBluetoothReceiver(): NotSynchronized, rewrapped.
-            Triple("getCurrentBandwidth", ise) { service.getCurrentBandwidth() },
+            // via getModelHandler()/getBluetoothReceiver(): NotSynchronized, rewrapped.
             Triple("getSessionUser", ise) { service.getSessionUser() },
             Triple("getSessionChannel", ise) { service.getSessionChannel() },
             Triple("getUser", ise) { service.getUser(1) },
@@ -895,5 +869,8 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.getWhisperTarget()).isNull()
         service.setTalkingState(true)
         assertThat(service.isTalking()).isTrue()
+        // Task A9b: the pipeline is asynchronous, so "connected" and "a pipeline is up" are no
+        // longer the same statement. This answers -1 where it used to throw IllegalStateException.
+        assertThat(service.getCurrentBandwidth()).isEqualTo(-1)
     }
 }

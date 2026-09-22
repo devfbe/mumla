@@ -27,6 +27,7 @@ import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadConfigBundle
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.inputmode.ActivityInputMode
+import se.lublin.humla.session.AudioConfig
 
 /**
  * The settings screen writes preferences; this is where they stop being preferences and become the
@@ -93,40 +94,37 @@ class HumlaServiceVadExtrasTest {
     }
 
     /**
-     * The 110 ms the rebuild costs, spent only when it buys something. Before this, dragging the
-     * detection-threshold slider tore the capture chain down and built it again per step, to
-     * deliver a value `setThreshold` writes into a live object.
+     * **The two `requiresAudioRebuild` tests that lived here are gone with the method (task A9b).**
+     * It answered by *key*: a bundle carrying only the detection threshold or the VAD config did
+     * not rebuild, anything else did - including a write that set a value the pipeline already had,
+     * which is 110 ms with the microphone dead for no change at all. `AudioController.reconfigure`
+     * now answers by *value*, which is strictly finer: the live extras never change [AudioConfig],
+     * so they still never rebuild, and a no-op write no longer does either.
+     *
+     * What replaced them, and why they are not in this file: the property is now about the running
+     * pipeline rather than about a pure function, so it needs a session -
+     * `HumlaServiceAudioTest.aLiveExtraDoesNotRebuildThePipeline` and
+     * `anExtraWrittenWithTheSameValueDoesNotRebuildThePipeline`.
      */
     @Test
-    fun `only the extras that cannot reach a live object rebuild the audio chain`() {
-        assertThat(HumlaService.requiresAudioRebuild(setOf(HumlaService.EXTRAS_DETECTION_THRESHOLD))).isFalse()
-        assertThat(HumlaService.requiresAudioRebuild(setOf(HumlaService.EXTRAS_VAD_CONFIG))).isFalse()
-        assertThat(
-            HumlaService.requiresAudioRebuild(
-                setOf(HumlaService.EXTRAS_DETECTION_THRESHOLD, HumlaService.EXTRAS_VAD_CONFIG)
-            )
-        ).isFalse()
+    fun `the detection threshold and the vad config are the two extras that reach a live object`() {
+        val service = service()
+        val before = inputMode(service).vadConfig
 
-        assertThat(HumlaService.requiresAudioRebuild(setOf(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD))).isTrue()
-        assertThat(HumlaService.requiresAudioRebuild(setOf(HumlaService.EXTRAS_ANDROID_AGC))).isTrue()
-        // One live key beside one that is not is still a rebuild: the answer is about the bundle.
-        assertThat(
-            HumlaService.requiresAudioRebuild(
-                setOf(HumlaService.EXTRAS_VAD_CONFIG, HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD)
-            )
-        ).isTrue()
-    }
+        service.configureExtras(Bundle().apply { putFloat(HumlaService.EXTRAS_DETECTION_THRESHOLD, 0.25f) })
+        assertThat(inputMode(service).vadConfig.startThreshold).isEqualTo(0.25f)
+        assertThat(service.getAudioConfigForTest()).isEqualTo(AudioConfig())
 
-    /**
-     * Pin the set (spec 4.04): every extra that is *not* in the live set must be one this service
-     * really cannot apply without a rebuild. A key added to the live set by mistake is a setting
-     * the user changes and nothing happens, which no other test here would see.
-     */
-    @Test
-    fun `the live extras are exactly the two that write into objects a rebuild keeps`() {
-        assertThat(HumlaService.LIVE_AUDIO_EXTRAS).containsExactly(
-            HumlaService.EXTRAS_DETECTION_THRESHOLD,
-            HumlaService.EXTRAS_VAD_CONFIG,
+        service.configureExtras(
+            Bundle().apply {
+                putBundle(
+                    HumlaService.EXTRAS_VAD_CONFIG,
+                    VadConfigBundle.toBundle(VadConfig.probability(0.8f, 0.2f, 120L)),
+                )
+            }
         )
+        assertThat(inputMode(service).vadConfig).isNotEqualTo(before)
+        // Neither key is carried by AudioConfig, which is what makes them free of a rebuild.
+        assertThat(service.getAudioConfigForTest()).isEqualTo(AudioConfig())
     }
 }

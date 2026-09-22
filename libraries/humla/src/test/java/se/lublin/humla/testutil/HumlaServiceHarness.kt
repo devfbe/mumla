@@ -56,6 +56,7 @@ class HumlaServiceHarness(
     server: Server? = Server(-1, "test", "127.0.0.1", 64738, "me", ""),
 ) {
     val transports = FakeTransports()
+    val audioFactory = FakeAudioFactory()
     val mainLooper: ShadowLooper = shadowOf(Looper.getMainLooper())
     val warnings = CopyOnWriteArrayList<String?>()
 
@@ -72,6 +73,7 @@ class HumlaServiceHarness(
             HumlaConnection(listener, transports, Handler(Looper.getMainLooper()))
         }
         service.reconnectPolicy = reconnectPolicy
+        service.audioFactory = audioFactory
         service.celtVersions = {
             // The native library is not on the JVM; see HumlaService.celtVersions.
             intArrayOf(0x8000000b.toInt()).also { celtAnnouncements += it }

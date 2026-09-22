@@ -61,6 +61,11 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.protocol.ModelHandler
+import se.lublin.humla.session.AudioConfig
+import se.lublin.humla.session.AudioController
+import se.lublin.humla.session.AudioHandlerFactory
+import se.lublin.humla.session.AudioSessionParams
+import se.lublin.humla.session.DefaultAudioHandlerFactory
 import se.lublin.humla.session.ReconnectPolicy
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.SessionStateMachine
@@ -86,7 +91,7 @@ import java.security.cert.X509Certificate
  *    which has cost this project four test scaffolds. It also keeps every existing caller, Java and
  *    Kotlin, compiling against the same call syntax.
  * 2. **Nullability is preserved, not repaired.** Where the Java dereferenced a field that can be
- *    null - `getConnection().getTCPLatency()`, `mAudioHandler.setVoiceTargetId(...)`, the `self` and
+ *    null - `getConnection().getTCPLatency()`, the `self` and
  *    `user` of a text message - this file writes `!!` and throws the same NullPointerException at
  *    the same point. Replacing those with `require`/`checkNotNull` or with `?.` changes an
  *    observable, and `everySessionCallThrowsItsOwnExceptionWhileDisconnected` is the test that
@@ -114,8 +119,17 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private var mTrustStoreFormat: String? = null
     private var mLocalMuteHistory: List<Int>? = null
     private var mLocalIgnoreHistory: List<Int>? = null
-    private lateinit var mAudioBuilder: AudioHandler.Builder
     private var mTransmitMode = 0
+
+    /** Current audio settings; rebuilt wholesale by [configureExtras] (spec section 4). */
+    private var mAudioConfig = AudioConfig()
+
+    /**
+     * The input mode in force. Held by identity rather than derived from [mTransmitMode] at every
+     * read, because the audio thread and `isTalking()` must see the *same object*: the toggle a key
+     * press writes is the toggle the capture loop consults.
+     */
+    private lateinit var mInputMode: IInputMode
 
     private var mVoiceTargetId: Byte = 0
     private lateinit var mWhisperTargetList: WhisperTargetList
@@ -134,8 +148,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     @Volatile
     private var mModelHandler: ModelHandler? = null
-    private var mAudioHandler: AudioHandler? = null
     private lateinit var mBluetoothReceiver: BluetoothScoReceiver
+
+    /** Owns the pipeline's lifecycle on its own thread; nothing here ever joins on main (spec A2). */
+    private lateinit var mAudioController: AudioController
 
     private lateinit var mActivityInputMode: ActivityInputMode
     private lateinit var mToggleInputMode: ToggleInputMode
@@ -156,6 +172,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /** Test seam: the backoff the session state machine uses (spec A3). Set before `onCreate`. */
     var reconnectPolicy: ReconnectPolicy = ReconnectPolicy()
+
+    /** Test seam: builds the audio pipeline; stream B swaps in its own factory. */
+    var audioFactory: AudioHandlerFactory = DefaultAudioHandlerFactory()
 
     /**
      * Test seam: the CELT 0.7 bitstream versions announced in `Authenticate`.
@@ -192,6 +211,16 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      */
     private val mReconnectRunnable = Runnable {
         if (mStateMachine.reconnectTimerFired()) startSession()
+    }
+
+    private val mAudioControllerListener = object : AudioController.Listener {
+        override fun onAudioStarted() = Unit
+
+        /** Spec A8: a pipeline that cannot start is a chat-log warning, not a silent failure. */
+        override fun onAudioFailed(message: String) = logWarning(message)
+
+        /** Spec A8: microphone silencing and decoder errors reach the chat log. */
+        override fun onAudioWarning(message: String) = logWarning(message)
     }
 
     private val mAudioInputListener: AudioHandler.AudioEncodeListener =
@@ -267,18 +296,20 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mHandler = Handler(mainLooper)
         mCallbacks = HumlaCallbacks()
         mStateMachine = SessionStateMachine(reconnectPolicy)
-        mAudioBuilder = AudioHandler.Builder()
-            .setContext(this)
-            .setLogger(this)
-            .setEncodeListener(mAudioInputListener)
-            .setTalkingListener(mAudioOutputListener)
         mConnectionState = ConnectionState.DISCONNECTED
         mBluetoothReceiver = BluetoothScoReceiver(this, this)
         registerReceiver(mBluetoothReceiver, IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED))
         mToggleInputMode = ToggleInputMode()
         mActivityInputMode = ActivityInputMode(0f) // FIXME: reasonable default
         mContinuousInputMode = ContinuousInputMode()
+        mInputMode = mActivityInputMode
         mWhisperTargetList = WhisperTargetList()
+        // Eagerly, and for the life of the service: one controller, one thread, quit in onDestroy.
+        // `{ audioFactory }` and not `audioFactory`, so a factory set after onCreate still takes.
+        mAudioController = AudioController(
+            this, this, { audioFactory }, mAudioInputListener, mAudioOutputListener,
+            mAudioControllerListener, mHandler,
+        )
 
         // initialize minidns dns lookup mechanisms
         AndroidUsingLinkProperties.setup(this)
@@ -304,6 +335,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // registration decides nothing but whether the state broadcast is heard.
         disconnect()
         unregisterConnectivityReceiver()
+        // Posts the teardown and then quits the looper; it does not wait for either (spec A2).
+        mAudioController.quit()
         try {
             unregisterReceiver(mBluetoothReceiver)
         } catch (e: IllegalArgumentException) {
@@ -441,7 +474,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // TODO hackish, but this seems to happen?!
         val modelHandler = mModelHandler
         if (modelHandler == null) {
-            Log.e(TAG, "onConnectionSynchronized: mAudioHandler is null")
+            Log.e(TAG, "onConnectionSynchronized: model handler is null")
             return
         }
 
@@ -454,25 +487,41 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // would leave a count behind that no release balances.
         if (!mWakeLock.isHeld) mWakeLock.acquire()
 
-        try {
-            val audioHandler = mAudioBuilder.initialize(
-                modelHandler.getUser(connection.getSession()),
-                connection.getMaxBandwidth(), connection.getCodec(),
-                mVoiceTargetId
+        startAudio(connection, modelHandler)
+
+        mCallbacks.onConnected()
+    }
+
+    /**
+     * Hands the session's inputs to the audio controller, which builds the pipeline on its own
+     * thread. Nothing is thrown at the caller any more: a pipeline that cannot start arrives as
+     * [AudioController.Listener.onAudioFailed] and becomes a chat-log warning (spec A8), where the
+     * Java original caught `AudioException` here and logged it from the main thread.
+     */
+    private fun startAudio(connection: HumlaConnection, modelHandler: ModelHandler) {
+        val params = try {
+            val self = modelHandler.getUser(connection.getSession())
+            if (self == null) {
+                // A ServerSync whose session id names no user. The Java original handed the null
+                // to the builder and died inside it; there is nothing to send voice as, so the
+                // session stays up without a microphone and says so.
+                Log.e(TAG, "No session user after ServerSync; audio not started")
+                logWarning(getString(R.string.no_session_user))
+                return
+            }
+            AudioSessionParams(
+                self = self,
+                maxBandwidth = connection.getMaxBandwidth(),
+                codec = connection.getCodec(),
+                targetId = mVoiceTargetId,
+                inputMode = mInputMode,
             )
-            mAudioHandler = audioHandler
-            connection.addTCPMessageHandlers(audioHandler)
-            connection.addUDPMessageHandlers(audioHandler)
-        } catch (e: AudioException) {
-            Log.w(TAG, "Could not initialize audio", e)
-            logWarning(e.message)
         } catch (e: NotSynchronizedException) {
             throw RuntimeException(
                 "Connection should be synchronized in callback for synchronization!", e
             )
         }
-
-        mCallbacks.onConnected()
+        mAudioController.start(mAudioConfig, params, connection)
     }
 
     override fun onConnectionHandshakeFailed(chain: Array<X509Certificate>) {
@@ -487,7 +536,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // mConnectionState is set below before mCallbacks.onDisconnected(e) fires, and both
         // isConnected() and HumlaSession() read that field, so the reset would be a no-op.
         // Clearing it here also signals the toggle's condition, which releases the input thread
-        // waiting in waitForInput() before mAudioHandler.shutdown() has to.
+        // waiting in waitForInput() before the pipeline's shutdown() has to.
         mToggleInputMode.setTalkingOn(false)
 
         if (e != null) {
@@ -500,10 +549,11 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             e.reason == HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
         val next = mStateMachine.lost(autoReconnect, e)
 
-        mAudioHandler?.shutdown()
+        // Asynchronous: the capture and playback threads are joined on humla-audio-control,
+        // never on the main thread (spec A2). This call is the one the ANR came from.
+        mAudioController.shutdown()
 
         mModelHandler = null
-        mAudioHandler = null
         mVoiceTargetId = 0
         mWhisperTargetList.clear()
 
@@ -603,39 +653,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /**
-     * Instantiates an audio handler with the current service settings, destroying any previous
-     * handler. Requires synchronization with the server, as the maximum bandwidth and session must
-     * be known.
-     */
-    @Throws(AudioException::class)
-    private fun createAudioHandler() {
-        if (BuildConfig.DEBUG && mConnectionState != ConnectionState.CONNECTED) {
-            throw AssertionError("Attempted to instantiate audio handler when not connected!")
-        }
-
-        val connection = mConnection!!
-        val audioHandler = mAudioHandler
-        if (audioHandler != null) {
-            connection.removeTCPMessageHandler(audioHandler)
-            connection.removeUDPMessageHandler(audioHandler)
-            audioHandler.shutdown()
-        }
-
-        try {
-            val created = mAudioBuilder.initialize(
-                mModelHandler!!.getUser(connection.getSession()),
-                connection.getMaxBandwidth(), connection.getCodec(),
-                mVoiceTargetId
-            )
-            mAudioHandler = created
-            connection.addTCPMessageHandlers(created)
-            connection.addUDPMessageHandlers(created)
-        } catch (e: NotSynchronizedException) {
-            throw RuntimeException("Attempted to create audio handler when not synchronized!")
-        }
-    }
-
-    /**
      * Loads all defined settings from the given bundle into the HumlaService.
      * Some settings may only take effect after a reconnect.
      * @param extras A bundle with settings.
@@ -645,6 +662,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     @Throws(AudioException::class)
     fun configureExtras(extras: Bundle): Boolean {
         var reconnectNeeded = false
+        var config = mAudioConfig
         if (extras.containsKey(EXTRAS_SERVER)) {
             @Suppress("DEPRECATION")
             mServer = extras.getParcelable(EXTRAS_SERVER)
@@ -668,23 +686,24 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             mActivityInputMode.setThreshold(extras.getFloat(EXTRAS_DETECTION_THRESHOLD))
         }
         if (extras.containsKey(EXTRAS_AMPLITUDE_BOOST)) {
-            mAudioBuilder.setAmplitudeBoost(extras.getFloat(EXTRAS_AMPLITUDE_BOOST))
+            config = config.copy(amplitudeBoost = extras.getFloat(EXTRAS_AMPLITUDE_BOOST))
         }
         if (extras.containsKey(EXTRAS_TRANSMIT_MODE)) {
             mTransmitMode = extras.getInt(EXTRAS_TRANSMIT_MODE)
-            val inputMode: IInputMode = when (mTransmitMode) {
+            mInputMode = when (mTransmitMode) {
                 Constants.TRANSMIT_PUSH_TO_TALK -> mToggleInputMode
                 Constants.TRANSMIT_CONTINUOUS -> mContinuousInputMode
                 Constants.TRANSMIT_VOICE_ACTIVITY -> mActivityInputMode
                 else -> throw IllegalArgumentException()
             }
-            mAudioBuilder.setInputMode(inputMode)
+            // Into the config as well, because AudioConfig.halfDuplex is derived from it.
+            config = config.copy(transmitMode = mTransmitMode)
         }
         if (extras.containsKey(EXTRAS_INPUT_RATE)) {
-            mAudioBuilder.setInputSampleRate(extras.getInt(EXTRAS_INPUT_RATE))
+            config = config.copy(inputSampleRate = extras.getInt(EXTRAS_INPUT_RATE))
         }
         if (extras.containsKey(EXTRAS_INPUT_QUALITY)) {
-            mAudioBuilder.setTargetBitrate(extras.getInt(EXTRAS_INPUT_QUALITY))
+            config = config.copy(targetBitrate = extras.getInt(EXTRAS_INPUT_QUALITY))
         }
         if (extras.containsKey(EXTRAS_USE_OPUS)) {
             mUseOpus = extras.getBoolean(EXTRAS_USE_OPUS)
@@ -712,13 +731,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             }
         }
         if (extras.containsKey(EXTRAS_AUDIO_SOURCE)) {
-            mAudioBuilder.setAudioSource(extras.getInt(EXTRAS_AUDIO_SOURCE))
+            config = config.copy(audioSource = extras.getInt(EXTRAS_AUDIO_SOURCE))
         }
         if (extras.containsKey(EXTRAS_AUDIO_STREAM)) {
-            mAudioBuilder.setAudioStream(extras.getInt(EXTRAS_AUDIO_STREAM))
+            config = config.copy(audioStream = extras.getInt(EXTRAS_AUDIO_STREAM))
         }
         if (extras.containsKey(EXTRAS_FRAMES_PER_PACKET)) {
-            mAudioBuilder.setTargetFramesPerPacket(extras.getInt(EXTRAS_FRAMES_PER_PACKET))
+            config = config.copy(targetFramesPerPacket = extras.getInt(EXTRAS_FRAMES_PER_PACKET))
         }
         if (extras.containsKey(EXTRAS_TRUST_STORE)) {
             mTrustStore = extras.getString(EXTRAS_TRUST_STORE)
@@ -733,10 +752,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             reconnectNeeded = true
         }
         if (extras.containsKey(EXTRAS_HALF_DUPLEX)) {
-            mAudioBuilder.setHalfDuplexEnabled(
-                extras.getInt(EXTRAS_TRANSMIT_MODE) == Constants.TRANSMIT_PUSH_TO_TALK &&
-                    extras.getBoolean(EXTRAS_HALF_DUPLEX)
-            )
+            // Stored as requested; AudioConfig.halfDuplex applies the push-to-talk rule against
+            // the mode in force, so a later EXTRAS_TRANSMIT_MODE change alone re-evaluates it
+            // (spec A7). The Java original read EXTRAS_TRANSMIT_MODE out of *this* bundle, which
+            // answers 0 - voice activity - when the bundle does not carry it, so a settings write
+            // that changed only half duplex always resolved to false.
+            config = config.copy(halfDuplexRequested = extras.getBoolean(EXTRAS_HALF_DUPLEX))
         }
         if (extras.containsKey(EXTRAS_LOCAL_MUTE_HISTORY)) {
             mLocalMuteHistory = extras.getIntegerArrayList(EXTRAS_LOCAL_MUTE_HISTORY)
@@ -747,22 +768,26 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             reconnectNeeded = true
         }
         if (extras.containsKey(EXTRAS_ENABLE_PREPROCESSOR)) {
-            mAudioBuilder.setPreprocessorEnabled(extras.getBoolean(EXTRAS_ENABLE_PREPROCESSOR))
+            config = config.copy(preprocessorEnabled = extras.getBoolean(EXTRAS_ENABLE_PREPROCESSOR))
         }
         if (extras.containsKey(EXTRAS_NOISE_SUPPRESSION_METHOD)) {
-            mAudioBuilder.setNoiseSuppressionMethod(extras.getString(EXTRAS_NOISE_SUPPRESSION_METHOD))
+            config = config.copy(
+                noiseSuppression = extras.getString(EXTRAS_NOISE_SUPPRESSION_METHOD) ?: "none"
+            )
         }
         if (extras.containsKey(EXTRAS_ECHO_CANCELLATION_METHOD)) {
-            mAudioBuilder.setEchoCancellationMethod(extras.getString(EXTRAS_ECHO_CANCELLATION_METHOD))
+            config = config.copy(
+                legacyEchoCancellationMethod = extras.getString(EXTRAS_ECHO_CANCELLATION_METHOD) ?: "none"
+            )
         }
         if (extras.containsKey(EXTRAS_SPEEX_NOISE_SUPPRESS_DB)) {
-            mAudioBuilder.setSpeexNoiseSuppressDb(extras.getInt(EXTRAS_SPEEX_NOISE_SUPPRESS_DB))
+            config = config.copy(speexNoiseSuppressDb = extras.getInt(EXTRAS_SPEEX_NOISE_SUPPRESS_DB))
         }
         if (extras.containsKey(EXTRAS_ANDROID_NOISE_SUPPRESSOR)) {
-            mAudioBuilder.setAndroidNoiseSuppressor(extras.getBoolean(EXTRAS_ANDROID_NOISE_SUPPRESSOR))
+            config = config.copy(androidNoiseSuppressor = extras.getBoolean(EXTRAS_ANDROID_NOISE_SUPPRESSOR))
         }
         if (extras.containsKey(EXTRAS_ANDROID_AGC)) {
-            mAudioBuilder.setAndroidAutomaticGainControl(extras.getBoolean(EXTRAS_ANDROID_AGC))
+            config = config.copy(androidAgc = extras.getBoolean(EXTRAS_ANDROID_AGC))
         }
         if (extras.containsKey(EXTRAS_VAD_CONFIG)) {
             // The one object that outlives a rebuild, which is why this needs no rebuild at all.
@@ -771,38 +796,33 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             )
         }
 
-        // Reload audio subsystem if initialized -- but only for a change that cannot reach the
-        // running objects. See LIVE_AUDIO_EXTRAS.
-        val audioHandler = mAudioHandler
-        if (audioHandler != null && audioHandler.isInitialized && requiresAudioRebuild(extras.keySet())) {
-            createAudioHandler()
-            Log.i(TAG, "Audio subsystem reloaded after settings change.")
-        }
+        mAudioConfig = config
+        // Unconditional, and that is the point (task 7 contract, spec 4.04). Both halves of the
+        // old `if` - "did anything change" and "is a pipeline up" - are decisions AudioController
+        // already makes, by value for the config and by identity for the input mode. A copy here
+        // could not kill a mutation, because the copy inside the controller masks it; and the SCO
+        // listener calls reconfigure unconditionally, so a check here would guard one of two call
+        // sites and not the other. This also replaces requiresAudioRebuild(), which answered by
+        // key: re-writing a setting the pipeline already had rebuilt it, i.e. 110 ms with the
+        // microphone dead, for a change that was not one.
+        mAudioController.reconfigure(mAudioConfig, mInputMode)
         return reconnectNeeded
     }
 
-    override fun onBluetoothScoConnected() {
-        // After an SCO connection is established, audio is rerouted to be compatible with SCO.
-        mAudioBuilder.setBluetoothEnabled(true)
-        if (mAudioHandler != null) {
-            try {
-                createAudioHandler()
-            } catch (e: AudioException) {
-                e.printStackTrace()
-            }
-        }
-    }
+    override fun onBluetoothScoConnected() = setScoRouteActive(true)
 
-    override fun onBluetoothScoDisconnected() {
-        // Restore audio settings after disconnection.
-        mAudioBuilder.setBluetoothEnabled(false)
-        if (mAudioHandler != null) {
-            try {
-                createAudioHandler()
-            } catch (e: AudioException) {
-                e.printStackTrace()
-            }
-        }
+    override fun onBluetoothScoDisconnected() = setScoRouteActive(false)
+
+    /**
+     * An SCO route came or went, so the pipeline has to be rebuilt for the other sample rate and
+     * stream. Unconditional: a route event that reports the state the pipeline already has is
+     * dropped by [AudioController.reconfigure], which compares by value, and a doubled event is
+     * otherwise an audible gap.
+     */
+    private fun setScoRouteActive(active: Boolean) {
+        mAudioConfig = mAudioConfig.copy(bluetoothActive = active)
+        // Posts to humla-audio-control; never joins on the main thread (spec A2).
+        mAudioController.reconfigure(mAudioConfig, mInputMode)
     }
 
     /**
@@ -812,20 +832,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * @return The active [HumlaConnection].
      */
     fun getConnection(): HumlaConnection? = mConnection
-
-    /**
-     * Returnes the current [AudioHandler]. An AudioHandler is instantiated upon connection
-     * to a server, and destroyed upon disconnection.
-     * @return the active AudioHandler, or null if there is no active connection.
-     */
-    @Throws(NotSynchronizedException::class)
-    private fun getAudioHandler(): AudioHandler? {
-        if (!isSynchronized()) throw NotSynchronizedException()
-        if (mAudioHandler == null && mConnectionState == ConnectionState.CONNECTED) {
-            throw RuntimeException("Audio handler should always be instantiated while connected!")
-        }
-        return mAudioHandler
-    }
 
     /**
      * Returns the current [ModelHandler], containing the channel tree. A model handler is
@@ -912,11 +918,16 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         throw IllegalStateException(e)
     }
 
-    override fun getCurrentBandwidth(): Int = try {
-        getAudioHandler()!!.currentBandwidth
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    /**
+     * The running pipeline's bandwidth in bps, or **-1** while none runs.
+     *
+     * The Java original threw IllegalStateException while disconnected, by way of a
+     * `getAudioHandler()` that demanded synchronization. The pipeline is now asynchronous: it
+     * exists a short moment after ServerSync and a short moment after the session ends, so
+     * "connected" and "a pipeline is up" are no longer the same statement and a caller that reads
+     * this on a timer would see the exception rather than the gap.
+     */
+    override fun getCurrentBandwidth(): Int = mAudioController.currentBandwidth
 
     override fun getServerVersion(): Int = try {
         getConnection()!!.getServerVersion()
@@ -1222,17 +1233,24 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override fun setVoiceTargetId(targetId: Byte) {
-        // `> 0`, not `!= 0`: for a negative byte the masked value is negative and the guard does
-        // not fire, so 0x80 is accepted. Pre-existing; pinned by
-        // aNegativeVoiceTargetIdPassesTheFiveBitGuard and handed to A9b rather than repaired here.
-        if ((targetId.toInt() and 0x1F.inv()) > 0) {
+        // `!= 0`, where the Java original wrote `> 0`: for a *negative* byte the masked value is
+        // negative too, so 0x80 passed a guard that says "at most 5 bits" and became a whisper
+        // target id nothing had registered. A9a pinned the defect; this is the repair.
+        if ((targetId.toInt() and 0x1F.inv()) != 0) {
             throw IllegalArgumentException("Target ID must be at most 5 bits.")
         }
         mVoiceTargetId = targetId
-        // Unconditional, as it was: setting a voice target while disconnected throws.
-        mAudioHandler!!.setVoiceTargetId(targetId)
+        // Reaches the running pipeline and the session behind it, so the next rebuild starts out
+        // targeting it. Setting one while disconnected was a NullPointerException before.
+        mAudioController.setVoiceTargetId(targetId)
         mCallbacks.onVoiceTargetChanged(VoiceTargetMode.fromId(targetId))
     }
+
+    /**
+     * Test seam: the settings the next pipeline would be built with. Public rather than `internal`,
+     * because the app module's tests cannot see Kotlin's `internal` across a module boundary.
+     */
+    fun getAudioConfigForTest(): AudioConfig = mAudioConfig
 
     override fun getVoiceTargetId(): Byte = mVoiceTargetId
 
@@ -1353,24 +1371,5 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         /** `android.media.audiofx.AutomaticGainControl` on the recorder's session (spec B6). */
         const val EXTRAS_ANDROID_AGC = "android_agc"
 
-        /**
-         * The extras that reach the *running* audio objects, so a bundle containing only these
-         * must not rebuild the pipeline.
-         *
-         * Rebuilding costs a measured 110 ms with the microphone dead in the middle of it, and
-         * before this every extra paid it -- dragging the detection-threshold slider tore down and
-         * rebuilt the whole capture chain per step, to deliver a value that
-         * `ActivityInputMode.setThreshold` applies to a live object in nanoseconds.
-         */
-        @JvmField
-        val LIVE_AUDIO_EXTRAS: Set<String> = setOf(EXTRAS_DETECTION_THRESHOLD, EXTRAS_VAD_CONFIG)
-
-        /**
-         * @return true unless every key in [keys] is one of [LIVE_AUDIO_EXTRAS]. An **empty** set
-         *   answers false, which is the same answer `configureExtras` already gives it by never
-         *   being reached with an empty bundle.
-         */
-        @JvmStatic
-        fun requiresAudioRebuild(keys: Set<String>): Boolean = keys.any { it !in LIVE_AUDIO_EXTRAS }
     }
 }
