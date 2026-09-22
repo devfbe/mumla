@@ -31,6 +31,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import kotlinx.coroutines.flow.StateFlow
 import org.minidns.dnsserverlookup.android21.AndroidUsingLinkProperties
 import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.BluetoothScoReceiver
@@ -60,6 +61,9 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.protocol.ModelHandler
+import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.session.SessionState
+import se.lublin.humla.session.SessionStateMachine
 import se.lublin.humla.util.HumlaCallbacks
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.HumlaException
@@ -98,7 +102,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     // Service settings
     private var mServer: Server? = null
     private var mAutoReconnect = false
-    private var mAutoReconnectDelay = 0
     private var mCertificate: ByteArray? = null
     private var mCertificatePassword: String? = null
     private var mUseOpus = false
@@ -138,31 +141,57 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private lateinit var mToggleInputMode: ToggleInputMode
     private lateinit var mContinuousInputMode: ContinuousInputMode
 
-    private var mReconnecting = false
+    /**
+     * The session lifecycle (spec A3). Confined to the main thread, which is the one thread every
+     * mutator here runs on: `connect`/`disconnect`/`cancelReconnect` arrive through the binder,
+     * the connection's own callbacks are posted to the main looper by [HumlaConnection], and the
+     * reconnect timer and the connectivity receiver both run on [mHandler]. Any other thread that
+     * wants the state collects [getSessionState] instead (task 1 contract).
+     */
+    private lateinit var mStateMachine: SessionStateMachine
+
+    /** Test seam: builds the connection used by [connect]. Set before `onCreate`. */
+    var connectionFactory: (HumlaConnection.HumlaConnectionListener) -> HumlaConnection =
+        { HumlaConnection(it) }
+
+    /** Test seam: the backoff the session state machine uses (spec A3). Set before `onCreate`. */
+    var reconnectPolicy: ReconnectPolicy = ReconnectPolicy()
 
     /**
-     * Listen for connectivity changes in the reconnection state, and reconnect accordingly.
+     * Test seam: the CELT 0.7 bitstream versions announced in `Authenticate`.
+     *
+     * The default asks `libhumla_celt7`, which is in the APK and not on the JVM, so
+     * `CELT7Encoder.getBitstreamVersion()` throws `UnsatisfiedLinkError` under Robolectric. It sits
+     * on the handshake path, which means that without this seam **no** unit test can reach a
+     * synchronized session - and the session, the audio pipeline and the SCO route are what tasks
+     * A2, A3, A4 and A8 are about. Deliberately not a `try/catch` in production: a device without
+     * the library does not exist, so the catch arm would be a branch nothing can reach.
+     */
+    var celtVersions: () -> IntArray = { intArrayOf(CELT7Encoder.getBitstreamVersion()) }
+
+    /**
+     * Listen for connectivity changes while waiting to reconnect, and retry immediately.
      */
     private val mConnectivityReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (!mReconnecting) {
-                try {
-                    unregisterReceiver(this)
-                } catch (e: IllegalArgumentException) {
-                    Log.e(TAG, "Error unregistering connectivity receiver: " + e.message)
-                }
+            if (mStateMachine.current !is SessionState.ConnectionLost) {
+                unregisterConnectivityReceiver()
                 return
             }
-
-            val cm = context.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-            @Suppress("DEPRECATION")
-            val info = cm.activeNetworkInfo
-            @Suppress("DEPRECATION")
-            if (info != null && info.isConnected) {
-                Log.v(TAG, "Connectivity restored, attempting reconnect.")
-                connect()
-            }
+            if (!isOnline()) return
+            Log.v(TAG, "Connectivity restored, attempting reconnect.")
+            unregisterConnectivityReceiver()
+            if (mStateMachine.connectivityRestored()) mHandler.post(mReconnectRunnable)
         }
+    }
+
+    /**
+     * The backoff timer. One Runnable instance for the lifetime of the service, because
+     * `removeCallbacks` identifies the pending post by it: a fresh lambda per schedule would leave
+     * a retry queued that nothing can cancel.
+     */
+    private val mReconnectRunnable = Runnable {
+        if (mStateMachine.reconnectTimerFired()) startSession()
     }
 
     private val mAudioInputListener: AudioHandler.AudioEncodeListener =
@@ -237,6 +266,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Humla:HumlaService")
         mHandler = Handler(mainLooper)
         mCallbacks = HumlaCallbacks()
+        mStateMachine = SessionStateMachine(reconnectPolicy)
         mAudioBuilder = AudioHandler.Builder()
             .setContext(this)
             .setLogger(this)
@@ -273,6 +303,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // longer registered -- harmless, since that only asks AudioManager to drop SCO and
         // registration decides nothing but whether the state broadcast is heard.
         disconnect()
+        unregisterConnectivityReceiver()
         try {
             unregisterReceiver(mBluetoothReceiver)
         } catch (e: IllegalArgumentException) {
@@ -282,13 +313,48 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun onBind(intent: Intent?): IBinder = HumlaBinder(this)
 
-    protected open fun connect() {
-        setReconnecting(false)
-        mConnectionState = ConnectionState.DISCONNECTED
+    /**
+     * User-initiated connect. A connect while an attempt is in flight or a session is up is
+     * ignored by the state machine rather than by a field write here.
+     *
+     * Public, where the Java original was `protected`: the state machine is what the wiring tests
+     * drive, and `MumlaService.reconnect()` already called it from a subclass.
+     */
+    open fun connect() {
+        if (!mStateMachine.connectRequested()) return
+        startSession()
+    }
+
+    /**
+     * Builds and starts one connection attempt. The only caller besides [connect] is
+     * [mReconnectRunnable], so the missing-server check below is one guard covering both entry
+     * points rather than one per entry point (spec 4.04).
+     */
+    private fun startSession() {
+        mHandler.removeCallbacks(mReconnectRunnable)
+        mConnectionState = ConnectionState.CONNECTING
         mVoiceTargetId = 0
         mWhisperTargetList.clear()
 
-        val connection = HumlaConnection(this)
+        // Read before anything is built, so a misconfigured start allocates nothing. Repair of a
+        // pre-existing crash characterized by A9a: the Java service handed a null mServer straight
+        // to HumlaConnection.connect(Server), i.e. died on a parameter check on the main looper
+        // where the caller had asked for a connection attempt and expects a reported failure.
+        val server = mServer
+        if (server == null) {
+            Log.e(TAG, "connect() without a target server")
+            mStateMachine.disconnectRequested()
+            mConnectionState = ConnectionState.DISCONNECTED
+            mCallbacks.onDisconnected(
+                HumlaException(
+                    getString(R.string.no_target_server),
+                    HumlaException.HumlaDisconnectReason.OTHER_ERROR,
+                )
+            )
+            return
+        }
+
+        val connection = connectionFactory(this)
         mConnection = connection
         connection.setForceTCP(mForceTcp)
         connection.setUseTor(mUseTor)
@@ -300,14 +366,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mModelHandler = modelHandler
         connection.addTCPMessageHandlers(modelHandler)
 
-        mConnectionState = ConnectionState.CONNECTING
-
         mCallbacks.onConnecting()
 
         try {
             // Resolves the host (SRV lookup included) and opens the socket on the protocol thread;
             // every failure, certificate errors included, arrives at onConnectionDisconnected.
-            connection.connect(mServer!!)
+            connection.connect(server)
         } catch (e: IllegalStateException) {
             // mCallbacks.onConnecting() above is raised on this handler's own thread with an empty
             // queue, so it is delivered inline: an observer can call disconnect() from inside it,
@@ -332,6 +396,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override fun disconnect() {
+        mHandler.removeCallbacks(mReconnectRunnable)
+        mStateMachine.disconnectRequested()
         mConnection?.disconnect()
     }
 
@@ -354,7 +420,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         val auth = Mumble.Authenticate.newBuilder()
         auth.setUsername(mServer!!.username)
         auth.setPassword(mServer!!.password)
-        auth.addCeltVersions(CELT7Encoder.getBitstreamVersion())
+        for (celtVersion in celtVersions()) auth.addCeltVersions(celtVersion)
         // FIXME: resolve issues with CELT 11 robot voices.
         //     auth.addCeltVersions(Constants.CELT_11_VERSION);
         auth.setOpus(mUseOpus)
@@ -379,10 +445,14 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             return
         }
 
+        mStateMachine.synchronized()
         mConnectionState = ConnectionState.CONNECTED
 
         Log.v(TAG, "Connected")
-        mWakeLock.acquire()
+        // `if (!isHeld)`: the lock is reference counted, and with a reconnect it is now taken once
+        // per session but released only when the session ends for good. Acquiring unconditionally
+        // would leave a count behind that no release balances.
+        if (!mWakeLock.isHeld) mWakeLock.acquire()
 
         try {
             val audioHandler = mAudioBuilder.initialize(
@@ -422,19 +492,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         if (e != null) {
             Log.e(TAG, "Error: " + e.message + " (reason: " + e.reason.name + ")")
-            mConnectionState = ConnectionState.CONNECTION_LOST
-
-            setReconnecting(
-                mAutoReconnect && e.reason == HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
-            )
         } else {
             Log.v(TAG, "Disconnected")
-            mConnectionState = ConnectionState.DISCONNECTED
         }
 
-        if (mWakeLock.isHeld) {
-            mWakeLock.release()
-        }
+        val autoReconnect = mAutoReconnect && e != null &&
+            e.reason == HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
+        val next = mStateMachine.lost(autoReconnect, e)
 
         mAudioHandler?.shutdown()
 
@@ -442,6 +506,21 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mAudioHandler = null
         mVoiceTargetId = 0
         mWhisperTargetList.clear()
+
+        if (next is SessionState.ConnectionLost) {
+            // Spec A3: the wake lock, the Bluetooth wish, the mute/deafen state and (in
+            // MumlaService) the foreground notification all survive this transition. Releasing
+            // them here is what made the microphone die with the screen off.
+            mConnectionState = ConnectionState.CONNECTION_LOST
+            scheduleReconnect(next.reconnectInMillis)
+        } else {
+            // Disconnected: either no reconnect was wanted, the attempts are spent, or the session
+            // had already ended. `lost()` returns nothing else.
+            mConnectionState =
+                if (e != null) ConnectionState.CONNECTION_LOST else ConnectionState.DISCONNECTED
+            if (autoReconnect) logWarning(getString(R.string.reconnect_gave_up))
+            releaseSessionResources()
+        }
 
         // Halt SCO connection on shutdown.
         mBluetoothReceiver.stopBluetoothSco()
@@ -469,44 +548,57 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mCallbacks.onLogError(message)
     }
 
-    fun setReconnecting(reconnecting: Boolean) {
-        if (mReconnecting == reconnecting) {
-            return
-        }
-
-        mReconnecting = reconnecting
-        if (reconnecting) {
-            val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-            @Suppress("DEPRECATION")
-            val info = cm.activeNetworkInfo
-            @Suppress("DEPRECATION")
-            val online = info != null && info.isConnected
-            if (online) {
-                Log.v(TAG, "Connection lost due to non-connectivity issue. Start reconnect polling.")
-                val mainHandler = Handler(mainLooper)
-                mainHandler.postDelayed({
-                    if (mReconnecting) connect()
-                }, mAutoReconnectDelay.toLong())
-            } else {
-                // In the event that we've lost connectivity, don't poll. Wait until network
-                // returns before we resume connection attempts.
-                Log.v(TAG, "Connection lost due to connectivity issue. Waiting until network returns.")
-                try {
-                    @Suppress("DEPRECATION")
-                    registerReceiver(
-                        mConnectivityReceiver,
-                        IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
-                    )
-                } catch (e: IllegalArgumentException) {
-                    Log.e(TAG, "Error registering connectivity receiver: " + e.message)
-                }
-            }
+    private fun scheduleReconnect(delayMillis: Long) {
+        if (isOnline()) {
+            Log.v(TAG, "Reconnecting in $delayMillis ms")
+            mHandler.postDelayed(mReconnectRunnable, delayMillis)
         } else {
-            try {
-                unregisterReceiver(mConnectivityReceiver)
-            } catch (e: IllegalArgumentException) {
-                Log.e(TAG, "Error unregistering connectivity receiver: " + e.message)
-            }
+            // No point in burning attempts while there is no network; wait for it to come back.
+            Log.v(TAG, "Offline; waiting for connectivity before reconnecting.")
+            registerConnectivityReceiver()
+        }
+    }
+
+    /** Gives back everything a live session holds. Only a Disconnected state reaches this. */
+    private fun releaseSessionResources() {
+        mHandler.removeCallbacks(mReconnectRunnable)
+        unregisterConnectivityReceiver()
+        if (mWakeLock.isHeld) mWakeLock.release()
+    }
+
+    /**
+     * Whether a default network is up.
+     *
+     * `getActiveNetwork() != null` is the modern spelling of the `activeNetworkInfo.isConnected`
+     * this replaced - the platform returns null exactly when no default data network is active.
+     * Deliberately *not* also a `NET_CAPABILITY_INTERNET` test: measured against Robolectric's
+     * ShadowConnectivityManager, `getNetworkCapabilities` answers from a map that is empty unless
+     * a test fills it, so the capability form makes the "online" corner unreachable in the suite
+     * unless every test pins it open - a dimension closed by the fake rather than by the code
+     * (spec 4.04).
+     */
+    private fun isOnline(): Boolean {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        return cm.activeNetwork != null
+    }
+
+    private fun registerConnectivityReceiver() {
+        try {
+            @Suppress("DEPRECATION")
+            registerReceiver(
+                mConnectivityReceiver,
+                IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
+            )
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "Error registering connectivity receiver: " + e.message)
+        }
+    }
+
+    private fun unregisterConnectivityReceiver() {
+        try {
+            unregisterReceiver(mConnectivityReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Not registered; nothing to do.
         }
     }
 
@@ -561,9 +653,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         if (extras.containsKey(EXTRAS_AUTO_RECONNECT)) {
             mAutoReconnect = extras.getBoolean(EXTRAS_AUTO_RECONNECT)
         }
-        if (extras.containsKey(EXTRAS_AUTO_RECONNECT_DELAY)) {
-            mAutoReconnectDelay = extras.getInt(EXTRAS_AUTO_RECONNECT_DELAY)
-        }
+        // EXTRAS_AUTO_RECONNECT_DELAY is accepted and ignored: ReconnectPolicy owns the backoff
+        // now (spec A3), and a fixed delay is exactly what an exponential one replaces. The key
+        // stays because it is public API of this library and MumlaService still writes it.
         if (extras.containsKey(EXTRAS_CERTIFICATE)) {
             mCertificate = extras.getByteArray(EXTRAS_CERTIFICATE)
             reconnectNeeded = true
@@ -761,13 +853,36 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun getConnectionState(): ConnectionState = mConnectionState
 
-    override fun getConnectionError(): HumlaException? = getConnection()?.error
+    /** The session lifecycle as a flow, for clients that render it (spec A3). */
+    override fun getSessionState(): StateFlow<SessionState> = mStateMachine.state
 
-    override fun isReconnecting(): Boolean = mReconnecting
+    /**
+     * Why the last session ended. Read from the state machine rather than from the connection: a
+     * reconnect replaces the connection object, and the state machine is what carries the error
+     * forward through ConnectionLost and Reconnecting to the Disconnected that ends the attempt.
+     */
+    override fun getConnectionError(): HumlaException? = when (val state = mStateMachine.current) {
+        is SessionState.Disconnected -> state.error
+        is SessionState.ConnectionLost -> state.error
+        is SessionState.Reconnecting -> state.error
+        else -> null
+    }
+
+    override fun isReconnecting(): Boolean = when (mStateMachine.current) {
+        is SessionState.ConnectionLost, is SessionState.Reconnecting -> true
+        else -> false
+    }
 
     override fun cancelReconnect() {
-        setReconnecting(false)
+        mHandler.removeCallbacks(mReconnectRunnable)
+        if (mStateMachine.cancelReconnect()) {
+            mConnectionState = ConnectionState.CONNECTION_LOST
+            releaseSessionResources()
+        }
     }
+
+    /** Test seam: spec A3 requires the wake lock to survive a ConnectionLost. */
+    fun isWakeLockHeldForTest(): Boolean = mWakeLock.isHeld
 
     override fun getTargetServer(): Server? = mServer
 

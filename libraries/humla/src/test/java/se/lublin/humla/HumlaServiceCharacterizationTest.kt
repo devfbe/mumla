@@ -606,37 +606,13 @@ class HumlaServiceCharacterizationTest {
         }
     }
 
-    @Test
-    fun onlyAConnectionErrorWithAutoReconnectOnStartsReconnecting() {
-        val corners = listOf(
-            HumlaException.HumlaDisconnectReason.CONNECTION_ERROR to true,
-            HumlaException.HumlaDisconnectReason.CONNECTION_ERROR to false,
-            HumlaException.HumlaDisconnectReason.REJECT to true,
-            HumlaException.HumlaDisconnectReason.OTHER_ERROR to true,
-        )
-
-        for ((reason, autoReconnect) in corners) {
-            val service = service()
-            service.configureExtras(
-                Bundle().apply {
-                    putBoolean(HumlaService.EXTRAS_AUTO_RECONNECT, autoReconnect)
-                    putParcelable(HumlaService.EXTRAS_SERVER, server)
-                    // Far enough out that the retry never fires inside this test.
-                    putInt(HumlaService.EXTRAS_AUTO_RECONNECT_DELAY, 600_000)
-                }
-            )
-
-            service.onConnectionDisconnected(HumlaException("gone", reason))
-
-            assertThat(service.getConnectionState())
-                .isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
-            val shouldReconnect =
-                autoReconnect && reason == HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
-            assertThat(service.isReconnecting()).isEqualTo(shouldReconnect)
-            service.cancelReconnect()
-        }
-    }
-
+    /**
+     * **Moved to `HumlaServiceSessionTest` (task A9b), same four corners.** It used to reach the
+     * reconnecting state on a service that had never connected, because `setReconnecting` was a
+     * field write. `SessionStateMachine.lost()` returns the current state when there was no
+     * session, so a disconnect report with nothing to report no longer starts a reconnect - the
+     * corner is now driven over a real session, which is also the only shape the app produces.
+     */
     /** The error object reaches the observer unchanged, and the state is already set when it does. */
     @Test
     fun theDisconnectReportCarriesTheSameErrorAndAStateThatIsAlreadySet() {
@@ -685,162 +661,26 @@ class HumlaServiceCharacterizationTest {
     // ---------------------------------------------------------------- reconnect and connectivity
 
     /**
-     * With connectivity, a reconnect **polls**: the retry is posted to the main looper with
-     * `EXTRAS_AUTO_RECONNECT_DELAY` as its delay, and no connectivity receiver is registered. The
-     * delay is read back by idling the looper up to one millisecond short of it and then over it,
-     * so this pins the delay itself and not merely that something was queued.
+     * **Eight tests lived here and are now in `HumlaServiceSessionTest` (task A9b).** They drove
+     * `setReconnecting(boolean)` - the field write A9b replaced with `SessionStateMachine` - and
+     * they reached it on a service that had never connected, which the state machine refuses:
+     * a loss with nothing to lose is not a loss. Every corner they enumerated is still enumerated,
+     * one test per corner, over a real session on fake transports:
      *
-     * Robolectric's ConnectivityManager reports a *connected* active network by default, which is
-     * the corner this arm needs; the other arm has to set it to null, and does, below. Spec §4.04's
-     * fake pass: for each corner, name the double that produces it.
+     * - the four corners of (disconnect reason x EXTRAS_AUTO_RECONNECT) ->
+     *   `onlyAConnectionErrorWithAutoReconnectOnStartsReconnecting`
+     * - polling with connectivity -> `aReconnectWithConnectivityPollsAfterTheBackoffDelay`, now
+     *   against the backoff rather than EXTRAS_AUTO_RECONNECT_DELAY, which A9b accepts and ignores
+     * - waiting for the network without it -> `aReconnectWithoutConnectivityWaitsForTheNetworkInstead`
+     * - the receiver's two guards -> `theConnectivityReceiverReconnectsOnlyWhenTheNetworkIsBack`
+     *   and `aBroadcastThatArrivesAfterTheSessionEndedUnregistersTheReceiver`
+     * - `cancelReconnect`, both arms -> `cancelReconnectStopsTheTimerAndEndsTheSession` and
+     *   `cancellingAReconnectThatNeverStartedIsHarmless`
+     * - the idempotence of `setReconnecting(true)` -> gone with the method. The transition table
+     *   that replaced it is pinned by `SessionStateMachineTest`.
+     * - a retry without a target server, which used to crash on the looper, is now a reported
+     *   failure -> `aConnectWithoutATargetServerReportsAFailureInsteadOfCrashing`.
      */
-    @Test
-    fun aReconnectWithConnectivityPollsAfterTheConfiguredDelay() {
-        val service = cancellingService()
-        service.configureExtras(Bundle().apply {
-            putParcelable(HumlaService.EXTRAS_SERVER, server)
-            putInt(HumlaService.EXTRAS_AUTO_RECONNECT_DELAY, 5_000)
-        })
-
-        service.setReconnecting(true)
-
-        assertThat(service.isReconnecting()).isTrue()
-        assertThat(connectivityReceivers()).isEmpty()
-        assertThat(service.getConnection()).isNull()
-
-        shadowOf(Looper.getMainLooper()).idleFor(4_999, TimeUnit.MILLISECONDS)
-        assertThat(service.getConnection()).isNull()
-
-        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.MILLISECONDS)
-        assertThat(service.getConnection()).isNotNull()
-    }
-
-    /**
-     * Without connectivity the service does **not** poll: it registers the connectivity receiver
-     * and waits. Idling a full minute past the (zero) delay shows that nothing was queued at all.
-     */
-    @Test
-    fun aReconnectWithoutConnectivityWaitsForTheNetworkInstead() {
-        val service = cancellingService()
-        service.configureExtras(Bundle().apply { putParcelable(HumlaService.EXTRAS_SERVER, server) })
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-
-        service.setReconnecting(true)
-
-        assertThat(service.isReconnecting()).isTrue()
-        assertThat(connectivityReceivers()).hasSize(1)
-        shadowOf(Looper.getMainLooper()).idleFor(60, TimeUnit.SECONDS)
-        assertThat(service.getConnection()).isNull()
-    }
-
-    /**
-     * The connectivity receiver's own input space: it reconnects only while the service still wants
-     * to reconnect **and** the network is back. All three corners that reach it.
-     */
-    @Test
-    fun theConnectivityReceiverReconnectsOnlyWhenTheNetworkIsBack() {
-        val service = cancellingService()
-        service.configureExtras(Bundle().apply { putParcelable(HumlaService.EXTRAS_SERVER, server) })
-        @Suppress("DEPRECATION")
-        val connected = connectivityManager().activeNetworkInfo
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-        service.setReconnecting(true)
-
-        // Still no network: the broadcast changes nothing and the receiver stays registered.
-        sendConnectivityBroadcast()
-        assertThat(service.getConnection()).isNull()
-        assertThat(connectivityReceivers()).hasSize(1)
-
-        // Network back: the receiver reconnects.
-        shadowOf(connectivityManager()).setActiveNetworkInfo(connected)
-        sendConnectivityBroadcast()
-        assertThat(service.getConnection()).isNotNull()
-    }
-
-    /**
-     * The receiver's first guard: once reconnecting has been cancelled, a late broadcast
-     * unregisters the receiver instead of reconnecting. `cancelReconnect` already unregisters it,
-     * so this arm is only reachable when the broadcast beats the unregistration — which is why the
-     * guard cannot be dropped as redundant.
-     */
-    @Test
-    fun aBroadcastThatArrivesAfterReconnectingWasClearedUnregistersTheReceiver() {
-        val service = cancellingService()
-        service.configureExtras(Bundle().apply { putParcelable(HumlaService.EXTRAS_SERVER, server) })
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-        service.setReconnecting(true)
-        val receiver = connectivityReceivers().single().broadcastReceiver
-
-        // Clear the flag without going through setReconnecting(), so the receiver is still registered.
-        field(service, "mReconnecting")
-        setField(service, "mReconnecting", false)
-        receiver.onReceive(RuntimeEnvironment.getApplication(), Intent())
-
-        assertThat(service.getConnection()).isNull()
-        assertThat(connectivityReceivers()).isEmpty()
-    }
-
-    /**
-     * A retry that fires without a target server crashes on the main looper: `connect()` hands
-     * `mServer` straight to `HumlaConnection.connect(Server)`, which is non-null in Kotlin, so a
-     * null gets the parameter check rather than a reported failure.
-     *
-     * Unreachable from the app today — `onConnectionDisconnected` is the only thing that starts a
-     * reconnect and it implies a connection, hence a server — but it is what pins that `connect()`
-     * has **no** null check on `mServer`. A conversion that writes `checkNotNull(mServer)` turns
-     * this NullPointerException into an IllegalStateException; that is A9b's decision, not A9a's.
-     */
-    @Test
-    fun aRetryWithoutATargetServerThrowsOnTheLooperRatherThanReportingAFailure() {
-        val service = service()
-
-        service.setReconnecting(true)
-
-        assertThrows(NullPointerException::class.java) {
-            shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
-        }
-    }
-
-    @Test
-    fun cancelReconnectClearsTheStateAndUnregistersTheConnectivityReceiver() {
-        val service = service()
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-        service.setReconnecting(true)
-
-        service.cancelReconnect()
-
-        assertThat(service.isReconnecting()).isFalse()
-        assertThat(connectivityReceivers()).isEmpty()
-    }
-
-    /**
-     * The `if (mReconnecting == reconnecting) return` guard, both arms. Without it, a second
-     * `setReconnecting(true)` registers the receiver twice and posts a second retry — and a
-     * `setReconnecting(false)` on a service that never reconnected calls `unregisterReceiver` on an
-     * unregistered receiver. (The `catch (IllegalArgumentException)` there makes that survivable,
-     * which is why the guard needs a test of its own rather than a crash to prove it.)
-     */
-    @Test
-    fun settingTheSameReconnectStateTwiceDoesNothingTheSecondTime() {
-        val service = service()
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-
-        service.setReconnecting(true)
-        service.setReconnecting(true)
-
-        assertThat(connectivityReceivers()).hasSize(1)
-    }
-
-    @Test
-    fun cancellingAReconnectThatNeverStartedIsHarmless() {
-        val service = service()
-
-        service.cancelReconnect()
-
-        assertThat(service.isReconnecting()).isFalse()
-        assertThat(connectivityReceivers()).isEmpty()
-    }
-
     private fun connectivityReceivers() = shadowOf(RuntimeEnvironment.getApplication())
         .registeredReceivers
         .filter {

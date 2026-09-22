@@ -54,5 +54,7 @@
     <string name="udp_warning_receive_failed">UDP packets cannot be received from the server. Switching to TCP mode.</string>
     <string name="udp_warning_ping_timeout">No UDP ping reply from the server for 15 seconds. Switching to TCP mode.</string>
     <string name="udp_warning_restored">UDP packets can be sent to and received from the server. Switching back to UDP mode.</string>
+    <string name="reconnect_gave_up">Could not reconnect to the server. Giving up.</string>
+    <string name="no_target_server">No server was configured for this connection.</string>
     <string name="udp_warning_thread_failed">The UDP connection failed. Voice is tunneled over TCP while UDP is retried.</string>
 </resources>

@@ -17,7 +17,10 @@
 
 package se.lublin.humla;
 
+import kotlinx.coroutines.flow.StateFlow;
+
 import se.lublin.humla.model.Server;
+import se.lublin.humla.session.SessionState;
 import se.lublin.humla.util.HumlaDisconnectedException;
 import se.lublin.humla.util.HumlaException;
 import se.lublin.humla.util.IHumlaObserver;
@@ -54,6 +57,14 @@ public interface IHumlaService {
      * @return one of {@link HumlaService.ConnectionState}.
      */
     HumlaService.ConnectionState getConnectionState();
+
+    /**
+     * The session lifecycle as a flow, for clients that render it (spec A3, section 4). Finer than
+     * {@link #getConnectionState()}: it tells a lost connection that is being retried apart from
+     * one that is not, and carries the attempt number and the delay until the next try.
+     * @return the current session state; never null.
+     */
+    StateFlow<SessionState> getSessionState();
 
     /**
      * If the {@link HumlaService} disconnected due to an error, returns that error.
