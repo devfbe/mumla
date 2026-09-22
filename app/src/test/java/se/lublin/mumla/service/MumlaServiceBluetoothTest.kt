@@ -14,8 +14,9 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.audio.BluetoothScoReceiver
+import android.media.AudioDeviceInfo
 import se.lublin.humla.net.HumlaConnection
+import se.lublin.humla.session.CommunicationDevices
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 
@@ -36,44 +37,58 @@ import se.lublin.mumla.Settings
  * `MumlaService.onConnectionSynchronized` reachable without a native audio stack, and with it the
  * one call that fixes the complaint.
  *
- * What is faked here is exactly one object: the `BluetoothScoReceiver`, whose two methods are
- * one-line delegations to `AudioManager` inside the humla library. Everything between the hook
- * and it -- the preference, the permission, `isSynchronized()`, `getBluetoothReceiver()`'s own
- * synchronization check -- is the real code.
+ * What is faked here is exactly one object: the `CommunicationDevices` seam, i.e. the four
+ * one-line delegations to `AudioManager` inside the humla library. Everything between the hook and
+ * it -- the preference, the permission, `isSynchronized()`, and `ScoRouter`'s own wanted-vs-active
+ * reconciliation -- is the real code.
+ *
+ * Task A9b replaced `BluetoothScoReceiver` with `ScoRouter` over `CommunicationDevices`, so the
+ * calls this reads back are `select`/`clear` rather than `startBluetoothSco`/`stopBluetoothSco`.
+ * Two tests went with that change and are named where they went, below.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceBluetoothTest {
 
-    /** Reads back the two calls the service makes into the SCO receiver. */
-    class RecordingScoReceiver(context: Context, listener: Listener) :
-        BluetoothScoReceiver(context, listener) {
-        private var starts = 0
-        private var stops = 0
+    /** Reads back the route calls the service makes, with one headset present to route to. */
+    class RecordingDevices : CommunicationDevices {
+        /** device id -> AudioDeviceInfo type, in the order the platform would report them. */
+        val available = linkedMapOf(HEADSET_ID to AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
+        val selectCalls = mutableListOf<Int>()
+        var clearCalls = 0
+        private var selectedId: Int? = null
+        private var listener: (() -> Unit)? = null
 
-        /**
-         * An OEM that enforces `BLUETOOTH_CONNECT` on `android.media` although the platform's own
-         * annotation database declares it on `android.bluetooth.*` only. Absent from the database
-         * is not "never thrown anywhere", which is the whole reason the call is wrapped.
-         */
-        var refuses = false
+        fun startCount(): Int = selectCalls.size
+        fun stopCount(): Int = clearCalls
 
-        fun startCount(): Int = starts
-        fun stopCount(): Int = stops
+        override fun availableIdsOfType(type: Int): List<Int> =
+            available.filterValues { it == type }.keys.toList()
 
-        override fun startBluetoothSco() {
-            starts++
-            if (refuses) throw SecurityException("Need BLUETOOTH_CONNECT permission")
+        override fun select(id: Int): Boolean {
+            selectCalls += id
+            selectedId = id
+            return true
         }
 
-        override fun stopBluetoothSco() {
-            stops++
-            if (refuses) throw SecurityException("Need BLUETOOTH_CONNECT permission")
+        override fun clear() {
+            clearCalls++
+            selectedId = null
+        }
+
+        override fun currentType(): Int? = selectedId?.let { available[it] }
+
+        override fun setOnChangedListener(listener: (() -> Unit)?) {
+            this.listener = listener
+        }
+
+        companion object {
+            const val HEADSET_ID = 7
         }
     }
 
     private lateinit var app: Application
     private lateinit var service: MumlaService
-    private lateinit var receiver: RecordingScoReceiver
+    private lateinit var receiver: RecordingDevices
     private lateinit var settings: Settings
 
     private fun humlaField(name: String) =
@@ -89,9 +104,12 @@ class MumlaServiceBluetoothTest {
         PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
         settings = Settings.getInstance(app)
 
-        service = Robolectric.buildService(MumlaService::class.java).create().get()
-        receiver = RecordingScoReceiver(app, service)
-        humlaField("mBluetoothReceiver").set(service, receiver)
+        receiver = RecordingDevices()
+        val controller = Robolectric.buildService(MumlaService::class.java)
+        // Before create(): HumlaService.onCreate wraps the platform AudioManager when the seam is
+        // unset, and the router it builds there is the one that lives for the service.
+        controller.get().communicationDevices = receiver
+        service = controller.create().get()
     }
 
     /** A connection that reports itself synchronized, which is all these two hooks ask it. */
@@ -155,36 +173,19 @@ class MumlaServiceBluetoothTest {
     }
 
     /**
-     * And the other side of the wrap: the platform is allowed to be stricter than its own
-     * annotations, so the call is caught rather than trusted. Once in the chat log, not once per
-     * reconnection -- the hook runs on every synchronization and auto-reconnect can run it a lot.
+     * **Two refusal tests lived here and are now unwritable at this level (task A9b).** They drove
+     * a `BluetoothScoReceiver` whose `startBluetoothSco`/`stopBluetoothSco` threw
+     * `SecurityException`, which `MumlaService.applyBluetoothSco` caught and turned into one chat
+     * line. The catch is now unreachable: `AndroidCommunicationDevices` wraps **every**
+     * `AudioManager` call one layer down, answers with the value that reads as "no headset", and
+     * reports the denial through a constructor callback that has no default - so nothing above it
+     * can see a `SecurityException` any more.
+     *
+     * The property did not move, the layer did:
+     * `se.lublin.humla.HumlaServiceBluetoothTest.aPlatformRefusalIsReportedOnceAsAChatLine` drives
+     * the real wrapper against an `AudioManager` shadow that refuses, and asserts the one line.
+     * `MumlaService.applyBluetoothSco`'s catch is dead code for task A12 to remove with the file.
      */
-    @Test
-    fun aDeviceThatRefusesScoIsReportedOnceAndDoesNotTakeTheServiceDown() {
-        settings.setBluetoothScoEnabled(true)
-        shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-        receiver.refuses = true
-        connect()
-
-        service.onConnectionSynchronized()
-        service.onConnectionSynchronized()
-
-        assertThat(receiver.startCount()).isEqualTo(2)
-        assertThat(warnings()).containsExactly(app.getString(R.string.bluetooth_sco_refused))
-    }
-
-    @Test
-    fun aDeviceThatRefusesToStopScoDoesNotTakeTheServiceDownEither() {
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-        settings.setBluetoothScoEnabled(true)
-        connect()
-        receiver.refuses = true
-
-        settings.setBluetoothScoEnabled(false)
-
-        assertThat(receiver.stopCount()).isEqualTo(1)
-        assertThat(warnings()).containsExactly(app.getString(R.string.bluetooth_sco_refused))
-    }
 
     /**
      * M1 from the review. The restore used to be the *last* statement of the hook, behind
@@ -246,15 +247,34 @@ class MumlaServiceBluetoothTest {
         assertThat(receiver.stopCount()).isEqualTo(0)
     }
 
+    /**
+     * The wish has to be routed before it can be taken back. `ScoRouter` clears the communication
+     * device only when the route it would clear is **its own** SCO route - clearing whatever else
+     * the platform chose would take the user off their own speaker or wired headset for a reason
+     * they never gave. So the switch is flipped on while connected first, which is the gesture, and
+     * the old `stopBluetoothSco()`-on-every-flip is what this no longer does.
+     */
     @Test
     fun turningThePreferenceOffWhileConnectedStopsTheHeadset() {
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-        settings.setBluetoothScoEnabled(true)
         connect()
+        settings.setBluetoothScoEnabled(true)
+        assertThat(receiver.startCount()).isEqualTo(1)
 
         settings.setBluetoothScoEnabled(false)
 
         assertThat(receiver.stopCount()).isEqualTo(1)
+    }
+
+    /** And with no route held, turning it off asks the platform for nothing at all. */
+    @Test
+    fun turningThePreferenceOffWithNoRouteHeldTouchesNothing() {
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        connect()
+
+        settings.setBluetoothScoEnabled(false)
+
+        assertThat(receiver.stopCount()).isEqualTo(0)
         assertThat(receiver.startCount()).isEqualTo(0)
     }
 

@@ -67,7 +67,12 @@ class MumlaServiceAudioPreferencesTest {
         throw AssertionError("no field $name on ${target.javaClass}")
     }
 
-    private fun builderField(name: String): Any? = field(field(service, "mAudioBuilder")!!, name)
+    /**
+     * Task A9b replaced the `AudioHandler.Builder` the service used to hold with an immutable
+     * [se.lublin.humla.session.AudioConfig], so what a preference lands in is a config field. The
+     * config-to-builder half moved with it and is pinned in `DefaultAudioHandlerFactoryTest`.
+     */
+    private fun audioConfig() = service.getAudioConfigForTest()
 
     private fun vadConfig(): VadConfig = (field(service, "mActivityInputMode") as ActivityInputMode).vadConfig
 
@@ -122,29 +127,29 @@ class MumlaServiceAudioPreferencesTest {
     // --- the preprocessor chain ----------------------------------------------------------------
 
     @Test
-    fun `the noise suppression method reaches the builder`() {
+    fun `the noise suppression method reaches the audio config`() {
         prefs.edit().putString(Settings.PREF_NOISE_SUPPRESSION_METHOD, "speex").commit()
         change(Settings.PREF_NOISE_SUPPRESSION_METHOD)
-        assertThat(builderField("mNoiseSuppressionMethod")).isEqualTo("speex")
+        assertThat(audioConfig().noiseSuppression).isEqualTo("speex")
     }
 
     @Test
-    fun `the speex suppression depth reaches the builder`() {
+    fun `the speex suppression depth reaches the audio config`() {
         prefs.edit().putString(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB, "-35").commit()
         change(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB)
-        assertThat(builderField("mSpeexNoiseSuppressDb")).isEqualTo(-35)
+        assertThat(audioConfig().speexNoiseSuppressDb).isEqualTo(-35)
     }
 
     @Test
-    fun `the echo cancellation method reaches the builder`() {
+    fun `the echo cancellation method reaches the audio config`() {
         prefs.edit().putString(Settings.PREF_ECHO_CANCELLATION_METHOD, "webrtc").commit()
         change(Settings.PREF_ECHO_CANCELLATION_METHOD)
-        assertThat(builderField("mEchoCancellationMethod")).isEqualTo("webrtc")
+        assertThat(audioConfig().legacyEchoCancellationMethod).isEqualTo("webrtc")
     }
 
     /** Four corners over two booleans: one `||` between them would pass three of the four. */
     @Test
-    fun `each android audio effect toggle reaches its own builder field`() {
+    fun `each android audio effect toggle reaches its own config field`() {
         for (ns in listOf(false, true)) {
             for (agc in listOf(false, true)) {
                 prefs.edit()
@@ -153,8 +158,8 @@ class MumlaServiceAudioPreferencesTest {
                     .commit()
                 change(Settings.PREF_ANDROID_NOISE_SUPPRESSOR)
                 change(Settings.PREF_ANDROID_AGC)
-                assertThat(builderField("mAndroidNoiseSuppressor")).isEqualTo(ns)
-                assertThat(builderField("mAndroidAutomaticGainControl")).isEqualTo(agc)
+                assertThat(audioConfig().androidNoiseSuppressor).isEqualTo(ns)
+                assertThat(audioConfig().androidAgc).isEqualTo(agc)
             }
         }
     }
@@ -219,7 +224,10 @@ class MumlaServiceAudioPreferencesTest {
         for (key in AudioPreferenceExtras.VAD_KEYS) {
             val extras = AudioPreferenceExtras.extrasFor(key, settings)
             assertThat(extras.keySet()).containsExactly(HumlaService.EXTRAS_VAD_CONFIG)
-            assertThat(HumlaService.requiresAudioRebuild(extras.keySet())).isFalse()
+            // `HumlaService.requiresAudioRebuild` is gone with task A9b: the rebuild is decided by
+            // the value of AudioConfig, not by the key, and EXTRAS_VAD_CONFIG reaches a live object
+            // rather than the config. That one drag costs no rebuild is pinned end to end by
+            // HumlaServiceAudioTest.aLiveExtraDoesNotRebuildThePipeline.
         }
     }
 
