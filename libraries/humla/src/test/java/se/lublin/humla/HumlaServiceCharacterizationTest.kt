@@ -34,7 +34,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
-import se.lublin.humla.audio.BluetoothScoReceiver
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
@@ -179,24 +178,25 @@ class HumlaServiceCharacterizationTest {
     }
 
     /**
-     * Effect pass: `onCreate` registers the SCO receiver on the *system*, and `onDestroy` takes it
-     * off again. Neither is visible anywhere on the service, so the registry is the only reader.
+     * **Gone with `BluetoothScoReceiver` (task A9b).** The service no longer registers a broadcast
+     * receiver for `ACTION_SCO_AUDIO_STATE_UPDATED`; the route goes through `ScoRouter` over
+     * `CommunicationDevices`, which is the API this module's minSdk of 31 has, and the listener is
+     * registered on the platform's `AudioManager` instead of on the broadcast registry. The
+     * lifetime property is pinned by
+     * `HumlaServiceBluetoothTest.destroyingTheServiceReleasesTheRouteAndTheListener`, and this test
+     * asserts what is left of it here: that nothing registers that broadcast any more.
      */
     @Test
-    fun theScoReceiverIsRegisteredForTheLifetimeOfTheService() {
+    fun noScoBroadcastReceiverIsRegisteredAnyMore() {
         val controller = Robolectric.buildService(HumlaService::class.java).create()
         controllers += controller
 
-        assertThat(scoReceivers()).hasSize(1)
+        @Suppress("DEPRECATION")
+        val scoReceivers = shadowOf(RuntimeEnvironment.getApplication()).registeredReceivers
+            .filter { it.intentFilter.hasAction(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED) }
 
-        controller.destroy()
-
-        assertThat(scoReceivers()).isEmpty()
+        assertThat(scoReceivers).isEmpty()
     }
-
-    private fun scoReceivers() = shadowOf(RuntimeEnvironment.getApplication()).registeredReceivers
-        .filter { it.broadcastReceiver is BluetoothScoReceiver }
-        .filter { it.intentFilter.hasAction(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED) }
 
     /**
      * Effect pass: the wake lock is built in `onCreate` with a fixed tag and is *not* taken until
@@ -346,6 +346,7 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR to false,
             HumlaService.EXTRAS_ANDROID_AGC to false,
             HumlaService.EXTRAS_VAD_CONFIG to false,
+            HumlaService.EXTRAS_BLUETOOTH_WANTED to false,
         )
 
         assertThat(declaredExtraKeys()).containsExactlyElementsIn(reconnectNeeded.keys)
@@ -384,6 +385,7 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_USE_TOR,
             HumlaService.EXTRAS_FORCE_TCP,
             HumlaService.EXTRAS_HALF_DUPLEX,
+            HumlaService.EXTRAS_BLUETOOTH_WANTED,
             HumlaService.EXTRAS_ENABLE_PREPROCESSOR -> putBoolean(key, true)
             else -> putString(key, "value-for-$key")
         }
@@ -629,20 +631,18 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.getWhisperTarget()).isNull()
     }
 
-    /** Effect pass: a disconnect asks the platform to drop SCO, through the receiver it owns. */
-    @Test
-    fun aDisconnectHaltsBluetoothSco() {
-        val service = service()
-        val audioManager = RuntimeEnvironment.getApplication()
-            .getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        @Suppress("DEPRECATION")
-        audioManager.startBluetoothSco()
-
-        service.onConnectionDisconnected(null)
-
-        @Suppress("DEPRECATION")
-        assertThat(audioManager.isBluetoothScoOn).isFalse()
-    }
+    /**
+     * **Deleted (task A9b), and it was worth nothing before that.** `aDisconnectHaltsBluetoothSco`
+     * called `AudioManager.startBluetoothSco()` and then asserted `isBluetoothScoOn` was false
+     * after a disconnect - but Robolectric's `ShadowAudioManager` never sets that flag from
+     * `startBluetoothSco()`, so the assertion was true whatever the service did. Measured in A9a's
+     * sweep: deleting the `stopBluetoothSco()` call from the service left it green. Spec 4.04's
+     * fake case, a dimension closed by the double rather than by the code.
+     *
+     * What replaced it, against a seam that can express the dimension:
+     * `HumlaServiceBluetoothTest.aUserDisconnectReleasesTheRouteAndKeepsTheWish` and
+     * `bluetoothScoIsRestartedAfterAReconnect`.
+     */
 
     // ---------------------------------------------------------------- reconnect and connectivity
 
@@ -820,7 +820,7 @@ class HumlaServiceCharacterizationTest {
             Triple("removeChannel", npe) { service.removeChannel(1) },
             Triple("setMuteDeafState", npe) { service.setMuteDeafState(1, true, false) },
             Triple("setSelfMuteDeafState", npe) { service.setSelfMuteDeafState(true, false) },
-            // via getModelHandler()/getBluetoothReceiver(): NotSynchronized, rewrapped.
+            // via getModelHandler(): NotSynchronized, rewrapped.
             Triple("getSessionUser", ise) { service.getSessionUser() },
             Triple("getSessionChannel", ise) { service.getSessionChannel() },
             Triple("getUser", ise) { service.getUser(1) },
@@ -828,9 +828,6 @@ class HumlaServiceCharacterizationTest {
             Triple("getRootChannel", ise) { service.getRootChannel() },
             Triple("getPermissions", ise) { service.getPermissions() },
             Triple("getServerSettings", ise) { service.getServerSettings() },
-            Triple("usingBluetoothSco", ise) { service.usingBluetoothSco() },
-            Triple("enableBluetoothSco", ise) { service.enableBluetoothSco() },
-            Triple("disableBluetoothSco", ise) { service.disableBluetoothSco() },
             Triple("sendUserTextMessage", ise) { service.sendUserTextMessage(1, "m") },
             Triple("sendChannelTextMessage", ise) { service.sendChannelTextMessage(1, "m", false) },
             // not implemented at all.
@@ -872,5 +869,14 @@ class HumlaServiceCharacterizationTest {
         // Task A9b: the pipeline is asynchronous, so "connected" and "a pipeline is up" are no
         // longer the same statement. This answers -1 where it used to throw IllegalStateException.
         assertThat(service.getCurrentBandwidth()).isEqualTo(-1)
+        // Task A9b: the Bluetooth wish outlives every session, so asking for it outside one is a
+        // question with an answer. All three threw IllegalStateException while disconnected before,
+        // by way of a getBluetoothReceiver() that demanded synchronization.
+        assertThat(service.usingBluetoothSco()).isFalse()
+        assertThat(service.isBluetoothScoActive()).isFalse()
+        service.enableBluetoothSco()
+        assertThat(service.usingBluetoothSco()).isTrue()
+        service.disableBluetoothSco()
+        assertThat(service.usingBluetoothSco()).isFalse()
     }
 }

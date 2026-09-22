@@ -106,6 +106,14 @@ public interface IHumlaSession {
 
     boolean usingBluetoothSco();
 
+    /**
+     * @return true if voice is actually routed over a Bluetooth SCO device right now, as opposed
+     *         to {@link #usingBluetoothSco()}, which reports what the user asked for (spec A4).
+     *         The two differ whenever the headset is absent, has walked away, or the platform
+     *         refused the route.
+     */
+    boolean isBluetoothScoActive();
+
     void enableBluetoothSco();
 
     void disableBluetoothSco();

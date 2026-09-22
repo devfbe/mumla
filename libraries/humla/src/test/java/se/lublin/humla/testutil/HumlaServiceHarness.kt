@@ -54,6 +54,8 @@ class HumlaServiceHarness(
         maxJitterFraction = 0.0,
     ),
     server: Server? = Server(-1, "test", "127.0.0.1", 64738, "me", ""),
+    /** null leaves the service to wrap the platform AudioManager, which is its own corner. */
+    val devices: FakeCommunicationDevices? = FakeCommunicationDevices(),
 ) {
     val transports = FakeTransports()
     val audioFactory = FakeAudioFactory()
@@ -74,6 +76,7 @@ class HumlaServiceHarness(
         }
         service.reconnectPolicy = reconnectPolicy
         service.audioFactory = audioFactory
+        service.communicationDevices = devices
         service.celtVersions = {
             // The native library is not on the JVM; see HumlaService.celtVersions.
             intArrayOf(0x8000000b.toInt()).also { celtAnnouncements += it }

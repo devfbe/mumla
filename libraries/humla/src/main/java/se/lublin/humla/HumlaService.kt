@@ -34,7 +34,6 @@ import android.util.Log
 import kotlinx.coroutines.flow.StateFlow
 import org.minidns.dnsserverlookup.android21.AndroidUsingLinkProperties
 import se.lublin.humla.audio.AudioOutput
-import se.lublin.humla.audio.BluetoothScoReceiver
 import se.lublin.humla.audio.encoder.CELT7Encoder
 import se.lublin.humla.audio.capture.VadConfigBundle
 import se.lublin.humla.audio.inputmode.ActivityInputMode
@@ -61,12 +60,15 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.protocol.ModelHandler
+import se.lublin.humla.session.AndroidCommunicationDevices
 import se.lublin.humla.session.AudioConfig
 import se.lublin.humla.session.AudioController
 import se.lublin.humla.session.AudioHandlerFactory
 import se.lublin.humla.session.AudioSessionParams
+import se.lublin.humla.session.CommunicationDevices
 import se.lublin.humla.session.DefaultAudioHandlerFactory
 import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.session.ScoRouter
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.SessionStateMachine
 import se.lublin.humla.util.HumlaCallbacks
@@ -102,7 +104,7 @@ import java.security.cert.X509Certificate
  *    [createAudioHandler] stays. All three are handed to A9b as riders.
  */
 open class HumlaService : Service(), IHumlaService, IHumlaSession,
-    HumlaConnection.HumlaConnectionListener, HumlaLogger, BluetoothScoReceiver.Listener {
+    HumlaConnection.HumlaConnectionListener, HumlaLogger {
 
     // Service settings
     private var mServer: Server? = null
@@ -148,10 +150,19 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     @Volatile
     private var mModelHandler: ModelHandler? = null
-    private lateinit var mBluetoothReceiver: BluetoothScoReceiver
-
     /** Owns the pipeline's lifecycle on its own thread; nothing here ever joins on main (spec A2). */
     private lateinit var mAudioController: AudioController
+
+    /** Reconciles the user's wish for a headset with the route the platform holds (spec A4). */
+    private lateinit var mScoRouter: ScoRouter
+
+    /**
+     * The last warning delivered to the chat log, for the one de-duplication this service owes.
+     * [ScoRouter.Listener.onScoUnavailable] fires per `apply()` rather than per state, on purpose,
+     * so an auto-reconnect over a link with no headset would otherwise write the same line once
+     * per attempt.
+     */
+    private var mLastWarning: String? = null
 
     private lateinit var mActivityInputMode: ActivityInputMode
     private lateinit var mToggleInputMode: ToggleInputMode
@@ -175,6 +186,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /** Test seam: builds the audio pipeline; stream B swaps in its own factory. */
     var audioFactory: AudioHandlerFactory = DefaultAudioHandlerFactory()
+
+    /** Test seam: null means "wrap the platform AudioManager in [onCreate]". */
+    var communicationDevices: CommunicationDevices? = null
 
     /**
      * Test seam: the CELT 0.7 bitstream versions announced in `Authenticate`.
@@ -211,6 +225,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      */
     private val mReconnectRunnable = Runnable {
         if (mStateMachine.reconnectTimerFired()) startSession()
+    }
+
+    private val mScoRouterListener = object : ScoRouter.Listener {
+        override fun onScoActiveChanged(active: Boolean) = setScoRouteActive(active)
+
+        override fun onScoUnavailable() = logWarningOnce(getString(R.string.sco_unavailable))
     }
 
     private val mAudioControllerListener = object : AudioController.Listener {
@@ -297,8 +317,16 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mCallbacks = HumlaCallbacks()
         mStateMachine = SessionStateMachine(reconnectPolicy)
         mConnectionState = ConnectionState.DISCONNECTED
-        mBluetoothReceiver = BluetoothScoReceiver(this, this)
-        registerReceiver(mBluetoothReceiver, IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED))
+        // One instance for one service life, which is what makes AndroidCommunicationDevices report
+        // a platform refusal once rather than on every route decision (task 8 contract). The
+        // callback has no default so that this line cannot be left out in silence.
+        mScoRouter = ScoRouter(
+            communicationDevices ?: AndroidCommunicationDevices(
+                getSystemService(AUDIO_SERVICE) as AudioManager,
+                mHandler,
+            ) { logWarningOnce(getString(R.string.bluetooth_sco_denied)) },
+            mScoRouterListener,
+        )
         mToggleInputMode = ToggleInputMode()
         mActivityInputMode = ActivityInputMode(0f) // FIXME: reasonable default
         mContinuousInputMode = ContinuousInputMode()
@@ -335,13 +363,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // registration decides nothing but whether the state broadcast is heard.
         disconnect()
         unregisterConnectivityReceiver()
+        stopScoRoute()
+        mScoRouter.release()
         // Posts the teardown and then quits the looper; it does not wait for either (spec A2).
         mAudioController.quit()
-        try {
-            unregisterReceiver(mBluetoothReceiver)
-        } catch (e: IllegalArgumentException) {
-            Log.e(TAG, "Error unregistering bluetooth receiver: " + e.message)
-        }
     }
 
     override fun onBind(intent: Intent?): IBinder = HumlaBinder(this)
@@ -487,6 +512,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // would leave a count behind that no release balances.
         if (!mWakeLock.isHeld) mWakeLock.acquire()
 
+        // Spec A4: a session exists again, so restore the route the user asked for. The wish
+        // outlives the connection; the route does not, because onConnectionDisconnected drops it.
+        mScoRouter.apply()
+
         startAudio(connection, modelHandler)
 
         mCallbacks.onConnected()
@@ -549,6 +578,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             e.reason == HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
         val next = mStateMachine.lost(autoReconnect, e)
 
+        // The route is a session resource and the wish is not, so this runs on every disconnect,
+        // auto-reconnect included; onConnectionSynchronized is where it comes back.
+        stopScoRoute()
         // Asynchronous: the capture and playback threads are joined on humla-audio-control,
         // never on the main thread (spec A2). This call is the one the ANR came from.
         mAudioController.shutdown()
@@ -572,9 +604,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             releaseSessionResources()
         }
 
-        // Halt SCO connection on shutdown.
-        mBluetoothReceiver.stopBluetoothSco()
-
         mCallbacks.onDisconnected(e)
     }
 
@@ -591,7 +620,18 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override fun logWarning(message: String?) {
+        mLastWarning = message
         mCallbacks.onLogWarning(message)
+    }
+
+    /**
+     * A warning that would only repeat the last line delivered is dropped. Against the *last line*
+     * rather than per message type, so the log can never end on a line that contradicts the state
+     * (task 6 contract, point 1); the same shape as `HumlaConnection.warn`.
+     */
+    private fun logWarningOnce(message: String) {
+        if (message == mLastWarning) return
+        logWarning(message)
     }
 
     override fun logError(message: String?) {
@@ -607,6 +647,18 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             Log.v(TAG, "Offline; waiting for connectivity before reconnecting.")
             registerConnectivityReceiver()
         }
+    }
+
+    /**
+     * Stops routing voice to a Bluetooth headset **without forgetting that the user asked for it**:
+     * spec A4 says only [enableBluetoothSco]/[disableBluetoothSco] and EXTRAS_BLUETOOTH_WANTED
+     * change the wish. Idempotent - with no route to clear, `apply()` does nothing.
+     */
+    private fun stopScoRoute() {
+        val wanted = mScoRouter.wanted
+        mScoRouter.wanted = false
+        mScoRouter.apply()
+        mScoRouter.wanted = wanted
     }
 
     /** Gives back everything a live session holds. Only a Disconnected state reaches this. */
@@ -789,6 +841,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         if (extras.containsKey(EXTRAS_ANDROID_AGC)) {
             config = config.copy(androidAgc = extras.getBoolean(EXTRAS_ANDROID_AGC))
         }
+        if (extras.containsKey(EXTRAS_BLUETOOTH_WANTED)) {
+            // Spec A4/P2: the persisted preference is the one carrier of the wish, and this is
+            // where it reaches the router. No permission is consulted, and none can be.
+            mScoRouter.wanted = extras.getBoolean(EXTRAS_BLUETOOTH_WANTED)
+            mScoRouter.apply()
+        }
         if (extras.containsKey(EXTRAS_VAD_CONFIG)) {
             // The one object that outlives a rebuild, which is why this needs no rebuild at all.
             mActivityInputMode.setVadConfig(
@@ -808,10 +866,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mAudioController.reconfigure(mAudioConfig, mInputMode)
         return reconnectNeeded
     }
-
-    override fun onBluetoothScoConnected() = setScoRouteActive(true)
-
-    override fun onBluetoothScoDisconnected() = setScoRouteActive(false)
 
     /**
      * An SCO route came or went, so the pipeline has to be rebuilt for the other sample rate and
@@ -845,16 +899,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             throw RuntimeException("Model handler should always be instantiated while connected!")
         }
         return mModelHandler
-    }
-
-    /**
-     * Returns the bluetooth service provider, established after synchronization.
-     * @return The [BluetoothScoReceiver] attached to this service.
-     */
-    @Throws(NotSynchronizedException::class)
-    private fun getBluetoothReceiver(): BluetoothScoReceiver {
-        if (!isSynchronized()) throw NotSynchronizedException()
-        return mBluetoothReceiver
     }
 
     override fun getConnectionState(): ConnectionState = mConnectionState
@@ -999,26 +1043,24 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         throw IllegalStateException(e)
     }
 
-    override fun usingBluetoothSco(): Boolean = try {
-        getBluetoothReceiver().isBluetoothScoOn
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    /**
+     * Spec A4: what the user asked for, independent of what the platform currently routes. It
+     * survives a lost connection, a headset that walks away and a platform refusal - which is why
+     * the three answered IllegalStateException while disconnected before and answer the wish now.
+     */
+    override fun usingBluetoothSco(): Boolean = mScoRouter.wanted
+
+    /** Spec A4: what the platform actually routes right now. */
+    override fun isBluetoothScoActive(): Boolean = mScoRouter.isActive
 
     override fun enableBluetoothSco() {
-        try {
-            getBluetoothReceiver().startBluetoothSco()
-        } catch (e: NotSynchronizedException) {
-            throw IllegalStateException(e)
-        }
+        mScoRouter.wanted = true
+        mScoRouter.apply()
     }
 
     override fun disableBluetoothSco() {
-        try {
-            getBluetoothReceiver().stopBluetoothSco()
-        } catch (e: NotSynchronizedException) {
-            throw IllegalStateException(e)
-        }
+        mScoRouter.wanted = false
+        mScoRouter.apply()
     }
 
     override fun isTalking(): Boolean = mToggleInputMode.isTalkingOn()
@@ -1370,6 +1412,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         /** `android.media.audiofx.AutomaticGainControl` on the recorder's session (spec B6). */
         const val EXTRAS_ANDROID_AGC = "android_agc"
+
+        /**
+         * Spec A4/P2: the persisted Bluetooth preference, i.e. the user's wish for a headset. The
+         * **only** carrier of that wish; `ScoRouter.wanted` is derived from it and nothing in the
+         * UI reads the router. Never a reconnect: the route is reconciled in place.
+         */
+        const val EXTRAS_BLUETOOTH_WANTED = "bluetooth_wanted"
 
     }
 }
