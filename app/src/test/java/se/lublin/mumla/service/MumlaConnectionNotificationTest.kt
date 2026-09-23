@@ -133,6 +133,19 @@ class MumlaConnectionNotificationTest {
         assertThat(content.isImmutable).isTrue()
     }
 
+    /**
+     * Extras are not part of a PendingIntent's identity, and MumlaMessageNotification asks for the
+     * same activity under the same request code. Both carry ITEM_SERVER today, so the only thing
+     * that shows the flag is the flag.
+     */
+    @Test
+    fun theContentIntentReplacesAnyEarlierOneSoItsExtraIsTheOneSent() {
+        MumlaConnectionNotification.create(service, "Connecting", listener).show()
+
+        val content = shadowOf(shadowOf(service).lastForegroundNotification.contentIntent)
+        assertThat(content.flags and android.app.PendingIntent.FLAG_CANCEL_CURRENT).isNotEqualTo(0)
+    }
+
     @Test
     fun noActionsAreShownUntilAskedFor() {
         MumlaConnectionNotification.create(service, "Connecting", listener).show()

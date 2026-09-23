@@ -87,6 +87,8 @@ class MumlaReconnectNotificationTest {
         val n = posted()!!
         assertThat(n.flags and Notification.FLAG_ONGOING_EVENT).isEqualTo(0)
         assertThat(n.actions.map { it.title.toString() }).containsExactly(context.getString(R.string.reconnect))
+        @Suppress("DEPRECATION")
+        assertThat(n.actions.single().icon).isEqualTo(R.drawable.ic_action_move)
         n.actions.single().actionIntent.send()
         idle()
         assertThat(actions.calls).containsExactly("reconnect")
@@ -99,6 +101,8 @@ class MumlaReconnectNotificationTest {
         val n = posted()!!
         assertThat(n.flags and Notification.FLAG_ONGOING_EVENT).isNotEqualTo(0)
         assertThat(n.actions.map { it.title.toString() }).containsExactly(context.getString(R.string.cancel_reconnect))
+        @Suppress("DEPRECATION")
+        assertThat(n.actions.single().icon).isEqualTo(R.drawable.ic_action_delete_dark)
         n.actions.single().actionIntent.send()
         idle()
         assertThat(actions.calls).containsExactly("cancel")

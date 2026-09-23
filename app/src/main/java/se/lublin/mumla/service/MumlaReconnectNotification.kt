@@ -21,7 +21,6 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.PendingIntent.FLAG_CANCEL_CURRENT
 import android.app.PendingIntent.FLAG_IMMUTABLE
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -107,9 +106,10 @@ class MumlaReconnectNotification(
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
     }
 
+    /** See MumlaConnectionNotification.broadcast: the action is the identity, nothing goes stale. */
     private fun broadcast(action: String): PendingIntent {
         val intent = Intent(action).setPackage(context.packageName)
-        return PendingIntent.getBroadcast(context, 2, intent, FLAG_CANCEL_CURRENT or FLAG_IMMUTABLE)
+        return PendingIntent.getBroadcast(context, 0, intent, FLAG_IMMUTABLE)
     }
 
     interface OnActionListener {

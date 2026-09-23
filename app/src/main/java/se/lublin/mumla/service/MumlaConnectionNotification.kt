@@ -142,23 +142,31 @@ class MumlaConnectionNotification private constructor(
             .setOngoing(true)
 
         if (actionsShown) {
-            builder.addAction(R.drawable.ic_action_microphone, service.getString(R.string.mute), broadcast(BROADCAST_MUTE, 1))
-            builder.addAction(R.drawable.ic_action_audio, service.getString(R.string.deafen), broadcast(BROADCAST_DEAFEN, 1))
-            builder.addAction(R.drawable.ic_action_channels, service.getString(R.string.overlay), broadcast(BROADCAST_OVERLAY, 2))
+            builder.addAction(R.drawable.ic_action_microphone, service.getString(R.string.mute), broadcast(BROADCAST_MUTE))
+            builder.addAction(R.drawable.ic_action_audio, service.getString(R.string.deafen), broadcast(BROADCAST_DEAFEN))
+            builder.addAction(R.drawable.ic_action_channels, service.getString(R.string.overlay), broadcast(BROADCAST_OVERLAY))
         }
 
         val channelListIntent = Intent(service, MumlaActivity::class.java)
             .putExtra(MumlaActivity.EXTRA_DRAWER_FRAGMENT, DrawerAdapter.ITEM_SERVER)
-        // FLAG_CANCEL_CURRENT ensures that the extra always gets sent.
+        // FLAG_CANCEL_CURRENT ensures that the extra always gets sent: extras are not part of a
+        // PendingIntent's identity, and MumlaMessageNotification asks for the same activity under
+        // the same request code. Today both carry ITEM_SERVER, so only the flag test pins this.
         builder.setContentIntent(
             PendingIntent.getActivity(service, 0, channelListIntent, FLAG_CANCEL_CURRENT or FLAG_IMMUTABLE),
         )
         return builder.build()
     }
 
-    private fun broadcast(action: String, requestCode: Int): PendingIntent {
+    /**
+     * The three buttons' intents differ in their action, which is what tells PendingIntents apart,
+     * and carry no extras that could go stale -- so neither a per-button request code nor
+     * FLAG_CANCEL_CURRENT has anything to do here. The Java original had both; changing either
+     * one left every test green (measured), which is why they are gone rather than pinned.
+     */
+    private fun broadcast(action: String): PendingIntent {
         val intent = Intent(action).setPackage(service.packageName)
-        return PendingIntent.getBroadcast(service, requestCode, intent, FLAG_CANCEL_CURRENT or FLAG_IMMUTABLE)
+        return PendingIntent.getBroadcast(service, 0, intent, FLAG_IMMUTABLE)
     }
 
     interface OnActionListener {
