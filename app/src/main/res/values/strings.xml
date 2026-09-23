@@ -125,6 +125,8 @@
     <string name="connected">Connected</string>
     <string name="mumlaConnected">Mumla connected</string>
     <string name="mumlaConnecting">Mumla connecting…</string>
+    <string name="connection_lost_reconnecting">Connection lost – reconnecting…</string>
+    <string name="foreground_start_failed">Could not keep Mumla running in the background. Voice may stop when the screen turns off.</string>
     <string name="mumlaDisconnected">Mumla disconnected</string>
     <string name="channel">Channel</string>
     <string name="user">User</string>
