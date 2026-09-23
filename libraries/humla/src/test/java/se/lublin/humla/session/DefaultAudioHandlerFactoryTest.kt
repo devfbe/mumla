@@ -41,7 +41,7 @@ class DefaultAudioHandlerFactoryTest {
         override fun onTalkingStateChanged(talking: Boolean) = Unit
     }
     private val outputListener = object : AudioOutput.AudioOutputListener {
-        override fun onUserTalkStateUpdated(user: User?) = Unit
+        override fun onUserTalkStateUpdated(user: User) = Unit
         override fun getUser(session: Int): User? = null
     }
 
