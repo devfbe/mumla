@@ -23,6 +23,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import java.util.Arrays
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
@@ -80,8 +81,16 @@ class AudioOutput(
             AudioHandler.SAMPLE_RATE,
             AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
         )
-        bufferSize = minOf(minBufferSize, AudioHandler.FRAME_SIZE * 12)
-        Log.v(TAG, "Using buffer size $bufferSize, system's min buffer size: $minBufferSize")
+        if (minBufferSize <= 0) {
+            throw AudioInitializationException("AudioTrack has no minimum buffer size for this format: $minBufferSize")
+        }
+        val sizes = playbackBuffer(minBufferSize)
+        bufferSize = sizes.mixSamples
+        Log.v(
+            TAG,
+            "Mixing ${sizes.mixSamples} samples per write into a ${sizes.trackBytes}-byte track " +
+                "(system minimum $minBufferSize bytes)",
+        )
 
         audioTrack = try {
             @Suppress("DEPRECATION")
@@ -90,7 +99,7 @@ class AudioOutput(
                 AudioHandler.SAMPLE_RATE,
                 AudioFormat.CHANNEL_OUT_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize,
+                sizes.trackBytes,
                 AudioTrack.MODE_STREAM,
             )
         } catch (e: IllegalArgumentException) {
@@ -130,6 +139,9 @@ class AudioOutput(
     }
 
     fun isPlaying(): Boolean = running
+
+    @VisibleForTesting
+    internal fun playbackTrack(): AudioTrack? = audioTrack
 
     override fun run() {
         Log.v(TAG, "Started thread.")
@@ -303,7 +315,28 @@ class AudioOutput(
         fun getUser(session: Int): User?
     }
 
-    private companion object {
+    /**
+     * The two sizes playback needs, which are in different units: [mixSamples] is how many 16-bit
+     * mono samples one mix -- and one [AudioTrack.write] -- carries, [trackBytes] is the
+     * `bufferSizeInBytes` the track is built with.
+     */
+    internal data class PlaybackBuffer(val mixSamples: Int, val trackBytes: Int)
+
+    internal companion object {
         private val TAG: String = AudioOutput::class.java.name
+
+        private const val BYTES_PER_SAMPLE = 2 // ENCODING_PCM_16BIT, CHANNEL_OUT_MONO
+
+        /**
+         * [minBufferBytes] is what [AudioTrack.getMinBufferSize] answers, and that is **bytes**.
+         * Reading it as samples once built the track with half the system minimum (5760 bytes
+         * against 11520 on a Galaxy S25) and mixed twice what the track could hold. The track
+         * gets the minimum in full; a mix is at most what that minimum holds, and never more than
+         * twelve frames (120 ms), which is what the far-end chunker and the decoders are sized for.
+         */
+        fun playbackBuffer(minBufferBytes: Int): PlaybackBuffer {
+            val mixSamples = minOf(minBufferBytes / BYTES_PER_SAMPLE, AudioHandler.FRAME_SIZE * 12)
+            return PlaybackBuffer(mixSamples = mixSamples, trackBytes = minBufferBytes)
+        }
     }
 }
