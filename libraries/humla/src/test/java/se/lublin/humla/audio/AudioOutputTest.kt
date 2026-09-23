@@ -96,6 +96,24 @@ class AudioOutputTest {
         assertThat(o.isPlaying()).isFalse()
     }
 
+    // --- start and stop -------------------------------------------------------------------------
+
+    @Test
+    fun `stopping straight after starting stops the playback thread`() {
+        // AudioHandler.shutdown can follow initialize before the playback thread has run a line.
+        repeat(20) { round ->
+            val o = AudioOutput(listener, null)
+            val thread = o.startPlaying(AudioManager.STREAM_MUSIC)!!
+
+            runBounded("stopPlaying in round $round") { o.stopPlaying() }
+            thread.join(TimeUnit.SECONDS.toMillis(5))
+
+            assertWithMessage("playback thread alive after stop, round $round").that(thread.isAlive).isFalse()
+            assertThat(o.isPlaying()).isFalse()
+            assertThat(o.playbackTrack()).isNull()
+        }
+    }
+
     // --- the packet lock ------------------------------------------------------------------------
 
     @Test
@@ -175,7 +193,7 @@ class AudioOutputTest {
         t.isDaemon = true
         t.start()
         t.join(TimeUnit.SECONDS.toMillis(5))
-        assertWithMessage("$what did not return within 5 s -- a lock is still held").that(t.isAlive).isFalse()
+        assertWithMessage("$what did not return within 5 s").that(t.isAlive).isFalse()
         failure?.let { throw it }
     }
 

@@ -86,8 +86,14 @@ class AudioOutput @JvmOverloads constructor(
      * playback thread parks on its next mix and [stopPlaying] never returns.
      */
     private val packetLock: Lock = ReentrantLock()
+    /**
+     * Set by [startPlaying] before the thread starts, not by the thread: a [stopPlaying] that
+     * arrives before [run] has executed a line must still see a running output, or it returns
+     * early and leaves the thread playing forever.
+     */
+    @Volatile
     private var running = false
-    private var woken = false // set by every notify() on inactiveLock
+    private var woken = false // set by every notify() on inactiveLock, read and written under it
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mixer: IAudioMixer<FloatArray, ShortArray> = BasicClippingShortMixer()
@@ -129,6 +135,7 @@ class AudioOutput @JvmOverloads constructor(
 
         val t = Thread(this)
         thread = t
+        running = true
         t.start()
         return t
     }
@@ -166,7 +173,6 @@ class AudioOutput @JvmOverloads constructor(
     override fun run() {
         Log.v(TAG, "Started thread.")
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
-        running = true
         val track = audioTrack!!
         track.play()
 
@@ -210,7 +216,11 @@ class AudioOutput @JvmOverloads constructor(
                                 }
                             }
                         } else {
-                            inactiveLock.wait()
+                            // The same flag without the timeout: a notify() from stopPlaying or
+                            // queueVoiceData that landed before this block was entered is not lost.
+                            while (running && !woken) {
+                                inactiveLock.wait()
+                            }
                         }
                     } catch (e: InterruptedException) {
                         e.printStackTrace()
