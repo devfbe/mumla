@@ -30,10 +30,10 @@ import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaSQLiteDatabase
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.FileNotFoundException
 import java.io.IOException
-import java.io.InputStream
 import java.security.KeyStore
 import java.security.KeyStoreException
 import java.security.NoSuchAlgorithmException
@@ -68,29 +68,30 @@ class CertificateImportActivity : AppCompatActivity() {
         }
 
         val uri: Uri = data!!.data!!
-        val input: InputStream = try {
-            contentResolver.openInputStream(uri)!!
+        // Read once and closed right here: the stream is a descriptor the picker lent us, and a
+        // password retry needs the bytes again anyway -- the stream itself would be spent.
+        val pkcs12: ByteArray = try {
+            contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         } catch (e: FileNotFoundException) {
             e.printStackTrace()
             // FIXME(acomminos)
             finish()
             return
+        } catch (e: IOException) {
+            invalidCertificate(e)
+            return
         }
 
-        val cursor = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-        val displayName = if (cursor != null && cursor.moveToFirst()) {
-            cursor.getString(0)
-        } else {
-            UUID.randomUUID().toString() + ".p12"
-        }
-        cursor?.close()
+        val displayName = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null }
+            ?: (UUID.randomUUID().toString() + ".p12")
 
-        storeKeystore(CharArray(0), displayName, input)
+        storeKeystore(CharArray(0), displayName, pkcs12)
     }
 
-    private fun storeKeystore(password: CharArray, fileName: String, input: InputStream) {
+    private fun storeKeystore(password: CharArray, fileName: String, pkcs12: ByteArray) {
         val keyStore: KeyStore = try {
-            Pkcs12Certificates.load(input, password)
+            Pkcs12Certificates.load(ByteArrayInputStream(pkcs12), password)
         } catch (e: CertificateException) {
             // A problem occurred when reading the stream; interpret this as a password being
             // required. Request a password from the user and reattempt decryption.
@@ -103,7 +104,7 @@ class CertificateImportActivity : AppCompatActivity() {
                 .setView(passwordField)
                 .setOnCancelListener { finish() }
                 .setPositiveButton(android.R.string.ok) { _, _ ->
-                    storeKeystore(passwordField.text.toString().toCharArray(), fileName, input)
+                    storeKeystore(passwordField.text.toString().toCharArray(), fileName, pkcs12)
                 }
                 .show()
             return
@@ -134,8 +135,11 @@ class CertificateImportActivity : AppCompatActivity() {
         }
 
         val database: MumlaDatabase = MumlaSQLiteDatabase(this)
-        database.addCertificate(fileName, output.toByteArray())
-        database.close()
+        try {
+            database.addCertificate(fileName, output.toByteArray())
+        } finally {
+            database.close()
+        }
 
         Toast.makeText(this, getString(R.string.certificate_import_success, fileName), Toast.LENGTH_LONG).show()
         finish()
