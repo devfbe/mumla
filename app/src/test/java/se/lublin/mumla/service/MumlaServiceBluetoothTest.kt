@@ -16,6 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import android.media.AudioDeviceInfo
 import se.lublin.humla.net.HumlaConnection
+import se.lublin.humla.session.CommunicationDevice
 import se.lublin.humla.session.CommunicationDevices
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
@@ -61,8 +62,8 @@ class MumlaServiceBluetoothTest {
         fun startCount(): Int = selectCalls.size
         fun stopCount(): Int = clearCalls
 
-        override fun availableIdsOfType(type: Int): List<Int> =
-            available.filterValues { it == type }.keys.toList()
+        override fun available(): List<CommunicationDevice> =
+            available.map { (id, type) -> CommunicationDevice(id, type, "") }
 
         override fun select(id: Int): Boolean {
             selectCalls += id
@@ -75,7 +76,8 @@ class MumlaServiceBluetoothTest {
             selectedId = null
         }
 
-        override fun currentType(): Int? = selectedId?.let { available[it] }
+        override fun current(): CommunicationDevice? =
+            selectedId?.let { id -> available[id]?.let { CommunicationDevice(id, it, "") } }
 
         override fun setOnChangedListener(listener: (() -> Unit)?) {
             this.listener = listener

@@ -253,7 +253,7 @@ class HumlaServiceBluetoothTest {
      * The device seam is reachable after `onCreate`, whether a test set it or the service wrapped
      * the platform itself. The next task on this line - "take the Bluetooth headphones, or the
      * speaker, and if headphones are plugged in take those by themselves" - is a chooser over
-     * `availableIdsOfType`/`select`, and this is the handle it docks onto. Without this line the
+     * `available`/`select`, and this is the handle it docks onto. Without this line the
      * only reference lived inside `ScoRouter`'s constructor call.
      */
     @Test

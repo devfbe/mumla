@@ -17,6 +17,7 @@
 
 package se.lublin.humla.testutil
 
+import se.lublin.humla.session.CommunicationDevice
 import se.lublin.humla.session.CommunicationDevices
 
 /**
@@ -40,6 +41,9 @@ import se.lublin.humla.session.CommunicationDevices
 class FakeCommunicationDevices : CommunicationDevices {
     /** device id -> AudioDeviceInfo type, in the order the platform would report them. */
     val available = linkedMapOf<Int, Int>()
+
+    /** device id -> product name; a device without an entry is unnamed, as most built-in ones are. */
+    val names = mutableMapOf<Int, String>()
     var selectedId: Int? = null
     var selectResult = true
 
@@ -50,8 +54,8 @@ class FakeCommunicationDevices : CommunicationDevices {
     var clearCalls = 0
     var listenerRegistrations = 0
 
-    override fun availableIdsOfType(type: Int): List<Int> =
-        available.filterValues { it == type }.keys.toList()
+    override fun available(): List<CommunicationDevice> =
+        available.map { (id, type) -> device(id, type) }
 
     override fun select(id: Int): Boolean {
         selectCalls += id
@@ -67,7 +71,10 @@ class FakeCommunicationDevices : CommunicationDevices {
         if (notifiesOnChange) listener?.invoke()
     }
 
-    override fun currentType(): Int? = selectedId?.let { available[it] }
+    override fun current(): CommunicationDevice? =
+        selectedId?.let { id -> available[id]?.let { device(id, it) } }
+
+    private fun device(id: Int, type: Int) = CommunicationDevice(id, type, names[id].orEmpty())
 
     override fun setOnChangedListener(listener: (() -> Unit)?) {
         listenerRegistrations++
@@ -79,4 +86,5 @@ class FakeCommunicationDevices : CommunicationDevices {
         selectedId = id
         listener?.invoke()
     }
+
 }

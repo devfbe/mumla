@@ -193,7 +193,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * [onCreate] fills it with an [AndroidCommunicationDevices] when nothing did.
      *
      * Kept reachable on purpose. [ScoRouter] asks it for one device type, but the seam itself is
-     * generic - `availableIdsOfType(type)` plus `select(id)` is the whole of what
+     * generic - `available()` plus `select(id)` is the whole of what
      * `AudioManager.getAvailableCommunicationDevices()`/`setCommunicationDevice()` offer - so a
      * later "pick the output the way the phone app does" chooser docks here, beside the router,
      * without re-plumbing onCreate. See contracts.md.

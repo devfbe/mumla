@@ -64,7 +64,7 @@ class ScoRouter(
      */
     private var lastActive = false
 
-    val isActive: Boolean get() = devices.currentType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+    val isActive: Boolean get() = devices.current()?.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
 
     init {
         devices.setOnChangedListener { notifyIfChanged() }
@@ -73,7 +73,7 @@ class ScoRouter(
     fun apply() {
         if (wanted) {
             if (!isActive) {
-                val id = devices.availableIdsOfType(AudioDeviceInfo.TYPE_BLUETOOTH_SCO).firstOrNull()
+                val id = devices.available().firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }?.id
                 if (id == null || !devices.select(id)) listener.onScoUnavailable()
             }
         } else if (isActive) {

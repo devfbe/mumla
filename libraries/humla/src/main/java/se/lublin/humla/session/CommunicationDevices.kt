@@ -17,21 +17,30 @@
 
 package se.lublin.humla.session
 
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Handler
 import android.util.Log
 import java.util.concurrent.Executor
 
 /**
- * The subset of `AudioManager`'s communication-device API (API 31) that [ScoRouter] needs.
+ * One entry of `AudioManager.getAvailableCommunicationDevices()`, reduced to what routing and a
+ * chooser need: the platform's [id] to select it by, its [android.media.AudioDeviceInfo] [type] to
+ * decide and label by, and its product [name] - the Bluetooth headset's own name, which is how the
+ * phone app shows one. [name] is never null; an unnamed device carries an empty string.
+ */
+data class CommunicationDevice(val id: Int, val type: Int, val name: String)
+
+/**
+ * The subset of `AudioManager`'s communication-device API (API 31) that routing needs.
  *
  * The module's `minSdk` is 31, so this is the only API there is here - spec A4's "on API 31+"
  * carries no alternative branch in this codebase, and `startBluetoothSco` has no reader left once
  * the service is wired to this.
  */
 interface CommunicationDevices {
-    /** Ids of currently available communication devices of the given [android.media.AudioDeviceInfo] type. */
-    fun availableIdsOfType(type: Int): List<Int>
+    /** Every communication device available right now, in the platform's order. */
+    fun available(): List<CommunicationDevice>
 
     /** Routes voice to the device; false if the platform refused or the id is gone. */
     fun select(id: Int): Boolean
@@ -39,8 +48,8 @@ interface CommunicationDevices {
     /** Returns routing to the platform default. */
     fun clear()
 
-    /** Type of the current communication device, or null if none is set. */
-    fun currentType(): Int?
+    /** The current communication device, or null if none is set. */
+    fun current(): CommunicationDevice?
 
     /** Registers (or with null, removes) a callback for route changes; invoked on the main thread. */
     fun setOnChangedListener(listener: (() -> Unit)?)
@@ -73,8 +82,8 @@ class AndroidCommunicationDevices(
     private var changeListener: AudioManager.OnCommunicationDeviceChangedListener? = null
     private var denialReported = false
 
-    override fun availableIdsOfType(type: Int): List<Int> = guarded(emptyList()) {
-        audioManager.availableCommunicationDevices.filter { it.type == type }.map { it.id }
+    override fun available(): List<CommunicationDevice> = guarded(emptyList()) {
+        audioManager.availableCommunicationDevices.map { it.toCommunicationDevice() }
     }
 
     override fun select(id: Int): Boolean = guarded(false) {
@@ -84,7 +93,8 @@ class AndroidCommunicationDevices(
 
     override fun clear() = guarded(Unit) { audioManager.clearCommunicationDevice() }
 
-    override fun currentType(): Int? = guarded(null) { audioManager.communicationDevice?.type }
+    override fun current(): CommunicationDevice? =
+        guarded(null) { audioManager.communicationDevice?.toCommunicationDevice() }
 
     /**
      * One writer for [changeListener], deliberately. The obvious shape - unregister, clear the
@@ -126,6 +136,9 @@ class AndroidCommunicationDevices(
             null
         }
     }
+
+    private fun AudioDeviceInfo.toCommunicationDevice() =
+        CommunicationDevice(id, type, productName?.toString().orEmpty())
 
     private inline fun <T> guarded(fallback: T, body: () -> T): T =
         try {
