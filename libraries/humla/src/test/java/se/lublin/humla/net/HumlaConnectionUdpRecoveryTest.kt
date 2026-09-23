@@ -8,6 +8,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowLog
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.ReconnectPolicy
@@ -187,6 +188,103 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(connection.isUsingUdp).isTrue()
         assertThat(listener.warnings).isEmpty()
         assertThat(connection.getUDPLatency()).isEqualTo(6_000_000L)
+    }
+
+    /**
+     * The ping a Mumble 1.5 server answers. Humla announces protocol 1.2.5, so a 1.5 server reads
+     * the ping as a legacy packet, and `decodePing_legacy` accepts at most nine bytes behind the
+     * header - one varint. The sixteen bytes this client used to send (header, eight raw bytes,
+     * seven bytes of padding) are neither that nor the 12-byte extended-information request, so
+     * the server dropped every one of them, and fifteen seconds into every session the chat said
+     * "No UDP ping reply from the server for 15 seconds" and the voice went over TCP for good.
+     */
+    @Test
+    fun theUdpPingIsALegacyPingAMumble15ServerAccepts() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+        atSeconds(300) // 300 000 000 us: the four-byte form, 0xF0 0x11 0xE1 0xA3 0x00
+
+        val ping = connection.synchronizeAndAwaitFirstPing(tcp, udp)
+
+        assertThat(ping.map { it.toInt() and 0xFF }).containsExactly(0x20, 0xF0, 0x11, 0xE1, 0xA3, 0x00).inOrder()
+        assertThat(ping.size).isAtMost(10)
+        assertThat(MumbleLegacyPingDecoder.decodeAsServer(ping)).isEqualTo(300_000_000L)
+    }
+
+    /** The decoder above is not agreeing with everything: the old sixteen bytes are what it drops. */
+    @Test
+    fun theMumble15RulesDropTheSixteenBytePingThisClientUsedToSend() {
+        val old = ByteArray(16).also {
+            it[0] = ((HumlaUDPMessageType.UDPPing.ordinal shl 5) and 0xFF).toByte()
+            java.nio.ByteBuffer.wrap(it, 1, 8).putLong(300_000_000L)
+        }
+        assertThat(MumbleLegacyPingDecoder.decodeAsServer(old)).isNull()
+    }
+
+    /**
+     * An hour and twenty minutes into a call the timestamp needs the eight-byte form, which is the
+     * form PacketBuffer used to read back wrong.
+     */
+    @Test
+    fun aMumble15ReplyLateInALongCallFeedsTheLatency() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+        connection.synchronizeAndAwaitFirstPing(tcp, udp)
+
+        val eightyMinutes = 80L * 60L
+        atSeconds(eightyMinutes)
+        udp.simulateDatagram(udpPingReply(sentAtMicros = eightyMinutes * 1_000_000L - 50_000L))
+        connection.drainProtocolQueue("ping reply handled")
+
+        assertThat(connection.getUDPLatency()).isEqualTo(50_000L)
+    }
+
+    /** What a server older than 1.5 does: it sends the datagram back as it came. */
+    @Test
+    fun aPingEchoedByAnOlderServerFeedsTheLatencyAndResetsTheTimeout() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+        atSeconds(2)
+        val ping = connection.synchronizeAndAwaitFirstPing(tcp, udp)
+
+        atSeconds(10)
+        udp.simulateDatagram(ping.copyOf())
+        connection.drainProtocolQueue("echo handled")
+        connection.feedPings(listOf(20L), tcp, good = 5) // 18 s after the send, 10 s after the echo
+        mainLooper.idle()
+
+        assertThat(connection.getUDPLatency()).isEqualTo(8_000_000L)
+        assertThat(connection.isUsingUdp).isTrue()
+        assertThat(listener.warnings).isEmpty()
+    }
+
+    /**
+     * A ping datagram too short to carry a timestamp, or carrying a negative one, is dropped quietly: no exception reaches the
+     * connection's catch-all (which logs an error per datagram), no latency, and it is not a reply,
+     * so it does not hold off the timeout either.
+     */
+    @Test
+    fun aTruncatedPingReplyIsIgnoredWithoutAnError() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+        connection.synchronizeAndAwaitFirstPing(tcp, udp)
+        ShadowLog.clear()
+
+        atSeconds(5)
+        udp.simulateDatagram(byteArrayOf(0x20))
+        udp.simulateDatagram(byteArrayOf(0x20, 0xF4.toByte(), 0x01))
+        udp.simulateDatagram(byteArrayOf(0x20, 0xFC.toByte())) // varint -1: no ping of ours says that
+        connection.drainProtocolQueue("truncated replies handled")
+        connection.feedPings(listOf(16L), tcp, good = 5)
+        mainLooper.idle()
+
+        assertThat(ShadowLog.getLogs().filter { it.type >= android.util.Log.ERROR }.map { it.msg }).isEmpty()
+        assertThat(connection.getUDPLatency()).isEqualTo(0L)
+        assertThat(listener.warnings).containsExactly(ConnectionWarning.UDP_PING_TIMEOUT)
     }
 
     /**
@@ -692,10 +790,21 @@ class HumlaConnectionUdpRecoveryTest {
         it[0] = ((HumlaUDPMessageType.UDPVoiceOpus.ordinal shl 5) and 0xFF).toByte()
     }
 
-    /** A datagram shaped like the server's answer to our UDP ping: type nibble, then the echo. */
-    private fun udpPingReply(sentAtMicros: Long): ByteArray = ByteArray(9).also {
-        it[0] = ((HumlaUDPMessageType.UDPPing.ordinal shl 5) and 0xFF).toByte()
-        java.nio.ByteBuffer.wrap(it, 1, 8).putLong(sentAtMicros)
+    /**
+     * The answer a Mumble 1.5 server sends to a connectivity ping: the header and the timestamp as
+     * a varint, nothing else (`UDPPingEncoder::encodePingPacket_legacy`). It used to be the header
+     * and eight raw bytes, which is what an older server echoed of the ping this client used to
+     * send - a shape no server produces any more.
+     */
+    private fun udpPingReply(sentAtMicros: Long): ByteArray = MumbleLegacyPingDecoder.encodeReplyAsServer(sentAtMicros)
+
+    private fun HumlaConnection.synchronizeAndAwaitFirstPing(tcp: FakeTcpTransport, udp: FakeUdpTransport): ByteArray {
+        tcp.simulateMessage(
+            HumlaTCPMessageType.ServerSync,
+            Mumble.ServerSync.newBuilder().setSession(1).build().toByteArray()
+        )
+        awaitUntil(description = "first udp ping sent") { udp.sent.isNotEmpty() }
+        return udp.sent[0]
     }
 
     private companion object {

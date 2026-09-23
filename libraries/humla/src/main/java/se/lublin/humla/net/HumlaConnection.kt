@@ -34,7 +34,6 @@ import se.lublin.humla.session.ReconnectPolicy
 import se.lublin.humla.util.HumlaException
 import java.io.IOException
 import java.net.ConnectException
-import java.nio.ByteBuffer
 import java.security.InvalidKeyException
 import java.security.KeyManagementException
 import java.security.KeyStore
@@ -413,8 +412,8 @@ class HumlaConnection @JvmOverloads constructor(
 
     private val udpPingListener = object : HumlaUDPMessageListener.Stub() {
         override fun messageUDPPing(data: ByteArray) {
+            val timestamp = UdpPing.decodeTimestamp(data) ?: return
             val now = elapsed
-            val timestamp = ByteBuffer.wrap(data, 1, 8).long
             udpLatency = now - timestamp
             udpHealth.onUdpPingReply(now)
         }
@@ -424,10 +423,8 @@ class HumlaConnection @JvmOverloads constructor(
         // In microseconds
         val t = elapsed
         if (!shouldForceTCP()) {
-            val buffer = ByteBuffer.allocate(16)
-            buffer.put(((HumlaUDPMessageType.UDPPing.ordinal shl 5) and 0xFF).toByte())
-            buffer.putLong(t)
-            sendUDPMessage(buffer.array(), 16, true)
+            val ping = UdpPing.encode(t)
+            sendUDPMessage(ping, ping.size, true)
             udpHealth.onUdpPingSent(t)
         }
         val pb = Mumble.Ping.newBuilder()
