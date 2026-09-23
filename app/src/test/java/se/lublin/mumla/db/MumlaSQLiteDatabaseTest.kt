@@ -18,6 +18,9 @@
 package se.lublin.mumla.db
 
 import android.content.Context
+import android.database.Cursor
+import android.database.sqlite.SQLiteCursor
+import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
@@ -173,5 +176,47 @@ class MumlaSQLiteDatabaseTest {
 
         db.onUpgrade(w, 2, 8)
         assertThat(tables()).containsAtLeastElementsIn(added)
+    }
+
+    /**
+     * Every query closes its cursor, on every path. The device log showed "A resource failed to
+     * call AbstractCursor.close" from the finalizer: isChannelPinned -- asked once per channel
+     * while the list renders -- and the local mute and ignore lists never closed theirs, and
+     * getCertificateData left it open when the id had no row.
+     */
+    @Test
+    fun everyQueryClosesItsCursor() {
+        val opened = mutableListOf<Cursor>()
+        val factory = SQLiteDatabase.CursorFactory { _, driver, table, query ->
+            SQLiteCursor(driver, table, query).also { opened += it }
+        }
+        val recording = MumlaSQLiteDatabase(context, "recording.db", factory)
+        try {
+            recording.addServer(server("s"))
+            recording.addPinnedChannel(1, 2)
+            recording.addLocalMutedUser(1, 3)
+            recording.addLocalIgnoredUser(1, 4)
+            recording.addAccessToken(1, "t")
+            val cert = recording.addCertificate("c", byteArrayOf(1))
+            opened.clear()
+
+            recording.getServers()
+            recording.getPinnedChannels(1)
+            recording.isChannelPinned(1, 2)
+            recording.isChannelPinned(1, 99)
+            recording.getAccessTokens(1)
+            recording.getLocalMutedUsers(1)
+            recording.getLocalIgnoredUsers(1)
+            recording.getCertificates()
+            recording.getCertificateData(cert.id)
+            recording.getCertificateData(cert.id + 1)
+            recording.isCommentSeen("who", byteArrayOf(1))
+
+            assertThat(opened).hasSize(11)
+            assertThat(opened.filterNot { it.isClosed }).isEmpty()
+        } finally {
+            recording.close()
+            context.deleteDatabase("recording.db")
+        }
     }
 }
