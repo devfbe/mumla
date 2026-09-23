@@ -54,9 +54,7 @@ public class HumlaSSLSocketFactory {
         kmf.init(keystore, keystorePassword != null ? keystorePassword.toCharArray() : new char[0]);
 
         if(trustStorePath != null) {
-            KeyStore trustStore = KeyStore.getInstance(trustStoreFormat);
-            FileInputStream fis = new FileInputStream(trustStorePath);
-            trustStore.load(fis, trustStorePassword.toCharArray());
+            KeyStore trustStore = loadTrustStore(trustStorePath, trustStorePassword, trustStoreFormat);
 
             TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
             tmf.init(trustStore);
@@ -68,6 +66,18 @@ public class HumlaSSLSocketFactory {
         }
 
         mContext.init(kmf.getKeyManagers(), new TrustManager[] { mTrustWrapper }, null);
+    }
+
+    /**
+     * Loads the trust store file at {@code path}, closing it on every path: this runs once per
+     * connection attempt, reconnects included. Package-private for the test.
+     */
+    static KeyStore loadTrustStore(String path, String password, String format) throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException {
+        KeyStore trustStore = KeyStore.getInstance(format);
+        try (FileInputStream fis = new FileInputStream(path)) {
+            trustStore.load(fis, password.toCharArray());
+        }
+        return trustStore;
     }
 
     /**
