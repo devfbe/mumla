@@ -141,11 +141,12 @@ public class PacketBuffer {
             final int tmp = (int) (v & 0xFC);
             switch (tmp) {
                 case 0xF0:
-                    i = next() << 24 | next() << 16 | next() << 8 | next();
+                    // Widened before the shift: an int shifted by 24 turns a top byte of 0x80 or
+                    // more negative, and an int shift by 32 or more wraps around (by 56 is by 24).
+                    i = readBigEndian(4);
                     break;
                 case 0xF4:
-                    i = next() << 56 | next() << 48 | next() << 40 | next() << 32 |
-                            next() << 24 | next() << 16 | next() << 8 | next();
+                    i = readBigEndian(8);
                     break;
                 case 0xF8:
                     i = readLong();
@@ -162,6 +163,14 @@ public class PacketBuffer {
             i = (v & 0x0F) << 24 | next() << 16 | next() << 8 | next();
         } else if ((v & 0xE0) == 0xC0) {
             i = (v & 0x1F) << 16 | next() << 8 | next();
+        }
+        return i;
+    }
+
+    private long readBigEndian(int bytes) {
+        long i = 0;
+        for (int n = 0; n < bytes; n++) {
+            i = (i << 8) | next();
         }
         return i;
     }
@@ -199,7 +208,8 @@ public class PacketBuffer {
     public void writeLong(long value) {
         long i = value;
 
-        if (((i & 0x8000000000000000L) > 0) && (~i < 0x100000000L)) {
+        // The sign bit makes the masked value negative, so the test is != 0, not > 0.
+        if (((i & 0x8000000000000000L) != 0) && (~i < 0x100000000L)) {
             // Signed number.
             i = ~i;
             if (i <= 0x3) {
@@ -211,7 +221,12 @@ public class PacketBuffer {
             }
         }
 
-        if (i < 0x80) {
+        // PacketDataStream compares as quint64: a negative value that took no branch above is a
+        // full 64-bit pattern, not a one-byte one.
+        if (i < 0) {
+            append(0xF4);
+            appendBigEndian(i, 8);
+        } else if (i < 0x80) {
             // Need top bit clear
             append(i);
         } else if (i < 0x4000) {
@@ -239,14 +254,13 @@ public class PacketBuffer {
         } else {
             // It's a 64-bit value.
             append(0xF4);
-            append((i >> 56) & 0xFF);
-            append((i >> 48) & 0xFF);
-            append((i >> 40) & 0xFF);
-            append((i >> 32) & 0xFF);
-            append((i >> 24) & 0xFF);
-            append((i >> 16) & 0xFF);
-            append((i >> 8) & 0xFF);
-            append(i & 0xFF);
+            appendBigEndian(i, 8);
+        }
+    }
+
+    private void appendBigEndian(long v, int bytes) {
+        for (int shift = (bytes - 1) * 8; shift >= 0; shift -= 8) {
+            append((v >> shift) & 0xFF);
         }
     }
 }
