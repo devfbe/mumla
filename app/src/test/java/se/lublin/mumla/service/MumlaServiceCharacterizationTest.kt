@@ -1112,6 +1112,133 @@ class MumlaServiceCharacterizationTest {
         assertThat(clicks).isEqualTo(0)
     }
 
+    // ---- added in the sweep round of task 12 ----------------------------------------------------
+
+    private fun postedActions(): Array<Notification.Action>? =
+        shadowOf(notificationManager).getNotification(FOREGROUND_ID)?.actions
+
+    @Test
+    fun connectingAndALostConnectionShowNoActions() {
+        service.renderSessionState(SessionState.Connecting)
+        assertThat(postedActions()).isNull()
+        service.renderSessionState(SessionState.Connected)
+        service.renderSessionState(SessionState.ConnectionLost(2_000, 1, error()))
+        assertThat(postedActions()).isNull()
+        service.renderSessionState(SessionState.Reconnecting(error()))
+        assertThat(postedActions()).isNull()
+    }
+
+    @Test
+    fun connectingHidesAPromptLeftFromTheLastSession() {
+        service.renderSessionState(SessionState.Disconnected(error()))
+        assertThat(reconnectPrompt()).isNotNull()
+
+        service.renderSessionState(SessionState.Connecting)
+
+        assertThat(reconnectPrompt()).isNull()
+    }
+
+    @Test
+    fun withTorTheConnectedTextAndThePromptSaySo() {
+        preferences().edit().putBoolean(Settings.PREF_USE_TOR, true).commit()
+
+        service.renderSessionState(SessionState.Connecting)
+        service.renderSessionState(SessionState.Connected)
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected) + " (Tor)")
+
+        service.renderSessionState(SessionState.Disconnected(error()))
+        assertThat(reconnectPrompt()!!.extras.getString(Notification.EXTRA_TEXT)).isEqualTo("socket reset (Tor)")
+    }
+
+    private fun promptReceivers() = shadowOf(app).registeredReceivers.filter { it.intentFilter.hasAction("b_reconnect") }
+
+    @Test
+    fun aNewPromptReplacesTheOldOneIncludingItsReceiver() {
+        service.renderSessionState(SessionState.Disconnected(error()))
+        service.renderSessionState(SessionState.Disconnected(HumlaException("again", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)))
+
+        assertThat(promptReceivers()).hasSize(1)
+    }
+
+    @Test
+    fun aRefusalPromptReplacesAnOlderPromptIncludingItsReceiver() {
+        service.renderSessionState(SessionState.Disconnected(error()))
+        shadowOf(service).setThrowInStartForeground(SecurityException("refused"))
+
+        service.renderSessionState(SessionState.Connecting)
+        service.renderSessionState(SessionState.Connected)
+
+        assertThat(promptReceivers()).hasSize(1)
+    }
+
+    @Test
+    fun ourOwnStateOutsideASessionDoesNotEnterTheForeground() {
+        connect()
+
+        callbacks().onUserStateUpdated(user(SELF, muted = true))
+        callbacks().onPermissionDenied("no")
+        idle()
+
+        assertThat(shadowOf(service).lastForegroundNotification).isNull()
+        assertThat(shadowOf(notificationManager).getNotification(FOREGROUND_ID)).isNull()
+    }
+
+    @Test
+    fun deafenedWithoutMuteReadsAsConnected() {
+        connect()
+        service.renderSessionState(SessionState.Connecting)
+
+        callbacks().onUserStateUpdated(user(SELF, muted = false, deafened = true))
+        idle()
+
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
+    }
+
+    @Test
+    fun synchronizingRestoresADeafenStoredWithoutMute() {
+        preferences().edit().putBoolean(Settings.PREF_DEAFENED, true).commit()
+        connect()
+
+        synchronize()
+
+        assertThat(userStates().map { it.selfMute to it.selfDeaf }).containsExactly(false to true)
+    }
+
+    /** Other apps (automation, headset helpers) send the talk broadcast: exported on purpose. */
+    @Test
+    fun theTalkReceiverIsExported() {
+        connect()
+        synchronize()
+
+        val receiver = talkReceivers().single()
+        assertThat(receiver.flags and android.content.Context.RECEIVER_EXPORTED).isNotEqualTo(0)
+    }
+
+    @Test
+    fun aSynchronizationTheSuperclassRejectsGoesNoFurther() {
+        preferences().edit().putBoolean(Settings.PREF_MUTED, true).commit()
+        humlaField("mConnection").set(service, null) // super dereferences it: NullPointerException
+
+        service.onConnectionSynchronized()
+
+        assertThat(talkReceivers()).isEmpty()
+    }
+
+    @Test
+    fun destroyingTheServiceRemovesThePromptAndTheChatNotification() {
+        connect()
+        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        service.renderSessionState(SessionState.Disconnected(error()))
+        callbacks().onMessageLogged(textMessage("ping"))
+        idle()
+        assertThat(shadowOf(notificationManager).allNotifications).hasSize(2)
+
+        controller.destroy()
+        destroyed = true
+
+        assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
+    }
+
     private companion object {
         const val SELF = 7
         const val FOREGROUND_ID = 1

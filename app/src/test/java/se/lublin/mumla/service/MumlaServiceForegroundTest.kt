@@ -293,4 +293,32 @@ class MumlaServiceForegroundTest {
         preferences.edit().putBoolean(se.lublin.mumla.Settings.PREF_HALF_DUPLEX, false).commit()
         assertThat(service.getAudioConfigForTest().halfDuplex).isFalse()
     }
+
+    @Test
+    fun aDestroyedServiceNoLongerRendersTheSession() {
+        controller.destroy()
+
+        service.connect()
+        mainLooper.idle()
+
+        assertThat(shadowOf(service).lastForegroundNotification).isNull()
+    }
+
+    /** onCreate reads these three settings itself; nothing else would until they change. */
+    @Test
+    fun theSettingsInForceAtStartAreTheOnesUsed() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
+        prefs.edit()
+            .putBoolean(se.lublin.mumla.Settings.PREF_USE_TTS, true)
+            .putBoolean(se.lublin.mumla.Settings.PREF_PTT_SOUND, true)
+            .putBoolean(se.lublin.mumla.Settings.PREF_SHORT_TTS_MESSAGES, true)
+            .commit()
+        val fresh = Robolectric.buildService(MumlaService::class.java).create().get()
+        fun field(name: String) = MumlaService::class.java.getDeclaredField(name).apply { isAccessible = true }.get(fresh)
+
+        assertThat(field("mTTS")).isNotNull()
+        assertThat(field("mPTTSoundEnabled")).isEqualTo(true)
+        assertThat(field("mShortTtsMessagesEnabled")).isEqualTo(true)
+        fresh.onDestroy()
+    }
 }
