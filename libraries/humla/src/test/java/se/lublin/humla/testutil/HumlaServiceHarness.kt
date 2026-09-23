@@ -160,6 +160,29 @@ class HumlaServiceHarness(
         }
     }
 
+    /**
+     * Feeds the same three frames as [synchronize] but waits only for the *protocol* thread to
+     * have parsed them, leaving `onConnectionSynchronized` queued on the main looper. That is the
+     * window in which a disconnect can beat the callback.
+     */
+    fun synchronizeWithoutDraining(tcp: FakeTcpTransport, session: Int = 1) {
+        tcp.simulateMessage(
+            HumlaTCPMessageType.ChannelState,
+            Mumble.ChannelState.newBuilder().setChannelId(0).setName("Root").build().toByteArray(),
+        )
+        tcp.simulateMessage(
+            HumlaTCPMessageType.UserState,
+            Mumble.UserState.newBuilder().setSession(session).setName("me").setChannelId(0).build().toByteArray(),
+        )
+        tcp.simulateMessage(
+            HumlaTCPMessageType.ServerSync,
+            Mumble.ServerSync.newBuilder().setSession(session).setMaxBandwidth(72_000).build().toByteArray(),
+        )
+        awaitUntil(description = "server sync parsed") {
+            service.getConnection()?.isSynchronized == true
+        }
+    }
+
     fun connectAndSynchronize(index: Int = 0): FakeTcpTransport {
         if (index == 0) service.connect()
         val tcp = openSocket(index)

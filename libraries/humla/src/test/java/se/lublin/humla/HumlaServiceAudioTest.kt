@@ -145,6 +145,10 @@ class HumlaServiceAudioTest {
 
         h.service.disconnect()
         h.mainLooper.idle()
+        // Set *after* the disconnect cleared it, so what has to clear it again is startSession's
+        // own reset and not the one on the disconnect path (measured, E6: with only the disconnect
+        // path the target survives into the next session).
+        h.service.setVoiceTargetId(9)
         h.service.connect()
         h.synchronize(h.openSocket(1))
 
@@ -250,6 +254,27 @@ class HumlaServiceAudioTest {
         val f = HumlaService::class.java.getDeclaredField("mAudioController")
         f.isAccessible = true
         return f.get(h.service) as AudioController
+    }
+
+    /**
+     * A disconnect that lands between the server's sync and its delivery on the main looper: the
+     * session is synchronized as far as the protocol thread is concerned, and dead by the time
+     * `onConnectionSynchronized` runs. No pipeline is built for it -- a microphone opened for a
+     * connection that is already gone is the one thing worse than none (G3).
+     */
+    @Test
+    fun aDisconnectThatBeatsTheSyncCallbackBuildsNoPipeline() {
+        val h = start()
+        h.service.connect()
+        val tcp = h.openSocket(0)
+        h.synchronizeWithoutDraining(tcp)
+
+        h.service.disconnect()
+        h.mainLooper.idle()
+
+        assertThat(h.audioFactory.created).isEmpty()
+        assertThat(h.service.getConnectionState())
+            .isNotEqualTo(HumlaService.ConnectionState.CONNECTED)
     }
 
     // ---------------------------------------------------------------- spec A8: problems are visible
@@ -392,6 +417,11 @@ class HumlaServiceAudioTest {
         // And a half-duplex write that carries no mode no longer resolves to false by accident.
         h.service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true) })
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isTrue()
+
+        // Both directions: the flag is what the caller wrote, not a constant (G23).
+        h.service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, false) })
+        assertThat(h.service.getAudioConfigForTest().halfDuplexRequested).isFalse()
+        assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
     }
 
     // ---------------------------------------------------------------- voice targets

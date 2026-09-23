@@ -27,6 +27,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import se.lublin.humla.model.WhisperTargetChannel
+import se.lublin.humla.model.WhisperTargetList
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
@@ -163,6 +165,18 @@ class HumlaServiceSessionTest {
         assertThat(field(connection, "trustStorePath")).isEqualTo("/store")
         assertThat(field(connection, "trustStorePassword")).isEqualTo("store-pw")
         assertThat(field(connection, "trustStoreFormat")).isEqualTo("BKS")
+    }
+
+    /** The other configuration, where Tor is on: `useTor` is what carries it to the connection. */
+    @Test
+    fun torReachesTheConnectionAsItsOwnFlag() {
+        val h = start()
+        h.configure { putBoolean(HumlaService.EXTRAS_USE_TOR, true) }
+
+        h.service.connect()
+        h.mainLooper.idle()
+
+        assertThat(field(h.service.getConnection()!!, "useTor")).isEqualTo(true)
     }
 
     private fun field(target: Any, name: String): Any? {
@@ -356,6 +370,45 @@ class HumlaServiceSessionTest {
         assertThat(h.transports.tcps).hasSize(1) // no reconnect was attempted
     }
 
+    /**
+     * The one mechanism that decides whether a scheduled retry may run. Nothing removes the
+     * pending post, so it really does arrive here after the user has cancelled -- and the state
+     * machine refuses it (measured, G14: without the check the cancelled session reconnects).
+     */
+    @Test
+    fun aRetryThatFiresAfterTheUserCancelledIsRefused() {
+        val h = start(autoReconnect = true)
+        h.connectAndSynchronize()
+        h.failConnection(0, connectionError())
+        val connection = h.service.getConnection()
+
+        h.service.cancelReconnect()
+        h.mainLooper.idleFor(100, TimeUnit.MILLISECONDS) // the post fires in here
+
+        assertThat(h.service.getConnection()).isSameInstanceAs(connection)
+        assertThat(h.service.getSessionState().value)
+            .isInstanceOf(SessionState.Disconnected::class.java)
+        assertThat(h.transports.tcps).hasSize(1)
+    }
+
+    /**
+     * `cancelReconnect` on a live session is a no-op, both halves. Without the state machine's
+     * answer it would release the wake lock and put the service into CONNECTION_LOST while the
+     * connection is up (measured, G15).
+     */
+    @Test
+    fun cancelReconnectDuringALiveSessionChangesNothing() {
+        val h = start(autoReconnect = true)
+        h.connectAndSynchronize()
+
+        h.service.cancelReconnect()
+        h.mainLooper.idle()
+
+        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Connected)
+        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTED)
+        assertThat(h.service.isWakeLockHeldForTest()).isTrue()
+    }
+
     @Test
     fun cancellingAReconnectThatNeverStartedIsHarmless() {
         val h = start()
@@ -364,6 +417,34 @@ class HumlaServiceSessionTest {
 
         assertThat(h.service.isReconnecting()).isFalse()
         assertThat(connectivityReceivers()).isEmpty()
+    }
+
+    private fun whisperTarget(h: HumlaServiceHarness) =
+        WhisperTargetChannel(h.service.getRootChannel(), false, false, null)
+
+    /**
+     * The thirty whisper slots are the session's, not the service's. Without the clear on the
+     * disconnect path a long-lived service runs out of them after thirty whispers spread over any
+     * number of connections, and `registerWhisperTarget` starts answering -1 for good (E10).
+     */
+    @Test
+    fun aNewSessionGetsItsWhisperSlotsBack() {
+        val h = start()
+        h.connectAndSynchronize()
+        repeat(WhisperTargetList.TARGET_MAX - WhisperTargetList.TARGET_MIN + 1) {
+            assertThat(h.service.registerWhisperTarget(whisperTarget(h)))
+                .isNotEqualTo((-1).toByte())
+        }
+        assertThat(h.service.registerWhisperTarget(whisperTarget(h)))
+            .isEqualTo((-1).toByte())
+
+        h.service.disconnect()
+        h.mainLooper.idle()
+        h.service.connect()
+        h.synchronize(h.openSocket(1))
+
+        assertThat(h.service.registerWhisperTarget(whisperTarget(h)))
+            .isNotEqualTo((-1).toByte())
     }
 
     // ---------------------------------------------------------------- connectivity

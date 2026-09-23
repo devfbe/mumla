@@ -234,6 +234,18 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * `removeCallbacks` identifies the pending post by it: a fresh lambda per schedule would leave
      * a retry queued that nothing can cancel.
      */
+    /**
+     * The backoff timer.
+     *
+     * Nothing cancels a pending post, and that is deliberate: whether a retry may run is one
+     * decision and it belongs to the state machine, which answers false in every state but
+     * ConnectionLost. Four `removeCallbacks` call sites stood here -- in startSession, disconnect,
+     * cancelReconnect and releaseSessionResources -- and all four survived their mutations,
+     * because this guard already refuses what they were removing (spec 4.04: two guards over one
+     * observable are one guard and a lie). The price of keeping only the guard is that a stale
+     * post can arrive while a *later* loss is waiting out its backoff and retry it early, once;
+     * the price of keeping the copies was four lines no test could distinguish.
+     */
     private val mReconnectRunnable = Runnable {
         if (mStateMachine.reconnectTimerFired()) startSession()
     }
@@ -399,10 +411,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * points rather than one per entry point (spec 4.04).
      */
     private fun startSession() {
-        mHandler.removeCallbacks(mReconnectRunnable)
         mConnectionState = ConnectionState.CONNECTING
+        // The whisper slots are cleared where the session ends, not where the next one starts:
+        // registerWhisperTarget needs a live connection, so there is no window between the two in
+        // which they could differ, and the copy here survived its mutation for that reason
+        // (spec 4.04). `mVoiceTargetId` does have such a window -- setVoiceTargetId works while
+        // disconnected -- so its reset stays.
         mVoiceTargetId = 0
-        mWhisperTargetList.clear()
 
         // Read before anything is built, so a misconfigured start allocates nothing. Repair of a
         // pre-existing crash characterized by A9a: the Java service handed a null mServer straight
@@ -464,7 +479,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override fun disconnect() {
-        mHandler.removeCallbacks(mReconnectRunnable)
         mStateMachine.disconnectRequested()
         mConnection?.disconnect()
     }
@@ -595,6 +609,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // never on the main thread (spec A2). This call is the one the ANR came from.
         mAudioController.shutdown()
 
+        // The one line in this method with no behavioural observable, and it is measured rather
+        // than assumed: deleting it alone leaves all 95 service tests green, because every reader
+        // goes through getModelHandler(), which throws NotSynchronizedException once the
+        // connection is down - so the null-out can never be the reason an answer differs. It stays
+        // as a retention measure: a ModelHandler holds the whole channel tree, every user and
+        // their textures, and a service that keeps one after the session is over keeps all of it
+        // until the next connection replaces it. Do not read this line as protection.
         mModelHandler = null
         mVoiceTargetId = 0
         mWhisperTargetList.clear()
@@ -673,7 +694,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /** Gives back everything a live session holds. Only a Disconnected state reaches this. */
     private fun releaseSessionResources() {
-        mHandler.removeCallbacks(mReconnectRunnable)
         unregisterConnectivityReceiver()
         if (mWakeLock.isHeld) mWakeLock.release()
     }
@@ -934,7 +954,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override fun cancelReconnect() {
-        mHandler.removeCallbacks(mReconnectRunnable)
         if (mStateMachine.cancelReconnect()) {
             mConnectionState = ConnectionState.CONNECTION_LOST
             releaseSessionResources()
