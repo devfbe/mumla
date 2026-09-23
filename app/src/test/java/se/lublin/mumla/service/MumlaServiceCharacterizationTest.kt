@@ -36,6 +36,7 @@ import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.ModelHandler
+import se.lublin.humla.session.SessionState
 import se.lublin.humla.util.HumlaCallbacks
 import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
@@ -396,7 +397,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun connectingEntersTheForegroundWithTheConnectingText() {
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
 
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
@@ -407,7 +408,7 @@ class MumlaServiceCharacterizationTest {
     fun withTorTheTextSaysSo() {
         preferences().edit().putBoolean(Settings.PREF_USE_TOR, true).commit()
 
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
 
         assertThat(foregroundText()).isEqualTo(app.getString(R.string.mumlaConnecting) + " (Tor)")
@@ -415,8 +416,8 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun connectedShowsTheConnectedTextAndTheActions() {
-        callbacks().onConnecting()
-        callbacks().onConnected()
+        service.renderSessionState(SessionState.Connecting)
+        service.renderSessionState(SessionState.Connected)
         idle()
 
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
@@ -426,7 +427,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun ourOwnMuteAndDeafenStateIsStoredAndShown() {
         connect()
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
 
         callbacks().onUserStateUpdated(user(SELF, muted = true, deafened = false))
@@ -449,7 +450,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun somebodyElsesStateChangesNothing() {
         connect()
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
 
         callbacks().onUserStateUpdated(user(SELF + 1, muted = true, deafened = true))
@@ -463,7 +464,7 @@ class MumlaServiceCharacterizationTest {
     fun aUserStateBeforeOurSessionIsKnownChangesNothing() {
         connect()
         every { connection.getSession() } throws NotSynchronizedException()
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
 
         callbacks().onUserStateUpdated(user(SELF, muted = true))
@@ -477,7 +478,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aNullUserStateChangesNothing() {
         connect()
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
 
         callbacks().onUserStateUpdated(null)
@@ -488,7 +489,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun aPermissionDenialRepostsTheNotification() {
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
         val before = shadowOf(notificationManager).getNotification(FOREGROUND_ID)
 
@@ -500,7 +501,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun aPermissionDenialRepostsNothingWhileNotificationsAreSuppressed() {
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
         val before = shadowOf(notificationManager).getNotification(FOREGROUND_ID)
         service.setSuppressNotifications(true)
@@ -513,8 +514,8 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun aDisconnectWithAnErrorShowsTheReconnectPrompt() {
-        callbacks().onConnecting()
-        callbacks().onDisconnected(error())
+        service.renderSessionState(SessionState.Connecting)
+        service.renderSessionState(SessionState.Disconnected(error()))
         idle()
 
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
@@ -525,8 +526,8 @@ class MumlaServiceCharacterizationTest {
     fun aDisconnectWithAnErrorShowsNoPromptWhileNotificationsAreSuppressed() {
         service.setSuppressNotifications(true)
 
-        callbacks().onConnecting()
-        callbacks().onDisconnected(error())
+        service.renderSessionState(SessionState.Connecting)
+        service.renderSessionState(SessionState.Disconnected(error()))
         idle()
 
         assertThat(reconnectPrompt()).isNull()
@@ -534,8 +535,8 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun aCleanDisconnectShowsNoPrompt() {
-        callbacks().onConnecting()
-        callbacks().onDisconnected(null)
+        service.renderSessionState(SessionState.Connecting)
+        service.renderSessionState(SessionState.Disconnected(null))
         idle()
 
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
@@ -544,7 +545,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun cancelReconnectHidesThePrompt() {
-        callbacks().onDisconnected(error())
+        service.renderSessionState(SessionState.Disconnected(error()))
         idle()
 
         service.cancelReconnect()
@@ -558,7 +559,7 @@ class MumlaServiceCharacterizationTest {
         service.onReconnectNotificationDismissed()
         assertThat(service.isErrorShown()).isTrue()
 
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
         assertThat(service.isErrorShown()).isFalse()
 
@@ -568,7 +569,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun acknowledgingTheErrorHidesThePromptWhenNoReconnectIsUnderway() {
-        callbacks().onDisconnected(error())
+        service.renderSessionState(SessionState.Disconnected(error()))
         idle()
 
         service.markErrorShown()
@@ -995,10 +996,10 @@ class MumlaServiceCharacterizationTest {
         val tts = installTts()
         connect()
         synchronize()
-        callbacks().onConnecting()
-        callbacks().onDisconnected(error())
+        service.renderSessionState(SessionState.Connecting)
+        service.renderSessionState(SessionState.Disconnected(error()))
         idle()
-        callbacks().onConnecting()
+        service.renderSessionState(SessionState.Connecting)
         idle()
 
         preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()

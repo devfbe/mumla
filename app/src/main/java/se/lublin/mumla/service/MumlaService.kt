@@ -38,6 +38,7 @@ import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.session.SessionState
 import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.HumlaObserver
 import se.lublin.mumla.R
@@ -45,6 +46,11 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.util.HtmlUtils
 import java.util.Collections
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * An extension of the Humla service with some added Mumla-exclusive non-standard Mumble features.
@@ -106,48 +112,14 @@ class MumlaService : HumlaService(),
 
     private lateinit var mTalkReceiver: BroadcastReceiver
 
+    /**
+     * Collects the session state for the lifetime of the service. Main.immediate, because the state
+     * machine is mutated on the main thread: every transition is rendered inline, before the call
+     * that caused it returns, so no later line in HumlaService can observe a stale notification.
+     */
+    private val mServiceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     private val mObserver = object : HumlaObserver() {
-        override fun onConnecting() {
-            // Remove old notification left from reconnect,
-            mReconnectNotification?.let {
-                it.hide()
-                mReconnectNotification = null
-            }
-
-            val tor = if (mSettings.isTorEnabled()) " (Tor)" else ""
-            mNotification = MumlaConnectionNotification.create(
-                this@MumlaService,
-                getString(R.string.mumlaConnecting) + tor,
-                this@MumlaService,
-            ).also { it.show() }
-
-            mErrorShown = false
-        }
-
-        override fun onConnected() {
-            mNotification?.let {
-                val tor = if (mSettings.isTorEnabled()) " (Tor)" else ""
-                it.customContentText = getString(R.string.connected) + tor
-                it.actionsShown = true
-                it.show()
-            }
-        }
-
-        override fun onDisconnected(e: HumlaException?) {
-            mNotification?.let {
-                it.hide()
-                mNotification = null
-            }
-            if (e != null && !mSuppressNotifications) {
-                mReconnectNotification = MumlaReconnectNotification.show(
-                    this@MumlaService,
-                    e.message + (if (mSettings.isTorEnabled()) " (Tor)" else ""),
-                    isReconnecting(),
-                    this@MumlaService,
-                )
-            }
-        }
-
         override fun onUserConnected(user: IUser) {
             if (user.getTextureHash() != null && user.getTexture() == null) {
                 // Request avatar data if available.
@@ -300,11 +272,74 @@ class MumlaService : HumlaService(),
         mTalkReceiver = TalkBroadcastReceiver(this)
 
         mMediaSession = MumlaMediaSession(this, HumlaMediaKeyTarget(this), mSettings).also { it.attach(this) }
+
+        // Spec A3/A6: the notification is a function of the session state, and only Disconnected
+        // tears the foreground down.
+        mServiceScope.launch { getSessionState().collect { renderSessionState(it) } }
+    }
+
+    /**
+     * Renders one session state into the foreground notification (spec A3, A6) -- the only place
+     * that decides whether the service is in the foreground.
+     *
+     * `Connecting` enters the foreground; everything up to `Disconnected` only changes its text.
+     * In particular `ConnectionLost` and `Reconnecting` keep it: leaving the foreground on a loss
+     * meant the reconnect had to start it again, from the background with the screen off, which
+     * Android 12+ refuses -- and the microphone stayed dead after every reconnect.
+     */
+    internal fun renderSessionState(state: SessionState) {
+        when (state) {
+            SessionState.Connecting -> {
+                // Remove old notification left from reconnect,
+                mReconnectNotification?.let {
+                    it.hide()
+                    mReconnectNotification = null
+                }
+                mErrorShown = false
+                showConnectionNotification(getString(R.string.mumlaConnecting) + torSuffix(), actions = false)
+            }
+            SessionState.Connected ->
+                showConnectionNotification(getString(R.string.connected) + torSuffix(), actions = true)
+            is SessionState.ConnectionLost, is SessionState.Reconnecting ->
+                showConnectionNotification(getString(R.string.connection_lost_reconnecting), actions = false)
+            is SessionState.Disconnected -> {
+                mNotification?.let {
+                    it.hide()
+                    mNotification = null
+                }
+                val error = state.error
+                if (error != null && !mSuppressNotifications) {
+                    mReconnectNotification?.hide()
+                    mReconnectNotification =
+                        MumlaReconnectNotification.show(this, error.message + torSuffix(), false, this)
+                }
+            }
+        }
+    }
+
+    private fun torSuffix(): String = if (mSettings.isTorEnabled()) " (Tor)" else ""
+
+    private fun showConnectionNotification(contentText: String, actions: Boolean) {
+        val notification = mNotification
+            ?: MumlaConnectionNotification.create(this, contentText, this).also { mNotification = it }
+        notification.customContentText = contentText
+        notification.actionsShown = actions
+        if (!notification.show()) {
+            // Spec A6: the platform refused the foreground start. Say so instead of dying.
+            logWarning(getString(R.string.foreground_start_failed))
+            if (!mSuppressNotifications) {
+                mReconnectNotification?.hide()
+                mReconnectNotification = MumlaReconnectNotification.show(
+                    this, getString(R.string.foreground_start_failed), false, this,
+                )
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder = MumlaBinder(this)
 
     override fun onDestroy() {
+        mServiceScope.cancel()
         mNotification?.let {
             it.hide()
             mNotification = null
