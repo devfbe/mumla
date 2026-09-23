@@ -110,6 +110,12 @@ class HumlaServiceHarness(
         }
     }
 
+    /** Applies extras the way MumlaService does, before or during a session. */
+    fun configure(block: Bundle.() -> Unit) {
+        service.configureExtras(Bundle().apply(block))
+        mainLooper.idle()
+    }
+
     /** Waits until something has been posted to the main looper, then runs it. */
     fun drainMainWhenPosted() {
         awaitUntil(description = "a task on the main looper") { !mainLooper.isIdle }

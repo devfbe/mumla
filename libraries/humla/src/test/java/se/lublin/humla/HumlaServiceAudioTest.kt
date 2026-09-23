@@ -75,6 +75,109 @@ class HumlaServiceAudioTest {
         assertThat(h.service.getCurrentBandwidth()).isEqualTo(12_345)
     }
 
+    /**
+     * The first pipeline is built from the settings and the input mode **in force**, not from
+     * defaults and not from the activity mode the service happens to start with. Each of those was
+     * a surviving mutation of its own: the config argument (E12), the input mode (S35) and the
+     * half-duplex flag, which only resolves against the transmit mode the config carries (G23).
+     */
+    @Test
+    fun theFirstPipelineIsBuiltFromTheSettingsInForce() {
+        val h = start()
+        h.configure {
+            putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK)
+            putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true)
+            putInt(HumlaService.EXTRAS_INPUT_QUALITY, 24_000)
+        }
+
+        h.connectAndSynchronize()
+        audioUp(h)
+
+        val config = h.audioFactory.configs[0]
+        assertThat(config.targetBitrate).isEqualTo(24_000)
+        assertThat(config.transmitMode).isEqualTo(Constants.TRANSMIT_PUSH_TO_TALK)
+        assertThat(config.halfDuplex).isTrue()
+        assertThat(config.halfDuplexRequested).isTrue()
+        // By identity: the toggle the capture loop consults is the toggle a key press writes.
+        assertThat(h.audioFactory.sessionParams[0].inputMode)
+            .isSameInstanceAs(inputModeOf(h))
+        h.service.setTalkingState(true)
+        assertThat(
+            (h.audioFactory.sessionParams[0].inputMode as se.lublin.humla.audio.inputmode.ToggleInputMode)
+                .isTalkingOn()
+        ).isTrue()
+    }
+
+    private fun inputModeOf(h: HumlaServiceHarness): Any {
+        val f = HumlaService::class.java.getDeclaredField("mInputMode")
+        f.isAccessible = true
+        return f.get(h.service)
+    }
+
+    /**
+     * A voice target set while the socket is up but the session is not yet synchronized reaches
+     * the pipeline that is built for that session. This is the only window in which
+     * `mVoiceTargetId` can be non-zero at build time -- `startSession` clears it -- so without it
+     * the argument could be a constant zero and no test would know (measured, S34).
+     */
+    @Test
+    fun aVoiceTargetSetWhileConnectingReachesTheFirstPipeline() {
+        val h = start()
+        h.service.connect()
+        val tcp = h.openSocket(0)
+
+        h.service.setVoiceTargetId(5)
+        h.synchronize(tcp)
+
+        audioUp(h)
+        assertThat(h.audioFactory.sessionParams[0].targetId).isEqualTo(5.toByte())
+    }
+
+    /** And the next session starts clean: the slots the old one held are not carried over (E6/E7). */
+    @Test
+    fun aNewSessionStartsWithoutThePreviousVoiceTarget() {
+        val h = start()
+        h.service.connect()
+        val tcp = h.openSocket(0)
+        h.service.setVoiceTargetId(5)
+        h.synchronize(tcp)
+        audioUp(h)
+
+        h.service.disconnect()
+        h.mainLooper.idle()
+        h.service.connect()
+        h.synchronize(h.openSocket(1))
+
+        audioUp(h, count = 2)
+        assertThat(h.service.getVoiceTargetId()).isEqualTo(0.toByte())
+        assertThat(h.audioFactory.sessionParams[1].targetId).isEqualTo(0.toByte())
+    }
+
+    /**
+     * Spec A8's other half: a ServerSync whose session id names no user leaves the session up and
+     * says so, rather than building a pipeline with nothing to stamp packets with (G32).
+     */
+    @Test
+    fun aServerSyncWithoutASessionUserSaysSoAndBuildsNoPipeline() {
+        val h = start()
+        h.service.connect()
+        val tcp = h.openSocket(0)
+
+        // ServerSync for a session the user list never mentioned.
+        tcp.simulateMessage(
+            se.lublin.humla.net.HumlaTCPMessageType.ServerSync,
+            se.lublin.humla.protobuf.Mumble.ServerSync.newBuilder()
+                .setSession(4242).setMaxBandwidth(72_000).build().toByteArray(),
+        )
+        awaitUntil(description = "the sync is reported") {
+            h.mainLooper.idle()
+            h.service.getConnectionState() == HumlaService.ConnectionState.CONNECTED
+        }
+
+        assertThat(h.warnings).contains(h.service.getString(R.string.no_session_user))
+        assertThat(h.audioFactory.created).isEmpty()
+    }
+
     /** Spec section 6 regression test: "no main-thread join in disconnect". */
     @Test
     fun disconnectDoesNotBlockTheMainThreadWhileAudioTearsDown() {
@@ -121,6 +224,32 @@ class HumlaServiceAudioTest {
 
         awaitUntil(description = "pipeline stopped") { h.audioFactory.created[0].shutdownCalls.get() == 1 }
         assertThat(h.service.getCurrentBandwidth()).isEqualTo(-1)
+    }
+
+    /**
+     * `onDestroy` must stop the control thread, or `humla-audio-control` outlives the service for
+     * the rest of the process. Reached by reflection and asserted on the thread **object** rather
+     * than on a name filter over `Thread.getAllStackTraces` (task 7 contract): a library that
+     * renames threads turns a name filter into a leak test that passes by finding nothing.
+     */
+    @Test
+    fun destroyingTheServiceStopsTheAudioControlThread() {
+        val h = start()
+        h.connectAndSynchronize()
+        audioUp(h)
+        val controller = controllerOf(h)
+        assertThat(controller.thread.isAlive).isTrue()
+
+        h.destroy()
+        harnesses.remove(h)
+
+        awaitUntil(description = "the control thread ended") { !controller.thread.isAlive }
+    }
+
+    private fun controllerOf(h: HumlaServiceHarness): AudioController {
+        val f = HumlaService::class.java.getDeclaredField("mAudioController")
+        f.isAccessible = true
+        return f.get(h.service) as AudioController
     }
 
     // ---------------------------------------------------------------- spec A8: problems are visible

@@ -162,6 +162,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * so an auto-reconnect over a link with no headset would otherwise write the same line once
      * per attempt.
      */
+    @Volatile
     private var mLastWarning: String? = null
 
     private lateinit var mActivityInputMode: ActivityInputMode

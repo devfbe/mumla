@@ -167,6 +167,27 @@ class HumlaServiceBluetoothTest {
         assertThat(h.devices!!.listener).isNull()
     }
 
+    /**
+     * The same release, on the path where `onConnectionDisconnected` cannot do it for us. The test
+     * above connects first, so the disconnect report clears the route and `onDestroy`'s own call
+     * is masked -- two guards over one observable, and the mutation that deletes the one in
+     * `onDestroy` survived it (measured, S17). A route held *without* a session separates them:
+     * there is no connection, so there is no disconnect report.
+     */
+    @Test
+    fun destroyingTheServiceReleasesARouteHeldWithoutASession() {
+        val h = HumlaServiceHarness().also { harnesses += it }
+        h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+        h.service.enableBluetoothSco()
+        assertThat(h.devices!!.selectCalls).containsExactly(7)
+        assertThat(h.service.isBluetoothScoActive()).isTrue()
+
+        h.destroy()
+        harnesses.remove(h)
+
+        assertThat(h.devices!!.clearCalls).isEqualTo(1)
+    }
+
     // ---------------------------------------------------------------- the route and the pipeline
 
     @Test
