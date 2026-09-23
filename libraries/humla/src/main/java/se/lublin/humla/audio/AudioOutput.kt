@@ -48,7 +48,7 @@ import se.lublin.humla.protocol.AudioHandler
  *               thread-safe and one chunker serves one playback thread, while the sink behind
  *               it takes the one lock that also covers the capture thread.
  */
-class AudioOutput(
+class AudioOutput @JvmOverloads constructor(
     private val listener: AudioOutputListener,
     /**
      * The far-end reference for AEC3, or null when the WebRTC canceller is not in the capture
@@ -56,7 +56,21 @@ class AudioOutput(
      * in the constructor and read only by the playback thread in [run].
      */
     private val farEnd: FarEndFrameChunker?,
+    /** Builds one user's decoder chain; the seam JVM tests use to run without native codecs. */
+    private val speechFactory: SpeechFactory = SpeechFactory { user, codec, samples, talkStateListener ->
+        AudioOutputSpeech(user, codec, samples, talkStateListener)
+    },
 ) : Runnable, AudioOutputSpeech.TalkStateListener {
+
+    fun interface SpeechFactory {
+        @Throws(NativeAudioException::class)
+        fun create(
+            user: User,
+            codec: HumlaUDPMessageType,
+            requestedSamples: Int,
+            talkStateListener: AudioOutputSpeech.TalkStateListener,
+        ): AudioOutputSpeech
+    }
 
     private val audioOutputs = HashMap<Int, AudioOutputSpeech>()
     private var audioTrack: AudioTrack? = null
@@ -270,11 +284,14 @@ class AudioOutput(
             val aop = packetLock.withLock {
                 var existing = audioOutputs[session]
                 if (existing != null && existing.getCodec() != messageType) {
+                    // Out of the map before it is destroyed: if the successor cannot be built,
+                    // nothing may be left for the next mix to decode through freed handles.
+                    audioOutputs.remove(session)
                     existing.destroy()
                     existing = null
                 }
                 existing ?: try {
-                    AudioOutputSpeech(user, messageType, bufferSize, this).also {
+                    speechFactory.create(user, messageType, bufferSize, this).also {
                         Log.v(TAG, "Created audio user " + user.getName())
                         audioOutputs[session] = it
                     }

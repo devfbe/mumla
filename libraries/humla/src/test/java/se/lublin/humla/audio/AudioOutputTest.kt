@@ -11,6 +11,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowAudioTrack
 import org.robolectric.shadows.ShadowLog
+import se.lublin.humla.audio.native.OpusDecoderApi
+import se.lublin.humla.audio.native.SpeexJitterApi
+import se.lublin.humla.audio.native.SpeexJitterNative
+import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
@@ -19,11 +23,11 @@ import se.lublin.humla.protocol.AudioHandler
 @RunWith(RobolectricTestRunner::class)
 class AudioOutputTest {
 
-    private val user = User(SESSION, "bob")
+    private val users = mapOf(SESSION to User(SESSION, "bob"), OTHER_SESSION to User(OTHER_SESSION, "alice"))
 
     private val listener = object : AudioOutput.AudioOutputListener {
         override fun onUserTalkStateUpdated(user: User) = Unit
-        override fun getUser(session: Int): User? = if (session == SESSION) user else null
+        override fun getUser(session: Int): User? = users[session]
     }
 
     private var output: AudioOutput? = null
@@ -39,8 +43,10 @@ class AudioOutputTest {
         output?.let { o -> runBounded("tearDown stopPlaying") { o.stopPlaying() } }
     }
 
-    private fun startedOutput(): AudioOutput {
-        val o = AudioOutput(listener, null)
+    private fun startedOutput(
+        factory: AudioOutput.SpeechFactory = AudioOutput.SpeechFactory { u, c, n, l -> AudioOutputSpeech(u, c, n, l) },
+    ): AudioOutput {
+        val o = AudioOutput(listener, null, factory)
         output = o
         o.startPlaying(AudioManager.STREAM_MUSIC)
         awaitTrue("the playback thread to start") { o.isPlaying() }
@@ -111,13 +117,46 @@ class AudioOutputTest {
         assertThat(o.isPlaying()).isFalse()
     }
 
+    @Test
+    fun `a speech destroyed for a codec switch does not stay in the mix when its successor fails`() {
+        val jitters = mutableMapOf<Int, TrackingJitter>()
+        val factory = AudioOutput.SpeechFactory { u, codec, samples, talkStateListener ->
+            if (codec != HumlaUDPMessageType.UDPVoiceOpus) {
+                throw NativeAudioException("No decoder for codec $codec")
+            }
+            val jitter = TrackingJitter()
+            jitters[u.session] = jitter
+            AudioOutputSpeech(u, codec, samples, talkStateListener, NoOpusDecoder(), jitter)
+        }
+        val o = startedOutput(factory)
+
+        // bob talks opus, then switches to a codec that cannot be built: his opus speech is
+        // destroyed on the way to its successor, and the successor never arrives.
+        o.queueVoiceData(voicePacket(SESSION), HumlaUDPMessageType.UDPVoiceOpus)
+        o.queueVoiceData(voicePacket(SESSION), HumlaUDPMessageType.UDPPing)
+        val bob = jitters.getValue(SESSION)
+        assertThat(bob.destroys).isEqualTo(1)
+
+        // alice's packet wakes the playback thread, and the next mix decodes every speech still
+        // registered. A destroyed one passes a freed handle to libspeexdsp: on a device that is a
+        // native crash, here it is a counted call.
+        o.queueVoiceData(voicePacket(OTHER_SESSION), HumlaUDPMessageType.UDPVoiceOpus)
+        awaitTrue("a mix that decoded alice") { jitters.getValue(OTHER_SESSION).callsWhileAlive > 1 }
+        runBounded("stopPlaying") { o.stopPlaying() }
+        output = null
+
+        assertThat(bob.callsAfterDestroy).isEqualTo(0)
+    }
+
     // --- helpers --------------------------------------------------------------------------------
 
-    private fun voicePacket(): ByteArray {
+    /** Header byte, session, sequence, then one opus frame: a 13-bit size and its payload. */
+    private fun voicePacket(session: Int = SESSION): ByteArray {
         val pb = PacketBuffer.allocate(16)
         pb.append(0) // header byte: type and target
-        pb.writeLong(SESSION.toLong())
+        pb.writeLong(session.toLong())
         pb.writeLong(0) // sequence
+        pb.writeLong(2) // opus size header
         pb.append(byteArrayOf(0x01, 0x02), 2)
         val length = pb.size()
         pb.rewind()
@@ -148,8 +187,57 @@ class AudioOutputTest {
         }
     }
 
+    /** Counts every call libspeexdsp would get, split at `destroy`. */
+    private class TrackingJitter : SpeexJitterApi {
+        @Volatile var destroys = 0
+        @Volatile var callsWhileAlive = 0
+        @Volatile var callsAfterDestroy = 0
+
+        private fun touch() {
+            if (destroys == 0) callsWhileAlive++ else callsAfterDestroy++
+        }
+
+        override fun init(stepSize: Int): Long = 1L
+        override fun destroy(handle: Long) {
+            destroys++
+        }
+        override fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int) = touch()
+        override fun get(handle: Long, out: ByteArray, desiredSpan: Int, meta: IntArray): Int {
+            touch()
+            return SpeexJitterNative.JITTER_BUFFER_MISSING
+        }
+        override fun pointerTimestamp(handle: Long): Int {
+            touch()
+            return 0
+        }
+        override fun tick(handle: Long) = touch()
+        override fun ctl(handle: Long, request: Int, value: IntArray): Int {
+            touch()
+            return 0
+        }
+        override fun updateDelay(handle: Long): Int {
+            touch()
+            return 0
+        }
+    }
+
+    private class NoOpusDecoder : OpusDecoderApi {
+        override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {
+            error[0] = 0
+            return 1L
+        }
+        override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int =
+            AudioHandler.FRAME_SIZE
+        override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int): Int =
+            AudioHandler.FRAME_SIZE
+        override fun destroy(state: Long) = Unit
+        override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = 1
+        override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int = AudioHandler.FRAME_SIZE
+    }
+
     private companion object {
         const val SESSION = 7
+        const val OTHER_SESSION = 8
         const val BYTES_PER_SAMPLE = 2
 
         /** What the device in the bug report answers for 48 kHz mono 16-bit, in bytes. */
