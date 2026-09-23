@@ -30,6 +30,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import se.lublin.humla.audio.capture.FarEndFrameChunker
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.exception.NativeAudioException
@@ -64,6 +65,12 @@ class AudioOutput(
 
     // Lock that the audio thread waits on when there's no audio to play. Wake when we get a frame.
     private val inactiveLock = Object()
+    /**
+     * Guards [audioOutputs] between the network thread ([queueVoiceData]), the playback thread
+     * ([fetchAudio]) and [stopPlaying]. Only ever taken through `withLock`: an exception inside the
+     * critical section -- a codec with no decoder is one -- must not leave it held, or the
+     * playback thread parks on its next mix and [stopPlaying] never returns.
+     */
     private val packetLock: Lock = ReentrantLock()
     private var running = false
     private var woken = false // set by every notify() on inactiveLock
@@ -127,13 +134,12 @@ class AudioOutput(
         }
         thread = null
 
-        packetLock.lock()
-        for (speech in audioOutputs.values) {
-            speech.destroy()
+        packetLock.withLock {
+            for (speech in audioOutputs.values) {
+                speech.destroy()
+            }
+            audioOutputs.clear()
         }
-        packetLock.unlock()
-
-        audioOutputs.clear()
         audioTrack?.release()
         audioTrack = null
     }
@@ -219,18 +225,19 @@ class AudioOutput(
         Arrays.fill(buffer, bufferOffset, bufferOffset + bufferSize, 0.toShort())
         val sources = ArrayList<IAudioMixerSource<FloatArray>>()
         try {
-            packetLock.lock()
-            // Parallelize decoding using a fixed thread pool equal to the number of cores
-            val futureResults = decodeExecutorService.invokeAll(audioOutputs.values)
-            for (future in futureResults) {
-                val result = future.get()
-                if (result.isAlive()) {
-                    sources.add(result)
-                } else {
-                    val speech = result.getSpeechOutput()
-                    Log.v(TAG, "Deleted audio user " + speech.getUser().getName())
-                    audioOutputs.remove(speech.getSession())
-                    speech.destroy()
+            packetLock.withLock {
+                // Parallelize decoding using a fixed thread pool equal to the number of cores
+                val futureResults = decodeExecutorService.invokeAll(audioOutputs.values)
+                for (future in futureResults) {
+                    val result = future.get()
+                    if (result.isAlive()) {
+                        sources.add(result)
+                    } else {
+                        val speech = result.getSpeechOutput()
+                        Log.v(TAG, "Deleted audio user " + speech.getUser().getName())
+                        audioOutputs.remove(speech.getSession())
+                        speech.destroy()
+                    }
                 }
             }
         } catch (e: InterruptedException) {
@@ -239,8 +246,6 @@ class AudioOutput(
         } catch (e: ExecutionException) {
             e.printStackTrace()
             return false
-        } finally {
-            packetLock.unlock()
         }
 
         if (sources.isEmpty()) return false
@@ -262,24 +267,23 @@ class AudioOutput(
             val seq = pds.readLong().toInt()
 
             // Synchronize so we don't destroy an output while we add a buffer to it.
-            packetLock.lock()
-            var aop = audioOutputs[session]
-            if (aop != null && aop.getCodec() != messageType) {
-                aop.destroy()
-                aop = null
-            }
-            if (aop == null) {
-                try {
-                    aop = AudioOutputSpeech(user, messageType, bufferSize, this)
+            val aop = packetLock.withLock {
+                var existing = audioOutputs[session]
+                if (existing != null && existing.getCodec() != messageType) {
+                    existing.destroy()
+                    existing = null
+                }
+                existing ?: try {
+                    AudioOutputSpeech(user, messageType, bufferSize, this).also {
+                        Log.v(TAG, "Created audio user " + user.getName())
+                        audioOutputs[session] = it
+                    }
                 } catch (e: NativeAudioException) {
                     Log.v(TAG, "Failed to create audio user " + user.getName())
                     e.printStackTrace()
-                    return
+                    null
                 }
-                Log.v(TAG, "Created audio user " + user.getName())
-                audioOutputs[session] = aop
-            }
-            packetLock.unlock()
+            } ?: return
 
             val dataBuffer = PacketBuffer(pds.bufferBlock(pds.left()))
             aop.addFrameToBuffer(dataBuffer, msgFlags, seq)

@@ -90,6 +90,27 @@ class AudioOutputTest {
         assertThat(o.isPlaying()).isFalse()
     }
 
+    // --- the packet lock ------------------------------------------------------------------------
+
+    @Test
+    fun `a speech that cannot be built does not leave the packet lock held`() {
+        val o = startedOutput()
+
+        // UDPPing has no decoder: building the speech throws inside the critical section. On a
+        // thread of its own, because the lock is reentrant -- the test thread would get it back
+        // no matter what was leaked.
+        val producer = Thread { o.queueVoiceData(voicePacket(), HumlaUDPMessageType.UDPPing) }
+        producer.start()
+        producer.join(TimeUnit.SECONDS.toMillis(5))
+        assertThat(producer.isAlive).isFalse()
+
+        // stopPlaying takes the packet lock after the playback thread has gone. A lock the dead
+        // producer still owns parks it forever.
+        runBounded("stopPlaying after the failed packet") { o.stopPlaying() }
+        output = null
+        assertThat(o.isPlaying()).isFalse()
+    }
+
     // --- helpers --------------------------------------------------------------------------------
 
     private fun voicePacket(): ByteArray {
