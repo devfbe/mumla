@@ -89,7 +89,7 @@
         <!-- android:defaultValue must equal Settings.DEFAULT_BLUETOOTH_SCO, for the same
              reason as the preference below it. -->
         <CheckBoxPreference
-            android:defaultValue="false"
+            android:defaultValue="true"
             android:key="pref_bluetooth_sco"
             android:summary="@string/bluetoothScoSum"
             android:title="@string/bluetoothSco"

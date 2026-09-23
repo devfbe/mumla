@@ -57,12 +57,23 @@ class GeneralSettingsBluetoothTest {
         PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
         settings = Settings.getInstance(app)
         ShadowToast.reset()
+    }
 
+    private fun open() {
         activity = Robolectric.buildActivity(HostActivity::class.java).setup().get()
         fragment = GeneralSettingsFragment()
         activity.supportFragmentManager.beginTransaction()
             .add(android.R.id.content, fragment)
             .commitNow()
+    }
+
+    /**
+     * The screen as a user who switched the headset off finds it. The default is on since the
+     * audio chooser, and ticking the box is the gesture that asks for the permission.
+     */
+    private fun openSwitchedOff() {
+        settings.setBluetoothScoEnabled(false)
+        open()
     }
 
     private fun checkBox(): CheckBoxPreference {
@@ -98,6 +109,7 @@ class GeneralSettingsBluetoothTest {
 
     @Test
     fun theCheckBoxSitsInTheControlsCategoryAndStartsFromTheCodeDefault() {
+        open()
         val category = fragment.preferenceScreen.findPreference<Preference>("controls_settings")
         assertWithMessage("no PreferenceCategory with key 'controls_settings'")
             .that(category).isNotNull()
@@ -114,6 +126,7 @@ class GeneralSettingsBluetoothTest {
 
     @Test
     fun theSummarySaysThatThePermissionIsNeeded() {
+        open()
         // The box can be tapped and stay empty. The only place that can be explained beforehand
         // is the text under it.
         val summary = checkBox().summary.toString().lowercase()
@@ -124,6 +137,7 @@ class GeneralSettingsBluetoothTest {
 
     @Test
     fun tickingItWithoutThePermissionAsksForItAndLeavesTheBoxEmpty() {
+        openSwitchedOff()
         shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
 
         checkBox().performClick()
@@ -135,6 +149,7 @@ class GeneralSettingsBluetoothTest {
 
     @Test
     fun tickingItWithThePermissionPersistsIt() {
+        openSwitchedOff()
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
 
         checkBox().performClick()
@@ -146,6 +161,7 @@ class GeneralSettingsBluetoothTest {
 
     @Test
     fun untickingItNeverAsksForThePermission() {
+        openSwitchedOff()
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         checkBox().performClick()
         shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
@@ -159,6 +175,7 @@ class GeneralSettingsBluetoothTest {
 
     @Test
     fun grantingThePermissionAfterwardsTurnsItOnAndTicksTheBox() {
+        openSwitchedOff()
         shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         checkBox().performClick()
 
@@ -172,6 +189,7 @@ class GeneralSettingsBluetoothTest {
     /** Keep asking, stop gating (spec 4.1) -- the settings half of the same ruling. */
     @Test
     fun denyingThePermissionStillTurnsItOnAndSaysWhatItMayCost() {
+        openSwitchedOff()
         shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         checkBox().performClick()
 

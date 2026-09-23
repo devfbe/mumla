@@ -99,7 +99,10 @@ class ChannelListFragmentBluetoothTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
+        // Switched off explicitly: the default is on since the headset is taken automatically,
+        // and the item's gestures below start from a user who switched it off.
+        PreferenceManager.getDefaultSharedPreferences(app).edit().clear()
+            .putBoolean(Settings.PREF_BLUETOOTH_SCO, false).commit()
         settings = Settings.getInstance(app)
         ShadowToast.reset()
 

@@ -264,6 +264,7 @@ class MumlaService : HumlaService(),
         mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled()
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         preferences.registerOnSharedPreferenceChangeListener(this)
+        applyBluetoothPreference()
 
         // Manually set theme to style overlay views
         // XML <application> theme does NOT do this!
@@ -399,18 +400,10 @@ class MumlaService : HumlaService(),
             setSelfMuteDeafState(mSettings.isMuted(), mSettings.isDeafened())
         }
 
-        // The Bluetooth headset is a stored wish, not a live state (spec P2): SCO is torn down
-        // by onConnectionDisconnected on every dropped connection, auto-reconnect included, so
-        // this is where it comes back. It sits beside the other restore and ahead of the overlay
-        // and sensor work on purpose: WindowManager.addView and the proximity wake lock can both
-        // throw, and anything that throws in front of this line reproduces the complaint this
-        // task exists to close.
-        // No catch: AndroidCommunicationDevices takes the platform's SecurityException one layer
-        // down and reports it once per service life (task 8 contract), so the one that stood here
-        // could not fire.
-        if (mSettings.isBluetoothScoEnabled()) {
-            enableBluetoothSco()
-        }
+        // No Bluetooth restore here any more. The stored wish reaches the router from onCreate
+        // and on every change (applyBluetoothPreference), and the superclass hook above takes the
+        // route when it engages the router -- before any line of this method, so nothing here can
+        // throw in front of it.
 
         ContextCompat.registerReceiver(
             this, mTalkReceiver,
@@ -473,10 +466,7 @@ class MumlaService : HumlaService(),
                 mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled()
             Settings.PREF_PTT_SOUND ->
                 mPTTSoundEnabled = mSettings.isPttSoundEnabled()
-            Settings.PREF_BLUETOOTH_SCO ->
-                if (isSynchronized()) {
-                    if (mSettings.isBluetoothScoEnabled()) enableBluetoothSco() else disableBluetoothSco()
-                }
+            Settings.PREF_BLUETOOTH_SCO -> applyBluetoothPreference()
             Settings.PREF_CERT_ID,
             Settings.PREF_FORCE_TCP,
             Settings.PREF_USE_TOR,
@@ -495,6 +485,16 @@ class MumlaService : HumlaService(),
         if (requiresReconnect && isConnectionEstablished()) {
             Toast.makeText(this, R.string.change_requires_reconnect, Toast.LENGTH_LONG).show()
         }
+    }
+
+    /**
+     * Hands the stored Bluetooth wish (spec P2, the one carrier) to the router, at any time. No
+     * `isSynchronized()` check: the router routes only while a session is synchronized, and
+     * dropping a change made while disconnected - which the old check did - left the next session
+     * routing the stale wish.
+     */
+    private fun applyBluetoothPreference() {
+        if (mSettings.isBluetoothScoEnabled()) enableBluetoothSco() else disableBluetoothSco()
     }
 
     private fun setProximitySensorOn(on: Boolean) {

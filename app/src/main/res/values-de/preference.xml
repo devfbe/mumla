@@ -94,4 +94,6 @@
     <string name="pref_show_user_count_summary">Zeigt die Anzahl an Benutzern in einem Kanalunterbaum an.</string>
     <string name="pref_start_up_in_pinned_mode">Angehefteter Kanalmodus</string>
     <string name="pref_export_certificate_title">Zertifikat exportieren</string>
+    <string name="bluetoothSco">Bluetooth-Headset automatisch verwenden</string>
+    <string name="bluetoothScoSum">Sprache über ein verbundenes Bluetooth-Headset senden und empfangen, solange du mit einem Server verbunden bist, und zu einem Headset wechseln, das sich während des Gesprächs verbindet. Das Audiogerät lässt sich für das Gespräch im Kanalmenü wechseln. Fragt nach der Berechtigung „Geräte in der Nähe“; manche Geräte leiten den Ton ohne sie nicht an ein Headset weiter.</string>
 </resources>

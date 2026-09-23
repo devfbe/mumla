@@ -499,9 +499,13 @@ class Settings private constructor(context: Context) {
 
         const val PREF_NEWS_SHOWN_VERSIONS = "newsShownVersions"
 
-        /** Route audio through a Bluetooth headset (SCO) whenever connected. Spec P2. */
+        /**
+         * Take a connected Bluetooth headset automatically while connected to a server. Spec P2.
+         * On by default since the audio chooser: a headset is used without being asked for, as in
+         * the phone app, and the chooser in the channel menu picks another device for the session.
+         */
         const val PREF_BLUETOOTH_SCO = "pref_bluetooth_sco"
-        const val DEFAULT_BLUETOOTH_SCO = false
+        const val DEFAULT_BLUETOOTH_SCO = true
 
         /** Headset / AVRCP media button behavior, one of [MediaButtonAction.prefValue]. Spec P1. */
         const val PREF_MEDIA_BUTTON_ACTION = "media_button_action"
