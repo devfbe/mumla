@@ -44,10 +44,9 @@ public class MumlaTrustStore {
      */
     public static KeyStore getTrustStore(Context context) throws CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException {
         KeyStore store = KeyStore.getInstance(STORE_FORMAT);
-        try {
-            FileInputStream fis = context.openFileInput(STORE_FILE);
+        // Closed on every path, a store that fails to load included.
+        try (FileInputStream fis = context.openFileInput(STORE_FILE)) {
             store.load(fis, STORE_PASS.toCharArray());
-            fis.close();
         } catch (FileNotFoundException e) {
             store.load(null, null);
         }
@@ -55,9 +54,9 @@ public class MumlaTrustStore {
     }
 
     public static void saveTrustStore(Context context, KeyStore store) throws IOException, CertificateException, NoSuchAlgorithmException, KeyStoreException {
-        FileOutputStream fos = context.openFileOutput(STORE_FILE, Context.MODE_PRIVATE);
-        store.store(fos, STORE_PASS.toCharArray());
-        fos.close();
+        try (FileOutputStream fos = context.openFileOutput(STORE_FILE, Context.MODE_PRIVATE)) {
+            store.store(fos, STORE_PASS.toCharArray());
+        }
     }
 
     public static void clearTrustStore(Context context) {
