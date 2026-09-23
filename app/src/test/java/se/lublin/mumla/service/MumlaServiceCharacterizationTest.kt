@@ -1117,15 +1117,25 @@ class MumlaServiceCharacterizationTest {
     private fun postedActions(): Array<Notification.Action>? =
         shadowOf(notificationManager).getNotification(FOREGROUND_ID)?.actions
 
+    /**
+     * Connecting shows nothing; a lost connection shows only "Cancel reconnect" -- the session
+     * buttons go, since there is no session to mute. Changed on purpose: the loss used to show no
+     * action at all, which left no way to give up on the reconnect from the notification.
+     */
     @Test
-    fun connectingAndALostConnectionShowNoActions() {
+    fun connectingShowsNoActionsAndALostConnectionOnlyTheCancel() {
         service.renderSessionState(SessionState.Connecting)
         assertThat(postedActions()).isNull()
         service.renderSessionState(SessionState.Connected)
         service.renderSessionState(SessionState.ConnectionLost(2_000, 1, error()))
-        assertThat(postedActions()).isNull()
+        assertThat(postedActions()!!.map { it.title.toString() })
+            .containsExactly(service.getString(R.string.cancel_reconnect))
         service.renderSessionState(SessionState.Reconnecting(error()))
-        assertThat(postedActions()).isNull()
+        assertThat(postedActions()!!.map { it.title.toString() })
+            .containsExactly(service.getString(R.string.cancel_reconnect))
+        service.renderSessionState(SessionState.Connected)
+        assertThat(postedActions()!!.map { it.title.toString() })
+            .doesNotContain(service.getString(R.string.cancel_reconnect))
     }
 
     @Test

@@ -65,7 +65,15 @@ class MumlaConnectionNotification private constructor(
     private val listener: OnActionListener,
 ) {
     var customContentText: String = contentText
+    /** Mute, deafen and overlay: only meaningful while a session is up. */
     var actionsShown: Boolean = false
+
+    /**
+     * "Cancel reconnect", for ConnectionLost and Reconnecting. The notification stays in the
+     * foreground through a loss (spec A6), so this button is where the user gives up on the
+     * automatic reconnect without opening the app.
+     */
+    var cancelReconnectShown: Boolean = false
 
     /** True from a successful [show] until [hide]. */
     var isForeground: Boolean = false
@@ -77,6 +85,7 @@ class MumlaConnectionNotification private constructor(
                 BROADCAST_MUTE -> listener.onMuteToggled()
                 BROADCAST_DEAFEN -> listener.onDeafenToggled()
                 BROADCAST_OVERLAY -> listener.onOverlayToggled()
+                BROADCAST_CANCEL_RECONNECT -> listener.onReconnectCancelled()
             }
         }
     }
@@ -110,6 +119,7 @@ class MumlaConnectionNotification private constructor(
             addAction(BROADCAST_DEAFEN)
             addAction(BROADCAST_MUTE)
             addAction(BROADCAST_OVERLAY)
+            addAction(BROADCAST_CANCEL_RECONNECT)
         }
         ContextCompat.registerReceiver(service, notificationReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         return true
@@ -146,6 +156,13 @@ class MumlaConnectionNotification private constructor(
             builder.addAction(R.drawable.ic_action_audio, service.getString(R.string.deafen), broadcast(BROADCAST_DEAFEN))
             builder.addAction(R.drawable.ic_action_channels, service.getString(R.string.overlay), broadcast(BROADCAST_OVERLAY))
         }
+        if (cancelReconnectShown) {
+            builder.addAction(
+                R.drawable.ic_action_delete_dark,
+                service.getString(R.string.cancel_reconnect),
+                broadcast(BROADCAST_CANCEL_RECONNECT),
+            )
+        }
 
         val channelListIntent = Intent(service, MumlaActivity::class.java)
             .putExtra(MumlaActivity.EXTRA_DRAWER_FRAGMENT, DrawerAdapter.ITEM_SERVER)
@@ -159,7 +176,7 @@ class MumlaConnectionNotification private constructor(
     }
 
     /**
-     * The three buttons' intents differ in their action, which is what tells PendingIntents apart,
+     * The buttons' intents differ in their action, which is what tells PendingIntents apart,
      * and carry no extras that could go stale -- so neither a per-button request code nor
      * FLAG_CANCEL_CURRENT has anything to do here. The Java original had both; changing either
      * one left every test green (measured), which is why they are gone rather than pinned.
@@ -173,6 +190,7 @@ class MumlaConnectionNotification private constructor(
         fun onMuteToggled()
         fun onDeafenToggled()
         fun onOverlayToggled()
+        fun onReconnectCancelled()
     }
 
     companion object {
@@ -182,6 +200,12 @@ class MumlaConnectionNotification private constructor(
         private const val BROADCAST_MUTE = "b_mute"
         private const val BROADCAST_DEAFEN = "b_deafen"
         private const val BROADCAST_OVERLAY = "b_overlay"
+
+        /**
+         * Not MumlaReconnectNotification's "b_cancel_reconnect": both receivers can be registered
+         * at once, and a shared action would deliver one press to both.
+         */
+        private const val BROADCAST_CANCEL_RECONNECT = "b_foreground_cancel_reconnect"
 
         /**
          * Creates a foreground Mumla notification for the given service.

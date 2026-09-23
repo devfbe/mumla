@@ -223,6 +223,71 @@ class MumlaServiceForegroundTest {
         assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
     }
 
+    // ---- cancelling from the foreground notification (spec A6 follow-up) -----------------------
+
+    private fun foregroundActions(): List<String> =
+        shadowOf(service.getSystemService(android.app.NotificationManager::class.java))
+            .getNotification(1)?.actions.orEmpty().map { it.title.toString() }
+
+    private fun pressCancelReconnect() {
+        val action = shadowOf(service.getSystemService(android.app.NotificationManager::class.java))
+            .getNotification(1)!!.actions
+            .single { it.title.toString() == service.getString(R.string.cancel_reconnect) }
+        action.actionIntent.send()
+        mainLooper.idle()
+    }
+
+    @Test
+    fun onlyALostConnectionOffersToCancelTheReconnect() {
+        service.connect()
+        mainLooper.idle()
+        assertThat(foregroundActions()).isEmpty() // Connecting
+
+        service.renderSessionState(se.lublin.humla.session.SessionState.Connected)
+        assertThat(foregroundActions()).doesNotContain(service.getString(R.string.cancel_reconnect))
+
+        service.onConnectionDisconnected(lost())
+        mainLooper.idle()
+        assertThat(foregroundActions()).containsExactly(service.getString(R.string.cancel_reconnect))
+    }
+
+    @Test
+    fun theCancelActionEndsAWaitingReconnectAndLeavesTheForeground() {
+        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        service.connect()
+        mainLooper.idle()
+        screenOff()
+        service.onConnectionDisconnected(lost())
+        mainLooper.idle()
+
+        pressCancelReconnect()
+
+        assertThat(service.isReconnecting()).isFalse()
+        assertThat(shadowOf(service).isForegroundStopped).isTrue()
+        assertThat(reconnectPrompt()).isNull()
+        mainLooper.idleFor(Duration.ofMillis(10_000))
+        assertThat(connections).hasSize(1) // the backoff timer no longer retries
+    }
+
+    @Test
+    fun theCancelActionDuringAnAttemptInFlightDisconnectsIt() {
+        service.connect()
+        mainLooper.idle()
+        screenOff()
+        service.onConnectionDisconnected(lost())
+        mainLooper.idle()
+        mainLooper.idleFor(Duration.ofMillis(2_000)) // Reconnecting: attempt 2 is in flight
+        assertThat(connections).hasSize(2)
+        assertThat(foregroundActions()).containsExactly(service.getString(R.string.cancel_reconnect))
+
+        pressCancelReconnect()
+
+        io.mockk.verify { connections[1].disconnect() }
+        assertThat(service.isReconnecting()).isFalse()
+        assertThat(shadowOf(service).isForegroundStopped).isTrue()
+    }
+
     @Test
     fun dismissingTheChatNotificationLeavesThePromptAlone() {
         org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())

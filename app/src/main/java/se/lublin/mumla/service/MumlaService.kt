@@ -306,12 +306,12 @@ class MumlaService : HumlaService(),
                     mReconnectNotification = null
                 }
                 mErrorShown = false
-                showConnectionNotification(getString(R.string.mumlaConnecting) + torSuffix(), actions = false)
+                showConnectionNotification(getString(R.string.mumlaConnecting) + torSuffix())
             }
             SessionState.Connected ->
                 showConnectionNotification(getString(R.string.connected) + torSuffix(), actions = true)
             is SessionState.ConnectionLost, is SessionState.Reconnecting ->
-                showConnectionNotification(getString(R.string.connection_lost_reconnecting), actions = false)
+                showConnectionNotification(getString(R.string.connection_lost_reconnecting), cancelReconnect = true)
             is SessionState.Disconnected -> {
                 mNotification.hide()
                 // Session-visible state: spec A3 keeps it across a ConnectionLost, so it goes here
@@ -330,9 +330,14 @@ class MumlaService : HumlaService(),
 
     private fun torSuffix(): String = if (mSettings.isTorEnabled()) " (Tor)" else ""
 
-    private fun showConnectionNotification(contentText: String, actions: Boolean) {
+    private fun showConnectionNotification(
+        contentText: String,
+        actions: Boolean = false,
+        cancelReconnect: Boolean = false,
+    ) {
         mNotification.customContentText = contentText
         mNotification.actionsShown = actions
+        mNotification.cancelReconnectShown = cancelReconnect
         if (!mNotification.show()) {
             // Spec A6: the platform refused the foreground start. Say so instead of dying -- once
             // while the refusal repeats, since every later state change tries again.
@@ -542,6 +547,16 @@ class MumlaService : HumlaService(),
         } else {
             mChannelOverlay.hide()
         }
+    }
+
+    /**
+     * The foreground notification's "Cancel reconnect". The same path as the app's dialog: the
+     * session goes to Disconnected, which renders synchronously and leaves the foreground. A press
+     * on a stale notification after the reconnect has already succeeded is a no-op, because
+     * cancelReconnect only acts in ConnectionLost and Reconnecting.
+     */
+    override fun onReconnectCancelled() {
+        cancelReconnect()
     }
 
     override fun onReconnectNotificationDismissed() {
