@@ -166,7 +166,7 @@ class MumlaReconnectNotificationTest {
     }
 
     private companion object {
-        const val NOTIFICATION_ID = 2
+        const val NOTIFICATION_ID = 3
         const val CHANNEL_ID = "reconnecting_channel"
     }
 }

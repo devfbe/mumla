@@ -40,7 +40,6 @@ import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
-import se.lublin.humla.exception.AudioException
 import se.lublin.humla.exception.NotConnectedException
 import se.lublin.humla.exception.NotSynchronizedException
 import se.lublin.humla.model.Channel
@@ -313,11 +312,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         if (intent != null) {
             val extras = intent.extras
             if (extras != null) {
-                try {
-                    configureExtras(extras)
-                } catch (e: AudioException) {
-                    throw RuntimeException("Attempted to initialize audio in onStartCommand erroneously.")
-                }
+                configureExtras(extras)
             }
 
             if (ACTION_CONNECT == intent.action) {
@@ -660,7 +655,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * rather than per message type, so the log can never end on a line that contradicts the state
      * (task 6 contract, point 1); the same shape as `HumlaConnection.warn`.
      */
-    private fun logWarningOnce(message: String) {
+    protected fun logWarningOnce(message: String) {
         if (message == mLastWarning) return
         logWarning(message)
     }
@@ -741,7 +736,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * @return true if a reconnect is required for changes to take effect.
      * @see se.lublin.humla.HumlaService
      */
-    @Throws(AudioException::class)
     fun configureExtras(extras: Bundle): Boolean {
         var reconnectNeeded = false
         var config = mAudioConfig

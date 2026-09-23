@@ -138,4 +138,159 @@ class MumlaServiceForegroundTest {
         assertThat(service.isReconnecting()).isFalse()
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }
+
+    // ---- the chat log across the session (spec A3, D5) ------------------------------------------
+
+    private fun log() = service.getMessageLog().map { it.body }
+
+    @Test
+    fun theChatLogSurvivesAConnectionLossAndIsClearedOnDisconnect() {
+        service.connect()
+        service.logWarning("something happened")
+        mainLooper.idle()
+
+        service.onConnectionDisconnected(lost())
+        mainLooper.idle()
+        assertThat(log()).containsExactly("something happened") // a loss is not the end
+
+        service.disconnect()
+        mainLooper.idle()
+        assertThat(log()).isEmpty()
+    }
+
+    @Test
+    fun theGiveUpLineIsTheOneThingLeftInTheChatLog() {
+        service.connect()
+        mainLooper.idle()
+        service.logWarning("before")
+        for (delay in listOf(2_000L, 4_000L)) {
+            service.onConnectionDisconnected(lost())
+            mainLooper.idle()
+            mainLooper.idleFor(Duration.ofMillis(delay))
+        }
+
+        service.onConnectionDisconnected(lost())
+        mainLooper.idle()
+
+        assertThat(log()).containsExactly(service.getString(se.lublin.humla.R.string.reconnect_gave_up))
+    }
+
+    @Test
+    fun theChatLogIsBoundedAtFiveHundredEntries() {
+        repeat(ChatMessageLog.MAX_ENTRIES + 1) { service.logWarning("m$it") }
+        mainLooper.idle()
+
+        assertThat(service.getMessageLog()).hasSize(ChatMessageLog.MAX_ENTRIES)
+        assertThat(service.getMessageLog().first().body).isEqualTo("m1")
+    }
+
+    // ---- the reconnect prompt -------------------------------------------------------------------
+
+    private fun reconnectPrompt(): Notification? =
+        shadowOf(service.getSystemService(android.app.NotificationManager::class.java)).getNotification(3)
+
+    @Test
+    fun whenThePolicyGivesUpThePromptOffersAReconnect() {
+        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        service.connect()
+        for (delay in listOf(2_000L, 4_000L)) {
+            service.onConnectionDisconnected(lost())
+            mainLooper.idle()
+            mainLooper.idleFor(Duration.ofMillis(delay))
+        }
+        service.onConnectionDisconnected(lost())
+        mainLooper.idle()
+
+        val prompt = reconnectPrompt()!!
+        assertThat(prompt.extras.getString(Notification.EXTRA_TEXT)).isEqualTo("socket reset")
+        assertThat(prompt.actions.single().title.toString()).isEqualTo(service.getString(R.string.reconnect))
+    }
+
+    @Test
+    fun cancellingTheReconnectEndsTheSessionWithoutAPrompt() {
+        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        service.connect()
+        service.onConnectionDisconnected(lost())
+        mainLooper.idle()
+
+        service.cancelReconnect()
+        mainLooper.idle()
+
+        assertThat(service.isReconnecting()).isFalse()
+        assertThat(shadowOf(service).isForegroundStopped).isTrue()
+        assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
+    }
+
+    @Test
+    fun dismissingTheChatNotificationLeavesThePromptAlone() {
+        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        service.renderSessionState(se.lublin.humla.session.SessionState.Disconnected(lost()))
+
+        service.clearChatNotifications()
+
+        assertThat(reconnectPrompt()).isNotNull()
+    }
+
+    // ---- spec A6: a refused start ---------------------------------------------------------------
+
+    @Test
+    fun aRefusedForegroundStartBecomesAWarningAndAPromptInsteadOfACrash() {
+        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        screenOff()
+
+        service.connect()
+        mainLooper.idle()
+
+        assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
+        assertThat(reconnectPrompt()!!.extras.getString(Notification.EXTRA_TEXT))
+            .isEqualTo(service.getString(R.string.foreground_start_failed))
+    }
+
+    @Test
+    fun aRefusalThatRepeatsIsReportedOnce() {
+        screenOff()
+        service.connect()
+        mainLooper.idle()
+
+        service.renderSessionState(se.lublin.humla.session.SessionState.Connected)
+        mainLooper.idle()
+
+        assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
+    }
+
+    @Test
+    fun aRefusalIsNotShownAsAPromptWhileNotificationsAreSuppressed() {
+        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        service.setSuppressNotifications(true)
+        screenOff()
+
+        service.connect()
+        mainLooper.idle()
+
+        assertThat(reconnectPrompt()).isNull()
+        assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
+    }
+
+    // ---- spec A7 ---------------------------------------------------------------------------------
+
+    /**
+     * Half duplex follows the transmit mode the service is in, which the connect intent always
+     * carries (ServerConnectTask) -- a settings write that carries only half duplex is enough.
+     */
+    @Test
+    fun aHalfDuplexPreferenceChangeTakesEffectInPushToTalk() {
+        service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })
+        val preferences = PreferenceManager.getDefaultSharedPreferences(service)
+
+        preferences.edit().putBoolean(se.lublin.mumla.Settings.PREF_HALF_DUPLEX, true).commit()
+        assertThat(service.getAudioConfigForTest().halfDuplex).isTrue()
+
+        preferences.edit().putBoolean(se.lublin.mumla.Settings.PREF_HALF_DUPLEX, false).commit()
+        assertThat(service.getAudioConfigForTest().halfDuplex).isFalse()
+    }
 }

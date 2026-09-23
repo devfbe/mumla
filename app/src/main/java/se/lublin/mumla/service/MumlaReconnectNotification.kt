@@ -119,7 +119,12 @@ class MumlaReconnectNotification(
     }
 
     companion object {
-        private const val NOTIFICATION_ID = 2
+        /**
+         * Not 2: MumlaMessageNotification posts the chat notification under 2, so every chat
+         * dismissal -- one runs on every disconnect -- cancelled this prompt as well, and every
+         * chat message replaced it.
+         */
+        private const val NOTIFICATION_ID = 3
         private const val CHANNEL_ID = "reconnecting_channel"
         private const val BROADCAST_DISMISS = "b_dismiss"
         private const val BROADCAST_RECONNECT = "b_reconnect"

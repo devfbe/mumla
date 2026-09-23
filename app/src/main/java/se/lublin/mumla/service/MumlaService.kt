@@ -87,11 +87,9 @@ class MumlaService : HumlaService(),
      * This should serve as a hint not to bother the user.
      */
     private var mErrorShown = false
-    private var mMessageLog: MutableList<IChatMessage>? = null
+    /** Bounded (spec D5); null only after onDestroy. */
+    private var mMessageLog: ChatMessageLog? = null
     private var mSuppressNotifications = false
-
-    /** Set once a device has refused to route SCO, so the chat log says it once and not per reconnect. */
-    private var mBluetoothScoRefused = false
 
     private var mTTS: TextToSpeech? = null
     private val mTTSInitListener = TextToSpeech.OnInitListener { status ->
@@ -111,6 +109,14 @@ class MumlaService : HumlaService(),
     }
 
     private lateinit var mTalkReceiver: BroadcastReceiver
+
+    /**
+     * Test seam: the push-to-talk click. Robolectric's AudioManager records no sound effect, so
+     * without it nothing could read back the five-clause condition in onUserTalkStateUpdated.
+     */
+    internal var keyClickSound: () -> Unit = {
+        (getSystemService(AUDIO_SERVICE) as AudioManager).playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD, -1f)
+    }
 
     /**
      * Collects the session state for the lifetime of the service. Main.immediate, because the state
@@ -238,8 +244,7 @@ class MumlaService : HumlaService(),
                 user.getTalkState() == TalkState.TALKING &&
                 mPTTSoundEnabled
             ) {
-                val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-                audioManager.playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD, -1f)
+                keyClickSound()
             }
         }
     }
@@ -259,7 +264,7 @@ class MumlaService : HumlaService(),
         // XML <application> theme does NOT do this!
         setTheme(R.style.Theme_Mumla)
 
-        mMessageLog = ArrayList()
+        mMessageLog = ChatMessageLog()
         mMessageNotification = MumlaMessageNotification(this@MumlaService)
 
         // Instantiate overlay view
@@ -307,6 +312,10 @@ class MumlaService : HumlaService(),
                     it.hide()
                     mNotification = null
                 }
+                // Session-visible state: spec A3 keeps it across a ConnectionLost, so it goes here
+                // and not in onConnectionDisconnected, which runs on every loss.
+                clearMessageLog()
+                mMessageNotification.dismiss()
                 val error = state.error
                 if (error != null && !mSuppressNotifications) {
                     mReconnectNotification?.hide()
@@ -325,8 +334,9 @@ class MumlaService : HumlaService(),
         notification.customContentText = contentText
         notification.actionsShown = actions
         if (!notification.show()) {
-            // Spec A6: the platform refused the foreground start. Say so instead of dying.
-            logWarning(getString(R.string.foreground_start_failed))
+            // Spec A6: the platform refused the foreground start. Say so instead of dying -- once
+            // while the refusal repeats, since every later state change tries again.
+            logWarningOnce(getString(R.string.foreground_start_failed))
             if (!mSuppressNotifications) {
                 mReconnectNotification?.hide()
                 mReconnectNotification = MumlaReconnectNotification.show(
@@ -397,8 +407,11 @@ class MumlaService : HumlaService(),
         // and sensor work on purpose: WindowManager.addView and the proximity wake lock can both
         // throw, and anything that throws in front of this line reproduces the complaint this
         // task exists to close.
+        // No catch: AndroidCommunicationDevices takes the platform's SecurityException one layer
+        // down and reports it once per service life (task 8 contract), so the one that stood here
+        // could not fire.
         if (mSettings.isBluetoothScoEnabled()) {
-            applyBluetoothSco(true)
+            enableBluetoothSco()
         }
 
         ContextCompat.registerReceiver(
@@ -415,32 +428,6 @@ class MumlaService : HumlaService(),
         }
     }
 
-    /**
-     * Start or stop the headset link, and survive a device that enforces BLUETOOTH_CONNECT on
-     * android.media although the platform's own annotation database declares it on
-     * android.bluetooth.* only (spec 4.1: keep asking, stop gating). Absent from the database is
-     * not "never thrown anywhere", so the call is wrapped rather than trusted.
-     *
-     * Reported once per service lifetime: this runs on every synchronization, and auto-reconnect
-     * can run it many times over one broken network. A chat log that repeats the same line after
-     * every reconnect buries the message it is trying to deliver.
-     */
-    private fun applyBluetoothSco(wanted: Boolean) {
-        try {
-            if (wanted) {
-                enableBluetoothSco()
-            } else {
-                disableBluetoothSco()
-            }
-        } catch (e: SecurityException) {
-            Log.w(TAG, "bluetooth sco refused by the platform: $e")
-            if (!mBluetoothScoRefused) {
-                mBluetoothScoRefused = true
-                logWarning(getString(R.string.bluetooth_sco_refused))
-            }
-        }
-    }
-
     override fun onConnectionDisconnected(e: HumlaException?) {
         super.onConnectionDisconnected(e)
         try {
@@ -454,9 +441,6 @@ class MumlaService : HumlaService(),
         mHotCorner.setShown(false)
 
         setProximitySensorOn(false)
-
-        clearMessageLog()
-        mMessageNotification.dismiss()
     }
 
     /**
@@ -493,7 +477,7 @@ class MumlaService : HumlaService(),
                 mPTTSoundEnabled = mSettings.isPttSoundEnabled()
             Settings.PREF_BLUETOOTH_SCO ->
                 if (isSynchronized()) {
-                    applyBluetoothSco(mSettings.isBluetoothScoEnabled())
+                    if (mSettings.isBluetoothScoEnabled()) enableBluetoothSco() else disableBluetoothSco()
                 }
             Settings.PREF_CERT_ID,
             Settings.PREF_FORCE_TCP,
@@ -568,12 +552,17 @@ class MumlaService : HumlaService(),
         connect()
     }
 
+    /**
+     * The superclass first: it moves the session to Disconnected, which renders synchronously and
+     * would post a prompt for the loss the user has just chosen to give up on. Hiding afterwards
+     * removes that one as well as any earlier one.
+     */
     override fun cancelReconnect() {
+        super.cancelReconnect()
         mReconnectNotification?.let {
             it.hide()
             mReconnectNotification = null
         }
-        super.cancelReconnect()
     }
 
     override fun setOverlayShown(showOverlay: Boolean) {
@@ -628,7 +617,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    override fun getMessageLog(): List<IChatMessage> = Collections.unmodifiableList(mMessageLog!!)
+    override fun getMessageLog(): List<IChatMessage> = Collections.unmodifiableList(mMessageLog!!.snapshot())
 
     override fun clearMessageLog() {
         mMessageLog?.clear()

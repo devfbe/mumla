@@ -693,6 +693,22 @@ class MumlaServiceCharacterizationTest {
         verify { hotCorner.setShown(false) }
         assertThat(lock.isHeld).isFalse()
         assertThat(mumlaField("mProximityLock").get(service)).isNull()
+        // Changed in task 12 (spec A3): the chat log and the chat notification survive a loss;
+        // only the Disconnected state clears them. See the next test.
+        assertThat(service.getMessageLog()).isNotEmpty()
+    }
+
+    @Test
+    fun theDisconnectedStateClearsTheChatLogAndTheChatNotification() {
+        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        connect()
+        service.logWarning("old")
+        callbacks().onMessageLogged(textMessage("ping"))
+        idle()
+        assertThat(shadowOf(notificationManager).allNotifications).isNotEmpty()
+
+        service.renderSessionState(SessionState.Disconnected(null))
+
         assertThat(service.getMessageLog()).isEmpty()
         assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
     }
@@ -1021,9 +1037,84 @@ class MumlaServiceCharacterizationTest {
         verify(exactly = 0) { overlay.setPushToTalkShown(any()) }
     }
 
+    // ---- the push-to-talk click (added with the Kotlin conversion's seam; not characterization) --
+
+    private var clicks = 0
+
+    /** All five clauses true; each test below turns exactly one of them false. */
+    private fun clickReady(): User {
+        service.keyClickSound = { clicks++ }
+        service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })
+        preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()
+        connect()
+        val talking = user(SELF)
+        every { talking.getTalkState() } returns TalkState.TALKING
+        return talking
+    }
+
+    private fun talk(user: User) {
+        callbacks().onUserTalkStateUpdated(user)
+        idle()
+    }
+
+    @Test
+    fun startingToTalkInPushToTalkClicks() {
+        talk(clickReady())
+        assertThat(clicks).isEqualTo(1)
+    }
+
+    @Test
+    fun noClickWithoutAnEstablishedConnection() {
+        val u = clickReady()
+        every { connection.isConnected } returns false
+        talk(u)
+        assertThat(clicks).isEqualTo(0)
+    }
+
+    @Test
+    fun noClickForSomebodyElse() {
+        clickReady()
+        val other = user(SELF + 1)
+        every { other.getTalkState() } returns TalkState.TALKING
+        talk(other)
+        assertThat(clicks).isEqualTo(0)
+    }
+
+    @Test
+    fun noClickOutsidePushToTalk() {
+        val u = clickReady()
+        service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_VOICE_ACTIVITY) })
+        talk(u)
+        assertThat(clicks).isEqualTo(0)
+    }
+
+    @Test
+    fun noClickWhenTheTalkStateIsNotTalking() {
+        val u = clickReady()
+        every { u.getTalkState() } returns TalkState.PASSIVE
+        talk(u)
+        assertThat(clicks).isEqualTo(0)
+    }
+
+    @Test
+    fun noClickWhenTheSoundIsOff() {
+        val u = clickReady()
+        preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, false).commit()
+        talk(u)
+        assertThat(clicks).isEqualTo(0)
+    }
+
+    @Test
+    fun noClickBeforeOurSessionIsKnown() {
+        val u = clickReady()
+        every { connection.getSession() } throws NotSynchronizedException()
+        talk(u)
+        assertThat(clicks).isEqualTo(0)
+    }
+
     private companion object {
         const val SELF = 7
         const val FOREGROUND_ID = 1
-        const val RECONNECT_ID = 2
+        const val RECONNECT_ID = 3
     }
 }
