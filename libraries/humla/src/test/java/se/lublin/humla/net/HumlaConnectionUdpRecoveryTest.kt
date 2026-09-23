@@ -288,6 +288,45 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
+     * The way back after the ping timeout. Once the voice is tunneled the server sends nothing over
+     * UDP but the answers to our pings - sendPings keeps sending them with force = true - so those
+     * answers are all that can lift localGood past the restore threshold. With the pings answered
+     * again, one every five seconds, the connection goes back to UDP as soon as the lockout after
+     * the switch has run out.
+     */
+    @Test
+    fun udpComesBackAfterAPingTimeoutOnceThePingsAreAnsweredAgain() {
+        val connection = newConnection() // the production monitor: 20 s window, 15 s timeout, threshold 1
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+        connection.synchronizeAndAwaitFirstPing(tcp, udp)
+
+        connection.feedPings(listOf(16L), tcp, good = 5)
+        awaitUntil(description = "switched to tcp") { !connection.isUsingUdp }
+
+        // The premise: tunneling moves the voice, not the ping. The next ping still goes out on
+        // the UDP transport, not wrapped into a UDPTunnel message.
+        val pingsBefore = udp.sent.size
+        shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(5))
+        awaitUntil(description = "a udp ping sent while tunneled") { udp.sent.size > pingsBefore }
+
+        var serverGood = 5
+        for (s in listOf(20L, 25L, 30L, 35L, 40L)) {
+            atSeconds(s)
+            udp.simulateDatagram(udpPingReply(sentAtMicros = s * 1_000_000L - 30_000L))
+            connection.drainProtocolQueue("reply at $s s handled")
+            serverGood++ // the server decrypted our ping of the same tick
+            connection.feedPings(listOf(s), tcp, good = serverGood)
+        }
+
+        awaitUntil(description = "udp restored") { connection.isUsingUdp }
+        mainLooper.idle()
+        assertThat(listener.warnings)
+            .containsExactly(ConnectionWarning.UDP_PING_TIMEOUT, ConnectionWarning.UDP_RESTORED).inOrder()
+        assertThat(connection.getUDPLatency()).isEqualTo(30_000L)
+    }
+
+    /**
      * The other latency line, and the sibling of the one the effect sweep did catch. `tcpLatency =
      * now - msg.timestamp` -> `0L` SURVIVED: the value is written into a field with a public getter
      * and no test read it back, which is the same hole aUdpPingReplyResetsTheTimeout... closed one
