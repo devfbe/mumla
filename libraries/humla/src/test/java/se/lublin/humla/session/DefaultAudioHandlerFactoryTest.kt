@@ -1,5 +1,6 @@
 package se.lublin.humla.session
 
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaRecorder
 import androidx.test.core.app.ApplicationProvider
@@ -95,7 +96,7 @@ class DefaultAudioHandlerFactoryTest {
             halfDuplexRequested = true,
             preprocessorEnabled = true,
             legacyEchoCancellationMethod = "speex",
-            bluetoothActive = true,
+            routedDeviceType = AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
             noiseSuppression = "rnnoise",
             speexNoiseSuppressDb = -35,
             androidNoiseSuppressor = true,
@@ -110,7 +111,9 @@ class DefaultAudioHandlerFactoryTest {
         val expected = mapOf(
             "mContext" to context,
             "mLogger" to SilentLogger,
-            "mAudioStream" to AudioManager.STREAM_ALARM,
+            // Not STREAM_ALARM: a routed device moves playback to the voice-call stream, see
+            // aRoutedDevicePlaysOnTheVoiceCallStreamAndOnlyBluetoothIsBluetooth.
+            "mAudioStream" to AudioManager.STREAM_VOICE_CALL,
             "mAudioSource" to MediaRecorder.AudioSource.VOICE_RECOGNITION,
             "mInputSampleRate" to 16_000,
             "mTargetBitrate" to 24_000,
@@ -155,22 +158,49 @@ class DefaultAudioHandlerFactoryTest {
         assertThat(
             booleansOf(
                 AudioConfig(
-                    bluetoothActive = true, preprocessorEnabled = false,
+                    routedDeviceType = AudioDeviceInfo.TYPE_BLUETOOTH_SCO, preprocessorEnabled = false,
                     halfDuplexRequested = true, transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
                 ),
             ),
         ).isEqualTo(Triple(true, false, true))
         assertThat(
-            booleansOf(AudioConfig(bluetoothActive = false, preprocessorEnabled = true, halfDuplexRequested = false)),
+            booleansOf(AudioConfig(routedDeviceType = null, preprocessorEnabled = true, halfDuplexRequested = false)),
         ).isEqualTo(Triple(false, true, false))
         assertThat(
             booleansOf(
                 AudioConfig(
-                    bluetoothActive = true, preprocessorEnabled = false,
+                    routedDeviceType = AudioDeviceInfo.TYPE_BLUETOOTH_SCO, preprocessorEnabled = false,
                     halfDuplexRequested = false, transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
                 ),
             ),
         ).isEqualTo(Triple(true, false, false))
+    }
+
+    /**
+     * The stream and the Bluetooth flag both depend on the routed device, which the fixture above
+     * can only show one value of. Unrouted, the configured stream goes through as it is; routed to
+     * a device that is not a headset, playback moves to the voice-call stream - the only one that
+     * follows the communication device - and Bluetooth stays off.
+     */
+    @Test
+    fun aRoutedDevicePlaysOnTheVoiceCallStreamAndOnlyBluetoothIsBluetooth() {
+        fun streamAndBluetooth(config: AudioConfig): Pair<Any?, Any?> {
+            val b = factory.builder(context, SilentLogger, config, params, encodeListener, outputListener)
+            fun read(name: String) =
+                AudioHandler.Builder::class.java.getDeclaredField(name).apply { isAccessible = true }.get(b)
+            return read("mAudioStream") to read("mBluetoothEnabled")
+        }
+
+        assertThat(streamAndBluetooth(AudioConfig(audioStream = AudioManager.STREAM_ALARM)))
+            .isEqualTo(AudioManager.STREAM_ALARM to false)
+        assertThat(
+            streamAndBluetooth(
+                AudioConfig(
+                    audioStream = AudioManager.STREAM_ALARM,
+                    routedDeviceType = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+                ),
+            ),
+        ).isEqualTo(AudioManager.STREAM_VOICE_CALL to false)
     }
 
     /** The per-session arguments, which are the session identity and not just a setting. */

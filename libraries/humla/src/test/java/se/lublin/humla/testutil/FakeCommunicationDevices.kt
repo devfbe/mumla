@@ -21,7 +21,7 @@ import se.lublin.humla.session.CommunicationDevice
 import se.lublin.humla.session.CommunicationDevices
 
 /**
- * The communication-device seam as a map of ids to types, with every input [ScoRouter] branches on
+ * The communication-device seam as a map of ids to types, with every input the router branches on
  * expressible: a device list that holds none, one or several of a type, a platform that refuses a
  * selection, and a route the system changed by itself.
  *
@@ -31,11 +31,11 @@ import se.lublin.humla.session.CommunicationDevices
  *
  * [notifiesOnChange] defaults to **false**, and that is the production ordering rather than a
  * convenience. `AndroidCommunicationDevices` hands `AudioManager` an Executor that posts to the
- * main looper, and [ScoRouter] is main-thread-only, so while `apply()` is running the platform's
+ * main looper, and the router is main-thread-only, so while `apply()` is running the platform's
  * own callback cannot run: `select` and `clear` return with the route already changed and the event
  * still queued. A fake that notifies inline models a state production cannot reach, and it hides
  * the only thing that reports the change in time - see
- * ScoRouterTest.applyReportsTheRouteItselfWhenTheSeamHasNotRaisedItsEventYet, which is the test the
+ * AudioRouterTest.applyReportsTheRouteItselfWhenTheSeamHasNotRaisedItsEventYet, which is the test the
  * inline default had made unwritable.
  */
 class FakeCommunicationDevices : CommunicationDevices {
@@ -87,4 +87,22 @@ class FakeCommunicationDevices : CommunicationDevices {
         listener?.invoke()
     }
 
+    /** A device was switched on or plugged in: the platform raises the device callback. */
+    fun deviceArrives(id: Int, type: Int, name: String = "") {
+        available[id] = type
+        if (name.isNotEmpty()) names[id] = name
+        listener?.invoke()
+    }
+
+    /**
+     * A device was switched off or unplugged. The platform drops a route that pointed at it by
+     * itself and raises the change; [selectedId] follows it to null, which is what "the platform
+     * default" reads as through [current].
+     */
+    fun deviceLeaves(id: Int) {
+        available.remove(id)
+        names.remove(id)
+        if (selectedId == id) selectedId = null
+        listener?.invoke()
+    }
 }

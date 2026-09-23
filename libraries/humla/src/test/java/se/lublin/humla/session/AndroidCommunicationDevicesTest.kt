@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * The pass-through to `AudioManager`'s communication-device API, and nothing else. The rule of
- * spec A4 - *the first* TYPE_BLUETOOTH_SCO device - is verified in [ScoRouterTest] against a fake
+ * spec A4 - *the first* TYPE_BLUETOOTH_SCO device - is verified in [AudioRouterTest] against a fake
  * that models distinct ids, because Robolectric's `AudioDeviceInfoBuilder` exposes `newBuilder()`,
  * `setType(int)`, `setProfiles(...)` and `build()` and no `setId()`, so two SCO devices built here
  * cannot be told apart.
@@ -117,6 +117,35 @@ class AndroidCommunicationDevicesTest {
         assertThat(idsOfType(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)).hasSize(1)
     }
 
+    /**
+     * A headset being switched on or off is not a route change: the platform raises nothing on the
+     * communication-device listener until someone routes, so "a Bluetooth headset appeared, take
+     * it" needs the device callback too. Both reach the one listener, on the main looper.
+     */
+    @Test
+    fun aDeviceArrivingOrLeavingIsReportedToTheListener() {
+        shadowOf(audioManager).setAvailableCommunicationDevices(emptyList())
+        val invocations = AtomicInteger()
+        devices.setOnChangedListener { invocations.incrementAndGet() }
+        shadowOf(Looper.getMainLooper()).idle()
+        val afterRegistration = invocations.get()
+
+        val headset = sco()
+        shadowOf(audioManager).addAvailableCommunicationDevice(headset, true)
+        assertThat(invocations.get()).isEqualTo(afterRegistration) // posted, not run inline
+        shadowOf(Looper.getMainLooper()).idle()
+        assertThat(invocations.get()).isEqualTo(afterRegistration + 1)
+
+        shadowOf(audioManager).removeAvailableCommunicationDevice(headset, true)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertThat(invocations.get()).isEqualTo(afterRegistration + 2)
+
+        devices.setOnChangedListener(null)
+        shadowOf(audioManager).addAvailableCommunicationDevice(headset, true)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertThat(invocations.get()).isEqualTo(afterRegistration + 2)
+    }
+
     @Test
     fun selectingAnUnknownIdFails() {
         shadowOf(audioManager).setAvailableCommunicationDevices(emptyList())
@@ -184,17 +213,21 @@ class AndroidCommunicationDevicesTest {
         shadowOf(audioManager).setAvailableCommunicationDevices(listOf(device))
         val invocations = AtomicInteger()
         devices.setOnChangedListener { invocations.incrementAndGet() }
+        // The device callback reports the devices already present on registration, as the
+        // platform does; that one is not what this test is about.
+        shadowOf(Looper.getMainLooper()).idle()
+        val registered = invocations.get()
 
         shadowOf(audioManager).callOnCommunicationDeviceChangedListeners(device)
-        assertThat(invocations.get()).isEqualTo(0) // posted, not run inline
+        assertThat(invocations.get()).isEqualTo(registered) // posted, not run inline
         shadowOf(Looper.getMainLooper()).idle()
-        assertThat(invocations.get()).isEqualTo(1)
+        assertThat(invocations.get()).isEqualTo(registered + 1)
 
         devices.setOnChangedListener(null)
         shadowOf(audioManager).callOnCommunicationDeviceChangedListeners(null)
         shadowOf(Looper.getMainLooper()).idle()
 
-        assertThat(invocations.get()).isEqualTo(1)
+        assertThat(invocations.get()).isEqualTo(registered + 1)
     }
 
     /**

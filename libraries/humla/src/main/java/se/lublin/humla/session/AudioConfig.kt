@@ -19,6 +19,7 @@
 
 package se.lublin.humla.session
 
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaRecorder
 import se.lublin.humla.Constants
@@ -48,8 +49,13 @@ data class AudioConfig(
      * `equals("system")` on it, where the builder's own Java default of null threw.
      */
     val legacyEchoCancellationMethod: String = "none",
-    /** True while a Bluetooth SCO route is the active communication device. */
-    val bluetoothActive: Boolean = false,
+    /**
+     * The `AudioDeviceInfo` type of the communication device [AudioRouter] routes voice to, or null
+     * while the route is the platform's own. More than a bool on purpose (contract 9b, point 15):
+     * playback has to follow any routed device, not only a headset, and SCO is the one route the
+     * pipeline needs to tell apart.
+     */
+    val routedDeviceType: Int? = null,
     val noiseSuppression: String = "none",
     /** Spec B9: how deep the Speex denoiser may cut. One of the three supported steps. */
     val speexNoiseSuppressDb: Int = -25,
@@ -74,4 +80,17 @@ data class AudioConfig(
      * `copy` re-derives, so no test can tell the two apart, and none claims to.
      */
     val halfDuplex: Boolean get() = halfDuplexRequested && transmitMode == Constants.TRANSMIT_PUSH_TO_TALK
+
+    /** True while a Bluetooth SCO route is the routed communication device. */
+    val bluetoothActive: Boolean get() = routedDeviceType == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+
+    /**
+     * The stream the playback track is opened on. [audioStream] is the settings' rule
+     * (`Settings.getPlaybackStream()`), and it holds while nothing is routed; a routed device moves
+     * playback to the voice-call stream, because a media-stream track does not follow the
+     * communication device - the earpiece or a speaker chosen over a plugged-in headset would
+     * otherwise stay silent. This generalizes what `AudioHandler` did for Bluetooth alone.
+     */
+    val playbackStream: Int
+        get() = if (routedDeviceType != null) AudioManager.STREAM_VOICE_CALL else audioStream
 }

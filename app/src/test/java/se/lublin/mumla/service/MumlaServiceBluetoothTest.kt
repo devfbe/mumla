@@ -16,6 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import android.media.AudioDeviceInfo
 import se.lublin.humla.net.HumlaConnection
+import se.lublin.humla.session.AudioRouter
 import se.lublin.humla.session.CommunicationDevice
 import se.lublin.humla.session.CommunicationDevices
 import se.lublin.mumla.R
@@ -40,10 +41,10 @@ import se.lublin.mumla.Settings
  *
  * What is faked here is exactly one object: the `CommunicationDevices` seam, i.e. the four
  * one-line delegations to `AudioManager` inside the humla library. Everything between the hook and
- * it -- the preference, the permission, `isSynchronized()`, and `ScoRouter`'s own wanted-vs-active
+ * it -- the preference, the permission, `isSynchronized()`, and `AudioRouter`'s own
  * reconciliation -- is the real code.
  *
- * Task A9b replaced `BluetoothScoReceiver` with `ScoRouter` over `CommunicationDevices`, so the
+ * Task A9b replaced `BluetoothScoReceiver` with a router over `CommunicationDevices`, so the
  * calls this reads back are `select`/`clear` rather than `startBluetoothSco`/`stopBluetoothSco`.
  * Two tests went with that change and are named where they went, below.
  */
@@ -122,6 +123,10 @@ class MumlaServiceBluetoothTest {
         humlaField("mConnection").set(service, connection)
         // mModelHandler stays null on purpose: the superclass hook then logs and returns instead
         // of building an AudioHandler over the native stack, and MumlaService's own half runs.
+        // That early return also skips the one thing the superclass does for the route - engaging
+        // the router, which takes no route before a session exists - so it is done here, the way
+        // a synchronized session does it.
+        (humlaField("mRouter").get(service) as AudioRouter).engage()
     }
 
     private fun preferences() = PreferenceManager.getDefaultSharedPreferences(app)
@@ -250,7 +255,7 @@ class MumlaServiceBluetoothTest {
     }
 
     /**
-     * The wish has to be routed before it can be taken back. `ScoRouter` clears the communication
+     * The wish has to be routed before it can be taken back. The router clears the communication
      * device only when the route it would clear is **its own** SCO route - clearing whatever else
      * the platform chose would take the user off their own speaker or wired headset for a reason
      * they never gave. So the switch is flipped on while connected first, which is the gesture, and

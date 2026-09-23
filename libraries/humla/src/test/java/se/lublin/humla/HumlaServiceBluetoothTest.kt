@@ -18,6 +18,7 @@
 package se.lublin.humla
 
 import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Bundle
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
@@ -37,7 +38,7 @@ import java.util.concurrent.TimeUnit
  * two different questions, and the first survives everything the second does not.
  *
  * `BluetoothScoReceiver` and the deprecated `startBluetoothSco()` are gone; the route goes through
- * [se.lublin.humla.session.ScoRouter] over [se.lublin.humla.session.CommunicationDevices], which is
+ * [se.lublin.humla.session.AudioRouter] over [se.lublin.humla.session.CommunicationDevices], which is
  * the API this module's minSdk of 31 has. No permission is consulted before routing and none can
  * be - see the spec 4.1 ruling quoted on `AndroidCommunicationDevices`.
  */
@@ -81,20 +82,22 @@ class HumlaServiceBluetoothTest {
     }
 
     /**
-     * A wish with no headset to grant it is one chat line, not one per attempt. `ScoRouter` raises
-     * `onScoUnavailable` per `apply()` on purpose - it has no clock and no chat log - so the
+     * A platform that refuses the route is one chat line, not one per attempt. The router raises
+     * `onRouteRefused` per `apply()` on purpose - it has no clock and no chat log - so the
      * de-duplication is this service's, against the last line it delivered, the way
      * `HumlaConnection.warn` does it.
      */
     @Test
-    fun askingForAHeadsetThatIsNotThereIsOneChatLine() {
+    fun aRefusedRouteIsOneChatLine() {
         val h = start()
+        h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+        h.devices!!.selectResult = false
         h.connectAndSynchronize()
 
         h.service.enableBluetoothSco()
         h.service.enableBluetoothSco()
 
-        val line = h.service.getString(R.string.sco_unavailable)
+        val line = h.service.getString(R.string.audio_route_refused)
         assertThat(h.warnings.filter { it == line }).hasSize(1)
 
         // A different line in between ends the suppression: the rule is about repetition, not
@@ -102,6 +105,17 @@ class HumlaServiceBluetoothTest {
         h.service.logWarning("something else")
         h.service.enableBluetoothSco()
         assertThat(h.warnings.filter { it == line }).hasSize(2)
+    }
+
+    /** No headset is not a failure any more: the default without one is the phone itself. */
+    @Test
+    fun wantingAHeadsetThatIsNotThereSaysNothing() {
+        val h = start()
+        h.connectAndSynchronize()
+
+        h.service.enableBluetoothSco()
+
+        assertThat(h.warnings).isEmpty()
     }
 
     // ---------------------------------------------------------------- the route across a session
@@ -168,24 +182,133 @@ class HumlaServiceBluetoothTest {
     }
 
     /**
-     * The same release, on the path where `onConnectionDisconnected` cannot do it for us. The test
-     * above connects first, so the disconnect report clears the route and `onDestroy`'s own call
-     * is masked -- two guards over one observable, and the mutation that deletes the one in
-     * `onDestroy` survived it (measured, S17). A route held *without* a session separates them:
-     * there is no connection, so there is no disconnect report.
+     * Routing voice with no voice to route holds an SCO link open for nothing. This test used to pin
+     * the opposite - a route taken and held without a session, which `onDestroy` then had to give
+     * back - and the release it pinned is now the router's: nothing is taken before a session is
+     * synchronized, so there is nothing for the destroy to find.
      */
     @Test
-    fun destroyingTheServiceReleasesARouteHeldWithoutASession() {
+    fun noRouteIsTakenWithoutASession() {
         val h = HumlaServiceHarness().also { harnesses += it }
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+
         h.service.enableBluetoothSco()
-        assertThat(h.devices!!.selectCalls).containsExactly(7)
-        assertThat(h.service.isBluetoothScoActive()).isTrue()
+        h.devices!!.deviceArrives(9, AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
+
+        assertThat(h.devices!!.selectCalls).isEmpty()
+        assertThat(h.service.usingBluetoothSco()).isTrue()
 
         h.destroy()
         harnesses.remove(h)
 
-        assertThat(h.devices!!.clearCalls).isEqualTo(1)
+        assertThat(h.devices!!.clearCalls).isEqualTo(0)
+    }
+
+    // ---------------------------------------------------------------- the chooser
+
+    private fun HumlaServiceHarness.phone() {
+        devices!!.available[1] = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+        devices!!.available[2] = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+    }
+
+    /** The chooser's three calls, through the session interface the UI holds. */
+    @Test
+    fun theUserPicksTheDeviceThroughTheSession() {
+        val h = start()
+        h.phone()
+        h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+        h.devices!!.names[7] = "Jabra"
+        h.connectAndSynchronize()
+        val session: IHumlaSession = h.service
+
+        assertThat(session.audioDevices.map { it.id }).containsExactly(1, 2, 7).inOrder()
+        assertThat(session.activeAudioDevice?.id).isEqualTo(2)
+
+        session.selectAudioDevice(1)
+
+        assertThat(h.devices!!.selectedId).isEqualTo(1)
+        assertThat(session.activeAudioDevice?.id).isEqualTo(1)
+    }
+
+    @Test
+    fun theChooserIsEmptyWithoutASession() {
+        val h = start()
+        h.phone()
+
+        assertThat(h.service.audioDevices).isEmpty()
+        assertThat(h.service.activeAudioDevice).isNull()
+    }
+
+    /** Handset mode is the voice-call stream, and there the default shown is the earpiece. */
+    @Test
+    fun theDefaultFollowsThePlaybackStream() {
+        val h = start()
+        h.phone()
+        h.configure { putInt(HumlaService.EXTRAS_AUDIO_STREAM, AudioManager.STREAM_VOICE_CALL) }
+        h.connectAndSynchronize()
+
+        assertThat(h.service.activeAudioDevice?.id).isEqualTo(1)
+    }
+
+    /** The choice is the wish, and like the headset wish it outlives a dropped connection. */
+    @Test
+    fun aChoiceSurvivesAReconnect() {
+        val h = start(autoReconnect = true)
+        h.phone()
+        h.connectAndSynchronize()
+        h.service.selectAudioDevice(1)
+
+        h.failConnection(0, connectionError())
+        assertThat(h.devices!!.selectedId).isNull() // the route is a session resource
+        h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS) // backoff timer
+        h.synchronize(h.openSocket(1))
+
+        assertThat(h.devices!!.selectedId).isEqualTo(1)
+    }
+
+    /** ...but not the end of the session: the next call starts from the default, as on a phone. */
+    @Test
+    fun aChoiceIsForgottenWhenTheSessionEnds() {
+        val h = start()
+        h.phone()
+        h.connectAndSynchronize()
+        h.service.selectAudioDevice(1)
+
+        h.service.disconnect()
+        h.mainLooper.idle()
+
+        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
+        h.service.connect()
+        h.connectAndSynchronize(1)
+        assertThat(h.devices!!.selectCalls).containsExactly(1)
+        assertThat(h.service.activeAudioDevice?.id).isEqualTo(2)
+    }
+
+    /**
+     * A routed device only carries the voice when the track is on the voice-call stream: a
+     * media-stream track does not follow the communication device. So choosing one rebuilds the
+     * pipeline onto that stream, and giving the route back rebuilds it onto the stream the
+     * settings chose.
+     */
+    @Test
+    fun aChosenDeviceMovesPlaybackToTheVoiceCallStream() {
+        val h = start()
+        h.phone()
+        h.connectAndSynchronize()
+        awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
+        assertThat(h.audioFactory.configs[0].playbackStream).isEqualTo(AudioManager.STREAM_MUSIC)
+
+        h.service.selectAudioDevice(1)
+
+        awaitUntil(description = "audio rebuilt for the earpiece") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
+        assertThat(h.audioFactory.configs[1].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        assertThat(h.audioFactory.configs[1].playbackStream).isEqualTo(AudioManager.STREAM_VOICE_CALL)
+
+        h.service.selectAudioDevice(2)
+
+        awaitUntil(description = "audio rebuilt for the default") { h.mainLooper.idle(); h.audioFactory.created.size == 3 }
+        assertThat(h.audioFactory.configs[2].routedDeviceType).isNull()
+        assertThat(h.audioFactory.configs[2].playbackStream).isEqualTo(AudioManager.STREAM_MUSIC)
     }
 
     // ---------------------------------------------------------------- the route and the pipeline
@@ -254,7 +377,7 @@ class HumlaServiceBluetoothTest {
      * the platform itself. The next task on this line - "take the Bluetooth headphones, or the
      * speaker, and if headphones are plugged in take those by themselves" - is a chooser over
      * `available`/`select`, and this is the handle it docks onto. Without this line the
-     * only reference lived inside `ScoRouter`'s constructor call.
+     * only reference lived inside the router's constructor call.
      */
     @Test
     fun theDeviceSeamIsReachableAfterOnCreate() {

@@ -179,7 +179,7 @@ class HumlaServiceCharacterizationTest {
 
     /**
      * **Gone with `BluetoothScoReceiver` (task A9b).** The service no longer registers a broadcast
-     * receiver for `ACTION_SCO_AUDIO_STATE_UPDATED`; the route goes through `ScoRouter` over
+     * receiver for `ACTION_SCO_AUDIO_STATE_UPDATED`; the route goes through `AudioRouter` over
      * `CommunicationDevices`, which is the API this module's minSdk of 31 has, and the listener is
      * registered on the platform's `AudioManager` instead of on the broadcast registry. The
      * lifetime property is pinned by

@@ -117,7 +117,7 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
         AudioHandler.Builder()
             .setContext(context)
             .setLogger(logger)
-            .setAudioStream(config.audioStream)
+            .setAudioStream(config.playbackStream)
             .setAudioSource(config.audioSource)
             .setInputSampleRate(config.inputSampleRate)
             .setTargetBitrate(config.targetBitrate)

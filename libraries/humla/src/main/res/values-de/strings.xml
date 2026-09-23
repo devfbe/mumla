@@ -32,4 +32,5 @@
     <string name="perm_denied">Zugriff verweigert.</string>
     <string name="server">Server</string>
     <string name="the_server">der Server</string>
+    <string name="audio_route_refused">Das Gerät hat den Wechsel des Audiogeräts abgelehnt. Der Ton bleibt, wo er war.</string>
 </resources>

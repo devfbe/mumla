@@ -17,6 +17,7 @@
 
 package se.lublin.humla.session
 
+import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Handler
@@ -51,13 +52,18 @@ interface CommunicationDevices {
     /** The current communication device, or null if none is set. */
     fun current(): CommunicationDevice?
 
-    /** Registers (or with null, removes) a callback for route changes; invoked on the main thread. */
+    /**
+     * Registers (or with null, removes) one callback for both kinds of change - the route moved,
+     * or a device arrived or left - invoked on the main thread. The second kind is not a route
+     * change: switching a headset on raises nothing on the platform's communication-device
+     * listener until somebody routes to it, and "a headset appeared, take it" is exactly that case.
+     */
     fun setOnChangedListener(listener: (() -> Unit)?)
 }
 
 /**
  * Thin pass-through to [AudioManager.setCommunicationDevice] and friends. The logic lives in
- * [ScoRouter] and is tested against a fake; this class carries only the seam and the wrapper.
+ * [AudioRouter] and is tested against a fake; this class carries only the seam and the wrapper.
  *
  * **The wrapper is spec 4.1's ruling, and it is the one thing here that is not pass-through.**
  * `BLUETOOTH_CONNECT` is asked for and is never a condition of routing: measured against the SDK's
@@ -79,8 +85,14 @@ class AndroidCommunicationDevices(
     private val mainHandler: Handler,
     private val onSecurityDenial: (SecurityException) -> Unit,
 ) : CommunicationDevices {
-    private var changeListener: AudioManager.OnCommunicationDeviceChangedListener? = null
+    private var changeListener: Registration? = null
     private var denialReported = false
+
+    /** The two platform registrations one listener stands for; either may have been refused. */
+    private class Registration(
+        val route: AudioManager.OnCommunicationDeviceChangedListener?,
+        val devices: AudioDeviceCallback?,
+    )
 
     override fun available(): List<CommunicationDevice> = guarded(emptyList()) {
         audioManager.availableCommunicationDevices.map { it.toCommunicationDevice() }
@@ -108,34 +120,69 @@ class AndroidCommunicationDevices(
         changeListener = listener?.let { register(it) }
     }
 
-    private fun unregister(platformListener: AudioManager.OnCommunicationDeviceChangedListener) {
-        try {
-            audioManager.removeOnCommunicationDeviceChangedListener(platformListener)
-        } catch (e: SecurityException) {
-            reportDenial(e)
-        } catch (e: RuntimeException) {
-            Log.w(TAG, "Could not remove communication device listener", e)
+    private fun unregister(registration: Registration) {
+        registration.route?.let { platformListener ->
+            platformCall("Could not remove communication device listener", Unit) {
+                audioManager.removeOnCommunicationDeviceChangedListener(platformListener)
+            }
+        }
+        registration.devices?.let { callback ->
+            platformCall("Could not remove audio device callback", Unit) {
+                audioManager.unregisterAudioDeviceCallback(callback)
+            }
         }
     }
 
-    /** The registered platform listener, or null if this build refused the registration. */
-    private fun register(listener: () -> Unit): AudioManager.OnCommunicationDeviceChangedListener? {
-        val platformListener = AudioManager.OnCommunicationDeviceChangedListener { listener() }
-        return try {
-            audioManager.addOnCommunicationDeviceChangedListener(
-                Executor { mainHandler.post(it) },
-                platformListener,
-            )
-            platformListener
+    /**
+     * Both platform registrations for [listener]; a refused one is null. The platform calls the
+     * device callback once on registration with the devices already present - a change that
+     * changes nothing, which the listener's owner reconciles like any other.
+     *
+     * The device callback posts to [mainHandler] itself although the platform is handed the same
+     * handler. The platform already delivers there, so in production this is one extra hop; but it
+     * makes "posted, never inline" a property of this class rather than of the platform, and it is
+     * what keeps the registration callback from running inside `onCreate` - Robolectric's shadow
+     * calls it inline, and a denial reported there reached the chat log before anyone listened.
+     */
+    private fun register(listener: () -> Unit): Registration {
+        val route = AudioManager.OnCommunicationDeviceChangedListener { listener() }
+        val devices = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                mainHandler.post(listener)
+            }
+
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                mainHandler.post(listener)
+            }
+        }
+        // Some vendor builds throw on either registration; routing still works, only the
+        // automatic updates are lost.
+        return Registration(
+            route = platformCall("Communication device listener unavailable", null) {
+                audioManager.addOnCommunicationDeviceChangedListener(
+                    Executor { mainHandler.post(it) },
+                    route,
+                )
+                route
+            },
+            devices = platformCall("Audio device callback unavailable", null) {
+                audioManager.registerAudioDeviceCallback(devices, mainHandler)
+                devices
+            },
+        )
+    }
+
+    /** A registration call: a denial is reported like any other, anything else is only logged. */
+    private inline fun <T> platformCall(warning: String, fallback: T, body: () -> T): T =
+        try {
+            body()
         } catch (e: SecurityException) {
             reportDenial(e)
-            null
+            fallback
         } catch (e: RuntimeException) {
-            // Some vendor builds throw here; SCO still works, only automatic route updates are lost.
-            Log.w(TAG, "Communication device listener unavailable", e)
-            null
+            Log.w(TAG, warning, e)
+            fallback
         }
-    }
 
     private fun AudioDeviceInfo.toCommunicationDevice() =
         CommunicationDevice(id, type, productName?.toString().orEmpty())
