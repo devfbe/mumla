@@ -47,35 +47,45 @@ class PublicServerFetchTask extends AsyncTask<Void, Void, List<PublicServer>> {
         contextRef = new WeakReference<>(context);
     }
 
+    /** Test seam: the connection the list is fetched over. */
+    protected HttpURLConnection openConnection() throws IOException {
+        return (HttpURLConnection) new URL(MUMBLE_PUBLIC_URL).openConnection();
+    }
+
     @Override
     protected List<PublicServer> doInBackground(Void... params) {
         try {
             // Fetch XML from server
-            URL url = new URL(MUMBLE_PUBLIC_URL);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.addRequestProperty("version", se.lublin.humla.Constants.PROTOCOL_STRING);
-            connection.connect();
-            InputStream stream = connection.getInputStream();
+            HttpURLConnection connection = openConnection();
+            // Stream and connection are released on every path; left open they were only
+            // reclaimed by the finalizer ("A resource failed to call close").
+            try {
+                connection.setRequestMethod("GET");
+                connection.addRequestProperty("version", se.lublin.humla.Constants.PROTOCOL_STRING);
+                connection.connect();
+                try (InputStream stream = connection.getInputStream()) {
+                    XmlPullParser parser = Xml.newPullParser();
+                    parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+                    parser.setInput(stream, "UTF-8");
+                    parser.nextTag();
 
-            XmlPullParser parser = Xml.newPullParser();
-            parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
-            parser.setInput(stream, "UTF-8");
-            parser.nextTag();
+                    List<PublicServer> serverList = new ArrayList<PublicServer>();
 
-            List<PublicServer> serverList = new ArrayList<PublicServer>();
+                    parser.require(XmlPullParser.START_TAG, null, "servers");
+                    while (parser.next() != XmlPullParser.END_TAG) {
+                        if (parser.getEventType() != XmlPullParser.START_TAG) {
+                            continue;
+                        }
 
-            parser.require(XmlPullParser.START_TAG, null, "servers");
-            while(parser.next() != XmlPullParser.END_TAG) {
-                if (parser.getEventType() != XmlPullParser.START_TAG) {
-                    continue;
+                        serverList.add(readEntry(parser));
+                    }
+                    parser.require(XmlPullParser.END_TAG, null, "servers");
+
+                    return serverList;
                 }
-
-                serverList.add(readEntry(parser));
+            } finally {
+                connection.disconnect();
             }
-            parser.require(XmlPullParser.END_TAG, null, "servers");
-
-            return serverList;
         } catch (XmlPullParserException e) {
             e.printStackTrace();
         } catch (ProtocolException e) {
