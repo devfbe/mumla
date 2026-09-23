@@ -623,10 +623,17 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             scheduleReconnect(next.reconnectInMillis)
         } else {
             // Disconnected: either no reconnect was wanted, the attempts are spent, or the session
-            // had already ended. `lost()` returns nothing else.
-            mConnectionState =
-                if (e != null) ConnectionState.CONNECTION_LOST else ConnectionState.DISCONNECTED
-            if (autoReconnect) logWarning(getString(R.string.reconnect_gave_up))
+            // had already ended. `lost()` returns nothing else. The state's error counts as well
+            // as `e`: when the session had already ended -- cancelReconnect disconnecting the
+            // attempt in flight -- this late, error-free report must not turn the cancelled
+            // session's CONNECTION_LOST into DISCONNECTED, nor claim to have given up.
+            val ended = next as SessionState.Disconnected
+            mConnectionState = if (e != null || ended.error != null) {
+                ConnectionState.CONNECTION_LOST
+            } else {
+                ConnectionState.DISCONNECTED
+            }
+            if (autoReconnect && ended.error === e) logWarning(getString(R.string.reconnect_gave_up))
             releaseSessionResources()
         }
 
@@ -947,10 +954,18 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         else -> false
     }
 
+    /**
+     * Gives up on the automatic reconnect. In Reconnecting an attempt is in flight, so its
+     * connection is disconnected as well: left running, a successful attempt would reach
+     * onConnectionSynchronized, which takes the wake lock and starts the microphone for a session
+     * the user has just ended. In ConnectionLost the connection is already down and the call is a
+     * no-op. The attempt's own disconnect report then finds the state machine in Disconnected.
+     */
     override fun cancelReconnect() {
         if (mStateMachine.cancelReconnect()) {
             mConnectionState = ConnectionState.CONNECTION_LOST
             releaseSessionResources()
+            mConnection?.disconnect()
         }
     }
 

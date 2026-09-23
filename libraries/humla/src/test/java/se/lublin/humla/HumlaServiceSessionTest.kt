@@ -392,6 +392,58 @@ class HumlaServiceSessionTest {
     }
 
     /**
+     * Cancelling while a retry is in flight (Reconnecting) must stop that attempt too. Before the
+     * fix the state machine went to Disconnected but the connection kept going: had it succeeded,
+     * onConnectionSynchronized would have set CONNECTED, taken the wake lock and started the
+     * microphone for a session the user had given up on -- with the service out of the foreground.
+     */
+    @Test
+    fun cancelReconnectDuringAnAttemptInFlightDisconnectsThatAttempt() {
+        val h = start(autoReconnect = true)
+        h.connectAndSynchronize()
+        h.failConnection(0, connectionError())
+        awaitUntil(description = "the retry opened a second socket") {
+            h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS)
+            h.transports.tcps.size > 1 && h.transports.tcps[1].connectThread != null
+        }
+        assertThat(h.service.getSessionState().value).isInstanceOf(SessionState.Reconnecting::class.java)
+
+        h.service.cancelReconnect()
+        awaitUntil(description = "the attempt in flight was disconnected") {
+            h.mainLooper.idle()
+            h.transports.tcps[1].disconnectCalls > 0
+        }
+        h.mainLooper.idle()
+
+        assertThat(h.service.getSessionState().value).isInstanceOf(SessionState.Disconnected::class.java)
+        // The cancelled session's error stays what the UI shows, also after the attempt's own
+        // (error-free) disconnect report has arrived.
+        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
+        assertThat(h.service.getConnectionError()).isNotNull()
+        assertThat(h.service.isWakeLockHeldForTest()).isFalse()
+        assertThat(h.warnings).doesNotContain(h.service.getString(R.string.reconnect_gave_up))
+    }
+
+    /**
+     * The attempt in flight can also end on its own error at the moment the user cancels. Its
+     * report then arrives in Disconnected with a CONNECTION_ERROR -- which is not the reconnect
+     * giving up, the user ended it, so no "Giving up." line.
+     */
+    @Test
+    fun aLateErrorReportAfterACancelDoesNotClaimTheReconnectGaveUp() {
+        val h = start(autoReconnect = true)
+        h.connectAndSynchronize()
+        h.failConnection(0, connectionError())
+
+        h.service.cancelReconnect()
+        h.service.onConnectionDisconnected(connectionError())
+        h.mainLooper.idle()
+
+        assertThat(h.warnings).doesNotContain(h.service.getString(R.string.reconnect_gave_up))
+        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
+    }
+
+    /**
      * `cancelReconnect` on a live session is a no-op, both halves. Without the state machine's
      * answer it would release the wake lock and put the service into CONNECTION_LOST while the
      * connection is up (measured, G15).
