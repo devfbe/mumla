@@ -14,8 +14,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-@file:JvmName("HumlaEvents")
-
 package se.lublin.mumla.util
 
 import kotlinx.coroutines.CoroutineScope
@@ -27,16 +25,11 @@ import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.inMainThreadSlices
 
-/** Receives session events on the main thread. */
-fun interface HumlaEventListener {
-    fun onEvent(event: HumlaEvent)
-}
-
 /**
  * Collects [service]'s events in [scope] on the main thread until the returned job or [scope] is
  * cancelled. Subscribed when this returns; events emitted on the main thread arrive inline.
  */
-fun collectEvents(scope: CoroutineScope, service: IHumlaService, listener: HumlaEventListener): Job =
+fun collectEvents(scope: CoroutineScope, service: IHumlaService, onEvent: (HumlaEvent) -> Unit): Job =
     scope.launch(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) {
-        service.events.inMainThreadSlices().collect { listener.onEvent(it) }
+        service.events.inMainThreadSlices().collect(onEvent)
     }

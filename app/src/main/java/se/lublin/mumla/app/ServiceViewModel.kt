@@ -37,9 +37,9 @@ import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.session.inMainThreadSlices
 import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.util.collectEvents
 
 /**
  * The [IMumlaService] of the activity, shared with its fragments: set while the activity has the
@@ -112,9 +112,7 @@ fun ServiceViewModel.bindClient(owner: LifecycleOwner, client: ServiceClient): J
                 unbind()
                 if (service != null) {
                     current = service
-                    events = launch(start = CoroutineStart.UNDISPATCHED) {
-                        service.events.inMainThreadSlices().collect(client::onServiceEvent)
-                    }
+                    events = collectEvents(this, service, client::onServiceEvent)
                     client.onServiceBound(service)
                 }
             }

@@ -454,7 +454,7 @@ class MumlaService : HumlaService(),
     }
 
     override fun onOverlayToggled() {
-        if (!mChannelOverlay.isShown()) {
+        if (!mChannelOverlay.isShown) {
             if (!android.provider.Settings.canDrawOverlays(applicationContext)) {
                 val showSetting = Intent(
                     android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -496,7 +496,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    override fun isOverlayShown(): Boolean = mChannelOverlay.isShown()
+    override fun isOverlayShown(): Boolean = mChannelOverlay.isShown
 
     override fun clearChatNotifications() {
         mMessageNotification.dismiss()
