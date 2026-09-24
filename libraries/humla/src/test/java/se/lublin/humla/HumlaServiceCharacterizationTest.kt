@@ -347,6 +347,7 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_ANDROID_AGC to false,
             HumlaService.EXTRAS_VAD_CONFIG to false,
             HumlaService.EXTRAS_BLUETOOTH_WANTED to false,
+            HumlaService.EXTRAS_EARPIECE_BY_DEFAULT to false,
         )
 
         assertThat(declaredExtraKeys()).containsExactlyElementsIn(reconnectNeeded.keys)
@@ -386,6 +387,7 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_FORCE_TCP,
             HumlaService.EXTRAS_HALF_DUPLEX,
             HumlaService.EXTRAS_BLUETOOTH_WANTED,
+            HumlaService.EXTRAS_EARPIECE_BY_DEFAULT,
             HumlaService.EXTRAS_ENABLE_PREPROCESSOR -> putBoolean(key, true)
             else -> putString(key, "value-for-$key")
         }

@@ -863,6 +863,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             mRouter.bluetoothAutomatic = extras.getBoolean(EXTRAS_BLUETOOTH_WANTED)
             mRouter.apply()
         }
+        if (extras.containsKey(EXTRAS_EARPIECE_BY_DEFAULT)) {
+            // The old handset mode, as the router's default when no headset is there. Live: the
+            // next apply routes it, and a user's explicit choice is left standing.
+            mRouter.earpieceByDefault = extras.getBoolean(EXTRAS_EARPIECE_BY_DEFAULT)
+            mRouter.apply()
+        }
         if (extras.containsKey(EXTRAS_VAD_CONFIG)) {
             // The one object that outlives a rebuild, which is why this needs no rebuild at all.
             mActivityInputMode.setVadConfig(
@@ -871,10 +877,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
 
         mAudioConfig = config
-        // What the platform plays on when nobody routes, which is what the chooser shows as the
-        // default and what "choosing the default" compares against. Read from the stream rule,
-        // not decided again here.
-        mRouter.handset = config.audioStream == AudioManager.STREAM_VOICE_CALL
         // Unconditional, and that is the point (task 7 contract, spec 4.04). Both halves of the
         // old `if` - "did anything change" and "is a pipeline up" - are decisions AudioController
         // already makes, by value for the config and by identity for the input mode. A copy here
@@ -1444,6 +1446,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
          * UI reads the router. Never a reconnect: the route is reconciled in place.
          */
         const val EXTRAS_BLUETOOTH_WANTED = "bluetooth_wanted"
+
+        /**
+         * Boolean: without a headset, route voice to the earpiece rather than the speaker. The
+         * standing preference that replaced the handset mode; the chooser overrides it per session.
+         */
+        const val EXTRAS_EARPIECE_BY_DEFAULT = "earpiece_by_default"
 
     }
 }

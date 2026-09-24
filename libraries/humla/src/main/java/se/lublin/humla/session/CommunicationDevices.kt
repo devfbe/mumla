@@ -49,6 +49,12 @@ interface CommunicationDevices {
     /** Returns routing to the platform default. */
     fun clear()
 
+    /**
+     * Takes (`MODE_IN_COMMUNICATION`) or gives back (`MODE_NORMAL`) the communication mode, which
+     * is what makes the platform route voice by the communication device at all.
+     */
+    fun setCommunicationMode(on: Boolean)
+
     /** The current communication device, or null if none is set. */
     fun current(): CommunicationDevice?
 
@@ -104,6 +110,10 @@ class AndroidCommunicationDevices(
     }
 
     override fun clear() = guarded(Unit) { audioManager.clearCommunicationDevice() }
+
+    override fun setCommunicationMode(on: Boolean) = guarded(Unit) {
+        audioManager.mode = if (on) AudioManager.MODE_IN_COMMUNICATION else AudioManager.MODE_NORMAL
+    }
 
     override fun current(): CommunicationDevice? =
         guarded(null) { audioManager.communicationDevice?.toCommunicationDevice() }

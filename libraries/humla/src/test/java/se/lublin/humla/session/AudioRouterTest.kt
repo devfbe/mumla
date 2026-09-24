@@ -30,8 +30,9 @@ import se.lublin.humla.testutil.FakeCommunicationDevices
 /**
  * The phone app's audio chooser as one router with one wish (contract 9b, point 15): the user's
  * explicit [AudioRouter.choice] replaces `ScoRouter.wanted`, and everything else is the automatic
- * default - a connected Bluetooth headset when [AudioRouter.bluetoothAutomatic] allows it, and
- * otherwise the route the platform takes when nobody routes, which the router leaves unclaimed.
+ * default - a connected Bluetooth headset when [AudioRouter.bluetoothAutomatic] allows it, then a
+ * plugged-in headset, then the speaker or, by preference, the earpiece. While engaged the router
+ * holds the communication mode and routes every one of them explicitly.
  *
  * No permission appears anywhere in this class, and that is a decision rather than an omission -
  * see the class doc of [AudioRouter]. There is no input by which a caller could refuse the route on
@@ -84,21 +85,52 @@ class AudioRouterTest {
     }
 
     /**
-     * Without a headset the automatic default is the one the platform takes by itself - the
-     * speaker for a media-stream track, a plugged-in headset before it - so the router routes
-     * nothing, and a speaker or wired headset is never a refusal.
+     * In communication mode the platform's own default is the earpiece, whatever the stream, so
+     * leaving the route to the platform would put a walkie-talkie app on the earpiece. The default
+     * without a headset is routed like any other: a plugged-in headset first, then the speaker.
      */
     @Test
-    fun withoutAHeadsetNothingIsRoutedAndNothingIsRefused() {
+    fun withoutABluetoothHeadsetAPluggedInOneIsRouted() {
         phone()
         devices.available[4] = TYPE_WIRED_HEADSET
 
         engaged()
 
-        assertThat(devices.selectCalls).isEmpty()
-        assertThat(devices.clearCalls).isEqualTo(0)
+        assertThat(devices.selectedId).isEqualTo(4)
         assertThat(refusals).isEqualTo(0)
-        assertThat(routes).isEmpty()
+        assertThat(routes).containsExactly(TYPE_WIRED_HEADSET)
+    }
+
+    @Test
+    fun withoutAnyHeadsetTheSpeakerIsRouted() {
+        phone()
+
+        engaged()
+
+        assertThat(devices.selectedId).isEqualTo(2)
+        assertThat(routes).containsExactly(TYPE_BUILTIN_SPEAKER)
+    }
+
+    /** What the handset mode was: the earpiece, by the user's standing preference. */
+    @Test
+    fun theEarpieceIsTheDefaultWhenPreferred() {
+        phone()
+        router.earpieceByDefault = true
+
+        engaged()
+
+        assertThat(devices.selectedId).isEqualTo(1)
+    }
+
+    /** A tablet has no earpiece; preferring one must not leave it silent. */
+    @Test
+    fun withoutAnEarpieceThePreferenceFallsBackToTheSpeaker() {
+        devices.available[2] = TYPE_BUILTIN_SPEAKER
+        router.earpieceByDefault = true
+
+        engaged()
+
+        assertThat(devices.selectedId).isEqualTo(2)
     }
 
     @Test
@@ -108,11 +140,11 @@ class AudioRouterTest {
 
         engaged(bluetooth = false)
 
-        assertThat(devices.selectCalls).isEmpty()
+        assertThat(devices.selectedId).isEqualTo(2)
     }
 
     @Test
-    fun switchingBluetoothOffGivesBackTheRouteItTook() {
+    fun switchingBluetoothOffMovesToThePhone() {
         phone()
         devices.available[7] = TYPE_BLUETOOTH_SCO
         engaged()
@@ -120,25 +152,49 @@ class AudioRouterTest {
         router.bluetoothAutomatic = false
         router.apply()
 
-        assertThat(devices.clearCalls).isEqualTo(1)
-        assertThat(devices.selectedId).isNull()
-        assertThat(routes).containsExactly(TYPE_BLUETOOTH_SCO, null).inOrder()
+        assertThat(devices.selectedId).isEqualTo(2)
+        assertThat(routes).containsExactly(TYPE_BLUETOOTH_SCO, TYPE_BUILTIN_SPEAKER).inOrder()
     }
 
     /**
      * Only a route this router took is its to give back. Clearing whatever the platform chose would
-     * take the user off their own speaker or wired headset for a reason they never gave.
+     * take the user off a route somebody else holds for a reason they never gave.
      */
     @Test
-    fun aRouteSomebodyElseTookIsLeftAlone() {
-        phone()
-        devices.systemSelects(2)
+    fun withNothingToRouteNothingIsGivenBack() {
+        devices.systemSelects(null)
+        engaged()
 
-        engaged(bluetooth = false)
-        router.apply()
+        router.disengage()
 
+        assertThat(devices.selectCalls).isEmpty()
         assertThat(devices.clearCalls).isEqualTo(0)
-        assertThat(devices.selectedId).isEqualTo(2)
+    }
+
+    /**
+     * The communication mode is what makes the platform route voice by the communication device
+     * at all, and it is the session's: taken when the router engages, before the first route, and
+     * handed back when it disengages - not left behind for the rest of the process.
+     */
+    @Test
+    fun theRouterHoldsTheCommunicationModeForTheSession() {
+        phone()
+        assertThat(devices.inCommunicationMode).isFalse()
+
+        engaged()
+        assertThat(devices.inCommunicationMode).isTrue()
+        assertThat(devices.modeCalls.first()).isTrue()
+
+        router.disengage()
+        assertThat(devices.inCommunicationMode).isFalse()
+    }
+
+    @Test
+    fun aRouterThatWasNeverEngagedLeavesTheModeAlone() {
+        router.apply()
+        router.disengage()
+
+        assertThat(devices.modeCalls).isEmpty()
     }
 
     @Test
@@ -255,12 +311,12 @@ class AudioRouterTest {
         router.disengage()
 
         assertThat(devices.clearCalls).isEqualTo(1)
-        assertThat(routes).containsExactly(TYPE_BUILTIN_EARPIECE, null).inOrder()
+        assertThat(routes).containsExactly(TYPE_BUILTIN_SPEAKER, TYPE_BUILTIN_EARPIECE, null).inOrder()
         assertThat(router.choice).isEqualTo(1)
 
         router.engage()
 
-        assertThat(devices.selectCalls).containsExactly(1, 1).inOrder()
+        assertThat(devices.selectCalls).containsExactly(2, 1, 1).inOrder()
     }
 
     /**
@@ -289,7 +345,7 @@ class AudioRouterTest {
         router.forgetChoice()
 
         assertThat(router.choice).isNull()
-        assertThat(devices.clearCalls).isEqualTo(1)
+        assertThat(devices.selectedId).isEqualTo(2)
     }
 
     // ---------------------------------------------------------------- the user's choice
@@ -315,12 +371,12 @@ class AudioRouterTest {
         router.choose(1)
 
         assertThat(devices.selectedId).isEqualTo(1)
-        assertThat(routes).containsExactly(TYPE_BUILTIN_EARPIECE)
+        assertThat(routes).containsExactly(TYPE_BUILTIN_SPEAKER, TYPE_BUILTIN_EARPIECE).inOrder()
     }
 
     /**
-     * Choosing what the default would have given anyway is going back to the default: the route is
-     * handed back to the platform, and the next headset may take over again.
+     * Choosing what the default would have given anyway is going back to the default, so the next
+     * headset may take over again.
      */
     @Test
     fun choosingTheDefaultDeviceIsTheDefault() {
@@ -331,8 +387,7 @@ class AudioRouterTest {
         router.choose(2)
 
         assertThat(router.choice).isNull()
-        assertThat(devices.clearCalls).isEqualTo(1)
-        assertThat(devices.selectedId).isNull()
+        assertThat(devices.selectedId).isEqualTo(2)
     }
 
     @Test
@@ -343,7 +398,7 @@ class AudioRouterTest {
         router.choose(42)
 
         assertThat(router.choice).isNull()
-        assertThat(devices.selectCalls).isEmpty()
+        assertThat(devices.selectCalls).containsExactly(2)
     }
 
     // ---------------------------------------------------------------- plugging in and out
@@ -383,10 +438,7 @@ class AudioRouterTest {
         assertThat(devices.selectedId).isEqualTo(9)
     }
 
-    /**
-     * A plugged-in headset is where the platform plays anyway, so taking over means handing the
-     * route back rather than selecting it.
-     */
+    /** A plugged-in headset takes over as well, and becomes the default rather than a choice. */
     @Test
     fun aWiredHeadsetThatIsPluggedInTakesOverFromAChoice() {
         phone()
@@ -397,7 +449,7 @@ class AudioRouterTest {
         devices.deviceArrives(4, TYPE_USB_HEADSET)
 
         assertThat(router.choice).isNull()
-        assertThat(devices.selectedId).isNull()
+        assertThat(devices.selectedId).isEqualTo(4)
         assertThat(router.activeDevice()?.id).isEqualTo(4)
     }
 
@@ -435,19 +487,20 @@ class AudioRouterTest {
         devices.deviceLeaves(7)
 
         assertThat(router.isBluetoothActive).isFalse()
-        assertThat(routes.last()).isNull()
+        assertThat(routes.last()).isEqualTo(TYPE_BUILTIN_SPEAKER)
         assertThat(router.activeDevice()?.id).isEqualTo(2)
     }
 
     // ---------------------------------------------------------------- what the chooser shows
 
     @Test
-    fun theDefaultShownIsTheSpeakerOrInHandsetModeTheEarpiece() {
+    fun changingTheEarpiecePreferenceMovesTheDefaultAtTheNextApply() {
         phone()
         engaged()
         assertThat(router.activeDevice()?.id).isEqualTo(2)
 
-        router.handset = true
+        router.earpieceByDefault = true
+        router.apply()
 
         assertThat(router.activeDevice()?.id).isEqualTo(1)
     }

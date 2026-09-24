@@ -31,6 +31,7 @@ import org.xmlpull.v1.XmlPullParser
 import se.lublin.humla.HumlaService
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.inputmode.ActivityInputMode
+import se.lublin.humla.session.AudioRouter
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 
@@ -138,6 +139,19 @@ class MumlaServiceAudioPreferencesTest {
         prefs.edit().putString(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB, "-35").commit()
         change(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB)
         assertThat(audioConfig().speexNoiseSuppressDb).isEqualTo(-35)
+    }
+
+    /** The handset mode is the router's earpiece default now; the stream no longer decides it. */
+    @Test
+    fun `handset mode makes the earpiece the default output`() {
+        val router = field(service, "mRouter") as AudioRouter
+        prefs.edit().putBoolean(Settings.PREF_HANDSET_MODE, true).commit()
+        change(Settings.PREF_HANDSET_MODE)
+        assertThat(router.earpieceByDefault).isTrue()
+
+        prefs.edit().putBoolean(Settings.PREF_HANDSET_MODE, false).commit()
+        change(Settings.PREF_HANDSET_MODE)
+        assertThat(router.earpieceByDefault).isFalse()
     }
 
     @Test

@@ -72,6 +72,8 @@ class MumlaServiceBluetoothTest {
             selectedId = null
         }
 
+        override fun setCommunicationMode(on: Boolean) = Unit
+
         override fun current(): CommunicationDevice? =
             selectedId?.let { id -> available[id]?.let { CommunicationDevice(id, it, "") } }
 

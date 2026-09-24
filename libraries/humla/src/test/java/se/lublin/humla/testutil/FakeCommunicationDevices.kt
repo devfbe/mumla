@@ -54,6 +54,10 @@ class FakeCommunicationDevices : CommunicationDevices {
     var clearCalls = 0
     var listenerRegistrations = 0
 
+    /** Whether the communication mode is held, and every request, in order. */
+    var inCommunicationMode = false
+    val modeCalls = mutableListOf<Boolean>()
+
     override fun available(): List<CommunicationDevice> =
         available.map { (id, type) -> device(id, type) }
 
@@ -69,6 +73,11 @@ class FakeCommunicationDevices : CommunicationDevices {
         clearCalls++
         selectedId = null
         if (notifiesOnChange) listener?.invoke()
+    }
+
+    override fun setCommunicationMode(on: Boolean) {
+        modeCalls += on
+        inCommunicationMode = on
     }
 
     override fun current(): CommunicationDevice? =

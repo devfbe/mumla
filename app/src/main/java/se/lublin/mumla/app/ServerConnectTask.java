@@ -81,6 +81,7 @@ public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
         connectIntent.putStringArrayListExtra(HumlaService.EXTRAS_ACCESS_TOKENS, (ArrayList<String>) mDatabase.getAccessTokens(server.getId()));
         connectIntent.putExtra(HumlaService.EXTRAS_AUDIO_SOURCE, audioSource);
         connectIntent.putExtra(HumlaService.EXTRAS_AUDIO_STREAM, audioStream);
+        connectIntent.putExtra(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, mSettings.isHandsetMode());
         connectIntent.putExtra(HumlaService.EXTRAS_FRAMES_PER_PACKET, mSettings.getFramesPerPacket());
         connectIntent.putExtra(HumlaService.EXTRAS_TRUST_STORE, MumlaTrustStore.getTrustStorePath(mContext));
         connectIntent.putExtra(HumlaService.EXTRAS_TRUST_STORE_PASSWORD, MumlaTrustStore.getTrustStorePassword());

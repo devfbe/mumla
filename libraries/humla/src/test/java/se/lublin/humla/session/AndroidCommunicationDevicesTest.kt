@@ -146,6 +146,16 @@ class AndroidCommunicationDevicesTest {
         assertThat(invocations.get()).isEqualTo(afterRegistration + 2)
     }
 
+    /** The mode is the platform's switch for routing voice by the communication device at all. */
+    @Test
+    fun theCommunicationModeIsTakenAndGivenBackThroughAudioManager() {
+        devices.setCommunicationMode(true)
+        assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_IN_COMMUNICATION)
+
+        devices.setCommunicationMode(false)
+        assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
+    }
+
     @Test
     fun selectingAnUnknownIdFails() {
         shadowOf(audioManager).setAvailableCommunicationDevices(emptyList())
@@ -244,6 +254,7 @@ class AndroidCommunicationDevicesTest {
         assertThat(devices.select(1)).isFalse()
         assertThat(devices.current()).isNull()
         devices.clear()
+        devices.setCommunicationMode(true)
 
         assertThat(denials).hasSize(1)
         assertThat(denials[0]).hasMessageThat().contains("denied")
@@ -265,5 +276,8 @@ class AndroidCommunicationDevicesTest {
 
         @Implementation
         override fun clearCommunicationDevice(): Unit = throw SecurityException("denied")
+
+        @Implementation
+        override fun setMode(mode: Int): Unit = throw SecurityException("denied")
     }
 }

@@ -239,15 +239,36 @@ class HumlaServiceBluetoothTest {
         assertThat(h.service.activeAudioDevice).isNull()
     }
 
-    /** Handset mode is the voice-call stream, and there the default shown is the earpiece. */
+    /** What the handset mode was: the earpiece by the user's standing preference, live. */
     @Test
-    fun theDefaultFollowsThePlaybackStream() {
+    fun theEarpieceIsTheDefaultWhenTheExtraAsksForIt() {
         val h = start()
         h.phone()
-        h.configure { putInt(HumlaService.EXTRAS_AUDIO_STREAM, AudioManager.STREAM_VOICE_CALL) }
+        h.configure { putBoolean(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, true) }
         h.connectAndSynchronize()
 
         assertThat(h.service.activeAudioDevice?.id).isEqualTo(1)
+
+        h.configure { putBoolean(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, false) }
+
+        assertThat(h.devices!!.selectedId).isEqualTo(2)
+    }
+
+    /**
+     * The communication mode is the session's: without it the platform does not route voice by the
+     * communication device, and left behind it keeps the phone in call mode after a disconnect.
+     */
+    @Test
+    fun theSessionHoldsTheCommunicationMode() {
+        val h = start()
+        h.phone()
+        h.connectAndSynchronize()
+        assertThat(h.devices!!.inCommunicationMode).isTrue()
+
+        h.service.disconnect()
+        h.mainLooper.idle()
+
+        assertThat(h.devices!!.inCommunicationMode).isFalse()
     }
 
     /** The choice is the wish, and like the headset wish it outlives a dropped connection. */
@@ -280,35 +301,29 @@ class HumlaServiceBluetoothTest {
         assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
         h.service.connect()
         h.connectAndSynchronize(1)
-        assertThat(h.devices!!.selectCalls).containsExactly(1)
+        assertThat(h.devices!!.selectCalls).containsExactly(2, 1, 2).inOrder()
         assertThat(h.service.activeAudioDevice?.id).isEqualTo(2)
     }
 
     /**
      * A routed device only carries the voice when the track is on the voice-call stream: a
-     * media-stream track does not follow the communication device. So choosing one rebuilds the
-     * pipeline onto that stream, and giving the route back rebuilds it onto the stream the
-     * settings chose.
+     * media-stream track does not follow the communication device. The first pipeline is built
+     * for the route the session starts on, and a chosen device rebuilds it for its own.
      */
     @Test
-    fun aChosenDeviceMovesPlaybackToTheVoiceCallStream() {
+    fun thePipelineIsBuiltForTheRoutedDevice() {
         val h = start()
         h.phone()
         h.connectAndSynchronize()
         awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
-        assertThat(h.audioFactory.configs[0].playbackStream).isEqualTo(AudioManager.STREAM_MUSIC)
+        assertThat(h.audioFactory.configs[0].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+        assertThat(h.audioFactory.configs[0].playbackStream).isEqualTo(AudioManager.STREAM_VOICE_CALL)
 
         h.service.selectAudioDevice(1)
 
         awaitUntil(description = "audio rebuilt for the earpiece") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
         assertThat(h.audioFactory.configs[1].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
         assertThat(h.audioFactory.configs[1].playbackStream).isEqualTo(AudioManager.STREAM_VOICE_CALL)
-
-        h.service.selectAudioDevice(2)
-
-        awaitUntil(description = "audio rebuilt for the default") { h.mainLooper.idle(); h.audioFactory.created.size == 3 }
-        assertThat(h.audioFactory.configs[2].routedDeviceType).isNull()
-        assertThat(h.audioFactory.configs[2].playbackStream).isEqualTo(AudioManager.STREAM_MUSIC)
     }
 
     // ---------------------------------------------------------------- the route and the pipeline

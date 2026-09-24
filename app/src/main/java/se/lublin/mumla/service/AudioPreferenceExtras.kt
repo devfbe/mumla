@@ -83,10 +83,10 @@ object AudioPreferenceExtras {
         when (key) {
             Settings.PREF_INPUT_METHOD ->
                 extras.putInt(HumlaService.EXTRAS_TRANSMIT_MODE, settings.getHumlaInputMethod())
-            Settings.PREF_HANDSET_MODE -> extras.putInt(
-                HumlaService.EXTRAS_AUDIO_STREAM,
-                settings.getPlaybackStream(),
-            )
+            Settings.PREF_HANDSET_MODE -> {
+                extras.putInt(HumlaService.EXTRAS_AUDIO_STREAM, settings.getPlaybackStream())
+                extras.putBoolean(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, settings.isHandsetMode())
+            }
             Settings.PREF_AMPLITUDE_BOOST ->
                 extras.putFloat(HumlaService.EXTRAS_AMPLITUDE_BOOST, settings.getAmplitudeBoostMultiplier())
             Settings.PREF_HALF_DUPLEX ->
