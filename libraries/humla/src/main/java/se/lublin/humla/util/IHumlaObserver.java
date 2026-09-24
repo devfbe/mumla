@@ -35,6 +35,12 @@ public interface IHumlaObserver {
 
     void onTLSHandshakeFailed(X509Certificate[] chain);
 
+    /**
+     * The server presented a certificate that differs from the one the user pinned for its host,
+     * and the system does not trust it either. Possibly an attack; never accept it silently.
+     */
+    void onTLSCertificateChanged(X509Certificate[] chain);
+
     void onChannelAdded(IChannel channel);
 
     void onChannelStateUpdated(IChannel channel);

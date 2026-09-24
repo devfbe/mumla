@@ -49,6 +49,11 @@ public class HumlaObserver implements IHumlaObserver {
     }
 
     @Override
+    public void onTLSCertificateChanged(X509Certificate[] chain) {
+
+    }
+
+    @Override
     public void onChannelAdded(IChannel channel) {
 
     }

@@ -19,6 +19,7 @@ open class NoopObserver : IHumlaObserver {
     override fun onConnecting() = Unit
     override fun onDisconnected(e: HumlaException?) = Unit
     override fun onTLSHandshakeFailed(chain: Array<out X509Certificate>?) = Unit
+    override fun onTLSCertificateChanged(chain: Array<out X509Certificate>?) = Unit
     override fun onChannelAdded(channel: IChannel?) = Unit
     override fun onChannelStateUpdated(channel: IChannel?) = Unit
     override fun onChannelRemoved(channel: IChannel?) = Unit

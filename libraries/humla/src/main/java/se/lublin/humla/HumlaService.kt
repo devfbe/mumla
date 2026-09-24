@@ -594,6 +594,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mCallbacks.onTLSHandshakeFailed(chain)
     }
 
+    override fun onConnectionCertificateChanged(chain: Array<X509Certificate>) {
+        mCallbacks.onTLSCertificateChanged(chain)
+    }
+
     override fun onConnectionDisconnected(e: HumlaException?) {
         // Before anything else, and in code rather than through an observer: mToggleInputMode
         // outlives every connection, and nothing else ever clears it. Left set, an auto-reconnect

@@ -576,6 +576,7 @@ class HumlaCallbacksBoundTest {
             "onConnecting" to QueuePolicy.LIFECYCLE,
             "onDisconnected" to QueuePolicy.LIFECYCLE,
             "onTLSHandshakeFailed" to QueuePolicy.LIFECYCLE,
+            "onTLSCertificateChanged" to QueuePolicy.LIFECYCLE,
             // Everything an observer answers by rebuilding the whole list.
             "onChannelAdded" to QueuePolicy.DROPPABLE,
             "onChannelRemoved" to QueuePolicy.DROPPABLE,

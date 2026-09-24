@@ -17,7 +17,6 @@
 
 package se.lublin.humla.net
 
-import android.net.SSLCertificateSocketFactory
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -162,7 +161,6 @@ class HumlaTCP @JvmOverloads constructor(
             // disconnect() raced the connect; bail out before the handshake, finally closes the socket.
             if (!running) return
 
-            (SSLCertificateSocketFactory.getDefault(0) as SSLCertificateSocketFactory).setHostname(tcpSocket, host)
             tcpSocket.keepAlive = true
             tcpSocket.startHandshake()
             Log.v(TAG, "Started handshake")
@@ -186,7 +184,13 @@ class HumlaTCP @JvmOverloads constructor(
             // Let the user verify the certificate manually.
             val chain = socketFactory.serverChain
             if (chain != null && listener != null) {
-                if (running) post { it.onTLSHandshakeFailed(chain) }
+                if (running) {
+                    if (socketFactory.trustFailure == TrustFailure.CHANGED) {
+                        post { it.onTLSCertificateChanged(chain) }
+                    } else {
+                        post { it.onTLSHandshakeFailed(chain) }
+                    }
+                }
             } else {
                 error("Could not verify host certificate", e)
             }
@@ -357,6 +361,8 @@ class HumlaTCP @JvmOverloads constructor(
     interface TCPConnectionListener {
         fun onTCPConnectionEstablished()
         fun onTLSHandshakeFailed(chain: Array<X509Certificate>)
+        /** A host with a pinned certificate presented a different one that the system does not trust. */
+        fun onTLSCertificateChanged(chain: Array<X509Certificate>)
         fun onTCPConnectionFailed(e: HumlaException)
         fun onTCPConnectionDisconnect()
         fun onTCPMessageReceived(type: HumlaTCPMessageType, length: Int, data: ByteArray)

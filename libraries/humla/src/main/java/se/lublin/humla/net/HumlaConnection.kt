@@ -467,7 +467,7 @@ class HumlaConnection @JvmOverloads constructor(
                 return@post
             }
             val socketFactory = try {
-                createSocketFactory()
+                createSocketFactory(server.host ?: "")
             } catch (e: HumlaException) {
                 handleFatalException(e)
                 return@post
@@ -745,9 +745,10 @@ class HumlaConnection @JvmOverloads constructor(
 
     /**
      * Creates a socket factory using this connection's certificate and trust store configuration.
+     * [peerHost] is the host the user entered, which the server certificate must match.
      */
     @Throws(HumlaException::class)
-    private fun createSocketFactory(): HumlaSSLSocketFactory {
+    private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory {
         try {
             var keyStore: KeyStore? = null
             val cert = certificate
@@ -755,7 +756,7 @@ class HumlaConnection @JvmOverloads constructor(
                 keyStore = Pkcs12Certificates.load(cert, certificatePassword)
             }
             return HumlaSSLSocketFactory(
-                keyStore, certificatePassword, trustStorePath, trustStorePassword, trustStoreFormat
+                keyStore, certificatePassword, trustStorePath, trustStorePassword, trustStoreFormat, peerHost
             )
         } catch (e: KeyManagementException) {
             throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
@@ -862,6 +863,11 @@ class HumlaConnection @JvmOverloads constructor(
         disconnect()
     }
 
+    override fun onTLSCertificateChanged(chain: Array<X509Certificate>) {
+        notifyListener { onConnectionCertificateChanged(chain) }
+        disconnect()
+    }
+
     override fun onTCPConnectionFailed(e: HumlaException) {
         // Without this the failure would become this connection's error *after* the disconnect had
         // already been reported as clean: the consumer gets a null reason and a non-null error()
@@ -953,6 +959,7 @@ class HumlaConnection @JvmOverloads constructor(
          * [onConnectionDisconnected] will still be called.
          */
         fun onConnectionHandshakeFailed(chain: Array<X509Certificate>)
+        fun onConnectionCertificateChanged(chain: Array<X509Certificate>)
 
         /**
          * Called when the connection was lost, with the error that caused termination, or null if

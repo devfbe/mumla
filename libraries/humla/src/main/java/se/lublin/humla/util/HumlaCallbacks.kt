@@ -415,6 +415,8 @@ class HumlaCallbacks @JvmOverloads constructor(
     override fun onDisconnected(e: HumlaException?) = dispatch(Policy.Lifecycle) { it.onDisconnected(e) }
     override fun onTLSHandshakeFailed(chain: Array<X509Certificate>?) =
         dispatch(Policy.Lifecycle) { it.onTLSHandshakeFailed(chain) }
+    override fun onTLSCertificateChanged(chain: Array<X509Certificate>?) =
+        dispatch(Policy.Lifecycle) { it.onTLSCertificateChanged(chain) }
     override fun onChannelAdded(channel: IChannel?) =
         dispatch(Policy.Droppable) { it.onChannelAdded(channel) }
     override fun onChannelStateUpdated(channel: IChannel?) =

@@ -554,7 +554,7 @@ class HumlaConnectionProtocolThreadTest {
 
         assertThat(invoked).containsExactly(
             "onTCPConnectionDisconnect", "onTCPConnectionEstablished", "onTCPConnectionFailed",
-            "onTCPMessageReceived", "onTLSHandshakeFailed",
+            "onTCPMessageReceived", "onTLSCertificateChanged", "onTLSHandshakeFailed",
             "onUDPConnectionError", "onUDPDataReceived", "resyncCryptState",
         )
         assertThat(frames.get()).isEqualTo(0)
@@ -615,6 +615,16 @@ class HumlaConnectionProtocolThreadTest {
         inTheTeardownWindow(tcp) { connection.onTLSHandshakeFailed(emptyArray()) }
 
         assertThat(listener.handshakeFailures).isEmpty()
+        assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
+    }
+
+    @Test
+    fun aCertificateChangeBehindADisconnectPromptsNobody() {
+        val tcp = connectAndEstablish()
+
+        inTheTeardownWindow(tcp) { connection.onTLSCertificateChanged(emptyArray()) }
+
+        assertThat(listener.certificateChanges).isEmpty()
         assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
     }
 

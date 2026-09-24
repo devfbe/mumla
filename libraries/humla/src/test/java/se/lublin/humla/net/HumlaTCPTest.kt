@@ -1,6 +1,5 @@
 package se.lublin.humla.net
 
-import android.net.SSLCertificateSocketFactory
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -8,7 +7,6 @@ import android.os.Message
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import org.junit.After
 import org.junit.Assert.assertThrows
@@ -31,6 +29,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLSocket
 
 /**
@@ -38,10 +37,8 @@ import javax.net.ssl.SSLSocket
  * connect reports onTCPConnectionDisconnect exactly once, and that no socket thread outlives the
  * connection.
  *
- * The real read loop is reachable here too: HumlaTCP hands its socket to
- * SSLCertificateSocketFactory.setHostname for SNI, which rejects anything that is not a Conscrypt
- * socket, but mockkStatic on that factory replaces the SNI call, and a mocked SSLSocket carrying a
- * piped stream then drives readFrame and the frame callbacks for real.
+ * The real read loop is reachable here too: a mocked SSLSocket carrying a piped stream drives
+ * readFrame and the frame callbacks for real.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaTCPTest {
@@ -55,6 +52,7 @@ class HumlaTCPTest {
         val disconnects = AtomicInteger()
         override fun onTCPConnectionEstablished() { record("established") }
         override fun onTLSHandshakeFailed(chain: Array<X509Certificate>) { record("handshakeFailed") }
+        override fun onTLSCertificateChanged(chain: Array<X509Certificate>) { record("certificateChanged") }
         override fun onTCPConnectionFailed(e: HumlaException) { record("failed") }
         override fun onTCPConnectionDisconnect() { disconnects.incrementAndGet(); record("disconnect") }
         override fun onTCPMessageReceived(type: HumlaTCPMessageType, length: Int, data: ByteArray) { record("message") }
@@ -144,6 +142,30 @@ class HumlaTCPTest {
      * The default handler must stay the main looper: HumlaConnection is still a main-thread
      * consumer until Task 4 moves it, and a different delivery thread would reorder its callbacks.
      */
+    private fun failHandshakeWith(failure: TrustFailure) {
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socket.startHandshake() } throws SSLHandshakeException("rejected")
+        every { socketFactory.createSocket(any(), any()) } returns socket
+        every { socketFactory.serverChain } returns arrayOf(mockk<X509Certificate>())
+        every { socketFactory.trustFailure } returns failure
+    }
+
+    @Test
+    fun anUntrustedCertificateAsksForTrust() {
+        failHandshakeWith(TrustFailure.UNTRUSTED)
+        newTransport(Handler(callbackThread.looper)).connect("example.invalid", 64738, false)
+
+        assertThat(listener.next().first).isEqualTo("handshakeFailed")
+    }
+
+    @Test
+    fun aChangedPinnedCertificateIsReportedAsSuch() {
+        failHandshakeWith(TrustFailure.CHANGED)
+        newTransport(Handler(callbackThread.looper)).connect("example.invalid", 64738, false)
+
+        assertThat(listener.next().first).isEqualTo("certificateChanged")
+    }
+
     @Test
     fun theDefaultHandlerDeliversOnTheMainLooper() {
         every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
@@ -278,9 +300,6 @@ class HumlaTCPTest {
         every { socket.inputStream } returns fromServer
         every { socket.outputStream } returns ByteArrayOutputStream()
         every { socketFactory.createSocket(any(), any()) } returns socket
-        mockkStatic(SSLCertificateSocketFactory::class)
-        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
-        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
         val transport = newTransport(Handler(callbackThread.looper))
 
         transport.connect("example.invalid", 64738, false)
@@ -448,9 +467,6 @@ class HumlaTCPTest {
         every { socket.inputStream } returns fromServer
         every { socket.outputStream } returns ByteArrayOutputStream()
         every { socketFactory.createSocket(any(), any()) } returns socket
-        mockkStatic(SSLCertificateSocketFactory::class)
-        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
-        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
         lateinit var transport: HumlaTCP
         // Post 1 is onTCPConnectionEstablished, post 2 the frame, post 3 the disconnect the hook
         // itself triggers - after the frame passed the check in post(), before it is queued.
@@ -504,9 +520,6 @@ class HumlaTCPTest {
         every { second.startHandshake() } answers { handshaking.countDown(); gate.await() }
         every { second.close() } answers { secondClosed.countDown() }
         every { socketFactory.createSocket(any(), any()) } returnsMany listOf(first, second)
-        mockkStatic(SSLCertificateSocketFactory::class)
-        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
-        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
         val transport = newTransport(Handler(callbackThread.looper))
 
         transport.connect("example.invalid", 64738, false)
@@ -558,9 +571,6 @@ class HumlaTCPTest {
             }
             second
         }
-        mockkStatic(SSLCertificateSocketFactory::class)
-        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
-        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
         // Post 1 is A's disconnect, post 2 is B's onTCPConnectionEstablished.
         val handler = HookedHandler(callbackThread.looper) { post ->
             if (post == 2) establishedQueued.countDown()

@@ -80,6 +80,7 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
     fun simulateMessage(type: HumlaTCPMessageType, data: ByteArray) = post { it.onTCPMessageReceived(type, data.size, data) }
     fun simulateFailure(e: HumlaException) = post { it.onTCPConnectionFailed(e) }
     fun simulateHandshakeFailure(chain: Array<X509Certificate>) = post { it.onTLSHandshakeFailed(chain) }
+    fun simulateCertificateChanged(chain: Array<X509Certificate>) = post { it.onTLSCertificateChanged(chain) }
 
     /**
      * The read loop's finally block reporting the closed socket. Called **directly**, not through
@@ -176,6 +177,7 @@ class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
     val disconnects = CopyOnWriteArrayList<HumlaException?>()
     val warnings = CopyOnWriteArrayList<ConnectionWarning>()
     val handshakeFailures = CopyOnWriteArrayList<Array<X509Certificate>>()
+    val certificateChanges = CopyOnWriteArrayList<Array<X509Certificate>>()
 
     /**
      * One entry per callback. The looper is recorded, not the thread name: "the callback ran on the
@@ -189,6 +191,7 @@ class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
     override fun onConnectionEstablished() { record("established"); established.incrementAndGet() }
     override fun onConnectionSynchronized() { record("synchronized"); synchronizedCount.incrementAndGet() }
     override fun onConnectionHandshakeFailed(chain: Array<X509Certificate>) { record("handshakeFailed"); handshakeFailures += chain }
+    override fun onConnectionCertificateChanged(chain: Array<X509Certificate>) { record("certificateChanged"); certificateChanges += chain }
     override fun onConnectionDisconnected(e: HumlaException?) { record("disconnected"); disconnects += e }
     override fun onConnectionWarning(warning: ConnectionWarning) { record("warning:$warning"); warnings += warning }
 

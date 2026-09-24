@@ -33,39 +33,60 @@ import java.security.NoSuchProviderException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.Collections;
+import java.util.Set;
 
 import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
+/**
+ * Creates the TLS sockets of one connection. The server is trusted if the system trusts its chain
+ * and the leaf names {@code peerHost}, or if its leaf matches a certificate the user pinned for
+ * {@code peerHost} in the trust store; see {@link ServerTrustManager}.
+ */
 public class HumlaSSLSocketFactory {
     private static final String TAG = HumlaSSLSocketFactory.class.getName();
 
-    private SSLContext mContext;
-    private HumlaTrustManagerWrapper mTrustWrapper;
+    private final SSLContext mContext;
+    private final ServerTrustManager mTrustManager;
+    private final String mPeerHost;
 
-    public HumlaSSLSocketFactory(KeyStore keystore, String keystorePassword, String trustStorePath, String trustStorePassword, String trustStoreFormat) throws NoSuchAlgorithmException, KeyManagementException, KeyStoreException, UnrecoverableKeyException, NoSuchProviderException, IOException, CertificateException {
+    /**
+     * @param peerHost The host name the user entered: certificates are verified against it, it is
+     *                 sent as SNI and it selects the pins, even when an SRV record points the
+     *                 connection at another host.
+     */
+    public HumlaSSLSocketFactory(KeyStore keystore, String keystorePassword, String trustStorePath, String trustStorePassword, String trustStoreFormat, String peerHost) throws NoSuchAlgorithmException, KeyManagementException, KeyStoreException, UnrecoverableKeyException, NoSuchProviderException, IOException, CertificateException {
+        this(keystore, keystorePassword,
+                trustStorePath != null ? loadTrustStore(trustStorePath, trustStorePassword, trustStoreFormat) : null,
+                systemTrustManager(), peerHost);
+    }
+
+    /** Package-private for tests, which supply their own system trust. */
+    HumlaSSLSocketFactory(KeyStore keystore, String keystorePassword, KeyStore trustStore, X509TrustManager systemTrust, String peerHost) throws NoSuchAlgorithmException, KeyManagementException, KeyStoreException, UnrecoverableKeyException {
         mContext = SSLContext.getInstance("TLS");
+        mPeerHost = peerHost;
 
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance("X509");
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         kmf.init(keystore, keystorePassword != null ? keystorePassword.toCharArray() : new char[0]);
 
-        if(trustStorePath != null) {
-            KeyStore trustStore = loadTrustStore(trustStorePath, trustStorePassword, trustStoreFormat);
+        Set<String> pins = trustStore != null ? CertificatePins.forHost(trustStore, peerHost) : Collections.emptySet();
+        Log.i(TAG, pins.isEmpty() ? "No pinned certificate for this host" : "Using pinned certificate(s) for this host");
+        mTrustManager = new ServerTrustManager(systemTrust, peerHost, pins);
 
-            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            tmf.init(trustStore);
-            mTrustWrapper = new HumlaTrustManagerWrapper((X509TrustManager) tmf.getTrustManagers()[0]);
-            Log.i(TAG, "Using custom trust store " + trustStorePath + " with system trust store");
-        } else {
-            mTrustWrapper = new HumlaTrustManagerWrapper(null);
-            Log.i(TAG, "Using system trust store");
-        }
+        mContext.init(kmf.getKeyManagers(), new TrustManager[] { mTrustManager }, null);
+    }
 
-        mContext.init(kmf.getKeyManagers(), new TrustManager[] { mTrustWrapper }, null);
+    private static X509TrustManager systemTrustManager() throws NoSuchAlgorithmException, KeyStoreException {
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        tmf.init((KeyStore) null);
+        return (X509TrustManager) tmf.getTrustManagers()[0];
     }
 
     /**
@@ -81,17 +102,31 @@ public class HumlaSSLSocketFactory {
     }
 
     /**
-     * Creates a new SSLSocket that runs through a SOCKS5 proxy to reach its destination.
+     * Creates a new SSLSocket that runs through a SOCKS5 proxy to reach its destination. The proxy
+     * resolves {@code host}.
      */
     public SSLSocket createTorSocket(String host, int port, String proxyHost, int proxyPort) throws IOException {
         Proxy proxy = new Proxy(Proxy.Type.SOCKS, new InetSocketAddress(proxyHost, proxyPort));
         Socket socket = new Socket(proxy);
         socket.connect(InetSocketAddress.createUnresolved(host, port));
-        return (SSLSocket) mContext.getSocketFactory().createSocket(socket, host, port, true);
+        return configure((SSLSocket) mContext.getSocketFactory().createSocket(socket, host, port, true));
     }
 
     public SSLSocket createSocket(String host, int port) throws IOException {
-        return (SSLSocket) mContext.getSocketFactory().createSocket(InetAddress.getByName(host), port);
+        return configure((SSLSocket) mContext.getSocketFactory().createSocket(InetAddress.getByName(host), port));
+    }
+
+    private SSLSocket configure(SSLSocket socket) {
+        if (mPeerHost != null && !mPeerHost.isEmpty() && !HostnameMatcher.isIpLiteral(mPeerHost)) {
+            try {
+                SSLParameters parameters = socket.getSSLParameters();
+                parameters.setServerNames(Collections.singletonList(new SNIHostName(mPeerHost)));
+                socket.setSSLParameters(parameters);
+            } catch (IllegalArgumentException e) {
+                Log.w(TAG, "Not sending SNI for a host name SNI cannot carry", e);
+            }
+        }
+        return socket;
     }
 
     /**
@@ -99,54 +134,11 @@ public class HumlaSSLSocketFactory {
      * @return The remote server's certificate chain, or null if a connection has not reached handshake yet.
      */
     public X509Certificate[] getServerChain() {
-        return mTrustWrapper.getServerChain();
+        return mTrustManager.getServerChain();
     }
 
-    /**
-     * Wraps around a custom trust manager and stores the certificate chains that did not validate.
-     * We can then send the chain to the user for manual validation.
-     */
-    private static class HumlaTrustManagerWrapper implements X509TrustManager {
-
-        private X509TrustManager mDefaultTrustManager;
-        private X509TrustManager mTrustManager;
-        private X509Certificate[] mServerChain;
-
-        public HumlaTrustManagerWrapper(X509TrustManager trustManager) throws NoSuchAlgorithmException, KeyStoreException {
-            TrustManagerFactory dmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            dmf.init((KeyStore) null);
-            mDefaultTrustManager = (X509TrustManager) dmf.getTrustManagers()[0];
-            mTrustManager = trustManager;
-        }
-
-        @Override
-        public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-            try {
-                mDefaultTrustManager.checkClientTrusted(chain, authType);
-            } catch (CertificateException e) {
-                if(mTrustManager != null) mTrustManager.checkClientTrusted(chain, authType);
-                else throw e;
-            }
-        }
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-            mServerChain = chain;
-            try {
-                mDefaultTrustManager.checkServerTrusted(chain, authType);
-            } catch (CertificateException e) {
-                if(mTrustManager != null) mTrustManager.checkServerTrusted(chain, authType);
-                else throw e;
-            }
-        }
-
-        @Override
-        public X509Certificate[] getAcceptedIssuers() {
-            return mDefaultTrustManager.getAcceptedIssuers();
-        }
-
-        public X509Certificate[] getServerChain() {
-            return mServerChain;
-        }
+    /** Why the server certificate was rejected, or {@link TrustFailure#NONE}. */
+    public TrustFailure getTrustFailure() {
+        return mTrustManager.getFailure();
     }
 }
