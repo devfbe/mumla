@@ -13,34 +13,11 @@ import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 
 /**
- * The measurement behind [ChannelListAdapter]'s coalescing, kept so the numbers do not have to be
- * rediscovered. Not a gate -- wall-clock assertions are flaky, and the invariants that a
- * regression would break are pinned deterministically in [ChannelListAdapterRebuildTest].
+ * Manual measurement harness for [ChannelListAdapter]'s rebuild coalescing; not a gate, since
+ * wall-clock assertions are flaky. The invariants are pinned in [ChannelListAdapterRebuildTest].
  *
- * Remove the `@Ignore` to run it, and read the numbers from the test report's system-out:
+ * Remove the `@Ignore` to run it and read the numbers from the test report's system-out:
  * `./gradlew :app:testFossDebugUnitTest --tests '*AdapterRebuildBenchmarkTest'`
- *
- * **The wall-clock column is a sample from one machine, not a measurement of the change.** A
- * reviewer ran the same paired benchmark on other hardware and came out up to 58 % away on the
- * clock (2 174.4 ms against 1 376.9 ms for the 5 000-event synchronisation before the change)
- * while reproducing every deterministic count exactly. Read the ratios and the node visits; the
- * milliseconds are here so the order of magnitude does not have to be rediscovered, and spec 4.04
- * asks that the algorithm be asserted and the machine not be (which is why nothing here is a
- * gate).
- *
- * 5 000 channels, 1 000 users, branching factor 4, one paired run, rebuild best of seven and each
- * sync best of five:
- *
- * |                              | before    | after    |
- * |------------------------------|-----------|----------|
- * | one rebuild                  | 351.6 us  | 165.5 us |
- * | recursive-count node visits  | 33 179    | 0        |
- * | 1 024-event synchronisation  | 348.0 ms  | 0.2 ms   |
- * | 5 000-event synchronisation  | 1 376.9 ms| 0.4 ms   |
- *
- * Both event counts are measured because the spec's own figure was corrected: the observer queue
- * is bounded in droppable events but not in total, and `onUserConnected` -- one of the events the
- * channel list answers with a rebuild -- is undroppable and arrives once per user.
  */
 @Ignore("measurement harness, not a gate -- see the KDoc")
 @RunWith(RobolectricTestRunner::class)

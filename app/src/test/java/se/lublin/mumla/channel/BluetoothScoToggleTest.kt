@@ -13,24 +13,9 @@ import org.robolectric.Shadows.shadowOf
 import se.lublin.mumla.Settings
 
 /**
- * The decision behind "Bluetooth headset": what the user *wants* (a persisted preference) as
- * opposed to what is *active* (an SCO link, which stream A's AudioRouter owns). Only the first
- * survives a disconnect -- `HumlaService.onConnectionDisconnected` stops SCO on every drop,
- * including the ones auto-reconnect recovers from, and nothing ever started it again. That is
- * the user's original complaint, and this class holds the half of the fix that is a setting.
- *
- * The one input this file branches on is swept over its full space rather than sampled:
- * `request` reads two booleans, so it gets four corners (spec 4.04: a clause sweep says nothing
- * about the operator joining the clauses -- 2^k inputs, not k mutations). Neither input comes
- * from a hand-written fake: the preference is a real `Settings` over Robolectric's
- * SharedPreferences and the grant state is Robolectric's own package manager, and every test
- * writes both of them.
- *
- * `shouldRouteToBluetooth` used to live here with four corners of its own, and is gone: under the
- * ruling in spec 4.1 the routing follows the wish alone, so the second dimension no longer
- * exists. It was deleted rather than pinned to `true` -- a gate that is always open is a gate
- * somebody writes back in (4.04: removing state beats adding a guard). What the service reads now
- * is `Settings.isBluetoothScoEnabled()`, pinned in `MumlaServiceBluetoothTest`.
+ * The persisted "Bluetooth headset" wish, as opposed to the active SCO link owned by AudioRouter;
+ * only the wish survives a disconnect. `request` reads two booleans, so all four corners are
+ * tested, over a real `Settings` and Robolectric's package manager.
  */
 @RunWith(RobolectricTestRunner::class)
 class BluetoothScoToggleTest {
@@ -41,8 +26,7 @@ class BluetoothScoToggleTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        // Switched off explicitly: the default is on since the audio chooser, and every corner
-        // below that says "from off" means a user who switched it off.
+        // Switched off explicitly: the default is on.
         PreferenceManager.getDefaultSharedPreferences(app).edit().clear()
             .putBoolean(Settings.PREF_BLUETOOTH_SCO, false).commit()
         settings = Settings.getInstance(app)
@@ -144,8 +128,7 @@ class BluetoothScoToggleTest {
 
     @Test
     fun answeringTheDialogTwiceLeavesItOn() {
-        // Idempotent, because the launcher can deliver a result the process death of an earlier
-        // request left pending, on top of the one the current tap asked for.
+        // Idempotent: a result left pending by an earlier process death can arrive too.
         toggle.onPermissionAnswered()
         toggle.onPermissionAnswered()
 

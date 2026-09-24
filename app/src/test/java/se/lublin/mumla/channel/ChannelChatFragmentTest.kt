@@ -65,11 +65,8 @@ import se.lublin.mumla.util.HumlaServiceFragment
 import se.lublin.mumla.util.HumlaServiceProvider
 
 /**
- * The fragment is glue, and glue is what carries the contracts its collaborators cannot enforce:
- * the viewer's uniqueness, a session id that may not throw, a scope on the main thread. So it is
- * driven here through a real host — an `Activity` that is a `HumlaServiceProvider` and a parent
- * `Fragment` that is a `ChatTargetProvider`, which are precisely the two hard casts that keep
- * `FragmentScenario`'s empty host out.
+ * Driven through a real host: an `Activity` that is a `HumlaServiceProvider` and a parent
+ * `Fragment` that is a `ChatTargetProvider` (the two hard casts that keep `FragmentScenario` out).
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelChatFragmentTest {
@@ -150,10 +147,8 @@ class ChannelChatFragmentTest {
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     /**
-     * Drains the main looper until [condition] holds. One `idle()` is not enough: the adapter's
-     * parse hops to `Dispatchers.Default` and back, so the continuation is not on the queue yet
-     * when the first drain runs. Fails loudly rather than returning quietly, so a state that never
-     * arrives cannot read as a pass.
+     * Drains the main looper until [condition] holds, failing on timeout. One `idle()` is not
+     * enough: the adapter's parse hops to `Dispatchers.Default` and back.
      */
     private fun drain(timeoutMs: Long = 10_000, condition: () -> Boolean) {
         val deadline = System.nanoTime() + timeoutMs * 1_000_000
@@ -212,9 +207,8 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * The observer outlives the view — `HumlaServiceFragment` unregisters it in `onDestroy`, not in
-     * `onDestroyView` — so a message can arrive with no view to put it in. `viewLifecycleOwner`
-     * throws in exactly that window, which is why the adapter is checked before it is touched.
+     * The observer outlives the view (it is unregistered in `onDestroy`), and `viewLifecycleOwner`
+     * throws in that window.
      */
     @Test
     fun aMessageArrivingAfterTheViewIsGoneIsNotACrash() {
@@ -247,7 +241,7 @@ class ChannelChatFragmentTest {
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Lounge"))
     }
 
-    /** The fourth arm: no target and no session channel either, so there is nothing to name. */
+    /** No target and no session channel: nothing to name. */
     @Test
     fun theHintIsClearedWhenThereIsNothingToName() {
         every { session.sessionChannel } returns null
@@ -255,11 +249,7 @@ class ChannelChatFragmentTest {
         assertThat(editor.hint).isNull()
     }
 
-    /**
-     * The service usually binds *after* the view exists. The old fragment set the hint only from
-     * `onCreateView`, which returns early with no service, and nothing came back to it on the bind
-     * — so on every cold start the compose box read "Send message" instead of naming the channel.
-     */
+    /** The service usually binds after the view exists, so the hint must be set on bind too. */
     @Test
     fun theHintIsSetWhenTheServiceBindsAfterTheView() {
         launch(withService = null)
@@ -270,7 +260,7 @@ class ChannelChatFragmentTest {
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
     }
 
-    /** The observer's only non-log arm: the local user moved, and no target overrides the hint. */
+    /** The local user moved, and no target overrides the hint. */
     @Test
     fun theHintFollowsTheLocalUserIntoANewChannel() {
         val self = user("Me", session = 7)
@@ -305,9 +295,8 @@ class ChannelChatFragmentTest {
     // ---- the compose row --------------------------------------------------------------------
 
     /**
-     * `android:enabled="false"` on an `ImageButton` is inert (see `ChatLayoutTest`), so the send
-     * button shipped live over an empty editor; the text watcher only fires on a change and could
-     * never correct the initial state.
+     * `android:enabled="false"` on an `ImageButton` is inert (see `ChatLayoutTest`), and the text
+     * watcher only fires on a change, so the initial state has to be set in code.
      */
     @Test
     fun theSendButtonStartsDisabledAndFollowsTheEditor() {
@@ -362,7 +351,6 @@ class ChannelChatFragmentTest {
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
     }
 
-    /** A disconnect between typing and tapping must not take the app down with it. */
     @Test
     fun aDisconnectWhileSendingIsSwallowed() {
         launch()
@@ -378,9 +366,8 @@ class ChannelChatFragmentTest {
         fragment.parentFragmentManager.fragments.count { it is ImageViewerDialogFragment }
 
     /**
-     * The contract `ChatAdapter`'s `onImageClicked` KDoc states. `show(fm, tag)` is a plain `add`
-     * and `FragmentManager` does not deduplicate by tag, so without the check two quick taps give
-     * two viewers on one source — and two viewers on one source export to one share path at once.
+     * `show(fm, tag)` does not deduplicate by tag, so two quick taps would open two viewers
+     * exporting to one share path.
      */
     @Test
     fun aSecondTapWhileTheViewerIsOpenDoesNotOpenASecond() {
@@ -391,7 +378,7 @@ class ChannelChatFragmentTest {
         assertThat(openViewers()).isEqualTo(1)
     }
 
-    /** ...and the gate is not a latch: once the viewer is gone, the next tap opens one again. */
+    /** Once the viewer is gone, the next tap opens one again. */
     @Test
     fun theViewerOpensAgainAfterItIsDismissed() {
         launch()
@@ -414,10 +401,7 @@ class ChannelChatFragmentTest {
         assertThat(fragment.sessionId()).isEqualTo(7)
     }
 
-    /**
-     * The adapter asks for this on every bind, and a disconnect with the log still on screen is an
-     * ordinary event. The `ListView` adapter this replaces wrapped the same call in a `try`.
-     */
+    /** Asked on every bind, and a disconnect with the log on screen is ordinary. */
     @Test
     fun theSessionIdSurvivesADisconnect() {
         launch()
@@ -435,9 +419,8 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * The value that stands for "no session" must be one no actor can take, or every actorless
-     * message renders right-aligned — as if the local user had sent it — from the moment the
-     * connection drops. `Message(String)` sets its actor to exactly -1, which is why -1 is wrong.
+     * "No session" must be a value no actor can take: `Message(String)` sets its actor to -1, so
+     * -1 would render actorless messages as the local user's.
      */
     @Test
     fun theAbsentSessionIdCannotCollideWithAMessageActor() {
@@ -464,8 +447,7 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * The session can break between picking an image and confirming it — a dialog stands between
-     * the two — so the service is fetched again at the send, not captured at the pick.
+     * A dialog stands between picking and confirming, so the service is fetched again at send.
      */
     @Test
     fun anImageConfirmedAfterTheServiceWentAwaySendsNothing() {
@@ -477,7 +459,7 @@ class ChannelChatFragmentTest {
         assertThat(progress.visibility).isEqualTo(View.GONE)
     }
 
-    /** ...and the same one hop later: connected at the tap, gone by the time the encoder asks. */
+    /** Connected at the tap, gone by the time the encoder asks. */
     @Test
     fun aDisconnectWhileEncodingAnImageSendsNothing() {
         launch()
@@ -500,13 +482,9 @@ class ChannelChatFragmentTest {
     private fun settings(imageMessageLength: Int): ServerSettings =
         mockk(relaxed = true) { every { getImageMessageLength() } returns imageMessageLength }
 
-    // ---- corners the first fixture set could not express ------------------------------------
-
     /**
-     * `isConnected()` and the throw inside `HumlaSession()` are **the same condition** in
-     * production — both read `mConnectionState == CONNECTED` — and a mock that lets them disagree
-     * closes off every branch behind the pair. This is the coupled state; the race below is the
-     * uncoupled one, and both are real.
+     * `isConnected()` and the throw inside `HumlaSession()` read the same state in production, so
+     * this disconnects both together.
      */
     private fun disconnect() {
         every { service.isConnected } returns false
@@ -531,17 +509,12 @@ class ChannelChatFragmentTest {
         observer.onUserJoinedChannel(self, channel("Lounge"), channel("Root"))
     }
 
-    /**
-     * `updateChatTargetText` is public API, so it can be called before the view exists — and the
-     * lateinit field behind it would then throw. Nothing in the fragment reaches it that early
-     * today, which is exactly why this is written down rather than left to a call site.
-     */
+    /** `updateChatTargetText` is public, so it may be called before the view exists. */
     @Test
     fun theHintIsSafeToUpdateBeforeThereIsAView() {
         ChannelChatFragment().updateChatTargetText(null)
     }
 
-    /** The listener is the only way a target chosen elsewhere reaches the hint. */
     @Test
     fun theTargetListenerIsHeldOnlyWhileResumed() {
         launch()
@@ -562,12 +535,10 @@ class ChannelChatFragmentTest {
         verify { service.clearMessageLog() }
     }
 
-    // ---- the storage permission, which only one SDK level asks for --------------------------
-
+    // ---- storage permission ------------------------------------------------------------------
     private fun tapUpload() {
         val button = fragment.requireView().findViewById<ImageButton>(R.id.chatImageSend)
-        // performClick ignores both isEnabled and visibility, so the state is asserted rather than
-        // assumed: an inert button would otherwise report this branch as working.
+        // performClick ignores isEnabled and visibility, so the state is asserted explicitly.
         assertThat(button.isEnabled).isTrue()
         assertThat(button.visibility).isEqualTo(View.VISIBLE)
         button.performClick()
@@ -603,8 +574,7 @@ class ChannelChatFragmentTest {
         assertThat(startedAction()).isEqualTo(Intent.ACTION_GET_CONTENT)
     }
 
-    // ---- the confirmation dialog, which nothing else reads back -----------------------------
-
+    // ---- confirmation dialog -----------------------------------------------------------------
     private fun latestDialog(): AlertDialog = ShadowDialog.getLatestDialog() as AlertDialog
 
     @Test
@@ -619,8 +589,6 @@ class ChannelChatFragmentTest {
         assertThat(dialog.isShowing).isTrue()
         val preview = dialog.window!!.decorView.firstImageView()
         assertThat(preview).isNotNull()
-        // The one property the four below never checked: that the dialog shows the picked image at
-        // all. Removing `setImageBitmap` left this test green, which is a cover that did not exist.
         assertThat((preview!!.drawable as BitmapDrawable).bitmap).isSameInstanceAs(bitmap)
         assertThat(preview.contentDescription.toString())
             .isEqualTo(activity.getString(R.string.image_confirm_send))
@@ -652,11 +620,7 @@ class ChannelChatFragmentTest {
         return null
     }
 
-    /**
-     * The hint is what the compose box is as wide as, so a changed hint has to reach layout. The
-     * explicit `requestLayout()` the old fragment carried a comment for is measured here rather
-     * than explained: see the fragment for what the measurement said.
-     */
+    /** The hint sets the compose box width, so a changed hint has to reach layout. */
     @Test
     fun changingTheHintAsksForAFreshLayout() {
         launch()
@@ -672,9 +636,8 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * The server does not echo a message back to its sender, so this call is the only thing that
-     * puts what you just typed into your own log. Found by mutation: dropping it left all 32 tests
-     * green while the sent message vanished from the screen.
+     * The server does not echo a message back to its sender, so this is what puts your own message
+     * into your log.
      */
     @Test
     fun aSentMessageAppearsInTheListImmediately() {
@@ -686,12 +649,7 @@ class ChannelChatFragmentTest {
         assertThat(itemCount()).isEqualTo(1)
     }
 
-    // ---- corners the mutation sweep pointed at ----------------------------------------------
-
-    /**
-     * Rebinding replaces the log; it does not append it. Reached on every reconnect, and without
-     * the clear the whole history is on screen twice.
-     */
+    /** Rebinding (every reconnect) replaces the log rather than appending to it. */
     @Test
     fun rebindingReplacesTheLogRatherThanAppendingIt() {
         log += info("a")
@@ -705,7 +663,6 @@ class ChannelChatFragmentTest {
         assertThat(itemCount()).isEqualTo(2)
     }
 
-    /** The list is read newest-last, so it has to sit at the bottom rather than the top. */
     @Test
     fun theListSticksToTheNewestMessage() {
         launch()
@@ -713,8 +670,7 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * Detaching the adapter is what recycles the bound rows, which is what cancels their thumbnail
-     * coroutines — `RecyclerView.setAdapter(null)` runs `onViewRecycled` over the whole window.
+     * Detaching the adapter recycles the bound rows, which cancels their thumbnail coroutines.
      */
     @Test
     fun theViewTeardownDetachesTheAdapter() {
@@ -726,9 +682,8 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * `onUserJoinedChannel` is declared with a nullable user, and the session user is null until
-     * the server has named it — so `null == null` is a reachable pair, and without the explicit
-     * `user != null` the hint would follow a channel change that is not the local user's.
+     * The session user is null until the server has named it, so `null == null` is reachable and
+     * must not move the hint.
      */
     @Test
     fun aChannelJoinWithNoUserAndNoSessionUserIsIgnored() {
@@ -741,9 +696,8 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * An exception escaping a `lifecycleScope.launch` is not a failed test, it is a dead app: the
-     * default handler for an unhandled coroutine exception is the thread's. So the catch around
-     * the encode is measured by watching that handler, which is the only place its absence shows.
+     * An exception escaping `lifecycleScope.launch` goes to the thread's uncaught-exception
+     * handler, so that is where the encode's catch is checked.
      */
     @Test
     fun aDisconnectWhileEncodingDoesNotEscapeTheCoroutine() {
@@ -763,12 +717,8 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * The one test in this class that binds an image row, and so the only one that runs anything in
-     * the scope the adapter was handed. `lifecycleScope` is `Dispatchers.Main.immediate`, so a
-     * coroutine started from the main thread runs inline up to its first real suspension: with a
-     * loader that answers without suspending, the bitmap is on the view **before
-     * `bindViewHolder` returns**. A scope on a background dispatcher cannot do that, because the
-     * body would first have to be handed to another thread.
+     * `lifecycleScope` is `Dispatchers.Main.immediate`, so with a loader that does not suspend the
+     * bitmap is on the view before `bindViewHolder` returns.
      */
     @Test
     fun theAdapterIsGivenAScopeThatDispatchesOnTheMainThread() {
@@ -791,13 +741,12 @@ class ChannelChatFragmentTest {
     }
 
 
-    // ---- the seams: what the fragment hands the adapter, driven through a real row -----------
+    // ---- seams: what the fragment hands the adapter, driven through a real row ---------------
 
     /**
-     * Lays the host out for real. `performClick()` ignores `isEnabled` and a touch delivered
-     * straight at a child ignores its visibility — the filter is in the parent — and an unattached
-     * view puts its click into the `HandlerActionQueue` while `post()` still returns true. So the
-     * row tests below enter at the `RecyclerView` on a measured, laid-out window.
+     * Lays the host out for real: `performClick()` ignores `isEnabled`, a touch sent straight to a
+     * child ignores its visibility, and an unattached view queues its click, so row tests enter at
+     * the `RecyclerView` of a laid-out window.
      */
     private fun layOutHost() {
         val root = activity.findViewById<View>(android.R.id.content)
@@ -844,12 +793,7 @@ class ChannelChatFragmentTest {
         idle()
     }
 
-    /**
-     * I1: the seam this whole task exists for. Both ends were pinned — `ChatAdapter` calls
-     * `onImageClicked` on a tap, and `openImageViewer` opens exactly one viewer — and the wire
-     * between them was not: replacing `onImageClicked = ::openImageViewer` with `{ }` left all 432
-     * tests green while tapping a picture did nothing at all.
-     */
+    /** Tapping an image row opens the viewer through the `onImageClicked` wire. */
     @Test
     fun tappingAPictureInTheLogOpensTheViewerOnIt() {
         installThumbnailLoader()
@@ -876,13 +820,8 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * I3: the other constructor seam, and the same shape as `NO_SESSION = -1` one level up.
-     * `sessionId()` is pinned four ways and the adapter is pinned to align on it, but that the
-     * fragment *supplies* it was read back by nothing: `selfSessionId = { NO_SESSION }` survived,
-     * and every message you sent yourself would render left-aligned, as if somebody else had.
-     *
-     * The fixture carries both actors, because a fake whose session id is a constant cannot
-     * express the difference the branch is about.
+     * The fragment supplies its session id to the adapter, so your own messages align right. The
+     * fixture carries both actors to tell the two apart.
      */
     @Test
     fun yourOwnMessagesAreAlignedToYourSideAndOtherPeoplesAreNot() {
@@ -942,19 +881,14 @@ class ChannelChatFragmentTest {
     }
 
 
-    // ---- I2: pick -> prepare -> confirm, which had no test at all ---------------------------
-
+    // ---- pick -> prepare -> confirm ----------------------------------------------------------
     private fun registerImage(uri: Uri, bytes: ByteArray) {
         shadowOf(activity.contentResolver).registerInputStreamSupplier(uri) {
             java.io.ByteArrayInputStream(bytes)
         }
     }
 
-    /**
-     * Granting the storage permission must open the picker. The mutation that flips this — `if
-     * (granted)` to `if (!granted)` — is the one that matters: on Android 12 the user who says yes
-     * would get "Permission denied to read storage" and never see a picker at all.
-     */
+    /** Granting the storage permission opens the picker. */
     @Test
     @Config(sdk = [31])
     fun grantingTheStoragePermissionOpensThePicker() {
@@ -976,7 +910,6 @@ class ChannelChatFragmentTest {
         assertThat(startedAction()).isNull()
     }
 
-    /** Cancelling the picker is an ordinary outcome: no spinner, no dialog, no complaint. */
     @Test
     fun cancellingThePickerDoesNothing() {
         launch()
@@ -988,13 +921,8 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * The whole outgoing path end to end, over the real `OutgoingImagePreparer` and a real JPEG:
-     * picked uri, spinner up, decoded to the outgoing bounds off the main thread, confirmation
-     * showing that very bitmap, spinner down.
-     *
-     * `@GraphicsMode(NATIVE)` for this test alone: the preparer decodes with `ImageDecoder`, which
-     * Robolectric's legacy graphics does not implement. Its neighbours do not need it and it is
-     * slower, which is why it is per test.
+     * The outgoing path end to end over the real `OutgoingImagePreparer` and a real JPEG.
+     * `@GraphicsMode(NATIVE)` here only: `ImageDecoder` needs it, and it is slower.
      */
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -1010,13 +938,12 @@ class ChannelChatFragmentTest {
 
         val preview = latestDialog().window!!.decorView.firstImageView()!!
         val shown = (preview.drawable as BitmapDrawable).bitmap
-        // Decoded straight to the outgoing bounds, not to the photo's own size: 1200 x 900 is
-        // bounded by its height, so 533 x 400 rather than 1200 x 900 or 600 x 450.
+        // Bounded by height: 1200 x 900 -> 533 x 400.
         assertThat(shown.width).isEqualTo(533)
         assertThat(shown.height).isEqualTo(OutgoingImagePreparer.MAX_HEIGHT)
     }
 
-    /** ...and a uri that is not an image is reported rather than shown. */
+    /** A uri that is not an image is reported rather than shown. */
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun aPickedFileThatIsNotAnImageIsReportedAndOpensNoDialog() {
@@ -1031,7 +958,6 @@ class ChannelChatFragmentTest {
         assertThat(progress.visibility).isEqualTo(View.GONE)
     }
 
-    /** A picked image with no session behind it never reaches the decoder. */
     @Test
     fun aPickedImageWithNoSessionIsDroppedBeforeAnythingIsDecoded() {
         launch()
@@ -1053,9 +979,8 @@ class ChannelChatFragmentTest {
     }
 
 
-    // ---- the rest of the effect pass, run to exhaustion --------------------------------------
+    // ---- misc ---------------------------------------------------------------------------------
 
-    /** The spinner is the only sign that the encode is running; it has to be up while it is. */
     @Test
     fun theSpinnerIsUpWhileAnImageIsBeingEncoded() {
         every { session.serverSettings } returns settings(0)
@@ -1067,7 +992,7 @@ class ChannelChatFragmentTest {
         drain { progress.visibility == View.GONE }
     }
 
-    /** An image no quality rung fits is said out loud, not swallowed. */
+    /** An image no quality rung fits is reported. */
     @Test
     fun anImageThatCannotBeMadeToFitSaysSo() {
         every { session.serverSettings } returns settings(10)
@@ -1078,7 +1003,6 @@ class ChannelChatFragmentTest {
             .isEqualTo(activity.getString(R.string.image_too_large))
     }
 
-    /** The newest message is the one you are meant to be looking at. */
     @Test
     fun theListIsScrolledToTheNewestMessage() {
         repeat(40) { log += info("m$it") }
@@ -1090,7 +1014,7 @@ class ChannelChatFragmentTest {
         assertThat(lm.findLastVisibleItemPosition()).isEqualTo(39)
     }
 
-    /** Without this the clear-chat item never reaches onCreateOptionsMenu at all. */
+    /** Needed for the clear-chat item to reach onCreateOptionsMenu. */
     @Test
     fun theFragmentAsksForItsOwnMenu() {
         launch()
@@ -1099,11 +1023,9 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * A hardware Enter sends. `TextView.doKeyDown` offers `KEYCODE_ENTER` to the editor action
-     * listener as `IME_NULL` **with the key event**, before it would insert a newline — which is
-     * why the listener tests for the event and not only for the action id. Driven with a real key
-     * event for that reason: `onEditorAction(id)` hands the listener a null event and would take
-     * the other branch, so it would report this as working while a keyboard did nothing.
+     * A hardware Enter sends. `TextView.doKeyDown` offers `KEYCODE_ENTER` to the listener as
+     * `IME_NULL` with the key event, so this uses a real key event; `onEditorAction(id)` would
+     * pass a null event and take the other branch.
      */
     @Test
     fun aHardwareEnterInTheEditorSendsTheMessage() {
@@ -1118,7 +1040,7 @@ class ChannelChatFragmentTest {
         assertThat(editor.text.toString()).isEmpty()
     }
 
-    /** ...and a soft action that is not Enter does not, which is the other side of that clause. */
+    /** A soft action that is not Enter does not send. */
     @Test
     fun aSoftImeActionWithoutAKeyEventDoesNotSend() {
         launch()

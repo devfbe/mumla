@@ -29,22 +29,14 @@ import se.lublin.mumla.util.HumlaServiceFragment
 import se.lublin.mumla.util.HumlaServiceProvider
 
 /**
- * The fragment had no tests at all -- 391 lines of it -- and two semantic changes went through the
- * Kotlin conversion unpinned. What is testable here without a fabricated scaffold is pinned:
- *
- * - the chat-target action mode, whose three-clause condition decides whether a tap opens a target
- *   or closes the one that is open,
- * - what happens to the list across a disconnect and a rebind, which is where a pre-existing bug
- *   left the list permanently empty,
- * - that the fragment refuses a host or a parent that cannot serve it, which the conversion turned
- *   from Java's silent null cast into an immediate ClassCastException.
+ * Covers the chat-target action mode, the list across disconnect and rebind, and the refusal of a
+ * host or parent that cannot serve the fragment.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelListFragmentTest {
 
     class HostActivity : AppCompatActivity(), HumlaServiceProvider, DatabaseProvider {
-        // Not `var service`/`var database`: both would generate the interface's own accessor
-        // (spec 4.05).
+        // Not `var service`/`var database`: both would generate the interface's own accessor.
         private var bound: IMumlaService? = null
         private val db: MumlaDatabase = mockk(relaxed = true)
 
@@ -173,12 +165,7 @@ class ChannelListFragmentTest {
         arguments = Bundle().apply { putBoolean("pinned", false) }
     }
 
-    /**
-     * The Java read `(ChatTargetProvider) getParentFragment()` and, for a parent that is not one,
-     * got a `ClassCastException` -- but it read `(DatabaseProvider) activity` into a field and
-     * only failed later, somewhere else. Both refusals are immediate now, and both name what is
-     * missing. Nothing said so, so this is where it is said.
-     */
+    /** A host or parent that cannot serve the fragment is refused at once, naming the gap. */
     @Test
     fun aParentThatCannotProvideChatTargetsIsRefusedWhenTheFragmentAttaches() {
         val plainParent = Fragment()
@@ -213,11 +200,8 @@ class ChannelListFragmentTest {
     }
 
     /**
-     * Pre-existing, and identical in the Java, so not a regression of this conversion -- but a
-     * disconnect took the adapter off the list and left the fragment's own reference in place, and
-     * the rebind that follows a reconnection takes the `setService` branch, which never puts an
-     * adapter back on the `RecyclerView`. The channel list then stays empty for the rest of the
-     * process, with a connected server behind it.
+     * A disconnect removes the adapter from the list; the rebind after reconnecting takes the
+     * `setService` branch, which must put it back or the list stays empty.
      */
     @Test
     fun reconnectingAfterADisconnectPutsAnAdapterBackOnTheList() {
@@ -233,14 +217,8 @@ class ChannelListFragmentTest {
     }
 
     /**
-     * The list follows us and nobody else. `onUserJoinedChannel` arrives for every user in the
-     * server, and the scroll belongs only to the one whose session is ours -- otherwise every join
-     * anywhere on a busy server would yank the list out from under the reader.
-     *
-     * It is also the production path that the adapter's rebuild coalescing is built around: the
-     * position is asked for in the same main-thread turn in which the event scheduled a rebuild,
-     * so the answer has to settle that rebuild first or the list scrolls to where the channel used
-     * to be.
+     * Only our own join scrolls the list. The position is asked for in the same turn the event
+     * scheduled a rebuild, so the adapter must settle it first.
      */
     @Test
     fun ourOwnChannelChangeScrollsTheListAndSomebodyElsesDoesNot() {
@@ -264,7 +242,7 @@ class ChannelListFragmentTest {
         assertThat(listAdapter.getChannelPosition(2)).isNotEqualTo(-1)
     }
 
-    /** A disconnected service reports nothing, and a scroll then points at a list that is gone. */
+    /** A disconnected service reports nothing, so no scroll happens. */
     @Test
     fun aJoinReportedWhileDisconnectedScrollsNothing() {
         val layout = RecordingLayoutManager(controller.get())
@@ -280,10 +258,7 @@ class ChannelListFragmentTest {
         assertThat(layout.scrolls).isEmpty()
     }
 
-    /**
-     * The only setting this fragment reads, and it reads it by key: a preference change for
-     * anything else must not reach the adapter. Neither side of that comparison had a test.
-     */
+    /** Only a change to the preference this fragment reads reaches the adapter. */
     @Test
     fun onlyTheUserCountPreferenceReachesTheAdapter() {
         val preferences =
@@ -299,11 +274,7 @@ class ChannelListFragmentTest {
         assertThat(changes()).isEqualTo(1)
     }
 
-    /**
-     * The fragment is used twice in the same screen -- once over the whole tree and once over the
-     * pinned channels -- and which one it is comes from its own argument. Nothing read that
-     * argument back, so the two instances were one as far as any test could tell.
-     */
+    /** Its argument decides whether it shows the whole tree or the pinned channels. */
     @Test
     fun thePinnedArgumentDecidesWhereTheTreeIsRooted() {
         verify(exactly = 0) { controller.get().databaseMock().getPinnedChannels(any()) }
@@ -320,9 +291,7 @@ class ChannelListFragmentTest {
     }
 
     /**
-     * A removal reported after we ourselves were disconnected is the report of our own removal,
-     * and the model is no longer in a state worth reading. Both sides had a test only by
-     * accident: nothing read the rebuild back.
+     * A removal reported after we were disconnected is our own removal; the model is not read.
      */
     @Test
     fun aRemovalReportedWhileDisconnectedRebuildsNothing() {
@@ -342,33 +311,30 @@ class ChannelListFragmentTest {
     }
 
     /**
-     * Three clauses -- a target is set, it is this row's channel, and an action mode is open --
-     * and only all three together mean "the user tapped the open target again". The observable is
-     * the target itself: opening a mode sets it, finishing the mode clears it.
+     * Only a set target that is this row's channel with an open action mode means "tapped the open
+     * target again". Opening a mode sets the target, finishing it clears it.
      */
     @Test
     fun tappingTheOpenChannelTargetAgainClosesItAndTappingAnotherSwitchesIt() {
         val first = FakeChannel(1)
         val second = FakeChannel(2)
 
-        // No target yet: the first clause is false, so this opens one.
+        // No target yet: opens one.
         fragment.onChannelClick(first)
         assertThat(parent.chatTarget?.channel).isEqualTo(first)
 
-        // A target, but not this channel: the second clause is false, so this switches it.
+        // A target, but not this channel: switches it.
         fragment.onChannelClick(second)
         assertThat(parent.chatTarget?.channel).isEqualTo(second)
 
-        // All three: the open target, tapped again.
+        // The open target, tapped again.
         fragment.onChannelClick(second)
         assertThat(parent.chatTarget).isNull()
     }
 
     /**
-     * The third clause on its own. A chat target can be set from elsewhere -- the chat fragment
-     * sets one whenever the user changes channel -- and then this fragment holds no action mode
-     * to dismiss, so the tap has to open one rather than swallow itself. Without the clause the
-     * tap would do nothing at all and the row would look dead.
+     * A chat target can be set from elsewhere with no action mode open here, so the tap has to open
+     * one rather than swallow itself.
      */
     @Test
     fun tappingTheChannelOfATargetThisFragmentDidNotOpenOpensAModeForIt() {
@@ -379,7 +345,7 @@ class ChannelListFragmentTest {
 
         assertThat(parent.chatTarget?.channel).isEqualTo(channel)
 
-        // And now there is one to dismiss, which is what proves a mode was opened above.
+        // Now there is one to dismiss, proving a mode was opened above.
         fragment.onChannelClick(channel)
 
         assertThat(parent.chatTarget).isNull()
@@ -415,9 +381,8 @@ class ChannelListFragmentTest {
     }
 
     /**
-     * A channel target and a user target are different targets even when one tap follows the
-     * other: `channel == current.channel` is null on a user target, and `null == null` would make
-     * the two collapse into one if either side stopped being compared.
+     * A channel target and a user target differ even when one tap follows the other
+     * (`current.channel` is null on a user target).
      */
     @Test
     fun aUserTargetIsNotTheChannelTargetOfTheSameTap() {

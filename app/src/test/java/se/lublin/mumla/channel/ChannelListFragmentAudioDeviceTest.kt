@@ -49,18 +49,15 @@ import se.lublin.mumla.util.HumlaServiceFragment
 import se.lublin.mumla.util.HumlaServiceProvider
 
 /**
- * The audio chooser in the channel menu - the phone app's "Bluetooth / speaker / earpiece / wired
- * headset" picker. It lists what the session offers **right now**, ticks the device voice goes to
- * and hands a tap to the session; the decision what the default is and when a headset takes over
- * belongs to `AudioRouter` and is pinned there. It replaces the "Bluetooth" item, whose standing
- * wish lives on in the settings screen.
+ * The audio chooser in the channel menu: lists what the session offers right now, ticks the device
+ * voice goes to and hands a tap to the session. Default and takeover rules belong to `AudioRouter`.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelListFragmentAudioDeviceTest {
 
     /**
-     * Same contract as `ChannelListFragmentTest.HostActivity`, plus a count of the menu
-     * invalidations -- the only way the fragment's "redraw the tick" effect can be read back.
+     * Same contract as `ChannelListFragmentTest.HostActivity`, plus a count of menu invalidations
+     * (how the "redraw the tick" effect is read back).
      */
     class RecordingHostActivity : AppCompatActivity(), HumlaServiceProvider, DatabaseProvider {
         private var bound: IMumlaService? = null
@@ -163,9 +160,8 @@ class ChannelListFragmentAudioDeviceTest {
     }
 
     /**
-     * Single choice with exactly one tick, on the device voice goes to. `isChecked` alone would
-     * stay green on an item that draws no tick at all - `MenuItemImpl` stores the flag whether or
-     * not the item is checkable - so the checkable flag is asserted with it.
+     * Single choice with one tick, on the device voice goes to. `MenuItemImpl` stores `isChecked`
+     * even on non-checkable items, so checkability is asserted too.
      */
     @Test
     fun theDeviceVoiceGoesToIsTheOneTicked() {
@@ -189,9 +185,8 @@ class ChannelListFragmentAudioDeviceTest {
     }
 
     /**
-     * The devices are read when the chooser is opened, not when the menu was last drawn: a headset
-     * switched on since then has to be there when the user looks. Tapping the chooser itself is
-     * not consumed, so the platform goes on to open the submenu that was just refilled.
+     * Devices are read when the chooser opens. The tap on the chooser is not consumed, so the
+     * platform opens the refilled submenu.
      */
     @Test
     fun openingTheChooserReadsTheDevicesAgain() {
@@ -228,7 +223,7 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(prepared().chooser().isVisible).isFalse()
     }
 
-    /** Nothing to choose from - a platform that refused the device list - is nothing to show. */
+    /** A platform that refused the device list shows nothing. */
     @Test
     fun anEmptyDeviceListHidesTheChooser() {
         every { session.audioDevices } returns emptyList()
@@ -241,7 +236,7 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(prepared().chooser().isVisible).isTrue()
     }
 
-    /** A tap that arrives after the connection went away does nothing and does not crash. */
+    /** A tap after the connection went away does nothing and does not crash. */
     @Test
     fun aTapAfterTheConnectionWentAwayIsIgnored() {
         val speakerItem = prepared().choices().single { it.itemId == 2 }
@@ -256,9 +251,8 @@ class ChannelListFragmentAudioDeviceTest {
     // --- echo cancellation, below the devices ------------------------------------------------
 
     /**
-     * One switch under the devices, showing what runs for the device voice goes to - its kind's
-     * default or the user's override, as the session reports it. Checkable in its own right, and
-     * not part of the single-choice group, or ticking it would untick the device.
+     * One switch under the devices showing the effective setting for the current device's kind.
+     * Checkable on its own, outside the single-choice group.
      */
     @Test
     fun theEchoSwitchShowsWhatRunsForTheActiveDevice() {
@@ -273,10 +267,7 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(prepared().echo().isChecked).isTrue()
     }
 
-    /**
-     * Tapping it is a choice about this kind of device, remembered for the next time one is
-     * routed: it is written as that kind's override, and the service picks it up from there.
-     */
+    /** Tapping it writes the override for this kind of device. */
     @Test
     fun tappingTheEchoSwitchRemembersTheChoiceForThisKindOfDevice() {
         val settings = Settings.getInstance(app)
@@ -308,7 +299,6 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(prepared().echo().isVisible).isFalse()
     }
 
-    /** The echo menu and the settings' echo method are gone; this is the one place left. */
     @Test
     fun thereIsNoSeparateEchoMenuAnyMore() {
         val menu = prepared()
@@ -318,7 +308,7 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(menu.chooser().subMenu!!.size()).isEqualTo(4) // three devices and the switch
     }
 
-    /** The chooser replaces the old checkable "Bluetooth" item; there is no second way in. */
+    /** The chooser replaced the old checkable "Bluetooth" item. */
     @Test
     fun thereIsNoSeparateBluetoothItemAnyMore() {
         val menu = prepared()

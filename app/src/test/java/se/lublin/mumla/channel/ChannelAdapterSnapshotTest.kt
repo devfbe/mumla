@@ -17,12 +17,8 @@ import se.lublin.humla.model.TalkState
 import se.lublin.mumla.R
 
 /**
- * The overlay's user list has to answer about one state of the channel.
- *
- * `getCount()` and `getItem(position)` each asked the model for the user list of the moment, so a
- * user leaving between the two calls -- which the protocol thread can do at any time -- turned a
- * list row into an IndexOutOfBoundsException. Copy-on-read in the model does not fix that: each
- * call gets a correct copy, of a different moment. The adapter has to hold one.
+ * The overlay's user list answers about one snapshot of the channel: `getCount()` and
+ * `getItem(position)` must not see different moments, or a user leaving between them throws.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelAdapterSnapshotTest {
