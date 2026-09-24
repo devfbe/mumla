@@ -33,7 +33,6 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentTransaction
 import androidx.lifecycle.lifecycleScope
@@ -50,6 +49,7 @@ import se.lublin.mumla.channel.AccessTokenFragment
 import se.lublin.mumla.channel.ChannelFragment
 import se.lublin.mumla.channel.ServerInfoFragment
 import se.lublin.mumla.chat.NoticeFormatter
+import se.lublin.mumla.databinding.ActivityMainBinding
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.preference.generateDefaultCertificate
@@ -98,16 +98,19 @@ class MumlaActivity :
     override fun onCreate(savedInstanceState: Bundle?) {
         settings = Settings.getInstance(this)
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        val toolbar = findViewById<Toolbar>(R.id.toolbar)
-        setSupportActionBar(toolbar)
+        val binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        setSupportActionBar(binding.toolbar)
         onBackPressedDispatcher.addCallback(this, backCallback)
 
         setStayAwake(settings.shouldStayAwake)
         PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener(this)
 
-        drawer = MainDrawer(this, toolbar, ::connectedServerName, ::showDrawerFragment)
+        drawer = MainDrawer(
+            this, binding.drawerLayout, binding.leftDrawer, binding.toolbar,
+            serverName = ::connectedServerName,
+            onItemSelected = ::showDrawerFragment,
+        )
         dialogs = ConnectionDialogs(this, settings, this)
         connectFlow = ConnectFlow(this, settings) { service }
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
