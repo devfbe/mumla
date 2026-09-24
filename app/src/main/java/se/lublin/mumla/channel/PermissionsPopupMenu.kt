@@ -53,7 +53,7 @@ class PermissionsPopupMenu(
     private val permissions: Int
         get() = when {
             !service.isConnected -> 0
-            channel.id == 0 -> service.HumlaSession().permissions
+            channel.id == 0 -> service.session.permissions
             else -> channel.permissions
         }
 
@@ -66,7 +66,7 @@ class PermissionsPopupMenu(
         }
         if (permissions == 0) {
             // onMenuPrepare will be called once more once permissions have loaded.
-            if (service.isConnected) service.HumlaSession().requestPermissions(channel.id)
+            if (service.isConnected) service.session.requestPermissions(channel.id)
         } else {
             prepareListener.onMenuPrepare(menu.menu, permissions)
         }

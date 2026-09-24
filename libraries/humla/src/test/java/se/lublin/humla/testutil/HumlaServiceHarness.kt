@@ -97,7 +97,7 @@ class HumlaServiceHarness(
 
     /** Reconfigures the service the way MumlaService does, before or during a session. */
     fun configure(change: SessionConfig.() -> SessionConfig) {
-        service.configure(service.getSessionConfig().change())
+        service.configure(service.sessionConfig.change())
         mainLooper.idle()
     }
 
@@ -144,7 +144,7 @@ class HumlaServiceHarness(
         )
         awaitUntil(description = "server sync delivered") {
             mainLooper.idle()
-            service.getConnectionState() == HumlaService.ConnectionState.CONNECTED
+            service.connectionState == HumlaService.ConnectionState.CONNECTED
         }
     }
 
@@ -189,7 +189,7 @@ class HumlaServiceHarness(
         transports.tcps[index].simulateSocketClosed()
         awaitUntil(description = "disconnect report delivered") {
             mainLooper.idle()
-            service.getConnectionState() != HumlaService.ConnectionState.CONNECTED
+            service.connectionState != HumlaService.ConnectionState.CONNECTED
         }
     }
 }

@@ -72,7 +72,7 @@ class HumlaMediaKeyTargetTest {
     }
 
     /**
-     * Like the real HumlaService, HumlaSession() throws exactly when isConnected is false, which
+     * Like the real HumlaService, `session` throws exactly when isConnected is false, which
      * is the live state in onDisconnected.
      */
     @Test
@@ -81,6 +81,6 @@ class HumlaMediaKeyTargetTest {
 
         HumlaMediaKeyTarget(disconnected).stopTalking()
 
-        verify(exactly = 0) { disconnected.HumlaSession() }
+        verify(exactly = 0) { disconnected.session }
     }
 }

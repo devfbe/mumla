@@ -24,7 +24,7 @@ import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
 
 /**
- * Something that happened in a session, as published by `IHumlaService.getEvents()`.
+ * Something that happened in a session, as published by `IHumlaService.events`.
  *
  * Model events carry the live model object, which may have changed again by the time the event is
  * collected: treat them as "re-read this", never as a delta.

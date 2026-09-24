@@ -75,19 +75,19 @@ class HumlaServiceSessionTest {
     @Test
     fun connectWalksDisconnectedToConnectingToConnected() {
         val h = start()
-        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
+        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Disconnected())
         assertThat(h.service.isWakeLockHeldForTest()).isFalse()
 
         h.service.connect()
         h.mainLooper.idle()
-        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Connecting)
-        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTING)
+        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Connecting)
+        assertThat(h.service.connectionState).isEqualTo(HumlaService.ConnectionState.CONNECTING)
 
         h.synchronize(h.openSocket(0))
 
-        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Connected)
-        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTED)
-        assertThat(h.service.isConnected()).isTrue()
+        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Connected)
+        assertThat(h.service.connectionState).isEqualTo(HumlaService.ConnectionState.CONNECTED)
+        assertThat(h.service.isConnected).isTrue()
         assertThat(h.service.isWakeLockHeldForTest()).isTrue()
     }
 
@@ -104,7 +104,7 @@ class HumlaServiceSessionTest {
         // `getConnection()` rather than `transports.tcps.size`: a transport appears on the
         // protocol thread only later, so a size check would pass either way.
         assertThat(h.service.getConnection()).isSameInstanceAs(connection)
-        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Connected)
+        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Connected)
         assertThat(h.transports.tcps).hasSize(1)
     }
 
@@ -175,14 +175,14 @@ class HumlaServiceSessionTest {
 
         h.failConnection(0, connectionError())
 
-        val state = h.service.getSessionState().value as SessionState.ConnectionLost
+        val state = h.service.sessionState.value as SessionState.ConnectionLost
         assertThat(state.attempt).isEqualTo(1)
         assertThat(state.reconnectInMillis).isEqualTo(10L)
-        assertThat(h.service.isReconnecting()).isTrue()
-        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
+        assertThat(h.service.isReconnecting).isTrue()
+        assertThat(h.service.connectionState).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
         // Only Disconnected releases it.
         assertThat(h.service.isWakeLockHeldForTest()).isTrue()
-        assertThat(h.service.getConnectionError()).isNotNull()
+        assertThat(h.service.connectionError).isNotNull()
     }
 
     /** The four corners of `onConnectionDisconnected`: disconnect reason x `autoReconnect`. */
@@ -203,9 +203,9 @@ class HumlaServiceSessionTest {
 
             val shouldReconnect =
                 autoReconnect && reason == HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
-            assertThat(h.service.getConnectionState())
+            assertThat(h.service.connectionState)
                 .isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
-            assertThat(h.service.isReconnecting()).isEqualTo(shouldReconnect)
+            assertThat(h.service.isReconnecting).isEqualTo(shouldReconnect)
             assertThat(h.service.isWakeLockHeldForTest()).isEqualTo(shouldReconnect)
         }
     }
@@ -219,13 +219,13 @@ class HumlaServiceSessionTest {
 
             h.service.disconnect()
             // Derived from the session state, so already over before the connection reports back.
-            assertThat(h.service.isConnected()).isFalse()
+            assertThat(h.service.isConnected).isFalse()
             h.mainLooper.idle()
 
-            assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
-            assertThat(h.service.getConnectionState())
+            assertThat(h.service.sessionState.value).isEqualTo(SessionState.Disconnected())
+            assertThat(h.service.connectionState)
                 .isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
-            assertThat(h.service.isReconnecting()).isFalse()
+            assertThat(h.service.isReconnecting).isFalse()
             assertThat(h.service.isWakeLockHeldForTest()).isFalse()
             // The giving-up line belongs to a spent auto-reconnect, not to every disconnect.
             assertThat(h.warnings).doesNotContain(h.service.getString(R.string.reconnect_gave_up))
@@ -242,7 +242,7 @@ class HumlaServiceSessionTest {
         // retry, loss 4 gives up.
         h.failConnection(0, connectionError())
         for (index in 1..2) {
-            assertThat(h.service.getSessionState().value)
+            assertThat(h.service.sessionState.value)
                 .isInstanceOf(SessionState.ConnectionLost::class.java)
             h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS) // backoff timer fires
             h.openSocket(index)
@@ -252,10 +252,10 @@ class HumlaServiceSessionTest {
         h.openSocket(3)
         h.failConnection(3, connectionError())
 
-        assertThat(h.service.getSessionState().value)
+        assertThat(h.service.sessionState.value)
             .isInstanceOf(SessionState.Disconnected::class.java)
-        assertThat((h.service.getSessionState().value as SessionState.Disconnected).error).isNotNull()
-        assertThat(h.service.isReconnecting()).isFalse()
+        assertThat((h.service.sessionState.value as SessionState.Disconnected).error).isNotNull()
+        assertThat(h.service.isReconnecting).isFalse()
         assertThat(h.service.isWakeLockHeldForTest()).isFalse()
         assertThat(h.warnings).contains(h.service.getString(R.string.reconnect_gave_up))
     }
@@ -267,14 +267,14 @@ class HumlaServiceSessionTest {
         h.connectAndSynchronize()
 
         h.failConnection(0, connectionError())
-        assertThat((h.service.getSessionState().value as SessionState.ConnectionLost).attempt)
+        assertThat((h.service.sessionState.value as SessionState.ConnectionLost).attempt)
             .isEqualTo(1)
         h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS)
         h.synchronize(h.openSocket(1))
 
         h.failConnection(1, connectionError())
 
-        assertThat((h.service.getSessionState().value as SessionState.ConnectionLost).attempt)
+        assertThat((h.service.sessionState.value as SessionState.ConnectionLost).attempt)
             .isEqualTo(1)
     }
 
@@ -312,9 +312,9 @@ class HumlaServiceSessionTest {
         h.service.onConnectionDisconnected(connectionError())
         h.mainLooper.idle()
 
-        assertThat(h.service.getSessionState().value)
+        assertThat(h.service.sessionState.value)
             .isEqualTo(SessionState.Disconnected())
-        assertThat(h.service.isReconnecting()).isFalse()
+        assertThat(h.service.isReconnecting).isFalse()
         assertThat(h.service.isWakeLockHeldForTest()).isFalse()
         h.mainLooper.idleFor(100, TimeUnit.MILLISECONDS)
         assertThat(h.transports.tcps).hasSize(1)
@@ -329,11 +329,11 @@ class HumlaServiceSessionTest {
         h.service.cancelReconnect()
         h.mainLooper.idleFor(100, TimeUnit.MILLISECONDS)
 
-        assertThat(h.service.getSessionState().value)
+        assertThat(h.service.sessionState.value)
             .isInstanceOf(SessionState.Disconnected::class.java)
         // The error stays visible: the UI is still showing why the session ended.
-        assertThat(h.service.getConnectionError()).isNotNull()
-        assertThat(h.service.isReconnecting()).isFalse()
+        assertThat(h.service.connectionError).isNotNull()
+        assertThat(h.service.isReconnecting).isFalse()
         assertThat(h.service.isWakeLockHeldForTest()).isFalse()
         assertThat(h.transports.tcps).hasSize(1) // no reconnect was attempted
     }
@@ -353,7 +353,7 @@ class HumlaServiceSessionTest {
         h.mainLooper.idleFor(100, TimeUnit.MILLISECONDS) // the post fires in here
 
         assertThat(h.service.getConnection()).isSameInstanceAs(connection)
-        assertThat(h.service.getSessionState().value)
+        assertThat(h.service.sessionState.value)
             .isInstanceOf(SessionState.Disconnected::class.java)
         assertThat(h.transports.tcps).hasSize(1)
     }
@@ -371,7 +371,7 @@ class HumlaServiceSessionTest {
             h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS)
             h.transports.tcps.size > 1 && h.transports.tcps[1].connectThread != null
         }
-        assertThat(h.service.getSessionState().value).isInstanceOf(SessionState.Reconnecting::class.java)
+        assertThat(h.service.sessionState.value).isInstanceOf(SessionState.Reconnecting::class.java)
 
         h.service.cancelReconnect()
         awaitUntil(description = "the attempt in flight was disconnected") {
@@ -380,11 +380,11 @@ class HumlaServiceSessionTest {
         }
         h.mainLooper.idle()
 
-        assertThat(h.service.getSessionState().value).isInstanceOf(SessionState.Disconnected::class.java)
+        assertThat(h.service.sessionState.value).isInstanceOf(SessionState.Disconnected::class.java)
         // The cancelled session's error stays what the UI shows, also after the attempt's own
         // (error-free) disconnect report has arrived.
-        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
-        assertThat(h.service.getConnectionError()).isNotNull()
+        assertThat(h.service.connectionState).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
+        assertThat(h.service.connectionError).isNotNull()
         assertThat(h.service.isWakeLockHeldForTest()).isFalse()
         assertThat(h.warnings).doesNotContain(h.service.getString(R.string.reconnect_gave_up))
     }
@@ -404,7 +404,7 @@ class HumlaServiceSessionTest {
         h.mainLooper.idle()
 
         assertThat(h.warnings).doesNotContain(h.service.getString(R.string.reconnect_gave_up))
-        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
+        assertThat(h.service.connectionState).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
     }
 
     /**
@@ -423,10 +423,10 @@ class HumlaServiceSessionTest {
         h.service.disconnect()
         h.mainLooper.idle()
 
-        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
+        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Disconnected())
         assertThat(h.service.isWakeLockHeldForTest()).isFalse()
         assertThat(networkCallbacks()).isEmpty()
-        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
+        assertThat(h.service.connectionState).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
     }
 
     /**
@@ -467,8 +467,8 @@ class HumlaServiceSessionTest {
         h.service.cancelReconnect()
         h.mainLooper.idle()
 
-        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Connected)
-        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTED)
+        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Connected)
+        assertThat(h.service.connectionState).isEqualTo(HumlaService.ConnectionState.CONNECTED)
         assertThat(h.service.isWakeLockHeldForTest()).isTrue()
     }
 
@@ -478,12 +478,12 @@ class HumlaServiceSessionTest {
 
         h.service.cancelReconnect()
 
-        assertThat(h.service.isReconnecting()).isFalse()
+        assertThat(h.service.isReconnecting).isFalse()
         assertThat(networkCallbacks()).isEmpty()
     }
 
     private fun whisperTarget(h: HumlaServiceHarness) =
-        WhisperTargetChannel(h.service.getRootChannel()!!, false, false, null)
+        WhisperTargetChannel(h.service.rootChannel!!, false, false, null)
 
     /**
      * The thirty whisper slots are the session's, not the service's; without the clear on
@@ -523,7 +523,7 @@ class HumlaServiceSessionTest {
 
         h.failConnection(0, connectionError())
 
-        assertThat(h.service.isReconnecting()).isTrue()
+        assertThat(h.service.isReconnecting).isTrue()
         assertThat(networkCallbacks()).hasSize(1)
         h.mainLooper.idleFor(60, TimeUnit.SECONDS)
         assertThat(h.transports.tcps).hasSize(1)
@@ -541,11 +541,11 @@ class HumlaServiceSessionTest {
         h.mainLooper.idleFor(9, TimeUnit.MILLISECONDS)
         assertThat(h.transports.tcps).hasSize(1)
         h.mainLooper.idleFor(1, TimeUnit.MILLISECONDS)
-        assertThat(h.service.getSessionState().value)
+        assertThat(h.service.sessionState.value)
             .isInstanceOf(SessionState.Reconnecting::class.java)
         // Reconnecting is still "reconnecting" to the UI, and it still knows why.
-        assertThat(h.service.isReconnecting()).isTrue()
-        assertThat(h.service.getConnectionError()).isNotNull()
+        assertThat(h.service.isReconnecting).isTrue()
+        assertThat(h.service.connectionError).isNotNull()
         // The socket is opened on the protocol thread, so the transport appears after the post.
         awaitUntil(description = "second connection attempt") { h.transports.tcps.size == 2 }
     }
@@ -655,8 +655,8 @@ class HumlaServiceSessionTest {
         h.mainLooper.idle()
 
         assertThat(h.transports.tcps).isEmpty()
-        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
-        assertThat(h.service.getConnectionState())
+        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Disconnected())
+        assertThat(h.service.connectionState)
             .isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
         assertThat(h.disconnects).hasSize(1)
         assertThat(h.disconnects[0]!!.message).isEqualTo(h.service.getString(R.string.no_target_server))

@@ -82,7 +82,7 @@ import java.security.cert.X509Certificate
 
 /**
  * Owns one server session (connection, model, audio pipeline and audio routing) and exposes it
- * through [IHumlaService] and [IHumlaSession]. Accessors stay functions to match the Java interfaces.
+ * through [IHumlaService] and [IHumlaSession].
  */
 open class HumlaService : Service(), IHumlaService, IHumlaSession,
     HumlaConnection.HumlaConnectionListener, HumlaLogger {
@@ -93,7 +93,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     /** Current audio settings: [mConfig]'s audio half plus what the route decides. */
     private var mAudioConfig = AudioConfig()
 
-    /** Held by identity: the audio thread and `isTalking()` must see the same toggle object. */
+    /** Held by identity: the audio thread and `isTalking` must see the same toggle object. */
     @VisibleForTesting
     internal lateinit var mInputMode: IInputMode
         private set
@@ -144,7 +144,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /**
      * The session lifecycle. Confined to the main thread, where binder calls, connection callbacks,
-     * the reconnect timer and the network callback all run; other threads collect [getSessionState].
+     * the reconnect timer and the network callback all run; other threads collect [sessionState].
      */
     @VisibleForTesting
     internal lateinit var mStateMachine: SessionStateMachine
@@ -440,7 +440,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     override fun onConnectionDisconnected(e: HumlaException?) {
         // Clear push-to-talk first: the toggle outlives the connection, so an auto-reconnect would
         // otherwise transmit without a key press. This also releases the input thread waiting in
-        // waitForInput(). An event collector can't do it: isConnected() is already false by then.
+        // waitForInput(). An event collector can't do it: isConnected is already false by then.
         mToggleInputMode.setTalkingOn(false)
 
         if (e != null) {
@@ -512,7 +512,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mEvents.tryEmit(event)
     }
 
-    override fun getEvents(): SharedFlow<HumlaEvent> = mEvents.asSharedFlow()
+    override val events: SharedFlow<HumlaEvent>
+        get() = mEvents.asSharedFlow()
 
     private fun scheduleReconnect(delayMillis: Long) {
         if (isOnline()) {
@@ -615,7 +616,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         return config.needsReconnectAfter(previous)
     }
 
-    override fun getSessionConfig(): SessionConfig = mConfig
+    override val sessionConfig: SessionConfig
+        get() = mConfig
 
     /**
      * The routed device changed, so the pipeline is rebuilt for its stream (and, for SCO, its
@@ -662,32 +664,36 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         return checkNotNull(mModelHandler) { "No model for the synchronized session" }
     }
 
-    override fun getConnectionState(): ConnectionState = when (val state = mStateMachine.current) {
-        SessionState.Connecting, is SessionState.Reconnecting -> ConnectionState.CONNECTING
-        SessionState.Connected -> ConnectionState.CONNECTED
-        is SessionState.ConnectionLost -> ConnectionState.CONNECTION_LOST
-        is SessionState.Disconnected ->
-            if (state.error != null) ConnectionState.CONNECTION_LOST else ConnectionState.DISCONNECTED
-    }
+    override val connectionState: ConnectionState
+        get() = when (val state = mStateMachine.current) {
+            SessionState.Connecting, is SessionState.Reconnecting -> ConnectionState.CONNECTING
+            SessionState.Connected -> ConnectionState.CONNECTED
+            is SessionState.ConnectionLost -> ConnectionState.CONNECTION_LOST
+            is SessionState.Disconnected ->
+                if (state.error != null) ConnectionState.CONNECTION_LOST else ConnectionState.DISCONNECTED
+        }
 
     /** The session lifecycle as a flow. */
-    override fun getSessionState(): StateFlow<SessionState> = mStateMachine.state
+    override val sessionState: StateFlow<SessionState>
+        get() = mStateMachine.state
 
     /**
      * Why the last session ended. Read from the state machine, which carries the error across
      * reconnect attempts that replace the connection object.
      */
-    override fun getConnectionError(): HumlaException? = when (val state = mStateMachine.current) {
-        is SessionState.Disconnected -> state.error
-        is SessionState.ConnectionLost -> state.error
-        is SessionState.Reconnecting -> state.error
-        else -> null
-    }
+    override val connectionError: HumlaException?
+        get() = when (val state = mStateMachine.current) {
+            is SessionState.Disconnected -> state.error
+            is SessionState.ConnectionLost -> state.error
+            is SessionState.Reconnecting -> state.error
+            else -> null
+        }
 
-    override fun isReconnecting(): Boolean = when (mStateMachine.current) {
-        is SessionState.ConnectionLost, is SessionState.Reconnecting -> true
-        else -> false
-    }
+    override val isReconnecting: Boolean
+        get() = when (mStateMachine.current) {
+            is SessionState.ConnectionLost, is SessionState.Reconnecting -> true
+            else -> false
+        }
 
     /**
      * Gives up on the automatic reconnect. An attempt in flight is disconnected too, so it cannot
@@ -703,55 +709,71 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     /** Test seam: whether the wake lock is held. */
     fun isWakeLockHeldForTest(): Boolean = mWakeLock.isHeld
 
-    override fun getTargetServer(): Server? = mConfig.server
+    override val targetServer: Server?
+        get() = mConfig.server
 
-    @Throws(HumlaDisconnectedException::class)
-    override fun HumlaSession(): IHumlaSession {
-        if (!isConnected()) throw HumlaDisconnectedException()
-        return this
-    }
+    override val session: IHumlaSession
+        get() {
+            if (!isConnected) throw HumlaDisconnectedException()
+            return this
+        }
 
-    override fun getTCPLatency(): Long = conn().getTCPLatency()
+    override val tcpLatency: Long
+        get() = conn().getTCPLatency()
 
-    override fun getUDPLatency(): Long = conn().getUDPLatency()
+    override val udpLatency: Long
+        get() = conn().getUDPLatency()
 
-    override fun getMaxBandwidth(): Int = conn().getMaxBandwidth()
+    override val maxBandwidth: Int
+        get() = conn().getMaxBandwidth()
 
     /**
      * The running pipeline's bandwidth in bps, or -1 while none runs. The pipeline starts and
      * stops asynchronously around the session, so this does not throw while disconnected.
      */
-    override fun getCurrentBandwidth(): Int = mAudioController.currentBandwidth
+    override val currentBandwidth: Int
+        get() = mAudioController.currentBandwidth
 
-    override fun getServerVersion(): Int = conn().getServerVersion()
+    override val serverVersion: Int
+        get() = conn().getServerVersion()
 
-    override fun getServerRelease(): String? = conn().getServerRelease()
+    override val serverRelease: String?
+        get() = conn().getServerRelease()
 
-    override fun getServerOSName(): String? = conn().getServerOSName()
+    override val serverOSName: String?
+        get() = conn().getServerOSName()
 
-    override fun getServerOSVersion(): String? = conn().getServerOSVersion()
+    override val serverOSVersion: String?
+        get() = conn().getServerOSVersion()
 
-    override fun getSessionId(): Int = conn().getSession()
+    override val sessionId: Int
+        get() = conn().getSession()
 
-    override fun getSessionUser(): IUser? = model().getUser(getSessionId())
+    override val sessionUser: IUser?
+        get() = model().getUser(sessionId)
 
-    override fun getSessionChannel(): IChannel? {
-        val user = getSessionUser()
-        if (user != null) return user.channel
-        throw IllegalStateException("Session user should be set post-synchronization!")
-    }
+    override val sessionChannel: IChannel?
+        get() {
+            val user = sessionUser
+            if (user != null) return user.channel
+            throw IllegalStateException("Session user should be set post-synchronization!")
+        }
 
     override fun getUser(session: Int): IUser? = model().getUser(session)
 
     override fun getChannel(id: Int): IChannel? = model().getChannel(id)
 
-    override fun getRootChannel(): IChannel? = getChannel(0)
+    override val rootChannel: IChannel?
+        get() = getChannel(0)
 
-    override fun getPermissions(): Int = model().permissions
+    override val permissions: Int
+        get() = model().permissions
 
-    override fun getTransmitMode(): Int = mConfig.transmitMode
+    override val transmitMode: Int
+        get() = mConfig.transmitMode
 
-    override fun getCodec(): HumlaUDPMessageType? = conn().getCodec()
+    override val codec: HumlaUDPMessageType?
+        get() = conn().getCodec()
 
     /**
      * What the user asked for, independent of the current route. Survives a lost connection, a
@@ -760,7 +782,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     override fun usingBluetoothSco(): Boolean = mRouter.bluetoothAutomatic
 
     /** What the platform actually routes right now. */
-    override fun isBluetoothScoActive(): Boolean = mRouter.isBluetoothActive
+    override val isBluetoothScoActive: Boolean
+        get() = mRouter.isBluetoothActive
 
     override fun enableBluetoothSco() {
         mRouter.bluetoothAutomatic = true
@@ -772,22 +795,26 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mRouter.apply()
     }
 
-    override fun getAudioDevices(): List<CommunicationDevice> = mRouter.availableDevices()
+    override val audioDevices: List<CommunicationDevice>
+        get() = mRouter.availableDevices()
 
-    override fun isEchoCancellationEnabled(): Boolean = mAudioConfig.echoCancellation
+    override val isEchoCancellationEnabled: Boolean
+        get() = mAudioConfig.echoCancellation
 
-    override fun getActiveAudioDevice(): CommunicationDevice? = mRouter.activeDevice()
+    override val activeAudioDevice: CommunicationDevice?
+        get() = mRouter.activeDevice()
 
     override fun selectAudioDevice(id: Int) = mRouter.choose(id)
 
-    override fun isTalking(): Boolean = mToggleInputMode.isTalkingOn()
+    override val isTalking: Boolean
+        get() = mToggleInputMode.isTalkingOn()
 
     override fun setTalkingState(talking: Boolean) {
         mToggleInputMode.setTalkingOn(talking)
     }
 
     override fun joinChannel(channel: Int) {
-        moveUserToChannel(getSessionId(), channel)
+        moveUserToChannel(sessionId, channel)
     }
 
     override fun moveUserToChannel(session: Int, channel: Int) {
@@ -799,8 +826,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun createChannel(
         parent: Int,
-        name: String?,
-        description: String?,
+        name: String,
+        description: String,
         position: Int,
         temporary: Boolean
     ) {
@@ -865,7 +892,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         // A message to an unknown session carries no user.
         val users = listOfNotNull(model.getUser(session))
-        return Message(getSessionId(), selfName(model), emptyList(), emptyList(), users, message)
+        return Message(sessionId, selfName(model), emptyList(), emptyList(), users, message)
     }
 
     override fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message {
@@ -878,13 +905,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // An unknown channel is left out, as above.
         val targetChannels = listOfNotNull(model.getChannel(channel))
         return Message(
-            getSessionId(), selfName(model), targetChannels,
+            sessionId, selfName(model), targetChannels,
             if (tree) targetChannels else emptyList(), emptyList(), message
         )
     }
 
     private fun selfName(model: ModelHandler): String? =
-        checkNotNull(model.getUser(getSessionId())) { "No user for our own session" }.name
+        checkNotNull(model.getUser(sessionId)) { "No user for our own session" }.name
 
     override fun setUserComment(session: Int, comment: String?) {
         val usb = Mumble.UserState.newBuilder()
@@ -922,7 +949,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
     }
 
-    override fun isConnected(): Boolean = mStateMachine.current == SessionState.Connected
+    override val isConnected: Boolean
+        get() = mStateMachine.current == SessionState.Connected
 
     override fun linkChannels(channelA: IChannel, channelB: IChannel) {
         val csb = Mumble.ChannelState.newBuilder()
@@ -965,34 +993,35 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mWhisperTargetList.free(targetId)
     }
 
-    override fun setVoiceTargetId(targetId: Byte) {
-        // `!= 0` rather than `> 0`: a negative byte masks to a negative value.
-        if ((targetId.toInt() and 0x1F.inv()) != 0) {
-            throw IllegalArgumentException("Target ID must be at most 5 bits.")
-        }
-        mVoiceTargetId = targetId
-        // Also reaches the running pipeline, so the next rebuild keeps targeting it.
-        mAudioController.setVoiceTargetId(targetId)
-        emit(HumlaEvent.VoiceTargetChanged(VoiceTargetMode.fromId(targetId)))
-    }
-
     /** Test seam: the settings the next pipeline would be built with (public for the app's tests). */
     fun getAudioConfigForTest(): AudioConfig = mAudioConfig
 
-    override fun getVoiceTargetId(): Byte = mVoiceTargetId
-
-    override fun getVoiceTargetMode(): VoiceTargetMode = VoiceTargetMode.fromId(mVoiceTargetId)
-
-    override fun getWhisperTarget(): WhisperTarget? {
-        if (VoiceTargetMode.fromId(mVoiceTargetId) == VoiceTargetMode.WHISPER) {
-            return mWhisperTargetList.get(mVoiceTargetId)
+    override var voiceTargetId: Byte
+        get() = mVoiceTargetId
+        set(targetId) {
+            // `!= 0` rather than `> 0`: a negative byte masks to a negative value.
+            require((targetId.toInt() and 0x1F.inv()) == 0) { "Target ID must be at most 5 bits." }
+            mVoiceTargetId = targetId
+            // Also reaches the running pipeline, so the next rebuild keeps targeting it.
+            mAudioController.setVoiceTargetId(targetId)
+            emit(HumlaEvent.VoiceTargetChanged(VoiceTargetMode.fromId(targetId)))
         }
-        return null
-    }
 
-    override fun getServerSettings(): ServerSettings? = model().serverSettings
+    override val voiceTargetMode: VoiceTargetMode
+        get() = VoiceTargetMode.fromId(mVoiceTargetId)
 
-    /** A coarse view of [getSessionState] for clients that only tell these four apart. */
+    override val whisperTarget: WhisperTarget?
+        get() {
+            if (VoiceTargetMode.fromId(mVoiceTargetId) == VoiceTargetMode.WHISPER) {
+                return mWhisperTargetList.get(mVoiceTargetId)
+            }
+            return null
+        }
+
+    override val serverSettings: ServerSettings?
+        get() = model().serverSettings
+
+    /** A coarse view of [sessionState] for clients that only tell these four apart. */
     enum class ConnectionState {
         /**
          * The default state of Humla, before connection to a server and after graceful/expected

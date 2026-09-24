@@ -27,13 +27,13 @@ import se.lublin.humla.util.HumlaDisconnectedException
 /** Stubs a service mock as connected, handing out [session]. */
 fun <T : IHumlaService> T.stubConnected(session: IHumlaSession): T = apply {
     every { isConnected } returns true
-    every { HumlaSession() } returns session
+    every { this@stubConnected.session } returns session
 }
 
-/** Stubs a service mock as disconnected: like HumlaService, `HumlaSession()` then throws. */
+/** Stubs a service mock as disconnected: like HumlaService, `session` then throws. */
 fun <T : IHumlaService> T.stubDisconnected(): T = apply {
     every { isConnected } returns false
-    every { HumlaSession() } throws HumlaDisconnectedException()
+    every { session } throws HumlaDisconnectedException()
 }
 
 /** Stubs a service mock's event flow; emit into the returned flow to deliver events. */

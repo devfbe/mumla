@@ -93,7 +93,7 @@ class ChannelListAdapter(
     init {
         setHasStableIds(true)
         rootChannels = if (showPinnedOnly) {
-            database.getPinnedChannels(humlaService.targetServer.id)
+            humlaService.targetServer?.let { database.getPinnedChannels(it.id) }.orEmpty()
         } else {
             listOf(0)
         }
@@ -140,7 +140,7 @@ class ChannelListAdapter(
             var italic = false
             val service = humlaService
             if (service.isConnected) {
-                val session = service.HumlaSession()
+                val session = service.session
                 var ourChan: IChannel? = null
                 try {
                     ourChan = session.sessionChannel
@@ -193,7 +193,7 @@ class ChannelListAdapter(
             cvh.joinButton.setOnClickListener {
                 val current = humlaService
                 if (current.isConnected) {
-                    current.HumlaSession().joinChannel(channel.id)
+                    current.session.joinChannel(channel.id)
                 }
             }
 
@@ -216,7 +216,7 @@ class ChannelListAdapter(
             var selfSession = -1
             val service = humlaService
             try {
-                selfSession = service.HumlaSession().sessionId
+                selfSession = service.session.sessionId
             } catch (e: HumlaDisconnectedException) {
                 Log.d(TAG, "exception in onBindViewHolder: $e")
             } catch (e: IllegalStateException) {
@@ -298,7 +298,7 @@ class ChannelListAdapter(
             return
         }
 
-        val session = service.HumlaSession()
+        val session = service.session
         nodes.clear()
         try {
             for (cid in rootChannels) {
@@ -446,7 +446,7 @@ class ChannelListAdapter(
         // Add or remove registered user from local mute history
         val server = humlaService.targetServer
 
-        if (user.userId >= 0 && server.isSaved) {
+        if (server != null && user.userId >= 0 && server.isSaved) {
             databaseExecutor.execute {
                 if (user.isLocalMuted) {
                     database.addLocalMutedUser(server.id, user.userId)

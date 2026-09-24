@@ -62,19 +62,19 @@ class HumlaServiceBluetoothTest {
         h.connectAndSynchronize()
 
         assertThat(h.service.usingBluetoothSco()).isFalse()
-        assertThat(h.service.isBluetoothScoActive()).isFalse()
+        assertThat(h.service.isBluetoothScoActive).isFalse()
 
         h.service.enableBluetoothSco()
 
         assertThat(h.devices!!.selectCalls).containsExactly(7)
         assertThat(h.service.usingBluetoothSco()).isTrue()
-        assertThat(h.service.isBluetoothScoActive()).isTrue()
+        assertThat(h.service.isBluetoothScoActive).isTrue()
 
         h.service.disableBluetoothSco()
 
         assertThat(h.devices!!.clearCalls).isEqualTo(1)
         assertThat(h.service.usingBluetoothSco()).isFalse()
-        assertThat(h.service.isBluetoothScoActive()).isFalse()
+        assertThat(h.service.isBluetoothScoActive).isFalse()
     }
 
     /**
@@ -124,20 +124,20 @@ class HumlaServiceBluetoothTest {
         h.connectAndSynchronize()
         h.service.enableBluetoothSco()
         assertThat(h.devices!!.selectCalls).containsExactly(7)
-        assertThat(h.service.isBluetoothScoActive()).isTrue()
+        assertThat(h.service.isBluetoothScoActive).isTrue()
 
         h.failConnection(0, connectionError())
 
-        assertThat(h.service.getSessionState().value)
+        assertThat(h.service.sessionState.value)
             .isInstanceOf(SessionState.ConnectionLost::class.java)
         assertThat(h.service.usingBluetoothSco()).isTrue() // the wish survives the loss
-        assertThat(h.service.isBluetoothScoActive()).isFalse() // the route does not
+        assertThat(h.service.isBluetoothScoActive).isFalse() // the route does not
 
         h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS) // backoff timer
         h.synchronize(h.openSocket(1))
 
         assertThat(h.devices!!.selectCalls).containsExactly(7, 7).inOrder()
-        assertThat(h.service.isBluetoothScoActive()).isTrue()
+        assertThat(h.service.isBluetoothScoActive).isTrue()
     }
 
     @Test
@@ -150,7 +150,7 @@ class HumlaServiceBluetoothTest {
         h.service.disconnect()
         h.mainLooper.idle()
 
-        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
+        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Disconnected())
         assertThat(h.devices!!.clearCalls).isEqualTo(1)
         // The wish is not a session resource: it is the user's setting until they change it.
         assertThat(h.service.usingBluetoothSco()).isTrue()
@@ -287,7 +287,7 @@ class HumlaServiceBluetoothTest {
         h.service.disconnect()
         h.mainLooper.idle()
 
-        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
+        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Disconnected())
         h.service.connect()
         h.connectAndSynchronize(1)
         assertThat(h.devices!!.selectCalls).containsExactly(2, 1, 2).inOrder()
@@ -347,7 +347,7 @@ class HumlaServiceBluetoothTest {
 
         awaitUntil(description = "audio rebuilt without sco") { h.mainLooper.idle(); h.audioFactory.created.size == 3 }
         assertThat(h.audioFactory.configs[2].routedDeviceType).isNull()
-        assertThat(h.service.isBluetoothScoActive()).isFalse()
+        assertThat(h.service.isBluetoothScoActive).isFalse()
         assertThat(h.service.usingBluetoothSco()).isTrue() // still wanted; the headset is not there
     }
 
@@ -434,6 +434,6 @@ class HumlaServiceBluetoothTest {
         assertThat(h.warnings.filter { it == line }).hasSize(1)
         // And the wish stands: the user asked for a headset, the platform said no.
         assertThat(h.service.usingBluetoothSco()).isTrue()
-        assertThat(h.service.isBluetoothScoActive()).isFalse()
+        assertThat(h.service.isBluetoothScoActive).isFalse()
     }
 }

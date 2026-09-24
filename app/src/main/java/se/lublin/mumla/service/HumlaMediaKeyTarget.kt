@@ -8,23 +8,23 @@ class HumlaMediaKeyTarget(private val service: IHumlaService) : MediaKeyTarget {
         get() = service.isConnected
 
     override val transmitMode: Int
-        get() = service.HumlaSession().transmitMode
+        get() = service.session.transmitMode
 
     override val isTalking: Boolean
-        get() = service.HumlaSession().isTalking
+        get() = service.session.isTalking
 
     override fun setTalking(talking: Boolean) {
-        service.HumlaSession().setTalkingState(talking)
+        service.session.setTalkingState(talking)
     }
 
     override fun stopTalking() {
-        // HumlaSession() throws once disconnected, and lifecycle callers may arrive after that.
+        // `session` throws once disconnected, and lifecycle callers may arrive after that.
         if (!service.isConnected) return
-        service.HumlaSession().setTalkingState(false)
+        service.session.setTalkingState(false)
     }
 
     override fun toggleSelfMute() {
-        val session = service.HumlaSession()
+        val session = service.session
         val self = session.sessionUser ?: return
         val muted = !self.isSelfMuted
         val deafened = self.isSelfDeafened && muted

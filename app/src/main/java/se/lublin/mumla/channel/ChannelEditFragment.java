@@ -66,7 +66,7 @@ public class ChannelEditFragment extends DialogFragment {
         // If we can only make temporary channels, remove the option.
         if (mServiceProvider.getService() != null && mServiceProvider.getService().isConnected()) {
             // TODO: we probably should just stop this dialog in its tracks if we're disconnected.
-            IHumlaSession session = mServiceProvider.getService().HumlaSession();
+            IHumlaSession session = mServiceProvider.getService().getSession();
             IChannel parentChannel = session.getChannel(getParent());
             int combinedPermissions = session.getPermissions() | parentChannel.getPermissions();
             boolean canMakeChannel = (combinedPermissions & Permissions.MAKE_CHANNEL) > 0;
@@ -81,7 +81,7 @@ public class ChannelEditFragment extends DialogFragment {
                 .setView(view)
                 .setPositiveButton(isAdding() ? R.string.add : R.string.save, (dialog, which) -> {
                     if (isAdding() && mServiceProvider.getService() != null && mServiceProvider.getService().isConnected()) {
-                        mServiceProvider.getService().HumlaSession().createChannel(getParent(),
+                        mServiceProvider.getService().getSession().createChannel(getParent(),
                                 mNameField.getText().toString(),
                                 mDescriptionField.getText().toString(),
                                 Integer.parseInt(mPositionField.getText().toString()), // We can guarantee this to be an int. InputType is numberSigned.

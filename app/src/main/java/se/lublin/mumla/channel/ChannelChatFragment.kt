@@ -110,7 +110,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
 
     override fun onServiceEvent(event: HumlaEvent) {
         if (event !is HumlaEvent.UserJoinedChannel) return
-        val session = getService()?.takeIf { it.isConnected }?.HumlaSession() ?: return
+        val session = getService()?.takeIf { it.isConnected }?.session ?: return
         if (event.user == session.sessionUser && targetProvider.chatTarget == null) {
             // The user changed channels without a target: follow them.
             updateChatTargetText(null)
@@ -236,7 +236,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         if (!this::chatTextEdit.isInitialized) return
         val service = getService() ?: return
         if (!service.isConnected) return
-        val session = service.HumlaSession()
+        val session = service.session
         // Local vals: Kotlin cannot smart-cast the result of a Java getter.
         val targetUser = target?.user
         val targetChannel = target?.channel
@@ -278,7 +278,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
      */
     @VisibleForTesting
     internal fun sessionId(): Int = try {
-        getService()?.takeIf { it.isConnected }?.HumlaSession()?.sessionId ?: NO_SESSION
+        getService()?.takeIf { it.isConnected }?.session?.sessionId ?: NO_SESSION
     } catch (e: HumlaDisconnectedException) {
         NO_SESSION
     }
@@ -341,8 +341,10 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         imageProgress.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
             val html = try {
-                val maxLength = service.HumlaSession().serverSettings.imageMessageLength
-                withContext(Dispatchers.Default) { OutgoingImageEncoder.encode(bitmap, maxLength) }
+                // Without the server's limit there is nothing to fit the image to.
+                val maxLength = service.session.serverSettings?.imageMessageLength
+                if (maxLength == null) null
+                else withContext(Dispatchers.Default) { OutgoingImageEncoder.encode(bitmap, maxLength) }
             } catch (e: HumlaDisconnectedException) {
                 Log.d(TAG, "disconnected while encoding an image: $e")
                 null
@@ -378,7 +380,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
             Log.d(TAG, "getService()==null in sendMessage")
             return
         }
-        val session = service.HumlaSession()
+        val session = service.session
         val formatted = HtmlUtils.markupOutgoingMessage(message)
         val target = targetProvider.chatTarget
         val targetUser = target?.user
@@ -387,7 +389,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         when {
             targetUser != null -> session.sendUserTextMessage(targetUser.session, formatted)
             targetChannel != null -> session.sendChannelTextMessage(targetChannel.id, formatted, false)
-            else -> session.sendChannelTextMessage(session.sessionChannel.id, formatted, false)
+            else -> session.sessionChannel?.let { session.sendChannelTextMessage(it.id, formatted, false) }
         }
     }
 

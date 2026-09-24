@@ -158,7 +158,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun startsDisconnectedWithAnEmptyChatLogAndNoForegroundNotification() {
-        assertThat(service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
+        assertThat(service.connectionState).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
         assertThat(service.getMessageLog().value).isEmpty()
         assertThat(shadowOf(service).lastForegroundNotification).isNull()
     }
@@ -747,9 +747,9 @@ class MumlaServiceCharacterizationTest {
         pushToTalk(toggle = false)
 
         service.onTalkKeyDown()
-        assertThat(service.isTalking()).isTrue()
+        assertThat(service.isTalking).isTrue()
         service.onTalkKeyUp()
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.isTalking).isFalse()
     }
 
     @Test
@@ -758,13 +758,13 @@ class MumlaServiceCharacterizationTest {
         pushToTalk(toggle = true)
 
         service.onTalkKeyDown()
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.isTalking).isFalse()
         service.onTalkKeyUp()
-        assertThat(service.isTalking()).isTrue()
+        assertThat(service.isTalking).isTrue()
         service.onTalkKeyDown()
-        assertThat(service.isTalking()).isTrue()
+        assertThat(service.isTalking).isTrue()
         service.onTalkKeyUp()
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.isTalking).isFalse()
     }
 
     @Test
@@ -773,10 +773,10 @@ class MumlaServiceCharacterizationTest {
         preferences().edit().putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_VOICE).commit()
 
         service.onTalkKeyDown()
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.isTalking).isFalse()
         service.setTalkingState(true)
         service.onTalkKeyUp()
-        assertThat(service.isTalking()).isTrue()
+        assertThat(service.isTalking).isTrue()
     }
 
     @Test
@@ -784,10 +784,10 @@ class MumlaServiceCharacterizationTest {
         pushToTalk(toggle = false)
 
         service.onTalkKeyDown()
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.isTalking).isFalse()
         service.setTalkingState(true)
         service.onTalkKeyUp()
-        assertThat(service.isTalking()).isTrue()
+        assertThat(service.isTalking).isTrue()
     }
 
     @Test
@@ -796,7 +796,7 @@ class MumlaServiceCharacterizationTest {
 
         service.onTalkKeyUp()
 
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.isTalking).isFalse()
     }
 
     @Test
@@ -806,7 +806,7 @@ class MumlaServiceCharacterizationTest {
 
         service.onTalkKeyUp()
 
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.isTalking).isFalse()
     }
 
     // ---- mute and deafen from the notification ------------------------------------------------
@@ -922,9 +922,9 @@ class MumlaServiceCharacterizationTest {
         val listener = service.mHotCornerListener
 
         listener.onHotCornerDown()
-        assertThat(service.isTalking()).isTrue()
+        assertThat(service.isTalking).isTrue()
         listener.onHotCornerUp()
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.isTalking).isFalse()
     }
 
     // ---- preferences that are not audio extras --------------------------------------------------
@@ -992,7 +992,7 @@ class MumlaServiceCharacterizationTest {
 
         service.reconnect()
 
-        assertThat(service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTING)
+        assertThat(service.connectionState).isEqualTo(HumlaService.ConnectionState.CONNECTING)
     }
 
     @Test

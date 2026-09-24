@@ -306,7 +306,7 @@ class ChannelChatFragmentTest {
     @Test
     fun aDisconnectWhileSendingIsSwallowed() {
         launch()
-        every { service.HumlaSession() } throws HumlaDisconnectedException()
+        every { service.session } throws HumlaDisconnectedException()
         editor.setText("hi")
         sendButton.performClick()
         assertThat(editor.text.toString()).isEqualTo("hi")
@@ -357,7 +357,7 @@ class ChannelChatFragmentTest {
     @Test
     fun theSessionIdSurvivesADisconnect() {
         launch()
-        every { service.HumlaSession() } throws HumlaDisconnectedException()
+        every { service.session } throws HumlaDisconnectedException()
         assertThat(fragment.sessionId()).isNotEqualTo(7)
     }
 
@@ -417,7 +417,7 @@ class ChannelChatFragmentTest {
     @Test
     fun aDisconnectWhileEncodingAnImageSendsNothing() {
         launch()
-        every { service.HumlaSession() } throws HumlaDisconnectedException()
+        every { service.session } throws HumlaDisconnectedException()
         fragment.sendImage(smallBitmap())
         drainMainUntil { progress.visibility == View.GONE }
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
@@ -437,7 +437,7 @@ class ChannelChatFragmentTest {
         mockk(relaxed = true) { every { this@mockk.imageMessageLength } returns imageMessageLength }
 
     /**
-     * `isConnected()` and the throw inside `HumlaSession()` read the same state in production, so
+     * `isConnected` and the throw inside `session` read the same state in production, so
      * this disconnects both together.
      */
     private fun disconnect() {
@@ -660,7 +660,7 @@ class ChannelChatFragmentTest {
         try {
             every { session.serverSettings } returns settings(0)
             launch()
-            every { service.HumlaSession() } throws HumlaDisconnectedException()
+            every { service.session } throws HumlaDisconnectedException()
             fragment.sendImage(smallBitmap())
             drainMainUntil { progress.visibility == View.GONE }
         } finally {

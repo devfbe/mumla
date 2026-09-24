@@ -140,12 +140,12 @@ class MumlaServiceAudioPreferencesTest {
     fun `an echo cancellation override reaches the service`() {
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
-        assertThat(service.getSessionConfig().echoCancellationOverrides)
+        assertThat(service.sessionConfig.echoCancellationOverrides)
             .isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
 
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.EARPIECE, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.EARPIECE))
-        assertThat(service.getSessionConfig().echoCancellationOverrides).isEqualTo(
+        assertThat(service.sessionConfig.echoCancellationOverrides).isEqualTo(
             mapOf(AudioDeviceCategory.SPEAKER to false, AudioDeviceCategory.EARPIECE to false),
         )
     }
@@ -207,15 +207,15 @@ class MumlaServiceAudioPreferencesTest {
     fun `only an audio key reconfigures the session`() {
         val settings = Settings.getInstance(service)
         prefs.edit().putBoolean(Settings.PREF_HALF_DUPLEX, true).commit()
-        val before = service.getSessionConfig()
+        val before = service.sessionConfig
 
         for (key in listOf(Settings.PREF_USE_TTS, Settings.PREF_HOT_CORNER_KEY, Settings.PREF_PTT_SOUND, "nonsense")) {
             change(key)
-            assertThat(service.getSessionConfig()).isSameInstanceAs(before)
+            assertThat(service.sessionConfig).isSameInstanceAs(before)
         }
         change(Settings.PREF_HALF_DUPLEX)
-        assertThat(service.getSessionConfig()).isEqualTo(SessionSettings.withAudioSettings(before, settings))
-        assertThat(service.getSessionConfig().halfDuplex).isTrue()
+        assertThat(service.sessionConfig).isEqualTo(SessionSettings.withAudioSettings(before, settings))
+        assertThat(service.sessionConfig.halfDuplex).isTrue()
     }
 
     private companion object {

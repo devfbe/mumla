@@ -77,7 +77,7 @@ class MumlaServiceForegroundTest {
         service.onConnectionDisconnected(lost())
         mainLooper.idle()
 
-        assertThat(service.isReconnecting()).isTrue()
+        assertThat(service.isReconnecting).isTrue()
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
         assertThat(foregroundText()).isEqualTo(service.getString(R.string.connection_lost_reconnecting))
     }
@@ -125,7 +125,7 @@ class MumlaServiceForegroundTest {
         service.onConnectionDisconnected(lost()) // spent: Disconnected
         mainLooper.idle()
 
-        assertThat(service.isReconnecting()).isFalse()
+        assertThat(service.isReconnecting).isFalse()
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }
 
@@ -208,7 +208,7 @@ class MumlaServiceForegroundTest {
         service.cancelReconnect()
         mainLooper.idle()
 
-        assertThat(service.isReconnecting()).isFalse()
+        assertThat(service.isReconnecting).isFalse()
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
         assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
     }
@@ -253,7 +253,7 @@ class MumlaServiceForegroundTest {
 
         pressCancelReconnect()
 
-        assertThat(service.isReconnecting()).isFalse()
+        assertThat(service.isReconnecting).isFalse()
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
         assertThat(reconnectPrompt()).isNull()
         mainLooper.idleFor(Duration.ofMillis(10_000))
@@ -274,7 +274,7 @@ class MumlaServiceForegroundTest {
         pressCancelReconnect()
 
         io.mockk.verify { connections[1].disconnect() }
-        assertThat(service.isReconnecting()).isFalse()
+        assertThat(service.isReconnecting).isFalse()
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }
 

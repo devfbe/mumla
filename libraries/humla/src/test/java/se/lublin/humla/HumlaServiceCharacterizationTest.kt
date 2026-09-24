@@ -83,20 +83,20 @@ class HumlaServiceCharacterizationTest {
 
     // ---------------------------------------------------------------- lifecycle and initial state
 
-    /** A fresh service is disconnected and has no session; `HumlaSession()` gates the binder API. */
+    /** A fresh service is disconnected and has no session; `session` gates the binder API. */
     @Test
     fun startsDisconnectedWithoutSession() {
         val service = service()
 
-        assertThat(service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
-        assertThat(service.isConnected()).isFalse()
-        assertThat(service.isReconnecting()).isFalse()
-        assertThat(service.getConnectionError()).isNull()
+        assertThat(service.connectionState).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
+        assertThat(service.isConnected).isFalse()
+        assertThat(service.isReconnecting).isFalse()
+        assertThat(service.connectionError).isNull()
         assertThat(service.getConnection()).isNull()
-        assertThat(service.getTargetServer()).isNull()
+        assertThat(service.targetServer).isNull()
         assertThat(service.isSynchronized()).isFalse()
         assertThat(service.isConnectionEstablished()).isFalse()
-        assertThrows(HumlaDisconnectedException::class.java) { service.HumlaSession() }
+        assertThrows(HumlaDisconnectedException::class.java) { service.session }
     }
 
     /** onCreate's own defaults, before any extra is applied. */
@@ -104,11 +104,11 @@ class HumlaServiceCharacterizationTest {
     fun startsWithVoiceActivityTransmitAndNoVoiceTarget() {
         val service = service()
 
-        assertThat(service.getTransmitMode()).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
-        assertThat(service.getVoiceTargetId()).isEqualTo(0.toByte())
-        assertThat(service.getVoiceTargetMode()).isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
-        assertThat(service.getWhisperTarget()).isNull()
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.transmitMode).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
+        assertThat(service.voiceTargetId).isEqualTo(0.toByte())
+        assertThat(service.voiceTargetMode).isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
+        assertThat(service.whisperTarget).isNull()
+        assertThat(service.isTalking).isFalse()
     }
 
     /** SCO state comes from `AudioRouter`, not from an `ACTION_SCO_AUDIO_STATE_UPDATED` receiver. */
@@ -156,7 +156,7 @@ class HumlaServiceCharacterizationTest {
             assertThat(service.onStartCommand(intent, 0, 0)).isEqualTo(Service.START_NOT_STICKY)
         }
         assertThat(service.getConnection()).isNull()
-        assertThat(service.getTargetServer()).isNull()
+        assertThat(service.targetServer).isNull()
     }
 
     /** The configured server is the one connected to, and the state is CONNECTING on `Connecting`. */
@@ -167,8 +167,8 @@ class HumlaServiceCharacterizationTest {
         val serverInsideOnConnecting = mutableListOf<String?>()
         service.onEvents {
             if (it == HumlaEvent.Connecting) {
-                stateInsideOnConnecting += service.getConnectionState()
-                serverInsideOnConnecting += service.getTargetServer()?.host
+                stateInsideOnConnecting += service.connectionState
+                serverInsideOnConnecting += service.targetServer?.host
                 service.disconnect()
             }
         }
@@ -239,7 +239,7 @@ class HumlaServiceCharacterizationTest {
             val service = service()
             service.configure(SessionConfig(transmitMode = mode))
 
-            assertThat(service.getTransmitMode()).isEqualTo(mode)
+            assertThat(service.transmitMode).isEqualTo(mode)
             assertThat(inputMode(service)).isInstanceOf(type)
         }
     }
@@ -251,7 +251,7 @@ class HumlaServiceCharacterizationTest {
         assertThrows(IllegalArgumentException::class.java) {
             service.configure(SessionConfig(transmitMode = 99, server = server))
         }
-        assertThat(service.getSessionConfig()).isEqualTo(SessionConfig())
+        assertThat(service.sessionConfig).isEqualTo(SessionConfig())
     }
 
     /** The chosen input mode is the instance `isTalking()` reads, not a fresh copy. */
@@ -264,7 +264,7 @@ class HumlaServiceCharacterizationTest {
 
         val mode = inputMode(service) as ToggleInputMode
         assertThat(mode.isTalkingOn()).isTrue()
-        assertThat(service.isTalking()).isTrue()
+        assertThat(service.isTalking).isTrue()
     }
 
     /** Access tokens are kept even with no connection to send them on; nothing throws. */
@@ -274,7 +274,7 @@ class HumlaServiceCharacterizationTest {
 
         assertThat(service.configure(SessionConfig(accessTokens = listOf("a", "b")))).isFalse()
 
-        assertThat(service.getSessionConfig().accessTokens).isEqualTo(listOf("a", "b"))
+        assertThat(service.sessionConfig.accessTokens).isEqualTo(listOf("a", "b"))
     }
 
     // ---------------------------------------------------------------- disconnection
@@ -292,9 +292,9 @@ class HumlaServiceCharacterizationTest {
 
             service.onConnectionDisconnected(null)
 
-            assertThat(service.getConnectionState())
+            assertThat(service.connectionState)
                 .isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
-            assertThat(service.isReconnecting()).isFalse()
+            assertThat(service.isReconnecting).isFalse()
         }
     }
 
@@ -307,7 +307,7 @@ class HumlaServiceCharacterizationTest {
         val error = HumlaException("gone", HumlaException.HumlaDisconnectReason.REJECT)
         val seen = mutableListOf<Pair<HumlaException?, HumlaService.ConnectionState>>()
         service.onEvents {
-            if (it is HumlaEvent.Disconnected) seen += it.error to service.getConnectionState()
+            if (it is HumlaEvent.Disconnected) seen += it.error to service.connectionState
         }
 
         service.onConnectionDisconnected(error)
@@ -325,8 +325,8 @@ class HumlaServiceCharacterizationTest {
 
         service.onConnectionDisconnected(null)
 
-        assertThat(service.getVoiceTargetId()).isEqualTo(0.toByte())
-        assertThat(service.getWhisperTarget()).isNull()
+        assertThat(service.voiceTargetId).isEqualTo(0.toByte())
+        assertThat(service.whisperTarget).isNull()
     }
 
     // ---------------------------------------------------------------- logging
@@ -399,8 +399,8 @@ class HumlaServiceCharacterizationTest {
 
         service.unregisterWhisperTarget(3)
 
-        assertThat(service.getWhisperTarget()).isNull()
-        assertThat(service.getVoiceTargetMode())
+        assertThat(service.whisperTarget).isNull()
+        assertThat(service.voiceTargetMode)
             .isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
     }
 
@@ -412,15 +412,15 @@ class HumlaServiceCharacterizationTest {
         val service = service()
 
         val calls = listOf<Pair<String, () -> Unit>>(
-            "getTCPLatency" to { service.getTCPLatency() },
-            "getUDPLatency" to { service.getUDPLatency() },
+            "getTCPLatency" to { service.tcpLatency },
+            "getUDPLatency" to { service.udpLatency },
             "getMaxBandwidth" to { service.maxBandwidth },
-            "getServerVersion" to { service.getServerVersion() },
-            "getServerRelease" to { service.getServerRelease() },
-            "getServerOSName" to { service.getServerOSName() },
-            "getServerOSVersion" to { service.getServerOSVersion() },
-            "getSessionId" to { service.getSessionId() },
-            "getCodec" to { service.getCodec() },
+            "getServerVersion" to { service.serverVersion },
+            "getServerRelease" to { service.serverRelease },
+            "getServerOSName" to { service.serverOSName },
+            "getServerOSVersion" to { service.serverOSVersion },
+            "getSessionId" to { service.sessionId },
+            "getCodec" to { service.codec },
             "moveUserToChannel" to { service.moveUserToChannel(1, 2) },
             "joinChannel" to { service.joinChannel(2) },
             "createChannel" to { service.createChannel(0, "n", "d", 0, false) },
@@ -436,13 +436,13 @@ class HumlaServiceCharacterizationTest {
             "removeChannel" to { service.removeChannel(1) },
             "setMuteDeafState" to { service.setMuteDeafState(1, true, false) },
             "setSelfMuteDeafState" to { service.setSelfMuteDeafState(true, false) },
-            "getSessionUser" to { service.getSessionUser() },
-            "getSessionChannel" to { service.getSessionChannel() },
+            "getSessionUser" to { service.sessionUser },
+            "getSessionChannel" to { service.sessionChannel },
             "getUser" to { service.getUser(1) },
             "getChannel" to { service.getChannel(1) },
-            "getRootChannel" to { service.getRootChannel() },
+            "getRootChannel" to { service.rootChannel },
             "getPermissions" to { service.permissions },
-            "getServerSettings" to { service.getServerSettings() },
+            "getServerSettings" to { service.serverSettings },
             "sendUserTextMessage" to { service.sendUserTextMessage(1, "m") },
             "sendChannelTextMessage" to { service.sendChannelTextMessage(1, "m", false) },
         )
@@ -469,19 +469,19 @@ class HumlaServiceCharacterizationTest {
     fun theSessionCallsThatDoNotDependOnAConnectionStillAnswer() {
         val service = service()
 
-        assertThat(service.getTransmitMode()).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
-        assertThat(service.isTalking()).isFalse()
-        assertThat(service.getVoiceTargetId()).isEqualTo(0.toByte())
-        assertThat(service.getVoiceTargetMode())
+        assertThat(service.transmitMode).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
+        assertThat(service.isTalking).isFalse()
+        assertThat(service.voiceTargetId).isEqualTo(0.toByte())
+        assertThat(service.voiceTargetMode)
             .isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
-        assertThat(service.getWhisperTarget()).isNull()
+        assertThat(service.whisperTarget).isNull()
         service.setTalkingState(true)
-        assertThat(service.isTalking()).isTrue()
+        assertThat(service.isTalking).isTrue()
         // The pipeline is asynchronous: -1 while none is up.
-        assertThat(service.getCurrentBandwidth()).isEqualTo(-1)
+        assertThat(service.currentBandwidth).isEqualTo(-1)
         // The Bluetooth wish outlives every session, so these answer while disconnected.
         assertThat(service.usingBluetoothSco()).isFalse()
-        assertThat(service.isBluetoothScoActive()).isFalse()
+        assertThat(service.isBluetoothScoActive).isFalse()
         service.enableBluetoothSco()
         assertThat(service.usingBluetoothSco()).isTrue()
         service.disableBluetoothSco()

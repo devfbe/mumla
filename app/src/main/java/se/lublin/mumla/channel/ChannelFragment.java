@@ -94,7 +94,7 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
         }
         int selfSession;
         try {
-            selfSession = getService().HumlaSession().getSessionId();
+            selfSession = getService().getSession().getSessionId();
         } catch (HumlaDisconnectedException|IllegalStateException e) {
             Log.d(TAG, "exception in onUserTalkStateUpdated: " + e);
             return;
@@ -121,7 +121,7 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
         }
         int selfSession;
         try {
-            selfSession = getService().HumlaSession().getSessionId();
+            selfSession = getService().getSession().getSessionId();
         } catch (IllegalStateException e) {
             Log.d(TAG, "exception in onUserStateUpdated: " + e);
             return;
@@ -197,7 +197,7 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
                 if (getService() == null || !getService().isConnected())
                     return;
 
-                IHumlaSession session = getService().HumlaSession();
+                IHumlaSession session = getService().getSession();
                 if (session.getVoiceTargetMode() == VoiceTargetMode.WHISPER) {
                     byte target = session.getVoiceTargetId();
                     session.setVoiceTargetId((byte) 0);
@@ -264,7 +264,7 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
         // A talk state set elsewhere (e.g. a headset key with the screen off) is not ours to clear.
         if (mTalkButtonHeld && getService() != null && getService().isConnected() &&
             !Settings.getInstance(getActivity()).isPushToTalkToggle()) {
-            getService().HumlaSession().setTalkingState(false);
+            getService().getSession().setTalkingState(false);
         }
         mTalkButtonHeld = false;
     }
@@ -290,7 +290,7 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
             return;
         }
 
-        IHumlaSession session = getService().HumlaSession();
+        IHumlaSession session = getService().getSession();
         VoiceTargetMode mode = session.getVoiceTargetMode();
         if (mode == VoiceTargetMode.WHISPER) {
             WhisperTarget target = session.getWhisperTarget();
@@ -323,7 +323,7 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
         if (getService() != null && getService().isConnected()) {
             IUser self = null;
             try {
-                self = getService().HumlaSession().getSessionUser();
+                self = getService().getSession().getSessionUser();
             } catch (HumlaDisconnectedException|IllegalStateException e) {
                 Log.d(TAG, "exception in configureInput: " + e);
             }

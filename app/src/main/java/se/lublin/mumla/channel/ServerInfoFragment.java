@@ -78,12 +78,12 @@ public class ServerInfoFragment extends HumlaServiceFragment {
         if(getService() == null || !getService().isConnected())
             return;
 
-        IHumlaSession session = getService().HumlaSession();
+        IHumlaSession session = getService().getSession();
 
         mProtocolView.setText(getString(R.string.server_info_protocol, session.getServerRelease()));
         mOSVersionView.setText(getString(R.string.server_info_version, session.getServerOSName(), session.getServerOSVersion()));
-        mTCPLatencyView.setText(getString(R.string.server_info_latency, (float)session.getTCPLatency()*Math.pow(10, -3)));
-        mUDPLatencyView.setText(getString(R.string.server_info_latency, (float)session.getUDPLatency()*Math.pow(10, -3)));
+        mTCPLatencyView.setText(getString(R.string.server_info_latency, (float)session.getTcpLatency()*Math.pow(10, -3)));
+        mUDPLatencyView.setText(getString(R.string.server_info_latency, (float)session.getUdpLatency()*Math.pow(10, -3)));
         // TODO SRV note also getHost,Port?
         mHostView.setText(getString(R.string.server_info_host,
                 getService().getTargetServer().getSrvHost(),

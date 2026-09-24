@@ -76,7 +76,7 @@ class ChannelListAdapterRebuildTest {
         every { server.isSaved } returns true
         service = mockk(relaxed = true)
         every { service.isConnected } returns connected
-        every { service.HumlaSession() } returns session
+        every { service.session } returns session
         every { service.targetServer } returns server
         database = mockk(relaxed = true)
         if (pinnedChannels != null) {

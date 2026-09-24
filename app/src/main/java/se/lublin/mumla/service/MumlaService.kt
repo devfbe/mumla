@@ -149,7 +149,7 @@ class MumlaService : HumlaService(),
 
     private fun onUserStateUpdated(user: IUser) {
         val selfSession = try {
-            getSessionId()
+            sessionId
         } catch (e: IllegalStateException) {
             Log.d(TAG, "exception in onUserStateUpdated: $e")
             return
@@ -188,7 +188,7 @@ class MumlaService : HumlaService(),
 
         // mTTS is non-null exactly while the setting is on (the preference listener owns it).
         val tts = mTTS
-        if (tts != null && formattedTtsMessage.length <= TTS_THRESHOLD && getSessionUser()?.isSelfDeafened == false) {
+        if (tts != null && formattedTtsMessage.length <= TTS_THRESHOLD && sessionUser?.isSelfDeafened == false) {
             @Suppress("DEPRECATION")
             tts.speak(formattedTtsMessage, TextToSpeech.QUEUE_ADD, null)
         }
@@ -204,13 +204,13 @@ class MumlaService : HumlaService(),
     private fun onUserTalkStateUpdated(user: IUser) {
         var selfSession = -1
         try {
-            selfSession = getSessionId()
+            selfSession = sessionId
         } catch (e: IllegalStateException) {
             Log.d(TAG, "exception in onUserTalkStateUpdated: $e")
         }
 
         val selfStartedTalking = user.session == selfSession && user.talkState == TalkState.TALKING
-        val pttClick = mPTTSoundEnabled && getTransmitMode() == Constants.TRANSMIT_PUSH_TO_TALK
+        val pttClick = mPTTSoundEnabled && transmitMode == Constants.TRANSMIT_PUSH_TO_TALK
         if (pttClick && selfStartedTalking && isConnectionEstablished()) {
             keyClickSound()
         }
@@ -242,7 +242,7 @@ class MumlaService : HumlaService(),
 
         mMediaSession = MumlaMediaSession(this, HumlaMediaKeyTarget(this), mSettings).also { it.attach(this) }
 
-        mServiceScope.launch { getSessionState().collect { renderSessionState(it) } }
+        mServiceScope.launch { sessionState.collect { renderSessionState(it) } }
     }
 
     /**
@@ -401,7 +401,7 @@ class MumlaService : HumlaService(),
         }
         if (key in SessionSettings.AUDIO_KEYS) {
             // The result is ignored: audio settings never require a reconnect.
-            configure(SessionSettings.withAudioSettings(getSessionConfig(), mSettings))
+            configure(SessionSettings.withAudioSettings(sessionConfig, mSettings))
         }
 
         if (requiresReconnect && isConnectionEstablished()) {
@@ -438,7 +438,7 @@ class MumlaService : HumlaService(),
     }
 
     override fun onMuteToggled() {
-        val user = getSessionUser()
+        val user = sessionUser
         if (isConnectionEstablished() && user != null) {
             val muted = !user.isSelfMuted
             val deafened = user.isSelfDeafened && muted
@@ -447,7 +447,7 @@ class MumlaService : HumlaService(),
     }
 
     override fun onDeafenToggled() {
-        val user = getSessionUser()
+        val user = sessionUser
         if (isConnectionEstablished() && user != null) {
             setSelfMuteDeafState(!user.isSelfDeafened, !user.isSelfDeafened)
         }
@@ -527,7 +527,7 @@ class MumlaService : HumlaService(),
     override fun onTalkKeyUp() {
         if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == mSettings.getInputMethod()) {
             if (mSettings.isPushToTalkToggle()) {
-                setTalkingState(!isTalking()) // Toggle talk state
+                setTalkingState(!isTalking) // Toggle talk state
             } else {
                 setTalkingState(false) // Stop talking (idempotent)
             }

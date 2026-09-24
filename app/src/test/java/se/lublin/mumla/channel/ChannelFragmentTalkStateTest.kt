@@ -209,7 +209,7 @@ class ChannelFragmentTalkStateTest {
     }
 
     /**
-     * `HumlaSession()` throws when `isConnected()` is false, so a pause after disconnect must not
+     * `session` throws when `isConnected` is false, so a pause after disconnect must not
      * reach for it.
      */
     @Test

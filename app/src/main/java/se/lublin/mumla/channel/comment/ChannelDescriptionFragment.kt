@@ -30,7 +30,7 @@ class ChannelDescriptionFragment : AbstractCommentFragment() {
         observeComment(service) { event ->
             (event as? HumlaEvent.ChannelStateUpdated)?.channel?.takeIf { it.id == channelId }?.description
         }
-        service.HumlaSession().requestChannelDescription(channelId)
+        service.session.requestChannelDescription(channelId)
     }
 
     override fun editComment(service: IHumlaService, comment: String) {

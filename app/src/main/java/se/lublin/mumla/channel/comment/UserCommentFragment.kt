@@ -30,11 +30,11 @@ class UserCommentFragment : AbstractCommentFragment() {
         observeComment(service) { event ->
             (event as? HumlaEvent.UserStateUpdated)?.user?.takeIf { it.session == session }?.comment
         }
-        service.HumlaSession().requestComment(session)
+        service.session.requestComment(session)
     }
 
     override fun editComment(service: IHumlaService, comment: String) {
         if (!service.isConnected) return
-        service.HumlaSession().setUserComment(session, comment)
+        service.session.setUserComment(session, comment)
     }
 }

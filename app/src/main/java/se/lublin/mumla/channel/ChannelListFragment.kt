@@ -86,7 +86,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
         val service = service?.takeIf { it.isConnected } ?: return
         val selfSession = try {
-            service.HumlaSession().sessionId
+            service.session.sessionId
         } catch (e: HumlaDisconnectedException) {
             Log.d(TAG, "exception in onUserJoinedChannel: $e")
             null
@@ -173,7 +173,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
         val service = service
         if (service != null && service.isConnected) {
-            val session = service.HumlaSession()
+            val session = service.session
 
             // Color the action bar icons to the primary text color of the theme, TODO move this elsewhere
             val foregroundColor = requireActivity().theme
@@ -222,10 +222,10 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
                 val itemType = cursor.getString(typeColumn)
                 val itemId = cursor.getInt(dataIdColumn)
 
-                val session = service.HumlaSession()
+                val session = service.session
                 return when (itemType) {
                     ChannelSearchProvider.INTENT_DATA_CHANNEL -> {
-                        if (session.sessionChannel.id != itemId) {
+                        if (session.sessionChannel?.id != itemId) {
                             session.joinChannel(itemId)
                         } else {
                             scrollToChannel(itemId)
@@ -269,7 +269,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
     /** The session, while there is a connection to have one; the chooser acts on nothing else. */
     private fun connectedSession(): IHumlaSession? =
-        service?.takeIf { it.isConnected }?.HumlaSession()
+        service?.takeIf { it.isConnected }?.session
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == R.id.menu_audio_device) {
@@ -311,7 +311,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         if (service == null || !service.isConnected) {
             return super.onOptionsItemSelected(item)
         }
-        val session = service.HumlaSession()
+        val session = service.session
 
         return when (item.itemId) {
             R.id.menu_mute_button -> {
