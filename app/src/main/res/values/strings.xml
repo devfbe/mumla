@@ -370,4 +370,10 @@
     <string name="audioTestMicrophone">Test microphone</string>
     <string name="audioTestMicrophoneSum">Shows your live input level while this is on. Other apps\' audio may get quieter meanwhile.</string>
     <string name="inputLevelMeterIdle">Turn on “Test microphone” to see your input level.</string>
+    <string name="battery_optimization_title">Background connection</string>
+    <string name="battery_optimization_unrestricted">Unrestricted</string>
+    <string name="battery_optimization_optimized">Optimized – tap to allow background use</string>
+    <string name="battery_optimization_prompt_title">Keep Mumla connected in the background?</string>
+    <string name="battery_optimization_prompt_message">Battery optimization can close Mumla while the screen is off, which drops you from the server. Allow Mumla to run in the background to stay connected. You can change this later under Settings › General › Background connection.</string>
+    <string name="battery_optimization_prompt_decline">Not now</string>
 </resources>

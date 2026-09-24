@@ -515,6 +515,9 @@ class Settings private constructor(private val context: Context) {
         const val PREF_MEDIA_BUTTON_ACTION = "media_button_action"
         const val DEFAULT_MEDIA_BUTTON_ACTION = "auto"
 
+        /** The general settings row for the battery-optimization exemption; stores nothing. */
+        const val PREF_BATTERY_OPTIMIZATION = "battery_optimization"
+
         /** True once the battery-optimization exemption has been offered. */
         const val PREF_BATTERY_OPTIMIZATION_ASKED = "battery_optimization_asked"
         const val DEFAULT_BATTERY_OPTIMIZATION_ASKED = false
