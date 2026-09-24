@@ -168,10 +168,15 @@ A4. **Bluetooth SCO desired state.** `bluetoothScoWanted` is set only by
     `AudioManager.setCommunicationDevice` with the first `TYPE_BLUETOOTH_SCO`
     device instead of `startBluetoothSco`; `usingBluetoothSco()` reports the
     wanted state, a separate `isBluetoothScoActive()` reports the actual state.
+    *Superseded 2026-09-24 (4.2 a):* `ScoRouter` became `AudioRouter`, which routes
+    every device, not only SCO; the wish is the chooser's `choice` plus
+    `pref_bluetooth_sco`.
 A5. **UDP recovery.** On `onUDPConnectionError` set `usingUdp = false` so outgoing
     voice tunnels over TCP, then restart the UDP thread with backoff; the
     UDP-vs-TCP decision uses deltas over a 20 s window instead of cumulative
     good counters; a missing UDP ping reply for 15 s switches to TCP.
+    *Addendum 2026-09-24 (4.2 b):* the ping itself is in the legacy form a 1.5 server
+    accepts.
 A6. **Foreground service robustness.** `startForeground` is wrapped; on
     `ForegroundServiceStartNotAllowedException`/`SecurityException` the service
     logs, emits a `ConnectionWarning` to the chat log and shows the reconnect
@@ -202,6 +207,8 @@ B3. **Echo cancellation via WebRTC APM.** Vendor `webrtc-audio-processing`
     build files. The playback path feeds the far-end signal
     (`AudioOutput` mixed frames) to `WebRtcApm.analyzeReverseStream` on every
     played frame. Settings: "Echo cancellation: None / Android / WebRTC".
+    *Superseded 2026-09-24 (4.2 a):* no echo setting any more; AEC3 or none per
+    routed device type, and the Android canceller is gone.
 B4. **RNNoise.** Submodule `xiph/rnnoise` at the latest release tag; the model
     weights file is checked in (or fetched by a documented, pinned CMake step —
     plan decides, reproducibility required). Settings: "Noise suppression:
@@ -216,6 +223,9 @@ B6. **Android audiofx.** `NoiseSuppressor` and `AutomaticGainControl` attached t
     the `AudioRecord` session when the user selects them (settings toggles),
     following the existing `AcousticEchoCanceler` pattern; `VOICE_COMMUNICATION`
     source and `MODE_IN_COMMUNICATION` whenever any effect or WebRTC AEC is active.
+    *Superseded 2026-09-24 (4.2 a):* `AcousticEchoCanceler` is no longer attached, so
+    there is no such pattern to follow; the session holds `MODE_IN_COMMUNICATION`
+    regardless (the router's), the `VOICE_COMMUNICATION` source rule stands.
 B7. **Silence detection.** `AudioInput` registers an `AudioRecordingCallback`;
     on `isClientSilenced()` it reports `CaptureState.Silenced` to `AudioHandler`,
     which surfaces a warning (stream A8) and retries capture after 2 s.
@@ -267,6 +277,9 @@ P1. **MediaSession push-to-talk.** `MumlaMediaSession` (`MediaSessionCompat`)
 P2. **Bluetooth as persistent setting** (`pref_bluetooth_sco`, default off),
     the menu toggle writes the preference; stream A's `bluetoothScoWanted` is
     initialized from it on connect.
+    *Superseded 2026-09-24 (4.2 a):* the preference now means "use a Bluetooth
+    headset automatically", defaults to on, and the menu toggle is replaced by the
+    audio device chooser.
 P3. **Runtime permissions:** `BLUETOOTH_CONNECT` requested before SCO is used;
     `POST_NOTIFICATIONS` flow kept; `RECORD_AUDIO` rationale dialog.
 P4. **Battery optimization exemption** offered once (dismissable) after the
@@ -1503,6 +1516,10 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   caller was the menu path P7 deleted), so whoever displays the wish reads the
   preference — otherwise the UI has two truths again, which is the defect class this
   whole project has been removing.
+  *Superseded 2026-09-24 (4.2 a):* `ScoRouter` and `ScoRouter.wanted` no longer exist.
+  `AudioRouter.choice` (the chooser's pick for this session) replaced the in-memory wish;
+  `pref_bluetooth_sco` still carries the standing one and reaches the router as
+  `bluetoothAutomatic`, derived state as ruled here.
 
 - **Six concurrent agents saturate this machine; the wall-clock lever has a ceiling (measured).**
   Reported from inside a run: **load 12–18 with 12 parallel Gradle processes from four
@@ -1736,6 +1753,65 @@ because `.superpowers/sdd/` is gitignored — a ledger disappears with its workt
   the opposite of what it claims. `shadowOf(bitmap).createdFromBitmap` yields the
   source instance a scaled bitmap was made from, which makes the chain
   sample → rotate → fit checkable link by link.
+
+### 4.2 Addenda, 2026-09-24
+
+a. **`AudioRouter` replaces `ScoRouter`; the device chooser is the one place for output,
+   handset mode and echo cancellation** (`2bd3006a`, `3351732b`, `80eb1c87`, `ca7d379e`,
+   `167d0f2e`, `11d2a497`). The channel menu's chooser lists earpiece, speaker, wired and
+   USB headsets and Bluetooth headsets by name and hands a tap to
+   `IHumlaSession.selectAudioDevice`. The default is Bluetooth (when "use a Bluetooth headset
+   automatically", `pref_bluetooth_sco`, now default on, allows it), then a plugged-in
+   headset, then the speaker, or the earpiece when `default_output` says so; every default
+   is routed explicitly. **The app holds `MODE_IN_COMMUNICATION` for the whole session**:
+   the router takes it in `engage()` and gives `MODE_NORMAL` back in `disengage()`, and
+   playback is always `STREAM_VOICE_CALL` (`Settings.PLAYBACK_STREAM`), the stream that
+   follows the route and that the volume keys adjust.
+   **Handset mode is the earpiece route:** the handset switch is gone; `handset_mode=true`
+   migrates to `default_output=earpiece` unless one was already set, and the key is removed.
+   The proximity lock follows the earpiece route, whoever chose it.
+   **Echo cancellation follows the device type** (`AudioDeviceCategory`): AEC3 on for
+   speaker and earpiece, off for Bluetooth, wired and USB. A switch under the devices
+   overrides it for the active type, stored per type (`echo_cancellation_<category>`) and
+   applied again whenever such a device is routed. Removed: the echo setting, the channel
+   menu's echo submenu, `EXTRAS_ECHO_CANCELLATION_METHOD`, the "system" option
+   (`AcousticEchoCanceler`, `EchoCancellationMode.ANDROID`); the stored
+   `echo_cancellation_method` key is deleted on first read and a stored "system" reads as none.
+   Entries above that still describe the `AcousticEchoCanceler` pattern, the
+   None/Android/WebRTC setting or `ScoRouter.wanted` are marked superseded in place.
+   `AudioHandler` still sets the mode itself when a canceller or effect is on (redundant, the
+   mode is idempotent) and keeps a speaker-claim branch for a non-voice-call stream that the
+   app no longer reaches; both are left for whoever makes `AudioHandler` testable.
+b. **UDP ping in the legacy form** (`753df51b`, `5e39924b`). Humla announces 1.2.5, so a 1.5
+   server decodes the ping with `decodePing_legacy`: after the header it accepts at most nine
+   bytes read as a Mumble varint, or the 12-byte extended-information request. The old
+   16-byte ping (raw 8-byte timestamp plus padding) is neither and was dropped, so every
+   session fell back to TCP after 15 s. The ping is now header plus timestamp as varint, and
+   the reply is read the same way; a malformed reply is ignored. Pre-1.5 servers echo it
+   unread. Found on the way: `PacketBuffer` read and wrote the four- and eight-byte varint
+   forms wrong (sign extension, a 24-bit shift for `<< 56`, a sign test that was never true),
+   which the timestamp hits after 36 and 71 minutes.
+c. **Translations.** Upstream pull requests carry base (English) strings only; translations
+   come through Weblate. AI translations exist only in this fork, each in a separate
+   `feat(l10n)` commit, so they can be left out of anything sent upstream.
+d. **The mini level bar in the main window is dropped** (user decision). The level meter
+   stays in the audio settings only.
+e. **Defects found and fixed since the scope cut:**
+   - `AudioOutput` read `AudioTrack.getMinBufferSize` (bytes) as samples, so the track got
+     half the system minimum (`a7ce90a7`).
+   - `queueVoiceData` took `mPacketLock` without `finally`; a failed speech build left it held
+     and `stopPlaying` hung (`e5c06d8f`).
+   - A codec switch destroyed the old speech while it was still in the mix map, so the
+     playback thread could decode through a freed jitter buffer (`9fedfc97`).
+   - `stopPlaying` right after `startPlaying` missed the not-yet-running thread or lost its
+     `notify()`, leaving the thread playing or the join hanging (`58da3493`).
+   - `cancelReconnect` in `Reconnecting` left the attempt in flight running (`33ff614a`).
+   - A disconnect while in `ConnectionLost` did not release the wake lock and connectivity
+     receiver (`2f4a38a3`).
+   - `Closeable` leaks: trust store files, the certificate import document, the public
+     server list download and its UDP ping socket, SQLite cursors (`b210cc3c`, `74b8a768`,
+     `b7440cd6`, `402f4d4f`, `3a0c94cd`, `05ecd9bf`); debug builds now log leaked closeables
+     with their stack trace (`dbb17817`).
 
 ## 5. Ordering and integration
 
