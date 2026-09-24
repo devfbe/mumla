@@ -42,11 +42,7 @@ import se.lublin.mumla.R;
 import se.lublin.mumla.db.DatabaseProvider;
 import se.lublin.mumla.db.PublicServer;
 
-/**
- * Displays a list of servers, and allows the user to connect and edit them.
- * @author morlunk
- *
- */
+/** Displays a list of servers, and allows the user to connect and edit them. */
 public class FavouriteServerListFragment extends Fragment implements OnItemClickListener, FavouriteServerAdapter.FavouriteServerAdapterMenuListener {
 
     private ServerConnectHandler mConnectHandler;
@@ -121,7 +117,6 @@ public class FavouriteServerListFragment extends Fragment implements OnItemClick
     }
 
     public void shareServer(Server server) {
-        // Build Mumble server URL
         String serverUrl = "mumble://" + server.getHost()
             + (server.getPort() == 0 ? "" : ":" + server.getPort()) + "/";
 

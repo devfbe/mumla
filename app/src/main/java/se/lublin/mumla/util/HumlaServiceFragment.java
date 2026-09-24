@@ -27,10 +27,7 @@ import se.lublin.humla.IHumlaService;
 import se.lublin.humla.util.IHumlaObserver;
 import se.lublin.mumla.service.IMumlaService;
 
-/**
- * Fragment class intended to make binding the Humla service to fragments easier.
- * Created by andrew on 04/08/13.
- */
+/** Fragment class intended to make binding the Humla service to fragments easier. */
 public abstract class HumlaServiceFragment extends Fragment {
 
     private HumlaServiceProvider mServiceProvider;
@@ -65,7 +62,7 @@ public abstract class HumlaServiceFragment extends Fragment {
         super.onDestroy();
     }
 
-    /** The definitive place where data from the service will be used to initialize the fragment. Only called once per bind, whether the fragment loads first or the service. */
+    /** Initializes the fragment from the service; called once per bind, whichever loads first. */
     public void onServiceBound(IHumlaService service) { }
 
     public void onServiceUnbound() { }

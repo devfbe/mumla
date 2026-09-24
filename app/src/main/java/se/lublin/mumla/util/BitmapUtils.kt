@@ -4,15 +4,11 @@ import android.graphics.Bitmap
 
 object BitmapUtils {
     /**
-     * Scales [image] down so it fits within [maxWidth] x [maxHeight] while keeping the aspect ratio.
+     * Scales [image] down to fit within [maxWidth] x [maxHeight], keeping the aspect ratio. Never
+     * upscales (an image within bounds is returned as the same instance); the scaled side is at
+     * least one pixel.
      *
-     * Never upscales: an image already within the bounds is returned as the very same instance, not
-     * a copy. The scaled side is floored at one pixel, so an extreme aspect ratio cannot collapse to
-     * a zero-sized bitmap.
-     *
-     * @throws IllegalArgumentException if [maxWidth] or [maxHeight] is not positive. Both are
-     *   caller-supplied limits, never image data, so a non-positive one is a programming error; the
-     *   previous version either ignored it silently or failed deep inside [Bitmap.createScaledBitmap].
+     * @throws IllegalArgumentException if [maxWidth] or [maxHeight] is not positive.
      */
     @JvmStatic
     fun resizeKeepingAspect(image: Bitmap, maxWidth: Int, maxHeight: Int): Bitmap {

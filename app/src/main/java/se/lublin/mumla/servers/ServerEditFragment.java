@@ -81,8 +81,7 @@ public class ServerEditFragment extends DialogFragment {
     @Override
     public void onStart() {
         super.onStart();
-        // Override positive button to not automatically dismiss on press.
-        // We can't accomplish this with AlertDialog.Builder.
+        // Override the positive button so it does not dismiss; AlertDialog.Builder can't do this.
         ((AlertDialog)getDialog()).getButton(Dialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -157,9 +156,7 @@ public class ServerEditFragment extends DialogFragment {
         try {
             port = Integer.parseInt((mPortEdit).getText().toString());
         } catch (final NumberFormatException ex) {
-            // Setting 0, meaning that port isn't configured. Consumers of
-            // Server.getPort() will have to deal with that. Like displaying
-            // nothing, looking up SRV record, using Constants.DEFAULT_PORT.
+            // 0 means "not configured"; consumers fall back to SRV lookup or the default port.
             port = 0;
         }
 
@@ -169,7 +166,6 @@ public class ServerEditFragment extends DialogFragment {
         if (username.equals(""))
             username = mUsernameEdit.getHint().toString();
 
-        // Inherit database ID of provided server.
         long id;
         if (getServer() != null) {
             id = getServer().getId();

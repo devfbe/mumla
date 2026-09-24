@@ -22,10 +22,7 @@ import java.util.List;
 
 import se.lublin.humla.model.IChannel;
 
-/**
- * Tools for dealing with the recursive user-channel hierarchy.
- * Created by andrew on 18/10/14.
- */
+/** Tools for dealing with the recursive user-channel hierarchy. */
 public class ModelUtils {
     /**
      * Flattens the channel hierarchy, returning an array of channels in hierarchical order.

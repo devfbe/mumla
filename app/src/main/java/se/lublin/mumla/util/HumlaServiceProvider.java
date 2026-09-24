@@ -19,9 +19,6 @@ package se.lublin.mumla.util;
 
 import se.lublin.mumla.service.IMumlaService;
 
-/**
- * Created by andrew on 03/08/13.
- */
 public interface HumlaServiceProvider {
     IMumlaService getService();
     void addServiceFragment(HumlaServiceFragment fragment);
