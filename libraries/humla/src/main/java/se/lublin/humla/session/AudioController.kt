@@ -29,14 +29,12 @@ import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.util.HumlaLogger
 
 /**
- * Owns the audio pipeline's lifecycle on the [THREAD_NAME] HandlerThread (spec A2).
+ * Owns the audio pipeline's lifecycle on the [THREAD_NAME] HandlerThread.
  *
- * Every public method posts and returns; creation and teardown - the latter joins the capture and
- * playback threads - run on the control thread, never on the caller's. [Listener] callbacks are
- * posted to [mainHandler], which is the main looper's unless a caller says otherwise.
- *
- * Confinement: [session] is touched only on the control thread. [running] is written there too and
- * is volatile because [isRunning] and [currentBandwidth] are read from whatever thread asks.
+ * Every public method posts and returns; creation and teardown (which joins the capture and
+ * playback threads) run on the control thread. [Listener] callbacks are posted to [mainHandler].
+ * [session] is confined to the control thread; [running] is volatile because [isRunning] and
+ * [currentBandwidth] may be read from any thread.
  */
 class AudioController(
     private val context: Context,
@@ -61,17 +59,12 @@ class AudioController(
     )
 
     /**
-     * A pipeline that is up, with the registry its handlers were added to. Carrying the registry
-     * here rather than reading it back out of [session] is what makes teardown unregister from the
-     * registry that holds the handlers, whatever [session] has become in between.
+     * A pipeline that is up, with the registry its handlers were added to, so teardown unregisters
+     * from that registry whatever [session] has become since.
      */
     private class Running(val audio: ManagedAudio, val registry: MessageHandlerRegistry)
 
-    /**
-     * Not private, so a test can assert on the thread itself. Started eagerly: the service builds
-     * one controller in onCreate and quits it in onDestroy, so there is no window in which the
-     * thread would be paid for and not wanted.
-     */
+    /** Not private so tests can assert on the thread. Started eagerly; lives as long as the service. */
     internal val thread = HandlerThread(THREAD_NAME).apply { start() }
     private val handler = Handler(thread.looper)
 
@@ -97,19 +90,9 @@ class AudioController(
     }
 
     /**
-     * Applies new settings, and rebuilds the pipeline if one is up and the settings really differ.
-     *
-     * Two decisions, both here rather than at the call sites, because a rebuild is an audible gap
-     * and this is the one place every caller passes through (spec 4.04: one bottleneck instead of
-     * N entry guards).
-     *
-     * - Nothing differs, nothing is rebuilt. The config is compared by value; the input mode by
-     *   identity, because IInputMode carries per-connection state and has no equality of its own.
-     *   Without this, a Bluetooth route that reports the state it already had - the SCO listener
-     *   passes the config on unconditionally - tears the pipeline down and builds it again.
-     * - A pipeline that never came up is not rebuilt, which is the pre-existing rule:
-     *   `HumlaService.configureExtras` reloaded audio only `if (mAudioHandler != null &&
-     *   mAudioHandler.isInitialized())`, and a failed initialize left that field null.
+     * Applies new settings, and rebuilds the pipeline if one is up and the settings really differ
+     * (a rebuild is an audible gap). The config is compared by value, the input mode by identity
+     * (it carries per-connection state). A pipeline that never came up is not rebuilt.
      */
     fun reconfigure(config: AudioConfig, inputMode: IInputMode) {
         handler.post {
@@ -125,9 +108,7 @@ class AudioController(
     }
 
     /**
-     * Retargets voice. The id goes into [session] as well as into the running pipeline, so the next
-     * rebuild starts out targeting it rather than transmitting to the channel until something
-     * repeats the call.
+     * Retargets voice. The id is stored in [session] too, so the next rebuild keeps targeting it.
      */
     fun setVoiceTargetId(id: Byte) {
         handler.post {
@@ -140,11 +121,7 @@ class AudioController(
     fun shutdown() {
         handler.post {
             stopRunning()
-            // Measured, not argued: deleting this line alone leaves all 273 tests green, because
-            // start() overwrites the session and reconfigure() needs a running pipeline. It stays
-            // as a retention measure - the session holds the connection that acts as the registry,
-            // the session user and the input mode - and it is the one line in this class with no
-            // behavioural observable. Do not read it as protected.
+            // Drop the reference so the session (connection, user, input mode) can be collected.
             session = null
         }
     }
@@ -152,8 +129,8 @@ class AudioController(
     /** Tears the pipeline down and stops the control thread (service teardown). */
     fun quit() {
         shutdown()
-        // quitSafely, and after the post: a quit that ran first would refuse that message and leave
-        // the capture and playback threads running for the life of the process.
+        // quitSafely, after the post: quitting first would drop that message and leave the capture
+        // and playback threads running.
         thread.quitSafely()
     }
 
@@ -166,10 +143,8 @@ class AudioController(
             running = Running(audio, s.registry)
             mainHandler.post { listener.onAudioStarted() }
         } catch (e: Exception) {
-            // Exception, not AudioException: AudioTrack and AudioRecord construction throw
-            // unchecked on a device, and an unchecked throw here would kill the control thread -
-            // after which every start, reconfigure and shutdown is dropped in silence, which is
-            // the failure spec A8 exists to prevent.
+            // Exception, not AudioException: AudioTrack/AudioRecord construction can throw
+            // unchecked, which would kill the control thread and silently drop all later messages.
             Log.e(TAG, "Audio initialization failed", e)
             mainHandler.post { listener.onAudioFailed(e.message ?: e.javaClass.simpleName) }
         }
@@ -180,8 +155,8 @@ class AudioController(
         running = null
         r.registry.removeTCPMessageHandler(r.audio.tcpListener)
         r.registry.removeUDPMessageHandler(r.audio.udpListener)
-        // Before shutdown(), not after: a pipeline that reports a warning on its way down would
-        // otherwise post a message about a session the user has already left.
+        // Before shutdown(): a warning posted on the way down would refer to a session the user
+        // has already left.
         r.audio.setWarningListener(null)
         r.audio.shutdown()
     }

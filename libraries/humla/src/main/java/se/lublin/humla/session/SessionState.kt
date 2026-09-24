@@ -3,7 +3,7 @@ package se.lublin.humla.session
 import se.lublin.humla.util.HumlaException
 
 /**
- * Lifecycle of one server session as seen by the service and the UI (spec A3).
+ * Lifecycle of one server session as seen by the service and the UI.
  *
  * Disconnected -> Connecting -> Connected -> ConnectionLost -> Reconnecting -> Connected ...
  *

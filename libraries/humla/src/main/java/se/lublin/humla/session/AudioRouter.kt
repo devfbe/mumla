@@ -20,44 +20,27 @@ package se.lublin.humla.session
 import android.media.AudioDeviceInfo
 
 /**
- * Which device voice goes to, decided the way the phone app decides it. Replaces `ScoRouter`
- * (contract 9b, point 15): one router, one wish.
+ * Decides which device voice goes to, the way the phone app does.
  *
- * **The wish is [choice], and it is the only one.** An explicit pick from the chooser; null means
- * "the default". It replaces `ScoRouter.wanted` rather than sitting beside it, so the route has
- * one truth. It survives a lost connection (the route does not, see [disengage]) and is dropped
- * when the device it names goes away, when the user picks what the default would have given
- * anyway, when a newly connected headset takes over, and by [forgetChoice] when the session ends.
+ * [choice] is the user's explicit pick (null = default). It survives a lost connection and is
+ * dropped when its device goes away, when it equals the default, when a newly connected headset
+ * takes over, and by [forgetChoice] when the session ends.
  *
- * **The default** is, in order: the first Bluetooth headset when [bluetoothAutomatic] allows it,
- * then a plugged-in headset, then the speaker - or the earpiece when [earpieceByDefault], which is
- * what the handset mode was - and the other built-in one when that is missing (a tablet). Every one
- * of them is routed explicitly: the router holds the communication mode for the session, and in
- * that mode the platform's own default is the earpiece whatever the app would have wanted.
+ * The default is: the first Bluetooth headset if [bluetoothAutomatic], then a wired headset, then
+ * the speaker (or the earpiece if [earpieceByDefault]), falling back to the other built-in device.
+ * Everything is routed explicitly, because in communication mode the platform default is the
+ * earpiece.
  *
- * **Plugging in and out.** A headset that appears during the session takes over, as in the phone
- * app - a Bluetooth one only when [bluetoothAutomatic] allows it - and the newest one wins. A chosen
- * device that disappears hands back to the default. Both come from the device callback, and only a
- * change of the device *set* triggers a new decision: a route change on its own is reported and
- * not fought, because a phone call takes the communication device and a router that re-selected on
- * every route event would argue with the dialler.
+ * A headset appearing during the session takes over (newest wins); a chosen device disappearing
+ * hands back to the default. Only a change of the device set triggers a new decision: route changes
+ * alone are reported but not fought, so the router does not argue with the dialler during a call.
  *
- * **[bluetoothAutomatic] is derived state and not a source of truth (spec 4.1, binding).** The
- * user's standing wish for a headset has exactly one carrier, the `pref_bluetooth_sco` preference,
- * which reaches this field through `EXTRAS_BLUETOOTH_WANTED`/`enableBluetoothSco()`. Nothing in the
- * UI reads it here.
+ * No permission is consulted; a refusal arrives as `select` returning false and is reported via
+ * [Listener.onRouteRefused] once per [apply].
  *
- * **No permission is consulted here, and none can be (spec 4.1, binding).** A `SecurityException`
- * an OEM may throw anyway is caught one layer down, in [AndroidCommunicationDevices]; a refusal
- * arrives here as `select` returning false and is reported as [Listener.onRouteRefused], once per
- * [apply] - de-duplicating the chat line is the consumer's job.
- *
- * **The communication mode is the session's.** [engage] takes it before the first route and
- * [disengage] gives it back after the last, so a disconnected app no longer leaves the phone in
- * call mode. Without it `setCommunicationDevice` does not decide where a voice-call track plays.
- *
- * Main thread only. Nothing touches the platform before [engage]: routing voice with no voice
- * session holds an SCO link open for nothing.
+ * [engage] takes the communication mode before the first route and [disengage] gives it back.
+ * Main thread only. Nothing touches the platform before [engage], so no SCO link is held open
+ * without a voice session.
  */
 class AudioRouter(
     private val devices: CommunicationDevices,

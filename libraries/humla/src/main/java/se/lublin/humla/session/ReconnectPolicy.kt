@@ -1,7 +1,7 @@
 package se.lublin.humla.session
 
 /**
- * Exponential backoff for automatic reconnects (spec A3): 2 s, 4 s, 8 s, 16 s, then 30 s,
+ * Exponential backoff for automatic reconnects: 2 s, 4 s, 8 s, 16 s, then 30 s,
  * plus up to [maxJitterFraction] of the delay as jitter, for at most [maxAttempts] attempts.
  * The caller resets the attempt counter when connectivity changes or a session succeeds.
  */
