@@ -23,7 +23,6 @@ import android.content.SharedPreferences
 import android.database.CursorWrapper
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
-import android.media.AudioManager
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -45,11 +44,7 @@ import androidx.recyclerview.widget.RecyclerView
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
-import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.CommunicationDevice
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.session.PreferredAudioDevice
-import se.lublin.humla.session.listCommunicationDevices
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
@@ -169,9 +164,7 @@ class ChannelListFragment :
     }
 
     override fun onPrepareMenu(menu: Menu) {
-        fillAudioDevices(menu.findItem(R.id.menu_audio_device))
-
-            // Writing the preference makes MumlaService reconfigure the audio subsystem live.
+        // Writing the preference makes MumlaService reconfigure the audio subsystem live.
         when (settings.noiseSuppressionMethod) {
             "speex" -> menu.findItem(R.id.menu_noise_speex)
             "none" -> menu.findItem(R.id.menu_noise_none)
@@ -259,84 +252,11 @@ class ChannelListFragment :
         })
     }
 
-    /**
-     * Fills the audio chooser: "Automatic", then the session's devices, or without a session the
-     * ones the platform offers for calls. The saved device is ticked while voice goes to it (or,
-     * without a session, while it is there), otherwise "Automatic". Called on menu preparation and
-     * again when the chooser opens, so a headset switched on in between shows up.
-     */
-    private fun fillAudioDevices(chooser: MenuItem) {
-        val sub = chooser.subMenu ?: return
-        sub.removeGroup(R.id.menu_audio_device_group)
-        chooser.isVisible = true
-        val session = connectedSession()
-        val devices = audioDevices(session)
-        val active = session?.activeAudioDevice
-        val saved = settings.preferredAudioDevice
-        val ticked = devices.firstOrNull { saved?.matches(it) == true && (session == null || it.id == active?.id) }
-        val automatic = if (ticked == null && active != null) {
-            getString(R.string.audio_device_automatic_current, AudioDeviceLabels.label(resources, active))
-        } else {
-            getString(R.string.audio_device_automatic)
-        }
-        sub.add(R.id.menu_audio_device_group, R.id.menu_audio_device_automatic, Menu.NONE, automatic)
-            .setChecked(ticked == null)
-        for (device in devices) {
-            sub.add(R.id.menu_audio_device_group, device.id, Menu.NONE,
-                AudioDeviceLabels.label(resources, device))
-                .setChecked(device.id == ticked?.id)
-        }
-        sub.setGroupCheckable(R.id.menu_audio_device_group, true, true)
-        // The echo canceller for the active device's kind (default or user override); nothing
-        // runs without a session, so there is nothing to show then.
-        sub.findItem(R.id.menu_audio_echo)?.let { echo ->
-            echo.isVisible = active != null
-            echo.isChecked = session?.isEchoCancellationEnabled == true
-        }
-    }
-
-    /** The session's devices, or without one what the platform offers, read without routing. */
-    private fun audioDevices(session: IHumlaSession?): List<CommunicationDevice> =
-        session?.audioDevices
-            ?: listCommunicationDevices(requireContext().getSystemService(AudioManager::class.java))
-
-    /**
-     * Saves the tapped entry; with a session it also takes effect now. Saved first, so the service
-     * already routes by the new preference when the session call arrives. Without a session nothing
-     * is routed: that would put the phone in call mode and duck other apps.
-     */
-    private fun chooseAudioDevice(itemId: Int) {
-        val session = connectedSession()
-        if (itemId == R.id.menu_audio_device_automatic) {
-            settings.preferredAudioDevice = null
-            session?.selectAutomaticAudioDevice()
-        } else {
-            // Gone since the menu was filled: nothing to save.
-            val device = audioDevices(session).firstOrNull { it.id == itemId } ?: return
-            settings.preferredAudioDevice = PreferredAudioDevice.of(device)
-            session?.selectAudioDevice(device.id)
-        }
-        requireActivity().invalidateMenu()
-    }
-
-    /** The session, while there is a connection to have one; the chooser acts on nothing else. */
+    /** The session, while there is a connection to have one. */
     private fun connectedSession(): IHumlaSession? =
         service?.takeIf { it.isConnected }?.session
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when {
-        menuItem.itemId == R.id.menu_audio_device -> {
-            fillAudioDevices(menuItem)
-            // Not consumed, so the platform goes on to open the submenu just refilled.
-            false
-        }
-        menuItem.itemId == R.id.menu_audio_echo -> {
-            toggleEchoCancellation()
-            true
-        }
-        menuItem.groupId == R.id.menu_audio_device_group -> {
-            chooseAudioDevice(menuItem.itemId)
-            true
-        }
         menuItem.itemId in NOISE_METHODS -> {
             settings.noiseSuppressionMethod = NOISE_METHODS.getValue(menuItem.itemId)
             menuItem.isChecked = true
@@ -345,14 +265,6 @@ class ChannelListFragment :
         menuItem.itemId == R.id.menu_mute_button || menuItem.itemId == R.id.menu_deafen_button ->
             toggleSelfMuteDeaf(deafen = menuItem.itemId == R.id.menu_deafen_button)
         else -> false
-    }
-
-    /** Flips the echo canceller of the active device's kind; the service applies it live and on every routing. */
-    private fun toggleEchoCancellation() {
-        val session = connectedSession() ?: return
-        val active = session.activeAudioDevice ?: return
-        settings.setEchoCancellationOverride(AudioDeviceCategory.of(active.type), !session.isEchoCancellationEnabled)
-        requireActivity().invalidateMenu()
     }
 
     /** Flips our own mute, or deafness with [deafen]; returns false while not connected. */

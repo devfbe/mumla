@@ -129,6 +129,7 @@ class MumlaActivity :
         dialogs = ConnectionDialogs(this, settings, this)
         connectFlow = ConnectFlow(this, settings) { service }
         batteryPrompt = BatteryOptimizationPrompt(this, settings)
+        addMenuProvider(AudioDeviceMenu(this, settings) { service?.takeIf { it.isConnected }?.session })
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setHomeButtonEnabled(true)
 

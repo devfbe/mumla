@@ -26,7 +26,7 @@ import se.lublin.mumla.testing.stubEvents
 
 /**
  * The channel screen's tabs: its menu has its own items first, then those of the shown tab, and
- * the tabs share the chat target.
+ * the tabs share the chat target. The audio chooser is the activity's, see `MumlaActivityAudioDeviceMenuTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelFragmentTabsTest {
@@ -71,7 +71,7 @@ class ChannelFragmentTabsTest {
         assertThat(menuTitles()).containsExactlyElementsIn(
             titles(
                 R.string.audioInputMethod, R.string.mute, R.string.deafen, R.string.search,
-                R.string.audio_device, R.string.noiseSuppression,
+                R.string.noiseSuppression,
             ),
         ).inOrder()
     }
@@ -88,7 +88,7 @@ class ChannelFragmentTabsTest {
         assertThat(menuTitles()).containsExactlyElementsIn(
             titles(
                 R.string.audioInputMethod, R.string.mute, R.string.deafen, R.string.search,
-                R.string.audio_device, R.string.noiseSuppression,
+                R.string.noiseSuppression,
             ),
         ).inOrder()
     }
