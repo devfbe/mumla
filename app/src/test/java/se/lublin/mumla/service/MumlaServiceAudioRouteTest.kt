@@ -29,6 +29,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.controller.ServiceController
 import se.lublin.humla.session.AudioRouter
 import se.lublin.mumla.Settings
 
@@ -45,6 +46,7 @@ class MumlaServiceAudioRouteTest {
     private lateinit var app: Application
     private lateinit var devices: MumlaServiceBluetoothTest.RecordingDevices
     private lateinit var service: MumlaService
+    private lateinit var controller: ServiceController<MumlaService>
 
     @Before
     fun setUp() {
@@ -61,6 +63,7 @@ class MumlaServiceAudioRouteTest {
         }
         val controller = Robolectric.buildService(MumlaService::class.java)
         controller.get().communicationDevices = devices
+        this.controller = controller
         service = controller.create().get()
     }
 
@@ -68,10 +71,42 @@ class MumlaServiceAudioRouteTest {
         Class.forName("se.lublin.humla.HumlaService").getDeclaredField("mRouter")
             .apply { isAccessible = true }.get(service) as AudioRouter
 
-    private fun proximityLockHeld(): Boolean {
-        val lock = MumlaService::class.java.getDeclaredField("mProximityLock")
+    private fun proximityLock(): PowerManager.WakeLock? =
+        MumlaService::class.java.getDeclaredField("mProximityLock")
             .apply { isAccessible = true }.get(service) as PowerManager.WakeLock?
+
+    private fun proximityLockHeld(): Boolean {
+        val lock = proximityLock()
         return lock != null && lock.isHeld && shadowOf(lock).tag == "Mumla:Proximity"
+    }
+
+    private fun reportRoute(type: Int?) {
+        MumlaService::class.java.getDeclaredMethod("onAudioRouteChanged", Integer::class.java)
+            .apply { isAccessible = true }.invoke(service, type)
+    }
+
+    @Test
+    fun aRepeatedEarpieceReportKeepsOneLockAndLeaksNone() {
+        create()
+        reportRoute(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        val first = proximityLock()!!
+
+        reportRoute(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        reportRoute(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+
+        assertThat(first.isHeld).isFalse()
+        assertThat(proximityLockHeld()).isFalse()
+    }
+
+    @Test
+    fun destroyingTheServiceReleasesTheLock() {
+        create()
+        reportRoute(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        val lock = proximityLock()!!
+
+        controller.destroy()
+
+        assertThat(lock.isHeld).isFalse()
     }
 
     @Test

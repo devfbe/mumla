@@ -380,6 +380,7 @@ class MumlaService : HumlaService(),
         unregisterObserver(mObserver)
         mTTS?.shutdown()
         mMessageNotification.dismiss()
+        setProximitySensorOn(false)
         super.onDestroy()
     }
 
@@ -509,8 +510,10 @@ class MumlaService : HumlaService(),
 
     private fun setProximitySensorOn(on: Boolean) {
         if (on) {
+            if (mProximityLock?.isHeld == true) return
             val pm = getSystemService(POWER_SERVICE) as PowerManager
-            mProximityLock = pm.newWakeLock(PROXIMITY_SCREEN_OFF_WAKE_LOCK, "Mumla:Proximity").also { it.acquire() }
+            mProximityLock = pm.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "Mumla:Proximity")
+                .also { it.acquire() }
         } else {
             mProximityLock?.release()
             mProximityLock = null
@@ -682,8 +685,6 @@ class MumlaService : HumlaService(),
     companion object {
         private val TAG = MumlaService::class.java.name
 
-        /** Undocumented constant that permits a proximity-sensing wake lock. */
-        const val PROXIMITY_SCREEN_OFF_WAKE_LOCK = 32
         const val TTS_THRESHOLD = 250 // Maximum number of characters to read
         const val RECONNECT_DELAY = 10000
     }
