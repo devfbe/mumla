@@ -1,5 +1,3 @@
-@file:JvmName("Hex")
-
 package se.lublin.mumla.util
 
 private const val DIGITS = "0123456789abcdef"

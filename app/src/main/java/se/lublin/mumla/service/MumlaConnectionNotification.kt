@@ -193,7 +193,6 @@ class MumlaConnectionNotification private constructor(
         /** Distinct from MumlaReconnectNotification's action: both receivers can be registered at once. */
         private const val BROADCAST_CANCEL_RECONNECT = "b_foreground_cancel_reconnect"
 
-        @JvmStatic
         fun create(service: Service, contentText: String, listener: OnActionListener): MumlaConnectionNotification =
             MumlaConnectionNotification(service, contentText, listener)
     }

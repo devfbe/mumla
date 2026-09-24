@@ -47,7 +47,6 @@ class MumlaRepository(
 
     companion object {
         /** The application's repository. */
-        @JvmStatic
         fun get(context: Context): MumlaRepository = (context.applicationContext as MumlaApplication).repository
     }
 }

@@ -25,7 +25,6 @@ import java.net.URI
 
 object HtmlUtils {
     /** Tries to get the link's hostname, returns null if not a valid URL. */
-    @JvmStatic
     fun getHostnameFromLink(link: String): String? {
         if (!link.contains("://")) return null
         return try {
@@ -39,7 +38,6 @@ object HtmlUtils {
     private val WHITESPACE = Regex("\\s+")
 
     /** The text of an HTML fragment, with images dropped and all whitespace collapsed to single spaces. */
-    @JvmStatic
     fun toPlainText(html: String): String = collapse(fromHtml(html))
 
     /**
@@ -71,7 +69,6 @@ object HtmlUtils {
      * Mumble clients percent-encode base64 image data, which contains '+', so URLDecoder
      * (which turns '+' into a space) must not be used.
      */
-    @JvmStatic
     fun percentDecode(input: String): String {
         if (!input.contains('%')) return input
         val out = StringBuilder(input.length)
@@ -100,7 +97,6 @@ object HtmlUtils {
     }
 
     /** Adds HTML markup to an outgoing message: links become anchors, newlines become `<br>`. */
-    @JvmStatic
     fun markupOutgoingMessage(message: String): String =
         LINK_PATTERN.replace(message) { "<a href=\"${it.value}\">${it.value}</a>" }
             .replace("\n", "<br>")

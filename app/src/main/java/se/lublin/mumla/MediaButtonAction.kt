@@ -15,7 +15,6 @@ enum class MediaButtonAction(val prefValue: String) {
     MUTE("mute");
 
     companion object {
-        @JvmStatic
         fun fromPrefValue(value: String?): MediaButtonAction =
             entries.firstOrNull { it.prefValue == value } ?: AUTO
     }

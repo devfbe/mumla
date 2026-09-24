@@ -502,7 +502,6 @@ class Settings private constructor(private val context: Context) {
          * The settings of [context]'s application. Created, and the legacy keys migrated, on first
          * use; a new application (as in tests) gets a new instance.
          */
-        @JvmStatic
         fun getInstance(context: Context): Settings {
             val app = context.applicationContext
             instance?.takeIf { it.context === app }?.let { return it }

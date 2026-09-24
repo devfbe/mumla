@@ -32,7 +32,7 @@ import se.lublin.humla.model.Server
  * each one was closed.
  * @param cipher test seam: the Android Keystore is not available under Robolectric.
  */
-class MumlaSQLiteDatabase @JvmOverloads constructor(
+class MumlaSQLiteDatabase(
     context: Context,
     name: String = DATABASE_NAME,
     cursorFactory: SQLiteDatabase.CursorFactory? = null,

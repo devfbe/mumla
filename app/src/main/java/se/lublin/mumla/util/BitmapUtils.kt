@@ -10,7 +10,6 @@ object BitmapUtils {
      *
      * @throws IllegalArgumentException if [maxWidth] or [maxHeight] is not positive.
      */
-    @JvmStatic
     fun resizeKeepingAspect(image: Bitmap, maxWidth: Int, maxHeight: Int): Bitmap {
         require(maxWidth > 0) { "maxWidth must be positive, was $maxWidth" }
         require(maxHeight > 0) { "maxHeight must be positive, was $maxHeight" }

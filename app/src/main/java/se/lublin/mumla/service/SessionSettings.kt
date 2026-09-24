@@ -34,7 +34,6 @@ import se.lublin.mumla.util.MumlaTrustStore
  */
 object SessionSettings {
     /** Every preference key [withAudioSettings] reads. */
-    @JvmField
     val AUDIO_KEYS: Set<String> = Settings.ECHO_CANCELLATION_KEYS + setOf(
         Settings.PREF_VAD_MODE,
         Settings.PREF_VAD_SENSITIVITY,
@@ -59,7 +58,6 @@ object SessionSettings {
     )
 
     /** [base] with every audio setting replaced by the user's current choice. */
-    @JvmStatic
     fun withAudioSettings(base: SessionConfig, settings: Settings): SessionConfig {
         val effects = settings.androidAudioEffects
         return base.copy(
@@ -81,7 +79,6 @@ object SessionSettings {
     }
 
     /** Everything to connect to [server] with. Reads the database, so not on the main thread. */
-    @JvmStatic
     fun forServer(context: Context, settings: Settings, database: MumlaDatabase, server: Server): SessionConfig {
         val certificate = if (settings.isUsingCertificate) {
             // TODO(acomminos): handle the case where a certificate's data is unavailable.

@@ -78,7 +78,6 @@ class BluetoothScoToggle(
     }
 
     companion object {
-        @JvmStatic
         fun hasPermission(context: Context): Boolean =
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
                 PackageManager.PERMISSION_GRANTED

@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 object Orbot {
     const val PACKAGE_NAME = "org.torproject.android"
 
-    @JvmStatic
     fun isInstalled(context: Context): Boolean = try {
         context.packageManager.getPackageInfo(PACKAGE_NAME, 0)
         true

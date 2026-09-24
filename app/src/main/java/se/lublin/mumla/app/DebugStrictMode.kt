@@ -26,8 +26,6 @@ import se.lublin.mumla.BuildConfig
  * call close", which names no culprit. Release builds are left alone.
  */
 object DebugStrictMode {
-    @JvmStatic
-    @JvmOverloads
     fun install(debug: Boolean = BuildConfig.DEBUG) {
         if (!debug) return
         StrictMode.setVmPolicy(

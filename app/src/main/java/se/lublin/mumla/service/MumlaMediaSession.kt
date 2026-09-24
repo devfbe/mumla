@@ -30,7 +30,7 @@ import se.lublin.mumla.Settings
  *
  * Call [attach] in the service's onCreate and [detach] in onDestroy. Main thread only.
  */
-class MumlaMediaSession @JvmOverloads constructor(
+class MumlaMediaSession(
     private val context: Context,
     private val target: MediaKeyTarget,
     private val settings: Settings,

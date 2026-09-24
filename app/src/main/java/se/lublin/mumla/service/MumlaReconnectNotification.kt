@@ -121,7 +121,6 @@ class MumlaReconnectNotification(
         private const val BROADCAST_RECONNECT = "b_reconnect"
         private const val BROADCAST_CANCEL_RECONNECT = "b_cancel_reconnect"
 
-        @JvmStatic
         fun show(
             context: Context,
             error: String,
