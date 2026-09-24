@@ -18,9 +18,8 @@
 package se.lublin.humla.audio.capture
 
 /**
- * Preference values are stable on-disk identifiers (see app Settings.kt). Unknown or missing values
- * fall back to [AMPLITUDE], what older installs were running: the `detection_threshold` slider is a
- * no-op in [PROBABILITY] mode, so any other fallback would silently disable it.
+ * Preference values are stable on-disk identifiers. Unknown values fall back to [AMPLITUDE], what
+ * older installs ran, so their `detection_threshold` slider keeps working.
  */
 enum class VadMode(val preferenceValue: String) {
     /** Legacy dBFS level detector; kept for devices where the models fail. */
@@ -29,11 +28,7 @@ enum class VadMode(val preferenceValue: String) {
     /** Uses the preprocessor chain's voice probability. */
     PROBABILITY("probability"),
 
-    /**
-     * Level detector with a threshold between a tracked noise floor and speech peak (see
-     * [AdaptiveVadTracker]). Recommended: robust to talker distance and independent of the chain
-     * configuration, since it measures the chain's own output.
-     */
+    /** Level detector with a threshold between tracked noise floor and speech peak ([AdaptiveVadTracker]). */
     ADAPTIVE("adaptive");
 
     companion object {
@@ -44,10 +39,8 @@ enum class VadMode(val preferenceValue: String) {
 }
 
 /**
- * Start/stop hysteresis plus hold time. Thresholds are scores in [0, 1] whose meaning depends on
- * [mode]: [VoiceActivityDetector.amplitudeScore] for [VadMode.AMPLITUDE], the chain's last opinion
- * for [VadMode.PROBABILITY] (a speech probability, or [LevelToProbability]'s loudness mapping when
- * only the APM has an opinion). The scales are not comparable, hence separate settings.
+ * Start/stop hysteresis plus hold time. Thresholds are scores in [0, 1]: the amplitude score for
+ * [VadMode.AMPLITUDE], the chain's probability for [VadMode.PROBABILITY]; the scales aren't comparable.
  */
 data class VadConfig(
     val mode: VadMode,
@@ -56,20 +49,12 @@ data class VadConfig(
     val holdTimeMs: Long,
     /** [VadMode.ADAPTIVE] only: fraction of the speech-to-floor gap a frame must clear. */
     val snrFraction: Float = AdaptiveVadTracker.DEFAULT_FRACTION,
-    /**
-     * [VadMode.ADAPTIVE] only: how far below the start threshold the stop threshold sits, in dB. 6 dB
-     * is one doubling of distance, so stepping away mid-sentence keeps the gate open.
-     */
+    /** [VadMode.ADAPTIVE] only: stop threshold below start, in dB (6 dB = one doubling of distance). */
     val hysteresisDb: Float = DEFAULT_HYSTERESIS_DB,
-    /**
-     * Consecutive frames over the start threshold needed to open the gate: the transient guard (e.g.
-     * a single keyboard click; the WebRTC transient suppressor is not built). Costs
-     * `(onsetFrames - 1) * 10 ms` at the start of a word.
-     */
+    /** Consecutive frames over the start threshold needed to open the gate (guards against clicks). */
     val onsetFrames: Int = DEFAULT_ONSET_FRAMES,
     /** [VadMode.ADAPTIVE] only: false pins the floor at [manualFloorDbfs] instead of tracking it. */
     val adaptiveFloor: Boolean = true,
-    /** [VadMode.ADAPTIVE] only: the floor to use while [adaptiveFloor] is false. */
     val manualFloorDbfs: Float = AdaptiveVadTracker.DEFAULT_FLOOR_DBFS,
 ) {
     init {
@@ -89,10 +74,6 @@ data class VadConfig(
         const val DEFAULT_HOLD_MS = 250L
         const val DEFAULT_HYSTERESIS_DB = 6f
 
-        /**
-         * Library default: the first frame over the threshold opens the gate. The app sets its own
-         * user-facing default (`Settings.DEFAULT_VAD_ONSET_FRAMES`).
-         */
         const val DEFAULT_ONSET_FRAMES = 1
 
         /** Largest hold whose `holdTimeMs * 1_000_000` nanosecond deadline doesn't overflow. */

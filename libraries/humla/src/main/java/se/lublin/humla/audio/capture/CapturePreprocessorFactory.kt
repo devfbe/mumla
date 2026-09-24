@@ -26,19 +26,11 @@ import se.lublin.humla.audio.native.WebRtcApmNative
 
 /**
  * One assembled capture chain: the stage the capture thread runs, and the far-end entry point the
- * playback thread feeds (present only when the WebRTC canceller is in the chain).
+ * playback thread feeds (only when the WebRTC canceller is in the chain). On a mode switch, publish
+ * the whole chain before releasing the old one, so the reference never reaches the wrong canceller.
  *
- * On a mode switch, publish the whole [CaptureChain] (via `@Volatile` or a shared lock) before
- * releasing the old one; publishing the halves separately would feed the reference signal to the
- * wrong canceller. A released stage returns null like a stage without an opinion, so whoever swaps
- * chains must report failures; the per-stage `rejected*Frames` counters are available for that.
- *
- * @param farEndSink must be fed frames of exactly [farEndFrameSize] samples (use
- *   [FarEndFrameChunker]); others are refused and counted in
- *   `WebRtcApmPreprocessor.rejectedFarEndFrames`.
- * @param farEndFrameSize the length [farEndSink] demands, as reported by the APM (480 at 48 kHz, 0
- *   without a sink). Oversized frames are silently truncated, so never size the chunker from a
- *   constant.
+ * @param farEndSink must be fed frames of exactly [farEndFrameSize] samples (use [FarEndFrameChunker]).
+ * @param farEndFrameSize as reported by the APM, 0 without a sink.
  */
 class CaptureChain(
     val preprocessor: CapturePreprocessor,
@@ -48,11 +40,8 @@ class CaptureChain(
 
 /**
  * Builds the capture chain: the WebRTC APM first when echo cancellation is WEBRTC, then Speex or
- * RNNoise; the probability is the last non-null one.
- *
- * The APIs are passed as factories because touching the native objects runs `System.loadLibrary`;
- * [tryStage] turns a missing `.so` into a skipped stage and a log line instead of breaking the
- * pipeline. A disabled mode yields [NoopPreprocessor] itself, which holds no native state or lock.
+ * RNNoise. The APIs are factories because touching the native objects loads the library; a missing
+ * `.so` becomes a skipped stage and a [log] line.
  */
 class CapturePreprocessorFactory(
     private val speexApi: () -> SpeexPreprocessApi = { SpeexPreprocessNative },
@@ -71,7 +60,7 @@ class CapturePreprocessorFactory(
         var farEndFrameSize = 0
 
         try {
-            // AEC first: anything time-varying in front keeps it from converging. See ChainedPreprocessor.
+            // AEC first: anything time-varying in front keeps it from converging.
             if (echo == EchoCancellationMode.WEBRTC) {
                 val apm = tryStage(WEBRTC_APM) {
                     WebRtcApmPreprocessor(apmApi(), WebRtcApmConfig.FOR_ECHO_CANCELLATION)
@@ -92,7 +81,6 @@ class CapturePreprocessorFactory(
                     tryStage(RNNOISE) { RnnoisePreprocessor(rnnoiseApi()) }?.let { stages += it }
             }
         } catch (e: Throwable) {
-            // Nobody else holds the stages built so far; release them (idempotent) before rethrowing.
             for (stage in stages) stage.release()
             throw e
         }
@@ -106,12 +94,8 @@ class CapturePreprocessorFactory(
     }
 
     /**
-     * Builds one stage, or logs why there is none and returns null.
-     *
-     * Catches [LinkageError] (a missing `.so` surfaces as `ExceptionInInitializerError`, then
-     * `NoClassDefFoundError`, neither an `Exception`) and [IllegalStateException] (library loaded but
-     * the handle couldn't be allocated). Anything else is a programmer error and propagates; [create]
-     * releases already-built stages in that case.
+     * Builds one stage, or logs why there is none and returns null. A missing `.so` surfaces as a
+     * [LinkageError]; [IllegalStateException] means the handle couldn't be allocated.
      */
     private fun <T : CapturePreprocessor> tryStage(name: String, build: () -> T): T? = try {
         build()

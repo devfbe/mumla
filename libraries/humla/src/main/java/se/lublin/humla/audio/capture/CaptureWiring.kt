@@ -23,33 +23,18 @@ import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.util.HumlaLogger
 
 /**
- * Assembles the capture chain for `AudioHandler` (the only caller), with injectable seams so stage
- * selection and fallback behaviour are testable.
- *
- * Echo cancellation has two ends: the near-end stage in the capture chain and [Wiring.farEnd], fed
- * by `AudioOutput` on the playback thread. Both or neither: an APM without the reference cancels
- * nothing.
+ * Assembles the capture chain for `AudioHandler`. Echo cancellation has two ends, the near-end stage
+ * and [Wiring.farEnd] fed by `AudioOutput` on the playback thread: both or neither.
  */
 object CaptureWiring {
     private const val TAG = "CaptureWiring"
 
-    /**
-     * The chain the capture thread runs and the far-end tap the playback thread feeds, returned
-     * together because they are one chain (the chunker's sink is a stage in [pipeline]).
-     *
-     * @param farEnd null whenever the WebRTC canceller is not in the chain, including when it was
-     *   requested but could not be built.
-     */
+    /** @param farEnd null whenever the WebRTC canceller is not in the chain. */
     class Wiring(val pipeline: CapturePipeline, val farEnd: FarEndFrameChunker?)
 
     /**
-     * @param inputSampleRate `AudioInput.sampleRate`; a resampler is inserted only when it differs
-     *   from [AudioHandler.SAMPLE_RATE].
-     * @param noise the suppressor to run; `NONE` means no stage at all.
-     * @param echo which canceller runs; only [EchoCancellationMode.WEBRTC] builds anything.
-     * @param speexNoiseSuppressDb how deep the Speex denoiser may cut. Placed before [logger] so the
-     *   Java caller can use a `@JvmOverloads` overload.
-     * @param logger where a stage that could not be built is reported, in the user's chat log.
+     * @param inputSampleRate a resampler is inserted when it differs from [AudioHandler.SAMPLE_RATE].
+     * @param logger receives a user-visible line for each stage that could not be built.
      */
     @JvmStatic
     @JvmOverloads
@@ -69,11 +54,9 @@ object CaptureWiring {
             logger?.logWarning(message)
         }
         val chain = (factory ?: CapturePreprocessorFactory(log = log)).create(noise, echo, speexNoiseSuppressDb)
-        // Tell the user when a requested suppressor couldn't be built (missing .so, allocation failure).
         if (noise != NoiseSuppressionMode.NONE && chain.preprocessor === NoopPreprocessor) {
             log("noise suppression (${noise.preferenceValue}) is not running on this device")
         }
-        // Separate check: losing only the APM doesn't yield NoopPreprocessor; a missing sink shows it.
         if (echo == EchoCancellationMode.WEBRTC && chain.farEndSink == null) {
             log("echo cancellation (${echo.preferenceValue}) is not running on this device")
         }
@@ -88,7 +71,6 @@ object CaptureWiring {
             AudioHandler.FRAME_SIZE,
             log,
         )
-        // Sized from the APM, never a constant: oversized far-end frames are silently truncated.
         val farEnd = chain.farEndSink?.let { FarEndFrameChunker(chain.farEndFrameSize, it) }
         return Wiring(pipeline, farEnd)
     }

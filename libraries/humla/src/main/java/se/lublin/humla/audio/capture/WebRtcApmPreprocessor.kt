@@ -19,11 +19,7 @@ package se.lublin.humla.audio.capture
 
 import se.lublin.humla.audio.native.WebRtcApmApi
 
-/**
- * How the APM is configured for one chain. Holds four of the bridge's six parameters: the sample
- * rate belongs to the stage and the noise-suppression level is unused (see
- * [WebRtcApmPreprocessor.UNUSED_NOISE_SUPPRESSION_LEVEL]).
- */
+/** How the APM is configured for one chain (the sample rate belongs to the stage). */
 data class WebRtcApmConfig(
     val echoCancellation: Boolean,
     val noiseSuppression: Boolean,
@@ -31,11 +27,7 @@ data class WebRtcApmConfig(
     val highPass: Boolean = true,
 ) {
     companion object {
-        /**
-         * Used when echo cancellation is WEBRTC: AEC3, AGC2 and high-pass on, the APM's own noise
-         * suppression off, so the user's noise suppression setting stays authoritative (no cascaded
-         * suppressors, and "None" means none).
-         */
+        /** AEC3, AGC2 and high-pass on; APM noise suppression off so the user's setting stays authoritative. */
         val FOR_ECHO_CANCELLATION = WebRtcApmConfig(
             echoCancellation = true,
             noiseSuppression = false,
@@ -45,19 +37,13 @@ data class WebRtcApmConfig(
 }
 
 /**
- * Maps the APM's output level in dBFS onto a "voice probability": [SILENCE_DBFS] and below is 0,
- * [FULL_DBFS] and above is 1, linear in between.
- *
- * This is a loudness threshold, not a speech model; with noise suppression NONE and echo
- * cancellation WEBRTC it is the only opinion in the chain, and thresholds tuned against RNNoise do
- * not transfer. The window matches this chain's processed output, where AGC2 holds the non-speech
- * floor near -45 dBFS regardless of input level.
+ * Maps the APM's output level in dBFS linearly onto a "voice probability" between [SILENCE_DBFS]
+ * (0) and [FULL_DBFS] (1). A loudness threshold, not a speech model; AGC2 holds the non-speech floor
+ * near -45 dBFS regardless of input level.
  */
 object LevelToProbability {
-    /** Typical non-speech floor of this chain; at or below it the stage reports 0. */
     const val SILENCE_DBFS = -45f
 
-    /** At or above this level the stage reports 1 (a 0.6 threshold is then 13 dB over the floor). */
     const val FULL_DBFS = -23.3f
 
     fun fromDbfs(dbfs: Float): Float =
@@ -65,16 +51,10 @@ object LevelToProbability {
 }
 
 /**
- * The WebRTC APM as a capture stage: AEC3, AGC2 and high-pass on the near-end path, far-end signal
- * via [analyzeReverseStream]; its own noise suppressor is off (see
- * [WebRtcApmConfig.FOR_ECHO_CANCELLATION]).
- *
- * `processCapture` runs on the capture thread, `processRender` on the playback thread, and release
- * may come from a third; [SingleHandleStage]'s lock covers all three.
- *
- * Per 10 ms tick the far-end frame must go in before the near-end frame containing its echo; getting
- * this wrong fails silently with much worse cancellation. `FarEndFrameChunker` produces those frames.
- * The stream delay is not bridged: AEC3 estimates it itself.
+ * The WebRTC APM as a capture stage, with the far-end signal fed via [analyzeReverseStream] on the
+ * playback thread ([SingleHandleStage]'s lock covers both threads and release). Per 10 ms tick the
+ * far-end frame must go in before the near-end frame containing its echo, or cancellation silently
+ * degrades. AEC3 estimates the stream delay itself.
  */
 class WebRtcApmPreprocessor private constructor(
     private val api: WebRtcApmApi,
@@ -100,25 +80,15 @@ class WebRtcApmPreprocessor private constructor(
         sampleRate,
     )
 
-    /**
-     * Samples per far-end frame, as reported by the APM; size `FarEndFrameChunker` with this. Oversized
-     * far-end frames are accepted with their tail silently dropped, so this must not be a guessed
-     * constant. Read once at construction, so it stays valid after release.
-     */
+    /** Samples per far-end frame as reported by the APM; oversized frames lose their tail silently. */
     val farEndFrameSize: Int = api.frameSize(handle)
 
-    /**
-     * Near-end frames the APM refused (any non-zero `webrtc::AudioProcessing::Error`, e.g. -8 for a
-     * too-short frame). Separates "refused" from "no opinion", since both yield null.
-     */
+    /** Near-end frames the APM refused; distinguishes "refused" from "no opinion" (both yield null). */
     @Volatile
     var rejectedFrames: Int = 0
         private set
 
-    /**
-     * Far-end frames the APM refused. The reverse stream returns nothing to its caller, so this is the
-     * only signal. Only too-short frames are counted; too-long frames lose their tail unnoticed.
-     */
+    /** Far-end frames the APM refused (too-short only); the only error signal of the reverse stream. */
     @Volatile
     var rejectedFarEndFrames: Int = 0
         private set
@@ -126,7 +96,6 @@ class WebRtcApmPreprocessor private constructor(
     override fun onCaptureFrame(handle: Long, frame: ShortArray): Float? {
         if (api.processCapture(handle, frame) != 0) {
             rejectedFrames++
-            // No opinion on a frame the APM never processed (not a stale or -100 dBFS level).
             return null
         }
         return LevelToProbability.fromDbfs(api.lastCaptureLevelDbfs(handle))
@@ -141,10 +110,7 @@ class WebRtcApmPreprocessor private constructor(
     companion object {
         const val DEFAULT_SAMPLE_RATE = 48000
 
-        /**
-         * `humla_apm_create` always takes a noise-suppression level; it has no effect while the APM's
-         * own suppressor is off. If that is ever turned back on, move the level into [WebRtcApmConfig].
-         */
+        /** No effect while the APM's own suppressor is off. */
         private const val UNUSED_NOISE_SUPPRESSION_LEVEL = 0
     }
 }

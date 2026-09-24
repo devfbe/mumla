@@ -20,48 +20,33 @@ package se.lublin.humla.audio.capture
 import kotlin.math.log10
 import kotlin.math.sqrt
 
-/**
- * A monotonic nanosecond clock, injectable for tests. A `fun interface` rather than `() -> Long`
- * because `Function0<Long>.invoke()` boxes the result on every audio frame.
- */
+/** Monotonic nanosecond clock; a `fun interface` because `() -> Long` boxes on every frame. */
 fun interface NanoClock {
     fun nanoTime(): Long
 }
 
 /**
  * Decides per frame whether the user is talking: start/stop hysteresis over a score, plus a hold
- * that keeps transmission open across gaps inside a word.
- *
- * Call [isVoice] from the capture thread only; [config] may be written from another thread.
- *
- * [clock] must be monotonic but may have any origin (including near `Long.MAX_VALUE`, as
- * `System.nanoTime` permits), hence the hold is a deadline compared via `now - deadline < 0`.
+ * across gaps inside a word. Call [isVoice] from the capture thread only; [config] may be written
+ * from any thread. [clock] may have any origin, hence the `now - deadline < 0` comparison.
  */
 class VoiceActivityDetector(
     config: VadConfig,
-    /**
-     * Frame duration in ms (10 ms in the pipeline); a parameter so previews at other rates don't
-     * mis-scale [AdaptiveVadTracker]'s time constants. Placed before [clock] so a trailing lambda
-     * still binds to the clock.
-     */
+    /** Frame duration in ms; scales [AdaptiveVadTracker]'s time constants. */
     private val frameMs: Float = DEFAULT_FRAME_MS,
     private val clock: NanoClock = NanoClock(System::nanoTime),
 ) {
     @Volatile
     var config: VadConfig = config
 
-    /** Written by the capture thread, read by the level meter on the main thread. */
     @Volatile
     private var talking = false
 
-    /** Whether the gate is currently open, for the level meter. */
     val isTalking: Boolean get() = talking
 
-    /** Set by [recalibrate] on any thread, acted on by the capture thread at the next frame. */
     @Volatile
     private var recalibrateRequested = false
 
-    /** Consecutive frames over the threshold; see [VadConfig.onsetFrames]. */
     private var consecutive = 0
 
     private val tracker = AdaptiveVadTracker(
@@ -69,35 +54,26 @@ class VoiceActivityDetector(
             if (config.adaptiveFloor) AdaptiveVadTracker.DEFAULT_FLOOR_DBFS else config.manualFloorDbfs,
     )
 
-    /**
-     * This frame's level in dBFS, for the level meter. Derived from the same [amplitudeScore] the
-     * gate uses, so meter and gate cannot disagree.
-     */
+    /** This frame's level in dBFS, from the same [amplitudeScore] the gate uses. */
     @Volatile
     var lastLevelDbfs: Float = NO_SIGNAL_DBFS
         private set
 
-    /** The tracked noise floor, for the meter's lower mark. */
     val floorDbfs: Float get() = tracker.floorDbfs
 
-    /** The tracked speech peak, for the meter's upper mark. */
     val speechDbfs: Float get() = tracker.speechDbfs
 
-    /** Where the gate opens, for the meter's threshold mark. */
     val thresholdDbfs: Float get() = tracker.thresholdDbfs(config.snrFraction)
 
-    /** True while the talker and the room are too close together for the gate to do its job. */
+    /** True while speech and noise floor are too close for the gate to work. */
     val tooClose: Boolean get() = tracker.tooClose
 
-    /**
-     * The user's "measure again": forgets both estimates. Safe from any thread; the capture thread
-     * (which owns the tracker) performs the reset on the next frame.
-     */
+    /** Forgets both estimates. Safe from any thread; applied on the next capture frame. */
     fun recalibrate() {
         recalibrateRequested = true
     }
 
-    /** When the hold expires; seeded from the clock so the first frame starts with the hold over. */
+    /** Seeded from the clock so the first frame starts with the hold over. */
     private var holdUntilNanos: Long = clock.nanoTime()
 
     /**
@@ -137,10 +113,8 @@ class VoiceActivityDetector(
 
     companion object {
         /**
-         * Score curve `1 + 20*log10(rms/32768)/96`: full scale is 1.0, -96 dBFS is 0.0, digital
-         * silence slightly negative (the `+1` keeps the log finite). Kept unchanged because the
-         * user's `detection_threshold` slider is calibrated against it. An empty frame returns
-         * [NO_SIGNAL] (the raw formula would give +infinity).
+         * `1 + 20*log10(rms/32768)/96`: full scale 1.0, -96 dBFS 0.0. The user's threshold slider is
+         * calibrated against this curve. An empty frame returns [NO_SIGNAL].
          */
         fun amplitudeScore(pcm: ShortArray, length: Int): Float {
             if (length <= 0) return NO_SIGNAL
@@ -150,10 +124,10 @@ class VoiceActivityDetector(
             return (1.0 + 20.0 * log10(rms / 32768.0) / 96.0).toFloat()
         }
 
-        /** [amplitudeScore] of an empty frame: below every [0, 1] threshold, and finite for the meter. */
+        /** Below every [0, 1] threshold, and finite for the meter. */
         const val NO_SIGNAL = -1f
 
-        /** [amplitudeScore] converted to dBFS, the scale of [VadMode.ADAPTIVE] and the level meter. */
+        /** [amplitudeScore] in dBFS. */
         @JvmStatic
         fun levelDbfs(pcm: ShortArray, length: Int): Float = scoreToDbfs(amplitudeScore(pcm, length))
 
@@ -162,7 +136,6 @@ class VoiceActivityDetector(
         /** [NO_SIGNAL] in dBFS (-192): finite and below [AdaptiveVadTracker.MIN_FLOOR_DBFS]. */
         const val NO_SIGNAL_DBFS = (NO_SIGNAL - 1f) * 96f
 
-        /** Ten milliseconds: `AudioHandler.FRAME_SIZE` samples at `AudioHandler.SAMPLE_RATE`. */
         const val DEFAULT_FRAME_MS = 10f
     }
 }

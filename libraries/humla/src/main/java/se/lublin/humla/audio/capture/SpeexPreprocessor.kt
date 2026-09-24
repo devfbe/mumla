@@ -21,40 +21,26 @@ import se.lublin.humla.audio.native.SpeexPreprocessApi
 import se.lublin.humla.audio.native.SpeexPreprocessNative
 
 /**
- * The Speex denoiser as a capture stage: denoise on, configurable suppression depth, no AGC.
- *
- * Only `SET_DENOISE` and `SET_NOISE_SUPPRESS` are issued. AGC controls are compiled out in this
- * `FIXED_POINT` build, `SET_DEREVERB` is inert, and Speex's own VAD (`SET_VAD`/`SET_PROB_START`)
- * only affects `speex_preprocess_run`'s return value, which is ignored: the stage reports
- * `GET_PROB` directly and the gate applies its own threshold and hysteresis downstream.
- *
- * The frame path allocates nothing ([PROBABILITIES] is pre-boxed; [ctlValue] is reused under the
- * base class lock).
+ * The Speex denoiser as a capture stage: denoise on, configurable suppression depth. AGC is compiled
+ * out in the `FIXED_POINT` build; the stage reports `GET_PROB` and ignores Speex's own VAD verdict.
+ * The frame path allocates nothing.
  */
 class SpeexPreprocessor(
     private val api: SpeexPreprocessApi,
     frameSize: Int = DEFAULT_FRAME_SIZE,
     sampleRate: Int = DEFAULT_SAMPLE_RATE,
-    /**
-     * Maximum suppression in dB, one of [SUPPORTED_NOISE_SUPPRESS_DB]; more negative is stronger.
-     * Fixed for the life of the stage; changing it means building a new chain.
-     */
+    /** Maximum suppression in dB, one of [SUPPORTED_NOISE_SUPPRESS_DB]; fixed for the stage's life. */
     val noiseSuppressDb: Int = DEFAULT_NOISE_SUPPRESS_DB,
 ) : SingleHandleStage(configuredState(api, frameSize, sampleRate, noiseSuppressDb), WHAT) {
 
-    /** The in/out argument of `ctlInt`, reused so the frame path allocates nothing. */
     private val ctlValue = IntArray(1)
 
-    /**
-     * Frames the bridge refused (shorter than the state's frame size). The only way to tell "refused"
-     * from "no opinion", since both yield null. Written under the stage lock.
-     */
+    /** Frames the bridge refused (too short); distinguishes "refused" from "no opinion". */
     @Volatile
     var rejectedFrames: Int = 0
         private set
 
     override fun onCaptureFrame(handle: Long, frame: ShortArray): Float? {
-        // Refused frame (wrong size): report no opinion rather than treating -1 as "speech".
         if (api.run(handle, frame) < 0) {
             rejectedFrames++
             return null
@@ -74,24 +60,16 @@ class SpeexPreprocessor(
         const val DEFAULT_SAMPLE_RATE = 48000
         const val DEFAULT_NOISE_SUPPRESS_DB = -25
 
-        /** The depths the preference offers. */
         val SUPPORTED_NOISE_SUPPRESS_DB = listOf(-15, -25, -35)
 
         private const val WHAT = "speex preprocessor"
 
-        /**
-         * Every value [onCaptureFrame] can return (integer percent), boxed once to avoid a per-frame
-         * allocation. `Float?` rather than `Float` so reads aren't unboxed and re-boxed.
-         */
+        /** Pre-boxed results (integer percent), so the frame path doesn't allocate. */
         private val PROBABILITIES: Array<Float?> = Array(101) { it / 100f }
     }
 }
 
-/**
- * Creates and configures the state, returning 0 if speex could not allocate one ([SingleHandleStage]
- * turns that into the exception). Runs as the superclass constructor argument so no second copy of
- * the handle is kept. The level is validated before `init`, so a bad level can't leak a state.
- */
+/** Creates and configures the state, or returns 0; validates before `init` so nothing leaks. */
 private fun configuredState(
     api: SpeexPreprocessApi,
     frameSize: Int,
@@ -106,8 +84,6 @@ private fun configuredState(
     val state = api.init(frameSize, sampleRate)
     if (state == 0L) return 0L
     val value = IntArray(1)
-    // Only requests on the bridge's allow list have constants in SpeexPreprocessNative. SET_VAD and
-    // SET_PROB_START are deliberately not issued (see class KDoc).
     for ((request, setting) in arrayOf(
         SpeexPreprocessNative.SPEEX_PREPROCESS_SET_DENOISE to 1,
         SpeexPreprocessNative.SPEEX_PREPROCESS_SET_NOISE_SUPPRESS to noiseSuppressDb,
