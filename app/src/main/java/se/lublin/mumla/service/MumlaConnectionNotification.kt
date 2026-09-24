@@ -19,7 +19,6 @@ package se.lublin.mumla.service
 
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.PendingIntent.FLAG_CANCEL_CURRENT
@@ -159,12 +158,7 @@ class MumlaConnectionNotification private constructor(
 
     private fun ensureChannel() {
         if (channelCreated) return
-        val manager = service.getSystemService(NotificationManager::class.java)
-        // Importance cannot be lowered on an existing channel, so it moved to a new id.
-        manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, service.getString(R.string.connected), NotificationManager.IMPORTANCE_LOW),
-        )
+        NotificationChannels.create(service)
         channelCreated = true
     }
 
@@ -184,8 +178,7 @@ class MumlaConnectionNotification private constructor(
     companion object {
         private val TAG = MumlaConnectionNotification::class.java.name
         private const val NOTIFICATION_ID = 1
-        private const val CHANNEL_ID = "connection_status"
-        private const val LEGACY_CHANNEL_ID = "connected_channel"
+        private const val CHANNEL_ID = NotificationChannels.CONNECTION
         private const val BROADCAST_MUTE = "b_mute"
         private const val BROADCAST_DEAFEN = "b_deafen"
         private const val BROADCAST_OVERLAY = "b_overlay"

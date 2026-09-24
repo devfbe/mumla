@@ -18,39 +18,74 @@
 package se.lublin.mumla.service
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
+import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import se.lublin.mumla.R
 import se.lublin.mumla.app.DrawerAdapter
 import se.lublin.mumla.app.MumlaActivity
 
 /**
- * Heads-up notification for unread chat messages, augmenting [MumlaConnectionNotification]. It
- * counts every unread message but lists only the newest [MAX_LINES], each cut to [MAX_TEXT_CHARS].
+ * Heads-up notification for unread chat messages, augmenting [MumlaConnectionNotification], as a
+ * conversation with an inline reply to the current channel. It counts every unread message but
+ * shows only the newest [MAX_MESSAGES], each cut to [MAX_TEXT_CHARS].
  */
 class MumlaMessageNotification(private val context: Context) {
-    private val unreadLines = ArrayDeque<String>()
+    private val messages = ArrayDeque<NotificationCompat.MessagingStyle.Message>()
     private var unreadCount = 0
     private var channelCreated = false
+    private var conversation = Conversation()
 
-    /** Adds a message from [actorName] with the plain (markup-free) [text] and posts the summary. */
-    fun show(actorName: String?, text: String) {
-        val shortText = text.ellipsize(MAX_TEXT_CHARS)
+    /** Where the conversation happens: [self] is our name, [channel] where a reply goes, on [server]. */
+    data class Conversation(val self: String? = null, val channel: String? = null, val server: String? = null)
+
+    /** Adds a message from [actorName] with the plain (markup-free) [text] and posts the conversation. */
+    fun show(actorName: String, text: String, conversation: Conversation = Conversation()) {
         unreadCount++
-        unreadLines.addLast(context.getString(R.string.notification_message, actorName, shortText))
-        while (unreadLines.size > MAX_LINES) unreadLines.removeFirst()
+        val sender = Person.Builder().setName(actorName).build()
+        add(NotificationCompat.MessagingStyle.Message(text.ellipsize(MAX_TEXT_CHARS), now(), sender))
+        this.conversation = conversation
+        post(silent = false)
+    }
 
-        val style = NotificationCompat.InboxStyle().setBigContentTitle(
-            context.resources.getQuantityString(R.plurals.notification_unread_many, unreadCount, unreadCount),
-        )
-        unreadLines.forEach(style::addLine)
+    /** Adds our own inline [reply], which counts as nothing unread, and re-posts without alerting. */
+    fun showReply(reply: String, conversation: Conversation = Conversation()) {
+        add(NotificationCompat.MessagingStyle.Message(reply.ellipsize(MAX_TEXT_CHARS), now(), null as Person?))
+        this.conversation = conversation
+        post(silent = true)
+    }
+
+    /** Re-posts the conversation unchanged and without alerting, e.g. after an empty reply. */
+    fun refresh() {
+        if (messages.isNotEmpty()) post(silent = true)
+    }
+
+    /** Dismisses the notification, marking all messages read. */
+    fun dismiss() {
+        messages.clear()
+        unreadCount = 0
+        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+    }
+
+    private fun add(message: NotificationCompat.MessagingStyle.Message) {
+        messages.addLast(message)
+        while (messages.size > MAX_MESSAGES) messages.removeFirst()
+    }
+
+    private fun post(silent: Boolean) {
+        val self = Person.Builder()
+            .setName(conversation.self?.takeIf { it.isNotEmpty() } ?: context.getString(R.string.notification_you))
+            .build()
+        val style = NotificationCompat.MessagingStyle(self)
+            .setConversationTitle(conversation.channel)
+            .setGroupConversation(true)
+        messages.forEach(style::addMessage)
 
         val channelListIntent = Intent(context, MumlaActivity::class.java)
             .putExtra(MumlaActivity.EXTRA_DRAWER_FRAGMENT, DrawerAdapter.ITEM_SERVER)
@@ -60,16 +95,18 @@ class MumlaMessageNotification(private val context: Context) {
         )
 
         ensureChannel()
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, NotificationChannels.MESSAGES)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setSmallIcon(R.drawable.ic_stat_notify)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setContentTitle(actorName)
-            .setContentText(shortText)
+            .setSubText(conversation.server)
             .setVibrate(VIBRATION_PATTERN)
             .setStyle(style)
             .setNumber(unreadCount)
+            .setSilent(silent)
+            .addAction(replyAction())
             .build()
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
@@ -79,31 +116,49 @@ class MumlaMessageNotification(private val context: Context) {
         }
     }
 
-    /** Dismisses the notification, marking all messages read. */
-    fun dismiss() {
-        unreadLines.clear()
-        unreadCount = 0
-        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+    /**
+     * The inline reply, delivered to [MumlaService] as [ACTION_REPLY]. Mutable, which RemoteInput
+     * needs to add the typed text, and so explicit.
+     */
+    private fun replyAction(): NotificationCompat.Action {
+        val intent = Intent(context, MumlaService::class.java).setAction(ACTION_REPLY)
+        val pendingIntent = PendingIntent.getService(
+            context, REPLY_REQUEST_CODE, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        val label = context.getString(R.string.notification_reply)
+        return NotificationCompat.Action.Builder(R.drawable.ic_action_send, label, pendingIntent)
+            .addRemoteInput(RemoteInput.Builder(KEY_REPLY).setLabel(label).build())
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .setAllowGeneratedReplies(true)
+            .build()
     }
 
     private fun ensureChannel() {
         if (channelCreated) return
-        val channel = NotificationChannel(
-            CHANNEL_ID, context.getString(R.string.messageReceived), NotificationManager.IMPORTANCE_DEFAULT,
-        )
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        NotificationChannels.create(context)
         channelCreated = true
     }
 
-    private companion object {
-        const val NOTIFICATION_ID = 2
-        const val CHANNEL_ID = "message_channel"
-        const val MAX_LINES = 5
-        const val MAX_TEXT_CHARS = 200
-        val VIBRATION_PATTERN = longArrayOf(0, 100)
+    companion object {
+        /** The service intent action of an inline reply; see [replyText]. */
+        const val ACTION_REPLY = "se.lublin.mumla.action.CHAT_REPLY"
+
+        private const val NOTIFICATION_ID = 2
+        private const val REPLY_REQUEST_CODE = 2
+        private const val KEY_REPLY = "reply"
+        private const val MAX_MESSAGES = 5
+        private const val MAX_TEXT_CHARS = 200
+        private val VIBRATION_PATTERN = longArrayOf(0, 100)
+
+        /** The text typed into an [ACTION_REPLY] intent's reply field, or null. */
+        fun replyText(intent: Intent): String? =
+            RemoteInput.getResultsFromIntent(intent)?.getCharSequence(KEY_REPLY)?.toString()
+
+        private fun now() = System.currentTimeMillis()
 
         /** Cuts this to at most [max] characters, ending in an ellipsis, without splitting a surrogate pair. */
-        fun String.ellipsize(max: Int): String {
+        private fun String.ellipsize(max: Int): String {
             if (length <= max) return this
             var end = max - 1
             if (this[end - 1].isHighSurrogate()) end--

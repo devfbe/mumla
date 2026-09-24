@@ -195,7 +195,7 @@ class MumlaService : HumlaService(),
 
         // Every message notifies while enabled; there is no per-sender filter yet.
         if (mSettings.isChatNotifyEnabled) {
-            mMessageNotification.show(sender, strippedMessage)
+            mMessageNotification.show(sender, strippedMessage, conversation())
         }
 
         mMessageLog.add(IChatMessage.TextMessage(message))
@@ -300,6 +300,45 @@ class MumlaService : HumlaService(),
                 )
             }
         }
+    }
+
+    /** Our name, the channel a reply goes to and the server, for the chat notification. */
+    private fun conversation() = MumlaMessageNotification.Conversation(
+        self = orNullOutsideSession { sessionUser }?.name,
+        channel = orNullOutsideSession { sessionChannel }?.name,
+        server = targetServer?.let { it.name.ifEmpty { it.host } },
+    )
+
+    /** [read]'s result, or null where it needs a synchronized session and there is none. */
+    private fun <T> orNullOutsideSession(read: () -> T?): T? = try {
+        read()
+    } catch (e: IllegalStateException) {
+        Log.d(TAG, "no session: $e")
+        null
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == MumlaMessageNotification.ACTION_REPLY) onChatReply(intent)
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    /**
+     * Sends the chat notification's inline reply to our channel. The notification is re-posted in
+     * any case, or it would keep waiting for the send; without a session it is removed instead.
+     */
+    private fun onChatReply(intent: Intent) {
+        val reply = MumlaMessageNotification.replyText(intent)?.trim()
+        val channel = orNullOutsideSession { sessionChannel }
+        if (channel == null) {
+            mMessageNotification.dismiss()
+            return
+        }
+        if (reply.isNullOrEmpty()) {
+            mMessageNotification.refresh()
+            return
+        }
+        sendChannelTextMessage(channel.id, HtmlUtils.markupOutgoingMessage(reply), false)
+        mMessageNotification.showReply(reply, conversation())
     }
 
     override fun onBind(intent: Intent?): IBinder = MumlaBinder(this)

@@ -18,8 +18,6 @@
 package se.lublin.mumla.service
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.PendingIntent.FLAG_IMMUTABLE
 import android.content.BroadcastReceiver
@@ -58,12 +56,7 @@ class MumlaReconnectNotification(
         }
         ContextCompat.registerReceiver(context, notificationReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            context.getString(R.string.connection_lost_reconnecting),
-            NotificationManager.IMPORTANCE_DEFAULT,
-        )
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        NotificationChannels.create(context)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_notify)
@@ -116,7 +109,7 @@ class MumlaReconnectNotification(
     companion object {
         /** Not 2: that is MumlaMessageNotification's id, whose dismissal would cancel this too. */
         private const val NOTIFICATION_ID = 3
-        private const val CHANNEL_ID = "reconnecting_channel"
+        private const val CHANNEL_ID = NotificationChannels.RECONNECT
         private const val BROADCAST_DISMISS = "b_dismiss"
         private const val BROADCAST_RECONNECT = "b_reconnect"
         private const val BROADCAST_CANCEL_RECONNECT = "b_cancel_reconnect"

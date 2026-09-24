@@ -4,8 +4,10 @@ import android.app.Application
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Intent
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
+import androidx.core.app.RemoteInput
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -45,6 +47,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.testing.createMumlaService
+import se.lublin.mumla.util.HtmlUtils
 import se.lublin.mumla.testing.idleMainLooper
 
 /**
@@ -225,9 +228,50 @@ class MumlaServiceCharacterizationTest {
         service.testEmit(HumlaEvent.TextMessage(textMessage("motd", actor = null)))
         idleMainLooper()
 
-        val extras = shadowOf(notificationManager).allNotifications.single().extras
-        assertThat(extras.getCharSequenceArray(NotificationCompat.EXTRA_TEXT_LINES)!!.map { it.toString() })
-            .containsExactly(app.getString(R.string.notification_message, app.getString(R.string.server), "motd"))
+        val message = postedMessages().single()
+        assertThat(message.person?.name.toString()).isEqualTo(app.getString(R.string.server))
+        assertThat(message.text.toString()).isEqualTo("motd")
+    }
+
+    /** The messages of the one posted chat notification. */
+    private fun postedMessages(): List<NotificationCompat.MessagingStyle.Message> {
+        val posted = shadowOf(notificationManager).allNotifications.single()
+        return NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(posted)!!.messages
+    }
+
+    private fun replyIntent(text: String): Intent {
+        val intent = Intent(app, MumlaService::class.java).setAction(MumlaMessageNotification.ACTION_REPLY)
+        val input = RemoteInput.Builder("reply").build()
+        RemoteInput.addResultsToIntent(arrayOf(input), intent, Bundle().apply { putCharSequence("reply", text) })
+        return intent
+    }
+
+    @Test
+    fun anInlineReplyGoesToOurChannelAndJoinsTheNotification() {
+        connect()
+        val channel = mockk<Channel>(relaxed = true)
+        every { channel.id } returns 4
+        every { self.channel } returns channel
+        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        service.testEmit(HumlaEvent.TextMessage(textMessage("coming?", actor = null)))
+        idleMainLooper()
+
+        service.onStartCommand(replyIntent(" on my way "), 0, 1)
+
+        val sentText = sent.single { it.first == HumlaTCPMessageType.TextMessage }.second as Mumble.TextMessage
+        assertThat(sentText.channelIdList).containsExactly(4)
+        assertThat(sentText.message).isEqualTo(HtmlUtils.markupOutgoingMessage("on my way"))
+        assertThat(postedMessages().last().text.toString()).isEqualTo("on my way")
+    }
+
+    @Test
+    fun anInlineReplyWithoutASessionSendsNothingAndRemovesTheNotification() {
+        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+
+        service.onStartCommand(replyIntent("hello"), 0, 1)
+
+        assertThat(sent).isEmpty()
+        assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
     }
 
     @Test
@@ -295,10 +339,9 @@ class MumlaServiceCharacterizationTest {
         service.testEmit(HumlaEvent.TextMessage(textMessage("<b>hi</b> <a href=\"https://x.example\">there</a>")))
         idleMainLooper()
 
-        val extras = shadowOf(notificationManager).allNotifications.single().extras
-        assertThat(extras.getCharSequence(NotificationCompat.EXTRA_TEXT).toString()).isEqualTo("hi there")
-        assertThat(extras.getCharSequenceArray(NotificationCompat.EXTRA_TEXT_LINES)!!.map { it.toString() })
-            .containsExactly(app.getString(R.string.notification_message, "alice", "hi there"))
+        val message = postedMessages().single()
+        assertThat(message.text.toString()).isEqualTo("hi there")
+        assertThat(message.person?.name.toString()).isEqualTo("alice")
     }
 
     @Test
