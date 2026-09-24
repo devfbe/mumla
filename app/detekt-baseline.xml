@@ -1,0 +1,247 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:MumlaService.kt$MumlaService.&lt;no name provided&gt;$isConnectionEstablished() &amp;&amp; user.getSession() == selfSession &amp;&amp; getTransmitMode() == Constants.TRANSMIT_PUSH_TO_TALK &amp;&amp; user.getTalkState() == TalkState.TALKING &amp;&amp; mPTTSoundEnabled</ID>
+    <ID>ComplexCondition:MumlaService.kt$MumlaService.&lt;no name provided&gt;$tts != null &amp;&amp; formattedTtsMessage.length &lt;= TTS_THRESHOLD &amp;&amp; getSessionUser() != null &amp;&amp; !getSessionUser()!!.isSelfDeafened()</ID>
+    <ID>CyclomaticComplexMethod:ChannelListAdapter.kt$ChannelListAdapter$override fun onBindViewHolder(viewHolder: RecyclerView.ViewHolder, position: Int)</ID>
+    <ID>CyclomaticComplexMethod:ChannelListFragment.kt$ChannelListFragment$override fun onOptionsItemSelected(item: MenuItem): Boolean</ID>
+    <ID>CyclomaticComplexMethod:HttpImageFetcher.kt$HttpImageFetcher$private fun fetchHop(target: URL, deadline: Long, unopenable: ImageError): Hop</ID>
+    <ID>CyclomaticComplexMethod:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase$private fun sealPlainSecrets(db: SQLiteDatabase)</ID>
+    <ID>CyclomaticComplexMethod:MumlaService.kt$MumlaService$override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?)</ID>
+    <ID>EmptyCatchBlock:MumlaService.kt$MumlaService${ }</ID>
+    <ID>EmptyFunctionBlock:ChannelChatFragment.kt$ChannelChatFragment.&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:NotificationPostingTest.kt$NotificationPostingTest.NoopActions${}</ID>
+    <ID>ForbiddenComment:ChannelListAdapter.kt$ChannelListAdapter$// FIXME: cache bitmaps</ID>
+    <ID>ForbiddenComment:ChannelListFragment.kt$ChannelListFragment$// Dismiss action mode if double pressed. FIXME: use list view selection instead?</ID>
+    <ID>ForbiddenComment:MumlaService.kt$MumlaService.&lt;no name provided&gt;$// TODO: create a customizable notification sieve</ID>
+    <ID>ImplicitDefaultLocale:ChannelListAdapter.kt$ChannelListAdapter$String.format("%d", node.subtreeUserCount)</ID>
+    <ID>LargeClass:ChannelChatFragmentTest.kt$ChannelChatFragmentTest</ID>
+    <ID>LargeClass:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest</ID>
+    <ID>LargeClass:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest</ID>
+    <ID>LongMethod:ChannelListAdapter.kt$ChannelListAdapter$override fun onBindViewHolder(viewHolder: RecyclerView.ViewHolder, position: Int)</ID>
+    <ID>LongMethod:ChannelListFragment.kt$ChannelListFragment$override fun onOptionsItemSelected(item: MenuItem): Boolean</ID>
+    <ID>LongParameterList:AudioTestSession.kt$AudioTestSession$( private val audioManager: AudioManager, private val vadConfig: VadConfig, private val noiseSuppression: NoiseSuppressionMode, private val speexNoiseSuppressDb: Int, private val echoCancellation: EchoCancellationMode, private val effects: AndroidAudioEffects, private val loopback: Boolean, private val onReading: (MeterReading) -&gt; Unit, private val readingIntervalFrames: Int = DEFAULT_READING_INTERVAL_FRAMES, private val captureFactory: PcmCaptureSourceFactory = AndroidAudioRecordSource.Factory(), private val sinkFactory: PcmPlaybackSinkFactory = AndroidAudioTrackSink.Factory(), private val preprocessorFactory: CapturePreprocessorFactory = CapturePreprocessorFactory(log = { Log.w(TAG, it) }), private val resamplerFactory: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
+    <ID>LongParameterList:AudioTestSessionTest.kt$AudioTestSessionTest$( source: TestCaptureSource, sink: TestPlaybackSink = TestPlaybackSink(), vad: VadConfig = VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1), noise: NoiseSuppressionMode = NoiseSuppressionMode.NONE, loopback: Boolean = false, effects: AndroidAudioEffects = AndroidAudioEffects(), echo: EchoCancellationMode = EchoCancellationMode.NONE, speexGain: Float = 1f, speexProbability: Int = 0, sinkFactory: TestPlaybackSink.Factory = TestPlaybackSink.Factory(sink), captureFactory: TestCaptureSource.Factory = TestCaptureSource.Factory(source), resamplerFactory: (Int, Int) -&gt; Resampler = { _, _ -&gt; error("no resampler expected at 48 kHz") }, )</ID>
+    <ID>LongParameterList:ChannelListAdapter.kt$ChannelListAdapter$( private val context: Context, service: IHumlaService, private val database: MumlaDatabase, private val fragmentManager: FragmentManager, showPinnedOnly: Boolean, showUserCount: Boolean, /** * Where the local mute/ignore rows are written. Off the main thread by default, and injected * only so that a test can run the write inline: with a bare `Thread` the two clauses that * decide whether the write happens at all are observable only through a race, which is how * `onLocalUserStateUpdated` came to have four unpinned lines behind an unpinned condition. */ private val databaseExecutor: Executor = Executor { Thread(it).start() }, )</ID>
+    <ID>LongParameterList:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest$( root: FakeChannel, ids: Map&lt;Int, FakeChannel&gt;, pinnedChannels: List&lt;Int&gt;? = null, showUserCount: Boolean = true, connected: Boolean = true, // Inline, so that what the background write does is a fact of the test rather than a race // with it. The production default is pinned separately, by // [theDefaultDatabaseExecutorWritesOffTheCallingThread]. databaseExecutor: Executor = Executor { it.run() }, )</ID>
+    <ID>LongParameterList:ChannelTreeFixture.kt$FakeUser$( private val session: Int, private val name: String = "user-$session", var selfDeafened: Boolean = false, var deafened: Boolean = false, var selfMuted: Boolean = false, var muted: Boolean = false, var suppressed: Boolean = false, // Not `var talkState`: that generates getTalkState(), which collides with the interface // method this class overrides (spec 4.05). var state: TalkState = TalkState.PASSIVE, // Negative for an unregistered user, which is the server's way of saying "not an account". // Backed by a field rather than a `var` for the same reason: `var userId` would generate // getUserId(), which is the interface's own accessor (spec 4.05). userId: Int = -1, // The user's avatar, as the server sends it: raw bytes that may or may not decode. A `var` // would generate getTexture(), the interface's own accessor (spec 4.05). texture: ByteArray? = null, )</ID>
+    <ID>LongParameterList:ChatAdapter.kt$ChatAdapter$( private val parser: ChatContentParser, private val loader: ChatImageLoader, private val thumbnailPx: Int, private val selfSessionId: () -&gt; Int, private val onImageClicked: (String) -&gt; Unit, private val scope: CoroutineScope, private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default, differConfig: AsyncDifferConfig&lt;IChatMessage&gt; = AsyncDifferConfig.Builder(DIFF).build(), )</ID>
+    <ID>LongParameterList:ChatAdapterTest.kt$ChatAdapterTest$( actor: Int = 7, actorName: String? = "alice", channels: List&lt;Channel&gt; = emptyList(), trees: List&lt;Channel&gt; = emptyList(), users: List&lt;User&gt; = emptyList(), body: String = "hi", )</ID>
+    <ID>LongParameterList:ChatAdapterTest.kt$ChatAdapterTest$( parser: ChatContentParser = ChatContentParser("[image]"), scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined), thumbnailPx: Int = 240, parseDispatcher: CoroutineDispatcher = Dispatchers.Default, selfSessionId: () -&gt; Int = { 42 }, decodeDispatcher: CoroutineDispatcher = Dispatchers.Unconfined, diff: DiffUtil.ItemCallback&lt;IChatMessage&gt; = ChatAdapter.DIFF, )</ID>
+    <ID>LongParameterList:ChatImageLoader.kt$ChatImageLoader$( private val fetcher: ImageFetcher = HttpImageFetcher(), private val externalImagesAllowed: () -&gt; Boolean, maxCacheBytes: Long = Runtime.getRuntime().maxMemory() / 8, private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO, private val decodeDispatcher: CoroutineDispatcher = Dispatchers.Default, private val nowMillis: () -&gt; Long = System::currentTimeMillis, maxConcurrentLoads: Int = DEFAULT_MAX_CONCURRENT_LOADS, )</ID>
+    <ID>LongParameterList:InputLevelMeterPreferenceTest.kt$InputLevelMeterPreferenceTest$( levelDbfs: Float = -30f, floorDbfs: Float? = -45f, speechDbfs: Float? = -20f, thresholdDbfs: Float? = -32f, voice: Boolean = true, holding: Boolean = false, tooClose: Boolean = false, )</ID>
+    <ID>LongParameterList:ServerAdapter.kt$ServerAdapter$( context: Context, private val viewResource: Int, servers: MutableList&lt;E&gt;, private val scope: CoroutineScope, private val pinger: ServerPinger = ServerPinger(), private val pingDispatcher: CoroutineDispatcher = PING_DISPATCHER, private val pingsAllowed: () -&gt; Boolean = { !Settings.getInstance(context).isTorEnabled() }, )</ID>
+    <ID>LongParameterList:ServerInfoResponse.kt$ServerInfoResponse$( val server: Server?, val version: Int, val identifier: Long, val currentUsers: Int, val maximumUsers: Int, val allowedBandwidth: Int, val latency: Int, val isDummy: Boolean, )</ID>
+    <ID>LongParameterList:ZoomState.kt$ZoomState$( factor: Float, focusX: Float, focusY: Float, viewWidth: Float, viewHeight: Float, imageWidth: Float, imageHeight: Float, )</ID>
+    <ID>LoopWithTooManyJumpStatements:AudioTestSession.kt$AudioTestSession$while</ID>
+    <ID>LoopWithTooManyJumpStatements:HttpImageFetcher.kt$HttpImageFetcher$while</ID>
+    <ID>LoopWithTooManyJumpStatements:MumlaServiceAudioPreferencesTest.kt$MumlaServiceAudioPreferencesTest$while</ID>
+    <ID>LoopWithTooManyJumpStatements:TestAudioFakes.kt$TestCaptureSource$while</ID>
+    <ID>MagicNumber:AudioTestSession.kt$AudioTestSession$100</ID>
+    <ID>MagicNumber:AudioTestSession.kt$AudioTestSession$96f</ID>
+    <ID>MagicNumber:ChannelChatFragment.kt$ChannelChatFragment$3</ID>
+    <ID>MagicNumber:ChannelListAdapter.kt$ChannelListAdapter$25f</ID>
+    <ID>MagicNumber:ChatImageLoader.kt$ChatImageLoader$8</ID>
+    <ID>MagicNumber:ChatImageLoader.kt$ChatImageLoader.Companion$0xFF</ID>
+    <ID>MagicNumber:ChatImageLoader.kt$ChatImageLoader.Companion$4</ID>
+    <ID>MagicNumber:Hex.kt$0xFF</ID>
+    <ID>MagicNumber:Hex.kt$4</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$0xFC</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$0xFE</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$0xFF</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$100</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$127</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$18</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$19</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$198</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$255</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$3</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$4</ID>
+    <ID>MagicNumber:HostPolicy.kt$PublicHostsOnly$64</ID>
+    <ID>MagicNumber:HtmlUtils.kt$HtmlUtils$16</ID>
+    <ID>MagicNumber:HtmlUtils.kt$HtmlUtils$3</ID>
+    <ID>MagicNumber:HtmlUtils.kt$HtmlUtils$4</ID>
+    <ID>MagicNumber:HttpImageFetcher.kt$HttpImageFetcher$1024</ID>
+    <ID>MagicNumber:HttpImageFetcher.kt$HttpImageFetcher$1_000_000L</ID>
+    <ID>MagicNumber:HttpImageFetcher.kt$HttpImageFetcher$200</ID>
+    <ID>MagicNumber:HttpImageFetcher.kt$HttpImageFetcher$299</ID>
+    <ID>MagicNumber:HttpImageFetcher.kt$HttpImageFetcher$300</ID>
+    <ID>MagicNumber:HttpImageFetcher.kt$HttpImageFetcher$399</ID>
+    <ID>MagicNumber:HttpImageFetcher.kt$HttpImageFetcher$5L</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$0x47</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$0x4E</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$0x50</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$0x89</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$0xD8</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$0xFF</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$10</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$11</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$12</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$8</ID>
+    <ID>MagicNumber:ImageShareExporter.kt$ImageShareExporter.Companion$9</ID>
+    <ID>MagicNumber:InputLevelMeterPreference.kt$InputLevelMeterPreference$6f</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$0.4f</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$0.5f</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$120</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$125</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$128</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$139</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$144</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$152</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$155</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$156</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$175</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$229</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$255</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$3</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$46</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$48</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$50</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$64</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$76</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$80</ID>
+    <ID>MagicNumber:LevelMeterView.kt$LevelMeterView$96</ID>
+    <ID>MagicNumber:SecretCipher.kt$KeystoreSecretCipher$256</ID>
+    <ID>MagicNumber:ServerInfoResponse.kt$ServerInfoResponse$12</ID>
+    <ID>MagicNumber:ServerInfoResponse.kt$ServerInfoResponse$16</ID>
+    <ID>MagicNumber:ServerInfoResponse.kt$ServerInfoResponse$20</ID>
+    <ID>MagicNumber:ServerInfoResponse.kt$ServerInfoResponse$4</ID>
+    <ID>MagicNumber:ServerInfoResponse.kt$ServerInfoResponse$8</ID>
+    <ID>MagicNumber:ServerPinger.kt$ServerPinger$1024</ID>
+    <ID>MagicNumber:ServerPinger.kt$ServerPinger$1_000_000</ID>
+    <ID>MagicNumber:Settings.kt$Settings$100</ID>
+    <ID>MagicNumber:Settings.kt$Settings$100f</ID>
+    <ID>MaxLineLength:AudioTestSession.kt$AudioTestSession$if</ID>
+    <ID>MaxLineLength:ChatImageLoaderTest.kt$ChatImageLoaderTest$assertThat(fetched).containsExactly("https://x.org/a.png", "https://x.org/b.png", "https://x.org/a.png").inOrder()</ID>
+    <ID>MaxLineLength:ChatImageLoaderTest.kt$ChatImageLoaderTest$assertThat(loader().loadThumbnail("ftp://x/a.png", 240, 240)).isEqualTo(ImageResult.Failed(ImageError.UNSUPPORTED))</ID>
+    <ID>MaxLineLength:ChatImageLoaderTest.kt$ChatImageLoaderTest$val result = loader().loadThumbnail(TestImages.dataUri(TestImages.png(1000, 500)), 240, 240) as ImageResult.Ready</ID>
+    <ID>MaxLineLength:HttpImageFetcher.kt$HttpImageFetcher$var buffer = ByteArray(if (declaredLength in 1..cap.toLong()) declaredLength.toInt() else INITIAL_CAPACITY.coerceAtMost(cap))</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$HttpImageFetcher(readTimeoutMs = 10_000, maxBytes = 5L * 1024 * 1024, totalTimeoutMs = 500, hostPolicy = HostPolicy.ANY_HOST)</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$assertThat(HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch("HTTP://127.0.0.1:${server.address.port}/up.png")).isEqualTo(body)</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$assertThat(HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/exact"))).isEqualTo(body)</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$expectError(target, ImageError.TIMEOUT, HttpImageFetcher(readTimeoutMs = 10_000, totalTimeoutMs = 500, hostPolicy = HostPolicy.ANY_HOST))</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$expectError(url("/endless"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 64 * 1024, hostPolicy = HostPolicy.ANY_HOST))</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$expectError(url("/justover"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST))</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$private</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(connectTimeoutMs = 500, hostPolicy = HostPolicy.ANY_HOST).fetch("http://127.0.0.1:$port/x") }</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch("nourl") }</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(url("/missing")) }</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/big")) }</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/chunked")) }</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$val e = assertThrows(ImageFetchException::class.java) { HttpImageFetcher(readTimeoutMs = 200, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/slow")) }</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$val fetched = HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch("http://user:pass@127.0.0.1:${server.address.port}/cred.png")</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$val fetcher = HttpImageFetcher(connectTimeoutMs = 1_000, readTimeoutMs = 1_000, totalTimeoutMs = 2_000, hostPolicy = HostPolicy.ANY_HOST)</ID>
+    <ID>MaxLineLength:HttpImageFetcherTest.kt$HttpImageFetcherTest$val fetcher = HttpImageFetcher(connectTimeoutMs = 2_000, readTimeoutMs = 2_000, totalTimeoutMs = 6_000, hostPolicy = HostPolicy.ANY_HOST)</ID>
+    <ID>MaxLineLength:ImageShareExporterTest.kt$ImageShareExporterTest$assertThat(ImageShareExporter.typeOf("RIFF WEBPVP8 ".toByteArray(Charsets.ISO_8859_1))).isEqualTo("webp" to "image/webp")</ID>
+    <ID>MaxLineLength:ImageShareExporterTest.kt$ImageShareExporterTest$assertThat(ImageShareExporter.typeOf(byteArrayOf(0x89.toByte(), 0x50, 0x4E))).isEqualTo("bin" to "application/octet-stream")</ID>
+    <ID>MaxLineLength:ImageShareExporterTest.kt$ImageShareExporterTest$assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte(), 0xD8.toByte()))).isEqualTo("jpg" to "image/jpeg")</ID>
+    <ID>MaxLineLength:ImageShareExporterTest.kt$ImageShareExporterTest$assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()))).isEqualTo("jpg" to "image/jpeg")</ID>
+    <ID>MaxLineLength:ImageSourceTest.kt$ImageSourceTest$assertThat(ImageSource.parse("\uFF48\uFF54\uFF54\uFF50://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)</ID>
+    <ID>MaxLineLength:ImageSourceTest.kt$ImageSourceTest$assertThat(ImageSource.parse("data:application/javascript;base64,YWxlcnQoMSk=")).isEqualTo(ImageSource.Unsupported)</ID>
+    <ID>MaxLineLength:ImageSourceTest.kt$ImageSourceTest$assertThat(ImageSource.parse("http://user:pass@/a.png")).isEqualTo(ImageSource.Remote("http://user:pass@/a.png"))</ID>
+    <ID>MaxLineLength:ImageSourceTest.kt$ImageSourceTest$assertThat(ImageSource.parse("https://Example.org/a.png")).isEqualTo(ImageSource.Remote("https://Example.org/a.png"))</ID>
+    <ID>MaxLineLength:LevelMeterViewTest.kt$LevelMeterViewTest$view.draw(android.graphics.Canvas(android.graphics.Bitmap.createBitmap(200, 20, android.graphics.Bitmap.Config.ARGB_8888)))</ID>
+    <ID>MaxLineLength:ManifestAuditTest.kt$ManifestAuditTest.Companion$"""android:(layout_)?(margin|padding)(Left|Right)=|android:layout_(alignParent|to|align)(Left|Right)(Of)?=|"""</ID>
+    <ID>MaxLineLength:MumlaConnectionNotification.kt$MumlaConnectionNotification$builder.addAction(R.drawable.ic_action_audio, service.getString(R.string.deafen), broadcast(BROADCAST_DEAFEN))</ID>
+    <ID>MaxLineLength:MumlaConnectionNotification.kt$MumlaConnectionNotification$builder.addAction(R.drawable.ic_action_channels, service.getString(R.string.overlay), broadcast(BROADCAST_OVERLAY))</ID>
+    <ID>MaxLineLength:MumlaConnectionNotification.kt$MumlaConnectionNotification$builder.addAction(R.drawable.ic_action_microphone, service.getString(R.string.mute), broadcast(BROADCAST_MUTE))</ID>
+    <ID>MaxLineLength:MumlaReconnectNotification.kt$MumlaReconnectNotification$builder.addAction(R.drawable.ic_action_move, context.getString(R.string.reconnect), broadcast(BROADCAST_RECONNECT))</ID>
+    <ID>MaxLineLength:MumlaReconnectNotificationTest.kt$MumlaReconnectNotificationTest$assertThat(n.extras.getString(Notification.EXTRA_TITLE)).isEqualTo(context.getString(R.string.mumlaDisconnected))</ID>
+    <ID>MaxLineLength:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase$db.query(TABLE_CERTIFICATES, arrayOf(COLUMN_CERTIFICATES_ID, COLUMN_CERTIFICATES_DATA), null, null, null, null, null)</ID>
+    <ID>MaxLineLength:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase$db.query(TABLE_SERVER, arrayOf(SERVER_ID, SERVER_PASSWORD), "$SERVER_PASSWORD IS NOT NULL", null, null, null, null)</ID>
+    <ID>MaxLineLength:MumlaSQLiteDatabaseSecretsTest.kt$MumlaSQLiteDatabaseSecretsTest$assertThat(raw("SELECT password FROM server WHERE password IS NOT NULL").map { SecretCodec.isSealed(it as String) })</ID>
+    <ID>MaxLineLength:MumlaSQLiteDatabaseSecretsTest.kt$MumlaSQLiteDatabaseSecretsTest$put("name", "old"); put("host", "old.example"); put("port", 64738); put("username", "me"); put("password", "legacy")</ID>
+    <ID>MaxLineLength:MumlaSQLiteDatabaseSecretsTest.kt$MumlaSQLiteDatabaseSecretsTest$while (c.moveToNext()) add(if (c.getType(0) == android.database.Cursor.FIELD_TYPE_BLOB) c.getBlob(0) else c.getString(0))</ID>
+    <ID>MaxLineLength:MumlaSQLiteDatabaseSecretsTest.kt$MumlaSQLiteDatabaseSecretsTest.&lt;no name provided&gt;$put("name", "old"); put("host", "old.example"); put("port", 64738); put("username", "me"); put("password", "legacy")</ID>
+    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$assertThat(userStates().map { it.selfMute to it.selfDeaf }).containsExactly(true to true, false to false).inOrder()</ID>
+    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$for</ID>
+    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$private fun promptReceivers()</ID>
+    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$putParcelable(HumlaService.EXTRAS_SERVER, se.lublin.humla.model.Server(-1, "t", "127.0.0.1", 64738, "me", ""))</ID>
+    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })</ID>
+    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_VOICE_ACTIVITY) })</ID>
+    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.renderSessionState(SessionState.Disconnected(HumlaException("again", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)))</ID>
+    <ID>MaxLineLength:MumlaServiceForegroundTest.kt$MumlaServiceForegroundTest$PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext()).edit().clear().commit()</ID>
+    <ID>MaxLineLength:MumlaServiceForegroundTest.kt$MumlaServiceForegroundTest$fun field(name: String)</ID>
+    <ID>MaxLineLength:MumlaServiceForegroundTest.kt$MumlaServiceForegroundTest$service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })</ID>
+    <ID>MaxLineLength:MumlaTrustStoreTest.kt$MumlaTrustStoreTest$assertThat(CertificatePins.forHost(store, "Mumble.Example.org")).containsExactly(CertificatePins.fingerprint(new))</ID>
+    <ID>MaxLineLength:MumlaTrustStoreTest.kt$MumlaTrustStoreTest$assertThat(CertificatePins.forHost(store, "other.example.org")).containsExactly(CertificatePins.fingerprint(other))</ID>
+    <ID>MaxLineLength:OutgoingImagePreparerTest.kt$OutgoingImagePreparerTest$assertThat(exif.rotationDegrees != 0 || exif.isFlipped).isEqualTo(orientation != ExifInterface.ORIENTATION_NORMAL)</ID>
+    <ID>MaxLineLength:OutgoingImagePreparerTest.kt$OutgoingImagePreparerTest$val bytes = TestImages.withExifOrientation(TestImages.png(1200, 800), ExifInterface.ORIENTATION_ROTATE_90, ".png")</ID>
+    <ID>MaxLineLength:ServerMatcherTest.kt$ServerMatcherTest$val replies = mapOf(old to reply(old, users = 0, latency = 1, version = 0x10203), silent to ServerInfoResponse())</ID>
+    <ID>MaxLineLength:Settings.kt$Settings$fun isPreprocessorEnabled(): Boolean</ID>
+    <ID>MaxLineLength:Settings.kt$Settings$fun isPushToTalkButtonShown(): Boolean</ID>
+    <ID>MaxLineLength:Settings.kt$Settings.Companion$val</ID>
+    <ID>NestedBlockDepth:ChannelListAdapter.kt$ChannelListAdapter$override fun onBindViewHolder(viewHolder: RecyclerView.ViewHolder, position: Int)</ID>
+    <ID>NestedBlockDepth:ManifestAuditTest.kt$ManifestAuditTest$@Test fun theBackupRulesFileExcludesCloudBackupButNotDeviceTransfer()</ID>
+    <ID>PrintStackTrace:CertificateImportActivity.kt$CertificateImportActivity$e</ID>
+    <ID>PrintStackTrace:MumlaReconnectNotification.kt$MumlaReconnectNotification$e</ID>
+    <ID>PrintStackTrace:MumlaService.kt$MumlaService$e</ID>
+    <ID>PrintStackTrace:PublicServerFetcher.kt$PublicServerFetcher$e</ID>
+    <ID>ReturnCount:AudioPreferenceExtras.kt$AudioPreferenceExtras$@JvmStatic fun extrasFor(key: String, settings: Settings): Bundle</ID>
+    <ID>ReturnCount:AudioSettingsFragment.kt$AudioSettingsFragment$private fun restartSession( loopback: Boolean = findPreference&lt;SwitchPreferenceCompat&gt;(KEY_LOOPBACK)?.isChecked ?: false, )</ID>
+    <ID>ReturnCount:BluetoothScoToggle.kt$BluetoothScoToggle$fun request(enabled: Boolean): Result</ID>
+    <ID>ReturnCount:BoundedBitmapDecoder.kt$BoundedBitmapDecoder$private fun decode(bytes: ByteArray, maxWidth: Int, maxHeight: Int, exactFit: Boolean): Bitmap?</ID>
+    <ID>ReturnCount:CertificateImportActivity.kt$CertificateImportActivity$@Deprecated("Deprecated in Java") override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?)</ID>
+    <ID>ReturnCount:CertificateImportActivityTest.kt$CertificateImportActivityTest$private fun findEditText(view: View): EditText?</ID>
+    <ID>ReturnCount:ChannelChatFragment.kt$ChannelChatFragment$fun updateChatTargetText(target: ChatTargetProvider.ChatTarget?)</ID>
+    <ID>ReturnCount:ChannelChatFragmentTest.kt$ChannelChatFragmentTest$private fun View.firstImageView(): ImageView?</ID>
+    <ID>ReturnCount:ChannelListFragment.kt$ChannelListFragment$override fun onOptionsItemSelected(item: MenuItem): Boolean</ID>
+    <ID>ReturnCount:ChannelListFragment.kt$ChannelListFragment.&lt;no name provided&gt;$override fun onUserJoinedChannel(user: IUser, newChannel: IChannel, oldChannel: IChannel?)</ID>
+    <ID>ReturnCount:ChatAdapter.kt$ChatAdapter$private fun targetLabel(context: Context, message: IMessage): String</ID>
+    <ID>ReturnCount:ChatImageLoader.kt$ChatImageLoader$private fun cached(key: String): ImageResult?</ID>
+    <ID>ReturnCount:ChatImageLoader.kt$ChatImageLoader$suspend fun loadFull(source: String, maxWidth: Int, maxHeight: Int): ImageResult</ID>
+    <ID>ReturnCount:ChatImageLoader.kt$ChatImageLoader$suspend fun loadThumbnail(source: String, maxWidth: Int, maxHeight: Int): ImageResult</ID>
+    <ID>ReturnCount:HostPolicy.kt$PublicHostsOnly$override fun isAllowed(host: String): Boolean</ID>
+    <ID>ReturnCount:ImageSource.kt$ImageSource.Companion$private fun parseData(uri: String): ImageSource</ID>
+    <ID>ReturnCount:MediaKeyHandler.kt$MediaKeyHandler$fun onKeyEvent(event: KeyEvent): Boolean</ID>
+    <ID>ReturnCount:MumlaConnectionNotification.kt$MumlaConnectionNotification$fun show(): Boolean</ID>
+    <ID>ReturnCount:PublicServerListFragment.kt$PublicServerListFragment$override fun onMenuItemSelected(menuItem: MenuItem): Boolean</ID>
+    <ID>ReturnCount:ZoomImageView.kt$ZoomImageView$private fun canFit(): Boolean</ID>
+    <ID>SwallowedException:ChannelChatFragment.kt$ChannelChatFragment$e: HumlaDisconnectedException</ID>
+    <ID>SwallowedException:HostPolicy.kt$PublicHostsOnly$e: SecurityException</ID>
+    <ID>SwallowedException:HostPolicy.kt$PublicHostsOnly$e: UnknownHostException</ID>
+    <ID>SwallowedException:HtmlUtils.kt$HtmlUtils$e: IllegalArgumentException</ID>
+    <ID>SwallowedException:HttpImageFetcher.kt$HttpImageFetcher$e: RuntimeException</ID>
+    <ID>SwallowedException:HttpImageFetcherTest.kt$HttpImageFetcherTest$e: Exception</ID>
+    <ID>SwallowedException:ImageSource.kt$ImageSource.Companion$e: IllegalArgumentException</ID>
+    <ID>SwallowedException:ImageViewerDialogFragment.kt$ImageViewerDialogFragment$e: IOException</ID>
+    <ID>SwallowedException:ImageViewerDialogFragment.kt$ImageViewerDialogFragment$e: ImageFetchException</ID>
+    <ID>SwallowedException:MumlaService.kt$MumlaService$iae: IllegalArgumentException</ID>
+    <ID>SwallowedException:MumlaServiceAudioPreferencesTest.kt$MumlaServiceAudioPreferencesTest$e: NoSuchFieldException</ID>
+    <ID>SwallowedException:MumlaTrustStoreTest.kt$MumlaTrustStoreTest$e: IOException</ID>
+    <ID>SwallowedException:OutgoingImagePreparer.kt$OutgoingImagePreparer$e: IOException</ID>
+    <ID>SwallowedException:OutgoingImagePreparer.kt$OutgoingImagePreparer$e: SecurityException</ID>
+    <ID>SwallowedException:ServerPinger.kt$ServerPinger$e: Exception</ID>
+    <ID>ThrowsCount:ChatImageLoader.kt$ChatImageLoader$private fun fetchBytes(source: String, sourceKey: String): ByteArray</ID>
+    <ID>ThrowsCount:HttpImageFetcher.kt$HttpImageFetcher$private fun fetchHop(target: URL, deadline: Long, unopenable: ImageError): Hop</ID>
+    <ID>ThrowsCount:HttpImageFetcher.kt$HttpImageFetcher$private fun redirectTarget(current: URL, location: String?): String</ID>
+    <ID>ThrowsCount:HttpImageFetcher.kt$HttpImageFetcher$private fun supportedUrl(url: String, failure: ImageError): URL</ID>
+    <ID>TooGenericExceptionCaught:AudioTestSession.kt$AudioTestSession$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:CertificateExportActivity.kt$CertificateExportActivity$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CertificateImportActivity.kt$CertificateImportActivity$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:HttpImageFetcher.kt$HttpImageFetcher$e: RuntimeException</ID>
+    <ID>TooGenericExceptionCaught:MumlaService.kt$MumlaService$e: RuntimeException</ID>
+    <ID>TooGenericExceptionCaught:SecretCipher.kt$KeystoreSecretCipher$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SecretCipher.kt$SecretCodec$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ServerPinger.kt$ServerPinger$e: Exception</ID>
+    <ID>TooGenericExceptionThrown:Settings.kt$Settings$throw RuntimeException("Could not convert input method '$inputMethod' to a Humla input method id!")</ID>
+    <ID>TooGenericExceptionThrown:Settings.kt$Settings$throw RuntimeException("Invalid input method $inputMethod")</ID>
+    <ID>TooManyFunctions:AudioSettingsFragment.kt$AudioSettingsFragment : MumlaPreferenceFragment</ID>
+    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : HumlaServiceFragmentOnChatTargetSelectedListener</ID>
+    <ID>TooManyFunctions:ChannelListAdapter.kt$ChannelListAdapter : AdapterIUserLocalStateListener</ID>
+    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : HumlaServiceFragmentOnChannelClickListenerOnUserClickListenerOnSharedPreferenceChangeListener</ID>
+    <ID>TooManyFunctions:ChatImageLoader.kt$ChatImageLoader</ID>
+    <ID>TooManyFunctions:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase : SQLiteOpenHelperMumlaDatabase</ID>
+    <ID>TooManyFunctions:MumlaService.kt$MumlaService : HumlaServiceOnSharedPreferenceChangeListenerOnActionListenerOnActionListenerIMumlaService</ID>
+    <ID>TooManyFunctions:PublicServerListFragment.kt$PublicServerListFragment : FragmentOnItemClickListenerPublicServerAdapterMenuListenerMenuProvider</ID>
+    <ID>TooManyFunctions:Settings.kt$Settings</ID>
+    <ID>TooManyFunctions:ZoomImageView.kt$ZoomImageView : AppCompatImageView</ID>
+    <ID>UnusedParameter:BoundedBitmapDecoderTest.kt$ArmedBitmapFactory.Companion$data: ByteArray?</ID>
+    <ID>UnusedParameter:BoundedBitmapDecoderTest.kt$ArmedBitmapFactory.Companion$length: Int</ID>
+    <ID>UnusedParameter:BoundedBitmapDecoderTest.kt$ArmedBitmapFactory.Companion$offset: Int</ID>
+    <ID>UnusedParameter:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest$ids: Map&lt;Int, FakeChannel&gt;</ID>
+    <ID>UnusedPrivateProperty:LevelMeterViewTest.kt$LevelMeterViewTest$name</ID>
+    <ID>UtilityClassWithPublicConstructor:BoundedBitmapDecoderTest.kt$ArmedBitmapFactory</ID>
+  </CurrentIssues>
+</SmellBaseline>

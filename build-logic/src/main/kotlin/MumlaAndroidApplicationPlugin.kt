@@ -10,6 +10,7 @@ class MumlaAndroidApplicationPlugin : Plugin<Project> {
             pluginManager.apply("com.android.application")
             val android = extensions.getByType<ApplicationExtension>()
             configureAndroidCommon(android)
+            configureDetekt()
             android.defaultConfig.targetSdk = 36
         }
     }

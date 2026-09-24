@@ -56,9 +56,10 @@ build:
     - nix develop "$DEVSHELL" --command ctest --test-dir build/native-tests --output-on-failure --no-tests=error
     # Every lint variant is named explicitly: the bare `lint` task resolves to :app:lintBetaDebug
     # only, which would leave foss (the F-Droid ship target), goog and donation unlinted even
-    # though each has its own source set.
+    # though each has its own source set. detekt fails only on findings not in a module's
+    # detekt-baseline.xml.
     - nix develop "$DEVSHELL" --command ./gradlew --console=plain assembleFossDebug assembleGoogDebug test
-        lintFossDebug lintGoogDebug lintDonationDebug lintBetaDebug :libraries:humla:lintDebug
+        lintFossDebug lintGoogDebug lintDonationDebug lintBetaDebug :libraries:humla:lintDebug detekt
   after_script:
     # Export the dev shell closure so the next pipeline does not rebuild the SDK/NDK.
     - nix copy --to "file://$CI_PROJECT_DIR/.nix-cache" "$DEVSHELL" || true

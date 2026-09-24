@@ -10,6 +10,7 @@ class MumlaAndroidLibraryPlugin : Plugin<Project> {
             pluginManager.apply("com.android.library")
             val android = extensions.getByType<LibraryExtension>()
             configureAndroidCommon(android)
+            configureDetekt()
             android.testOptions.targetSdk = 36
             android.lint.targetSdk = 36
         }

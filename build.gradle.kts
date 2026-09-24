@@ -24,6 +24,7 @@ plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.protobuf) apply false
+    alias(libs.plugins.detekt) apply false
 }
 
 // Both modules must read the toolchain versions from gradle.properties: a drifted ndkVersion does

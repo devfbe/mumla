@@ -3,8 +3,9 @@ plugins {
 }
 
 dependencies {
-    // compileOnly: AGP itself is put on the build classpath once, by the root build script.
+    // compileOnly: the plugins themselves are put on the build classpath once, by the root build script.
     compileOnly(libs.android.gradlePlugin)
+    compileOnly(libs.detekt.gradlePlugin)
 }
 
 gradlePlugin {
