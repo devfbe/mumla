@@ -151,7 +151,9 @@ class Settings private constructor(context: Context) {
 
     fun isFirstRun(): Boolean = preferences.getBoolean(PREF_FIRST_RUN, DEFAULT_FIRST_RUN)
 
-    fun shouldLoadExternalImages(): Boolean = preferences.getBoolean(PREF_LOAD_IMAGES, DEFAULT_LOAD_IMAGES)
+    /** Whether remote chat images may be fetched; never while Tor is on, since the fetch would bypass it. */
+    fun shouldLoadExternalImages(): Boolean =
+        preferences.getBoolean(PREF_LOAD_IMAGES, DEFAULT_LOAD_IMAGES) && !isTorEnabled()
 
     fun setMutedAndDeafened(muted: Boolean, deafened: Boolean) {
         preferences.edit()

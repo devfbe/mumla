@@ -149,4 +149,13 @@ class SettingsTest {
         prefs.edit().putBoolean("hidePtt", true).commit()
         assertThat(settings.isPushToTalkButtonShown()).isFalse()
     }
+
+    @Test
+    fun `external images load by default but never while Tor is on`() {
+        assertThat(settings.shouldLoadExternalImages()).isTrue()
+        prefs.edit().putBoolean("useTor", true).commit()
+        assertThat(settings.shouldLoadExternalImages()).isFalse()
+        prefs.edit().putBoolean("useTor", false).putBoolean("load_images", false).commit()
+        assertThat(settings.shouldLoadExternalImages()).isFalse()
+    }
 }
