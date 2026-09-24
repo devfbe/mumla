@@ -102,8 +102,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private final float mAmplitudeBoost;
 
     private boolean mInitialized;
-    /** True if the user is muted on the server. Written by the protocol thread, read by capture. */
-    private volatile boolean mMuted;
+    /** The own mute flags. Replaced by initialize(), updated by the protocol thread, read by capture. */
+    private volatile SelfMuteState mMuteState = new SelfMuteState(false, false, false);
     private boolean mBluetoothOn;
     private boolean mHalfDuplex;
     private boolean mPreprocessorEnabled;
@@ -220,7 +220,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
 
         setMaxBandwidth(maxBandwidth);
         setCodec(codec);
-        setServerMuted(self.isMuted() || self.isLocalMuted() || self.isSuppressed());
+        mMuteState = new SelfMuteState(self.isMuted() || self.isLocalMuted(), self.isSelfMuted(),
+                self.isSuppressed());
         startRecording();
         // Ensure that if a bluetooth SCO connection is active, we use the VOICE_CALL stream.
         // This is required by Android for compatibility with SCO.
@@ -256,14 +257,6 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
                 throw new AudioException("Attempted to stop recording while not recording!");
             }
         }
-    }
-
-    /**
-     * Sets whether or not the server wants the client muted.
-     * @param muted Whether the user is muted on the server.
-     */
-    private void setServerMuted(boolean muted) throws AudioException {
-        mMuted = muted;
     }
 
     /**
@@ -474,13 +467,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             return; // We shouldn't initialize on UserState- wait for ServerSync.
 
         // Stop audio input if the user is muted, and resume if the user has set talking enabled.
-        if (msg.hasSession() && msg.getSession() == mSession &&
-                (msg.hasMute() || msg.hasSelfMute() || msg.hasSuppress())) {
-            try {
-                setServerMuted(msg.getMute() || msg.getSelfMute() || msg.getSuppress());
-            } catch (AudioException e) {
-                e.printStackTrace();
-            }
+        if (msg.hasSession() && msg.getSession() == mSession) {
+            mMuteState.update(msg);
         }
     }
 
@@ -500,7 +488,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         // only until the next call; they are read here, never kept.
         CaptureFrame processed = mCapturePipeline.process(frame, frameSize);
         boolean talking = processed.getTransmit();
-        talking &= !mMuted;
+        talking &= !mMuteState.isMuted();
 
         if (mTalking ^ talking) {
             mEncodeListener.onTalkingStateChanged(talking);
