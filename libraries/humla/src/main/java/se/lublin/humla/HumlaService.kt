@@ -207,7 +207,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * [onCreate] fills it with an [AndroidCommunicationDevices] when nothing did.
      *
      * Kept reachable on purpose: it is the one handle to the platform's routing API for this
-     * service life, and [AudioRouter] is built over it in [onCreate]. See contracts.md.
+     * service life, and [AudioRouter] is built over it in [onCreate].
      */
     var communicationDevices: CommunicationDevices? = null
 

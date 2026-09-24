@@ -81,7 +81,6 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
 - `build-logic/` — Gradle convention plugins with the Android configuration
   shared by both modules; dependency versions live in
   `gradle/libs.versions.toml`.
-- `docs/superpowers/` — the ongoing modernization specification and plans.
 - `NOTICE.md` — third-party components and licenses.
 
 ## Contributing
@@ -105,9 +104,6 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
   `libraries/humla/src/main/res/values/strings.xml`; translations are
   handled on [Weblate](https://hosted.weblate.org/engage/mumla/) — please do
   not edit the translated resource files directly.
-- Work is currently organized in streams described in
-  `docs/superpowers/specs/2026-09-19-mumla-modernization.md`; check the
-  ownership table there before touching shared files.
 
 ## FAQ
 

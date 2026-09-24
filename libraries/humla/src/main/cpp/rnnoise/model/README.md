@@ -48,4 +48,4 @@ Nothing here is fetched at build time: the blob is checked in, so a fresh clone
 plus `git submodule update --init` reproduces the same binary byte for byte.
 
 To upgrade: bump the submodule, read its `model_version`, repeat the steps
-above, update the hashes here and in `docs/superpowers/plans/2026-09-19-b-audio.md`.
+above and update the hashes here.
