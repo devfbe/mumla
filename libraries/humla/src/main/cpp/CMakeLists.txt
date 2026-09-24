@@ -22,7 +22,7 @@ set(THIRD_PARTY "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 # runtime it statically contains -- typeinfo, the __cxa_* handlers, std::locale's id objects --
 # with default visibility, and the dynamic linker is then free to bind one library's copy to
 # another library's. That is exactly the duplicated-libc++-state hazard the NDK warns about for
-# ANDROID_STL=c++_static, and build.gradle rules it out on the grounds that these libraries
+# ANDROID_STL=c++_static, and build.gradle.kts rules it out on the grounds that these libraries
 # "export only C JNI entry points". They did not: measured on this tree before this line was
 # added, libhumla_opus exported 382 symbols and libhumlaapm 1010-2355 depending on the ABI. Now
 # they export their JNI entry points and nothing else, and check_library.cmake fails the build if

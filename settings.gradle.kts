@@ -16,6 +16,7 @@
  */
 
 pluginManagement {
+    includeBuild("build-logic")
     repositories {
         google()
         mavenCentral()
@@ -32,4 +33,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "mumla"
-include ':libraries:humla', ':app'
+include(":libraries:humla", ":app")

@@ -77,6 +77,9 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
   (nothing generated is checked in), crypto uses BouncyCastle, and
   `src/main/cpp/CMakeLists.txt` builds the native codecs and audio processing
   libraries and their JNI glue.
+- `build-logic/` — Gradle convention plugins with the Android configuration
+  shared by both modules; dependency versions live in
+  `gradle/libs.versions.toml`.
 - `docs/superpowers/` — the ongoing modernization specification and plans.
 - `NOTICE.md` — third-party components and licenses.
 

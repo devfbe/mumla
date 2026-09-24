@@ -181,7 +181,7 @@ class ManifestAuditTest {
      * `android:dataExtractionRules` attribute still points at it: measured directly (stripping the
      * attribute from the manifest and rerunning this test), it keeps passing. The
      * attribute-to-resource wiring is instead enforced by build's lint configuration
-     * (`app/build.gradle`'s `lint { error 'DataExtractionRules' }`, added specifically because the
+     * (`app/build.gradle.kts`'s `lint { error += "DataExtractionRules" }`, added specifically because the
      * default warning severity does not fail the build under `abortOnError`), not by this test.
      * See the task report for the evidence that the raised check actually fails the build when the
      * attribute is removed, and passes when it is present.
