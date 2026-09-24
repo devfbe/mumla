@@ -19,7 +19,6 @@ import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
@@ -44,6 +43,7 @@ import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
+import se.lublin.mumla.testing.createMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 
 /**
@@ -74,9 +74,8 @@ class MumlaServiceCharacterizationTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        preferences().edit().clear().commit()
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        controller = Robolectric.buildService(MumlaService::class.java).create()
+        controller = createMumlaService()
         service = controller.get()
         overlay = mockk(relaxed = true)
         hotCorner = mockk(relaxed = true)

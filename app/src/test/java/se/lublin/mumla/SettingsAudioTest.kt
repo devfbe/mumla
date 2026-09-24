@@ -39,7 +39,6 @@ class SettingsAudioTest {
 
     @Before
     fun clearPreferences() {
-        prefs.edit().clear().commit()
     }
 
     // --- noise suppression: one key, because two would drift apart --------------------------

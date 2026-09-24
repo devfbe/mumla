@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
+import se.lublin.mumla.testing.stubConnected
 
 /**
  * Manual measurement harness for [ChannelListAdapter]'s rebuild coalescing; not a gate, since
@@ -28,9 +29,7 @@ class AdapterRebuildBenchmarkTest {
         val (root, byId) = buildChannelTree(channelCount = 5000, branching = 4, userEvery = 5)
         val session = mockk<IHumlaSession>(relaxed = true)
         every { session.getChannel(any()) } answers { byId[firstArg<Int>()] }
-        val service = mockk<IHumlaService>(relaxed = true)
-        every { service.isConnected } returns true
-        every { service.HumlaSession() } returns session
+        val service = mockk<IHumlaService>(relaxed = true).stubConnected(session)
 
         val adapter = ChannelListAdapter(
             ApplicationProvider.getApplicationContext(),

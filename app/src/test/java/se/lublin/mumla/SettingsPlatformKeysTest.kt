@@ -17,7 +17,6 @@ class SettingsPlatformKeysTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
         settings = Settings.getInstance(context)
     }
 

@@ -23,9 +23,7 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
-import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
@@ -42,11 +40,10 @@ import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.session.CommunicationDevice
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.db.DatabaseProvider
-import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.util.HumlaServiceFragment
-import se.lublin.mumla.util.HumlaServiceProvider
+import se.lublin.mumla.testing.ChatTargetParentFragment
+import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.stubConnected
 
 /**
  * The audio chooser in the channel menu: lists what the session offers right now, ticks the device
@@ -55,43 +52,12 @@ import se.lublin.mumla.util.HumlaServiceProvider
 @RunWith(RobolectricTestRunner::class)
 class ChannelListFragmentAudioDeviceTest {
 
-    /**
-     * Same contract as `ChannelListFragmentTest.HostActivity`, plus a count of menu invalidations
-     * (how the "redraw the tick" effect is read back).
-     */
-    class RecordingHostActivity : AppCompatActivity(), HumlaServiceProvider, DatabaseProvider {
-        private var bound: IMumlaService? = null
-        private val db: MumlaDatabase = mockk(relaxed = true)
-        private var invalidations = 0
-
-        fun bind(service: IMumlaService?) {
-            bound = service
-        }
-
-        fun invalidationCount(): Int = invalidations
-
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-
-        override fun invalidateOptionsMenu() {
-            invalidations++
-            super.invalidateOptionsMenu()
-        }
-
-        override fun getService(): IMumlaService? = bound
-        override fun addServiceFragment(fragment: HumlaServiceFragment) = Unit
-        override fun removeServiceFragment(fragment: HumlaServiceFragment) = Unit
-        override fun getDatabase(): MumlaDatabase = db
-    }
-
     private val earpiece = CommunicationDevice(1, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, "Pixel")
     private val speaker = CommunicationDevice(2, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, "Pixel")
     private val headset = CommunicationDevice(7, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "Jabra Evolve")
 
     private lateinit var app: Application
-    private lateinit var controller: ActivityController<RecordingHostActivity>
+    private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var fragment: ChannelListFragment
     private lateinit var service: IMumlaService
     private lateinit var session: IHumlaSession
@@ -99,19 +65,17 @@ class ChannelListFragmentAudioDeviceTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
 
         service = mockk(relaxed = true)
         session = mockk(relaxed = true)
-        every { service.isConnected } returns true
-        every { service.HumlaSession() } returns session
+        service.stubConnected(session)
         every { session.audioDevices } returns listOf(earpiece, speaker, headset)
         every { session.activeAudioDevice } returns headset
         every { session.isEchoCancellationEnabled } returns false
 
-        controller = Robolectric.buildActivity(RecordingHostActivity::class.java).setup()
+        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         controller.get().bind(service)
-        val parent = ChannelListFragmentTest.HostParent()
+        val parent = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(parent, "parent").commitNow()
         fragment = ChannelListFragment()
@@ -119,7 +83,7 @@ class ChannelListFragmentAudioDeviceTest {
         parent.childFragmentManager.beginTransaction().add(fragment, "list").commitNow()
     }
 
-    private val activity: RecordingHostActivity get() = controller.get()
+    private val activity: ServiceHostActivity get() = controller.get()
 
     /** The real menu resource, inflated and prepared the way the action bar does it. */
     @Suppress("DEPRECATION")
@@ -173,7 +137,7 @@ class ChannelListFragmentAudioDeviceTest {
 
     @Test
     fun tappingADeviceHandsItToTheSessionAndRedrawsTheTick() {
-        val before = activity.invalidationCount()
+        val before = activity.menuInvalidations
         val speakerItem = prepared().choices().single { it.itemId == 2 }
 
         @Suppress("DEPRECATION")
@@ -181,7 +145,7 @@ class ChannelListFragmentAudioDeviceTest {
 
         assertThat(consumed).isTrue()
         verify(exactly = 1) { session.selectAudioDevice(2) }
-        assertThat(activity.invalidationCount()).isGreaterThan(before)
+        assertThat(activity.menuInvalidations).isGreaterThan(before)
     }
 
     /**
@@ -271,7 +235,7 @@ class ChannelListFragmentAudioDeviceTest {
     @Test
     fun tappingTheEchoSwitchRemembersTheChoiceForThisKindOfDevice() {
         val settings = Settings.getInstance(app)
-        val before = activity.invalidationCount()
+        val before = activity.menuInvalidations
 
         @Suppress("DEPRECATION")
         val consumed = fragment.onOptionsItemSelected(prepared().echo())
@@ -279,7 +243,7 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(consumed).isTrue()
         assertThat(settings.getEchoCancellationOverrides())
             .containsExactly(AudioDeviceCategory.BLUETOOTH, true)
-        assertThat(activity.invalidationCount()).isGreaterThan(before)
+        assertThat(activity.menuInvalidations).isGreaterThan(before)
 
         every { session.isEchoCancellationEnabled } returns true
         every { session.activeAudioDevice } returns speaker

@@ -7,14 +7,12 @@ import org.junit.Test
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IUser
-import se.lublin.humla.util.HumlaDisconnectedException
+import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubDisconnected
 
 class HumlaMediaKeyTargetTest {
     private val session = mockk<IHumlaSession>(relaxed = true)
-    private val service = mockk<IHumlaService> {
-        every { isConnected } returns true
-        every { HumlaSession() } returns session
-    }
+    private val service = mockk<IHumlaService>().stubConnected(session)
     private val target = HumlaMediaKeyTarget(service)
 
     @Test
@@ -79,10 +77,7 @@ class HumlaMediaKeyTargetTest {
      */
     @Test
     fun stopTalkingWhileDisconnectedIsANoOpAndDoesNotThrow() {
-        val disconnected = mockk<IHumlaService> {
-            every { isConnected } returns false
-            every { HumlaSession() } throws HumlaDisconnectedException()
-        }
+        val disconnected = mockk<IHumlaService>().stubDisconnected()
 
         HumlaMediaKeyTarget(disconnected).stopTalking()
 

@@ -21,7 +21,6 @@ class SettingsTest {
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        prefs.edit().clear().commit()
         settings = Settings.getInstance(context)
     }
 

@@ -14,12 +14,10 @@ import android.view.inputmethod.EditorInfo
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
@@ -60,9 +58,12 @@ import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.TestImages
 import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.testing.ChatTargetParentFragment
+import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.idleMainLooper
-import se.lublin.mumla.util.HumlaServiceFragment
+import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.util.HumlaServiceProvider
 
 /**
@@ -72,51 +73,18 @@ import se.lublin.mumla.util.HumlaServiceProvider
 @RunWith(RobolectricTestRunner::class)
 class ChannelChatFragmentTest {
 
-    class HostActivity : FragmentActivity(), HumlaServiceProvider {
-        /**
-         * Backed by a field with explicit accessors rather than a `var`: a Kotlin `var service`
-         * would generate `getService()` and collide with the interface's own method.
-         */
-        @JvmField
-        var bound: IMumlaService? = null
-        val serviceFragments = mutableListOf<HumlaServiceFragment>()
-
-        override fun getService(): IMumlaService? = bound
-        override fun addServiceFragment(fragment: HumlaServiceFragment) { serviceFragments += fragment }
-        override fun removeServiceFragment(fragment: HumlaServiceFragment) { serviceFragments -= fragment }
-    }
-
-    class HostParentFragment : Fragment(), ChatTargetProvider {
-        @JvmField
-        var target: ChatTargetProvider.ChatTarget? = null
-        val listeners = mutableListOf<ChatTargetProvider.OnChatTargetSelectedListener>()
-
-        override fun onCreateView(i: android.view.LayoutInflater, c: ViewGroup?, s: android.os.Bundle?): View =
-            FrameLayout(requireContext()).also { it.id = CONTAINER_ID }
-
-        override fun getChatTarget(): ChatTargetProvider.ChatTarget? = target
-        override fun setChatTarget(t: ChatTargetProvider.ChatTarget?) { target = t }
-        override fun registerChatTargetListener(l: ChatTargetProvider.OnChatTargetSelectedListener) { listeners += l }
-        override fun unregisterChatTargetListener(l: ChatTargetProvider.OnChatTargetSelectedListener) { listeners -= l }
-
-        companion object {
-            const val CONTAINER_ID = 0x0f0f0f
-        }
-    }
-
     private val service: IMumlaService = mockk(relaxed = true)
     private val session: IHumlaSession = mockk(relaxed = true)
     private val log = mutableListOf<IChatMessage>()
 
-    private lateinit var controller: ActivityController<HostActivity>
-    private lateinit var activity: HostActivity
-    private lateinit var parent: HostParentFragment
+    private lateinit var controller: ActivityController<ServiceHostActivity>
+    private lateinit var activity: ServiceHostActivity
+    private lateinit var parent: ChatTargetParentFragment
     private lateinit var fragment: ChannelChatFragment
 
     @Before
     fun setUp() {
-        every { service.isConnected } returns true
-        every { service.HumlaSession() } returns session
+        service.stubConnected(session)
         every { service.messageLog } returns log
         every { session.sessionId } returns 7
         every { session.sessionChannel } returns channel("Root")
@@ -132,15 +100,15 @@ class ChannelChatFragmentTest {
 
     /** Brings the host up with [withService] already bound, then attaches the fragment. */
     private fun launch(withService: IMumlaService? = service) {
-        controller = Robolectric.buildActivity(HostActivity::class.java)
+        controller = Robolectric.buildActivity(ServiceHostActivity::class.java)
         activity = controller.create().get()
-        activity.bound = withService
-        parent = HostParentFragment()
+        activity.bind(withService)
+        parent = ChatTargetParentFragment()
         activity.supportFragmentManager.beginTransaction()
             .add(android.R.id.content, parent, "parent").commitNow()
         fragment = ChannelChatFragment()
         parent.childFragmentManager.beginTransaction()
-            .add(HostParentFragment.CONTAINER_ID, fragment, "chat").commitNow()
+            .add(ChatTargetParentFragment.CONTAINER_ID, fragment, "chat").commitNow()
         controller.start().resume().visible()
         idleMainLooper()
     }
@@ -239,7 +207,7 @@ class ChannelChatFragmentTest {
     fun theHintIsSetWhenTheServiceBindsAfterTheView() {
         launch(withService = null)
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.send_message))
-        activity.bound = service
+        activity.bind(service)
         fragment.setServiceBound(true)
         drainMainUntil { editor.hint.toString() != activity.getString(R.string.send_message) }
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
@@ -398,7 +366,7 @@ class ChannelChatFragmentTest {
     fun theSessionIdIsAbsentWithNoServiceAndWhenNotConnected() {
         launch(withService = null)
         val noService = fragment.sessionId()
-        activity.bound = service
+        activity.bind(service)
         every { service.isConnected } returns false
         assertThat(fragment.sessionId()).isEqualTo(noService)
     }
@@ -437,7 +405,7 @@ class ChannelChatFragmentTest {
     @Test
     fun anImageConfirmedAfterTheServiceWentAwaySendsNothing() {
         launch()
-        activity.bound = null
+        activity.bind(null)
         fragment.sendImage(smallBitmap())
         idleMainLooper()
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
@@ -472,8 +440,7 @@ class ChannelChatFragmentTest {
      * this disconnects both together.
      */
     private fun disconnect() {
-        every { service.isConnected } returns false
-        every { service.HumlaSession() } throws HumlaDisconnectedException()
+        service.stubDisconnected()
     }
 
     @Test
@@ -946,7 +913,7 @@ class ChannelChatFragmentTest {
     @Test
     fun aPickedImageWithNoSessionIsDroppedBeforeAnythingIsDecoded() {
         launch()
-        activity.bound = null
+        activity.bind(null)
         fragment.onImagePickResult(Uri.parse("content://se.lublin.mumla.test/x.jpg"))
         idleMainLooper()
         assertThat(progress.visibility).isEqualTo(View.GONE)

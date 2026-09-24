@@ -53,7 +53,6 @@ class MumlaMediaSessionTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
         target = FakeTarget()
         mediaSession = MumlaMediaSession(context, target, Settings.getInstance(context))
     }

@@ -1,7 +1,6 @@
 package se.lublin.mumla.channel.comment
 
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.DialogFragment
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
@@ -12,38 +11,23 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IUser
 import se.lublin.humla.util.IHumlaObserver
-import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.idleMainLooper
-import se.lublin.mumla.util.HumlaServiceFragment
-import se.lublin.mumla.util.HumlaServiceProvider
+import se.lublin.mumla.testing.stubConnected
 
 @RunWith(RobolectricTestRunner::class)
 class CommentObserverTest {
 
-    class HostActivity : AppCompatActivity(), HumlaServiceProvider {
-        val mumla: IMumlaService = mockk(relaxed = true)
-
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-
-        override fun getService(): IMumlaService = mumla
-        override fun addServiceFragment(fragment: HumlaServiceFragment) = Unit
-        override fun removeServiceFragment(fragment: HumlaServiceFragment) = Unit
-    }
-
-    private val activity = Robolectric.buildActivity(HostActivity::class.java).setup().get()
+    private val mumla: IMumlaService = mockk<IMumlaService>(relaxed = true).stubConnected(mockk(relaxed = true))
+    private val activity = Robolectric.buildActivity(ServiceHostActivity::class.java).setup().get()
+        .also { it.bind(mumla) }
     private val observer = slot<IHumlaObserver>()
 
     init {
-        every { activity.mumla.isConnected } returns true
-        every { activity.mumla.HumlaSession() } returns mockk<IHumlaSession>(relaxed = true)
-        every { activity.mumla.registerObserver(capture(observer)) } returns Unit
+        every { mumla.registerObserver(capture(observer)) } returns Unit
     }
 
     private fun show(fragment: DialogFragment, args: Bundle) {
@@ -65,7 +49,7 @@ class CommentObserverTest {
 
         close(fragment)
 
-        verify(exactly = 1) { activity.mumla.unregisterObserver(observer.captured) }
+        verify(exactly = 1) { mumla.unregisterObserver(observer.captured) }
     }
 
     @Test
@@ -76,7 +60,7 @@ class CommentObserverTest {
 
         close(fragment)
 
-        verify(exactly = 1) { activity.mumla.unregisterObserver(observer.captured) }
+        verify(exactly = 1) { mumla.unregisterObserver(observer.captured) }
     }
 
     @Test
@@ -91,6 +75,6 @@ class CommentObserverTest {
 
         close(fragment)
 
-        verify(exactly = 1) { activity.mumla.unregisterObserver(observer.captured) }
+        verify(exactly = 1) { mumla.unregisterObserver(observer.captured) }
     }
 }

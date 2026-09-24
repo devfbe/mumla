@@ -1,7 +1,6 @@
 package se.lublin.mumla.channel
 
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -21,11 +20,12 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.DatabaseProvider
-import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.testing.ChatTargetParentFragment
+import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.ServiceOnlyHostActivity
 import se.lublin.mumla.testing.idleMainLooper
-import se.lublin.mumla.util.HumlaServiceFragment
-import se.lublin.mumla.util.HumlaServiceProvider
+import se.lublin.mumla.testing.stubConnected
 
 /**
  * Covers the chat-target action mode, the list across disconnect and rebind, and the refusal of a
@@ -33,57 +33,6 @@ import se.lublin.mumla.util.HumlaServiceProvider
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelListFragmentTest {
-
-    class HostActivity : AppCompatActivity(), HumlaServiceProvider, DatabaseProvider {
-        // Not `var service`/`var database`: both would generate the interface's own accessor.
-        private var bound: IMumlaService? = null
-        private val db: MumlaDatabase = mockk(relaxed = true)
-
-        fun bind(service: IMumlaService?) {
-            bound = service
-        }
-
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-
-        override fun getService(): IMumlaService? = bound
-        override fun addServiceFragment(fragment: HumlaServiceFragment) = Unit
-        override fun removeServiceFragment(fragment: HumlaServiceFragment) = Unit
-        override fun getDatabase(): MumlaDatabase = db
-
-        fun databaseMock(): MumlaDatabase = db
-    }
-
-    /** A host that can bind the service but cannot hand out a database. */
-    class ServiceOnlyActivity : AppCompatActivity(), HumlaServiceProvider {
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-
-        override fun getService(): IMumlaService? = null
-        override fun addServiceFragment(fragment: HumlaServiceFragment) = Unit
-        override fun removeServiceFragment(fragment: HumlaServiceFragment) = Unit
-    }
-
-    /** The parent the fragment demands: chat targets live above it, not in it. */
-    class HostParent : Fragment(), ChatTargetProvider {
-        private var target: ChatTargetProvider.ChatTarget? = null
-        override fun getChatTarget(): ChatTargetProvider.ChatTarget? = target
-        override fun setChatTarget(target: ChatTargetProvider.ChatTarget?) {
-            this.target = target
-        }
-
-        override fun registerChatTargetListener(
-            listener: ChatTargetProvider.OnChatTargetSelectedListener,
-        ) = Unit
-
-        override fun unregisterChatTargetListener(
-            listener: ChatTargetProvider.OnChatTargetSelectedListener,
-        ) = Unit
-    }
 
     /** Records what the fragment asks the list to scroll to, without needing a laid-out list. */
     private class RecordingLayoutManager(context: android.content.Context) :
@@ -95,8 +44,8 @@ class ChannelListFragmentTest {
         }
     }
 
-    private lateinit var controller: ActivityController<HostActivity>
-    private lateinit var parent: HostParent
+    private lateinit var controller: ActivityController<ServiceHostActivity>
+    private lateinit var parent: ChatTargetParentFragment
     private lateinit var fragment: ChannelListFragment
     private lateinit var service: IMumlaService
     private lateinit var session: IHumlaSession
@@ -111,11 +60,10 @@ class ChannelListFragmentTest {
         session = mockk(relaxed = true)
         tree = smallTree()
         every { session.getChannel(any()) } answers { tree[firstArg<Int>()] }
-        every { service.isConnected } returns true
-        every { service.HumlaSession() } returns session
-        controller = Robolectric.buildActivity(HostActivity::class.java).setup()
+        service.stubConnected(session)
+        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         controller.get().bind(service)
-        parent = HostParent()
+        parent = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(parent, "parent").commitNow()
         fragment = ChannelListFragment()
@@ -180,8 +128,8 @@ class ChannelListFragmentTest {
 
     @Test
     fun aHostThatCannotProvideADatabaseIsRefusedWhenTheFragmentAttaches() {
-        val host = Robolectric.buildActivity(ServiceOnlyActivity::class.java).setup().get()
-        val chatParent = HostParent()
+        val host = Robolectric.buildActivity(ServiceOnlyHostActivity::class.java).setup().get()
+        val chatParent = ChatTargetParentFragment()
         host.supportFragmentManager.beginTransaction().add(chatParent, "parent").commitNow()
 
         val thrown = assertThrows(ClassCastException::class.java) {
@@ -275,9 +223,9 @@ class ChannelListFragmentTest {
     /** Its argument decides whether it shows the whole tree or the pinned channels. */
     @Test
     fun thePinnedArgumentDecidesWhereTheTreeIsRooted() {
-        verify(exactly = 0) { controller.get().databaseMock().getPinnedChannels(any()) }
+        verify(exactly = 0) { controller.get().database.getPinnedChannels(any()) }
 
-        val pinnedParent = HostParent()
+        val pinnedParent = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(pinnedParent, "pinned-parent").commitNow()
         val pinned = ChannelListFragment().apply {
@@ -285,7 +233,7 @@ class ChannelListFragmentTest {
         }
         pinnedParent.childFragmentManager.beginTransaction().add(pinned, "pinned-list").commitNow()
 
-        verify(exactly = 1) { controller.get().databaseMock().getPinnedChannels(any()) }
+        verify(exactly = 1) { controller.get().database.getPinnedChannels(any()) }
     }
 
     /**

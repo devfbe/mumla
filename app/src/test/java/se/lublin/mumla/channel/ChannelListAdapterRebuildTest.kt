@@ -3,11 +3,9 @@ package se.lublin.mumla.channel
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
-import android.os.Bundle
 import android.graphics.Typeface
 import android.util.TypedValue
 import android.view.View
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -32,7 +30,9 @@ import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.drawable.CircleDrawable
+import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.stubConnected
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
@@ -43,14 +43,7 @@ import java.util.concurrent.TimeUnit
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelListAdapterRebuildTest {
-
     /** The row layouts resolve theme attributes, so they need a themed context, not the app one. */
-    class HostActivity : AppCompatActivity() {
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-    }
 
     private companion object {
         /** Tall enough for every row of [smallTree] to be laid out at once. */
@@ -127,10 +120,9 @@ class ChannelListAdapterRebuildTest {
         return root to mapOf(0 to root, 1 to empty, 2 to populated, 3 to emptyChild, 4 to deep)
     }
 
-
     @Before
     fun setUp() {
-        context = Robolectric.buildActivity(HostActivity::class.java).setup().get()
+        context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
         idleMainLooper()
     }
 
@@ -860,9 +852,7 @@ class ChannelListAdapterRebuildTest {
         val server = mockk<Server>(relaxed = true)
         every { server.id } returns SERVER_ID
         every { server.isSaved } returns true
-        val service = mockk<IHumlaService>(relaxed = true)
-        every { service.isConnected } returns true
-        every { service.HumlaSession() } returns mockk<IHumlaSession>(relaxed = true)
+        val service = mockk<IHumlaService>(relaxed = true).stubConnected(mockk(relaxed = true))
         every { service.targetServer } returns server
         val adapter = ChannelListAdapter(
             context, service, database, mockk<FragmentManager>(relaxed = true), false, true,

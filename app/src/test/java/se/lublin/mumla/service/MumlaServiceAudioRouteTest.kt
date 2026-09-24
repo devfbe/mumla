@@ -26,7 +26,6 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
@@ -34,6 +33,7 @@ import se.lublin.humla.session.AudioRouter
 import se.lublin.humla.testutil.FakeCommunicationDevices
 import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.createMumlaService
 
 /**
  * Routing voice to the earpiece holds the proximity lock that turns the screen off at the ear;
@@ -50,7 +50,7 @@ class MumlaServiceAudioRouteTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(app).edit().clear()
+        PreferenceManager.getDefaultSharedPreferences(app).edit()
             .putBoolean(Settings.PREF_BLUETOOTH_SCO, false).commit()
     }
 
@@ -59,10 +59,8 @@ class MumlaServiceAudioRouteTest {
             available[EARPIECE] = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
             available[SPEAKER] = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
         }
-        val controller = Robolectric.buildService(MumlaService::class.java)
-        controller.get().communicationDevices = devices
-        this.controller = controller
-        service = controller.create().get()
+        controller = createMumlaService { communicationDevices = devices }
+        service = controller.get()
     }
 
     private fun router(): AudioRouter = service.testRouter

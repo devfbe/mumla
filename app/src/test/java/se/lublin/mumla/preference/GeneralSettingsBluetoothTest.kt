@@ -3,13 +3,10 @@ package se.lublin.mumla.preference
 import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
-import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.CheckBoxPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceGroup
-import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -22,6 +19,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowToast
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.ThemedActivity
 
 /**
  * `BLUETOOTH_CONNECT` is asked for when the user ticks the Bluetooth switch. The box is driven
@@ -30,16 +28,8 @@ import se.lublin.mumla.Settings
  */
 @RunWith(RobolectricTestRunner::class)
 class GeneralSettingsBluetoothTest {
-
-    class HostActivity : AppCompatActivity() {
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-    }
-
     private lateinit var app: Application
-    private lateinit var activity: HostActivity
+    private lateinit var activity: ThemedActivity
     private lateinit var fragment: GeneralSettingsFragment
     private lateinit var settings: Settings
 
@@ -48,13 +38,12 @@ class GeneralSettingsBluetoothTest {
         app = ApplicationProvider.getApplicationContext()
         // Preferences survive between test methods in one JVM, and a stored value shadows the
         // XML default.
-        PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
         settings = Settings.getInstance(app)
         ShadowToast.reset()
     }
 
     private fun open() {
-        activity = Robolectric.buildActivity(HostActivity::class.java).setup().get()
+        activity = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
         fragment = GeneralSettingsFragment()
         activity.supportFragmentManager.beginTransaction()
             .add(android.R.id.content, fragment)

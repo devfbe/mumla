@@ -1,9 +1,7 @@
 package se.lublin.mumla.channel
 
-import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
-import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -20,8 +18,8 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.util.HumlaServiceFragment
-import se.lublin.mumla.util.HumlaServiceProvider
+import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.stubConnected
 
 /**
  * The fragment releases only what its own talk button is holding; transmission switched on
@@ -30,40 +28,24 @@ import se.lublin.mumla.util.HumlaServiceProvider
 @RunWith(RobolectricTestRunner::class)
 class ChannelFragmentTalkStateTest {
 
-    class HostActivity : AppCompatActivity(), HumlaServiceProvider {
-        // A `var service` here would generate getService(), clashing with the interface method.
-        private var bound: IMumlaService? = null
-        fun bind(service: IMumlaService) { bound = service }
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-        override fun getService(): IMumlaService? = bound
-        override fun addServiceFragment(fragment: HumlaServiceFragment) = Unit
-        override fun removeServiceFragment(fragment: HumlaServiceFragment) = Unit
-    }
-
     private lateinit var session: IHumlaSession
     private lateinit var service: IMumlaService
-    private lateinit var controller: ActivityController<HostActivity>
+    private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var fragment: ChannelFragment
 
     @Before
     fun setUp() {
         PreferenceManager
             .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
-            .edit().clear()
+            .edit()
             // Voice activity (the default) hides the talk view, and `touch` dispatches straight at
             // the view regardless, so push-to-talk must be set explicitly.
             .putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_PTT)
             .commit()
         session = mockk(relaxed = true)
-        service = mockk(relaxed = true) {
-            every { isConnected } returns true
-            every { HumlaSession() } returns session
-        }
+        service = mockk<IMumlaService>(relaxed = true).stubConnected(session)
         every { session.isTalking } returns true
-        controller = Robolectric.buildActivity(HostActivity::class.java).setup()
+        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         controller.get().bind(service)
         fragment = ChannelFragment()
         controller.get().supportFragmentManager.beginTransaction()

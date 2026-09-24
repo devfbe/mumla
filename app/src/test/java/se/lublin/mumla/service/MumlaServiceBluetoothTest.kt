@@ -10,7 +10,6 @@ import io.mockk.mockk
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import android.media.AudioDeviceInfo
@@ -19,6 +18,7 @@ import se.lublin.humla.testutil.FakeCommunicationDevices
 import se.lublin.humla.testutil.testConnection
 import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.createMumlaService
 
 /**
  * The Bluetooth preference drives the router: the service hands the stored wish to it from its
@@ -37,18 +37,15 @@ class MumlaServiceBluetoothTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
         settings = Settings.getInstance(app)
         service = create()
     }
 
     private fun create(): MumlaService {
         receiver = FakeCommunicationDevices().apply { available[HEADSET_ID] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
-        val controller = Robolectric.buildService(MumlaService::class.java)
         // Before create(): HumlaService.onCreate wraps the platform AudioManager when the seam is
         // unset, and the router it builds there is the one that lives for the service.
-        controller.get().communicationDevices = receiver
-        return controller.create().get()
+        return createMumlaService { communicationDevices = receiver }.get()
     }
 
     /**

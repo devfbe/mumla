@@ -3,9 +3,9 @@ package se.lublin.mumla.service
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.testutil.testCallbacks
+import se.lublin.mumla.testing.createMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 
 /**
@@ -17,7 +17,7 @@ class MumlaServiceMediaSessionWiringTest {
 
     @Test
     fun aConnectedServiceHoldsAMediaSessionAndGivesItUpWhenDestroyed() {
-        val controller = Robolectric.buildService(MumlaService::class.java).create()
+        val controller = createMumlaService()
         val service = controller.get()
         val mediaSession = service.mMediaSession!!
         assertThat(mediaSession.isActive).isFalse()

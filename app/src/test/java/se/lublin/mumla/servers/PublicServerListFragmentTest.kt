@@ -1,10 +1,8 @@
 package se.lublin.mumla.servers
 
-import android.os.Bundle
 import android.view.View
 import android.widget.PopupMenu
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.PreferenceManager
 import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
@@ -18,6 +16,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.db.DatabaseProvider
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.PublicServer
+import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.idleMainLooper
 import java.io.IOException
@@ -28,13 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger
 @RunWith(RobolectricTestRunner::class)
 class PublicServerListFragmentTest {
 
-    class HostActivity : AppCompatActivity(), FavouriteServerListFragment.ServerConnectHandler, DatabaseProvider {
+    class HostActivity : ThemedActivity(), FavouriteServerListFragment.ServerConnectHandler, DatabaseProvider {
         private val db: MumlaDatabase = mockk(relaxed = true)
-
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
 
         override fun connectToServer(server: Server) = Unit
         override fun connectToPublicServer(server: PublicServer) = Unit
@@ -47,7 +41,6 @@ class PublicServerListFragmentTest {
 
     @After
     fun tearDown() {
-        prefs.edit().clear().commit()
     }
 
     /** Hosts the fragment with a download that counts its attempts and always fails. */

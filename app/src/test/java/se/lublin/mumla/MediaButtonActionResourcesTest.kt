@@ -1,13 +1,10 @@
 package se.lublin.mumla
 
 import android.content.Context
-import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceGroup
-import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -19,6 +16,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.mumla.preference.GeneralSettingsFragment
 import se.lublin.mumla.preference.SettingsActivity
+import se.lublin.mumla.testing.ThemedActivity
 
 /**
  * The headset-button preference, checked on the settings screen the index actually launches
@@ -26,14 +24,6 @@ import se.lublin.mumla.preference.SettingsActivity
  */
 @RunWith(RobolectricTestRunner::class)
 class MediaButtonActionResourcesTest {
-
-    class HostActivity : AppCompatActivity() {
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-    }
-
     private lateinit var context: Context
 
     @Before
@@ -41,7 +31,6 @@ class MediaButtonActionResourcesTest {
         context = ApplicationProvider.getApplicationContext()
         // A ListPreference persists its default the moment it is attached, so the default test
         // only means anything from empty preferences.
-        PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
     }
 
     private fun stringArrayByName(name: String): List<String> {
@@ -52,7 +41,7 @@ class MediaButtonActionResourcesTest {
 
     private fun generalScreen(): PreferenceScreen {
         val fragment = GeneralSettingsFragment()
-        val controller = Robolectric.buildActivity(HostActivity::class.java).setup()
+        val controller = Robolectric.buildActivity(ThemedActivity::class.java).setup()
         controller.get().supportFragmentManager.beginTransaction()
             .add(android.R.id.content, fragment)
             .commitNow()
@@ -86,7 +75,7 @@ class MediaButtonActionResourcesTest {
     @Test
     fun theGeneralScreenIsReachableFromTheSettingsIndex() {
         val index = SettingsActivity.RootPreferenceFragment()
-        val controller = Robolectric.buildActivity(HostActivity::class.java).setup()
+        val controller = Robolectric.buildActivity(ThemedActivity::class.java).setup()
         controller.get().supportFragmentManager.beginTransaction()
             .add(android.R.id.content, index)
             .commitNow()

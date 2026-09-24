@@ -12,7 +12,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
@@ -22,6 +21,7 @@ import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.session.ReconnectPolicy
 import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
+import se.lublin.mumla.testing.createMumlaService
 import java.time.Duration
 
 /**
@@ -39,14 +39,11 @@ class MumlaServiceForegroundTest {
 
     @Before
     fun setUp() {
-        PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext()).edit().clear().commit()
-        controller = Robolectric.buildService(MumlaService::class.java)
-        service = controller.get()
-        service.reconnectPolicy = ReconnectPolicy(baseDelayMillis = 2_000L, maxAttempts = 2, maxJitterFraction = 0.0)
-        service.connectionFactory = {
-            mockk<HumlaConnection>(relaxed = true).also { connections += it }
+        controller = createMumlaService {
+            reconnectPolicy = ReconnectPolicy(baseDelayMillis = 2_000L, maxAttempts = 2, maxJitterFraction = 0.0)
+            connectionFactory = { mockk<HumlaConnection>(relaxed = true).also { connections += it } }
         }
-        controller.create()
+        service = controller.get()
         service.configureExtras(
             Bundle().apply {
                 putParcelable(HumlaService.EXTRAS_SERVER, Server(-1, "test", "127.0.0.1", 64738, "me", ""))
@@ -375,7 +372,7 @@ class MumlaServiceForegroundTest {
             .putBoolean(se.lublin.mumla.Settings.PREF_PTT_SOUND, true)
             .putBoolean(se.lublin.mumla.Settings.PREF_SHORT_TTS_MESSAGES, true)
             .commit()
-        val fresh = Robolectric.buildService(MumlaService::class.java).create().get()
+        val fresh = createMumlaService().get()
         assertThat(fresh.mTTS).isNotNull()
         assertThat(fresh.mPTTSoundEnabled).isTrue()
         assertThat(fresh.mShortTtsMessagesEnabled).isTrue()

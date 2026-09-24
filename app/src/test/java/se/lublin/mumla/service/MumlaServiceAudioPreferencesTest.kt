@@ -25,7 +25,6 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
 import se.lublin.humla.HumlaService
@@ -36,6 +35,7 @@ import se.lublin.humla.testutil.testEchoOverrides
 import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.createMumlaService
 
 /**
  * For every switch on the audio settings screen, reads the result back off the object the audio
@@ -50,8 +50,7 @@ class MumlaServiceAudioPreferencesTest {
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        prefs.edit().clear().commit()
-        service = Robolectric.buildService(MumlaService::class.java).create().get()
+        service = createMumlaService().get()
     }
 
     /** Preferences land in an immutable [se.lublin.humla.session.AudioConfig]. */
