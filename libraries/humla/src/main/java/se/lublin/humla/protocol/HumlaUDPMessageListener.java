@@ -19,10 +19,6 @@ package se.lublin.humla.protocol;
 
 import se.lublin.humla.net.HumlaUDPMessageType;
 
-/**
- * Created by andrew on 21/01/14.
- */
-
 public interface HumlaUDPMessageListener {
 
     public void messageUDPPing(byte[] data);

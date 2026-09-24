@@ -50,7 +50,6 @@ public interface HumlaTCPMessageListener {
     /**
      * Reads incoming protobuf TCP messages and performs the necessary action(s).
      * Designed to be subclassed at any level of the library, the default implementations do nothing.
-     * Created by andrew on 24/06/13.
      */
     public static class Stub implements HumlaTCPMessageListener {
 

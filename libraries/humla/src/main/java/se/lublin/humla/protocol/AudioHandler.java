@@ -51,13 +51,10 @@ import se.lublin.humla.util.HumlaLogger;
 import se.lublin.humla.util.HumlaNetworkListener;
 
 /**
- * Bridges the protocol's audio messages to our input and output threads.
- * A useful intermediate for reducing code coupling.
- * Audio playback and recording is exclusively controlled by the protocol.
- * Changes to input/output instance vars after the audio threads have been initialized will recreate
- * them in most cases (they're immutable for the purpose of avoiding threading issues).
- * Calling shutdown() will cleanup both input and output threads. It is safe to restart after.
- * Created by andrew on 23/04/14.
+ * Bridges the protocol's audio messages to the input and output threads. Audio playback and
+ * recording are controlled exclusively by the protocol. Changing input/output settings after the
+ * audio threads are initialized recreates them in most cases. {@link #shutdown()} cleans up both
+ * threads; restarting afterwards is safe.
  */
 public class AudioHandler extends HumlaNetworkListener implements AudioInput.AudioInputListener {
     private static final String TAG = AudioHandler.class.getName();
@@ -67,9 +64,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     public static final int MAX_BUFFER_SIZE = 960;
 
     /**
-     * Spec B6's android.media.audiofx effects are not wired through this class yet, so the source
-     * policy is asked with both of them off. The moment they are, this constant is the thing that
-     * has to become the real setting -- not a second copy of the condition.
+     * The android.media.audiofx effects are not wired through this class yet, so the source policy
+     * is asked with both off. Replace this constant with the real setting once they are.
      */
     private static final AndroidAudioEffects NO_ANDROID_EFFECTS = new AndroidAudioEffects(false, false);
 
@@ -79,8 +75,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private final AudioInput mInput;
     private final AudioOutput mOutput;
     /**
-     * Spec B1's capture chain, in front of the encoder rather than inside it. Touched only by the
-     * capture thread in {@link #onAudioInputReceived}, and released in {@link #shutdown()}.
+     * Capture chain in front of the encoder. Touched only by the capture thread in
+     * {@link #onAudioInputReceived}, released in {@link #shutdown()}.
      */
     private final CapturePipeline mCapturePipeline;
     private AudioOutput.AudioOutputListener mOutputListener;
@@ -107,7 +103,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private boolean mPreprocessorEnabled;
     private final String mNoiseSuppressionMethod;
     private final int mSpeexNoiseSuppressDb;
-    /** Spec B6: the platform effects the user switched on, attached to the recorder's session. */
+    /** The platform effects the user switched on, attached to the recorder's session. */
     private final AndroidAudioEffects mAndroidAudioEffects;
     private String mEchoCancellationMethod;
     /** The last observed talking state. False if muted, or the input mode is not active. */
@@ -149,18 +145,10 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         mEncoderLock = new Object();
 
         final EchoCancellationMode echo = EchoCancellationMode.fromPreferenceValue(echoCancellationMethod);
-        // One decision for the recording source and the audio mode, because they have to agree:
-        // AudioSourcePolicy also resolves the source inside PcmCaptureSource, so asking it here
-        // rather than testing the canceller by name is what keeps the WebRTC canceller from
-        // capturing on VOICE_COMMUNICATION while the manager still sits in MODE_NORMAL. Some AECs
-        // -- ours included, it needs a shared clock with the playback path -- will not work otherwise.
-        //
-        // In a session this is a second request for a mode AudioRouter already holds: the router
-        // takes MODE_IN_COMMUNICATION when it engages, gives MODE_NORMAL back when it disengages,
-        // and routes every device explicitly (Bluetooth, a plugged-in headset, the speaker, or the
-        // earpiece as the default output). Playback is always on the voice-call stream
-        // (Settings.PLAYBACK_STREAM in the app), which is what follows that route. The echo
-        // canceller is no longer a global setting but follows the routed device (AEC3 or none).
+        // Recording source and audio mode must agree: AudioSourcePolicy also resolves the source
+        // inside PcmCaptureSource, so the WebRTC canceller never captures on VOICE_COMMUNICATION
+        // while the manager is still in MODE_NORMAL. In a session AudioRouter already holds
+        // MODE_IN_COMMUNICATION; this is a second request for the same mode.
         if (AudioSourcePolicy.needsCommunicationMode(mAndroidAudioEffects, echo)) {
             mAudioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
         }
@@ -171,15 +159,10 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             throw new AudioInitializationException("RECORD_AUDIO permission not granted");
         }
         mInput = new AudioInput(this, mAudioSource, mSampleRate, mEchoCancellationMethod, mAndroidAudioEffects);
-        // The existing `preprocessor_enabled` switch keeps its meaning -- "suppress noise" -- and
-        // changes what does the suppressing: RNNoise instead of speex inside the encoder. Echo
-        // cancellation is WebRTC's AEC3 or none, chosen per routed device; the platform
-        // AcousticEchoCanceler is no longer attached.
-        //
-        // Both ends of the WebRTC canceller are taken from one call and handed to the two threads
-        // that need them: the chain to the capture thread, and the far-end tap to AudioOutput's
-        // playback thread. Wiring only the near end measured -0.62 dB of residual echo against
-        // -22.32 dB with the reference fed (task 2).
+        // `preprocessor_enabled` means "suppress noise" (RNNoise). Echo cancellation is AEC3 or
+        // none, per routed device. Both ends of the canceller come from one call: the chain goes
+        // to the capture thread, the far-end tap to AudioOutput's playback thread, which must feed
+        // the reference for AEC to work.
         CaptureWiring.Wiring wiring = CaptureWiring.wire(
                 mInput.getSampleRate(), mInputMode, mAmplitudeBoost,
                 mNoiseSuppressionMethod != null
@@ -300,9 +283,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
                 return;
         }
 
-        // No PreprocessingEncoder and no ResamplingEncoder any more: mCapturePipeline does both,
-        // and before the voice detector rather than after it (spec B1). Wrapping either one here
-        // as well would denoise twice and resample twice.
+        // Resampling and preprocessing happen in mCapturePipeline, before the voice detector.
         mEncoder = encoder;
     }
 
@@ -404,7 +385,6 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         mEncodeListener.onTalkingStateChanged(false);
     }
 
-
     @Override
     public void messageCodecVersion(Mumble.CodecVersion msg) {
         if (!mInitialized)
@@ -458,11 +438,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
 
     @Override
     public void onAudioInputReceived(short[] frame, int frameSize) {
-        // Spec B1: resample, preprocess *every* frame, then detect, then boost. The detector now
-        // judges the denoised frame instead of the raw one, which is the whole point -- and it
-        // means the same detection_threshold slider position corresponds to a different level than
-        // it did before. The result object and its samples belong to the pipeline and are valid
-        // only until the next call; they are read here, never kept.
+        // Resample, preprocess every frame, then detect, then boost. The result and its samples
+        // belong to the pipeline and are valid only until the next call.
         CaptureFrame processed = mCapturePipeline.process(frame, frameSize);
         boolean talking = processed.getTransmit();
         talking &= !mMuteState.isMuted();
@@ -478,12 +455,11 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             if (mEncoder != null) {
                 try {
                     if (talking) {
-                        // The pipeline has already applied the amplitude boost. The length is the
-                        // frame the pipeline produced, not the array's size.
+                        // Already boosted by the pipeline; length is the produced frame's, not
+                        // the array's.
                         mEncoder.encode(processed.getSamples(), processed.getLength());
                         mFrameCounter++;
                     } else if (mTalking) {
-                        // Terminate encoding when talking stops.
                         mEncoder.terminate();
                     }
                 } catch (NativeAudioException e) {
