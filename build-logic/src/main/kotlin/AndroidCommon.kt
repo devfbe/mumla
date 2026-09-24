@@ -39,8 +39,9 @@ internal fun Project.configureAndroidCommon(android: CommonExtension) {
             all { test ->
                 // Robolectric reaches jdk.internal.access, which JDK 21 does not export.
                 test.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
-                // Robolectric keeps every SDK's framework resources it has loaded; 512m runs out.
-                test.maxHeapSize = "1g"
+                // Robolectric keeps every SDK's framework resources it has loaded, and native themes
+                // until their finalizers run; the app suite outgrew 1g.
+                test.maxHeapSize = "2g"
             }
         }
 
