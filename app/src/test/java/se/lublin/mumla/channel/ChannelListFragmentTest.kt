@@ -20,11 +20,9 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.db.DatabaseProvider
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
-import se.lublin.mumla.testing.ServiceOnlyHostActivity
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubEvents
@@ -106,8 +104,8 @@ class ChannelListFragmentTest {
     }
 
     private fun rebind() {
-        fragment.setServiceBound(false)
-        fragment.setServiceBound(true)
+        controller.get().bind(null)
+        controller.get().bind(service)
     }
 
     private fun newListFragment() = ChannelListFragment().apply {
@@ -127,20 +125,6 @@ class ChannelListFragmentTest {
         }
 
         assertThat(thrown).hasMessageThat().contains("ChatTargetProvider")
-    }
-
-    @Test
-    fun aHostThatCannotProvideADatabaseIsRefusedWhenTheFragmentAttaches() {
-        val host = Robolectric.buildActivity(ServiceOnlyHostActivity::class.java).setup().get()
-        val chatParent = ChatTargetParentFragment()
-        host.supportFragmentManager.beginTransaction().add(chatParent, "parent").commitNow()
-
-        val thrown = assertThrows(ClassCastException::class.java) {
-            chatParent.childFragmentManager.beginTransaction()
-                .add(newListFragment(), "list").commitNow()
-        }
-
-        assertThat(thrown).hasMessageThat().contains("DatabaseProvider")
     }
 
     @Test

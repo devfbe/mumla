@@ -18,7 +18,7 @@
 package se.lublin.mumla.channel
 
 import android.Manifest
-import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
@@ -43,6 +43,8 @@ import androidx.activity.result.contract.ActivityResultContracts.GetContent
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -54,10 +56,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
+import se.lublin.mumla.app.ServiceClient
+import se.lublin.mumla.app.ServiceViewModel
+import se.lublin.mumla.app.bindClient
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatContentParser
 import se.lublin.mumla.chat.ChatImageLoaders
@@ -67,7 +71,6 @@ import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.util.HtmlUtils
-import se.lublin.mumla.util.HumlaServiceFragment
 
 /**
  * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. Parsing and rendering
@@ -75,7 +78,11 @@ import se.lublin.mumla.util.HumlaServiceFragment
  * is the uniqueness gate `ChatAdapter.onImageClicked` requires, [sessionId] never throws, and the
  * adapter gets a `lifecycleScope` (`Dispatchers.Main.immediate`) because its coroutines touch views.
  */
-class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTargetSelectedListener {
+class ChannelChatFragment : Fragment(), ServiceClient, ChatTargetProvider.OnChatTargetSelectedListener {
+
+    private val serviceModel: ServiceViewModel by activityViewModels()
+    private val service: IMumlaService? get() = serviceModel.service.value
+    private var bound = false
 
     private lateinit var targetProvider: ChatTargetProvider
     private lateinit var chatList: RecyclerView
@@ -110,7 +117,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
 
     override fun onServiceEvent(event: HumlaEvent) {
         if (event !is HumlaEvent.UserJoinedChannel) return
-        val session = getService()?.takeIf { it.isConnected }?.session ?: return
+        val session = service?.takeIf { it.isConnected }?.session ?: return
         if (event.user == session.sessionUser && targetProvider.chatTarget == null) {
             // The user changed channels without a target: follow them.
             updateChatTargetText(null)
@@ -123,9 +130,8 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         setHasOptionsMenu(true)
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION") // HumlaServiceFragment overrides the same hook.
-    override fun onAttach(activity: Activity) {
-        super.onAttach(activity)
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
         val parent = parentFragment
         targetProvider = parent as? ChatTargetProvider
             ?: throw ClassCastException("$parent must implement ChatTargetProvider")
@@ -191,6 +197,10 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
                 }
             }
         }
+        if (!bound) {
+            bound = true
+            serviceModel.bindClient(this, this)
+        }
     }
 
     override fun onDestroyView() {
@@ -214,11 +224,11 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
 
     /** Empties the service's chat log, and with it the list. */
     fun clear() {
-        getService()?.clearMessageLog()
+        service?.clearMessageLog()
     }
 
-    override fun onServiceBound(service: IHumlaService) {
-        boundService.value = getService() ?: return
+    override fun onServiceBound(service: IMumlaService) {
+        boundService.value = service
         // onCreateView may have run before the service was bound, so set the hint here too.
         updateChatTargetText(targetProvider.chatTarget)
     }
@@ -234,7 +244,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     /** Updates the compose hint that shows where the next message goes. */
     fun updateChatTargetText(target: ChatTargetProvider.ChatTarget?) {
         if (!this::chatTextEdit.isInitialized) return
-        val service = getService() ?: return
+        val service = service ?: return
         if (!service.isConnected) return
         val session = service.session
         // Local vals: Kotlin cannot smart-cast the result of a Java getter.
@@ -278,7 +288,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
      */
     @VisibleForTesting
     internal fun sessionId(): Int = try {
-        getService()?.takeIf { it.isConnected }?.session?.sessionId ?: NO_SESSION
+        service?.takeIf { it.isConnected }?.session?.sessionId ?: NO_SESSION
     } catch (e: HumlaDisconnectedException) {
         NO_SESSION
     }
@@ -297,7 +307,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
 
     @VisibleForTesting
     internal fun onImagePicked(uri: Uri) {
-        val service = getService() ?: return
+        val service = service ?: return
         if (!service.isConnected) return
         imageProgress.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
@@ -337,7 +347,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
      */
     @VisibleForTesting
     internal fun sendImage(bitmap: Bitmap) {
-        val service = getService() ?: return
+        val service = service ?: return
         imageProgress.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
             val html = try {
@@ -375,9 +385,9 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
 
     @Throws(HumlaDisconnectedException::class)
     private fun sendMessage(message: String) {
-        val service = getService()
+        val service = service
         if (service == null) {
-            Log.d(TAG, "getService()==null in sendMessage")
+            Log.d(TAG, "service==null in sendMessage")
             return
         }
         val session = service.session

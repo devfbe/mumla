@@ -66,11 +66,10 @@ import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
-import se.lublin.mumla.util.HumlaServiceProvider
 
 /**
- * Driven through a real host: an `Activity` that is a `HumlaServiceProvider` and a parent
- * `Fragment` that is a `ChatTargetProvider` (the two hard casts that keep `FragmentScenario` out).
+ * Driven through a real host: an `Activity` whose [se.lublin.mumla.app.ServiceViewModel] holds the
+ * service, and a parent `Fragment` that is a `ChatTargetProvider`.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelChatFragmentTest {
@@ -207,7 +206,6 @@ class ChannelChatFragmentTest {
         launch(withService = null)
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.send_message))
         activity.bind(service)
-        fragment.setServiceBound(true)
         drainMainUntil { editor.hint.toString() != activity.getString(R.string.send_message) }
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
     }
@@ -612,8 +610,8 @@ class ChannelChatFragmentTest {
         launch()
         log.value += info("live")
         drainMainUntil { itemCount() == 3 }
-        fragment.setServiceBound(false)
-        fragment.setServiceBound(true)
+        activity.bind(null)
+        activity.bind(service)
         idleMainLooper()
         assertThat(itemCount()).isEqualTo(3)
     }

@@ -215,9 +215,9 @@
     <ID>TooGenericExceptionThrown:Settings.kt$Settings$throw RuntimeException("Could not convert input method '$inputMethod' to a Humla input method id!")</ID>
     <ID>TooGenericExceptionThrown:Settings.kt$Settings$throw RuntimeException("Invalid input method $inputMethod")</ID>
     <ID>TooManyFunctions:AudioSettingsFragment.kt$AudioSettingsFragment : MumlaPreferenceFragment</ID>
-    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : HumlaServiceFragmentOnChatTargetSelectedListener</ID>
+    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentServiceClientOnChatTargetSelectedListener</ID>
     <ID>TooManyFunctions:ChannelListAdapter.kt$ChannelListAdapter : AdapterIUserLocalStateListener</ID>
-    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : HumlaServiceFragmentOnChannelClickListenerOnUserClickListenerOnSharedPreferenceChangeListener</ID>
+    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentServiceClientOnChannelClickListenerOnUserClickListenerOnSharedPreferenceChangeListener</ID>
     <ID>TooManyFunctions:ChatImageLoader.kt$ChatImageLoader</ID>
     <ID>TooManyFunctions:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase : SQLiteOpenHelperMumlaDatabase</ID>
     <ID>TooManyFunctions:MumlaService.kt$MumlaService : HumlaServiceOnSharedPreferenceChangeListenerOnActionListenerOnActionListenerIMumlaService</ID>

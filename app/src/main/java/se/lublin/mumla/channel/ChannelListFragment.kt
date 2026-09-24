@@ -17,7 +17,6 @@
 
 package se.lublin.mumla.channel
 
-import android.app.Activity
 import android.app.SearchManager
 import android.content.Context
 import android.content.SharedPreferences
@@ -34,10 +33,11 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
@@ -46,11 +46,18 @@ import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.db.DatabaseProvider
-import se.lublin.mumla.util.HumlaServiceFragment
+import se.lublin.mumla.app.ServiceClient
+import se.lublin.mumla.app.ServiceViewModel
+import se.lublin.mumla.app.bindClient
+import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.service.IMumlaService
 
-class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUserClickListener,
+class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, OnUserClickListener,
     SharedPreferences.OnSharedPreferenceChangeListener {
+
+    private val serviceModel: ServiceViewModel by activityViewModels()
+    private val service: IMumlaService? get() = serviceModel.service.value
+    private var bound = false
 
     override fun onServiceEvent(event: HumlaEvent) {
         when (event) {
@@ -103,7 +110,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     private lateinit var channelView: RecyclerView
     private var channelListAdapter: ChannelListAdapter? = null
     private lateinit var targetProvider: ChatTargetProvider
-    private lateinit var databaseProvider: DatabaseProvider
     private var actionMode: ActionMode? = null
     private lateinit var settings: Settings
 
@@ -112,15 +118,12 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         setHasOptionsMenu(true)
     }
 
-    @Suppress("DEPRECATION")
-    override fun onAttach(activity: Activity) {
-        super.onAttach(activity)
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
         targetProvider = parentFragment as? ChatTargetProvider
             ?: throw ClassCastException("$parentFragment must implement ChatTargetProvider")
-        databaseProvider = activity as? DatabaseProvider
-            ?: throw ClassCastException("$activity must implement DatabaseProvider")
-        settings = Settings.getInstance(activity)
-        PreferenceManager.getDefaultSharedPreferences(activity)
+        settings = Settings.getInstance(context)
+        PreferenceManager.getDefaultSharedPreferences(context)
             .registerOnSharedPreferenceChangeListener(this)
     }
 
@@ -135,10 +138,13 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         return view
     }
 
-    @Suppress("DEPRECATION")
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        super.onActivityCreated(savedInstanceState)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         registerForContextMenu(channelView)
+        if (!bound) {
+            bound = true
+            serviceModel.bindClient(this, this)
+        }
     }
 
     override fun onDestroy() {
@@ -147,7 +153,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
             .unregisterOnSharedPreferenceChangeListener(this)
     }
 
-    override fun onServiceBound(service: IHumlaService) {
+    override fun onServiceBound(service: IMumlaService) {
         val adapter = channelListAdapter
         if (adapter == null) {
             setupChannelList(service)
@@ -336,9 +342,9 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         }
     }
 
-    private fun setupChannelList(service: IHumlaService) {
+    private fun setupChannelList(service: IMumlaService) {
         val adapter = ChannelListAdapter(
-            requireActivity(), service, databaseProvider.database, childFragmentManager,
+            requireActivity(), service, MumlaRepository.get(requireContext()).database, childFragmentManager,
             isShowingPinnedChannels(), settings.shouldShowUserCount(),
         )
         adapter.setOnChannelClickListener(this)

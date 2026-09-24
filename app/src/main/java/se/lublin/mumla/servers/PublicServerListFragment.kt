@@ -17,7 +17,6 @@
 
 package se.lublin.mumla.servers
 
-import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
@@ -36,6 +35,7 @@ import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -46,7 +46,9 @@ import kotlinx.coroutines.withContext
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.db.DatabaseProvider
+import se.lublin.mumla.app.ServerRequest
+import se.lublin.mumla.app.ServiceViewModel
+import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
 import java.util.Locale
 
@@ -57,8 +59,7 @@ class PublicServerListFragment :
     PublicServerAdapter.PublicServerAdapterMenuListener,
     MenuProvider {
 
-    private lateinit var connectHandler: FavouriteServerListFragment.ServerConnectHandler
-    private lateinit var databaseProvider: DatabaseProvider
+    private val serviceModel: ServiceViewModel by activityViewModels()
     private var servers: MutableList<PublicServer> = mutableListOf()
     private var serverGrid: GridView? = null
     private var serverProgress: ProgressBar? = null
@@ -67,14 +68,6 @@ class PublicServerListFragment :
 
     @VisibleForTesting
     internal var fetcher = PublicServerFetcher()
-
-    override fun onAttach(context: Context) {
-        super.onAttach(context)
-        connectHandler = context as? FavouriteServerListFragment.ServerConnectHandler
-            ?: throw ClassCastException("$context must implement ServerConnectHandler")
-        databaseProvider = context as? DatabaseProvider
-            ?: throw ClassCastException("$context must implement DatabaseProvider")
-    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val view = inflater.inflate(R.layout.fragment_public_server_list, container, false)
@@ -134,7 +127,8 @@ class PublicServerListFragment :
             .setView(layout)
             .setPositiveButton(R.string.add) { _, _ ->
                 server.username = usernameField.text.toString().ifEmpty { settings.getDefaultUsername() }
-                databaseProvider.database.addServer(server)
+                val repository = MumlaRepository.get(context)
+                lifecycleScope.launch { repository.io { addServer(server) } }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
@@ -211,7 +205,7 @@ class PublicServerListFragment :
                         response.latency,
                     ),
                 )
-                .setPositiveButton(R.string.connect) { _, _ -> connectHandler.connectToPublicServer(server) }
+                .setPositiveButton(R.string.connect) { _, _ -> connect(server) }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
         } else {
@@ -271,7 +265,11 @@ class PublicServerListFragment :
     }
 
     override fun onItemClick(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-        serverAdapter?.getItem(position)?.let(connectHandler::connectToPublicServer)
+        serverAdapter?.getItem(position)?.let(::connect)
+    }
+
+    private fun connect(server: PublicServer) {
+        serviceModel.requestConnect(ServerRequest.Public(server))
     }
 
     private companion object {

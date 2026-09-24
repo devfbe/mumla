@@ -22,16 +22,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import io.mockk.mockk
 import se.lublin.mumla.R
+import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.channel.ChatTargetProvider
-import se.lublin.mumla.db.DatabaseProvider
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.util.HumlaServiceFragment
-import se.lublin.mumla.util.HumlaServiceProvider
 
 /** An activity in the app theme, for fragments that need nothing from their host. */
 open class ThemedActivity : AppCompatActivity() {
@@ -41,33 +40,20 @@ open class ThemedActivity : AppCompatActivity() {
     }
 }
 
-/** A host that hands out a service without a database, for fragments that must refuse it. */
-open class ServiceOnlyHostActivity : ThemedActivity(), HumlaServiceProvider {
-    // Not `var service`: its generated getter would clash with the interface's getService().
-    private var bound: IMumlaService? = null
-    val serviceFragments = mutableListOf<HumlaServiceFragment>()
-
-    fun bind(service: IMumlaService?) {
-        bound = service
-    }
-
-    override fun getService(): IMumlaService? = bound
-    override fun addServiceFragment(fragment: HumlaServiceFragment) {
-        serviceFragments += fragment
-    }
-
-    override fun removeServiceFragment(fragment: HumlaServiceFragment) {
-        serviceFragments -= fragment
-    }
-}
-
-/** The usual host of the service-backed fragments: a bindable service and a relaxed database mock. */
-class ServiceHostActivity : ServiceOnlyHostActivity(), DatabaseProvider {
-    private val db: MumlaDatabase = mockk(relaxed = true)
+/**
+ * The usual host of the service-backed fragments: [bind] publishes a service to them, and a relaxed
+ * mock is the app's database.
+ */
+class ServiceHostActivity : ThemedActivity() {
+    val database: MumlaDatabase = installDatabase(mockk(relaxed = true))
+    private val serviceModel: ServiceViewModel by viewModels()
     var menuInvalidations = 0
         private set
 
-    override fun getDatabase(): MumlaDatabase = db
+    /** Binds [service] as the activity would, or unbinds with null. */
+    fun bind(service: IMumlaService?) {
+        serviceModel.attach(service)
+    }
 
     override fun invalidateOptionsMenu() {
         menuInvalidations++

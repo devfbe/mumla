@@ -5,17 +5,12 @@ import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.preference.PreferenceManager
 import com.google.common.truth.Truth.assertThat
-import io.mockk.mockk
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.model.Server
 import se.lublin.mumla.R
-import se.lublin.mumla.db.DatabaseProvider
-import se.lublin.mumla.db.MumlaDatabase
-import se.lublin.mumla.db.PublicServer
-import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.idleMainLooper
 import java.io.IOException
@@ -26,16 +21,8 @@ import java.util.concurrent.atomic.AtomicInteger
 @RunWith(RobolectricTestRunner::class)
 class PublicServerListFragmentTest {
 
-    class HostActivity : ThemedActivity(), FavouriteServerListFragment.ServerConnectHandler, DatabaseProvider {
-        private val db: MumlaDatabase = mockk(relaxed = true)
-
-        override fun connectToServer(server: Server) = Unit
-        override fun connectToPublicServer(server: PublicServer) = Unit
-        override fun getDatabase(): MumlaDatabase = db
-    }
-
     private val downloads = AtomicInteger()
-    private val activity = Robolectric.buildActivity(HostActivity::class.java).setup().get()
+    private val activity = Robolectric.buildActivity(ServiceHostActivity::class.java).setup().get()
     private val prefs = PreferenceManager.getDefaultSharedPreferences(activity)
 
     /** Hosts the fragment with a download that counts its attempts and always fails. */
