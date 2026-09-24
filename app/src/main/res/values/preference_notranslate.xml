@@ -134,7 +134,7 @@
         <item>@string/vadOnset4</item>
     </string-array>
 
-    <!-- Frames of 10 ms; 1 is "open on the first frame", i.e. the behaviour before this version. -->
+    <!-- Frames of 10 ms; 1 opens on the first frame. -->
     <string-array name="vadOnsetValues">
         <item>1</item>
         <item>2</item>

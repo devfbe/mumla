@@ -97,7 +97,6 @@
             app:iconSpaceReserved="false"/>
 
         <!-- Classic mode: the legacy level slider, left on disk so switching back restores it. -->
-        <!-- multiplier was previously 0.1, but never made sense, never worked -->
         <se.lublin.mumla.preference.SeekBarDialogPreference
             app:multiplier="1"
             android:defaultValue="50"

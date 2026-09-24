@@ -53,13 +53,7 @@
         android:divider="?attr/dividerHorizontal"
         android:showDividers="middle">
 
-        <!--
-          ~ No android:enabled here or on the send button below. Both carried
-          ~ android:enabled="false" from 2022 on and it was inert: android:enabled is a TextView
-          ~ attribute, so an ImageButton never reads it (see ChatLayoutTest). Picking an image
-          ~ needs no text, so this one is always live; the send button is disabled from
-          ~ onViewCreated instead, which is where it was already re-enabled from.
-          -->
+        <!-- ImageButton ignores android:enabled; the send button is disabled in onViewCreated. -->
         <ImageButton
             android:id="@+id/chatImageSend"
             android:layout_width="48dp"

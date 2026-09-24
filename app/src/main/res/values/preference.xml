@@ -76,7 +76,7 @@
     <string name="disableOpus">Avoid Opus codec</string>
     <string name="disableOpusSum">Turn off Opus support for Mumble 1.2.4 servers.</string>
 
-    <!-- Stream B: the audio settings screen (spec B3-B6, B9, B10). -->
+    <!-- Audio settings screen -->
     <string name="noiseSuppression">Noise suppression</string>
     <string name="noiseSuppressionSum">Removes background noise from your microphone before it is sent.</string>
     <string name="noiseSuppressionNone">Off</string>
