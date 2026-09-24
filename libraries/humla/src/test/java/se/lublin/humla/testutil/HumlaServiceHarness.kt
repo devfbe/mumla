@@ -61,8 +61,6 @@ class HumlaServiceHarness(
     val mainLooper: ShadowLooper = shadowOf(Looper.getMainLooper())
     val warnings = CopyOnWriteArrayList<String?>()
 
-    /** One entry per handshake: the CELT versions the service announced. */
-    val celtAnnouncements = CopyOnWriteArrayList<IntArray>()
     val disconnects = CopyOnWriteArrayList<HumlaException?>()
 
     private val controller: ServiceController<HumlaService> =
@@ -76,10 +74,6 @@ class HumlaServiceHarness(
         service.reconnectPolicy = reconnectPolicy
         service.audioFactory = audioFactory
         service.communicationDevices = devices
-        service.celtVersions = {
-            // The native library is not on the JVM; see HumlaService.celtVersions.
-            intArrayOf(0x8000000b.toInt()).also { celtAnnouncements += it }
-        }
         controller.create()
         service.registerObserver(object : HumlaObserver() {
             override fun onLogWarning(message: String?) { warnings += message }

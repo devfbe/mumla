@@ -34,7 +34,6 @@ import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.flow.StateFlow
 import org.minidns.dnsserverlookup.android21.AndroidUsingLinkProperties
 import se.lublin.humla.audio.AudioOutput
-import se.lublin.humla.audio.encoder.CELT7Encoder
 import se.lublin.humla.audio.capture.VadConfigBundle
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
@@ -92,7 +91,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private var mAutoReconnect = false
     private var mCertificate: ByteArray? = null
     private var mCertificatePassword: String? = null
-    private var mUseOpus = false
     private var mForceTcpSetting = false
 
     /** Voice goes over TCP when the user forces it or when Tor is on, which cannot carry UDP. */
@@ -165,9 +163,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /** A test may set a fake before [onCreate]; otherwise [onCreate] creates the Android one. */
     var communicationDevices: CommunicationDevices? = null
-
-    /** Test seam: CELT 0.7 bitstream versions for `Authenticate` (the default needs the native library). */
-    var celtVersions: () -> IntArray = { intArrayOf(CELT7Encoder.getBitstreamVersion()) }
 
     /** Waits for a default network while the reconnect is on hold, and retries as soon as one is up. */
     private val mNetworkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -407,8 +402,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         val auth = Mumble.Authenticate.newBuilder()
         auth.setUsername(mServer!!.username)
         auth.setPassword(mServer!!.password)
-        for (celtVersion in celtVersions()) auth.addCeltVersions(celtVersion)
-        auth.setOpus(mUseOpus)
+        auth.setOpus(true)
         auth.addAllTokens(mAccessTokens)
 
         val connection = mConnection!!
@@ -659,10 +653,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
         if (extras.containsKey(EXTRAS_INPUT_QUALITY)) {
             config = config.copy(targetBitrate = extras.getInt(EXTRAS_INPUT_QUALITY))
-        }
-        if (extras.containsKey(EXTRAS_USE_OPUS)) {
-            mUseOpus = extras.getBoolean(EXTRAS_USE_OPUS)
-            reconnectNeeded = true
         }
         if (extras.containsKey(EXTRAS_USE_TOR)) {
             mUseTor = extras.getBoolean(EXTRAS_USE_TOR)
@@ -1261,7 +1251,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         const val EXTRAS_TRANSMIT_MODE = "transmit_mode"
         const val EXTRAS_INPUT_RATE = "input_frequency"
         const val EXTRAS_INPUT_QUALITY = "input_quality"
-        const val EXTRAS_USE_OPUS = "use_opus"
         const val EXTRAS_FORCE_TCP = "force_tcp"
         const val EXTRAS_USE_TOR = "use_tor"
         const val EXTRAS_CLIENT_NAME = "client_name"

@@ -401,7 +401,6 @@ class MumlaService : HumlaService(),
             Settings.PREF_CERT_ID,
             Settings.PREF_FORCE_TCP,
             Settings.PREF_USE_TOR,
-            Settings.PREF_DISABLE_OPUS,
             ->
                 requiresReconnect = true
         }

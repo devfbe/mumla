@@ -277,12 +277,5 @@
             android:title="@string/androidAgc"
             android:summary="@string/androidAgcSum"
             app:iconSpaceReserved="false"/>
-
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="disableOpus"
-            android:summary="@string/disableOpusSum"
-            android:title="@string/disableOpus"
-            app:iconSpaceReserved="false"/>
     </PreferenceCategory>
 </PreferenceScreen>

@@ -24,6 +24,9 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
     @Volatile var disconnectCalls = 0
     val sent = CopyOnWriteArrayList<HumlaTCPMessageType>()
 
+    /** The protobuf messages sent, in order; raw tunnelled frames are not included. */
+    val sentMessages = CopyOnWriteArrayList<MessageLite>()
+
     /**
      * Called from [sendMessage], on whichever thread sends. Lets a test park the protocol thread in
      * the middle of a message handler.
@@ -45,7 +48,10 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
         // Published last: tests wait on this field, so everything else must be in place first.
         connectThread = Thread.currentThread().name
     }
-    override fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType) { record(messageType) }
+    override fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType) {
+        sentMessages += message
+        record(messageType)
+    }
     override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) { record(messageType) }
 
     private fun record(messageType: HumlaTCPMessageType) {

@@ -40,6 +40,9 @@ class Settings private constructor(context: Context) {
         if (preferences.contains(LEGACY_PREF_ECHO_CANCELLATION_METHOD)) {
             preferences.edit().remove(LEGACY_PREF_ECHO_CANCELLATION_METHOD).apply()
         }
+        if (preferences.contains(LEGACY_PREF_DISABLE_OPUS)) {
+            preferences.edit().remove(LEGACY_PREF_DISABLE_OPUS).apply()
+        }
         if (preferences.contains(LEGACY_PREF_HANDSET_MODE)) {
             val editor = preferences.edit().remove(LEGACY_PREF_HANDSET_MODE)
             // The handset mode was the earpiece; a default output the user already picked wins.
@@ -121,8 +124,6 @@ class Settings private constructor(context: Context) {
     fun isAutoReconnectEnabled(): Boolean = preferences.getBoolean(PREF_AUTO_RECONNECT, DEFAULT_AUTO_RECONNECT)
 
     fun isTcpForced(): Boolean = preferences.getBoolean(PREF_FORCE_TCP, DEFAULT_FORCE_TCP)
-
-    fun isOpusDisabled(): Boolean = preferences.getBoolean(PREF_DISABLE_OPUS, DEFAULT_DISABLE_OPUS)
 
     fun isTorEnabled(): Boolean = preferences.getBoolean(PREF_USE_TOR, DEFAULT_USE_TOR)
 
@@ -369,9 +370,6 @@ class Settings private constructor(context: Context) {
         const val PREF_USE_TOR = "useTor"
         const val DEFAULT_USE_TOR = false
 
-        const val PREF_DISABLE_OPUS = "disableOpus"
-        const val DEFAULT_DISABLE_OPUS = false
-
         const val PREF_MUTED = "muted"
         const val DEFAULT_MUTED = false
 
@@ -462,6 +460,9 @@ class Settings private constructor(context: Context) {
 
         /** The global echo method the audio chooser replaced; removed on first read. */
         private const val LEGACY_PREF_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
+
+        /** The "avoid Opus" checkbox; Opus is now always offered. Removed on first read. */
+        private const val LEGACY_PREF_DISABLE_OPUS = "disableOpus"
 
         /** The preference key of the echo-cancellation override for [category]. */
         @JvmStatic

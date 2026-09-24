@@ -30,6 +30,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowNetwork
 import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.model.WhisperTargetList
+import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
@@ -106,20 +107,17 @@ class HumlaServiceSessionTest {
         assertThat(h.transports.tcps).hasSize(1)
     }
 
-    /**
-     * The handshake announces the CELT bitstream version the seam provides. `FakeTcpTransport`
-     * records only message types, so the content is checked here.
-     */
+    /** The handshake offers Opus and no CELT version: Opus is the only codec this client has. */
     @Test
-    fun theHandshakeAnnouncesTheCeltVersionsFromTheSeam() {
+    fun theHandshakeOffersOpusOnly() {
         val h = start()
-        assertThat(h.celtAnnouncements).isEmpty()
 
         h.service.connect()
         h.openSocket(0)
 
-        assertThat(h.celtAnnouncements).hasSize(1)
-        assertThat(h.celtAnnouncements[0].toList()).containsExactly(0x8000000b.toInt())
+        val auth = h.transports.tcps[0].sentMessages.filterIsInstance<Mumble.Authenticate>().single()
+        assertThat(auth.opus).isTrue()
+        assertThat(auth.celtVersionsList).isEmpty()
     }
 
     /**

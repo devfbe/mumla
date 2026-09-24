@@ -267,7 +267,6 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_TRANSMIT_MODE to false,
             HumlaService.EXTRAS_INPUT_RATE to false,
             HumlaService.EXTRAS_INPUT_QUALITY to false,
-            HumlaService.EXTRAS_USE_OPUS to true,
             HumlaService.EXTRAS_USE_TOR to true,
             HumlaService.EXTRAS_FORCE_TCP to true,
             HumlaService.EXTRAS_CLIENT_NAME to true,
@@ -323,7 +322,6 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_AUDIO_STREAM -> putInt(key, 3)
             HumlaService.EXTRAS_FRAMES_PER_PACKET -> putInt(key, 4)
             HumlaService.EXTRAS_AUTO_RECONNECT,
-            HumlaService.EXTRAS_USE_OPUS,
             HumlaService.EXTRAS_USE_TOR,
             HumlaService.EXTRAS_FORCE_TCP,
             HumlaService.EXTRAS_HALF_DUPLEX,

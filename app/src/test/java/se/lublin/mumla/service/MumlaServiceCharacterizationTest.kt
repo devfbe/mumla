@@ -941,7 +941,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun aSettingThatNeedsAReconnectSaysSoWhileConnected() {
-        for (key in listOf(Settings.PREF_CERT_ID, Settings.PREF_FORCE_TCP, Settings.PREF_USE_TOR, Settings.PREF_DISABLE_OPUS)) {
+        for (key in listOf(Settings.PREF_CERT_ID, Settings.PREF_FORCE_TCP, Settings.PREF_USE_TOR)) {
             ShadowToast.reset()
             service.onSharedPreferenceChanged(preferences(), key)
             assertThat(ShadowToast.getLatestToast()).isNull()

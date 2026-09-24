@@ -168,6 +168,16 @@ class SettingsAudioTest {
         assertThat(prefs.contains("echo_cancellation_method")).isFalse()
     }
 
+    /** Opus is always offered now; a stored "avoid Opus" choice is dropped rather than left behind. */
+    @Test
+    fun `the old avoid-opus choice is removed from the preferences`() {
+        prefs.edit().putBoolean("disableOpus", true).commit()
+
+        Settings.getInstance(ApplicationProvider.getApplicationContext())
+
+        assertThat(prefs.contains("disableOpus")).isFalse()
+    }
+
     // --- the voice gate ----------------------------------------------------------------------
 
     @Test
