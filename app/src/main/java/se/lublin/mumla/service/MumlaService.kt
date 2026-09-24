@@ -588,14 +588,6 @@ class MumlaService : HumlaService(),
         }
     }
 
-    override fun setOverlayShown(showOverlay: Boolean) {
-        if (!mChannelOverlay.isShown()) {
-            mChannelOverlay.show()
-        } else {
-            mChannelOverlay.hide()
-        }
-    }
-
     override fun isOverlayShown(): Boolean = mChannelOverlay.isShown()
 
     override fun clearChatNotifications() {

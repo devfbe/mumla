@@ -903,18 +903,6 @@ class MumlaServiceCharacterizationTest {
         verify(exactly = 0) { overlay.show() }
     }
 
-    /** Characterized, not endorsed: the argument is ignored and the call toggles. */
-    @Test
-    fun setOverlayShownTogglesWhateverItIsAsked() {
-        every { overlay.isShown } returns false
-        service.setOverlayShown(false)
-        verify(exactly = 1) { overlay.show() }
-
-        every { overlay.isShown } returns true
-        service.setOverlayShown(true)
-        verify(exactly = 1) { overlay.hide() }
-    }
-
     @Test
     fun isOverlayShownAsksTheOverlay() {
         every { overlay.isShown } returns true
