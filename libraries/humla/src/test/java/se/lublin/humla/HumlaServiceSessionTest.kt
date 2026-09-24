@@ -444,6 +444,59 @@ class HumlaServiceSessionTest {
     }
 
     /**
+     * A disconnect while the reconnect waits out its backoff ends the session for good, so it has
+     * to give back what only Disconnected releases. The connection already reported its end when
+     * it was lost and reports nothing a second time, so nothing on the disconnect-report path runs:
+     * the wake lock stayed held and the connectivity receiver registered until the next session.
+     */
+    @Test
+    fun aDisconnectWhileWaitingToReconnectReleasesTheWakeLockAndTheReceiver() {
+        val h = start(autoReconnect = true)
+        h.connectAndSynchronize()
+        shadowOf(connectivityManager()).setActiveNetworkInfo(null) // waits for the network
+        h.failConnection(0, connectionError())
+        assertThat(h.service.isWakeLockHeldForTest()).isTrue()
+        assertThat(connectivityReceivers()).isNotEmpty()
+
+        h.service.disconnect()
+        h.mainLooper.idle()
+
+        assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
+        assertThat(h.service.isWakeLockHeldForTest()).isFalse()
+        assertThat(connectivityReceivers()).isEmpty()
+        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
+    }
+
+    /**
+     * The other half of the same line: with a live connection, its own disconnect report is what
+     * releases the session, so the wake lock still covers the teardown that report runs.
+     */
+    @Test
+    fun aDisconnectDuringALiveSessionReleasesTheWakeLockWithTheConnectionsReport() {
+        val h = start(autoReconnect = true)
+        h.connectAndSynchronize()
+
+        h.service.disconnect()
+        assertThat(h.service.isWakeLockHeldForTest()).isTrue() // the report is still queued
+
+        h.mainLooper.idle()
+        assertThat(h.service.isWakeLockHeldForTest()).isFalse()
+    }
+
+    /** The same through the service going away, which disconnects. */
+    @Test
+    fun destroyingTheServiceWhileWaitingToReconnectReleasesTheWakeLock() {
+        val h = start(autoReconnect = true)
+        h.connectAndSynchronize()
+        h.failConnection(0, connectionError())
+        assertThat(h.service.isWakeLockHeldForTest()).isTrue()
+
+        h.destroy()
+
+        assertThat(h.service.isWakeLockHeldForTest()).isFalse()
+    }
+
+    /**
      * `cancelReconnect` on a live session is a no-op, both halves. Without the state machine's
      * answer it would release the wake lock and put the service into CONNECTION_LOST while the
      * connection is up (measured, G15).

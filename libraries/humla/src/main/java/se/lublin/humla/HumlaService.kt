@@ -473,8 +473,21 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
     }
 
+    /**
+     * Ends the session for good. While the reconnect waits out its backoff (ConnectionLost) there
+     * is no live connection: it reported its end when it was lost and reports nothing a second
+     * time, so onConnectionDisconnected -- the usual place Disconnected gives back the wake lock
+     * and the connectivity receiver -- never runs. They are released here instead; without it
+     * both stayed held until the next session, also past onDestroy. In every other state the
+     * connection's own report does it.
+     */
     override fun disconnect() {
+        val waiting = mStateMachine.current is SessionState.ConnectionLost
         mStateMachine.disconnectRequested()
+        if (waiting) {
+            mConnectionState = ConnectionState.DISCONNECTED
+            releaseSessionResources()
+        }
         mConnection?.disconnect()
     }
 
