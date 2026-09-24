@@ -73,7 +73,6 @@ public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
                 VadConfigBundle.toBundle(mSettings.getVadConfig()));
         connectIntent.putExtra(HumlaService.EXTRAS_AMPLITUDE_BOOST, mSettings.getAmplitudeBoostMultiplier());
         connectIntent.putExtra(HumlaService.EXTRAS_AUTO_RECONNECT, mSettings.isAutoReconnectEnabled());
-        connectIntent.putExtra(HumlaService.EXTRAS_AUTO_RECONNECT_DELAY, MumlaService.RECONNECT_DELAY);
         connectIntent.putExtra(HumlaService.EXTRAS_USE_OPUS, !mSettings.isOpusDisabled());
         connectIntent.putExtra(HumlaService.EXTRAS_INPUT_RATE, mSettings.getInputSampleRate());
         connectIntent.putExtra(HumlaService.EXTRAS_INPUT_QUALITY, mSettings.getInputQuality());

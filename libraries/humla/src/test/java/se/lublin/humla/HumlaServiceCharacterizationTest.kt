@@ -317,7 +317,6 @@ class HumlaServiceCharacterizationTest {
         val reconnectNeeded = mapOf(
             HumlaService.EXTRAS_SERVER to true,
             HumlaService.EXTRAS_AUTO_RECONNECT to false,
-            HumlaService.EXTRAS_AUTO_RECONNECT_DELAY to false,
             HumlaService.EXTRAS_CERTIFICATE to true,
             HumlaService.EXTRAS_CERTIFICATE_PASSWORD to true,
             HumlaService.EXTRAS_DETECTION_THRESHOLD to false,
@@ -375,7 +374,6 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_DETECTION_THRESHOLD -> putFloat(key, 0.25f)
             HumlaService.EXTRAS_AMPLITUDE_BOOST -> putFloat(key, 1.5f)
             HumlaService.EXTRAS_TRANSMIT_MODE -> putInt(key, Constants.TRANSMIT_CONTINUOUS)
-            HumlaService.EXTRAS_AUTO_RECONNECT_DELAY -> putInt(key, 5000)
             HumlaService.EXTRAS_INPUT_RATE -> putInt(key, 48000)
             HumlaService.EXTRAS_INPUT_QUALITY -> putInt(key, 40000)
             HumlaService.EXTRAS_AUDIO_SOURCE -> putInt(key, 7)
@@ -660,8 +658,7 @@ class HumlaServiceCharacterizationTest {
      *
      * - the four corners of (disconnect reason x EXTRAS_AUTO_RECONNECT) ->
      *   `onlyAConnectionErrorWithAutoReconnectOnStartsReconnecting`
-     * - polling with connectivity -> `aReconnectWithConnectivityPollsAfterTheBackoffDelay`, now
-     *   against the backoff rather than EXTRAS_AUTO_RECONNECT_DELAY, which A9b accepts and ignores
+     * - polling with connectivity -> `aReconnectWithConnectivityPollsAfterTheBackoffDelay`
      * - waiting for the network without it -> `aReconnectWithoutConnectivityWaitsForTheNetworkInstead`
      * - the receiver's two guards -> `theConnectivityReceiverReconnectsOnlyWhenTheNetworkIsBack`
      *   and `aBroadcastThatArrivesAfterTheSessionEndedUnregistersTheReceiver`

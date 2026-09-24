@@ -774,9 +774,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         if (extras.containsKey(EXTRAS_AUTO_RECONNECT)) {
             mAutoReconnect = extras.getBoolean(EXTRAS_AUTO_RECONNECT)
         }
-        // EXTRAS_AUTO_RECONNECT_DELAY is accepted and ignored: ReconnectPolicy owns the backoff
-        // now (spec A3), and a fixed delay is exactly what an exponential one replaces. The key
-        // stays because it is public API of this library and MumlaService still writes it.
         if (extras.containsKey(EXTRAS_CERTIFICATE)) {
             mCertificate = extras.getByteArray(EXTRAS_CERTIFICATE)
             reconnectNeeded = true
@@ -1449,7 +1446,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         /** A [Server] specifying the server to connect to. */
         const val EXTRAS_SERVER = "server"
         const val EXTRAS_AUTO_RECONNECT = "auto_reconnect"
-        const val EXTRAS_AUTO_RECONNECT_DELAY = "auto_reconnect_delay"
         const val EXTRAS_CERTIFICATE = "certificate"
         const val EXTRAS_CERTIFICATE_PASSWORD = "certificate_password"
         const val EXTRAS_DETECTION_THRESHOLD = "detection_threshold"

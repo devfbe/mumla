@@ -678,6 +678,5 @@ class MumlaService : HumlaService(),
         private val TAG = MumlaService::class.java.name
 
         const val TTS_THRESHOLD = 250 // Maximum number of characters to read
-        const val RECONNECT_DELAY = 10000
     }
 }
