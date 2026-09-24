@@ -142,8 +142,8 @@ class AudioHandlerAdapter(private val handler: AudioHandler) : ManagedAudio {
      * Reports a user-facing audio problem; [AudioController] posts it to the main thread and
      * `HumlaService` logs it to chat.
      *
-     * TODO: collect `handler.captureState` and report `CaptureState.Silenced`/`Error` here; nothing
-     * calls this in production yet.
+     * Intended for `CaptureState.Silenced`/`Error` from `handler.captureState`; nothing calls this
+     * in production yet.
      */
     fun reportWarning(message: String) {
         warningListener?.invoke(message)

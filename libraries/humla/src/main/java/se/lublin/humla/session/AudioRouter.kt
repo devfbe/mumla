@@ -20,47 +20,29 @@ package se.lublin.humla.session
 import android.media.AudioDeviceInfo
 
 /**
- * Decides which device voice goes to, the way the phone app does.
+ * Decides which device voice goes to, the way the phone app does. Main thread only.
  *
- * [choice] is the user's explicit pick (null = default). It survives a lost connection and is
- * dropped when its device goes away, when it equals the default, when a newly connected headset
- * takes over, and by [forgetChoice] when the session ends.
- *
- * The default is: the first Bluetooth headset if [bluetoothAutomatic], then a wired headset, then
- * the speaker (or the earpiece if [earpieceByDefault]), falling back to the other built-in device.
- * Everything is routed explicitly, because in communication mode the platform default is the
- * earpiece.
- *
- * A headset appearing during the session takes over (newest wins); a chosen device disappearing
- * hands back to the default. Only a change of the device set triggers a new decision: route changes
- * alone are reported but not fought, so the router does not argue with the dialler during a call.
- *
- * No permission is consulted; a refusal arrives as `select` returning false and is reported via
- * [Listener.onRouteRefused] once per [apply].
- *
- * [engage] takes the communication mode before the first route and [disengage] gives it back.
- * Main thread only. Nothing touches the platform before [engage], so no SCO link is held open
- * without a voice session.
+ * Default: a Bluetooth headset if [bluetoothAutomatic], then a wired headset, then the speaker (or
+ * earpiece if [earpieceByDefault]). Everything is routed explicitly, because in communication mode
+ * the platform default is the earpiece. [choice] overrides the default until its device goes away
+ * or a newly connected headset takes over (newest wins). Only a change of the device set triggers a
+ * new decision, so the router doesn't fight the dialler during a call. Nothing touches the platform
+ * before [engage], so no SCO link is held open without a voice session.
  */
 class AudioRouter(
     private val devices: CommunicationDevices,
     private val listener: Listener,
 ) {
     interface Listener {
-        /**
-         * The device this router routes voice to changed: its type, or null when the route is the
-         * platform's own. Reported once per transition, whoever caused it.
-         */
+        /** The routed device's type, or null for the platform's own route; once per transition. */
         fun onRouteChanged(type: Int?)
 
         /** The platform refused to route to the device the router picked. */
         fun onRouteRefused()
     }
 
-    /** Whether a connected Bluetooth headset is part of the default; see the class doc. */
     var bluetoothAutomatic: Boolean = false
 
-    /** The built-in default is the earpiece rather than the speaker (the old handset mode). */
     var earpieceByDefault: Boolean = false
 
     /** The user's explicit pick, or null for the default. */
@@ -70,16 +52,14 @@ class AudioRouter(
     var isEngaged: Boolean = false
         private set
 
-    /** Whether the current route is one this router selected, and so one it may give back. */
+    /** Whether the current route is one this router selected and may give back. */
     private var claimed = false
 
-    /** Whether this router holds the communication mode, and so has to give it back. */
     private var modeHeld = false
 
-    /** The device ids present at the last decision; what is not in here has just arrived. */
+    /** Device ids present at the last decision; anything else has just arrived. */
     private var known: Set<Int> = emptySet()
 
-    /** The last route reported; what makes [Listener.onRouteChanged] fire once per transition. */
     private var lastRouted: Int? = null
 
     private var applying = false
@@ -91,7 +71,6 @@ class AudioRouter(
         devices.setOnChangedListener { onPlatformChanged() }
     }
 
-    /** A session is up: take the route the wish and the default ask for. */
     fun engage() {
         isEngaged = true
         if (!modeHeld) {
@@ -102,7 +81,7 @@ class AudioRouter(
         apply()
     }
 
-    /** The session is down: give the route and the mode back. The wish stays for the next session. */
+    /** Gives the route and the mode back; [choice] stays for the next session. */
     fun disengage() {
         isEngaged = false
         apply()
@@ -112,26 +91,23 @@ class AudioRouter(
         }
     }
 
-    /** The user picked a device from the chooser. */
     fun choose(id: Int) {
         choice = id
         apply()
     }
 
-    /** Back to the default, for good: the session this choice was made in has ended. */
     fun forgetChoice() {
         choice = null
         apply()
     }
 
-    /** What the chooser offers: every device the platform can route voice to, while engaged. */
+    /** Every device the platform can route voice to, while engaged. */
     fun availableDevices(): List<CommunicationDevice> =
         if (isEngaged) devices.available() else emptyList()
 
     /** The device voice goes to, or null without a session. */
     fun activeDevice(): CommunicationDevice? = if (isEngaged) devices.current() else null
 
-    /** Reconciles the platform's route with the wish and the default. */
     fun apply() {
         if (applying) return
         applying = true
@@ -167,7 +143,6 @@ class AudioRouter(
         }
     }
 
-    /** The default: a Bluetooth headset if one may be taken, a plugged-in one, the phone itself. */
     private fun automatic(available: List<CommunicationDevice>): CommunicationDevice? {
         if (bluetoothAutomatic) available.firstOrNull { it.type in BLUETOOTH }?.let { return it }
         available.firstOrNull { it.type in WIRED }?.let { return it }
@@ -182,10 +157,7 @@ class AudioRouter(
     private fun takesOver(device: CommunicationDevice): Boolean =
         device.type in WIRED || (bluetoothAutomatic && device.type in BLUETOOTH)
 
-    /**
-     * Only a route this router took is its to give back. Clearing whatever else the platform chose
-     * would take the user off their own speaker or wired headset for no reason they asked for.
-     */
+    /** Only a route this router took is its to give back. */
     private fun giveBack() {
         if (!claimed) return
         devices.clear()
@@ -208,7 +180,7 @@ class AudioRouter(
     }
 
     companion object {
-        /** What the user calls a Bluetooth headset, whether the platform says SCO or LE Audio. */
+        /** SCO or LE Audio. */
         val BLUETOOTH: Set<Int> = setOf(
             AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
             AudioDeviceInfo.TYPE_BLE_HEADSET,
@@ -216,7 +188,6 @@ class AudioRouter(
             AudioDeviceInfo.TYPE_HEARING_AID,
         )
 
-        /** A headset on a cable or on USB, which comes before the phone's own speaker. */
         val WIRED: Set<Int> = setOf(
             AudioDeviceInfo.TYPE_WIRED_HEADSET,
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES,

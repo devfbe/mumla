@@ -32,40 +32,29 @@ data class CommunicationDevice(val id: Int, val type: Int, val name: String)
 
 /** The subset of `AudioManager`'s communication-device API (API 31) that routing needs. */
 interface CommunicationDevices {
-    /** Every communication device available right now, in the platform's order. */
     fun available(): List<CommunicationDevice>
 
     /** Routes voice to the device; false if the platform refused or the id is gone. */
     fun select(id: Int): Boolean
 
-    /** Returns routing to the platform default. */
     fun clear()
 
-    /**
-     * Takes (`MODE_IN_COMMUNICATION`) or gives back (`MODE_NORMAL`) the communication mode, without
-     * which the platform does not route voice by the communication device.
-     */
+    /** Takes or gives back `MODE_IN_COMMUNICATION`, without which the communication device is ignored. */
     fun setCommunicationMode(on: Boolean)
 
-    /** The current communication device, or null if none is set. */
     fun current(): CommunicationDevice?
 
     /**
-     * Registers (or with null, removes) one callback, invoked on the main thread, for both a route
-     * change and a device arriving or leaving. The latter matters because a newly switched-on
-     * headset raises nothing on the communication-device listener until something routes to it.
+     * Registers (null removes) one main-thread callback for route changes and devices coming or
+     * going; a new headset raises nothing on the communication-device listener until routed to.
      */
     fun setOnChangedListener(listener: (() -> Unit)?)
 }
 
 /**
- * Thin pass-through to [AudioManager.setCommunicationDevice] and friends; the logic lives in
- * [AudioRouter].
- *
- * `BLUETOOTH_CONNECT` is never a condition of routing: the platform does not require it for these
- * calls. Some OEMs may enforce more than they annotate, so every call is wrapped: a
- * [SecurityException] yields the "no headset" value and [onSecurityDenial] is invoked once per
- * instance (one service life).
+ * Thin pass-through to [AudioManager.setCommunicationDevice] and friends. The platform doesn't
+ * require `BLUETOOTH_CONNECT` for these calls, but some OEMs enforce more, so a [SecurityException]
+ * yields the "no headset" value and [onSecurityDenial] is invoked once per instance.
  */
 class AndroidCommunicationDevices(
     private val audioManager: AudioManager,
@@ -75,7 +64,7 @@ class AndroidCommunicationDevices(
     private var changeListener: Registration? = null
     private var denialReported = false
 
-    /** The two platform registrations one listener stands for; either may have been refused. */
+    /** Either registration may have been refused. */
     private class Registration(
         val route: AudioManager.OnCommunicationDeviceChangedListener?,
         val devices: AudioDeviceCallback?,
@@ -118,11 +107,8 @@ class AndroidCommunicationDevices(
     }
 
     /**
-     * Both platform registrations for [listener]; a refused one is null. The platform calls the
-     * device callback once on registration with the devices already present.
-     *
-     * The device callback posts to [mainHandler] itself so delivery is never inline, even where
-     * the platform (or Robolectric) calls it synchronously during registration.
+     * Both platform registrations for [listener]; a refused one is null. The device callback posts
+     * to [mainHandler] so delivery is never inline, even when called during registration.
      */
     private fun register(listener: () -> Unit): Registration {
         val route = AudioManager.OnCommunicationDeviceChangedListener { listener() }
@@ -135,8 +121,7 @@ class AndroidCommunicationDevices(
                 mainHandler.post(listener)
             }
         }
-        // Some vendor builds throw on either registration; routing still works, only the
-        // automatic updates are lost.
+        // Some vendor builds throw here; routing still works, only automatic updates are lost.
         return Registration(
             route = platformCall("Communication device listener unavailable", null) {
                 audioManager.addOnCommunicationDeviceChangedListener(
