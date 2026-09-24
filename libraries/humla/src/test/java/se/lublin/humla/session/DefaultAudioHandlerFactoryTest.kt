@@ -72,10 +72,8 @@ class DefaultAudioHandlerFactoryTest {
     }
 
     /**
-     * Enumerated from `AudioHandler.Builder`'s own fields rather than written out, so a setter
-     * stream B adds and forgets to wire fails here the moment the field exists (spec 4.04: pin the
-     * set, not the member). Every value below is distinct from every other and from the Java
-     * default, so a cross-wiring is visible and not only an omission.
+     * Enumerated from `AudioHandler.Builder`'s own fields, so a new setter that is not wired fails
+     * here. Every value is distinct from every other and from the default, so a cross-wiring shows.
      */
     @Test
     fun everyBuilderFieldIsSetFromTheConfigAndTheSessionParams() {
@@ -194,7 +192,7 @@ class DefaultAudioHandlerFactoryTest {
         }
     }
 
-    /** Half duplex reaches the builder through the rule, not as the raw request (spec A7). */
+    /** Half duplex reaches the builder through the rule, not as the raw request. */
     @Test
     fun halfDuplexReachesTheBuilderThroughTheRule() {
         val requestedButNotPushToTalk = AudioConfig(

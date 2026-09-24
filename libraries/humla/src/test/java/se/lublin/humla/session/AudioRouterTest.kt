@@ -28,15 +28,10 @@ import org.junit.Test
 import se.lublin.humla.testutil.FakeCommunicationDevices
 
 /**
- * The phone app's audio chooser as one router with one wish (contract 9b, point 15): the user's
- * explicit [AudioRouter.choice] replaces `ScoRouter.wanted`, and everything else is the automatic
- * default - a connected Bluetooth headset when [AudioRouter.bluetoothAutomatic] allows it, then a
- * plugged-in headset, then the speaker or, by preference, the earpiece. While engaged the router
- * holds the communication mode and routes every one of them explicitly.
- *
- * No permission appears anywhere in this class, and that is a decision rather than an omission -
- * see the class doc of [AudioRouter]. There is no input by which a caller could refuse the route on
- * that ground, so there is no corner of it to drive.
+ * The audio chooser as one router: the user's explicit [AudioRouter.choice], otherwise the
+ * automatic default - a connected Bluetooth headset when [AudioRouter.bluetoothAutomatic] allows
+ * it, then a plugged-in headset, then the speaker or, by preference, the earpiece. While engaged the
+ * router holds the communication mode and routes every one of them explicitly.
  */
 class AudioRouterTest {
     private val devices = FakeCommunicationDevices()
@@ -85,9 +80,8 @@ class AudioRouterTest {
     }
 
     /**
-     * In communication mode the platform's own default is the earpiece, whatever the stream, so
-     * leaving the route to the platform would put a walkie-talkie app on the earpiece. The default
-     * without a headset is routed like any other: a plugged-in headset first, then the speaker.
+     * In communication mode the platform's own default is the earpiece, so the default without a
+     * headset is routed explicitly: a plugged-in headset first, then the speaker.
      */
     @Test
     fun withoutABluetoothHeadsetAPluggedInOneIsRouted() {
@@ -111,7 +105,7 @@ class AudioRouterTest {
         assertThat(routes).containsExactly(TYPE_BUILTIN_SPEAKER)
     }
 
-    /** What the handset mode was: the earpiece, by the user's standing preference. */
+    /** The earpiece, by the user's standing preference. */
     @Test
     fun theEarpieceIsTheDefaultWhenPreferred() {
         phone()
@@ -156,10 +150,7 @@ class AudioRouterTest {
         assertThat(routes).containsExactly(TYPE_BLUETOOTH_SCO, TYPE_BUILTIN_SPEAKER).inOrder()
     }
 
-    /**
-     * Only a route this router took is its to give back. Clearing whatever the platform chose would
-     * take the user off a route somebody else holds for a reason they never gave.
-     */
+    /** Only a route this router took is its to give back. */
     @Test
     fun withNothingToRouteNothingIsGivenBack() {
         devices.systemSelects(null)
@@ -172,9 +163,8 @@ class AudioRouterTest {
     }
 
     /**
-     * The communication mode is what makes the platform route voice by the communication device
-     * at all, and it is the session's: taken when the router engages, before the first route, and
-     * handed back when it disengages - not left behind for the rest of the process.
+     * The communication mode is the session's: taken when the router engages, before the first
+     * route, and handed back when it disengages.
      */
     @Test
     fun theRouterHoldsTheCommunicationModeForTheSession() {
@@ -238,8 +228,7 @@ class AudioRouterTest {
 
     /**
      * ...but only an apply does. A route change the platform raises with the same devices present
-     * is reported and not fought: a phone call takes the communication device, and a router that
-     * re-selected on every route event would argue with the dialler.
+     * is reported and not fought: a phone call takes the communication device.
      */
     @Test
     fun aRouteChangeAloneIsReportedAndNotFought() {
@@ -253,10 +242,9 @@ class AudioRouterTest {
     }
 
     /**
-     * The production ordering: `AudioManager`'s callback is posted to the main looper and the router
-     * is main-thread-only, so while `apply()` runs the platform event cannot. `select` returns with
-     * the route already changed and the event still queued, and the only thing that tells the
-     * listener in time is the router's own closing check. (Found by mutation on `ScoRouter`.)
+     * `AudioManager`'s callback is posted to the main looper and the router is main-thread-only,
+     * so `select` returns with the route changed and the event still queued; the router's own
+     * closing check has to tell the listener.
      */
     @Test
     fun applyReportsTheRouteItselfWhenTheSeamHasNotRaisedItsEventYet() {
@@ -271,9 +259,8 @@ class AudioRouterTest {
     }
 
     /**
-     * And the other ordering: the seam raises the event inline, from inside `select`. Both reports
-     * describe one transition, so the listener hears it once - and the event arriving in the middle
-     * of an apply must not start a second one that selects again.
+     * The other ordering: the seam raises the event inline, from inside `select`. The listener hears
+     * the transition once, and the event must not start a second apply.
      */
     @Test
     fun anEventRaisedInsideApplyIsOneTransitionAndOneSelection() {
@@ -403,7 +390,7 @@ class AudioRouterTest {
 
     // ---------------------------------------------------------------- plugging in and out
 
-    /** The phone app's rule: a headset that is switched on during the call takes over. */
+    /** A headset that is switched on during the call takes over. */
     @Test
     fun aBluetoothHeadsetThatArrivesTakesOverFromAChoice() {
         phone()
@@ -549,9 +536,8 @@ class AudioRouterTest {
     }
 
     /**
-     * Release is the teardown of a registration the constructor made, so it has to reach the seam
-     * and not merely a flag of its own: asserted on the fake's own registration count, because a
-     * router that stopped reporting without unregistering looks identical from [routes].
+     * Release must unregister from the seam, asserted on the fake's registration count: a router
+     * that stopped reporting without unregistering looks identical from [routes].
      */
     @Test
     fun releaseUnregistersAtTheSeamItRegisteredAt() {

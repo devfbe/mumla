@@ -31,9 +31,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /**
- * Covers spec A2 for [AudioController]: the pipeline is created and torn down on the
- * "humla-audio-control" thread, no public method joins on its caller, and every [Listener]
- * callback arrives on the handler the controller was given.
+ * [AudioController] threading: the pipeline is created and torn down on the "humla-audio-control"
+ * thread, no public method joins on its caller, and every [Listener] callback arrives on the
+ * handler the controller was given.
  */
 @RunWith(RobolectricTestRunner::class)
 class AudioControllerTest {
@@ -44,17 +44,13 @@ class AudioControllerTest {
         @Volatile var shutdownThread: Thread? = null
 
         /**
-         * Held while the fake is inside [shutdown], to take an assertion in the window where a
-         * synchronous controller would still be blocked. Bounded on purpose: an unbounded await
-         * turns a synchronous implementation into a hung suite instead of a red test (spec 4.05,
-         * "a removed guard can hang the suite instead of failing it").
+         * Held while the fake is inside [shutdown], to assert in the window where a synchronous
+         * controller would still be blocked. Bounded so a regression fails instead of hanging.
          */
         @Volatile var shutdownGate: CountDownLatch? = null
         /**
-         * Backed by a private field with a read-only accessor, never by a `var`: `var
-         * warningListener` generates `setWarningListener(Function1)` and clashes with the
-         * interface's own method (spec 4.05). The brief's listing for this task and the one for
-         * task 9b both have the `var`; both refuse to compile.
+         * A private field, not a `var`: `var warningListener` would generate
+         * `setWarningListener(Function1)` and clash with the interface's own method.
          */
         @Volatile private var warning: ((String) -> Unit)? = null
         val warningListener: ((String) -> Unit)? get() = warning
@@ -189,13 +185,11 @@ class AudioControllerTest {
         val callerBlockedMillis = (System.nanoTime() - start) / 1_000_000
 
         awaitUntil(description = "shutdown started on control thread") { audio.shutdownThread != null }
-        // The structural statement of "returns immediately", and the one that must fire first: the
-        // test thread is here while the control thread is still inside ManagedAudio.shutdown().
+        // The test thread is here while the control thread is still inside ManagedAudio.shutdown().
         assertThat(audio.shutdownCalls.get()).isEqualTo(0)
         assertThat(audio.shutdownThread).isSameInstanceAs(controller.looper.thread)
-        // Taken inside the window, which is the only place the order is visible: the handlers are
-        // already unregistered while the pipeline is still stopping, so nothing routes a packet
-        // into a dying decoder. After the teardown returns, both orders look the same.
+        // Taken inside the window: the handlers are already unregistered while the pipeline is still
+        // stopping, so nothing routes a packet into a dying decoder.
         assertThat(registry.tcp).isEmpty()
         assertThat(registry.udp).isEmpty()
         assertThat(audio.warningListener).isNull()
@@ -228,9 +222,8 @@ class AudioControllerTest {
     }
 
     /**
-     * All four corners of the two inputs the short-circuit reads, not the two mutations its two
-     * clauses would suggest (spec 4.04: 2^k inputs). The (different, different) corner is
-     * [reconfigureRecreatesRunningAudioWithTheNewConfigAndInputMode].
+     * All four corners of the two inputs the short-circuit reads. The (different, different) corner
+     * is [reconfigureRecreatesRunningAudioWithTheNewConfigAndInputMode].
      */
     @Test
     fun reconfigureRebuildsOnlyWhenTheConfigOrTheInputModeReallyDiffers() {
@@ -248,10 +241,8 @@ class AudioControllerTest {
         controller.reconfigure(config.copy(amplitudeBoost = 6f), inputMode)
         awaitUntil(description = "rebuilt for the config") { factory.created.size == 2 }
 
-        // same as the last reconfigure, same input mode: this is the corner that reads the config
-        // reconfigure() STORED, not the one start() stored. Without `session = next` above, the
-        // comparison is against the start config and this rebuilds (measured: that mutation
-        // survived the whole suite before this assertion existed).
+        // same as the last reconfigure, same input mode: compares against the config reconfigure()
+        // stored, not the one start() stored.
         controller.reconfigure(config.copy(amplitudeBoost = 6f), inputMode)
         idleControlThread()
         assertThat(factory.created).hasSize(2)
@@ -269,8 +260,7 @@ class AudioControllerTest {
         idleControlThread()
         assertThat(factory.created).isEmpty()
 
-        // The control thread must have survived both no-ops, or every later post is dropped in
-        // silence rather than failing.
+        // The control thread must have survived both no-ops.
         startAndAwaitRunning()
         assertThat(factory.configs).hasSize(1)
         assertThat(factory.configs[0].amplitudeBoost).isEqualTo(1f)
@@ -302,9 +292,7 @@ class AudioControllerTest {
 
         awaitUntil(description = "second pipeline") { factory.created.size == 2 }
         assertThat(audio.targetIds).containsExactly(5.toByte())
-        // "Survives recreation" along the axis that matters: the pipeline reconfigure() builds is
-        // built WITH the target id, not merely told about it afterwards. Without the
-        // params.copy(targetId = id) in setVoiceTargetId this assertion fails on its own.
+        // The pipeline reconfigure() builds is built WITH the target id, not told about it later.
         assertThat(factory.sessionParams[1].targetId).isEqualTo(5.toByte())
         assertThat(factory.sessionParams[0].targetId).isEqualTo(0.toByte())
     }
@@ -325,12 +313,7 @@ class AudioControllerTest {
             .contains("Audio initialization failed")
     }
 
-    /**
-     * A pipeline that never started is not a running one, so a settings change must not silently
-     * build one behind the user's back. This is the pre-existing behaviour: HumlaService.java
-     * reloaded the audio subsystem only `if (mAudioHandler != null && isInitialized())`, and a
-     * failed AudioHandler.Builder.initialize left mAudioHandler null.
-     */
+    /** A pipeline that never started must not be built behind the user's back by a settings change. */
     @Test
     fun reconfigureAfterAFailedStartDoesNotRetry() {
         factory.failWith = AudioInitializationException("no microphone")
@@ -360,9 +343,9 @@ class AudioControllerTest {
     }
 
     /**
-     * The warning is raised from a foreign thread, because that is where it comes from - the
-     * capture thread, not the caller. Raised from the test thread, which *is* the main thread
-     * under Robolectric, a controller that called the listener inline would look identical.
+     * The warning is raised from a foreign thread (the capture thread in production); raised from
+     * the test thread, which is the main thread under Robolectric, inline delivery would look
+     * identical.
      */
     @Test
     fun warningsFromAudioReachTheListenerOnMain() {

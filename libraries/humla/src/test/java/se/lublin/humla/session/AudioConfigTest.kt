@@ -11,9 +11,8 @@ import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.Constants
 
 /**
- * [AudioConfig] carries two decisions of its own: the half-duplex rule (spec A7) and, because
- * HumlaService reconfigures the pipeline on `config != previous`, structural equality over every
- * field it holds.
+ * [AudioConfig] carries two decisions of its own: the half-duplex rule and, because HumlaService
+ * reconfigures the pipeline on `config != previous`, structural equality over every field it holds.
  */
 @RunWith(RobolectricTestRunner::class)
 class AudioConfigTest {
@@ -21,9 +20,8 @@ class AudioConfigTest {
         AudioConfig(halfDuplexRequested = requested, transmitMode = transmitMode)
 
     /**
-     * All six corners of the two inputs the property reads, not the two mutations its two clauses
-     * would suggest (spec 4.04: 2^k inputs, not k mutations). `transmitMode` is not a boolean, so
-     * the space is {requested} x {the three transmit modes}.
+     * All six corners of the two inputs the property reads: {requested} x {the three transmit
+     * modes}.
      */
     @Test
     fun halfDuplexHoldsOnlyWhenItWasRequestedAndTheModeIsPushToTalk() {
@@ -36,11 +34,8 @@ class AudioConfigTest {
     }
 
     /**
-     * The request survives a mode that suppresses it: this is what makes the old
-     * `EXTRAS_HALF_DUPLEX` handling's defect unrepeatable. That code resolved the rule once, at the
-     * moment the key arrived, against `extras.getInt(EXTRAS_TRANSMIT_MODE)` of the *same* bundle -
-     * which is 0 (voice activity) whenever the bundle does not also carry the transmit mode, so a
-     * settings write that changed only half duplex always resolved to false.
+     * The request survives a mode that suppresses it, so a settings write that changes only the
+     * transmit mode later cannot lose it.
      */
     @Test
     fun theRequestIsRememberedWhileTheModeSuppressesIt() {
@@ -70,9 +65,8 @@ class AudioConfigTest {
     }
 
     /**
-     * Enumerated from the class rather than written out, so a field stream B adds is covered the
-     * moment it exists: a property that does not reach `equals` leaves HumlaService believing the
-     * settings did not change, and the pipeline keeps the old value until the next connect.
+     * Enumerated from the class, so a new field is covered automatically: a property that does not
+     * reach `equals` would leave HumlaService believing the settings did not change.
      */
     @Test
     fun everyConstructorPropertyParticipatesInEquality() {
