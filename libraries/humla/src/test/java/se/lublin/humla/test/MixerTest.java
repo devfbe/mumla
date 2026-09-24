@@ -9,9 +9,6 @@ import se.lublin.humla.audio.BasicClippingShortMixer;
 import se.lublin.humla.audio.IAudioMixer;
 import se.lublin.humla.audio.IAudioMixerSource;
 
-/**
- * Created by andrew on 16/07/15.
- */
 public class MixerTest extends TestCase {
     /**
      * Tests that mixing order should not affect the output.

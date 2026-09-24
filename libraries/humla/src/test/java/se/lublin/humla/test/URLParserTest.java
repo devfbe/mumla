@@ -27,7 +27,6 @@ import se.lublin.humla.util.MumbleURLParser;
 
 /**
  * Tests the Mumble URL parser.
- * Created by andrew on 03/03/14.
  */
 public class URLParserTest extends TestCase {
 
