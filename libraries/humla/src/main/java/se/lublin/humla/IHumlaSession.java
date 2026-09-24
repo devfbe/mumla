@@ -15,9 +15,7 @@ import se.lublin.humla.util.VoiceTargetMode;
 
 /**
  * An interface representing a live connection to the server.
- * Created by andrew on 28/02/17.
  */
-
 public interface IHumlaSession {
     /**
      * @return the latency in milliseconds for the TCP connection.
@@ -44,8 +42,6 @@ public interface IHumlaSession {
      * Returns the protocol version returned by the server in the format 0xAABBCC, where AA
      * indicates the major version, BB indicates the minor version, and CC indicates the patch
      * version. This is the same formatting used by the Mumble protocol in big-endian format.
-     * @return the current bandwidth in bps for audio sent to the server, or a negative integer
-     *         if unknown (prior to connection or after disconnection).
      */
     int getServerVersion();
 
@@ -115,9 +111,7 @@ public interface IHumlaSession {
 
     /**
      * @return true if voice is actually routed over a Bluetooth headset right now, as opposed
-     *         to {@link #usingBluetoothSco()}, which reports what the user asked for (spec A4).
-     *         The two differ whenever the headset is absent, has walked away, the user chose
-     *         another device, or the platform refused the route.
+     *         to {@link #usingBluetoothSco()}, which reports what the user asked for.
      */
     boolean isBluetoothScoActive();
 

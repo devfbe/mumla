@@ -27,8 +27,6 @@ import se.lublin.humla.util.IHumlaObserver;
 
 /**
  * A public interface for clients to communicate with a {@link HumlaService}.
- * The long-term goal for this class is to migrate of the complexity out of this class into a
- * HumlaProtocol class that is owned by a {@link se.lublin.humla.net.HumlaConnection}.
  * <br><br>
  * Calls are not guaranteed to be thread-safe, so only call the binder from the main thread.
  * Service state changes related to connection state are only guaranteed to work if isConnected()
@@ -59,7 +57,7 @@ public interface IHumlaService {
     HumlaService.ConnectionState getConnectionState();
 
     /**
-     * The session lifecycle as a flow, for clients that render it (spec A3, section 4). Finer than
+     * The session lifecycle as a flow, for clients that render it. Finer than
      * {@link #getConnectionState()}: it tells a lost connection that is being retried apart from
      * one that is not, and carries the attempt number and the delay until the next try.
      * @return the current session state; never null.

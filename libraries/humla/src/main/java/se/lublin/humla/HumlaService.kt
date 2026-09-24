@@ -81,28 +81,11 @@ import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
 
 /**
- * Converted from Java in task A9a, **without a behaviour change**. The characterization suite in
- * `HumlaServiceCharacterizationTest` was written and run green against the Java file first and runs
- * unchanged against this one; `HumlaServiceConnectCancellationTest`, `HumlaServiceDestroyTest` and
- * `HumlaServiceTransmitResetTest` predate both.
+ * Owns one server session (connection, model, audio pipeline and audio routing) and exposes it
+ * through [IHumlaService] and [IHumlaSession].
  *
- * Three rules this file follows because the conversion is the risk, not the code:
- *
- * 1. **Every accessor stays a function.** `getConnectionState()`, `isConnected()`, `isTalking()`,
- *    `isSynchronized()` - not `val`s. `IHumlaService`/`IHumlaSession` declare them as methods and a
- *    Kotlin `var`/`val` of the matching name produces a platform declaration clash (spec 4.05),
- *    which has cost this project four test scaffolds. It also keeps every existing caller, Java and
- *    Kotlin, compiling against the same call syntax.
- * 2. **Nullability is preserved, not repaired.** Where the Java dereferenced a field that can be
- *    null - `getConnection().getTCPLatency()`, the `self` and
- *    `user` of a text message - this file writes `!!` and throws the same NullPointerException at
- *    the same point. Replacing those with `require`/`checkNotNull` or with `?.` changes an
- *    observable, and `everySessionCallThrowsItsOwnExceptionWhileDisconnected` is the test that
- *    says which one each call throws.
- * 3. **Nothing is tidied.** `(targetId and 0x1F.inv()) > 0` keeps its `> 0` (a negative id passes -
- *    see `aNegativeVoiceTargetIdPassesTheFiveBitGuard`), `EXTRAS_HALF_DUPLEX` keeps reading the
- *    transmit mode out of its own bundle, and the `BuildConfig.DEBUG` assertion in
- *    [createAudioHandler] stays. All three are handed to A9b as riders.
+ * Accessors stay functions rather than properties: a Kotlin property of the same name would clash
+ * with the methods the Java interfaces declare.
  */
 open class HumlaService : Service(), IHumlaService, IHumlaSession,
     HumlaConnection.HumlaConnectionListener, HumlaLogger {
@@ -130,7 +113,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private var mLocalIgnoreHistory: List<Int>? = null
     private var mTransmitMode = 0
 
-    /** Current audio settings; rebuilt wholesale by [configureExtras] (spec section 4). */
+    /** Current audio settings; rebuilt wholesale by [configureExtras]. */
     private var mAudioConfig = AudioConfig()
 
     /** The user's echo-cancellation choices per kind of device; see EXTRAS_ECHO_CANCELLATION_BY_DEVICE. */
@@ -150,30 +133,25 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private lateinit var mHandler: Handler
     private lateinit var mCallbacks: HumlaCallbacks
 
-    // @Volatile: both are written on the main thread and read from the protocol thread, which now
-    // calls logInfo/logWarning through ModelHandler. Without it a protocol-thread reader can see a
-    // stale mConnection -- including the previous connection's -- or a null mModelHandler that the
-    // main thread has already replaced.
+    // Written on the main thread, read on the protocol thread (ModelHandler logs through this).
     @Volatile
     private var mConnection: HumlaConnection? = null
     private var mConnectionState: ConnectionState = ConnectionState.DISCONNECTED
 
     @Volatile
     private var mModelHandler: ModelHandler? = null
-    /** Owns the pipeline's lifecycle on its own thread; nothing here ever joins on main (spec A2). */
+    /** Owns the audio pipeline's lifecycle on its own thread, so nothing here joins on main. */
     private lateinit var mAudioController: AudioController
 
     /**
-     * Which device voice goes to: the user's choice, a Bluetooth headset, or the platform's own
-     * default (spec A4, and the phone app's chooser). Engaged only while a session is synchronized.
+     * Routes voice to the user's choice, a Bluetooth headset or the platform default. Engaged only
+     * while a session is synchronized.
      */
     private lateinit var mRouter: AudioRouter
 
     /**
-     * The last warning delivered to the chat log, for the one de-duplication this service owes.
-     * [AudioRouter.Listener.onRouteRefused] fires per `apply()` rather than per state, on purpose,
-     * so an auto-reconnect against a platform that refuses the route would otherwise write the same
-     * line once per attempt.
+     * The last warning written to the chat log. [AudioRouter.Listener.onRouteRefused] fires per
+     * `apply()`, so without this an auto-reconnect would repeat the same line on every attempt.
      */
     @Volatile
     private var mLastWarning: String? = null
@@ -183,11 +161,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private lateinit var mContinuousInputMode: ContinuousInputMode
 
     /**
-     * The session lifecycle (spec A3). Confined to the main thread, which is the one thread every
-     * mutator here runs on: `connect`/`disconnect`/`cancelReconnect` arrive through the binder,
-     * the connection's own callbacks are posted to the main looper by [HumlaConnection], and the
-     * reconnect timer and the network callback both run on [mHandler]. Any other thread that
-     * wants the state collects [getSessionState] instead (task 1 contract).
+     * The session lifecycle. Confined to the main thread, where binder calls, connection callbacks,
+     * the reconnect timer and the network callback all run; other threads collect [getSessionState].
      */
     private lateinit var mStateMachine: SessionStateMachine
 
@@ -195,31 +170,21 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     var connectionFactory: (HumlaConnection.HumlaConnectionListener) -> HumlaConnection =
         { HumlaConnection(it) }
 
-    /** Test seam: the backoff the session state machine uses (spec A3). Set before `onCreate`. */
+    /** Test seam: the reconnect backoff. Set before `onCreate`. */
     var reconnectPolicy: ReconnectPolicy = ReconnectPolicy()
 
-    /** Test seam: builds the audio pipeline; stream B swaps in its own factory. */
+    /** Test seam: builds the audio pipeline. */
     var audioFactory: AudioHandlerFactory = DefaultAudioHandlerFactory()
 
     /**
-     * The communication-device seam: null before `onCreate`, and from `onCreate` on **the** handle
-     * to the platform's routing API for this service life. A test sets it to a fake beforehand;
-     * [onCreate] fills it with an [AndroidCommunicationDevices] when nothing did.
-     *
-     * Kept reachable on purpose: it is the one handle to the platform's routing API for this
-     * service life, and [AudioRouter] is built over it in [onCreate].
+     * The platform's routing API for this service life. A test may set a fake before `onCreate`;
+     * otherwise [onCreate] creates an [AndroidCommunicationDevices].
      */
     var communicationDevices: CommunicationDevices? = null
 
     /**
-     * Test seam: the CELT 0.7 bitstream versions announced in `Authenticate`.
-     *
-     * The default asks `libhumla_celt7`, which is in the APK and not on the JVM, so
-     * `CELT7Encoder.getBitstreamVersion()` throws `UnsatisfiedLinkError` under Robolectric. It sits
-     * on the handshake path, which means that without this seam **no** unit test can reach a
-     * synchronized session - and the session, the audio pipeline and the SCO route are what tasks
-     * A2, A3, A4 and A8 are about. Deliberately not a `try/catch` in production: a device without
-     * the library does not exist, so the catch arm would be a branch nothing can reach.
+     * Test seam: the CELT 0.7 bitstream versions announced in `Authenticate`. The default needs the
+     * native library, which is not available under Robolectric.
      */
     var celtVersions: () -> IntArray = { intArrayOf(CELT7Encoder.getBitstreamVersion()) }
 
@@ -236,21 +201,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private var mNetworkCallbackRegistered = false
 
     /**
-     * The backoff timer. One Runnable instance for the lifetime of the service, because
-     * `removeCallbacks` identifies the pending post by it: a fresh lambda per schedule would leave
-     * a retry queued that nothing can cancel.
-     */
-    /**
-     * The backoff timer.
-     *
-     * Nothing cancels a pending post, and that is deliberate: whether a retry may run is one
-     * decision and it belongs to the state machine, which answers false in every state but
-     * ConnectionLost. Four `removeCallbacks` call sites stood here -- in startSession, disconnect,
-     * cancelReconnect and releaseSessionResources -- and all four survived their mutations,
-     * because this guard already refuses what they were removing (spec 4.04: two guards over one
-     * observable are one guard and a lie). The price of keeping only the guard is that a stale
-     * post can arrive while a *later* loss is waiting out its backoff and retry it early, once;
-     * the price of keeping the copies was four lines no test could distinguish.
+     * The backoff timer. Pending posts are never cancelled: the state machine refuses a retry in
+     * every state but ConnectionLost. A stale post can therefore retry a later loss early, once.
      */
     private val mReconnectRunnable = Runnable {
         if (mStateMachine.reconnectTimerFired()) startSession()
@@ -265,10 +217,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private val mAudioControllerListener = object : AudioController.Listener {
         override fun onAudioStarted() = Unit
 
-        /** Spec A8: a pipeline that cannot start is a chat-log warning, not a silent failure. */
+        /** A pipeline that cannot start becomes a chat-log warning. */
         override fun onAudioFailed(message: String) = logWarning(message)
 
-        /** Spec A8: microphone silencing and decoder errors reach the chat log. */
+        /** Microphone silencing and decoder errors reach the chat log. */
         override fun onAudioWarning(message: String) = logWarning(message)
     }
 
@@ -324,7 +276,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
             if (ACTION_CONNECT == intent.action) {
                 if (extras == null || !extras.containsKey(EXTRAS_SERVER)) {
-                    // Ensure that we have been provided all required attributes.
                     throw RuntimeException("$ACTION_CONNECT requires a server provided in extras.")
                 }
                 connect()
@@ -342,9 +293,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mCallbacks = HumlaCallbacks()
         mStateMachine = SessionStateMachine(reconnectPolicy)
         mConnectionState = ConnectionState.DISCONNECTED
-        // One instance for one service life, which is what makes AndroidCommunicationDevices report
-        // a platform refusal once rather than on every route decision (task 8 contract). The
-        // callback has no default so that this line cannot be left out in silence.
+        // One instance per service life, so a platform refusal is reported once rather than on
+        // every route decision.
         val devices = communicationDevices ?: AndroidCommunicationDevices(
             getSystemService(AUDIO_SERVICE) as AudioManager,
             mHandler,
@@ -369,62 +319,37 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun onDestroy() {
         super.onDestroy()
-        // The protocol thread is non-daemon and only HumlaConnection.disconnect() quits its looper,
-        // so a service destroyed while connected left "humla-protocol" running -- with the socket,
-        // both transports and everything its queue still referenced -- for the life of the process.
-        //
-        // The order of the three statements: super.onDestroy() first because nothing below reads
-        // anything it touches, and disconnect() before unregisterReceiver() because the two do not
-        // meet. disconnect() only raises a flag, queues the teardown on the protocol looper and
-        // posts the disconnect report to main; it runs no listener code inline, so nothing between
-        // these lines can reach the receiver. Swapping them changes nothing observable.
-        //
-        // What the order does not fix, because no order can: onConnectionDisconnected is delivered
-        // on a later turn of the main looper, i.e. after this method has returned. There it joins
-        // the audio threads on main (AudioHandler.shutdown(), spec 4.1 "Take AudioHandler.shutdown()
-        // off the main thread", tasks 7 and 9) and disengages a router that this method has
-        // already disengaged and released -- harmless, since a disengaged router holds no route to
-        // give back.
+        // Without this, a service destroyed while connected would leave the non-daemon protocol
+        // thread running. disconnect() only queues the teardown; onConnectionDisconnected arrives
+        // on a later main-looper turn and disengages the already released router, which is harmless.
         disconnect()
         unregisterNetworkCallback()
         mRouter.disengage()
         mRouter.release()
-        // Posts the teardown and then quits the looper; it does not wait for either (spec A2).
+        // Posts the teardown and quits the looper without waiting for either.
         mAudioController.quit()
     }
 
     override fun onBind(intent: Intent?): IBinder = HumlaBinder(this)
 
     /**
-     * User-initiated connect. A connect while an attempt is in flight or a session is up is
-     * ignored by the state machine rather than by a field write here.
-     *
-     * Public, where the Java original was `protected`: the state machine is what the wiring tests
-     * drive, and `MumlaService.reconnect()` already called it from a subclass.
+     * User-initiated connect. Ignored by the state machine while an attempt is in flight or a
+     * session is up.
      */
     open fun connect() {
         if (!mStateMachine.connectRequested()) return
         startSession()
     }
 
-    /**
-     * Builds and starts one connection attempt. The only caller besides [connect] is
-     * [mReconnectRunnable], so the missing-server check below is one guard covering both entry
-     * points rather than one per entry point (spec 4.04).
-     */
+    /** Builds and starts one connection attempt; called from [connect] and [mReconnectRunnable]. */
     private fun startSession() {
         mConnectionState = ConnectionState.CONNECTING
-        // The whisper slots are cleared where the session ends, not where the next one starts:
-        // registerWhisperTarget needs a live connection, so there is no window between the two in
-        // which they could differ, and the copy here survived its mutation for that reason
-        // (spec 4.04). `mVoiceTargetId` does have such a window -- setVoiceTargetId works while
-        // disconnected -- so its reset stays.
+        // Whisper slots are cleared when a session ends. The voice target can be set while
+        // disconnected, so it is reset here.
         mVoiceTargetId = 0
 
-        // Read before anything is built, so a misconfigured start allocates nothing. Repair of a
-        // pre-existing crash characterized by A9a: the Java service handed a null mServer straight
-        // to HumlaConnection.connect(Server), i.e. died on a parameter check on the main looper
-        // where the caller had asked for a connection attempt and expects a reported failure.
+        // Checked before anything is built, so a misconfigured start allocates nothing and is
+        // reported as a failed attempt.
         val server = mServer
         if (server == null) {
             Log.e(TAG, "connect() without a target server")
@@ -458,20 +383,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             // every failure, certificate errors included, arrives at onConnectionDisconnected.
             connection.connect(server)
         } catch (e: IllegalStateException) {
-            // mCallbacks.onConnecting() above is raised on this handler's own thread with an empty
-            // queue, so it is delivered inline: an observer can call disconnect() from inside it,
-            // and the connection it marks as disconnected is the one this line is about to start.
-            // HumlaConnection is single-use and refuses. Without this the refusal would be thrown
-            // out of onStartCommand, or out of the reconnect runnable -- a crash where the old code
-            // reported a failed connection attempt. HumlaConnection reports nothing itself here:
-            // it was never started, so its own disconnect delivered nothing.
-            //
-            // Deliberately not narrowed. connect() raises IllegalStateException from two checks,
-            // and the other one -- a connection used twice -- cannot fire here, because mConnection
-            // was created a dozen lines above and is never handed out before this call. Telling the
-            // two apart would mean a condition that no test can make true, i.e. a branch whose
-            // removal nothing notices; spec 4.04 says not to write one. If connect() ever throws
-            // IllegalStateException for a third reason, this comment is what has to be revisited.
+            // onConnecting() above is delivered inline, so an observer may already have
+            // disconnected this single-use connection and connect() refuses. Report a failed
+            // attempt instead of throwing out of onStartCommand or the reconnect runnable.
             Log.w(TAG, "Connection was cancelled before it could start", e)
             mConnectionState = ConnectionState.DISCONNECTED
             mCallbacks.onDisconnected(
@@ -481,12 +395,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /**
-     * Ends the session for good. While the reconnect waits out its backoff (ConnectionLost) there
-     * is no live connection: it reported its end when it was lost and reports nothing a second
-     * time, so onConnectionDisconnected -- the usual place Disconnected gives back the wake lock
-     * and the network callback -- never runs. They are released here instead; without it
-     * both stayed held until the next session, also past onDestroy. In every other state the
-     * connection's own report does it.
+     * Ends the session for good. While a reconnect waits out its backoff there is no live
+     * connection to report the end, so the wake lock and network callback are released here.
      */
     override fun disconnect() {
         val waiting = mStateMachine.current is SessionState.ConnectionLost
@@ -507,7 +417,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     fun isSynchronized(): Boolean = mConnection?.isSynchronized == true
 
     override fun onConnectionEstablished() {
-        // Send version information and authenticate.
         val version = Mumble.Version.newBuilder()
         version.setRelease(mClientName)
         version.setVersion(Constants.PROTOCOL_VERSION)
@@ -544,13 +453,11 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mConnectionState = ConnectionState.CONNECTED
 
         Log.v(TAG, "Connected")
-        // `if (!isHeld)`: the lock is reference counted, and with a reconnect it is now taken once
-        // per session but released only when the session ends for good. Acquiring unconditionally
-        // would leave a count behind that no release balances.
+        // The lock is reference counted and taken once per session, but released only when the
+        // session ends for good.
         if (!mWakeLock.isHeld) mWakeLock.acquire()
 
-        // Spec A4: a session exists again, so restore the route the user asked for. The wish
-        // outlives the connection; the route does not, because onConnectionDisconnected drops it.
+        // Restore the route the user asked for; onConnectionDisconnected drops it.
         mRouter.engage()
 
         startAudio(connection, modelHandler)
@@ -560,17 +467,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /**
      * Hands the session's inputs to the audio controller, which builds the pipeline on its own
-     * thread. Nothing is thrown at the caller any more: a pipeline that cannot start arrives as
-     * [AudioController.Listener.onAudioFailed] and becomes a chat-log warning (spec A8), where the
-     * Java original caught `AudioException` here and logged it from the main thread.
+     * thread. A pipeline that cannot start arrives as [AudioController.Listener.onAudioFailed].
      */
     private fun startAudio(connection: HumlaConnection, modelHandler: ModelHandler) {
         val params = try {
             val self = modelHandler.getUser(connection.getSession())
             if (self == null) {
-                // A ServerSync whose session id names no user. The Java original handed the null
-                // to the builder and died inside it; there is nothing to send voice as, so the
-                // session stays up without a microphone and says so.
+                // ServerSync named no known user: keep the session up without a microphone.
                 Log.e(TAG, "No session user after ServerSync; audio not started")
                 logWarning(getString(R.string.no_session_user))
                 return
@@ -599,14 +502,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override fun onConnectionDisconnected(e: HumlaException?) {
-        // Before anything else, and in code rather than through an observer: mToggleInputMode
-        // outlives every connection, and nothing else ever clears it. Left set, an auto-reconnect
-        // resumes transmitting from its first second with no key press and nothing on screen --
-        // reachable with a headset media key while the screen is off. An observer cannot do this:
-        // mConnectionState is set below before mCallbacks.onDisconnected(e) fires, and both
-        // isConnected() and HumlaSession() read that field, so the reset would be a no-op.
-        // Clearing it here also signals the toggle's condition, which releases the input thread
-        // waiting in waitForInput() before the pipeline's shutdown() has to.
+        // Clear push-to-talk first: the toggle outlives the connection, so an auto-reconnect would
+        // otherwise transmit without a key press. This also releases the input thread waiting in
+        // waitForInput(). An observer can't do it: isConnected() is already false by then.
         mToggleInputMode.setTalkingOn(false)
 
         if (e != null) {
@@ -622,33 +520,23 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // The route is a session resource and the wish is not, so this runs on every disconnect,
         // auto-reconnect included; onConnectionSynchronized is where it comes back.
         mRouter.disengage()
-        // Asynchronous: the capture and playback threads are joined on humla-audio-control,
-        // never on the main thread (spec A2). This call is the one the ANR came from.
+        // Asynchronous: the audio threads are joined on humla-audio-control, never on main.
         mAudioController.shutdown()
 
-        // The one line in this method with no behavioural observable, and it is measured rather
-        // than assumed: deleting it alone leaves all 95 service tests green, because every reader
-        // goes through getModelHandler(), which throws NotSynchronizedException once the
-        // connection is down - so the null-out can never be the reason an answer differs. It stays
-        // as a retention measure: a ModelHandler holds the whole channel tree, every user and
-        // their textures, and a service that keeps one after the session is over keeps all of it
-        // until the next connection replaces it. Do not read this line as protection.
+        // Readers throw once disconnected; this only lets the channel tree and users be collected.
         mModelHandler = null
         mVoiceTargetId = 0
         mWhisperTargetList.clear()
 
         if (next is SessionState.ConnectionLost) {
-            // Spec A3: the wake lock, the Bluetooth wish, the mute/deafen state and (in
-            // MumlaService) the foreground notification all survive this transition. Releasing
-            // them here is what made the microphone die with the screen off.
+            // The wake lock, the Bluetooth wish, the mute/deafen state and the app's foreground
+            // notification survive this transition.
             mConnectionState = ConnectionState.CONNECTION_LOST
             scheduleReconnect(next.reconnectInMillis)
         } else {
-            // Disconnected: either no reconnect was wanted, the attempts are spent, or the session
-            // had already ended. `lost()` returns nothing else. The state's error counts as well
-            // as `e`: when the session had already ended -- cancelReconnect disconnecting the
-            // attempt in flight -- this late, error-free report must not turn the cancelled
-            // session's CONNECTION_LOST into DISCONNECTED, nor claim to have given up.
+            // Disconnected. The state's error counts as well as `e`: a late, error-free report
+            // after cancelReconnect must not turn CONNECTION_LOST into DISCONNECTED or claim to
+            // have given up.
             val ended = next as SessionState.Disconnected
             mConnectionState = if (e != null || ended.error != null) {
                 ConnectionState.CONNECTION_LOST
@@ -680,9 +568,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /**
-     * A warning that would only repeat the last line delivered is dropped. Against the *last line*
-     * rather than per message type, so the log can never end on a line that contradicts the state
-     * (task 6 contract, point 1); the same shape as `HumlaConnection.warn`.
+     * Delivers [message] unless it repeats the last warning. Compared with the last line rather
+     * than per type, so the log never ends on a line that contradicts the current state.
      */
     protected fun logWarningOnce(message: String) {
         if (message == mLastWarning) return
@@ -714,15 +601,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /**
-     * Whether a default network is up.
-     *
-     * `getActiveNetwork() != null` is the modern spelling of the `activeNetworkInfo.isConnected`
-     * this replaced - the platform returns null exactly when no default data network is active.
-     * Deliberately *not* also a `NET_CAPABILITY_INTERNET` test: measured against Robolectric's
-     * ShadowConnectivityManager, `getNetworkCapabilities` answers from a map that is empty unless
-     * a test fills it, so the capability form makes the "online" corner unreachable in the suite
-     * unless every test pins it open - a dimension closed by the fake rather than by the code
-     * (spec 4.04).
+     * Whether a default network is up. Deliberately not a `NET_CAPABILITY_INTERNET` check:
+     * Robolectric's ShadowConnectivityManager reports no capabilities unless a test sets them.
      */
     private fun isOnline(): Boolean {
         val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -756,7 +636,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * Some settings may only take effect after a reconnect.
      * @param extras A bundle with settings.
      * @return true if a reconnect is required for changes to take effect.
-     * @see se.lublin.humla.HumlaService
      */
     fun configureExtras(extras: Bundle): Boolean {
         var reconnectNeeded = false
@@ -846,11 +725,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             reconnectNeeded = true
         }
         if (extras.containsKey(EXTRAS_HALF_DUPLEX)) {
-            // Stored as requested; AudioConfig.halfDuplex applies the push-to-talk rule against
-            // the mode in force, so a later EXTRAS_TRANSMIT_MODE change alone re-evaluates it
-            // (spec A7). The Java original read EXTRAS_TRANSMIT_MODE out of *this* bundle, which
-            // answers 0 - voice activity - when the bundle does not carry it, so a settings write
-            // that changed only half duplex always resolved to false.
+            // Stored as requested; AudioConfig.halfDuplex applies it against the mode in force.
             config = config.copy(halfDuplexRequested = extras.getBoolean(EXTRAS_HALF_DUPLEX))
         }
         if (extras.containsKey(EXTRAS_LOCAL_MUTE_HISTORY)) {
@@ -886,49 +761,39 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             config = config.copy(androidAgc = extras.getBoolean(EXTRAS_ANDROID_AGC))
         }
         if (extras.containsKey(EXTRAS_BLUETOOTH_WANTED)) {
-            // Spec A4/P2: the persisted preference is the one carrier of the wish, and this is
-            // where it reaches the router. No permission is consulted, and none can be.
+            // The persisted preference is the only carrier of the Bluetooth wish.
             mRouter.bluetoothAutomatic = extras.getBoolean(EXTRAS_BLUETOOTH_WANTED)
             mRouter.apply()
         }
         if (extras.containsKey(EXTRAS_EARPIECE_BY_DEFAULT)) {
-            // The old handset mode, as the router's default when no headset is there. Live: the
-            // next apply routes it, and a user's explicit choice is left standing.
+            // Live: the next apply routes it, and a user's explicit choice is left standing.
             mRouter.earpieceByDefault = extras.getBoolean(EXTRAS_EARPIECE_BY_DEFAULT)
             mRouter.apply()
         }
         if (extras.containsKey(EXTRAS_VAD_CONFIG)) {
-            // The one object that outlives a rebuild, which is why this needs no rebuild at all.
+            // Applied live: the input mode outlives pipeline rebuilds.
             mActivityInputMode.setVadConfig(
                 VadConfigBundle.fromBundle(extras.getBundle(EXTRAS_VAD_CONFIG) ?: Bundle())
             )
         }
 
         mAudioConfig = config
-        // Unconditional, and that is the point (task 7 contract, spec 4.04). Both halves of the
-        // old `if` - "did anything change" and "is a pipeline up" - are decisions AudioController
-        // already makes, by value for the config and by identity for the input mode. A copy here
-        // could not kill a mutation, because the copy inside the controller masks it; and the SCO
-        // listener calls reconfigure unconditionally, so a check here would guard one of two call
-        // sites and not the other. This also replaces requiresAudioRebuild(), which answered by
-        // key: re-writing a setting the pipeline already had rebuilt it, i.e. 110 ms with the
-        // microphone dead, for a change that was not one.
+        // Unconditional: AudioController skips a config equal by value and an input mode equal
+        // by identity.
         mAudioController.reconfigure(mAudioConfig, mInputMode)
         return reconnectNeeded
     }
 
     /**
-     * The routed device changed, so the pipeline has to be rebuilt for the other stream (and, for
-     * SCO, the other sample rate). Unconditional: a route event that reports the state the pipeline
-     * already has is dropped by [AudioController.reconfigure], which compares by value, and a
-     * doubled event is otherwise an audible gap.
+     * The routed device changed, so the pipeline is rebuilt for its stream (and, for SCO, its
+     * sample rate). A redundant event is dropped by [AudioController.reconfigure].
      */
     private fun setRoutedDevice(type: Int?) {
         mAudioConfig = mAudioConfig.copy(
             routedDeviceType = type,
             echoCancellation = echoCancellationFor(type),
         )
-        // Posts to humla-audio-control; never joins on the main thread (spec A2).
+        // Posts to humla-audio-control; never joins on main.
         mAudioController.reconfigure(mAudioConfig, mInputMode)
         onAudioRouteChanged(type)
     }
@@ -950,10 +815,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     protected open fun onAudioRouteChanged(type: Int?) = Unit
 
     /**
-     * Exposes the current connection. The current connection is set once an attempt to connect to
-     * a server is made, and remains set until a subsequent connection. It remains available
-     * after disconnection to provide information regarding the terminated connection.
-     * @return The active [HumlaConnection].
+     * The connection of the latest attempt. Set when an attempt starts and kept after it ends, so
+     * the terminated connection can still be inspected.
      */
     fun getConnection(): HumlaConnection? = mConnection
 
@@ -973,13 +836,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun getConnectionState(): ConnectionState = mConnectionState
 
-    /** The session lifecycle as a flow, for clients that render it (spec A3). */
+    /** The session lifecycle as a flow. */
     override fun getSessionState(): StateFlow<SessionState> = mStateMachine.state
 
     /**
-     * Why the last session ended. Read from the state machine rather than from the connection: a
-     * reconnect replaces the connection object, and the state machine is what carries the error
-     * forward through ConnectionLost and Reconnecting to the Disconnected that ends the attempt.
+     * Why the last session ended. Read from the state machine, which carries the error across
+     * reconnect attempts that replace the connection object.
      */
     override fun getConnectionError(): HumlaException? = when (val state = mStateMachine.current) {
         is SessionState.Disconnected -> state.error
@@ -994,11 +856,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /**
-     * Gives up on the automatic reconnect. In Reconnecting an attempt is in flight, so its
-     * connection is disconnected as well: left running, a successful attempt would reach
-     * onConnectionSynchronized, which takes the wake lock and starts the microphone for a session
-     * the user has just ended. In ConnectionLost the connection is already down and the call is a
-     * no-op. The attempt's own disconnect report then finds the state machine in Disconnected.
+     * Gives up on the automatic reconnect. An attempt in flight is disconnected too, so it cannot
+     * reach onConnectionSynchronized for a session the user has just ended.
      */
     override fun cancelReconnect() {
         if (mStateMachine.cancelReconnect()) {
@@ -1008,7 +867,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
     }
 
-    /** Test seam: spec A3 requires the wake lock to survive a ConnectionLost. */
+    /** Test seam: whether the wake lock is held. */
     fun isWakeLockHeldForTest(): Boolean = mWakeLock.isHeld
 
     override fun getTargetServer(): Server? = mServer
@@ -1040,13 +899,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /**
-     * The running pipeline's bandwidth in bps, or **-1** while none runs.
-     *
-     * The Java original threw IllegalStateException while disconnected, by way of a
-     * `getAudioHandler()` that demanded synchronization. The pipeline is now asynchronous: it
-     * exists a short moment after ServerSync and a short moment after the session ends, so
-     * "connected" and "a pipeline is up" are no longer the same statement and a caller that reads
-     * this on a timer would see the exception rather than the gap.
+     * The running pipeline's bandwidth in bps, or -1 while none runs. The pipeline starts and
+     * stops asynchronously around the session, so this does not throw while disconnected.
      */
     override fun getCurrentBandwidth(): Int = mAudioController.currentBandwidth
 
@@ -1121,13 +975,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /**
-     * Spec A4: what the user asked for, independent of what the platform currently routes. It
-     * survives a lost connection, a headset that walks away and a platform refusal - which is why
-     * the three answered IllegalStateException while disconnected before and answer the wish now.
+     * What the user asked for, independent of the current route. Survives a lost connection, a
+     * headset going away and a platform refusal.
      */
     override fun usingBluetoothSco(): Boolean = mRouter.bluetoothAutomatic
 
-    /** Spec A4: what the platform actually routes right now. */
+    /** What the platform actually routes right now. */
     override fun isBluetoothScoActive(): Boolean = mRouter.isBluetoothActive
 
     override fun enableBluetoothSco() {
@@ -1234,8 +1087,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         val self = getModelHandler()!!.getUser(getSessionId())
         val user = getModelHandler()!!.getUser(session)
-        // The Java original added `user` unconditionally, null included; a null element in the
-        // list is what a message to an unknown session has always produced. Preserved.
+        // A message to an unknown session carries a null user.
         val users = ArrayList<User?>(1)
         users.add(user)
         Message(getSessionId(), self!!.getName(), ArrayList<Channel?>(0), ArrayList<Channel?>(0), users, message)
@@ -1253,7 +1105,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         val self = getModelHandler()!!.getUser(getSessionId())
         val targetChannel = getModelHandler()!!.getChannel(channel)
-        // As above: the Java original added the channel unconditionally, null included.
+        // An unknown channel is added as null, as above.
         val targetChannels = ArrayList<Channel?>()
         targetChannels.add(targetChannel)
         Message(
@@ -1352,22 +1204,19 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override fun setVoiceTargetId(targetId: Byte) {
-        // `!= 0`, where the Java original wrote `> 0`: for a *negative* byte the masked value is
-        // negative too, so 0x80 passed a guard that says "at most 5 bits" and became a whisper
-        // target id nothing had registered. A9a pinned the defect; this is the repair.
+        // `!= 0` rather than `> 0`: a negative byte masks to a negative value.
         if ((targetId.toInt() and 0x1F.inv()) != 0) {
             throw IllegalArgumentException("Target ID must be at most 5 bits.")
         }
         mVoiceTargetId = targetId
-        // Reaches the running pipeline and the session behind it, so the next rebuild starts out
-        // targeting it. Setting one while disconnected was a NullPointerException before.
+        // Also reaches the running pipeline, so the next rebuild keeps targeting it.
         mAudioController.setVoiceTargetId(targetId)
         mCallbacks.onVoiceTargetChanged(VoiceTargetMode.fromId(targetId))
     }
 
     /**
-     * Test seam: the settings the next pipeline would be built with. Public rather than `internal`,
-     * because the app module's tests cannot see Kotlin's `internal` across a module boundary.
+     * Test seam: the settings the next pipeline would be built with. Public because the app's
+     * tests cannot see `internal`.
      */
     fun getAudioConfigForTest(): AudioConfig = mAudioConfig
 
@@ -1388,9 +1237,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         throw IllegalStateException(e)
     }
 
-    /**
-     * The current connection state of the service.
-     */
+    /** The current connection state of the service. */
     enum class ConnectionState {
         /**
          * The default state of Humla, before connection to a server and after graceful/expected
@@ -1398,14 +1245,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
          */
         DISCONNECTED,
 
-        /**
-         * A connection to the server is currently in progress.
-         */
+        /** A connection to the server is currently in progress. */
         CONNECTING,
 
-        /**
-         * Humla has received all data necessary for normal protocol communication with the server.
-         */
+        /** Humla has received all data necessary for normal protocol communication with the server. */
         CONNECTED,
 
         /**
@@ -1477,33 +1320,29 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
          * A [Bundle] carrying a whole [se.lublin.humla.audio.capture.VadConfig], see
          * [se.lublin.humla.audio.capture.VadConfigBundle].
          *
-         * One extra rather than one per slider, and it supersedes [EXTRAS_DETECTION_THRESHOLD] for
-         * any caller that knows about it: the threshold alone cannot express a mode, a hold, an
-         * onset or a hand-set floor, and `setThreshold` is deliberately a no-op outside
-         * [se.lublin.humla.audio.capture.VadMode.AMPLITUDE]. The older extra stays because it is
-         * public API of this library and because it still means exactly what it always meant.
+         * Supersedes [EXTRAS_DETECTION_THRESHOLD], which can only express an amplitude threshold
+         * and is kept for compatibility.
          */
         const val EXTRAS_VAD_CONFIG = "vad_config"
 
-        /** One of `SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB` (spec B9). */
+        /** One of `SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB`. */
         const val EXTRAS_SPEEX_NOISE_SUPPRESS_DB = "speex_noise_suppress_db"
 
-        /** `android.media.audiofx.NoiseSuppressor` on the recorder's session (spec B6). */
+        /** `android.media.audiofx.NoiseSuppressor` on the recorder's session. */
         const val EXTRAS_ANDROID_NOISE_SUPPRESSOR = "android_noise_suppressor"
 
-        /** `android.media.audiofx.AutomaticGainControl` on the recorder's session (spec B6). */
+        /** `android.media.audiofx.AutomaticGainControl` on the recorder's session. */
         const val EXTRAS_ANDROID_AGC = "android_agc"
 
         /**
-         * Spec A4/P2: the persisted Bluetooth preference, i.e. the user's wish for a headset. The
-         * **only** carrier of that wish; `AudioRouter.bluetoothAutomatic` is derived from it and nothing in the
-         * UI reads the router. Never a reconnect: the route is reconciled in place.
+         * The persisted Bluetooth preference, i.e. the user's wish for a headset. Reconciled in
+         * place, never a reconnect.
          */
         const val EXTRAS_BLUETOOTH_WANTED = "bluetooth_wanted"
 
         /**
          * Boolean: without a headset, route voice to the earpiece rather than the speaker. The
-         * standing preference that replaced the handset mode; the chooser overrides it per session.
+         * chooser overrides it per session.
          */
         const val EXTRAS_EARPIECE_BY_DEFAULT = "earpiece_by_default"
 
