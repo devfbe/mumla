@@ -2,7 +2,9 @@ package se.lublin.mumla.servers
 
 import android.os.Bundle
 import android.os.Looper
+import android.view.View
 import android.widget.PopupMenu
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.PreferenceManager
 import com.google.common.truth.Truth.assertThat
@@ -84,5 +86,36 @@ class PublicServerListFragmentTest {
         val menu = preparedMenu(showFragment())
 
         assertThat(menu.findItem(R.id.menu_match_server).isVisible).isFalse()
+    }
+
+    @Test
+    fun withoutTorTheListIsDownloaded() {
+        val fragment = showFragment()
+        awaitDownloadAttempt()
+
+        assertThat(downloads.get()).isEqualTo(1)
+        assertThat(fragment.requireView().findViewById<View>(R.id.server_list_tor_notice).visibility)
+            .isEqualTo(View.GONE)
+    }
+
+    @Test
+    fun overTorTheListIsNotDownloadedAndANoticeExplainsWhy() {
+        prefs.edit().putBoolean("useTor", true).commit()
+
+        val view = showFragment().requireView()
+
+        assertThat(downloads.get()).isEqualTo(0)
+        val notice = view.findViewById<TextView>(R.id.server_list_tor_notice)
+        assertThat(notice.visibility).isEqualTo(View.VISIBLE)
+        assertThat(notice.text.toString()).isEqualTo(activity.getString(R.string.public_server_list_tor_disabled))
+        assertThat(view.findViewById<View>(R.id.serverProgress).visibility).isEqualTo(View.GONE)
+    }
+
+    private fun awaitDownloadAttempt() {
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (downloads.get() == 0 && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.yield()
+        }
     }
 }

@@ -149,6 +149,12 @@ class PublicServerListFragment :
     }
 
     private fun fillPublicList() {
+        if (Settings.getInstance(requireContext()).isTorEnabled()) {
+            // The download would bypass Tor.
+            serverProgress?.visibility = View.GONE
+            requireView().findViewById<View>(R.id.server_list_tor_notice).visibility = View.VISIBLE
+            return
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             val result = fetcher.fetch()
             if (result == null) {

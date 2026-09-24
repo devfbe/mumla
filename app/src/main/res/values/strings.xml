@@ -153,6 +153,7 @@
     <string name="search_country">Country</string>
     <string name="information">Information</string>
     <string name="error_fetching_servers">Could not fetch servers.\nAre you connected to the Internet?</string>
+    <string name="public_server_list_tor_disabled">The public server list is not loaded while Tor is on, because it would be downloaded without Tor.</string>
     <string name="overlay">Overlay</string>
     <string name="hint_reason">Reason</string>
     <string name="action_settings">Settings</string>
