@@ -11,7 +11,7 @@
     <ImageView
         android:layout_width="64dp"
         android:layout_height="64dp"
-        android:contentDescription="@string/app_name"
+        android:importantForAccessibility="no"
         app:srcCompat="@drawable/ic_launcher_foreground" />
 
     <TextView

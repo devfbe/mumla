@@ -41,6 +41,7 @@
             android:layout_width="320dp"
             android:layout_height="300dp"
             android:gravity="top|start"
+            android:hint="@string/comment"
             android:importantForAutofill="no"
             android:inputType="textMultiLine|textNoSuggestions"
             android:visibility="gone" />

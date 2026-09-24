@@ -32,7 +32,7 @@
         <LinearLayout
             android:id="@+id/overlay_titlebar"
             android:layout_width="fill_parent"
-            android:layout_height="40dp"
+            android:layout_height="48dp"
             android:textSize="12sp"
             android:orientation="horizontal">
 
@@ -54,9 +54,10 @@
 
             <ImageView
                 android:id="@+id/overlay_talk"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:padding="11dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="13dp"
+                android:contentDescription="@string/ptt"
                 android:scaleType="fitCenter"
                 app:srcCompat="@drawable/ic_action_microphone"
                 app:tint="?attr/colorOnSurfaceVariant"
@@ -68,9 +69,10 @@
                 android:background="?attr/colorOutlineVariant"/>
 
             <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:padding="11dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="13dp"
+                android:contentDescription="@string/close"
                 android:id="@+id/overlay_close"
                 app:srcCompat="@drawable/ic_action_delete_dark"
                 app:tint="?attr/colorOnSurfaceVariant"
@@ -103,9 +105,10 @@
 
     <ImageView
         android:id="@+id/overlay_drag"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:padding="8dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:padding="16dp"
+        android:contentDescription="@string/a11y_resize_overlay"
         android:layout_gravity="end|bottom"
         app:srcCompat="@drawable/ic_action_drag_handle"
         app:tint="?attr/colorOnSurfaceVariant"

@@ -17,6 +17,7 @@
 
 package se.lublin.mumla.channel
 
+import android.annotation.SuppressLint
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
@@ -28,6 +29,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.MenuProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
@@ -71,13 +74,22 @@ class ChannelFragment :
 
     private val settings get() = Settings.getInstance(requireActivity())
 
+    private val announcer = SelfStateAnnouncer { text ->
+        // No view shows these states for a live region to carry; a transient announcement it is.
+        @Suppress("DEPRECATION")
+        binding?.root?.announceForAccessibility(getString(text))
+    }
+
     /** True if only the user's pinned channels are shown. */
     private val isShowingPinnedChannels get() = arguments?.getBoolean("pinned") == true
 
     override fun onServiceEvent(event: HumlaEvent) {
         when (event) {
             is HumlaEvent.UserTalkStateUpdated -> onUserTalkStateUpdated(event.user)
-            is HumlaEvent.UserStateUpdated -> if (isSelf(event.user)) configureInput()
+            is HumlaEvent.UserStateUpdated -> if (isSelf(event.user)) {
+                configureInput()
+                announcer.onMuteState(event.user.isSelfMuted, event.user.isSelfDeafened)
+            }
             is HumlaEvent.VoiceTargetChanged -> configureTargetPanel()
             else -> Unit
         }
@@ -87,6 +99,11 @@ class ChannelFragment :
         if (service.isConnected) {
             configureTargetPanel()
             configureInput()
+            announcer.reset()
+            selfUser(service)?.let { self ->
+                announcer.onMuteState(self.isSelfMuted, self.isSelfDeafened)
+                showTalking(self.talkState != TalkState.PASSIVE)
+            }
         }
     }
 
@@ -94,10 +111,22 @@ class ChannelFragment :
     private fun onUserTalkStateUpdated(user: IUser) {
         val talkButton = binding?.pushtotalk ?: return
         if (!isSelf(user)) return
-        when (user.talkState) {
-            TalkState.TALKING, TalkState.SHOUTING, TalkState.WHISPERING -> talkButton.isPressed = true
-            TalkState.PASSIVE -> talkButton.isPressed = false
+        val talking = when (user.talkState) {
+            TalkState.TALKING, TalkState.SHOUTING, TalkState.WHISPERING -> true
+            TalkState.PASSIVE -> false
         }
+        talkButton.isPressed = talking
+        showTalking(talking)
+    }
+
+    /**
+     * Gives the talk button our talk state for accessibility services, and speaks changes in
+     * push-to-talk mode, where the user makes them; voice activation would chatter.
+     */
+    private fun showTalking(talking: Boolean) {
+        val talkButton = binding?.pushtotalk ?: return
+        ViewCompat.setStateDescription(talkButton, if (talking) getString(R.string.a11y_transmitting) else null)
+        announcer.onTalking(talking, announce = settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT)
     }
 
     private fun isSelf(user: IUser): Boolean {
@@ -116,7 +145,7 @@ class ChannelFragment :
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val binding = FragmentChannelBinding.inflate(inflater, container, false)
         this.binding = binding
-        binding.pushtotalk.setOnTouchListener { _, event -> onTalkButtonTouch(event) }
+        setUpTalkButton(binding.pushtotalk)
         binding.targetPanelCancel.setOnClickListener { cancelWhisper() }
         configureInput()
         return binding.root
@@ -129,6 +158,34 @@ class ChannelFragment :
         tabs.setBackgroundColor(background)
         tabs.setTabTextColors(text, text)
         tabs.setSelectedTabIndicatorColor(text)
+    }
+
+    /**
+     * Talks while held. An accessibility service cannot hold, so its click toggles transmission
+     * instead, and a pause releases what it started.
+     */
+    @SuppressLint("ClickableViewAccessibility") // A hold is not a click; the click action is below.
+    private fun setUpTalkButton(button: View) {
+        button.setOnTouchListener { _, event -> onTalkButtonTouch(event) }
+        ViewCompat.replaceAccessibilityAction(button, AccessibilityActionCompat.ACTION_CLICK, null) { _, _ ->
+            toggleTalkingForAccessibility()
+            true
+        }
+    }
+
+    private fun toggleTalkingForAccessibility() {
+        val service = service?.takeIf { it.isConnected } ?: return
+        when {
+            settings.isPushToTalkToggle -> service.onTalkKeyUp()
+            service.session.isTalking -> {
+                talkButtonHeld = false
+                service.onTalkKeyUp()
+            }
+            else -> {
+                talkButtonHeld = true
+                service.onTalkKeyDown()
+            }
+        }
     }
 
     private fun onTalkButtonTouch(event: MotionEvent): Boolean {
@@ -188,6 +245,7 @@ class ChannelFragment :
     }
 
     override fun onDestroyView() {
+        announcer.reset()
         binding = null
         super.onDestroyView()
     }
@@ -244,15 +302,7 @@ class ChannelFragment :
 
         val service = service
         val muted = if (service != null && service.isConnected) {
-            val self = try {
-                service.session.sessionUser
-            } catch (e: HumlaDisconnectedException) {
-                Log.d(TAG, "exception in configureInput: $e")
-                null
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in configureInput: $e")
-                null
-            }
+            val self = selfUser(service)
             self == null || self.isMuted || self.isSuppressed || self.isSelfMuted
         } else {
             false
@@ -261,6 +311,17 @@ class ChannelFragment :
             settings.isPushToTalkButtonShown &&
             settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT
         binding.pushtotalkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
+    }
+
+    /** Our own user, or null while the session has none. */
+    private fun selfUser(service: IMumlaService): IUser? = try {
+        service.session.sessionUser
+    } catch (e: HumlaDisconnectedException) {
+        Log.d(TAG, "exception in selfUser: $e")
+        null
+    } catch (e: IllegalStateException) {
+        Log.d(TAG, "exception in selfUser: $e")
+        null
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {

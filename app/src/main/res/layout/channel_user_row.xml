@@ -34,6 +34,7 @@
             android:id="@+id/user_row_talk_highlight"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:importantForAccessibility="no"
             custom:srcCompat="@drawable/outline_circle_talking_off"/>
     </FrameLayout>
 
@@ -50,11 +51,12 @@
 
     <ImageView
         android:id="@+id/user_row_more"
-        android:layout_width="32dp"
+        android:layout_width="48dp"
         android:layout_height="match_parent"
         custom:srcCompat="@drawable/ic_more_vert"
         android:layout_gravity="center"
-        android:paddingStart="8dp"
+        android:padding="12dp"
+        android:contentDescription="@string/a11y_user_options"
         custom:tint="?android:textColorSecondary"
         android:background="?attr/selectableItemBackgroundBorderless"/>
 </LinearLayout>

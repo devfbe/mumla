@@ -32,6 +32,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
+import androidx.core.view.ViewCompat
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.RecyclerView
 import se.lublin.humla.HumlaService
@@ -133,6 +134,8 @@ class ChannelListAdapter(
                 if (node.isExpanded) R.drawable.ic_action_expanded
                 else R.drawable.ic_action_collapsed
             )
+            cvh.channelExpandToggle.contentDescription =
+                context.getString(if (node.isExpanded) R.string.a11y_collapse else R.string.expand)
             cvh.channelExpandToggle.setOnClickListener {
                 expandedChannels[channel.id] = !node.isExpanded
                 updateChannels()
@@ -240,7 +243,7 @@ class ChannelListAdapter(
                 },
             )
 
-            uvh.userTalkHighlight.setImageDrawable(getTalkStateDrawable(user))
+            bindTalkState(uvh, user)
 
             // Pad the view depending on channel's nested level.
             val metrics = context.resources.displayMetrics
@@ -327,7 +330,13 @@ class ChannelListAdapter(
     fun updateUserStates(user: IUser, view: RecyclerView) {
         val itemId = user.session.toLong() or USER_ID_MASK
         val uvh = view.findViewHolderForItemId(itemId) as? UserViewHolder ?: return
+        bindTalkState(uvh, user)
+    }
+
+    /** The talk-state icon, and for accessibility services the row's state in words. */
+    private fun bindTalkState(uvh: UserViewHolder, user: IUser) {
         uvh.userTalkHighlight.setImageDrawable(getTalkStateDrawable(user))
+        ViewCompat.setStateDescription(uvh.itemView, talkStateDescription(context, user))
     }
 
     private fun getTalkStateDrawable(user: IUser): Drawable {

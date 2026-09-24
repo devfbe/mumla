@@ -29,6 +29,7 @@
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:id="@+id/drawer_item_icon"
+            android:importantForAccessibility="no"
             app:srcCompat="@drawable/ic_action_user_dark"
             android:padding="4dp"/>
 

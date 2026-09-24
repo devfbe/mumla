@@ -1,5 +1,6 @@
 package se.lublin.mumla.chat
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.os.Bundle
@@ -87,6 +88,7 @@ class ZoomImageView @JvmOverloads constructor(
      * `super.onTouchEvent` is not called: View's click handling would count a single tap twice, and
      * `onSingleTapConfirmed` waits out the double-tap window.
      */
+    @SuppressLint("ClickableViewAccessibility") // performClick() runs from onSingleTapConfirmed.
     override fun onTouchEvent(event: MotionEvent): Boolean {
         parent?.requestDisallowInterceptTouchEvent(event.pointerCount > 1 || state.scale > ZoomState.MIN_SCALE)
         scaleDetector.onTouchEvent(event)

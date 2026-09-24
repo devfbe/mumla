@@ -28,6 +28,8 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.ListView
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import se.lublin.humla.session.HumlaEvent
@@ -55,9 +57,7 @@ class MumlaOverlay(private val service: MumlaService) {
         private set
 
     init {
-        binding.overlayTitle.setOnTouchListener(MoveListener())
-        binding.overlayDrag.setOnTouchListener(ResizeListener())
-        talkButton.setOnTouchListener(TalkListener())
+        setUpGestures()
         binding.overlayClose.setOnClickListener { hide() }
         setPushToTalkShown(Settings.getInstance(service).inputMethod == Settings.ARRAY_INPUT_METHOD_PTT)
 
@@ -104,6 +104,18 @@ class MumlaOverlay(private val service: MumlaService) {
             adapter.setChannel(sessionChannel)
         } else if (event.newChannel.id == sessionChannel.id || event.oldChannel?.id == sessionChannel.id) {
             adapter.notifyDataSetChanged()
+        }
+    }
+
+    /** Dragging has no click equivalent; the talk button's accessibility click toggles talking. */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setUpGestures() {
+        binding.overlayTitle.setOnTouchListener(MoveListener())
+        binding.overlayDrag.setOnTouchListener(ResizeListener())
+        talkButton.setOnTouchListener(TalkListener())
+        ViewCompat.replaceAccessibilityAction(talkButton, AccessibilityActionCompat.ACTION_CLICK, null) { _, _ ->
+            service.setTalkingState(!service.isTalking)
+            true
         }
     }
 

@@ -305,6 +305,24 @@
     <string name="deny_reason_other">Reason: %s</string>
     <string name="server">Server</string>
     <string name="the_server">the server</string>
+    <string name="comment">Comment</string>
+    <string name="unmute">Unmute</string>
+    <string name="undeafen">Undeafen</string>
+    <string name="a11y_join_channel">Join channel</string>
+    <string name="a11y_channel_options">Channel options</string>
+    <string name="a11y_user_options">User options</string>
+    <string name="a11y_server_options">Server options</string>
+    <string name="a11y_stop_shouting">Stop shouting</string>
+    <string name="a11y_resize_overlay">Resize</string>
+    <string name="a11y_collapse">Collapse</string>
+    <string name="a11y_state_talking">Talking</string>
+    <string name="a11y_state_muted">Muted</string>
+    <string name="a11y_state_deafened">Deafened</string>
+    <string name="a11y_state_server_muted">Muted by the server</string>
+    <string name="a11y_state_server_deafened">Deafened by the server</string>
+    <string name="a11y_state_suppressed">Suppressed</string>
+    <string name="a11y_transmitting">Transmitting</string>
+    <string name="a11y_not_transmitting">Not transmitting</string>
     <string name="pref_dynamic_colors">Dynamic colors</string>
     <string name="pref_dynamic_colors_summary">Use the colors of your wallpaper instead of Mumla\'s.</string>
 </resources>

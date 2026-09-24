@@ -51,6 +51,7 @@
                 android:id="@+id/tokenAddButton"
                 android:layout_width="64dp"
                 android:layout_height="48dp"
+                android:contentDescription="@string/add"
                 app:srcCompat="@drawable/ic_action_add_dark"
                 app:tint="?android:attr/textColorPrimary"
                 android:background="?attr/selectableItemBackground"/>

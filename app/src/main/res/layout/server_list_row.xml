@@ -119,6 +119,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     android:layout_marginEnd="5dp"
+                    android:importantForAccessibility="no"
                     app:srcCompat="@drawable/ic_action_user_dark"
                     app:tint="?android:attr/textColorPrimary" />
 
@@ -139,6 +140,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     android:layout_marginEnd="5dp"
+                    android:importantForAccessibility="no"
                     app:srcCompat="@drawable/ic_server_light"
                     app:tint="?android:attr/textColorPrimary" />
 
@@ -156,10 +158,11 @@
 
     <ImageView
         android:id="@+id/server_row_more"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:paddingEnd="8dp"
-        android:paddingTop="4dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:padding="12dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/a11y_server_options"
         android:layout_alignTop="@id/server_card"
         android:layout_alignEnd="@id/server_card"
         app:srcCompat="@drawable/ic_more_vert"

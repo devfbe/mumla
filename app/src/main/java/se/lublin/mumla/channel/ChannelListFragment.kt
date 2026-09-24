@@ -192,6 +192,9 @@ class ChannelListFragment :
                     if (self.isSelfDeafened) R.drawable.ic_action_audio_muted
                     else R.drawable.ic_action_audio
                 )
+                // The action a tap takes, which is also what accessibility services read.
+                muteItem.setTitle(if (self.isSelfMuted) R.string.unmute else R.string.mute)
+                deafenItem.setTitle(if (self.isSelfDeafened) R.string.undeafen else R.string.deafen)
                 val tint = PorterDuffColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
                 muteItem.icon?.mutate()?.colorFilter = tint
                 deafenItem.icon?.mutate()?.colorFilter = tint

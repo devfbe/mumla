@@ -22,6 +22,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import androidx.core.view.ViewCompat
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
@@ -68,6 +69,7 @@ class ChannelAdapter(
                 else -> R.drawable.outline_circle_talking_off
             }
         )
+        ViewCompat.setStateDescription(binding.root, talkStateDescription(context, user))
 
         return binding.root
     }

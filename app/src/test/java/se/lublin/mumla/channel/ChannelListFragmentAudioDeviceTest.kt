@@ -105,6 +105,24 @@ class ChannelListFragmentAudioDeviceTest {
     private fun Menu.echo(): MenuItem = chooser().subMenu!!.findItem(R.id.menu_audio_echo)
 
     @Test
+    fun theMuteAndDeafenItemsAreTitledWithWhatATapDoes() {
+        val self = FakeUser(1)
+        every { session.sessionUser } returns self
+        prepared().let { menu ->
+            assertThat(menu.findItem(R.id.menu_mute_button).title).isEqualTo(activity.getString(R.string.mute))
+            assertThat(menu.findItem(R.id.menu_deafen_button).title).isEqualTo(activity.getString(R.string.deafen))
+        }
+
+        self.selfMuted = true
+        self.selfDeafened = true
+
+        prepared().let { menu ->
+            assertThat(menu.findItem(R.id.menu_mute_button).title).isEqualTo(activity.getString(R.string.unmute))
+            assertThat(menu.findItem(R.id.menu_deafen_button).title).isEqualTo(activity.getString(R.string.undeafen))
+        }
+    }
+
+    @Test
     fun theChooserHasATitleAndAnIcon() {
         val chooser = prepared().chooser()
 

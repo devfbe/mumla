@@ -33,6 +33,7 @@
         android:layout_height="match_parent"
         app:srcCompat="@drawable/ic_action_collapsed"
         app:tint="?android:attr/textColorSecondary"
+        android:contentDescription="@string/expand"
         android:padding="12dp" />
 
     <TextView
@@ -56,19 +57,22 @@
 
     <ImageView
         android:id="@+id/channel_row_join"
-        android:layout_width="32dp"
+        android:layout_width="48dp"
         android:layout_height="match_parent"
+        android:padding="12dp"
+        android:contentDescription="@string/a11y_join_channel"
         app:srcCompat="@drawable/ic_action_move"
         app:tint="?android:attr/textColorSecondary"
         android:background="?attr/selectableItemBackgroundBorderless"/>
 
     <ImageView
         android:id="@+id/channel_row_more"
-        android:layout_width="32dp"
+        android:layout_width="48dp"
         android:layout_height="match_parent"
         app:srcCompat="@drawable/ic_more_vert"
         android:layout_gravity="center"
-        android:paddingStart="8dp"
+        android:padding="12dp"
+        android:contentDescription="@string/a11y_channel_options"
         app:tint="?android:textColorSecondary"
         android:background="?attr/selectableItemBackgroundBorderless"/>
 </LinearLayout>
