@@ -17,7 +17,7 @@
 
 package se.lublin.humla.audio.native
 
-/** libopus encoder. State handles are `OpusEncoder*`. */
+/** libopus encoder. State handles are opaque; 0 means creation failed. */
 interface OpusEncoderApi {
     fun create(sampleRate: Int, channels: Int, application: Int, error: IntArray): Long
     fun encode(state: Long, pcm: ShortArray, frameSize: Int, out: ByteArray, maxBytes: Int): Int

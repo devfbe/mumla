@@ -349,3 +349,35 @@ if(HUMLA_HAVE_SANITIZERS)
   target_link_libraries(test_jni_speex_asan PRIVATE speex_hosttest_asan m)
   humla_add_labelled_test(jni_speex_sanitized test_jni_speex_asan sanitized)
 endif()
+
+# ---------------------------------------------------------------- the opus bridge
+# libopus is built with the same options as ../CMakeLists.txt. Only the bridge and the test are
+# instrumented in the sanitized variant; the bridge's length checks are what is under test.
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_FIXED_POINT ON CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_DISABLE_INTRINSICS ON CACHE BOOL "" FORCE)
+# abseil turns BUILD_TESTING on, and opus would then register its own suite here.
+set(BUILD_TESTING OFF)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/opus ${CMAKE_BINARY_DIR}/opus EXCLUDE_FROM_ALL)
+
+set(HUMLA_JNI_OPUS_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_jni_opus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_opus.cpp)
+
+add_executable(test_jni_opus ${HUMLA_JNI_OPUS_SOURCES})
+target_include_directories(test_jni_opus PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+target_link_libraries(test_jni_opus PRIVATE opus m)
+humla_add_labelled_test(jni_opus test_jni_opus plain)
+
+if(HUMLA_HAVE_SANITIZERS)
+  add_executable(test_jni_opus_asan ${HUMLA_JNI_OPUS_SOURCES})
+  target_include_directories(test_jni_opus_asan PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+  target_compile_options(test_jni_opus_asan PRIVATE ${HUMLA_SAN_FLAGS})
+  target_link_options(test_jni_opus_asan PRIVATE -fsanitize=address,undefined)
+  target_link_libraries(test_jni_opus_asan PRIVATE opus m)
+  humla_add_labelled_test(jni_opus_sanitized test_jni_opus_asan sanitized)
+endif()

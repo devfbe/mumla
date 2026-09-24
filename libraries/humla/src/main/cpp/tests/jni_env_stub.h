@@ -72,9 +72,7 @@ inline FakeArray* as_array(jarray a) { return reinterpret_cast<FakeArray*>(a); }
  *
  * The comparison is by element SIZE, not by element type, which is as much as a FakeArray knows.
  * It separates byte from short from int/float, and it does NOT separate jint from jfloat -- both
- * are four bytes. Nothing currently reaches that gap (no bridge calls SetFloatArrayRegion at all;
- * the entry in Env() below is there so a bridge that starts to would not get a null function
- * pointer), but an int/float mix-up is precisely what this would have to catch, and it would not.
+ * are four bytes. An int/float mix-up is precisely what this would have to catch, and it would not.
  * Closing it means giving FakeArray a type tag rather than a size. */
 template <typename T>
 inline void check_element_type(const FakeArray* fa, const char* who) {
@@ -166,6 +164,12 @@ class Env {
         };
         table_.ReleaseByteArrayElements = [](JNIEnv* e, jbyteArray a, jbyte* p, jint m) {
             release_elements<jbyte>(e, a, p, m);
+        };
+        table_.GetFloatArrayElements = [](JNIEnv* e, jfloatArray a, jboolean* c) {
+            return get_elements<jfloat>(e, a, c);
+        };
+        table_.ReleaseFloatArrayElements = [](JNIEnv* e, jfloatArray a, jfloat* p, jint m) {
+            release_elements<jfloat>(e, a, p, m);
         };
         table_.GetIntArrayRegion = get_int_region;
         table_.SetIntArrayRegion = set_int_region;
