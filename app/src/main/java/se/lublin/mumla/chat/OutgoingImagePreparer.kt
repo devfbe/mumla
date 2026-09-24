@@ -83,8 +83,7 @@ class OutgoingImagePreparer(
 
         /**
          * The largest size within [maxWidth] x [maxHeight] that keeps [width] : [height], never
-         * larger than the image itself, never smaller than one pixel on either axis (the same
-         * arithmetic as `BitmapUtils.resizeKeepingAspect`).
+         * larger than the image itself, never smaller than one pixel on either axis.
          */
         fun boundedSize(width: Int, height: Int, maxWidth: Int, maxHeight: Int): Size {
             if (width <= maxWidth && height <= maxHeight) return Size(width, height)

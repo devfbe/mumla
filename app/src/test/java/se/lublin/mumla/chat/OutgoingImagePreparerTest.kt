@@ -24,7 +24,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.GraphicsMode
-import se.lublin.mumla.util.BitmapUtils
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -154,25 +153,27 @@ class OutgoingImagePreparerTest {
         assertThat(tall.height).isEqualTo(400)
     }
 
-    /**
-     * The fit is [se.lublin.mumla.util.BitmapUtils.resizeKeepingAspect]'s, applied in the decode so
-     * the bitmap is allocated at its final size.
-     */
+    /** Aspect-ratio fit into 600 x 400, never enlarged, never below one pixel. */
     @Test
-    fun theTargetSizeIsTheSameFitBitmapUtilsWouldHaveProduced() {
-        val sizes = listOf(
-            1200 to 800, 800 to 1200, 100 to 50, 600 to 400, 600 to 399, 599 to 400,
-            600 to 31, 53 to 400, 3000 to 1, 1 to 3000, 4000 to 3000, 601 to 400, 600 to 401,
+    fun theTargetSizeFitsTheBoundsKeepingTheAspectRatio() {
+        val expected = listOf(
+            (1200 to 800) to (600 to 400),
+            (800 to 1200) to (266 to 400),
+            (100 to 50) to (100 to 50),
+            (600 to 400) to (600 to 400),
+            (600 to 399) to (600 to 399),
+            (599 to 400) to (599 to 400),
+            (600 to 31) to (600 to 31),
+            (53 to 400) to (53 to 400),
+            (3000 to 1) to (600 to 1),
+            (1 to 3000) to (1 to 400),
+            (4000 to 3000) to (533 to 400),
+            (601 to 400) to (600 to 399),
+            (600 to 401) to (598 to 400),
         )
-        for ((width, height) in sizes) {
-            val bounded = OutgoingImagePreparer.boundedSize(width, height, 600, 400)
-            val resized = BitmapUtils.resizeKeepingAspect(
-                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888),
-                600,
-                400,
-            )
-            assertThat("${width}x$height -> ${bounded.width}x${bounded.height}")
-                .isEqualTo("${width}x$height -> ${resized.width}x${resized.height}")
+        for ((source, target) in expected) {
+            val bounded = OutgoingImagePreparer.boundedSize(source.first, source.second, 600, 400)
+            assertThat("$source -> ${bounded.width to bounded.height}").isEqualTo("$source -> $target")
         }
     }
 
