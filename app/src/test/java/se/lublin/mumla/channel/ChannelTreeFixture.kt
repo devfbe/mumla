@@ -86,6 +86,8 @@ class FakeChannel(
 
     override val links: List<IChannel> get() = linkList
     override val permissions: Int = 0
+    override var isEnterRestricted: Boolean = false
+    override var canEnter: Boolean = true
 
     override fun equals(other: Any?): Boolean = other is FakeChannel && other.id == id
     override fun hashCode(): Int = id

@@ -46,6 +46,18 @@
         android:padding="4dp"
         tools:text="Channel name\nLine 2\nLine 3\nLine 4"/>
 
+    <ImageView
+        android:id="@+id/channel_row_lock"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_gravity="center_vertical"
+        android:layout_marginStart="4dp"
+        android:visibility="gone"
+        app:srcCompat="@drawable/ic_lock"
+        app:tint="?android:attr/textColorSecondary"
+        android:contentDescription="@string/a11y_channel_restricted"
+        tools:visibility="visible" />
+
     <TextView
         android:id="@+id/channel_row_count"
         android:layout_width="wrap_content"

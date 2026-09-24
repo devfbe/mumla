@@ -201,10 +201,11 @@ class ChannelListAdapter(
                 cvh.channelHolder.paddingBottom,
             )
 
+            bindEnterRestriction(cvh, channel)
             cvh.joinButton.setOnClickListener {
                 val current = humlaService
                 if (current.isConnected) {
-                    current.session.joinChannel(channel.id)
+                    current.session.joinOrExplain(context, channel)
                 }
             }
 
@@ -331,6 +332,18 @@ class ChannelListAdapter(
         val itemId = user.session.toLong() or USER_ID_MASK
         val uvh = view.findViewHolderForItemId(itemId) as? UserViewHolder ?: return
         bindTalkState(uvh, user)
+    }
+
+    /** The lock of a channel with enter restrictions, closed if the local user may not enter. */
+    private fun bindEnterRestriction(cvh: ChannelViewHolder, channel: IChannel) {
+        if (!channel.isEnterRestricted && channel.canEnter) {
+            cvh.lock.visibility = View.GONE
+            return
+        }
+        cvh.lock.visibility = View.VISIBLE
+        cvh.lock.setImageResource(if (channel.canEnter) R.drawable.ic_lock_open else R.drawable.ic_lock)
+        cvh.lock.contentDescription =
+            context.getString(if (channel.canEnter) R.string.a11y_channel_restricted else R.string.a11y_channel_locked)
     }
 
     /** The talk-state icon, and for accessibility services the row's state in words. */
@@ -482,6 +495,7 @@ class ChannelListAdapter(
         val channelExpandToggle: ImageView = binding.channelRowExpand
         val channelName: TextView = binding.channelRowName
         val channelUserCount: TextView = binding.channelRowCount
+        val lock: ImageView = binding.channelRowLock
         val joinButton: ImageView = binding.channelRowJoin
         val moreButton: ImageView = binding.channelRowMore
     }

@@ -233,7 +233,12 @@ class ChannelListFragment :
                 return when (itemType) {
                     ChannelSearchProvider.INTENT_DATA_CHANNEL -> {
                         if (session.sessionChannel?.id != itemId) {
-                            session.joinChannel(itemId)
+                            val channel = session.getChannel(itemId)
+                            if (channel != null) {
+                                session.joinOrExplain(requireContext(), channel)
+                            } else {
+                                session.joinChannel(itemId)
+                            }
                         } else {
                             scrollToChannel(itemId)
                         }

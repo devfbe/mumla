@@ -76,6 +76,25 @@ class ModelHandlerEventsTest {
         assertThat(notices()).containsExactly(HumlaEvent.LogMessage(HumlaEvent.Level.INFO, "<b>Hi</b>"))
     }
 
+    @Test
+    fun enterRestrictionsAreKeptUntilTheServerChangesThem() {
+        assertThat(handler.getChannel(2)!!.canEnter).isTrue()
+        assertThat(handler.getChannel(2)!!.isEnterRestricted).isFalse()
+
+        handler.onMessage(
+            Mumble.ChannelState.newBuilder().setChannelId(2).setIsEnterRestricted(true).setCanEnter(false).build()
+        )
+        handler.onMessage(channel(2, name = "Games renamed"))
+
+        val games = handler.getChannel(2)!!
+        assertThat(games.isEnterRestricted).isTrue()
+        assertThat(games.canEnter).isFalse()
+
+        handler.onMessage(Mumble.ChannelState.newBuilder().setChannelId(2).setCanEnter(true).build())
+        assertThat(games.canEnter).isTrue()
+        assertThat(games.isEnterRestricted).isTrue()
+    }
+
     // ---- users ----------------------------------------------------------------------------------
 
     @Test

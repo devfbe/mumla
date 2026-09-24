@@ -38,6 +38,8 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     @Volatile override var description: String? = null
     @Volatile override var descriptionHash: ByteArray? = null
     @Volatile override var permissions = 0
+    @Volatile override var isEnterRestricted = false
+    @Volatile override var canEnter = true
     private val mSubchannels = ArrayList<Channel>() // guarded by this
     private val mUsers = ArrayList<User>() // guarded by this
     private val mLinks = ArrayList<Channel>() // guarded by this

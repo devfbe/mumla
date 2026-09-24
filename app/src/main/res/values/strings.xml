@@ -308,6 +308,9 @@
     <string name="unmute">Unmute</string>
     <string name="undeafen">Undeafen</string>
     <string name="a11y_join_channel">Join channel</string>
+    <string name="a11y_channel_locked">Restricted channel, you cannot enter it</string>
+    <string name="a11y_channel_restricted">Restricted channel, you may enter it</string>
+    <string name="channel_enter_denied">You are not allowed to enter %1$s.</string>
     <string name="a11y_channel_options">Channel options</string>
     <string name="a11y_user_options">User options</string>
     <string name="a11y_server_options">Server options</string>

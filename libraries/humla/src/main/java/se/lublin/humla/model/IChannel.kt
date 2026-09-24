@@ -32,4 +32,10 @@ interface IChannel {
     val subchannelUserCount: Int
     val links: List<IChannel>
     val permissions: Int
+
+    /** Whether the channel's ACL restricts who may enter it. */
+    val isEnterRestricted: Boolean
+
+    /** Whether the server lets the local user enter this channel. */
+    val canEnter: Boolean
 }

@@ -74,7 +74,7 @@ class ChannelMenu(
     override fun onMenuItemClick(item: MenuItem): Boolean {
         val session = service.takeIf { it.isConnected }?.session ?: return false
         when (item.itemId) {
-            R.id.context_channel_join -> session.joinChannel(channel.id)
+            R.id.context_channel_join -> session.joinOrExplain(context, channel)
             R.id.context_channel_add -> showEditor(adding = true)
             R.id.context_channel_edit -> showEditor(adding = false)
             R.id.context_channel_remove -> confirmRemoval()

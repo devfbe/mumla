@@ -57,6 +57,8 @@ internal class ChannelTree {
         // parent id finds that channel.
         if (msg.hasParent()) hang(channel, getOrStub(msg.parent))
         applyDescription(channel, msg)
+        if (msg.hasIsEnterRestricted()) channel.isEnterRestricted = msg.isEnterRestricted
+        if (msg.hasCanEnter()) channel.canEnter = msg.canEnter
         applyLinks(channel, msg)
         return if (existing == null) HumlaEvent.ChannelAdded(channel) else HumlaEvent.ChannelStateUpdated(channel)
     }
