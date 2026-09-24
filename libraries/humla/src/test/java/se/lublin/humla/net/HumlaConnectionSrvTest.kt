@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -17,10 +18,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 class HumlaConnectionSrvTest {
     private val transports = FakeTransports()
     private val lookups = CopyOnWriteArrayList<String>()
-    private val originalLookup = Server.srvLookup
+    private lateinit var originalLookup: Server.SrvLookup
     private var connection: HumlaConnection? = null
 
-    init {
+    @Before
+    fun setUp() {
+        originalLookup = Server.srvLookup
         Server.srvLookup = Server.SrvLookup { host ->
             lookups += host
             InetSocketAddress.createUnresolved("srv-target.example", 1234)
