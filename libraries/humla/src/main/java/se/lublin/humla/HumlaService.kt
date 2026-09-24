@@ -367,7 +367,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         val modelHandler =
             ModelHandler(this, mCallbacks, this, mLocalMuteHistory, mLocalIgnoreHistory)
         mModelHandler = modelHandler
-        connection.addTCPMessageHandlers(modelHandler)
+        connection.addTcpHandler(modelHandler)
 
         mCallbacks.onConnecting()
 

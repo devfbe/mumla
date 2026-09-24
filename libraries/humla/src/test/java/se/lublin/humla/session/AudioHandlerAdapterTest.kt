@@ -18,8 +18,8 @@ class AudioHandlerAdapterTest {
 
     @Test
     fun theProtocolListenersAreTheHandlerItself() {
-        assertThat(adapter.tcpListener).isSameInstanceAs(handler)
-        assertThat(adapter.udpListener).isSameInstanceAs(handler)
+        assertThat(adapter.tcpHandler).isSameInstanceAs(handler)
+        assertThat(adapter.voiceHandler).isSameInstanceAs(handler)
     }
 
     @Test

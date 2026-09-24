@@ -9,7 +9,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.protocol.HumlaTCPMessageListener
 import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -32,9 +31,7 @@ class HumlaConnectionCodecTest {
 
     /** Connects and synchronizes; the codec is only readable on a synchronized connection. */
     private fun connect(): FakeTcpTransport {
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageVersion(msg: Mumble.Version) { handledVersions += msg.version }
-        })
+        connection.addTcpHandler { if (it is Mumble.Version) { handledVersions += it.version } }
         connection.setForceTCP(true)
         connection.connect(Server(-1, "test", "127.0.0.1", 64738, "user", ""))
         awaitUntil(description = "tcp connect") {

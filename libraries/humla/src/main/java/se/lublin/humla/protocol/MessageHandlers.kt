@@ -15,18 +15,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.protocol;
+package se.lublin.humla.protocol
 
-import se.lublin.humla.net.HumlaUDPMessageType;
+import com.google.protobuf.MessageLite
+import se.lublin.humla.net.HumlaUDPMessageType
 
-public interface HumlaUDPMessageListener {
+/** Receives every parsed TCP message from the server; handlers pick types with `is` checks. */
+fun interface TcpMessageHandler {
+    fun onMessage(msg: MessageLite)
+}
 
-    public void messageUDPPing(byte[] data);
-    public void messageVoiceData(byte[] data, HumlaUDPMessageType messageType);
-
-    public static class Stub implements HumlaUDPMessageListener {
-
-        public void messageUDPPing(byte[] data) {}
-        public void messageVoiceData(byte[] data, HumlaUDPMessageType messageType) {}
-    }
+/** Receives voice packets, whether they arrived over UDP or tunnelled through TCP. */
+fun interface VoicePacketHandler {
+    fun onVoicePacket(data: ByteArray, type: HumlaUDPMessageType)
 }

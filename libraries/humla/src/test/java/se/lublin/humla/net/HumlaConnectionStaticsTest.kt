@@ -20,7 +20,7 @@ class HumlaConnectionStaticsTest {
     fun parsesAKnownMessageType() {
         val bytes = Mumble.ChannelState.newBuilder().setChannelId(5).setName("five").build().toByteArray()
 
-        val parsed = HumlaConnection.getProtobufMessage(bytes, HumlaTCPMessageType.ChannelState) as Mumble.ChannelState
+        val parsed = HumlaTCPMessageType.ChannelState.parse(bytes) as Mumble.ChannelState
 
         assertThat(parsed.channelId).isEqualTo(5)
         assertThat(parsed.name).isEqualTo("five")
@@ -44,10 +44,24 @@ class HumlaConnectionStaticsTest {
         )
     }
 
+    /** Each type parses into the protobuf class of the same name, so a swapped parser shows up. */
+    @Test
+    fun everyServerSentTypeParsesIntoItsOwnMessageClass() {
+        for (type in HumlaTCPMessageType.entries - HumlaTCPMessageType.VoiceTarget) {
+            // An empty payload lacks required fields for some types; the parser still built one.
+            val parsed = try {
+                type.parse(ByteArray(0))
+            } catch (e: InvalidProtocolBufferException) {
+                e.unfinishedMessage
+            }
+            assertThat(parsed.javaClass.simpleName).isEqualTo(type.name)
+        }
+    }
+
     @Test
     fun voiceTargetIsNotAServerToClientMessage() {
         assertThrows(InvalidProtocolBufferException::class.java) {
-            HumlaConnection.getProtobufMessage(ByteArray(0), HumlaTCPMessageType.VoiceTarget)
+            HumlaTCPMessageType.VoiceTarget.parse(ByteArray(0))
         }
     }
 }

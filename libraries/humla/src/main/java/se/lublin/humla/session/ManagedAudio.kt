@@ -25,14 +25,14 @@ import se.lublin.humla.exception.AudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.protocol.AudioHandler
-import se.lublin.humla.protocol.HumlaTCPMessageListener
-import se.lublin.humla.protocol.HumlaUDPMessageListener
+import se.lublin.humla.protocol.TcpMessageHandler
+import se.lublin.humla.protocol.VoicePacketHandler
 import se.lublin.humla.util.HumlaLogger
 
 /** A running audio pipeline as [AudioController] sees it (real: AudioHandler; tests: fakes). */
 interface ManagedAudio {
-    val tcpListener: HumlaTCPMessageListener
-    val udpListener: HumlaUDPMessageListener
+    val tcpHandler: TcpMessageHandler
+    val voiceHandler: VoicePacketHandler
     val currentBandwidth: Int
     fun setVoiceTargetId(id: Byte)
 
@@ -132,8 +132,8 @@ class DefaultAudioHandlerFactory(
 class AudioHandlerAdapter(private val handler: AudioHandler) : ManagedAudio {
     @Volatile private var warningListener: ((String) -> Unit)? = null
 
-    override val tcpListener: HumlaTCPMessageListener get() = handler
-    override val udpListener: HumlaUDPMessageListener get() = handler
+    override val tcpHandler: TcpMessageHandler get() = handler
+    override val voiceHandler: VoicePacketHandler get() = handler
     override val currentBandwidth: Int get() = handler.currentBandwidth
     override fun setVoiceTargetId(id: Byte) = handler.setVoiceTargetId(id)
 

@@ -138,8 +138,8 @@ class AudioController(
         try {
             val audio = factory().create(context, logger, s.config, s.params, encodeListener, outputListener)
             audio.setWarningListener { message -> mainHandler.post { listener.onAudioWarning(message) } }
-            s.registry.addTCPMessageHandlers(audio.tcpListener)
-            s.registry.addUDPMessageHandlers(audio.udpListener)
+            s.registry.addTcpHandler(audio.tcpHandler)
+            s.registry.addVoiceHandler(audio.voiceHandler)
             running = Running(audio, s.registry)
             mainHandler.post { listener.onAudioStarted() }
         } catch (e: Exception) {
@@ -153,8 +153,8 @@ class AudioController(
     private fun stopRunning() {
         val r = running ?: return
         running = null
-        r.registry.removeTCPMessageHandler(r.audio.tcpListener)
-        r.registry.removeUDPMessageHandler(r.audio.udpListener)
+        r.registry.removeTcpHandler(r.audio.tcpHandler)
+        r.registry.removeVoiceHandler(r.audio.voiceHandler)
         // Before shutdown(): a warning posted on the way down would refer to a session the user
         // has already left.
         r.audio.setWarningListener(null)

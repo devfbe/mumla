@@ -14,8 +14,6 @@ import se.lublin.humla.exception.NotSynchronizedException
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.protocol.HumlaTCPMessageListener
-import se.lublin.humla.protocol.HumlaUDPMessageListener
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.HumlaCallbacks
@@ -110,9 +108,7 @@ class HumlaConnectionProtocolThreadTest {
     fun messagesAreParsedAndDispatchedOnTheProtocolThread() {
         val tcp = connectAndEstablish()
         val handlerThreads = CopyOnWriteArrayList<String>()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageVersion(msg: Mumble.Version) { handlerThreads += Thread.currentThread().name }
-        })
+        connection.addTcpHandler { if (it is Mumble.Version) { handlerThreads += Thread.currentThread().name } }
 
         tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())
 
@@ -141,11 +137,9 @@ class HumlaConnectionProtocolThreadTest {
             override fun logWarning(message: String) {}
             override fun logError(message: String) {}
         }
-        connection.addTCPMessageHandlers(ModelHandler(RuntimeEnvironment.getApplication(), callbacks, silentLogger, null, null))
+        connection.addTcpHandler(ModelHandler(RuntimeEnvironment.getApplication(), callbacks, silentLogger, null, null))
         val processed = AtomicInteger()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageChannelState(msg: Mumble.ChannelState) { processed.incrementAndGet() }
-        })
+        connection.addTcpHandler { if (it is Mumble.ChannelState) { processed.incrementAndGet() } }
         val frames = (0 until 5_000).map { i ->
             Mumble.ChannelState.newBuilder().setChannelId(i).setName("channel $i").apply { if (i > 0) parent = 0 }.build().toByteArray()
         }
@@ -261,9 +255,7 @@ class HumlaConnectionProtocolThreadTest {
     fun framesArrivingBehindADisconnectAreNotDispatched() {
         val tcp = connectAndEstablish()
         val seen = AtomicInteger()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageVersion(msg: Mumble.Version) { seen.incrementAndGet() }
-        })
+        connection.addTcpHandler { if (it is Mumble.Version) { seen.incrementAndGet() } }
         // Park the protocol thread so the frame is provably queued ahead of the teardown.
         val gate = CountDownLatch(1)
         connection.protocolHandler.post { gate.await() }
@@ -281,12 +273,8 @@ class HumlaConnectionProtocolThreadTest {
     fun aThrowingHandlerDoesNotKillTheProtocolThread() {
         val tcp = connectAndEstablish()
         val survivors = AtomicInteger()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageVersion(msg: Mumble.Version) { throw IllegalStateException("handler is broken") }
-        })
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageTextMessage(msg: Mumble.TextMessage) { survivors.incrementAndGet() }
-        })
+        connection.addTcpHandler { if (it is Mumble.Version) { error("handler is broken") } }
+        connection.addTcpHandler { if (it is Mumble.TextMessage) { survivors.incrementAndGet() } }
 
         tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())
         tcp.simulateMessage(HumlaTCPMessageType.TextMessage, Mumble.TextMessage.newBuilder().setMessage("still here").build().toByteArray())
@@ -395,11 +383,7 @@ class HumlaConnectionProtocolThreadTest {
     fun aDatagramArrivingBehindADisconnectIsNotDispatched() {
         val tcp = connectAndEstablish()
         val seen = AtomicInteger()
-        connection.addUDPMessageHandlers(object : HumlaUDPMessageListener.Stub() {
-            override fun messageVoiceData(data: ByteArray, messageType: HumlaUDPMessageType) {
-                seen.incrementAndGet()
-            }
-        })
+        connection.addVoiceHandler { _, _ -> seen.incrementAndGet() }
 
         inTheTeardownWindow(tcp) { connection.onUDPDataReceived(voiceDatagram) }
 
@@ -488,15 +472,9 @@ class HumlaConnectionProtocolThreadTest {
         val tcp = connectAndEstablish(forceTcp = false)
         awaitUntil(description = "udp started") { transports.udps.isNotEmpty() }
         val frames = AtomicInteger()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageVersion(msg: Mumble.Version) { frames.incrementAndGet() }
-        })
+        connection.addTcpHandler { if (it is Mumble.Version) { frames.incrementAndGet() } }
         val datagrams = AtomicInteger()
-        connection.addUDPMessageHandlers(object : HumlaUDPMessageListener.Stub() {
-            override fun messageVoiceData(data: ByteArray, messageType: HumlaUDPMessageType) {
-                datagrams.incrementAndGet()
-            }
-        })
+        connection.addVoiceHandler { _, _ -> datagrams.incrementAndGet() }
         val sentBefore = tcp.sent.toList()
         val invoked = CopyOnWriteArrayList<String>()
 

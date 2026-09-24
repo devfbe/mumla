@@ -19,8 +19,8 @@ import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.MessageHandlerRegistry
 import se.lublin.humla.protocol.AudioHandler
-import se.lublin.humla.protocol.HumlaTCPMessageListener
-import se.lublin.humla.protocol.HumlaUDPMessageListener
+import se.lublin.humla.protocol.TcpMessageHandler
+import se.lublin.humla.protocol.VoicePacketHandler
 import se.lublin.humla.testutil.SilentLogger
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.HumlaLogger
@@ -55,8 +55,8 @@ class AudioControllerTest {
         @Volatile private var warning: ((String) -> Unit)? = null
         val warningListener: ((String) -> Unit)? get() = warning
         val targetIds = CopyOnWriteArrayList<Byte>()
-        override val tcpListener: HumlaTCPMessageListener = object : HumlaTCPMessageListener.Stub() {}
-        override val udpListener: HumlaUDPMessageListener = object : HumlaUDPMessageListener.Stub() {}
+        override val tcpHandler = TcpMessageHandler {}
+        override val voiceHandler = VoicePacketHandler { _, _ -> }
         override val currentBandwidth: Int = 12_345
         override fun setVoiceTargetId(id: Byte) { targetIds += id }
         override fun setWarningListener(listener: ((String) -> Unit)?) { warning = listener }
@@ -95,12 +95,12 @@ class AudioControllerTest {
     }
 
     private class FakeRegistry : MessageHandlerRegistry {
-        val tcp = CopyOnWriteArrayList<HumlaTCPMessageListener>()
-        val udp = CopyOnWriteArrayList<HumlaUDPMessageListener>()
-        override fun addTCPMessageHandlers(vararg handlers: HumlaTCPMessageListener) { tcp += handlers }
-        override fun removeTCPMessageHandler(handler: HumlaTCPMessageListener) { tcp.remove(handler) }
-        override fun addUDPMessageHandlers(vararg handlers: HumlaUDPMessageListener) { udp += handlers }
-        override fun removeUDPMessageHandler(handler: HumlaUDPMessageListener) { udp.remove(handler) }
+        val tcp = CopyOnWriteArrayList<TcpMessageHandler>()
+        val udp = CopyOnWriteArrayList<VoicePacketHandler>()
+        override fun addTcpHandler(handler: TcpMessageHandler) { tcp += handler }
+        override fun removeTcpHandler(handler: TcpMessageHandler) { tcp.remove(handler) }
+        override fun addVoiceHandler(handler: VoicePacketHandler) { udp += handler }
+        override fun removeVoiceHandler(handler: VoicePacketHandler) { udp.remove(handler) }
     }
 
     private class RecordingListener : AudioController.Listener {
@@ -165,8 +165,8 @@ class AudioControllerTest {
         assertThat(factory.outputListeners).containsExactly(outputListener)
         assertThat(factory.configs[0].amplitudeBoost).isEqualTo(7f)
         assertThat(factory.sessionParams).containsExactly(params)
-        assertThat(registry.tcp).containsExactly(factory.created[0].tcpListener)
-        assertThat(registry.udp).containsExactly(factory.created[0].udpListener)
+        assertThat(registry.tcp).containsExactly(factory.created[0].tcpHandler)
+        assertThat(registry.udp).containsExactly(factory.created[0].voiceHandler)
         assertThat(controller.currentBandwidth).isEqualTo(12_345)
 
         idleMainWhenSomethingIsPosted()
@@ -217,8 +217,8 @@ class AudioControllerTest {
         assertThat(factory.configs[1].amplitudeBoost).isEqualTo(2f)
         assertThat(factory.sessionParams[1].inputMode).isSameInstanceAs(newInputMode)
         assertThat(factory.sessionParams[1].self).isSameInstanceAs(params.self)
-        assertThat(registry.tcp).containsExactly(factory.created[1].tcpListener)
-        assertThat(registry.udp).containsExactly(factory.created[1].udpListener)
+        assertThat(registry.tcp).containsExactly(factory.created[1].tcpHandler)
+        assertThat(registry.udp).containsExactly(factory.created[1].voiceHandler)
     }
 
     /**
@@ -279,8 +279,8 @@ class AudioControllerTest {
         assertThat(first.shutdownCalls.get()).isEqualTo(1)
         assertThat(registry.tcp).isEmpty()
         assertThat(registry.udp).isEmpty()
-        assertThat(secondRegistry.tcp).containsExactly(factory.created[1].tcpListener)
-        assertThat(secondRegistry.udp).containsExactly(factory.created[1].udpListener)
+        assertThat(secondRegistry.tcp).containsExactly(factory.created[1].tcpHandler)
+        assertThat(secondRegistry.udp).containsExactly(factory.created[1].voiceHandler)
     }
 
     @Test

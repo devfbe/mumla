@@ -23,6 +23,8 @@ import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.util.Log;
 
+import com.google.protobuf.MessageLite;
+
 import se.lublin.humla.R;
 import se.lublin.humla.audio.AudioInput;
 import se.lublin.humla.audio.AudioOutput;
@@ -46,7 +48,6 @@ import se.lublin.humla.net.HumlaUDPMessageType;
 import se.lublin.humla.net.PacketBuffer;
 import se.lublin.humla.protobuf.Mumble;
 import se.lublin.humla.util.HumlaLogger;
-import se.lublin.humla.util.HumlaNetworkListener;
 
 /**
  * Bridges the protocol's audio messages to the input and output threads. Audio playback and
@@ -54,7 +55,8 @@ import se.lublin.humla.util.HumlaNetworkListener;
  * audio threads are initialized recreates them in most cases. {@link #shutdown()} cleans up both
  * threads; restarting afterwards is safe.
  */
-public class AudioHandler extends HumlaNetworkListener implements AudioInput.AudioInputListener {
+public class AudioHandler implements TcpMessageHandler, VoicePacketHandler,
+        AudioInput.AudioInputListener {
     private static final String TAG = AudioHandler.class.getName();
 
     public static final int SAMPLE_RATE = 48000;
@@ -372,7 +374,13 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     }
 
     @Override
-    public void messageCodecVersion(Mumble.CodecVersion msg) {
+    public void onMessage(MessageLite msg) {
+        if (msg instanceof Mumble.CodecVersion m) onCodecVersion(m);
+        else if (msg instanceof Mumble.ServerSync m) onServerSync(m);
+        else if (msg instanceof Mumble.UserState m) onUserState(m);
+    }
+
+    private void onCodecVersion(Mumble.CodecVersion msg) {
         if (!mInitialized)
             return; // Only listen to change events in this handler.
 
@@ -389,8 +397,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         }
     }
 
-    @Override
-    public void messageServerSync(Mumble.ServerSync msg) {
+    private void onServerSync(Mumble.ServerSync msg) {
         try {
             setMaxBandwidth(msg.hasMaxBandwidth() ? msg.getMaxBandwidth() : -1);
         } catch (AudioException e) {
@@ -398,8 +405,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         }
     }
 
-    @Override
-    public void messageUserState(Mumble.UserState msg) {
+    private void onUserState(Mumble.UserState msg) {
         if (!mInitialized)
             return; // We shouldn't initialize on UserState- wait for ServerSync.
 
@@ -410,7 +416,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     }
 
     @Override
-    public void messageVoiceData(byte[] data, HumlaUDPMessageType messageType) {
+    public void onVoicePacket(byte[] data, HumlaUDPMessageType messageType) {
         synchronized (mOutput) {
             mOutput.queueVoiceData(data, messageType);
         }

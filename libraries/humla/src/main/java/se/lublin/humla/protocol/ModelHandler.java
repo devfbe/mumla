@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.google.protobuf.MessageLite;
+
 import se.lublin.humla.R;
 import se.lublin.humla.model.Channel;
 import se.lublin.humla.model.IServerSettings;
@@ -48,7 +50,7 @@ import se.lublin.humla.util.MessageFormatter;
  * are safe only because of that single writer; the concurrent maps and volatile fields just keep
  * readers from seeing half-rehashed tables or half-built objects.
  */
-public class ModelHandler extends HumlaTCPMessageListener.Stub {
+public class ModelHandler implements TcpMessageHandler {
     private static final String TAG = ModelHandler.class.getName();
 
     /**
@@ -176,6 +178,18 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
     }
 
     @Override
+    public void onMessage(MessageLite msg) {
+        if (msg instanceof Mumble.ChannelState m) messageChannelState(m);
+        else if (msg instanceof Mumble.ChannelRemove m) messageChannelRemove(m);
+        else if (msg instanceof Mumble.PermissionQuery m) messagePermissionQuery(m);
+        else if (msg instanceof Mumble.UserState m) messageUserState(m);
+        else if (msg instanceof Mumble.UserRemove m) messageUserRemove(m);
+        else if (msg instanceof Mumble.PermissionDenied m) messagePermissionDenied(m);
+        else if (msg instanceof Mumble.TextMessage m) messageTextMessage(m);
+        else if (msg instanceof Mumble.ServerSync m) messageServerSync(m);
+        else if (msg instanceof Mumble.ServerConfig m) messageServerConfig(m);
+    }
+
     public void messageChannelState(Mumble.ChannelState msg) {
         if(!msg.hasChannelId())
             return;
@@ -259,7 +273,6 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             mObserver.onChannelStateUpdated(channel);
     }
 
-    @Override
     public void messageChannelRemove(Mumble.ChannelRemove msg) {
         final Channel channel = mChannels.get(msg.getChannelId());
         if(channel != null && channel.getId() != 0) {
@@ -272,7 +285,6 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         }
     }
 
-    @Override
     public void messagePermissionQuery(Mumble.PermissionQuery msg) {
         if(msg.getFlush())
             for(Channel channel : mChannels.values())
@@ -287,7 +299,6 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         }
     }
 
-    @Override
     public void messageUserState(Mumble.UserState msg) {
         User user = mUsers.get(msg.getSession());
         boolean newUser = false;
@@ -459,7 +470,6 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
             mObserver.onUserStateUpdated(user);
     }
 
-    @Override
     public void messageUserRemove(Mumble.UserRemove msg) {
         final User user = mUsers.get(msg.getSession());
         final User actor = mUsers.get(msg.getActor());
@@ -481,7 +491,6 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         mObserver.onUserRemoved(user, reason);
     }
 
-    @Override
     public void messagePermissionDenied(final Mumble.PermissionDenied msg) {
         final String reason;
         switch (msg.getType()) {
@@ -514,7 +523,6 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         mObserver.onPermissionDenied(reason);
     }
 
-    @Override
     public void messageTextMessage(Mumble.TextMessage msg) {
         User sender = mUsers.get(msg.getActor());
 
@@ -534,13 +542,11 @@ public class ModelHandler extends HumlaTCPMessageListener.Stub {
         mObserver.onMessageLogged(message);
     }
 
-    @Override
     public void messageServerSync(Mumble.ServerSync msg) {
         mSession = msg.getSession();
         mLogger.logInfo(msg.getWelcomeText());
     }
 
-    @Override
     public void messageServerConfig(Mumble.ServerConfig msg) {
         mServerSettings = new ServerSettings(msg);
     }

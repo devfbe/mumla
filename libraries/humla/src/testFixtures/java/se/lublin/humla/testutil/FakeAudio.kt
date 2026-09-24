@@ -21,8 +21,8 @@ import android.content.Context
 import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.protocol.AudioHandler
-import se.lublin.humla.protocol.HumlaTCPMessageListener
-import se.lublin.humla.protocol.HumlaUDPMessageListener
+import se.lublin.humla.protocol.TcpMessageHandler
+import se.lublin.humla.protocol.VoicePacketHandler
 import se.lublin.humla.session.AudioConfig
 import se.lublin.humla.session.AudioHandlerFactory
 import se.lublin.humla.session.AudioSessionParams
@@ -46,8 +46,8 @@ class FakeAudio : ManagedAudio {
     val warningListener: ((String) -> Unit)? get() = warningListenerField
     val targetIds = CopyOnWriteArrayList<Byte>()
 
-    override val tcpListener: HumlaTCPMessageListener = object : HumlaTCPMessageListener.Stub() {}
-    override val udpListener: HumlaUDPMessageListener = object : HumlaUDPMessageListener.Stub() {}
+    override val tcpHandler = TcpMessageHandler {}
+    override val voiceHandler = VoicePacketHandler { _, _ -> }
     override val currentBandwidth: Int = 12_345
     override fun setVoiceTargetId(id: Byte) { targetIds += id }
     override fun setWarningListener(listener: ((String) -> Unit)?) { warningListenerField = listener }

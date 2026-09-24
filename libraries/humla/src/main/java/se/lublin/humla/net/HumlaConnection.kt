@@ -29,8 +29,8 @@ import se.lublin.humla.exception.NotConnectedException
 import se.lublin.humla.exception.NotSynchronizedException
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.protocol.HumlaTCPMessageListener
-import se.lublin.humla.protocol.HumlaUDPMessageListener
+import se.lublin.humla.protocol.TcpMessageHandler
+import se.lublin.humla.protocol.VoicePacketHandler
 import se.lublin.humla.session.ReconnectPolicy
 import se.lublin.humla.util.HumlaException
 import java.io.IOException
@@ -160,8 +160,8 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var sessionId = 0
 
     // Message handlers (the protocol thread iterates; any thread may add or remove)
-    private val tcpHandlers = ConcurrentLinkedQueue<HumlaTCPMessageListener>()
-    private val udpHandlers = ConcurrentLinkedQueue<HumlaUDPMessageListener>()
+    private val tcpHandlers = ConcurrentLinkedQueue<TcpMessageHandler>()
+    private val voiceHandlers = ConcurrentLinkedQueue<VoicePacketHandler>()
 
     /** Sends the pings and reschedules itself; quitSafely drops a not-yet-due reschedule. */
     private val pingRunnable = object : Runnable {
@@ -198,117 +198,113 @@ class HumlaConnection @JvmOverloads constructor(
         warn(warning)
     }
 
-    /** Handles packets received that are critical to the connection state (protocol thread). */
-    private val connectionMessageHandler = object : HumlaTCPMessageListener.Stub() {
-        override fun messageServerSync(msg: Mumble.ServerSync) {
-            // Protocol says we're supposed to send a dummy UDPTunnel packet here to let the server know we don't like UDP.
-            if (shouldForceTCP()) enableForceTCP()
-
-            // Start pinging. FIXME is this the right place?
-            protocolHandler.removeCallbacks(pingRunnable)
-            protocolHandler.post(pingRunnable)
-
-            sessionId = msg.session
-            serverMaxBandwidth = if (msg.hasMaxBandwidth()) msg.maxBandwidth else -1
-            synchronizedWithServer = true
-
-            notifyListener { onConnectionSynchronized() }
-        }
-
-        override fun messageCodecVersion(msg: Mumble.CodecVersion) {
-            if (msg.opus) {
-                serverCodec = HumlaUDPMessageType.UDPVoiceOpus
-                return
+    /** Handles the messages that drive the connection itself; runs before the registered handlers. */
+    private fun handleConnectionMessage(msg: MessageLite) {
+        when (msg) {
+            is Mumble.ServerSync -> onServerSync(msg)
+            is Mumble.CodecVersion -> onCodecVersion(msg)
+            is Mumble.Reject -> handleFatalException(HumlaException(msg))
+            is Mumble.UserRemove -> if (msg.session == sessionId) handleFatalException(HumlaException(msg))
+            is Mumble.CryptSetup -> onCryptSetup(msg)
+            is Mumble.Version -> {
+                remoteVersion = msg.version
+                remoteRelease = msg.release
+                remoteOsName = msg.os
+                remoteOsVersion = msg.osVersion
             }
-            // Opus is the only codec this client has; without it there is no voice at all.
-            serverCodec = null
-            if (!noOpusWarned) {
-                noOpusWarned = true
-                warn(ConnectionWarning.NO_OPUS)
-            }
-        }
-
-        override fun messageReject(msg: Mumble.Reject) {
-            handleFatalException(HumlaException(msg))
-        }
-
-        override fun messageUserRemove(msg: Mumble.UserRemove) {
-            if (msg.session == sessionId) {
-                handleFatalException(HumlaException(msg))
-            }
-        }
-
-        override fun messageCryptSetup(msg: Mumble.CryptSetup) {
-            try {
-                if (msg.hasKey() && msg.hasClientNonce() && msg.hasServerNonce()) {
-                    val key = msg.key
-                    val clientNonce = msg.clientNonce
-                    val serverNonce = msg.serverNonce
-                    if (key.size() == CryptState.AES_BLOCK_SIZE &&
-                        clientNonce.size() == CryptState.AES_BLOCK_SIZE &&
-                        serverNonce.size() == CryptState.AES_BLOCK_SIZE
-                    ) {
-                        cryptState.setKeys(key.toByteArray(), clientNonce.toByteArray(), serverNonce.toByteArray())
-                    }
-                } else if (msg.hasServerNonce()) {
-                    val serverNonce = msg.serverNonce
-                    if (serverNonce.size() == CryptState.AES_BLOCK_SIZE) {
-                        cryptState.mUiResync++
-                        cryptState.setDecryptIV(serverNonce.toByteArray())
-                    }
-                } else {
-                    val csb = Mumble.CryptSetup.newBuilder()
-                    csb.clientNonce = ByteString.copyFrom(cryptState.encryptIV)
-                    sendTCPMessage(csb.build(), HumlaTCPMessageType.CryptSetup)
-                }
-            } catch (e: InvalidKeyException) {
-                handleFatalException(
-                    HumlaException(
-                        "Received invalid cryptographic nonce from server", e,
-                        HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
-                    )
-                )
-            }
-        }
-
-        override fun messageVersion(msg: Mumble.Version) {
-            remoteVersion = msg.version
-            remoteRelease = msg.release
-            remoteOsName = msg.os
-            remoteOsVersion = msg.osVersion
-        }
-
-        override fun messagePing(msg: Mumble.Ping) {
-            cryptState.mUiRemoteGood = msg.good
-            cryptState.mUiRemoteLate = msg.late
-            cryptState.mUiRemoteLost = msg.lost
-            cryptState.mUiRemoteResync = msg.resync
-
-            // In microseconds
-            val now = elapsed
-            tcpLatency = now - msg.timestamp
-
-            // Forced TCP freezes both UDP counters; judging them would falsely report UDP down.
-            if (shouldForceTCP()) return
-
-            val decision = udpHealth.onTcpPing(now, cryptState.mUiGood, cryptState.mUiRemoteGood, usingUdp)
-            if (decision == UdpHealthMonitor.Decision.RESTORE_UDP) {
-                usingUdp = true
-                udpRestartAttempt = 0
-                warn(ConnectionWarning.UDP_RESTORED)
-            } else {
-                switchWarningFor(decision)?.let { switchToTcp(it) }
-            }
+            is Mumble.Ping -> onPing(msg)
         }
     }
 
-    private val udpPingListener = object : HumlaUDPMessageListener.Stub() {
-        override fun messageUDPPing(data: ByteArray) {
-            val timestamp = UdpPing.decodeTimestamp(data) ?: return
-            val now = elapsed
-            udpLatency = now - timestamp
-            udpHealth.onUdpPingReply(now)
+    private fun onServerSync(msg: Mumble.ServerSync) {
+        // Protocol says we're supposed to send a dummy UDPTunnel packet here to let the server know we don't like UDP.
+        if (shouldForceTCP()) enableForceTCP()
+
+        // Start pinging. FIXME is this the right place?
+        protocolHandler.removeCallbacks(pingRunnable)
+        protocolHandler.post(pingRunnable)
+
+        sessionId = msg.session
+        serverMaxBandwidth = if (msg.hasMaxBandwidth()) msg.maxBandwidth else -1
+        synchronizedWithServer = true
+
+        notifyListener { onConnectionSynchronized() }
+    }
+
+    private fun onCodecVersion(msg: Mumble.CodecVersion) {
+        if (msg.opus) {
+            serverCodec = HumlaUDPMessageType.UDPVoiceOpus
+            return
         }
+        // Opus is the only codec this client has; without it there is no voice at all.
+        serverCodec = null
+        if (!noOpusWarned) {
+            noOpusWarned = true
+            warn(ConnectionWarning.NO_OPUS)
+        }
+    }
+
+    private fun onCryptSetup(msg: Mumble.CryptSetup) {
+        try {
+            if (msg.hasKey() && msg.hasClientNonce() && msg.hasServerNonce()) {
+                val key = msg.key
+                val clientNonce = msg.clientNonce
+                val serverNonce = msg.serverNonce
+                if (key.size() == CryptState.AES_BLOCK_SIZE &&
+                    clientNonce.size() == CryptState.AES_BLOCK_SIZE &&
+                    serverNonce.size() == CryptState.AES_BLOCK_SIZE
+                ) {
+                    cryptState.setKeys(key.toByteArray(), clientNonce.toByteArray(), serverNonce.toByteArray())
+                }
+            } else if (msg.hasServerNonce()) {
+                val serverNonce = msg.serverNonce
+                if (serverNonce.size() == CryptState.AES_BLOCK_SIZE) {
+                    cryptState.mUiResync++
+                    cryptState.setDecryptIV(serverNonce.toByteArray())
+                }
+            } else {
+                val csb = Mumble.CryptSetup.newBuilder()
+                csb.clientNonce = ByteString.copyFrom(cryptState.encryptIV)
+                sendTCPMessage(csb.build(), HumlaTCPMessageType.CryptSetup)
+            }
+        } catch (e: InvalidKeyException) {
+            handleFatalException(
+                HumlaException(
+                    "Received invalid cryptographic nonce from server", e,
+                    HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
+                )
+            )
+        }
+    }
+
+    private fun onPing(msg: Mumble.Ping) {
+        cryptState.mUiRemoteGood = msg.good
+        cryptState.mUiRemoteLate = msg.late
+        cryptState.mUiRemoteLost = msg.lost
+        cryptState.mUiRemoteResync = msg.resync
+
+        // In microseconds
+        val now = elapsed
+        tcpLatency = now - msg.timestamp
+
+        // Forced TCP freezes both UDP counters; judging them would falsely report UDP down.
+        if (shouldForceTCP()) return
+
+        val decision = udpHealth.onTcpPing(now, cryptState.mUiGood, cryptState.mUiRemoteGood, usingUdp)
+        if (decision == UdpHealthMonitor.Decision.RESTORE_UDP) {
+            usingUdp = true
+            udpRestartAttempt = 0
+            warn(ConnectionWarning.UDP_RESTORED)
+        } else {
+            switchWarningFor(decision)?.let { switchToTcp(it) }
+        }
+    }
+
+    private fun onUdpPing(data: ByteArray) {
+        val timestamp = UdpPing.decodeTimestamp(data) ?: return
+        val now = elapsed
+        udpLatency = now - timestamp
+        udpHealth.onUdpPingReply(now)
     }
 
     private fun sendPings() {
@@ -327,11 +323,6 @@ class HumlaConnection @JvmOverloads constructor(
         pb.resync = cryptState.mUiResync
         // TODO accumulate stats and send with ping
         sendTCPMessage(pb.build(), HumlaTCPMessageType.Ping)
-    }
-
-    init {
-        tcpHandlers.add(connectionMessageHandler)
-        udpHandlers.add(udpPingListener)
     }
 
     /**
@@ -390,20 +381,20 @@ class HumlaConnection @JvmOverloads constructor(
     /** Microseconds since connect(). */
     val elapsed: Long get() = (nanoClock() - startTimestamp) / 1000
 
-    override fun addTCPMessageHandlers(vararg handlers: HumlaTCPMessageListener) {
-        tcpHandlers.addAll(handlers)
+    override fun addTcpHandler(handler: TcpMessageHandler) {
+        tcpHandlers.add(handler)
     }
 
-    override fun removeTCPMessageHandler(handler: HumlaTCPMessageListener) {
+    override fun removeTcpHandler(handler: TcpMessageHandler) {
         tcpHandlers.remove(handler)
     }
 
-    override fun addUDPMessageHandlers(vararg handlers: HumlaUDPMessageListener) {
-        udpHandlers.addAll(handlers)
+    override fun addVoiceHandler(handler: VoicePacketHandler) {
+        voiceHandlers.add(handler)
     }
 
-    override fun removeUDPMessageHandler(handler: HumlaUDPMessageListener) {
-        udpHandlers.remove(handler)
+    override fun removeVoiceHandler(handler: VoicePacketHandler) {
+        voiceHandlers.remove(handler)
     }
 
     /** Proxy all connections over a local Orbot instance; forces TCP tunneling for voice. */
@@ -636,8 +627,10 @@ class HumlaConnection @JvmOverloads constructor(
             return
         }
         try {
-            val message = getProtobufMessage(data, type)
-            for (handler in tcpHandlers) broadcastTCPMessage(handler, message, type)
+            // Parsed once, so every handler receives the same message object.
+            val message = type.parse(data)
+            handleConnectionMessage(message)
+            for (handler in tcpHandlers) handler.onMessage(message)
         } catch (e: InvalidProtocolBufferException) {
             Log.w(TAG, "Could not parse $type", e)
         } catch (e: RuntimeException) {
@@ -684,7 +677,11 @@ class HumlaConnection @JvmOverloads constructor(
         if (dataType < 0 || dataType >= types.size) return // Discard invalid data types
         val udpDataType = types[dataType]
         try {
-            for (handler in udpHandlers) broadcastUDPMessage(handler, data, udpDataType)
+            if (udpDataType == HumlaUDPMessageType.UDPPing) {
+                onUdpPing(data)
+            } else {
+                for (handler in voiceHandlers) handler.onVoicePacket(data, udpDataType)
+            }
         } catch (e: RuntimeException) {
             Log.e(TAG, "UDP handler failed for $udpDataType", e)
         }
@@ -758,88 +755,6 @@ class HumlaConnection @JvmOverloads constructor(
             var overhead = 20 + 8 + 4 + 1 + 2 + 12 + framesPerPacket
             overhead *= (800 / framesPerPacket)
             return overhead + bitrate
-        }
-
-        /** Parses the passed TCP payload once so every handler receives the same message object. */
-        @JvmStatic
-        @Throws(InvalidProtocolBufferException::class)
-        fun getProtobufMessage(data: ByteArray, messageType: HumlaTCPMessageType): MessageLite = when (messageType) {
-            HumlaTCPMessageType.Authenticate -> Mumble.Authenticate.parseFrom(data)
-            HumlaTCPMessageType.BanList -> Mumble.BanList.parseFrom(data)
-            HumlaTCPMessageType.Reject -> Mumble.Reject.parseFrom(data)
-            HumlaTCPMessageType.ServerSync -> Mumble.ServerSync.parseFrom(data)
-            HumlaTCPMessageType.ServerConfig -> Mumble.ServerConfig.parseFrom(data)
-            HumlaTCPMessageType.PermissionDenied -> Mumble.PermissionDenied.parseFrom(data)
-            HumlaTCPMessageType.UDPTunnel -> Mumble.UDPTunnel.parseFrom(data)
-            HumlaTCPMessageType.UserState -> Mumble.UserState.parseFrom(data)
-            HumlaTCPMessageType.UserRemove -> Mumble.UserRemove.parseFrom(data)
-            HumlaTCPMessageType.ChannelState -> Mumble.ChannelState.parseFrom(data)
-            HumlaTCPMessageType.ChannelRemove -> Mumble.ChannelRemove.parseFrom(data)
-            HumlaTCPMessageType.TextMessage -> Mumble.TextMessage.parseFrom(data)
-            HumlaTCPMessageType.ACL -> Mumble.ACL.parseFrom(data)
-            HumlaTCPMessageType.QueryUsers -> Mumble.QueryUsers.parseFrom(data)
-            HumlaTCPMessageType.Ping -> Mumble.Ping.parseFrom(data)
-            HumlaTCPMessageType.CryptSetup -> Mumble.CryptSetup.parseFrom(data)
-            HumlaTCPMessageType.ContextAction -> Mumble.ContextAction.parseFrom(data)
-            HumlaTCPMessageType.ContextActionModify -> Mumble.ContextActionModify.parseFrom(data)
-            HumlaTCPMessageType.Version -> Mumble.Version.parseFrom(data)
-            HumlaTCPMessageType.UserList -> Mumble.UserList.parseFrom(data)
-            HumlaTCPMessageType.PermissionQuery -> Mumble.PermissionQuery.parseFrom(data)
-            HumlaTCPMessageType.CodecVersion -> Mumble.CodecVersion.parseFrom(data)
-            HumlaTCPMessageType.UserStats -> Mumble.UserStats.parseFrom(data)
-            HumlaTCPMessageType.RequestBlob -> Mumble.RequestBlob.parseFrom(data)
-            HumlaTCPMessageType.SuggestConfig -> Mumble.SuggestConfig.parseFrom(data)
-            HumlaTCPMessageType.VoiceTarget -> throw InvalidProtocolBufferException("Unknown TCP data passed.")
-        }
-
-        /** Routes a parsed TCP message into the matching responder method of the handler. */
-        private fun broadcastTCPMessage(handler: HumlaTCPMessageListener, msg: MessageLite, messageType: HumlaTCPMessageType) {
-            when (messageType) {
-                HumlaTCPMessageType.Authenticate -> handler.messageAuthenticate(msg as Mumble.Authenticate)
-                HumlaTCPMessageType.BanList -> handler.messageBanList(msg as Mumble.BanList)
-                HumlaTCPMessageType.Reject -> handler.messageReject(msg as Mumble.Reject)
-                HumlaTCPMessageType.ServerSync -> handler.messageServerSync(msg as Mumble.ServerSync)
-                HumlaTCPMessageType.ServerConfig -> handler.messageServerConfig(msg as Mumble.ServerConfig)
-                HumlaTCPMessageType.PermissionDenied -> handler.messagePermissionDenied(msg as Mumble.PermissionDenied)
-                HumlaTCPMessageType.UDPTunnel -> handler.messageUDPTunnel(msg as Mumble.UDPTunnel)
-                HumlaTCPMessageType.UserState -> handler.messageUserState(msg as Mumble.UserState)
-                HumlaTCPMessageType.UserRemove -> handler.messageUserRemove(msg as Mumble.UserRemove)
-                HumlaTCPMessageType.ChannelState -> handler.messageChannelState(msg as Mumble.ChannelState)
-                HumlaTCPMessageType.ChannelRemove -> handler.messageChannelRemove(msg as Mumble.ChannelRemove)
-                HumlaTCPMessageType.TextMessage -> handler.messageTextMessage(msg as Mumble.TextMessage)
-                HumlaTCPMessageType.ACL -> handler.messageACL(msg as Mumble.ACL)
-                HumlaTCPMessageType.QueryUsers -> handler.messageQueryUsers(msg as Mumble.QueryUsers)
-                HumlaTCPMessageType.Ping -> handler.messagePing(msg as Mumble.Ping)
-                HumlaTCPMessageType.CryptSetup -> handler.messageCryptSetup(msg as Mumble.CryptSetup)
-                HumlaTCPMessageType.ContextAction -> handler.messageContextAction(msg as Mumble.ContextAction)
-                HumlaTCPMessageType.ContextActionModify -> {
-                    val actionModify = msg as Mumble.ContextActionModify
-                    when (actionModify.operation) {
-                        Mumble.ContextActionModify.Operation.Add -> handler.messageContextActionModify(actionModify)
-                        Mumble.ContextActionModify.Operation.Remove -> handler.messageRemoveContextAction(actionModify)
-                        else -> Unit
-                    }
-                }
-                HumlaTCPMessageType.Version -> handler.messageVersion(msg as Mumble.Version)
-                HumlaTCPMessageType.UserList -> handler.messageUserList(msg as Mumble.UserList)
-                HumlaTCPMessageType.PermissionQuery -> handler.messagePermissionQuery(msg as Mumble.PermissionQuery)
-                HumlaTCPMessageType.CodecVersion -> handler.messageCodecVersion(msg as Mumble.CodecVersion)
-                HumlaTCPMessageType.UserStats -> handler.messageUserStats(msg as Mumble.UserStats)
-                HumlaTCPMessageType.RequestBlob -> handler.messageRequestBlob(msg as Mumble.RequestBlob)
-                HumlaTCPMessageType.SuggestConfig -> handler.messageSuggestConfig(msg as Mumble.SuggestConfig)
-                HumlaTCPMessageType.VoiceTarget -> Unit // client-to-server only; never parsed
-            }
-        }
-
-        /** Routes a UDP datagram into the matching responder method of the handler. */
-        private fun broadcastUDPMessage(handler: HumlaUDPMessageListener, data: ByteArray, messageType: HumlaUDPMessageType) {
-            when (messageType) {
-                HumlaUDPMessageType.UDPPing -> handler.messageUDPPing(data)
-                HumlaUDPMessageType.UDPVoiceCELTAlpha,
-                HumlaUDPMessageType.UDPVoiceSpeex,
-                HumlaUDPMessageType.UDPVoiceCELTBeta,
-                HumlaUDPMessageType.UDPVoiceOpus -> handler.messageVoiceData(data, messageType)
-            }
         }
     }
 }
