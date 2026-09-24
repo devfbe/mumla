@@ -27,22 +27,10 @@ import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.session.AudioDeviceCategory
 
 /**
- * The echo canceller is on by default now - on the speaker and the earpiece - and this is the test
- * that used to stop exactly that, rewritten to the fix it was waiting for.
- *
- * **What was measured, on a Galaxy S25.** With a canceller on, the user heard nobody at all. Every
- * canceller asks for `MODE_IN_COMMUNICATION` (`AudioSourcePolicy.needsCommunicationMode`), and in
- * that mode Android routes output by the *communication device* - which a track on `STREAM_MUSIC`
- * does not follow. The canceller had to stay off until the route was fixed: the communication
- * device chosen explicitly, and the track on the communication stream.
- *
- * **The fix, and what this test now pins.** The audio router holds the communication mode for the
- * whole session and routes every device explicitly, the speaker included, and playback is always
- * on [Settings.PLAYBACK_STREAM], the voice-call stream. So a canceller's communication mode is
- * never in conflict with the stream, whichever device it comes on for.
- *
- * **What the host cannot say.** That the route is audible on an S25. Device QA: join a channel on
- * the speaker, listen, switch to the earpiece and back.
+ * The echo canceller is on by default on the speaker and the earpiece. Every canceller asks for
+ * `MODE_IN_COMMUNICATION`, where output follows the communication device; that only works because
+ * the router routes every device explicitly and playback is on [Settings.PLAYBACK_STREAM], the
+ * voice-call stream. Whether the route is audible is for device QA.
  */
 class EchoCancellationDefaultRouteTest {
     private companion object {
@@ -54,10 +42,7 @@ class EchoCancellationDefaultRouteTest {
         assertThat(Settings.PLAYBACK_STREAM).isEqualTo(AudioManager.STREAM_VOICE_CALL)
     }
 
-    /**
-     * The pair that used to be forbidden, now shipped: the speaker's default canceller asks for
-     * communication mode, and the stream is the one that follows it.
-     */
+    /** The speaker's default canceller asks for communication mode, and the stream follows it. */
     @Test
     fun `the speaker's default canceller asks for the mode the voice call stream follows`() {
         assertThat(AudioDeviceCategory.SPEAKER.echoCancellationByDefault).isTrue()

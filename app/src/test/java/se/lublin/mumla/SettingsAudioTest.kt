@@ -61,11 +61,7 @@ class SettingsAudioTest {
         assertThat(settings.getNoiseSuppressionMode()).isEqualTo(NoiseSuppressionMode.RNNOISE)
     }
 
-    /**
-     * The defect the quick-access menu shipped with: one tap wrote two keys, each of which is a
-     * `configureExtras` of its own, and the audio chain was rebuilt twice -- measured 93 ms apart.
-     * The write is now one key, so the second rebuild cannot exist rather than being debounced.
-     */
+    /** One tap writes one key, so the audio chain is rebuilt once, not twice. */
     @Test
     fun `setting the noise suppression method writes exactly one key`() {
         val written = mutableListOf<String?>()
@@ -162,7 +158,7 @@ class SettingsAudioTest {
         assertThat(prefs.contains("handset_mode")).isFalse()
     }
 
-    /** The global method is gone; the value it left on disk goes with it, once. */
+    /** The obsolete global echo cancellation value is removed from disk, once. */
     @Test
     fun `the old echo cancellation method is removed from the preferences`() {
         prefs.edit().putString("echo_cancellation_method", "system").commit()
