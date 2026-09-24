@@ -18,50 +18,76 @@
 package se.lublin.mumla.servers
 
 import android.content.Context
+import android.view.LayoutInflater
 import android.view.MenuItem
-import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import kotlinx.coroutines.CoroutineScope
-import se.lublin.humla.model.Server
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.PublicServerListRowBinding
 import se.lublin.mumla.db.PublicServer
 import java.util.Locale
 
+/** The public servers' cards, which can be filtered and sorted, with "favourite" in their menu. */
 class PublicServerAdapter(
     context: Context,
-    servers: MutableList<PublicServer>,
+    private val servers: List<PublicServer>,
     private val listener: PublicServerAdapterMenuListener,
     scope: CoroutineScope,
-) : ServerAdapter<PublicServer>(context, R.layout.public_server_list_row, servers, scope) {
+    onServerClick: (PublicServer) -> Unit,
+) : ServerAdapter<PublicServer>(context, scope, onServerClick) {
 
-    private val unfilteredServers = ArrayList(servers)
+    /** The servers shown, as filtered and sorted; the list catches up with this asynchronously. */
+    var shownServers: List<PublicServer> = servers
+        private set(value) {
+            field = value
+            submitList(value)
+        }
 
-    /** Shows only servers whose upper-cased name and country contain the given queries. */
+    init {
+        submitList(servers)
+    }
+
+    /** Shows only servers whose upper-cased name and country contain the given queries, in list order. */
     fun filter(queryName: String, queryCountry: String) {
-        clear()
-        for (server in unfilteredServers) {
-            val name = server.name?.uppercase(Locale.US) ?: ""
-            val country = server.country?.uppercase(Locale.US) ?: ""
-            if (name.contains(queryName) && country.contains(queryCountry)) add(server)
+        shownServers = servers.filter { server ->
+            server.name.uppercase(Locale.US).contains(queryName) &&
+                server.country.orEmpty().uppercase(Locale.US).contains(queryCountry)
         }
     }
 
-    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-        val view = super.getView(position, convertView, parent)
-        view.findViewById<TextView>(R.id.server_row_location).text = getItem(position)!!.country
-        return view
+    /** Sorts the shown servers. */
+    fun sort(comparator: Comparator<PublicServer>) {
+        shownServers = shownServers.sortedWith(comparator)
+    }
+
+    override fun createHolder(inflater: LayoutInflater, parent: ViewGroup): ServerViewHolder {
+        val binding = PublicServerListRowBinding.inflate(inflater, parent, false)
+        return ServerViewHolder(
+            binding.root,
+            name = binding.serverRowName,
+            version = binding.serverRowVersionStatus,
+            users = binding.serverRowUsercount,
+            latency = binding.serverRowLatency,
+            progress = binding.serverRowPingProgress,
+            more = binding.serverRowMore,
+            address = binding.serverRowAddress,
+            location = binding.serverRowLocation,
+        )
+    }
+
+    override fun onBindServer(holder: ServerViewHolder, server: PublicServer) {
+        holder.location?.text = server.country
     }
 
     override val popupMenuResource: Int get() = R.menu.popup_public_server
 
-    override fun onPopupItemClick(server: Server, menuItem: MenuItem): Boolean {
+    override fun onPopupItemClick(server: PublicServer, menuItem: MenuItem): Boolean {
         if (menuItem.itemId != R.id.menu_server_favourite) return false
         listener.favouriteServer(server)
         return true
     }
 
-    interface PublicServerAdapterMenuListener {
-        fun favouriteServer(server: Server)
+    fun interface PublicServerAdapterMenuListener {
+        fun favouriteServer(server: PublicServer)
     }
 }

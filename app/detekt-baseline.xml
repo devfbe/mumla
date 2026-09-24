@@ -23,7 +23,6 @@
     <ID>LongParameterList:ChatAdapterTest.kt$ChatAdapterTest$( parser: ChatContentParser = ChatContentParser("[image]"), scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined), thumbnailPx: Int = 240, parseDispatcher: CoroutineDispatcher = Dispatchers.Default, selfSessionId: () -&gt; Int = { 42 }, decodeDispatcher: CoroutineDispatcher = Dispatchers.Unconfined, diff: DiffUtil.ItemCallback&lt;IChatMessage&gt; = ChatAdapter.DIFF, )</ID>
     <ID>LongParameterList:ChatImageLoader.kt$ChatImageLoader$( private val fetcher: ImageFetcher = HttpImageFetcher(), private val externalImagesAllowed: () -&gt; Boolean, maxCacheBytes: Long = Runtime.getRuntime().maxMemory() / 8, private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO, private val decodeDispatcher: CoroutineDispatcher = Dispatchers.Default, private val nowMillis: () -&gt; Long = System::currentTimeMillis, maxConcurrentLoads: Int = DEFAULT_MAX_CONCURRENT_LOADS, )</ID>
     <ID>LongParameterList:InputLevelMeterPreferenceTest.kt$InputLevelMeterPreferenceTest$( levelDbfs: Float = -30f, floorDbfs: Float? = -45f, speechDbfs: Float? = -20f, thresholdDbfs: Float? = -32f, voice: Boolean = true, holding: Boolean = false, tooClose: Boolean = false, )</ID>
-    <ID>LongParameterList:ServerAdapter.kt$ServerAdapter$( context: Context, private val viewResource: Int, servers: MutableList&lt;E&gt;, private val scope: CoroutineScope, private val pinger: ServerPinger = ServerPinger(), private val pingDispatcher: CoroutineDispatcher = PING_DISPATCHER, private val pingsAllowed: () -&gt; Boolean = { !Settings.getInstance(context).isTorEnabled }, )</ID>
     <ID>LongParameterList:ServerInfoResponse.kt$ServerInfoResponse$( val server: Server?, val version: Int, val identifier: Long, val currentUsers: Int, val maximumUsers: Int, val allowedBandwidth: Int, val latency: Int, val isDummy: Boolean, )</ID>
     <ID>LongParameterList:ZoomState.kt$ZoomState$( factor: Float, focusX: Float, focusY: Float, viewWidth: Float, viewHeight: Float, imageWidth: Float, imageHeight: Float, )</ID>
     <ID>LoopWithTooManyJumpStatements:AudioTestSession.kt$AudioTestSession$while</ID>
@@ -208,7 +207,7 @@
     <ID>TooManyFunctions:ChatImageLoader.kt$ChatImageLoader</ID>
     <ID>TooManyFunctions:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase : SQLiteOpenHelperMumlaDatabase</ID>
     <ID>TooManyFunctions:MumlaService.kt$MumlaService : HumlaServiceOnSharedPreferenceChangeListenerOnActionListenerOnActionListenerIMumlaService</ID>
-    <ID>TooManyFunctions:PublicServerListFragment.kt$PublicServerListFragment : FragmentOnItemClickListenerPublicServerAdapterMenuListenerMenuProvider</ID>
+    <ID>TooManyFunctions:PublicServerListFragment.kt$PublicServerListFragment : FragmentPublicServerAdapterMenuListenerMenuProvider</ID>
     <ID>TooManyFunctions:ZoomImageView.kt$ZoomImageView : AppCompatImageView</ID>
     <ID>UnusedParameter:BoundedBitmapDecoderTest.kt$ArmedBitmapFactory.Companion$data: ByteArray?</ID>
     <ID>UnusedParameter:BoundedBitmapDecoderTest.kt$ArmedBitmapFactory.Companion$length: Int</ID>

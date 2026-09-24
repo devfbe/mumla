@@ -25,21 +25,24 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.widget.GridView
 import androidx.core.view.MenuProvider
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 import se.lublin.mumla.app.showConfirmDialog
 import se.lublin.mumla.app.ServerRequest
 import se.lublin.mumla.app.ServiceViewModel
+import se.lublin.mumla.databinding.FragmentServerListBinding
 import se.lublin.mumla.db.MumlaRepository
 
 /** Displays the favourite servers, and lets the user connect to and edit them. */
+@Suppress("TooManyFunctions") // Fragment, menu and card menu callbacks.
 class FavouriteServerListFragment :
     Fragment(),
     FavouriteServerAdapter.FavouriteServerAdapterMenuListener,
@@ -47,23 +50,37 @@ class FavouriteServerListFragment :
 
     private val serviceModel: ServiceViewModel by activityViewModels()
     private val repository get() = MumlaRepository.get(requireContext())
-    private lateinit var serverGrid: GridView
-    private var serverAdapter: ServerAdapter<Server>? = null
+    private var serverAdapter: FavouriteServerAdapter? = null
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        val view = inflater.inflate(R.layout.fragment_server_list, container, false)
-        serverGrid = view.findViewById(R.id.server_list_grid)
-        serverGrid.setOnItemClickListener { _, _, position, _ ->
-            serverAdapter?.getItem(position)?.let { serviceModel.requestConnect(ServerRequest.Favourite(it)) }
-        }
-        serverGrid.emptyView = view.findViewById(R.id.server_list_grid_empty)
-        registerForContextMenu(serverGrid)
-        return view
-    }
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        FragmentServerListBinding.inflate(inflater, container, false).root
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val binding = FragmentServerListBinding.bind(view)
+        setUpServerGrid(binding.serverListGrid)
+        val adapter = FavouriteServerAdapter(requireContext(), this, viewLifecycleOwner.lifecycleScope) {
+            serviceModel.requestConnect(ServerRequest.Favourite(it))
+        }
+        // As the platform grid's empty view: shown until there are servers to show.
+        adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+            override fun onChanged() = showEmpty()
+            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) = showEmpty()
+            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) = showEmpty()
+
+            fun showEmpty() {
+                binding.serverListGridEmpty.isVisible = adapter.itemCount == 0
+            }
+        })
+        binding.serverListGridEmpty.isVisible = true
+        binding.serverListGrid.adapter = adapter
+        serverAdapter = adapter
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
+    }
+
+    override fun onDestroyView() {
+        serverAdapter = null
+        super.onDestroyView()
     }
 
     override fun onResume() {
@@ -103,18 +120,15 @@ class FavouriteServerListFragment :
 
     override fun deleteServer(server: Server) {
         requireContext().showConfirmDialog(getString(R.string.confirm_delete_server), R.string.delete) {
-            serverAdapter?.remove(server)
+            serverAdapter?.let { adapter -> adapter.submitList(adapter.currentList - server) }
             lifecycleScope.launch { repository.io { removeServer(server) } }
         }
     }
 
     private fun updateServers() {
-        val listener = this
         viewLifecycleOwner.lifecycleScope.launch {
-            val servers = repository.io { getServers() }.toMutableList()
-            val adapter = FavouriteServerAdapter(requireActivity(), servers, listener, lifecycleScope)
-            serverAdapter = adapter
-            serverGrid.adapter = adapter
+            val servers = repository.io { getServers() }
+            serverAdapter?.submitList(servers)
         }
     }
 }

@@ -26,14 +26,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
-import android.widget.AdapterView
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.GridView
-import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.view.MenuProvider
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
@@ -43,12 +41,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 import se.lublin.mumla.app.showConfirmDialog
 import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ServerRequest
 import se.lublin.mumla.app.ServiceViewModel
+import se.lublin.mumla.databinding.DialogServerSearchBinding
+import se.lublin.mumla.databinding.FragmentPublicServerListBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
 import java.util.Locale
@@ -56,14 +55,11 @@ import java.util.Locale
 /** Displays the public servers, which can be sorted, filtered, matched, favourited and joined. */
 class PublicServerListFragment :
     Fragment(),
-    AdapterView.OnItemClickListener,
     PublicServerAdapter.PublicServerAdapterMenuListener,
     MenuProvider {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
-    private var servers: MutableList<PublicServer> = mutableListOf()
-    private var serverGrid: GridView? = null
-    private var serverProgress: ProgressBar? = null
+    private var binding: FragmentPublicServerListBinding? = null
     private var serverAdapter: PublicServerAdapter? = null
     private val pinger = ServerPinger()
 
@@ -71,15 +67,12 @@ class PublicServerListFragment :
     internal var fetcher = PublicServerFetcher()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        val view = inflater.inflate(R.layout.fragment_public_server_list, container, false)
-        serverGrid = view.findViewById<GridView>(R.id.server_list_grid).also { grid ->
-            grid.onItemClickListener = this
-            serverAdapter?.let { grid.adapter = it }
-        }
-        serverProgress = view.findViewById<ProgressBar>(R.id.serverProgress).also {
-            it.visibility = if (serverAdapter == null) View.VISIBLE else View.GONE
-        }
-        return view
+        val binding = FragmentPublicServerListBinding.inflate(inflater, container, false)
+        this.binding = binding
+        setUpServerGrid(binding.serverListGrid)
+        binding.serverListGrid.adapter = serverAdapter
+        binding.serverProgress.isVisible = serverAdapter == null
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -89,8 +82,7 @@ class PublicServerListFragment :
     }
 
     override fun onDestroyView() {
-        serverGrid = null
-        serverProgress = null
+        binding = null
         super.onDestroyView()
     }
 
@@ -114,7 +106,7 @@ class PublicServerListFragment :
         return true
     }
 
-    override fun favouriteServer(server: Server) {
+    override fun favouriteServer(server: PublicServer) {
         val context = requireActivity()
         val settings = Settings.getInstance(context)
         val usernameField = EditText(context).apply { hint = settings.defaultUsername }
@@ -136,18 +128,17 @@ class PublicServerListFragment :
     }
 
     private fun setServers(servers: List<PublicServer>) {
-        this.servers = servers.toMutableList()
-        serverProgress?.visibility = View.GONE
-        val adapter = PublicServerAdapter(requireActivity(), this.servers, this, lifecycleScope)
+        binding?.serverProgress?.isVisible = false
+        val adapter = PublicServerAdapter(requireActivity(), servers, this, lifecycleScope, ::connect)
         serverAdapter = adapter
-        serverGrid?.adapter = adapter
+        binding?.serverListGrid?.adapter = adapter
     }
 
     private fun fillPublicList() {
         if (Settings.getInstance(requireContext()).isTorEnabled) {
             // The download would bypass Tor.
-            serverProgress?.visibility = View.GONE
-            requireView().findViewById<View>(R.id.server_list_tor_notice).visibility = View.VISIBLE
+            binding?.serverProgress?.isVisible = false
+            binding?.serverListTorNotice?.isVisible = true
             return
         }
         viewLifecycleOwner.lifecycleScope.launch {
@@ -170,7 +161,8 @@ class PublicServerListFragment :
 
     /** Looks for an empty, nearby server in [countryCode] (anywhere when null) and offers to join it. */
     private fun findOptimalServer(countryCode: String?) {
-        val candidates = servers.toList()
+        // The servers shown, as filtered and sorted.
+        val candidates = serverAdapter?.shownServers.orEmpty()
         val progressDialog = MaterialAlertDialogBuilder(requireActivity())
             .setMessage(R.string.server_match_progress)
             .setCancelable(true)
@@ -230,9 +222,9 @@ class PublicServerListFragment :
     }
 
     private fun showFilterDialog(adapter: PublicServerAdapter) {
-        val dialogView = LayoutInflater.from(requireActivity()).inflate(R.layout.dialog_server_search, null)
-        val nameText = dialogView.findViewById<EditText>(R.id.server_search_name)
-        val countryText = dialogView.findViewById<EditText>(R.id.server_search_country)
+        val dialog = DialogServerSearchBinding.inflate(layoutInflater)
+        val nameText = dialog.serverSearchName
+        val countryText = dialog.serverSearchCountry
         fun applyFilter() = adapter.filter(
             nameText.text.toString().uppercase(Locale.US),
             countryText.text.toString().uppercase(Locale.US),
@@ -240,7 +232,7 @@ class PublicServerListFragment :
 
         val alertDialog = MaterialAlertDialogBuilder(requireActivity())
             .setTitle(R.string.search)
-            .setView(dialogView)
+            .setView(dialog.root)
             .setPositiveButton(R.string.search) { dialog, _ ->
                 applyFilter()
                 dialog.dismiss()
@@ -261,10 +253,6 @@ class PublicServerListFragment :
             }
         }
         alertDialog.show()
-    }
-
-    override fun onItemClick(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-        serverAdapter?.getItem(position)?.let(::connect)
     }
 
     private fun connect(server: PublicServer) {

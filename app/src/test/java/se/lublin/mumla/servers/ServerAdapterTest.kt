@@ -1,8 +1,10 @@
 package se.lublin.mumla.servers
 
 import android.content.Context
+import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.view.ContextThemeWrapper
@@ -18,6 +20,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.ServerListRowBinding
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -42,21 +45,41 @@ class ServerAdapterTest {
         }
     }
 
-    private fun adapter(servers: MutableList<Server> = mutableListOf(server), pingsAllowed: Boolean = true) =
-        object : ServerAdapter<Server>(
-            context, R.layout.server_list_row, servers, scope, pinger, dispatcher, { pingsAllowed },
-        ) {
-            override val popupMenuResource: Int get() = R.menu.popup_favourite_server
-            override fun onPopupItemClick(server: Server, menuItem: MenuItem) = false
+    private val clicked = mutableListOf<Server>()
+
+    private open inner class TestAdapter(pingsAllowed: (() -> Boolean)?) : ServerAdapter<Server>(
+        context, scope, { clicked += it }, pinger, dispatcher,
+        pingsAllowed ?: { !se.lublin.mumla.Settings.getInstance(context).isTorEnabled },
+    ) {
+        override fun createHolder(inflater: LayoutInflater, parent: ViewGroup): ServerViewHolder {
+            val binding = ServerListRowBinding.inflate(inflater, parent, false)
+            return ServerViewHolder(
+                binding.root, binding.serverRowName, binding.serverRowVersionStatus, binding.serverRowUsercount,
+                binding.serverRowLatency, binding.serverRowPingProgress, binding.serverRowMore,
+            )
         }
+
+        override val popupMenuResource: Int get() = R.menu.popup_favourite_server
+        override fun onPopupItemClick(server: Server, menuItem: MenuItem) = false
+    }
+
+    private fun adapter(servers: List<Server> = listOf(server), pingsAllowed: Boolean = true) =
+        TestAdapter { pingsAllowed }.also { it.submitList(servers) }
+
+    /** Binds the first row into a new holder, as the list does, and returns the row. */
+    private fun ServerAdapter<Server>.bindFirst(): View {
+        val holder = onCreateViewHolder(parent, 0)
+        onBindViewHolder(holder, 0)
+        return holder.itemView
+    }
 
     @Test
     fun aServerIsPingedOnceNoMatterHowOftenItsRowIsBound() {
         val adapter = adapter()
 
-        repeat(3) { adapter.getView(0, null, parent) }
+        repeat(3) { adapter.bindFirst() }
         scope.advanceUntilIdle()
-        repeat(3) { adapter.getView(0, null, parent) }
+        repeat(3) { adapter.bindFirst() }
         scope.advanceUntilIdle()
 
         assertThat(sockets.get()).isEqualTo(1)
@@ -65,10 +88,10 @@ class ServerAdapterTest {
     @Test
     fun aFailedPingShowsTheServerOffline() {
         val adapter = adapter()
-        adapter.getView(0, null, parent)
+        adapter.bindFirst()
         scope.advanceUntilIdle()
 
-        val row = adapter.getView(0, null, parent)
+        val row = adapter.bindFirst()
 
         val status = row.findViewById<TextView>(R.id.server_row_version_status)
         assertThat(status.visibility).isEqualTo(View.VISIBLE)
@@ -80,7 +103,7 @@ class ServerAdapterTest {
         val adapter = adapter()
         scope.cancel()
 
-        adapter.getView(0, null, parent)
+        adapter.bindFirst()
         scope.advanceUntilIdle()
 
         assertThat(sockets.get()).isEqualTo(0)
@@ -90,7 +113,7 @@ class ServerAdapterTest {
     fun withPingsDisallowedNothingIsSentAndTheStatusIsADash() {
         val adapter = adapter(pingsAllowed = false)
 
-        val row = adapter.getView(0, null, parent)
+        val row = adapter.bindFirst()
         scope.advanceUntilIdle()
 
         assertThat(sockets.get()).isEqualTo(0)
@@ -104,16 +127,33 @@ class ServerAdapterTest {
     fun byDefaultTorDisallowsPings() {
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
         prefs.edit().putBoolean("useTor", true).commit()
-        val adapter = object : ServerAdapter<Server>(
-            context, R.layout.server_list_row, mutableListOf(server), scope, pinger, dispatcher,
-        ) {
-            override val popupMenuResource: Int get() = R.menu.popup_favourite_server
-            override fun onPopupItemClick(server: Server, menuItem: MenuItem) = false
-        }
+        val adapter = TestAdapter(pingsAllowed = null).also { it.submitList(listOf(server)) }
 
-        adapter.getView(0, null, parent)
+        adapter.bindFirst()
         scope.advanceUntilIdle()
 
         assertThat(sockets.get()).isEqualTo(0)
+    }
+
+    @Test
+    fun aTappedCardGoesToTheClickHandler() {
+        val adapter = adapter(pingsAllowed = false)
+
+        adapter.bindFirst().performClick()
+
+        assertThat(clicked).containsExactly(server)
+    }
+
+    @Test
+    fun serversAtOneAddressShareOnePing() {
+        val twin = Server(2, "twin", server.host, server.port, "other", "")
+        val adapter = adapter(listOf(server, twin))
+
+        adapter.bindFirst()
+        val holder = adapter.onCreateViewHolder(parent, 0)
+        adapter.onBindViewHolder(holder, 1)
+        scope.advanceUntilIdle()
+
+        assertThat(sockets.get()).isEqualTo(1)
     }
 }

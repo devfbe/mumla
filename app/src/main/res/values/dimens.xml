@@ -28,5 +28,8 @@
     <!-- Chat -->
     <dimen name="chat_thumbnail_max">240dp</dimen>
     <dimen name="chat_item_spacing">4dp</dimen>
+    <!-- Server cards: as many columns of this width as fit, this far apart. -->
+    <dimen name="server_grid_column_width">320dp</dimen>
+    <dimen name="server_grid_spacing">10dp</dimen>
 
 </resources>
