@@ -46,6 +46,17 @@ class MumbleVersionTest {
     }
 
     @Test
+    fun `the v2 version of a Version message prefers v2, converts v1 and is 0 when unknown`() {
+        val both = Mumble.Version.newBuilder().setVersionV1(0x010400).setVersionV2(MumbleVersion.v2(1, 5, 634)).build()
+        assertThat(MumbleVersion.v2Of(both)).isEqualTo(MumbleVersion.v2(1, 5, 634))
+
+        val legacyOnly = Mumble.Version.newBuilder().setVersionV1(0x010305).build()
+        assertThat(MumbleVersion.v2Of(legacyOnly)).isEqualTo(MumbleVersion.v2(1, 3, 5))
+
+        assertThat(MumbleVersion.v2Of(Mumble.Version.getDefaultInstance())).isEqualTo(0L)
+    }
+
+    @Test
     fun `the advertised version stays below the protobuf UDP format`() {
         assertThat(MumbleVersion.CLIENT_V2).isLessThan(MumbleVersion.v2(1, 5, 0))
         assertThat(MumbleVersion.CLIENT_LEGACY).isEqualTo(MumbleVersion.toLegacy(MumbleVersion.CLIENT_V2))

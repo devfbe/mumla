@@ -59,6 +59,13 @@ object MumbleVersion {
         else -> 0
     }
 
+    /** The version in [msg] in the v2 format, preferring v2 when present; 0 if unknown. */
+    fun v2Of(msg: Mumble.Version): Long = when {
+        msg.hasVersionV2() -> msg.versionV2
+        msg.hasVersionV1() -> fromLegacy(msg.versionV1)
+        else -> 0L
+    }
+
     /** The version in [msg] as "major.minor.patch", preferring v2 when present; null if unknown. */
     fun displayOf(msg: Mumble.Version): String? {
         val v2 = when {

@@ -305,7 +305,7 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     private fun onUdpPing(data: ByteArray) {
-        val timestamp = UdpPing.decodeTimestamp(data) ?: return
+        val timestamp = UdpPing.decodeTimestamp(UdpProtocol.LEGACY, data) ?: return
         val now = elapsed
         udpLatency = now - timestamp
         udpPingStats.add(udpLatency / MICROS_PER_MILLI)
@@ -316,7 +316,7 @@ class HumlaConnection @JvmOverloads constructor(
         // In microseconds
         val t = elapsed
         if (!shouldForceTCP()) {
-            val ping = UdpPing.encode(t)
+            val ping = UdpPing.encode(UdpProtocol.LEGACY, t)
             sendUDPMessage(ping, ping.size, true)
             udpHealth.onUdpPingSent(t)
         }
