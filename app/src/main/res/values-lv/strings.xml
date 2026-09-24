@@ -29,4 +29,16 @@
     <string name="server_match_expand_country">Nevarēja atrast optimālo serveri jūsu valstī. Vai meklēt pa visu pasauli?</string>
     <string name="country">Valsts</string>
     <string name="search_country">Valsts</string>
+    <string name="connection_lost_reconnecting">Savienojums zaudēts – atkārtoti savienojas…</string>
+    <string name="foreground_start_failed">Neizdevās uzturēt Mumla darbību fonā. Balss var apstāties, kad ekrāns izslēdzas.</string>
+    <string name="bluetooth_perm_denied">Bluetooth austiņas paliek ieslēgtas. Bez atļaujas „Tuvumā esošās ierīces” dažas ierīces atteiksies uz tām novirzīt skaņu.</string>
+    <string name="chat_image_share">Kopīgot attēlu</string>
+    <string name="chat_image_close">Aizvērt</string>
+    <string name="chat_image_load_failed">Attēlu neizdevās ielādēt</string>
+    <string name="chat_image_viewer_image">Attēls</string>
+    <string name="chat_image_open">Atvērt attēlu</string>
+    <string name="chat_image_placeholder">[attēls]</string>
+    <string name="permission_denied_storage">Atļauja lasīt krātuvi liegta</string>
+    <string name="image_decode_failed">Neizdevās nolasīt šo attēlu</string>
+    <string name="image_too_large">Attēls ir pārāk liels šim serverim</string>
 </resources>

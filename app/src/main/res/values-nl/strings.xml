@@ -188,4 +188,16 @@
 \n
 \nOpnieuw verbinden…</string>
     <string name="chat_message_tts_short_link">(Link naar %1$s)</string>
+    <string name="connection_lost_reconnecting">Verbinding verbroken – opnieuw verbinden…</string>
+    <string name="foreground_start_failed">Mumla kon niet actief blijven op de achtergrond. De spraak kan stoppen wanneer het scherm uitgaat.</string>
+    <string name="bluetooth_perm_denied">De Bluetooth-headset blijft ingeschakeld. Zonder de toestemming Apparaten in de buurt weigeren sommige toestellen audio ernaartoe te sturen.</string>
+    <string name="chat_image_share">Afbeelding delen</string>
+    <string name="chat_image_close">Sluiten</string>
+    <string name="chat_image_load_failed">Afbeelding kon niet worden geladen</string>
+    <string name="chat_image_viewer_image">Afbeelding</string>
+    <string name="chat_image_open">Afbeelding openen</string>
+    <string name="chat_image_placeholder">[afbeelding]</string>
+    <string name="permission_denied_storage">Toestemming om opslag te lezen geweigerd</string>
+    <string name="image_decode_failed">Kon die afbeelding niet lezen</string>
+    <string name="image_too_large">Afbeelding is te groot voor deze server</string>
 </resources>

@@ -200,4 +200,16 @@
     <string name="drawer_open">Åpne skuff</string>
     <string name="image_confirm_send">Send dette bildet\?</string>
     <string name="grant_perm_notifications">Innvilg tilgang til å sende merknader.</string>
+    <string name="connection_lost_reconnecting">Tilkoblingen brutt – kobler til igjen…</string>
+    <string name="foreground_start_failed">Kunne ikke holde Mumla kjørende i bakgrunnen. Talen kan stoppe når skjermen slås av.</string>
+    <string name="bluetooth_perm_denied">Bluetooth-hodesettet forblir på. Uten tilgangen Enheter i nærheten nekter noen enheter å sende lyd til det.</string>
+    <string name="chat_image_share">Del bilde</string>
+    <string name="chat_image_close">Lukk</string>
+    <string name="chat_image_load_failed">Kunne ikke laste inn bildet</string>
+    <string name="chat_image_viewer_image">Bilde</string>
+    <string name="chat_image_open">Åpne bilde</string>
+    <string name="chat_image_placeholder">[bilde]</string>
+    <string name="permission_denied_storage">Tilgang til å lese lagring nektet</string>
+    <string name="image_decode_failed">Kunne ikke lese det bildet</string>
+    <string name="image_too_large">Bildet er for stort for denne tjeneren</string>
 </resources>

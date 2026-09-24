@@ -152,4 +152,16 @@
     <plurals name="search_channel_users">
         <item quantity="other">%d ユーザー</item>
     </plurals>
+    <string name="connection_lost_reconnecting">接続が切れました – 再接続中…</string>
+    <string name="foreground_start_failed">Mumla をバックグラウンドで実行し続けることができませんでした。画面がオフになると音声が停止する場合があります。</string>
+    <string name="bluetooth_perm_denied">Bluetooth ヘッドセットはオンのままです。「付近のデバイス」の権限がない場合、一部のデバイスではヘッドセットに音声がルーティングされません。</string>
+    <string name="chat_image_share">画像を共有</string>
+    <string name="chat_image_close">閉じる</string>
+    <string name="chat_image_load_failed">画像を読み込めませんでした</string>
+    <string name="chat_image_viewer_image">画像</string>
+    <string name="chat_image_open">画像を開く</string>
+    <string name="chat_image_placeholder">[画像]</string>
+    <string name="permission_denied_storage">ストレージの読み取り権限が拒否されました</string>
+    <string name="image_decode_failed">その画像を読み込めませんでした</string>
+    <string name="image_too_large">画像がこのサーバーには大きすぎます</string>
 </resources>

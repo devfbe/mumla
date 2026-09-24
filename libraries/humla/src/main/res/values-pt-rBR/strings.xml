@@ -10,4 +10,15 @@
     <string name="chat_notify_muted">Silenciado.</string>
     <string name="server">Servidor</string>
     <string name="perm_denied">Permissão negada.</string>
+    <string name="udp_warning_unavailable">Não é possível enviar ou receber pacotes UDP do servidor. Mudando para o modo TCP.</string>
+    <string name="udp_warning_send_failed">Não é possível enviar pacotes UDP para o servidor. Mudando para o modo TCP.</string>
+    <string name="udp_warning_receive_failed">Não é possível receber pacotes UDP do servidor. Mudando para o modo TCP.</string>
+    <string name="udp_warning_ping_timeout">Nenhuma resposta de ping UDP do servidor há 15 segundos. Mudando para o modo TCP.</string>
+    <string name="udp_warning_restored">Os pacotes UDP podem ser enviados e recebidos do servidor novamente. Voltando para o modo UDP.</string>
+    <string name="reconnect_gave_up">Não foi possível reconectar ao servidor. Desistindo.</string>
+    <string name="sco_unavailable">Nenhum fone de ouvido Bluetooth disponível. O áudio continua no telefone.</string>
+    <string name="bluetooth_sco_denied">Este dispositivo se recusou a direcionar o áudio para um fone de ouvido Bluetooth. Conceda a permissão Dispositivos próximos nas configurações do sistema.</string>
+    <string name="no_session_user">O servidor não enviou o próprio usuário desta sessão; o microfone continua desligado.</string>
+    <string name="no_target_server">Nenhum servidor foi configurado para esta conexão.</string>
+    <string name="udp_warning_thread_failed">A conexão UDP falhou. A voz é transmitida por TCP enquanto o UDP é tentado novamente.</string>
 </resources>

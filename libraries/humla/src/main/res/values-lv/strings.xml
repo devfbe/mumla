@@ -4,4 +4,15 @@
     <string name="audio_max_bandwidth">Maksimālais servera tīkla joslas platums ir tikai %1$d kbit/s. Skaņas audio kvalitāte iestatīta uz %2$d kbit/s (%3$d ms).</string>
     <string name="deny_reason_invalid_username">Nederīgs lietotājvārds.</string>
     <string name="deny_reason_channel_full">Kanāls ir pilns.</string>
+    <string name="udp_warning_unavailable">UDP paketes nevar nosūtīt uz serveri vai saņemt no tā. Pārslēdzas uz TCP režīmu.</string>
+    <string name="udp_warning_send_failed">UDP paketes nevar nosūtīt uz serveri. Pārslēdzas uz TCP režīmu.</string>
+    <string name="udp_warning_receive_failed">UDP paketes nevar saņemt no servera. Pārslēdzas uz TCP režīmu.</string>
+    <string name="udp_warning_ping_timeout">Serveris 15 sekundes nav atbildējis uz UDP ping. Pārslēdzas uz TCP režīmu.</string>
+    <string name="udp_warning_restored">UDP paketes atkal var nosūtīt uz serveri un saņemt no tā. Pārslēdzas atpakaļ uz UDP režīmu.</string>
+    <string name="reconnect_gave_up">Neizdevās atkārtoti savienoties ar serveri. Mēģinājumi pārtraukti.</string>
+    <string name="sco_unavailable">Nav pieejamu Bluetooth austiņu. Skaņa paliek tālrunī.</string>
+    <string name="bluetooth_sco_denied">Šī ierīce atteicās novirzīt skaņu uz Bluetooth austiņām. Piešķiriet atļauju „Tuvumā esošās ierīces” sistēmas iestatījumos.</string>
+    <string name="no_session_user">Serveris neatsūtīja šīs sesijas lietotāju; mikrofons paliek izslēgts.</string>
+    <string name="no_target_server">Šim savienojumam nav konfigurēts serveris.</string>
+    <string name="udp_warning_thread_failed">UDP savienojums neizdevās. Balss tiek tunelēta caur TCP, kamēr UDP tiek mēģināts atkārtoti.</string>
 </resources>
