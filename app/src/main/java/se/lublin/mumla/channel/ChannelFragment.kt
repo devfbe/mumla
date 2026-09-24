@@ -38,6 +38,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.preference.PreferenceManager
 import androidx.viewpager.widget.PagerTabStrip
 import androidx.viewpager.widget.ViewPager
+import com.google.android.material.color.MaterialColors
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
@@ -140,12 +141,8 @@ class ChannelFragment :
     }
 
     private fun styleTabStrip(tabStrip: PagerTabStrip) {
-        val attrs = requireActivity().obtainStyledAttributes(
-            intArrayOf(android.R.attr.colorPrimary, android.R.attr.textColorPrimaryInverse),
-        )
-        val background = attrs.getColor(0, -1)
-        val text = attrs.getColor(1, -1)
-        attrs.recycle()
+        val background = MaterialColors.getColor(requireActivity(), android.R.attr.colorPrimary, -1)
+        val text = MaterialColors.getColor(requireActivity(), android.R.attr.textColorPrimaryInverse, -1)
         tabStrip.setTextColor(text)
         tabStrip.tabIndicatorColor = text
         tabStrip.setBackgroundColor(background)
