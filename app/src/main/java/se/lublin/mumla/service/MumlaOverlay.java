@@ -36,10 +36,7 @@ import se.lublin.mumla.R;
 import se.lublin.mumla.Settings;
 import se.lublin.mumla.channel.ChannelAdapter;
 
-/**
- * An onscreen interactive overlay displaying the users in the current channel.
- * Created by andrew on 26/09/13.
- */
+/** An onscreen interactive overlay displaying the users in the current channel. */
 public class MumlaOverlay {
     private static final String TAG = MumlaOverlay.class.getName();
 
@@ -61,12 +58,7 @@ public class MumlaOverlay {
 
         @Override
         public void onUserRemoved(IUser user, String reason) {
-            // The adapter holds a snapshot of the channel's users and refreshes it here; without
-            // this, a user who disconnects or is kicked while the overlay is open leaves a row
-            // standing in it until some other event happens to refresh the list. Unconditional,
-            // like onUserTalkStateUpdated above: by the time a user is removed the model may no
-            // longer be able to say which channel they were in, and re-reading one channel's user
-            // list is what the adapter does anyway.
+            // Unconditional: the model may no longer know which channel a removed user was in.
             mChannelAdapter.notifyDataSetChanged();
         }
 
@@ -94,13 +86,11 @@ public class MumlaOverlay {
     private ListView mOverlayList;
     private ChannelAdapter mChannelAdapter;
     private ImageView mTalkButton;
-//    private ImageView mToggleButton;
     private ImageView mCloseButton;
     private ImageView mDragButton;
     private View mTitleView;
     private WindowManager.LayoutParams mOverlayParams;
     private boolean mShown = false;
-//    private boolean mShowChat = false;
 
     private MumlaService mService;
 
@@ -110,7 +100,6 @@ public class MumlaOverlay {
         mTalkButton = (ImageView) mOverlayView.findViewById(R.id.overlay_talk);
         mDragButton = (ImageView) mOverlayView.findViewById(R.id.overlay_drag);
         mCloseButton = (ImageView) mOverlayView.findViewById(R.id.overlay_close);
-//        mToggleButton = (ImageView) mOverlayView.findViewById(R.id.overlay_mode_toggle);
         mTitleView = mOverlayView.findViewById(R.id.overlay_title);
         mOverlayList = (ListView) mOverlayView.findViewById(R.id.overlay_list);
 
@@ -161,22 +150,6 @@ public class MumlaOverlay {
                 return false;
             }
         });
-
-        /*
-        mToggleButton.setOnClickListener(new View.OnClickListener() {
-
-            @Override
-            public void onClick(View v) {
-                mShowChat = !mShowChat;
-                // TODO implement chat
-                if(mShowChat) {
-
-                } else {
-
-                }
-            }
-        });
-        */
 
         mTalkButton.setOnTouchListener(new View.OnTouchListener() {
             @Override

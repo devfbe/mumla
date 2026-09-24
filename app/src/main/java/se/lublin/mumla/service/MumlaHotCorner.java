@@ -32,10 +32,7 @@ import androidx.core.content.ContextCompat;
 
 import se.lublin.mumla.R;
 
-/**
- * A hot corner in an area of the screen specified by {@link MumlaHotCorner#getGravity()}.
- * Created by andrew on 07/06/14.
- */
+/** A hot corner in an area of the screen specified by {@link MumlaHotCorner#getGravity()}. */
 public class MumlaHotCorner implements View.OnTouchListener {
     private WindowManager mWindowManager;
     private Context mContext;

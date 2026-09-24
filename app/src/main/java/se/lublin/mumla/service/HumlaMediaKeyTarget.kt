@@ -18,9 +18,7 @@ class HumlaMediaKeyTarget(private val service: IHumlaService) : MediaKeyTarget {
     }
 
     override fun stopTalking() {
-        // HumlaService.HumlaSession() throws under exactly the condition that makes isConnected
-        // false, and the callers of this are lifecycle events that may well arrive after the
-        // connection is already gone.
+        // HumlaSession() throws once disconnected, and lifecycle callers may arrive after that.
         if (!service.isConnected) return
         service.HumlaSession().setTalkingState(false)
     }

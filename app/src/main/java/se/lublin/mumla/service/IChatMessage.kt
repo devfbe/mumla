@@ -28,7 +28,7 @@ interface IChatMessage {
     /** Unix timestamp in milliseconds when the message was received. */
     val receivedTime: Long
 
-    /** Parsed [body], filled in once by the chat UI (stream D) and cached here; null until parsed. */
+    /** Parsed [body], filled in once by the chat UI and cached here; null until parsed. */
     var content: ChatContent?
 
     /** Calls the visitor with the concrete message type. */

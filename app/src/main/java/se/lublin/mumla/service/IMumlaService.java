@@ -4,9 +4,7 @@ import java.util.List;
 
 import se.lublin.humla.IHumlaService;
 
-/**
- * Created by andrew on 28/02/17.
- */
+/** Mumla's additions to {@link IHumlaService}. */
 public interface IMumlaService extends IHumlaService {
     boolean isOverlayShown();
 

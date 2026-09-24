@@ -25,24 +25,13 @@ import se.lublin.mumla.Settings
 
 /**
  * Turns one changed preference key into the extras the audio pipeline is reconfigured with.
+ * `MumlaServiceAudioPreferencesTest` checks every key in `settings_audio.xml` is in [KEYS] or
+ * explicitly exempt, so a new switch cannot be left unwired.
  *
- * It is a function rather than another arm of `MumlaService`'s `switch` so that the question *"is
- * this switch on the settings screen connected to anything?"* has an answer a test can read.
- * `MumlaServiceAudioPreferencesTest` enumerates the keys straight out of `res/xml/settings_audio.xml`
- * and demands that each is either in [KEYS] or named as an exemption -- which is the only shape
- * that catches the next switch somebody adds and forgets to wire, rather than the ones already in
- * the diff.
- *
- * @return an empty bundle for a key this mapper does not own. `MumlaService` keeps the cases whose
- *   effect is not an extra (text to speech, the hot corner, the PTT sound, Bluetooth, and the four
- *   keys that force a reconnect).
+ * @return an empty bundle for a key this mapper does not own.
  */
 object AudioPreferenceExtras {
-    /**
-     * Every voice-gate preference produces the same extra: the whole [VadConfigBundle]. One key per
-     * slider would be one `configureExtras` per slider, and before the live/rebuild split each of
-     * those tore down and rebuilt the capture chain -- 110 ms with the microphone dead.
-     */
+    /** Every voice-gate key produces the whole [VadConfigBundle], so one change is one reconfigure. */
     @JvmField
     val VAD_KEYS: Set<String> = setOf(
         Settings.PREF_VAD_MODE,

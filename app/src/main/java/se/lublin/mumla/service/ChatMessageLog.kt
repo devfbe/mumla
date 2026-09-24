@@ -17,18 +17,11 @@
 package se.lublin.mumla.service
 
 /**
- * The service's in-memory chat history, bounded at [capacity] entries: adding entry
- * [capacity] + 1 drops the oldest one (spec D5: 500 entries, oldest dropped; stream A owns the log
- * because it owns MumlaService).
+ * The service's in-memory chat history, bounded at [capacity] entries (oldest dropped).
+ * [snapshot] copies the list, never the messages: ChatAdapter's diff compares by identity.
  *
- * The instances handed in are the instances handed out: [snapshot] copies the list, never the
- * messages, because ChatAdapter's diff compares by identity.
- *
- * **Confined to the main thread, deliberately without a lock.** Every writer runs there -- the
- * observer callbacks arrive through HumlaCallbacks, which delivers on the main looper whichever
- * thread raised them, and `sendUserTextMessage`/`sendChannelTextMessage` are UI calls -- and the one
- * reader is the chat fragment binding to the service. A lock here would have no observable a test
- * could name (spec 4.04). Whoever adds a writer on another thread adds the lock with it.
+ * Main thread only, without a lock: observer callbacks arrive on the main looper and the send
+ * calls are UI calls. Add a lock together with any writer on another thread.
  */
 class ChatMessageLog(private val capacity: Int = MAX_ENTRIES) {
     private val entries = ArrayDeque<IChatMessage>()
@@ -52,7 +45,6 @@ class ChatMessageLog(private val capacity: Int = MAX_ENTRIES) {
     }
 
     companion object {
-        /** Spec D5: 500 entries, oldest dropped. */
         const val MAX_ENTRIES = 500
     }
 }
