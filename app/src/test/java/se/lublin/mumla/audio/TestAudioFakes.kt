@@ -30,11 +30,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * A microphone that hands out a scripted list of frames and then blocks, like the real one does
- * between frames.
- *
- * Every fake here can produce **more than one value** on every input the production file branches
- * on -- the sample rate, the frame contents, the length -- because a fake that answers a constant
- * closes a whole dimension of the enumeration without anybody noticing (spec 4.04).
+ * between frames. Varies sample rate, contents and length so no input dimension is constant.
  */
 class TestCaptureSource(
     frames: List<ShortArray>,

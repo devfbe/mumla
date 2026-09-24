@@ -29,10 +29,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.Server
 
-/**
- * Round trips through every query of the database, written against the Java class before its
- * conversion to Kotlin: whatever these read back, the conversion has to read back too.
- */
+/** Round trips through every query of the database. */
 @RunWith(RobolectricTestRunner::class)
 class MumlaSQLiteDatabaseTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
@@ -143,10 +140,8 @@ class MumlaSQLiteDatabaseTest {
     }
 
     /**
-     * Pre-existing defect, characterized rather than fixed: markCommentSeen stores the hash as a
-     * BLOB and isCommentSeen looks it up as TEXT (`new String(commentHash)`), and in SQLite a BLOB
-     * never equals a TEXT. A marked comment therefore never reads as seen. Nothing in the app calls
-     * either method, so no user sees it.
+     * Known defect, characterized: markCommentSeen stores the hash as a BLOB and isCommentSeen
+     * looks it up as TEXT, which never matches in SQLite. Nothing in the app calls either method.
      */
     @Test
     fun aMarkedCommentNeverReadsAsSeen() {
@@ -181,12 +176,7 @@ class MumlaSQLiteDatabaseTest {
         assertThat(tables()).containsAtLeastElementsIn(added)
     }
 
-    /**
-     * Every query closes its cursor, on every path. The device log showed "A resource failed to
-     * call AbstractCursor.close" from the finalizer: isChannelPinned -- asked once per channel
-     * while the list renders -- and the local mute and ignore lists never closed theirs, and
-     * getCertificateData left it open when the id had no row.
-     */
+    /** Every query closes its cursor, on every path (including a missing certificate id). */
     @Test
     fun everyQueryClosesItsCursor() {
         val opened = mutableListOf<Cursor>()

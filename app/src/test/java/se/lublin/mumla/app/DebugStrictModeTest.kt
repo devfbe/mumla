@@ -26,9 +26,8 @@ import org.robolectric.RobolectricTestRunner
 import se.lublin.mumla.BuildConfig
 
 /**
- * A debug build reports a leaked Closeable with the stack trace of where it was opened. Without
- * this the finalizer only logs "A resource failed to call close" -- no trace, so no way to tell
- * which of the app's streams, cursors or sockets it was.
+ * A debug build reports a leaked Closeable with the stack trace of where it was opened, instead
+ * of the finalizer's bare "A resource failed to call close".
  */
 @RunWith(RobolectricTestRunner::class)
 class DebugStrictModeTest {
@@ -48,8 +47,7 @@ class DebugStrictModeTest {
 
     @Test
     fun theDebugApplicationLogsLeakedClosables() {
-        // Robolectric has created MumlaApplication for this test, and unit tests run the debug
-        // variant -- so this is the wiring, not only the helper.
+        // Unit tests run the debug variant, so this checks the MumlaApplication wiring too.
         assertThat(BuildConfig.DEBUG).isTrue()
 
         val mask = mask(StrictMode.getVmPolicy())

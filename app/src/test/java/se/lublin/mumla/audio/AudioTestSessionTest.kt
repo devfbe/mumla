@@ -150,9 +150,8 @@ class AudioTestSessionTest {
     }
 
     /**
-     * Spec B1: the preprocessor runs in front of the detector, so the number the user calibrates
-     * against is the denoised one. A meter that measured the raw frame would show a level the gate
-     * never sees, which is the migration this screen exists to explain.
+     * The preprocessor runs in front of the detector, so the meter shows the denoised level the
+     * gate sees.
      */
     @Test
     fun `the meter measures the frame the gate measures, after the preprocessor`() {
@@ -311,7 +310,7 @@ class AudioTestSessionTest {
         assertThat(request.echo).isEqualTo(EchoCancellationMode.WEBRTC)
     }
 
-    /** Spec B6: the preview must route capture the same way the service will, or it lies. */
+    /** The preview must route capture the same way the service will. */
     @Test
     fun `an effect that needs communication mode sets and restores the audio manager mode`() {
         val s = session(
@@ -356,10 +355,7 @@ class AudioTestSessionTest {
         assertThat(built).containsExactly(16000 to 48000)
     }
 
-    /**
-     * A recorder that is open and a session that never started is a microphone taken for the life
-     * of the process. Measured by the fake: `release` has to have been called.
-     */
+    /** An open recorder whose session never started must still be released. */
     @Test
     fun `a failure after the recorder is open still releases it`() {
         val source = TestCaptureSource(emptyList())
