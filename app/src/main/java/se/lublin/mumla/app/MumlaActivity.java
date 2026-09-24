@@ -356,7 +356,7 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
                 DialogFragment fragment = ServerEditFragment.createServerEditDialog(
                         MumlaActivity.this, server, ServerEditFragment.Action.CONNECT_ACTION, true);
                 fragment.show(getSupportFragmentManager(), "url_edit");
-            } catch (MalformedURLException e) {
+            } catch (MalformedURLException | NumberFormatException e) {
                 Toast.makeText(this, getString(R.string.mumble_url_parse_failed), Toast.LENGTH_LONG).show();
                 e.printStackTrace();
             }

@@ -100,4 +100,30 @@ public class URLParserTest extends TestCase {
         }
     }
 
+    public void testPortOutOfRangeIsMalformed() {
+        for (String url : new String[] {
+                "mumble://server.com:0/",
+                "mumble://server.com:65536/",
+                "mumble://server.com:99999999999999999999/"}) {
+            try {
+                MumbleURLParser.parseURL(url);
+                fail("Parsed out-of-range port: " + url);
+            } catch (MalformedURLException expected) {
+                // expected
+            }
+        }
+    }
+
+    public void testHighestPortIsAccepted() throws MalformedURLException {
+        assertEquals(65535, MumbleURLParser.parseURL("mumble://server.com:65535/").getPort());
+    }
+
+    public void testNullIsMalformed() {
+        try {
+            MumbleURLParser.parseURL(null);
+            fail("Parsed null");
+        } catch (MalformedURLException expected) {
+            // expected
+        }
+    }
 }

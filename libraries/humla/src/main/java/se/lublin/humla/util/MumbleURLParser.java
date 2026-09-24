@@ -37,19 +37,35 @@ public class MumbleURLParser {
      * Parses the passed Mumble URL into a Server object.
      * @param url A URL with the Mumble scheme.
      * @return A server with the data specified in the Mumble URL.
-     * @throws MalformedURLException if the URL cannot be parsed.
+     * @throws MalformedURLException if the URL is null, cannot be parsed or has a port outside 1..65535.
      */
     public static Server parseURL(String url) throws MalformedURLException {
+        if (url == null) {
+            throw new MalformedURLException("null URL");
+        }
         Matcher matcher = URL_PATTERN.matcher(url);
         if(matcher.find()) {
             String username = matcher.group(2);
             String password = matcher.group(4);
             String host = matcher.group(5);
             String portString = matcher.group(7);
-            int port = portString == null ? Constants.DEFAULT_PORT : Integer.parseInt(portString);
+            int port = portString == null ? Constants.DEFAULT_PORT : parsePort(portString);
             return new Server(-1, null, host, port, username, password);
         } else {
             throw new MalformedURLException();
         }
+    }
+
+    private static int parsePort(String portString) throws MalformedURLException {
+        final int port;
+        try {
+            port = Integer.parseInt(portString);
+        } catch (NumberFormatException e) {
+            throw new MalformedURLException("Invalid port: " + portString);
+        }
+        if (port < 1 || port > 65535) {
+            throw new MalformedURLException("Port out of range: " + port);
+        }
+        return port;
     }
 }
