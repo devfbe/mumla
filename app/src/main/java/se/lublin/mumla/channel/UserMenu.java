@@ -39,7 +39,7 @@ import se.lublin.humla.net.Permissions;
 import se.lublin.mumla.R;
 import se.lublin.mumla.channel.comment.UserCommentFragment;
 import se.lublin.mumla.service.MumlaService;
-import se.lublin.mumla.util.ModelUtils;
+import se.lublin.mumla.util.ChannelTreeKt;
 
 public class UserMenu implements PermissionsPopupMenu.IOnMenuPrepareListener, PopupMenu.OnMenuItemClickListener {
     private static final String TAG = UserMenu.class.getName();
@@ -173,7 +173,7 @@ public class UserMenu implements PermissionsPopupMenu.IOnMenuPrepareListener, Po
     }
 
     private void showChannelMoveDialog() {
-        final List<IChannel> channels = ModelUtils.getChannelList(mService.getRootChannel());
+        final List<IChannel> channels = ChannelTreeKt.flattenChannels(mService.getRootChannel());
         final CharSequence[] channelNames = new CharSequence[channels.size()];
         for (int i = 0; i < channels.size(); i++) {
             channelNames[i] = channels.get(i).getName();

@@ -1,7 +1,7 @@
 package se.lublin.mumla.preference;
 
 import static java.util.Objects.requireNonNull;
-import static se.lublin.mumla.app.DialogUtils.showAllNewsDialog;
+import static se.lublin.mumla.app.DialogUtilsKt.showAllNewsDialog;
 
 import android.os.Bundle;
 import android.widget.Toast;

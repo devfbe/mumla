@@ -14,23 +14,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+package se.lublin.mumla.db
 
-package se.lublin.mumla.preference;
-
-import android.os.Bundle;
-import android.widget.Toast;
-
-import androidx.appcompat.app.AppCompatActivity;
-
-import se.lublin.mumla.R;
-import se.lublin.mumla.util.MumlaTrustStore;
-
-public class ServerCertificateClearActivity extends AppCompatActivity {
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        MumlaTrustStore.clearTrustStore(this);
-        Toast.makeText(this, R.string.trust_cleared, Toast.LENGTH_LONG).show();
-        finish();
-    }
+/** A stored client certificate: its database id and user-readable name. */
+data class DatabaseCertificate(val id: Long, val name: String) {
+    override fun toString(): String = name
 }

@@ -68,7 +68,7 @@ class MumlaSQLiteDatabaseSecretsTest {
         db.addAccessToken(server.id, "tok")
         val cert = db.addCertificate("me.p12", p12)
 
-        assertThat(db.servers.single().password).isEqualTo("hunter2")
+        assertThat(db.getServers().single().password).isEqualTo("hunter2")
         assertThat(db.getAccessTokens(server.id)).containsExactly("tok")
         assertThat(db.getCertificateData(cert.id)).isEqualTo(p12)
 
@@ -83,7 +83,7 @@ class MumlaSQLiteDatabaseSecretsTest {
     fun aNullPasswordStaysNull() {
         val db = open()
         db.addServer(Server(-1, "s", "s.example", 64738, "me", null))
-        assertThat(db.servers.single().password).isNull()
+        assertThat(db.getServers().single().password).isNull()
     }
 
     @Test
@@ -110,7 +110,7 @@ class MumlaSQLiteDatabaseSecretsTest {
         w.insert("tokens", null, ContentValues().apply { put("server", 1); put("value", "oldtok") })
         val id = w.insert("certificates", null, ContentValues().apply { put("name", "old.p12"); put("data", p12) })
 
-        assertThat(db.servers.single().password).isEqualTo("legacy")
+        assertThat(db.getServers().single().password).isEqualTo("legacy")
         assertThat(db.getAccessTokens(1)).containsExactly("oldtok")
         assertThat(db.getCertificateData(id)).isEqualTo(p12)
         db.removeAccessToken(1, "oldtok")
@@ -143,9 +143,9 @@ class MumlaSQLiteDatabaseSecretsTest {
 
         val db = open()
 
-        assertThat(db.servers.map { it.password }).containsExactly("legacy", null)
+        assertThat(db.getServers().map { it.password }).containsExactly("legacy", null)
         assertThat(db.getAccessTokens(1)).containsExactly("oldtok")
-        assertThat(db.getCertificateData(db.certificates.single().id)).isEqualTo(p12)
+        assertThat(db.getCertificateData(db.getCertificates().single().id)).isEqualTo(p12)
         assertThat(raw("SELECT password FROM server WHERE password IS NOT NULL").map { SecretCodec.isSealed(it as String) })
             .containsExactly(true)
         assertThat(SecretCodec.isSealed(raw("SELECT value FROM tokens").single() as String)).isTrue()
@@ -162,10 +162,10 @@ class MumlaSQLiteDatabaseSecretsTest {
 
         val elsewhere = open(FakeCipher())
 
-        assertThat(elsewhere.servers.single().password).isNull()
+        assertThat(elsewhere.getServers().single().password).isNull()
         assertThat(elsewhere.getAccessTokens(server.id)).isEmpty()
         assertThat(elsewhere.getCertificateData(cert.id)).isNull()
-        assertThat(elsewhere.certificates.map { it.name }).containsExactly("me.p12")
+        assertThat(elsewhere.getCertificates().map { it.name }).containsExactly("me.p12")
     }
 
     @Test
@@ -175,7 +175,7 @@ class MumlaSQLiteDatabaseSecretsTest {
         db.addAccessToken(server.id, "tok")
         val cert = db.addCertificate("me.p12", p12)
 
-        assertThat(db.servers.single().password).isEqualTo("hunter2")
+        assertThat(db.getServers().single().password).isEqualTo("hunter2")
         assertThat(db.getAccessTokens(server.id)).containsExactly("tok")
         assertThat(db.getCertificateData(cert.id)).isEqualTo(p12)
     }

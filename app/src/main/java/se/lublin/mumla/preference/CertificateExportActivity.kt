@@ -63,7 +63,7 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch {
-            certificates = repository.io { certificates }
+            certificates = repository.io { getCertificates() }
             val labels = certificates.map { it.name as CharSequence }.toTypedArray()
             MaterialAlertDialogBuilder(this@CertificateExportActivity)
                 .setTitle(R.string.pref_export_certificate_title)
@@ -121,7 +121,7 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
         }
         lifecycleScope.launch {
             val exported = try {
-                val stored = repository.io { getCertificateData(pending.id) }
+                val stored = checkNotNull(repository.io { getCertificateData(pending.id) })
                 withContext(workDispatcher) { Pkcs12Certificates.exportWithPassword(stored, password) }
             } catch (e: Exception) {
                 Log.w(TAG, "Could not re-encrypt certificate for export", e)

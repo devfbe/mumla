@@ -115,7 +115,7 @@ class FavouriteServerListFragment :
     private fun updateServers() {
         val listener = this
         viewLifecycleOwner.lifecycleScope.launch {
-            val servers = repository.io { servers }.toMutableList()
+            val servers = repository.io { getServers() }.toMutableList()
             val adapter = FavouriteServerAdapter(requireActivity(), servers, listener, lifecycleScope)
             serverAdapter = adapter
             serverGrid.adapter = adapter

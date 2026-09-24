@@ -47,9 +47,9 @@ class CertificateGenerateActivityTest {
         val database = installDatabase()
 
         Robolectric.buildActivity(CertificateGenerateActivity::class.java).setup()
-        drainMainUntil { database.certificates.isNotEmpty() && !latestMessage().isNullOrEmpty() }
+        drainMainUntil { database.getCertificates().isNotEmpty() && !latestMessage().isNullOrEmpty() }
 
-        val stored = database.certificates.single()
+        val stored = database.getCertificates().single()
         assertThat(latestMessage()).isEqualTo(context.getString(R.string.generateCertSuccess, stored.name))
         assertThat(Settings.getInstance(context).getDefaultCertificate()).isEqualTo(stored.id)
         assertThat(database.getCertificateData(stored.id)).isNotEmpty()

@@ -42,7 +42,7 @@ class CertificateSelectActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val settings = Settings.getInstance(this)
         lifecycleScope.launch {
-            val certificates = MumlaRepository.get(this@CertificateSelectActivity).io { certificates }
+            val certificates = MumlaRepository.get(this@CertificateSelectActivity).io { getCertificates() }
             val none = Choice(getString(R.string.no_certificate), !settings.isUsingCertificate()) {
                 settings.disableCertificate()
             }

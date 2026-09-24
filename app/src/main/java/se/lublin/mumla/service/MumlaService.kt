@@ -351,7 +351,7 @@ class MumlaService : HumlaService(),
         )
 
         if (mSettings.isHotCornerEnabled()) {
-            mHotCorner.setShown(true)
+            mHotCorner.isShown = true
         }
         // The proximity sensor follows the earpiece route (onAudioRouteChanged), not this hook.
     }
@@ -365,7 +365,7 @@ class MumlaService : HumlaService(),
 
         mChannelOverlay.hide()
 
-        mHotCorner.setShown(false)
+        mHotCorner.isShown = false
 
         setProximitySensorOn(false)
     }
@@ -376,8 +376,8 @@ class MumlaService : HumlaService(),
             Settings.PREF_INPUT_METHOD ->
                 mChannelOverlay.setPushToTalkShown(mSettings.getHumlaInputMethod() == Constants.TRANSMIT_PUSH_TO_TALK)
             Settings.PREF_HOT_CORNER_KEY -> {
-                mHotCorner.setGravity(mSettings.getHotCornerGravity())
-                mHotCorner.setShown(isConnectionEstablished() && mSettings.isHotCornerEnabled())
+                mHotCorner.gravity = mSettings.getHotCornerGravity()
+                mHotCorner.isShown = isConnectionEstablished() && mSettings.isHotCornerEnabled()
             }
             Settings.PREF_USE_TTS -> {
                 val tts = mTTS
@@ -496,7 +496,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    override fun isOverlayShown(): Boolean = mChannelOverlay.isShown
+    override val isOverlayShown: Boolean get() = mChannelOverlay.isShown
 
     override fun clearChatNotifications() {
         mMessageNotification.dismiss()
@@ -512,7 +512,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    override fun isErrorShown(): Boolean = mErrorShown
+    override val isErrorShown: Boolean get() = mErrorShown
 
     /** Talk key pressed; a no-op in toggle PTT mode, which acts on key up. */
     override fun onTalkKeyDown() {
@@ -534,7 +534,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    override fun getMessageLog(): StateFlow<List<IChatMessage>> = mMessageLog.messages
+    override val messageLog: StateFlow<List<IChatMessage>> get() = mMessageLog.messages
 
     override fun clearMessageLog() {
         mMessageLog.clear()

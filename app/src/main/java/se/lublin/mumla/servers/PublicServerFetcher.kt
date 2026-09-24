@@ -74,15 +74,18 @@ class PublicServerFetcher(
         return servers
     }
 
-    /** Reads one server element; null when its port is not a number. */
+    /** Reads one server element; null when it has no address or its port is not a number. */
     private fun readEntry(parser: XmlPullParser): PublicServer? {
         fun attr(name: String): String? = parser.getAttributeValue(null, name)
         val port = attr("port")?.toIntOrNull()
-        val server = port?.let {
+        val ip = attr("ip")
+        val server = if (port != null && ip != null) {
             PublicServer(
                 attr("name"), attr("ca"), attr("continent_code"), attr("country"),
-                attr("country_code"), attr("ip"), it, attr("region"), attr("url"),
+                attr("country_code"), ip, port, attr("region"), attr("url"),
             )
+        } else {
+            null
         }
         parser.nextTag()
         return server

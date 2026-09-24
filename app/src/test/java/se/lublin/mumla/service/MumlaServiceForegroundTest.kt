@@ -94,7 +94,7 @@ class MumlaServiceForegroundTest {
 
         assertThat(connections).hasSize(2) // the backoff timer fired and a new attempt started
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
-        assertThat(service.getMessageLog().value.map { it.body })
+        assertThat(service.messageLog.value.map { it.body })
             .doesNotContain(service.getString(R.string.foreground_start_failed))
     }
 
@@ -131,7 +131,7 @@ class MumlaServiceForegroundTest {
 
     // ---- the chat log across the session --------------------------------------------------------
 
-    private fun log() = service.getMessageLog().value.map { it.body }
+    private fun log() = service.messageLog.value.map { it.body }
 
     @Test
     fun theChatLogSurvivesAConnectionLossAndIsClearedOnDisconnect() {
@@ -170,8 +170,8 @@ class MumlaServiceForegroundTest {
         repeat(ChatMessageLog.MAX_ENTRIES + 1) { service.logWarning("m$it") }
         mainLooper.idle()
 
-        assertThat(service.getMessageLog().value).hasSize(ChatMessageLog.MAX_ENTRIES)
-        assertThat(service.getMessageLog().value.first().body).isEqualTo("m1")
+        assertThat(service.messageLog.value).hasSize(ChatMessageLog.MAX_ENTRIES)
+        assertThat(service.messageLog.value.first().body).isEqualTo("m1")
     }
 
     // ---- the reconnect prompt -------------------------------------------------------------------

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Andrew Comminos <andrew@comminos.com>
+ * Copyright (C) 2014 Andrew Comminos
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,29 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+package se.lublin.mumla.util
 
-package se.lublin.mumla.db;
+import se.lublin.humla.model.IChannel
 
-/** A stub for a certificate entry in Mumla's database. */
-public class DatabaseCertificate {
-    private final long mId;
-    private final String mName;
-
-    protected DatabaseCertificate(long id, String name) {
-        mId = id;
-        mName = name;
+/** [channel] and every channel below it, depth first, each parent before its subchannels. */
+fun flattenChannels(channel: IChannel): List<IChannel> = buildList {
+    fun visit(c: IChannel) {
+        add(c)
+        c.subchannels.forEach(::visit)
     }
-
-    public long getId() {
-        return mId;
-    }
-
-    public String getName() {
-        return mName;
-    }
-
-    @Override
-    public String toString() {
-        return mName;
-    }
+    visit(channel)
 }

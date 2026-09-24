@@ -159,7 +159,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun startsDisconnectedWithAnEmptyChatLogAndNoForegroundNotification() {
         assertThat(service.connectionState).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
-        assertThat(service.getMessageLog().value).isEmpty()
+        assertThat(service.messageLog.value).isEmpty()
         assertThat(shadowOf(service).lastForegroundNotification).isNull()
     }
 
@@ -170,7 +170,7 @@ class MumlaServiceCharacterizationTest {
         service.logError("broken")
         idleMainLooper()
 
-        val log = service.getMessageLog().value
+        val log = service.messageLog.value
         assertThat(log.map { (it as IChatMessage.InfoMessage).type to it.body }).containsExactly(
             IChatMessage.InfoMessage.Type.WARNING to "careful",
             IChatMessage.InfoMessage.Type.ERROR to "broken",
@@ -184,7 +184,7 @@ class MumlaServiceCharacterizationTest {
         service.logInfo("hello")
         idleMainLooper()
 
-        val entry = service.getMessageLog().value.single() as IChatMessage.InfoMessage
+        val entry = service.messageLog.value.single() as IChatMessage.InfoMessage
         assertThat(entry.type).isEqualTo(IChatMessage.InfoMessage.Type.INFO)
         assertThat(entry.body).isEqualTo("hello")
     }
@@ -197,7 +197,7 @@ class MumlaServiceCharacterizationTest {
         service.testEmit(HumlaEvent.TextMessage(message))
         idleMainLooper()
 
-        val entry = service.getMessageLog().value.single() as IChatMessage.TextMessage
+        val entry = service.messageLog.value.single() as IChatMessage.TextMessage
         assertThat(entry.message).isSameInstanceAs(message)
     }
 
@@ -209,7 +209,7 @@ class MumlaServiceCharacterizationTest {
         service.testEmit(HumlaEvent.SelfMuteChanged(muted = true, deafened = false))
         idleMainLooper()
 
-        val log = service.getMessageLog().value.map { (it as IChatMessage.InfoMessage).type to it.body }
+        val log = service.messageLog.value.map { (it as IChatMessage.InfoMessage).type to it.body }
         assertThat(log).containsExactly(
             IChatMessage.InfoMessage.Type.WARNING to NoticeFormatter(app)
                 .format(HumlaEvent.UserKicked("Ann", "Mod", "spam", ban = false)),
@@ -237,7 +237,7 @@ class MumlaServiceCharacterizationTest {
         val toUser = service.sendUserTextMessage(SELF, "to a user")
         val toChannel = service.sendChannelTextMessage(3, "to a channel", false)
 
-        assertThat(service.getMessageLog().value.map { (it as IChatMessage.TextMessage).message })
+        assertThat(service.messageLog.value.map { (it as IChatMessage.TextMessage).message })
             .containsExactly(toUser, toChannel).inOrder()
     }
 
@@ -247,7 +247,7 @@ class MumlaServiceCharacterizationTest {
         idleMainLooper()
 
         @Suppress("UNCHECKED_CAST")
-        val log = service.getMessageLog().value as MutableList<IChatMessage>
+        val log = service.messageLog.value as MutableList<IChatMessage>
         assertThrows(UnsupportedOperationException::class.java) {
             log.add(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, "sneaked in"))
         }
@@ -260,7 +260,7 @@ class MumlaServiceCharacterizationTest {
 
         service.clearMessageLog()
 
-        assertThat(service.getMessageLog().value).isEmpty()
+        assertThat(service.messageLog.value).isEmpty()
     }
 
     // ---- chat notifications and text to speech --------------------------------------------------
@@ -578,16 +578,16 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun theErrorCountsAsShownOnceTheUserDismissedOrAcknowledgedItUntilTheNextConnect() {
-        assertThat(service.isErrorShown()).isFalse()
+        assertThat(service.isErrorShown).isFalse()
         service.onReconnectNotificationDismissed()
-        assertThat(service.isErrorShown()).isTrue()
+        assertThat(service.isErrorShown).isTrue()
 
         service.renderSessionState(SessionState.Connecting)
         idleMainLooper()
-        assertThat(service.isErrorShown()).isFalse()
+        assertThat(service.isErrorShown).isFalse()
 
         service.markErrorShown()
-        assertThat(service.isErrorShown()).isTrue()
+        assertThat(service.isErrorShown).isTrue()
     }
 
     @Test
@@ -671,7 +671,7 @@ class MumlaServiceCharacterizationTest {
         connect()
         synchronize()
 
-        verify(exactly = 0) { hotCorner.setShown(true) }
+        verify(exactly = 0) { hotCorner.isShown = true }
         assertThat(proximityLockHeld()).isFalse()
     }
 
@@ -682,12 +682,12 @@ class MumlaServiceCharacterizationTest {
         preferences().edit()
             .putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_TOP_LEFT)
             .commit()
-        verify(exactly = 0) { hotCorner.setShown(true) }
+        verify(exactly = 0) { hotCorner.isShown = true }
         connect()
 
         synchronize()
 
-        verify(exactly = 1) { hotCorner.setShown(true) }
+        verify(exactly = 1) { hotCorner.isShown = true }
     }
 
     private fun proximityLockHeld(): Boolean {
@@ -711,10 +711,10 @@ class MumlaServiceCharacterizationTest {
 
         assertThat(talkReceivers()).isEmpty()
         verify { overlay.hide() }
-        verify { hotCorner.setShown(false) }
+        verify { hotCorner.isShown = false }
         assertThat(service.mProximityLock).isNull()
         // The chat log and the chat notification survive a loss; only Disconnected clears them.
-        assertThat(service.getMessageLog().value).isNotEmpty()
+        assertThat(service.messageLog.value).isNotEmpty()
     }
 
     @Test
@@ -728,7 +728,7 @@ class MumlaServiceCharacterizationTest {
 
         service.renderSessionState(SessionState.Disconnected(null))
 
-        assertThat(service.getMessageLog().value).isEmpty()
+        assertThat(service.messageLog.value).isEmpty()
         assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
     }
 
@@ -910,9 +910,9 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun isOverlayShownAsksTheOverlay() {
         every { overlay.isShown } returns true
-        assertThat(service.isOverlayShown()).isTrue()
+        assertThat(service.isOverlayShown).isTrue()
         every { overlay.isShown } returns false
-        assertThat(service.isOverlayShown()).isFalse()
+        assertThat(service.isOverlayShown).isFalse()
     }
 
     @Test
@@ -942,15 +942,15 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun theHotCornerPreferenceMovesItAndShowsItOnlyWhileConnected() {
         preferences().edit().putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_TOP_LEFT).commit()
-        verify { hotCorner.setGravity(Settings.getInstance(app).getHotCornerGravity()) }
-        verify(exactly = 1) { hotCorner.setShown(false) }
+        verify { hotCorner.gravity = Settings.getInstance(app).getHotCornerGravity() }
+        verify(exactly = 1) { hotCorner.isShown = false }
 
         connect()
         service.onSharedPreferenceChanged(preferences(), Settings.PREF_HOT_CORNER_KEY)
-        verify(exactly = 1) { hotCorner.setShown(true) }
+        verify(exactly = 1) { hotCorner.isShown = true }
 
         preferences().edit().putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_NONE).commit()
-        verify(exactly = 2) { hotCorner.setShown(false) }
+        verify(exactly = 2) { hotCorner.isShown = false }
     }
 
     @Test
