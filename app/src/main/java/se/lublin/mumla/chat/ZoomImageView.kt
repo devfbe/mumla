@@ -12,36 +12,16 @@ import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.os.BundleCompat
 
 /**
- * An ImageView with pinch-zoom, drag and double-tap, driven by [ZoomState].
+ * An ImageView with pinch-zoom, drag and double-tap; the arithmetic lives in [ZoomState].
  *
- * The arithmetic lives in [ZoomState]; this class is the thin layer that turns gestures and layout
- * into calls on it. It keeps no gesture-scoped state of its own -- no "dragging" flag, no anchor
- * point, no pending focus. That is *not* the same as there being no gesture-scoped state: the two
- * detectors it borrows keep plenty, and only they can unwind it. `GestureDetector.mIsDoubleTapping`
- * is cleared by an ACTION_UP or by `cancel()` and by nothing else -- not by a fresh ACTION_DOWN --
- * so an ACTION_CANCEL that does not reach it leaves every later drag routed to `onDoubleTapEvent`
- * instead of `onScroll`, i.e. dead. Forwarding every event to both detectors, cancels included, is
- * therefore load-bearing and is pinned as such.
+ * Every event, ACTION_CANCEL included, must reach both detectors: `GestureDetector` clears its
+ * double-tap flag only on ACTION_UP or `cancel()`, and a missed cancel leaves later drags dead.
+ * Every state change ends in [applyState], so the screen always shows the clamped state.
  *
- * Every path that changes the state ends in [applyState], so the invariants "what is on screen is
- * the clamped state" and "the zoom is inside this image's ceiling" hold after every single event --
- * including the events that did not come from a gesture, such as a state restored from an older
- * release.
- *
- * **Across a configuration change** the zoom factor is kept exactly and the pan position only
- * roughly. [ZoomState.scale] is relative to the fit, so "three times as close" still *means* the
- * same thing after a rotation -- though not the same size on screen, because the fit follows the
- * limiting axis and the limiting axis changes. The offsets are view pixels and are restored as
- * pixels, then re-clamped into the new bounds rather than thrown away, so a pan halfway to the edge
- * can come back three quarters of the way there; [ZoomState] says what that costs. The restored
- * state is applied to the first image that arrives, because a dialog restores its views before the
- * image has finished loading; a *second*, genuinely new image resets to the fit like any other.
- *
- * Two things the host has to get right for that to work. The view needs an `android:id`, because
- * View saves no state for a view without one. And nothing may be shown in *this* view before the
- * image: a placeholder or an error icon is a drawable like any other, it would spend the restored
- * zoom, and the real image arriving afterwards would count as the second image and reset to the
- * fit. Those belong in a separate view on top.
+ * Across a configuration change the zoom factor is kept and the pan offsets (view pixels) are
+ * re-clamped. The restored state applies to the first image that arrives (dialogs restore views
+ * before the image loads); a later image resets to the fit. The host must give the view an
+ * `android:id` and must not show a placeholder in it, which would consume the restored zoom.
  */
 class ZoomImageView @JvmOverloads constructor(
     context: Context,
@@ -63,10 +43,7 @@ class ZoomImageView @JvmOverloads constructor(
             }
         },
     ).apply {
-        // Off deliberately. ScaleGestureDetector turns this on by itself from targetSdk M upwards,
-        // which hangs a second, continuous zoom off the double-tap that [onDoubleTap] below already
-        // owns: two zoom sources on one gesture, neither of them chosen. Measured with it on, a
-        // drag after a double-tap ran the scale from 2.5 to 4.69.
+        // On by default since targetSdk M; it would add a second zoom to the double-tap gesture.
         isQuickScaleEnabled = false
     }
 
@@ -98,31 +75,17 @@ class ZoomImageView @JvmOverloads constructor(
 
     init {
         scaleType = ScaleType.MATRIX
-        // Set here rather than left to setOnClickListener: these two flags are what an accessibility
-        // service reads to decide which actions to offer, and TalkBack's click and long-click go
-        // straight to performClick/performLongClick without ever reaching [onTouchEvent].
+        // Accessibility services read these flags; TalkBack's clicks bypass [onTouchEvent].
         isClickable = true
         isLongClickable = true
     }
 
     /**
-     * Every event goes to both detectors, ACTION_CANCEL included -- see the class KDoc for what
-     * happens when one does not.
+     * Every event goes to both detectors, ACTION_CANCEL included. The parent may not intercept
+     * while zoomed in or multi-touch; at the fit a pager must win.
      *
-     * The parent is asked to keep its hands off while there is something here to pan or pinch. A
-     * `ViewPager2` or a scrolling container otherwise takes the drag away mid-pan, and what this
-     * view gets in exchange is precisely the ACTION_CANCEL that the two cancel tests are about. The
-     * criterion is deliberately coarse -- zoomed in at all, or more than one finger -- rather than
-     * per axis: at the fit there is nothing to pan on either axis, and that is the case where a
-     * pager must win.
-     *
-     * `super.onTouchEvent` is not called, and that is a decision rather than an omission. View's own
-     * click handling posts a `performClick` from ACTION_UP, which would land *alongside* the one
-     * [GestureDetector.SimpleOnGestureListener.onSingleTapConfirmed] sends -- a single tap counted
-     * twice. The confirmed one is the one worth keeping: it waits out the double-tap window, so the
-     * first tap of a double-tap does not also dismiss the dialog. What View's path would otherwise
-     * have contributed is covered above: the accessibility actions by the two flags in [init], the
-     * long press by `onLongPress`.
+     * `super.onTouchEvent` is not called: View's click handling would count a single tap twice, and
+     * `onSingleTapConfirmed` waits out the double-tap window.
      */
     override fun onTouchEvent(event: MotionEvent): Boolean {
         parent?.requestDisallowInterceptTouchEvent(event.pointerCount > 1 || state.scale > ZoomState.MIN_SCALE)
@@ -133,10 +96,7 @@ class ZoomImageView @JvmOverloads constructor(
 
     override fun performClick(): Boolean = super.performClick()
 
-    /**
-     * The one place a new image resets the zoom. `setImageBitmap` reaches it through here, so there
-     * is a single mechanism rather than one guard per entry point.
-     */
+    /** The one place a new image resets the zoom (`setImageBitmap` goes through here). */
     override fun setImageDrawable(drawable: Drawable?) {
         super.setImageDrawable(drawable)
         state = ZoomState()
@@ -149,9 +109,7 @@ class ZoomImageView @JvmOverloads constructor(
     }
 
     override fun onSaveInstanceState(): Parcelable {
-        // A restore that has not found an image yet lives in pendingRestore, not in state -- and
-        // the dialog loads over the network, so a second rotation inside that window is ordinary.
-        // Saving `state` there would save the default and throw the user's zoom away.
+        // A restore still waiting for its image (e.g. rotated twice while loading) must be kept.
         val saved = pendingRestore ?: state
         return Bundle().apply {
             putParcelable(KEY_SUPER, super.onSaveInstanceState())
@@ -162,20 +120,9 @@ class ZoomImageView @JvmOverloads constructor(
     }
 
     /**
-     * Everything read here is *input*, not an invariant: the bytes were written by some other
-     * process, possibly by an older build of this app, and both halves of that are real.
-     *
-     * "Not a Bundle" is only the easy half of an id collision -- somebody else's Bundle is the
-     * common one, and letting it through is silent: there is no [KEY_SUPER] in it, so super is
-     * restored from null and the real super state is dropped, and the default zoom is then adopted
-     * as if it had been saved. One of our own keys is the marker that tells the two apart.
-     *
-     * And the zoom is coerced rather than required. The ceiling is per image and can drop between
-     * releases, so a stored zoom above it is an ordinary event, not a bug: asserting it here would
-     * turn the first rotation after an update into a crash inside `restoreHierarchyState`. What is
-     * coerced to here is only what [ZoomState] can hold at all -- the *ceiling* is applied by
-     * [applyState], once, for every state however it arrived, rather than a second time here where
-     * no test could tell the two apart.
+     * The saved state is untrusted input (an id collision or an older build). A Bundle without our
+     * [KEY_SCALE] is handed to super unchanged. The zoom is coerced, not required, so a lowered
+     * ceiling cannot crash a restore; the per-image ceiling is applied by [applyState].
      */
     override fun onRestoreInstanceState(state: Parcelable?) {
         if (state !is Bundle || !state.containsKey(KEY_SCALE)) {
@@ -194,12 +141,7 @@ class ZoomImageView @JvmOverloads constructor(
     /** A stored float, with anything that is not a number at all read as 0. */
     private fun Bundle.finite(key: String): Float = getFloat(key).let { if (it.isFinite()) it else 0f }
 
-    /**
-     * Scales around ([focusX], [focusY]) in view coordinates. Ignored while there is nothing to be
-     * relative to: a focus point means nothing without a measured view, and a scale means nothing
-     * without an image, so remembering either would only land as a bogus offset at the first
-     * layout.
-     */
+    /** Scales around ([focusX], [focusY]) in view coordinates. Ignored until [canFit]. */
     fun zoomBy(factor: Float, focusX: Float, focusY: Float) {
         if (!canFit()) return
         val d = checkNotNull(drawable)
@@ -222,10 +164,7 @@ class ZoomImageView @JvmOverloads constructor(
         applyState()
     }
 
-    /**
-     * Whether there is an image with a size, in a view with a size. One predicate for all three
-     * callers, so "not ready yet" cannot come to mean two different things in the same class.
-     */
+    /** Whether there is an image with a size, in a view with a size. */
     private fun canFit(): Boolean {
         val d = drawable ?: return false
         if (width == 0 || height == 0) return false
@@ -248,11 +187,7 @@ class ZoomImageView @JvmOverloads constructor(
     }
 
     private companion object {
-        /**
-         * What one double-tap is worth. It is *asked for*, not granted: [ZoomState.scaledBy] holds
-         * it to the ceiling this image earns, so on a bitmap with no pixels to spare -- which is
-         * every bitmap the viewer decodes -- a double-tap lands on 2 rather than on 2.5.
-         */
+        /** Requested double-tap zoom; [ZoomState.scaledBy] may cap it at the image's ceiling. */
         const val DOUBLE_TAP_SCALE = 2.5f
         const val KEY_SUPER = "super"
         const val KEY_SCALE = "scale"

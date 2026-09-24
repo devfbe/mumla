@@ -24,57 +24,22 @@ fun interface ImageFetcher {
 /**
  * Fetches an `<img src>` over http(s) with hard bounds on both time and size.
  *
- * The URL comes from a chat message, i.e. from another client, so it is hostile input:
+ * The URL comes from another client, so it is hostile input:
  *
- *  * **Scheme.** Only `http` and `https` with a non-empty host are fetched. Everything else —
- *    `file:`, `javascript:`, `content:`, `ftp:`, `jar:`, a scheme-relative `//host/x`, a bare path,
- *    or an authority that names no host such as `http://@:8080/x` or `http://a@b@c/x` — is refused
- *    up front with [ImageError.UNSUPPORTED], before any connection object is created, so nothing is
- *    ever opened, let alone read. "Names no host" means what [URL] makes of the authority, not what
- *    [URI] does; [supportedUrl] explains why the difference is the whole point. This is the second
- *    half of the guarantee that [ImageSource.parse] starts:
- *    `ChatContentParser` deliberately passes the raw `src` through, and [ImageSource.parse] matches
- *    the scheme prefix case-insensitively, which folds some exotic characters together (`httpſ://`
- *    matches `https://`). The scheme check here is the authoritative one.
- *  * **Host.** [hostPolicy] is asked about every host this call talks to, and refusing one costs
- *    [ImageError.NETWORK] before anything is opened. The default refuses the device's own network;
- *    see [PublicHostsOnly] for why a chat message must not be able to aim the phone at its own
- *    router. Asking costs one name lookup, which is what judging the answer instead of the spelling
- *    is worth — and because it is an *answer* that is judged, the refusal is retryable rather than
- *    terminal; [allowedUrl] says why that distinction is not cosmetic.
- *  * **Redirects.** Followed by hand, up to [MAX_REDIRECTS] of them, and only within the same
- *    scheme: a `Location` with a different protocol ends the fetch with [ImageError.NETWORK], so an
- *    https → `file:` redirect reads nothing from disk. The same rule also blocks a legitimate
- *    http → https upgrade redirect, which is a deliberate trade, not a bug: the alternative is
- *    re-entering the loader for a scheme the caller did not ask for. Following them here rather than
- *    letting `HttpURLConnection` do it is what makes the host check hold: the platform follows a
- *    same-scheme redirect to *any* host without re-entering the gate, so a policy applied only to
- *    the URL the message carried is undone by one `302`.
- *  * **Size.** [maxBytes] is enforced twice: against `Content-Length` (so an oversized body is
- *    refused before it is read) and, independently, against the bytes actually read. The header is
- *    never trusted as the end of the body, so a server that understates it, omits it or streams
- *    chunked forever is still cut off at the cap. A body that falls *short* of a declared length is
- *    refused as [ImageError.NETWORK] rather than handed over truncated. The accumulation buffer is
- *    pre-sized from a plausible `Content-Length` and never grows past the cap.
- *  * **Time.** [totalTimeoutMs] bounds every phase this class can reach: the connect and read
- *    timeouts are both clamped to the remaining budget before each use, the remaining budget is
- *    checked after every read, and a watchdog closes the connection at the deadline. A server that
- *    dribbles one byte at a time — of the headers or of the body, so that every single read succeeds
- *    and [readTimeoutMs] alone never fires — is stopped by that watchdog.
- *
- *    It does **not** bound name resolution, and saying otherwise would be the more expensive
- *    mistake. [hostPolicy] resolves the host of the first URL and of every redirect hop;
- *    `InetAddress.getAllByName` takes no timeout parameter and Android's resolver retries per
- *    configured server, so one hostile name can block for far longer than the budget and nothing
- *    here can shorten it. Doing so needs resolution on a thread of its own, which this class
- *    deliberately does not start. Nor is one lookup per hop the count: `HttpURLConnection` resolves
- *    the host again, through `InetSocketAddress`, before the `connect()` that the timeouts above
- *    cover, so with a cold address cache a hop costs **two**. In practice the second is a cache hit,
- *    and the [PublicHostsOnly] KDoc already turns that second resolution into a documented residual
- *    of its own — it is the one that can answer differently. The honest bound on one [fetch] is
- *    therefore `totalTimeoutMs` **plus up to 2 x ([MAX_REDIRECTS] + 1) name resolutions**, and
- *    [fetch] blocks: it is not cancellable, so a caller that must not wait longer needs its own
- *    answer to that, not this number.
+ *  * **Scheme.** Only `http`/`https` with a non-empty host (as [URL] parses it) are fetched;
+ *    anything else is refused with [ImageError.UNSUPPORTED] before a connection object exists.
+ *    This is the authoritative scheme check ([ImageSource.parse]'s prefix match is lenient).
+ *  * **Host.** [hostPolicy] is asked about every host, including each redirect hop; a refusal is
+ *    [ImageError.NETWORK] (retryable, see [allowedUrl]).
+ *  * **Redirects.** Followed by hand, at most [MAX_REDIRECTS], same scheme only (so https ->
+ *    `file:` reads nothing, and http -> https upgrades are refused too). The platform would follow
+ *    a same-scheme redirect to any host without re-checking it.
+ *  * **Size.** [maxBytes] is enforced against `Content-Length` and, independently, against the bytes
+ *    read. A body shorter than its declared length is [ImageError.NETWORK], not a truncated image.
+ *  * **Time.** [totalTimeoutMs] bounds connect and reads (timeouts clamped to the remaining budget)
+ *    and a watchdog closes the connection at the deadline, which stops a server that dribbles bytes.
+ *    Name resolution is **not** bounded: `getAllByName` takes no timeout, and each hop may resolve
+ *    twice (policy + connect). [fetch] blocks and is not cancellable.
  */
 class HttpImageFetcher(
     private val connectTimeoutMs: Int = 5_000,
@@ -85,7 +50,7 @@ class HttpImageFetcher(
 ) : ImageFetcher {
 
     init {
-        // 0 means "no timeout" to the platform, which would defeat the point of all three.
+        // 0 means "no timeout" to the platform.
         require(connectTimeoutMs > 0) { "connectTimeoutMs must be positive" }
         require(readTimeoutMs > 0) { "readTimeoutMs must be positive" }
         require(totalTimeoutMs > 0) { "totalTimeoutMs must be positive" }
@@ -96,17 +61,14 @@ class HttpImageFetcher(
     override fun fetch(url: String): ByteArray {
         val deadline = System.nanoTime() + totalTimeoutMs * 1_000_000L
         var target = allowedUrl(url, ImageError.UNSUPPORTED)
-        // Whose fault an unusable target is. It starts as the message's and becomes the server's the
-        // moment a Location decides where to look; see [allowedUrl] for why the two differ.
+        // The message's fault until a Location decides where to look; see [allowedUrl].
         var blame = ImageError.UNSUPPORTED
         var redirects = 0
         while (true) {
             when (val hop = fetchHop(target, deadline, blame)) {
                 is Hop.Body -> return hop.bytes
                 is Hop.Redirect -> {
-                    // The limit is counted before the Location is resolved, so the hop that is not
-                    // followed costs no name lookup and the host it names cannot decide this call's
-                    // error code either.
+                    // Counted before resolving, so the unfollowed hop costs no lookup.
                     if (++redirects > MAX_REDIRECTS) throw ImageFetchException(ImageError.NETWORK)
                     target = allowedUrl(redirectTarget(target, hop.location), ImageError.NETWORK)
                     blame = ImageError.NETWORK
@@ -124,9 +86,7 @@ class HttpImageFetcher(
     /** [unopenable] is what a [target] that yields no [HttpURLConnection] costs; see [fetch]. */
     private fun fetchHop(target: URL, deadline: Long, unopenable: ImageError): Hop {
         val connection = try {
-            // Only reachable through a URLStreamHandlerFactory, since the scheme is already fixed at
-            // http(s) — but if one is installed, the target may have come from a Location, and then
-            // this is the server's answer being wrong and not the message's. Hence the parameter.
+            // Only reachable with a custom URLStreamHandlerFactory.
             target.openConnection() as? HttpURLConnection
                 ?: throw ImageFetchException(unopenable)
         } catch (e: IOException) {
@@ -134,30 +94,24 @@ class HttpImageFetcher(
         } catch (e: RuntimeException) {
             throw ImageFetchException(ImageError.NETWORK, e)
         }
-        // A blocking socket read is only interruptible by closing the connection, so the deadline
-        // needs a second pair of hands: without this, a server that dribbles response headers
-        // blocks in getResponseCode() for as long as it likes, whatever the budget says.
+        // A blocking socket read is only interruptible by closing the connection; without the
+        // watchdog a server dribbling headers blocks getResponseCode() indefinitely.
         val expired = AtomicBoolean(false)
         var watchdog: ScheduledFuture<*>? = null
         try {
-            // Scheduled inside the try, so that the connection is covered from the moment it
-            // exists: a rejected task would otherwise escape unchecked and leak the connection.
+            // Inside the try, so a rejected task cannot leak the connection.
             watchdog = WATCHDOG.schedule({
                 expired.set(true)
                 runCatching { connection.disconnect() }
             }, remainingMs(deadline), TimeUnit.MILLISECONDS)
-            // Both clamped: the watchdog can only close a connection that already exists, so the
-            // connect phase is the total budget's to bound or nobody's.
+            // Clamped: the watchdog cannot close a connection that does not exist yet.
             connection.connectTimeout = clamped(connectTimeoutMs, deadline)
             connection.readTimeout = clamped(readTimeoutMs, deadline)
             connection.instanceFollowRedirects = false
             val code = connection.responseCode
             if (code in 300..399 && code != HttpURLConnection.HTTP_NOT_MODIFIED) {
                 if (expired.get()) throw ImageFetchException(ImageError.TIMEOUT)
-                // Two Location headers: getHeaderField returns the last one on JDK 21 and the
-                // platform is free to pick either. Not a way past anything — whichever it is goes
-                // through allowedUrl like every other hop — but it is the platform's choice, not
-                // ours, and no test pins it because pinning it would pin the platform.
+                // With two Location headers the platform picks one; either goes through allowedUrl.
                 return Hop.Redirect(connection.getHeaderField("Location"))
             }
             if (code !in 200..299) throw ImageFetchException(ImageError.NETWORK)
@@ -166,13 +120,9 @@ class HttpImageFetcher(
             if (declared > maxBytes) throw ImageFetchException(ImageError.TOO_LARGE)
             connection.readTimeout = clamped(readTimeoutMs, deadline)
             val body = connection.inputStream.use { readCapped(it, deadline, declared) }
-            // A connection closed by the watchdog can surface as a plain EOF rather than an error,
-            // which would hand the caller a silently truncated image.
+            // A watchdog close can surface as a plain EOF, i.e. a silently truncated image.
             if (expired.get()) throw ImageFetchException(ImageError.TIMEOUT)
-            // Neither can a body that simply stops early. The declared length is no end-of-body
-            // marker (a server that understates it keeps streaming, which is what the cap is for),
-            // but falling short of it is a broken transfer, and half an image would otherwise reach
-            // the decoder as MALFORMED — a terminal error the loader remembers for good.
+            // A short body is a broken transfer; as MALFORMED it would be cached for good.
             if (declared > 0 && body.size < declared) throw ImageFetchException(ImageError.NETWORK)
             return Hop.Body(body)
         } catch (e: SocketTimeoutException) {
@@ -180,37 +130,25 @@ class HttpImageFetcher(
         } catch (e: IOException) {
             throw ImageFetchException(if (expired.get()) ImageError.TIMEOUT else ImageError.NETWORK, e)
         } catch (e: RuntimeException) {
-            // The platform HTTP stacks throw unchecked exceptions of their own on malformed
-            // authorities and on a connection closed underneath them. fetch() promises
-            // ImageFetchException and nothing else, so nothing unchecked may escape here.
+            // Platform HTTP stacks throw unchecked exceptions on malformed authorities and closed
+            // connections; fetch() promises ImageFetchException only.
             throw ImageFetchException(if (expired.get()) ImageError.TIMEOUT else ImageError.NETWORK, e)
         } finally {
             watchdog?.cancel(false)
-            // The watchdog thread may be inside disconnect() at the same moment. The platform's
-            // implementation is unsynchronised and re-reads its connection field after checking it
-            // for null, so the loser of that race can throw — and an unchecked exception thrown
-            // here would replace the ImageFetchException that is already on its way out.
+            // Racing the watchdog's unsynchronised disconnect() can throw, which would replace the
+            // exception already on its way out.
             runCatching { connection.disconnect() }
         }
     }
 
     /**
-     * [supportedUrl], plus the question [hostPolicy] exists to answer. Asked again for every
-     * redirect hop, because that is the only place the answer can still be acted on.
+     * [supportedUrl] plus the [hostPolicy] check, asked for every redirect hop. A policy that throws
+     * refuses.
      *
-     * A policy that throws refuses: this runs on hostile input, and the safe reading of "the check
-     * could not be made" is not "let it through".
-     *
-     * **The two refusals are not the same error.** [syntaxFailure] is what the *spelling* of [url]
-     * costs: [ImageError.UNSUPPORTED] for the URL the message carried, which cannot become a
-     * different URL later, and [ImageError.NETWORK] for a `Location`, which is the server's answer
-     * and not the message's fault. A refusal by [hostPolicy] is always [ImageError.NETWORK],
-     * whichever of the two produced the URL, because the policy judges a **resolver answer** and
-     * resolver answers change: a DNS blocker returns `0.0.0.0` for a blocked CDN, a captive portal
-     * and a split-horizon company resolver return `192.168.x.x` for a public name. Reporting that
-     * as terminal would leave the image broken for the life of the process however the network
-     * changes — turning the blocker off, signing in, moving to another Wi-Fi. That is the very
-     * argument [PublicHostsOnly] already makes for an unresolvable host.
+     * [syntaxFailure] is what a bad spelling costs: [ImageError.UNSUPPORTED] for the message's URL
+     * (terminal), [ImageError.NETWORK] for a `Location` (the server's fault). A policy refusal is
+     * always [ImageError.NETWORK], since it judges a resolver answer, which can change with the
+     * network.
      */
     private fun allowedUrl(url: String, syntaxFailure: ImageError): URL {
         val target = supportedUrl(url, syntaxFailure)
@@ -224,14 +162,9 @@ class HttpImageFetcher(
     }
 
     /**
-     * Where a `Location` header points, resolved against the URL that produced it — a relative one
-     * is legal and common. A redirect that changes the scheme is not followed at all, which is the
-     * behaviour `HttpURLConnection` used to enforce here and the reason an https → `file:` redirect
-     * reads nothing from disk.
-     *
-     * A missing or unparseable `Location` is [ImageError.NETWORK], not [ImageError.UNSUPPORTED]:
-     * the source the message carried was fine, the server's answer was not, and only the first of
-     * those two deserves to be remembered for the life of the process.
+     * Where a `Location` header points, resolved against the current URL (relative is legal). A
+     * scheme change is not followed. A missing or unparseable `Location` is [ImageError.NETWORK]:
+     * the server's answer was wrong, not the message.
      */
     private fun redirectTarget(current: URL, location: String?): String {
         if (location.isNullOrBlank()) throw ImageFetchException(ImageError.NETWORK)
@@ -249,25 +182,17 @@ class HttpImageFetcher(
     }
 
     /**
-     * Parses [url] and accepts it only if it is an absolute http(s) URL with a non-empty host.
-     * Purely syntactic: it opens nothing, so an unsupported source costs no I/O at all.
+     * Accepts [url] only if it is an absolute http(s) URL with a non-empty host. Purely syntactic.
      *
-     * The host is judged on the [URL] that is about to be opened, never on the [URI] it came from,
-     * because the two parsers disagree about the very same authority. `URI.getHost()` is null for
-     * anything registry-based (`my_host.invalid`, a non-ASCII name) although those really do name a
-     * host, while `URLStreamHandler.parseURL` gives up on server-based parsing entirely once the
-     * authority holds more than one `@` and leaves `getHost()` empty — for `http://a@b@c/x` the URI
-     * side sees the host `c` and the URL side sees nothing. An empty host is not inert: it resolves
-     * to localhost, so such a URL opens a socket to 127.0.0.1:80 (443 for https) with no DNS lookup
-     * at all, and [ImageSource.parse] classifies it as `Remote`, so one chat message is enough.
-     * Asking the chosen URL makes it structurally impossible for the gate and the connection to
-     * disagree, which matching a second hand-written parse against the platform's never was.
+     * The host is judged on the [URL] that is about to be opened, not on the [URI]: the parsers
+     * disagree (for `http://a@b@c/x` URI sees host `c`, URL sees none), and an empty host would
+     * connect to localhost without any DNS lookup.
      */
     private fun supportedUrl(url: String, failure: ImageError): URL {
         val uri = try {
             URI(url)
         } catch (e: URISyntaxException) {
-            // Spaces, control characters, a stray CR/LF, ... — anything that is not a URL.
+            // Spaces, control characters, CR/LF, ...
             throw ImageFetchException(failure, e)
         }
         val scheme = uri.scheme?.lowercase(Locale.ROOT)
@@ -292,9 +217,8 @@ class HttpImageFetcher(
         ((deadline - System.nanoTime()) / 1_000_000L).coerceIn(1L, Int.MAX_VALUE.toLong())
 
     /**
-     * Reads [input] into a buffer that is pre-sized from [declaredLength] when that is plausible and
-     * that never grows beyond the cap, so the peak allocation is the image's own size for a truthful
-     * `Content-Length` rather than a doubling `ByteArrayOutputStream` plus its final copy.
+     * Reads [input] into a buffer pre-sized from a plausible [declaredLength] that never grows beyond
+     * the cap, so a truthful `Content-Length` needs no growth or final copy.
      */
     private fun readCapped(input: InputStream, deadline: Long, declaredLength: Long): ByteArray {
         val cap = maxBytes.coerceAtMost(MAX_CAP).toInt()
@@ -302,9 +226,7 @@ class HttpImageFetcher(
         var size = 0
         while (true) {
             if (size == buffer.size) {
-                // Probe a single byte instead of growing blindly: a truthful Content-Length then
-                // needs no growth and no final copy at all, and at the cap this is the one byte
-                // that proves the body is too large.
+                // Probe one byte before growing; at the cap it proves the body is too large.
                 val probe = input.read()
                 if (probe < 0) break
                 if (size == cap) throw ImageFetchException(ImageError.TOO_LARGE)
@@ -326,14 +248,12 @@ class HttpImageFetcher(
         private const val INITIAL_CAPACITY = 16 * 1024
         private const val MAX_CAP = (Int.MAX_VALUE - 8).toLong()
 
-        /** Shared, daemon: one idle thread for the whole app, and never a reason to keep it alive. */
+        /** One shared daemon thread for the whole app. */
         private val WATCHDOG: ScheduledExecutorService =
             ScheduledThreadPoolExecutor(1) { r ->
                 Thread(r, "mumla-image-fetch-watchdog").apply { isDaemon = true }
             }.apply {
-                // Off by default, which would leave every finished fetch's cancelled task in the
-                // queue — and with it the HttpURLConnection the task captured — until its deadline,
-                // i.e. for up to totalTimeoutMs after the fetch itself is long over.
+                // Otherwise cancelled tasks (and their captured connections) stay queued until due.
                 removeOnCancelPolicy = true
             }
     }

@@ -20,63 +20,30 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** What a load of one chat image ended in. */
 sealed class ImageResult {
-    /**
-     * The bitmap is shared with every other caller that asked for the same source and bounds and it
-     * stays in the cache afterwards, so it belongs to the loader: draw it, never recycle or mutate it.
-     */
+    /** Shared and cached: owned by the loader. Draw it, never recycle or mutate it. */
     class Ready(val bitmap: Bitmap) : ImageResult()
 
     data class Failed(val error: ImageError) : ImageResult()
 
-    /**
-     * Nothing was attempted because the requested bounds were not positive — the usual cause is a
-     * view that has not been measured yet. Not an error and not cached: ask again after layout.
-     */
+    /** Bounds were not positive (view not measured yet). Not cached: ask again after layout. */
     data object Skipped : ImageResult()
 }
 
 /**
  * Loads chat images off the main thread.
  *
- * Thumbnails are cached in an [LruCache] keyed by the SHA-1 of the source **and the requested
- * bounds**, so callers asking for different sizes do not steal each other's bitmaps. The budget
- * defaults to 1/8 of the max heap and is counted in **bytes**, not in kibibytes: rounding each
- * entry down to a whole KiB lets small thumbnails (a 22x23 one costs 2024 bytes) count as half of
- * what they are, and a cache that holds twice its budget is the disease this class exists to cure.
+ * Thumbnails are cached in an [LruCache] keyed by the SHA-1 of the source and the requested bounds,
+ * with a budget counted in bytes (default 1/8 of the max heap). Terminal failures are cached for
+ * good, [ImageError.NETWORK]/[ImageError.TIMEOUT] for [TRANSIENT_ERROR_TTL_MS], and
+ * [ImageError.EXTERNAL_DISABLED] never (the setting can change while the log is on screen).
  *
- * Failures are cached too, but only terminal ones ([ImageError.UNSUPPORTED], [ImageError.MALFORMED],
- * [ImageError.TOO_LARGE]) for good: [ImageError.NETWORK] and [ImageError.TIMEOUT] expire after
- * [TRANSIENT_ERROR_TTL_MS] so an image that arrived while the phone was offline becomes loadable
- * again, and [ImageError.EXTERNAL_DISABLED] is never cached because the setting behind it can change
- * while the log is on screen. Without any error caching a failed row re-fetches on every single
- * bind, which is what turns one unreachable image into a scroll-speed request loop.
+ * Concurrent loads of the same key share one fetch and decode in the loader's own scope, so the row
+ * that scrolls away first does not cancel one still on screen. The job is cancelled when its last
+ * caller leaves, but a blocking fetch that has started runs to the end; the result is then dropped.
  *
- * Concurrent loads of the same key share one fetch and one decode, so a fling that binds the same
- * source in several rows does the work once. The shared work runs in the loader's own scope rather
- * than in the first caller's, because otherwise the row that scrolls away first cancels the row that
- * is still on screen. When its last caller is gone the job is cancelled — but cancellation is
- * cooperative and [ImageFetcher.fetch] blocks, so it never observes it: a download that has already
- * started runs to the end. What the cancellation buys is that no *further* work is queued and that
- * the result is dropped rather than cached; what bounds a fast fling is the permit below.
- *
- * At most [maxConcurrentLoads] loads hold a permit at a time, and a permit covers the decode as well
- * as the fetch, so decodes are serialised to the same number. That number is a memory bound, not a
- * throughput knob, and the bound it states is
- *
- *     maxConcurrentLoads x (peak per load)  +  1 x (peak per load, ungated)  +  maxCacheBytes
- *
- * The second term is [fetchBytes] called on its own — the share path — which takes **no permit at
- * all**, so a share running beside three full loads is a fourth concurrent peak, not a third.
- *
- * Peak per load is whichever source path that load takes: an inline `data:` source costs 4.75 bytes
- * per character inside [ImageSource.parse] (10_137_896 B at [MAX_SOURCE_LENGTH], which is where that
- * cap's number comes from), a remote one costs [HttpImageFetcher]'s byte cap. The two do not add up
- * *within* one load — one load takes one path — but four loads are four different sources and may
- * take four different paths, so the worst case is four times the larger of the two.
- *
- * At the defaults that is 4 x ~10 MB = ~40 MB of transient peak plus `maxMemory() / 8` of cache. It
- * is a bound, not a guarantee: none of this catches an [OutOfMemoryError], on purpose, so that an
- * exhausted heap fails where it can be diagnosed rather than being swallowed here.
+ * At most [maxConcurrentLoads] loads (fetch + decode) hold a permit, which bounds transient memory
+ * to roughly `(maxConcurrentLoads + 1) x ~10 MB + maxCacheBytes`; the `+ 1` is [fetchBytes], which
+ * takes no permit. [OutOfMemoryError] is deliberately not caught.
  */
 class ChatImageLoader(
     private val fetcher: ImageFetcher = HttpImageFetcher(),
@@ -98,34 +65,25 @@ class ChatImageLoader(
     private val cache = object : LruCache<String, Entry>(maxCacheBytes.coerceIn(1L, MAX_CACHE_BYTES).toInt()) {
         override fun sizeOf(key: String, value: Entry): Int = when (val result = value.result) {
             is ImageResult.Ready -> result.bitmap.byteCount.coerceAtLeast(1)
-            // A remembered failure is a small object and a key, but not free: a server that sends a
-            // thousand distinct broken URLs would otherwise fill the map without ever paying for it.
+            // Charged so a flood of distinct broken URLs cannot fill the map for free.
             else -> FAILURE_COST_BYTES
         }
     }
 
-    /** Not tied to any caller's lifecycle; see the class KDoc on why the work outlives one row. */
+    /** Not tied to any caller's lifecycle, so shared work outlives one row. */
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-    // The bound is checked here, not in an `init {}` block: property initialisers run first, so
-    // Semaphore(0) would throw its own message before any later check could be reached.
+    // Checked inline: Semaphore(0) would throw before an init {} check runs.
     private val gate = Semaphore(
         maxConcurrentLoads.also { require(it > 0) { "maxConcurrentLoads must be positive, was $it" } },
     )
 
     /**
-     * Guarded by `synchronized(inFlight)`. Nothing inside those sections suspends *or fetches*: the
-     * shared job is created [CoroutineStart.LAZY] and it is [Deferred.await], outside the monitor,
-     * that starts it, because on an immediate dispatcher a coroutine's body runs inline and the
-     * whole blocking fetch would otherwise happen with this lock held — a process-wide lock around
-     * the network, one dispatcher change away.
+     * Guarded by `synchronized(inFlight)`. Nothing inside the monitor suspends or fetches: jobs are
+     * [CoroutineStart.LAZY] and started by [Deferred.await] outside it, since an immediate dispatcher
+     * would otherwise run the blocking fetch under the lock.
      *
-     * **What would break this map is a path that takes an entry out of the monitor and then does not
-     * await it.** A "peek" helper, an early `return` between the monitor and the `try`, a `?:` that
-     * short-circuits past it: [shared] increments `waiters` inside the monitor, and the `finally`
-     * around the `await` is the only thing that ever decrements it. A caller that leaves in between
-     * leaks a waiter, so the count never reaches zero again, the job is never cancelled and the key
-     * stays in this map for the life of the process. The increment and the await are one path; they
-     * must stay one.
+     * Every `waiters++` in [shared] must be followed by the awaiting `try/finally` that decrements it;
+     * a path that leaves in between leaks the entry for the life of the process.
      */
     private val inFlight = HashMap<String, Shared>()
 
@@ -133,11 +91,8 @@ class ChatImageLoader(
     private val lastBytes = AtomicReference<Pair<String, ByteArray>?>(null)
 
     /**
-     * Thumbnail bounded by [maxWidth] x [maxHeight] px; cached per source *and* bounds.
-     *
-     * Non-positive bounds yield [ImageResult.Skipped] instead of reaching [BoundedBitmapDecoder],
-     * which throws on them — deliberately, since a negative bound hangs its sampling loop. An
-     * unmeasured view legitimately reports 0 px, and that must not be a crash.
+     * Thumbnail bounded by [maxWidth] x [maxHeight] px; cached per source and bounds. Non-positive
+     * bounds (an unmeasured view) yield [ImageResult.Skipped]; [BoundedBitmapDecoder] would throw.
      */
     suspend fun loadThumbnail(source: String, maxWidth: Int, maxHeight: Int): ImageResult {
         if (maxWidth <= 0 || maxHeight <= 0) return ImageResult.Skipped
@@ -149,12 +104,8 @@ class ChatImageLoader(
     }
 
     /**
-     * Decode bounded by the given size (e.g. the screen); never cached as a bitmap.
-     *
-     * Bounded with [BoundedBitmapDecoder.decodeAtMost], not with an exact fit: this is the only
-     * path whose bound is screen-sized, so it is the only one where the exact fit's second bitmap
-     * is measured in tens of megabytes. See that function for the numbers and for why the viewer
-     * does not notice.
+     * Decode bounded by the given size (e.g. the screen); never cached as a bitmap. Uses
+     * [BoundedBitmapDecoder.decodeAtMost] to avoid a second screen-sized bitmap for the exact fit.
      */
     suspend fun loadFull(source: String, maxWidth: Int, maxHeight: Int): ImageResult {
         if (maxWidth <= 0 || maxHeight <= 0) return ImageResult.Skipped
@@ -163,25 +114,17 @@ class ChatImageLoader(
     }
 
     /**
-     * Raw bytes of [source]. Throws [ImageFetchException]. Runs on [ioDispatcher].
-     * Remembers the last result (one entry) so displaying an image and then sharing it does not
-     * download it twice.
+     * Raw bytes of [source], on [ioDispatcher]; throws [ImageFetchException]. The last result is
+     * remembered so viewing and then sharing an image downloads it once.
      *
-     * **The array is the loader's**, exactly as [ImageResult.Ready.bitmap] is: it is the remembered
-     * entry itself, handed out without a copy because copying five mebibytes per call is the disease
-     * this class treats. Read it, never write to it.
-     *
-     * Takes no permit from the concurrency gate: [load] already holds one while it calls this, and
-     * the gate is not reentrant. A caller that uses this directly is therefore not counted against
+     * The array is the loader's (not copied): read it, never write to it. Takes no permit (the gate
+     * is not reentrant and [load] already holds one), so direct callers are not counted against
      * [maxConcurrentLoads].
      */
     suspend fun fetchBytes(source: String): ByteArray {
-        // ImageSource.parse enforces the same cap and is the authoritative one — it is where the
-        // percent-decode and the base64 decode happen. Refusing here as well keeps the work off
-        // this call before it even dispatches, and is pinned from both sides.
+        // Early refusal; ImageSource.parse enforces the same cap authoritatively.
         if (source.length > MAX_SOURCE_LENGTH) throw ImageFetchException(ImageError.TOO_LARGE)
-        // cacheKey hashes the whole source, and for a `data:` source the source *is* the image.
-        // That belongs on the IO dispatcher with the fetch, never on the thread that bound the row.
+        // cacheKey is O(length) and a data: source is the whole image, so hash off the caller's thread.
         return withContext(ioDispatcher) { fetchBytes(source, cacheKey(source)) }
     }
 
@@ -201,45 +144,29 @@ class ChatImageLoader(
         return bytes
     }
 
-    /**
-     * The bytes the cache really holds right now, measured on the bitmaps themselves rather than
-     * read back out of the cache's own accounting — a test that asked [LruCache] how full it thinks
-     * it is would pass under any sizing rule, including the one this measurement exists to reject.
-     */
+    /** Bytes held by cached bitmaps, measured on the bitmaps rather than the cache's accounting. */
     @VisibleForTesting
     fun cachedBitmapBytes(): Long =
         cache.snapshot().values.sumOf { (it.result as? ImageResult.Ready)?.bitmap?.byteCount?.toLong() ?: 0L }
 
     /**
-     * Runs [produce] once per [key] however many callers ask for it, and hands every caller the same
-     * result. A caller that is cancelled while waiting drops out; the work stops only when the last
-     * one has.
+     * Runs [produce] once per [key] and hands every caller the same result. A cancelled caller drops
+     * out; the work stops only when the last one has.
      */
     private suspend fun shared(key: String, produce: suspend () -> ImageResult): ImageResult {
         val entry = synchronized(inFlight) {
-            // `isCompleted`, not `isActive`, and the reason is the NEW half: a job created LAZY has
-            // not started, so it is not active either, and `isActive` would read that window as
-            // "nothing is running" and start a second fetch and decode of the same source. Both a
-            // finished and a cancelled job are completed, and neither may be handed to a new caller.
-            // Untested, deliberately, and the halves fail differently. A cancelled entry is removed
-            // inside the same critical section that cancels it and re-awaiting a finished one
-            // returns the same result, so those two have no observable failure at all. The NEW half
-            // does have one — the same work done twice — but both callers still get a correct
-            // result, so what a regression here costs is a duplicate load, not an answer.
+            // `isCompleted`, not `isActive`: a not-yet-started LAZY job is not active either.
             val running = inFlight[key]?.takeIf { !it.job.isCompleted }
             val shared = running ?: Shared().also {
                 inFlight[key] = it
-                // LAZY so that nothing can run while this monitor is held; see [inFlight].
+                // LAZY so nothing runs while this monitor is held; see [inFlight].
                 it.job = scope.async(start = CoroutineStart.LAZY) { produce() }
             }
             shared.waiters++
             shared
         }
         try {
-            // await() starts the LAZY job itself (JobSupport.awaitInternal -> startInternal) and it
-            // does so here, outside the monitor, which is the only property that matters. An
-            // explicit start() before this line would be a no-op for every caller including the
-            // first, so there is none.
+            // await() starts the LAZY job, outside the monitor.
             return entry.job.await()
         } finally {
             synchronized(inFlight) {
@@ -277,9 +204,7 @@ class ChatImageLoader(
 
     /** How long [result] may be served from the cache; `null` means do not cache it at all. */
     private fun ttlMillisFor(result: ImageResult): Long? = when {
-        // Unreachable by construction — loadThumbnail returns Skipped before anything can be cached
-        // — and kept anyway, because the alternative if it ever became reachable is caching "this
-        // view had not been measured yet" for the life of the process.
+        // Unreachable today (loadThumbnail returns early); never cache "not measured yet".
         result is ImageResult.Skipped -> null
         result is ImageResult.Failed && result.error == ImageError.EXTERNAL_DISABLED -> null
         result is ImageResult.Failed &&
@@ -316,17 +241,10 @@ class ChatImageLoader(
         /** How long a NETWORK/TIMEOUT failure stays cached before the source is tried again. */
         const val TRANSIENT_ERROR_TTL_MS = 30_000L
 
-        /**
-         * Longest source string that is even looked at; see [ImageSource.MAX_SOURCE_LENGTH], which
-         * owns the bound because it owns the allocations. Repeated here only so that this class's
-         * own early refusal and the parser's cannot drift apart.
-         */
+        /** Longest source string that is looked at; owned by [ImageSource.MAX_SOURCE_LENGTH]. */
         const val MAX_SOURCE_LENGTH = ImageSource.MAX_SOURCE_LENGTH
 
-        /**
-         * In flight at once. Each one costs a peak of its own, and the ungated share path adds one
-         * more on top; see the class KDoc for the arithmetic this number is a factor of.
-         */
+        /** Loads in flight at once; a memory bound, see the class KDoc. */
         const val DEFAULT_MAX_CONCURRENT_LOADS = 3
 
         /** What a cached failure is charged against the budget: the entry, its key and the error. */
@@ -340,22 +258,10 @@ class ChatImageLoader(
         private const val HASH_CHUNK_CHARS = 8 * 1024
 
         /**
-         * Stable, filesystem-safe key for a source; also used as the share file name (Task 8).
-         *
-         * The **whole** source is hashed, and that is not negotiable: for a `data:` source the
-         * source is the image, so any key derived from a part of it collides — by pigeonhole, on
-         * inputs an attacker picks — for two sources that differ only in the part not read, and a
-         * collision here shows one participant's image in place of another's and names the shared
-         * file after the wrong one. There is no cheaper key that is equally collision-safe.
-         *
-         * What *is* negotiable is the copy. `source.toByteArray()` would allocate a second
-         * megabytes-long array per call, so the string is fed to the digest in chunks instead,
-         * never splitting a surrogate pair — the halves encode differently apart than together,
-         * which would silently change the key of every source long enough to contain one. The
-         * result is byte for byte the SHA-1 of the source's UTF-8, pinned by
-         * `theKeyIsTheSha1OfTheWholeSourceHoweverLongItIs`.
-         *
-         * This is still O(length) work: callers run it off the thread that binds a row.
+         * Stable, filesystem-safe key for a source (also the share file name): the SHA-1 of the
+         * source's UTF-8. The whole source is hashed, since for a `data:` source a partial key would
+         * let an attacker make two images collide. Fed in chunks that never split a surrogate pair to
+         * avoid copying the whole string. O(length): call off the main thread.
          */
         fun cacheKey(source: String): String {
             val digest = MessageDigest.getInstance("SHA-1")
@@ -393,10 +299,7 @@ object ChatImageLoaders {
         }
     }
 
-    /**
-     * Test seam: installs [loader] as the process-wide instance, or restores the real one with
-     * `null`. Used by `ImageViewerDialogFragmentTest` (Task 8); production code must not call this.
-     */
+    /** Test seam: installs [loader] as the process-wide instance, or `null` to restore the real one. */
     @VisibleForTesting
     fun setForTests(loader: ChatImageLoader?) {
         instance = loader
