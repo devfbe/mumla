@@ -197,4 +197,12 @@
     <string name="audio_device_bluetooth">سماعة رأس بلوتوث</string>
     <string name="audio_device_other">جهاز الصوت</string>
     <string name="echo_cancellation">إلغاء الصدى</string>
+    <string name="chat_notify_muted_deafened">كُتم وأُصمّ</string>
+    <string name="chat_notify_muted">كُتم.</string>
+    <string name="chat_notify_unmuted">فُك كتمه.</string>
+    <string name="chat_notify_now_muted">%s مكتوم.</string>
+    <string name="chat_notify_now_unmuted">%s غير مكتوم.</string>
+    <string name="chat_notify_connected">%s متصل.</string>
+    <string name="chat_notify_disconnected">%s غير متصل.</string>
+    <string name="server">خادم</string>
 </resources>

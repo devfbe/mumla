@@ -1,15 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="chat_notify_now_unmuted">%s agora está dessilenciado.</string>
-    <string name="chat_notify_now_muted_deafened">%s agora está mudo e ensurdecido.</string>
-    <string name="chat_notify_unmuted">Dessilenciado.</string>
-    <string name="chat_notify_muted_deafened">Silenciado e ensurdecido.</string>
-    <string name="chat_notify_disconnected">%s desconectou.</string>
-    <string name="chat_notify_connected">%s conectou.</string>
-    <string name="chat_notify_now_muted">%s agora está silenciado.</string>
-    <string name="chat_notify_muted">Silenciado.</string>
-    <string name="server">Servidor</string>
-    <string name="perm_denied">Permissão negada.</string>
     <string name="udp_warning_unavailable">Não é possível enviar ou receber pacotes UDP do servidor. Mudando para o modo TCP.</string>
     <string name="udp_warning_send_failed">Não é possível enviar pacotes UDP para o servidor. Mudando para o modo TCP.</string>
     <string name="udp_warning_receive_failed">Não é possível receber pacotes UDP do servidor. Mudando para o modo TCP.</string>

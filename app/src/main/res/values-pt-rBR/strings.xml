@@ -184,4 +184,13 @@
     <string name="audio_device_bluetooth">Fone de ouvido Bluetooth</string>
     <string name="audio_device_other">Dispositivo de áudio</string>
     <string name="echo_cancellation">Cancelamento de eco</string>
+    <string name="chat_notify_muted_deafened">Silenciado e ensurdecido.</string>
+    <string name="chat_notify_muted">Silenciado.</string>
+    <string name="chat_notify_unmuted">Dessilenciado.</string>
+    <string name="chat_notify_now_muted_deafened">%s agora está mudo e ensurdecido.</string>
+    <string name="chat_notify_now_muted">%s agora está silenciado.</string>
+    <string name="chat_notify_now_unmuted">%s agora está dessilenciado.</string>
+    <string name="chat_notify_connected">%s conectou.</string>
+    <string name="chat_notify_disconnected">%s desconectou.</string>
+    <string name="server">Servidor</string>
 </resources>

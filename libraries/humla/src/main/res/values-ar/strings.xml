@@ -1,14 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="perm_denied">رُفض الإذن.</string>
-    <string name="chat_notify_unmuted">فُك كتمه.</string>
-    <string name="chat_notify_connected">%s متصل.</string>
-    <string name="chat_notify_disconnected">%s غير متصل.</string>
-    <string name="server">خادم</string>
-    <string name="chat_notify_muted">كُتم.</string>
-    <string name="chat_notify_muted_deafened">كُتم وأُصمّ</string>
-    <string name="chat_notify_now_muted">%s مكتوم.</string>
-    <string name="chat_notify_now_unmuted">%s غير مكتوم.</string>
     <string name="udp_warning_unavailable">لا يمكن إرسال حزم UDP إلى الخادم أو استقبالها منه. يجري التبديل إلى وضع TCP.</string>
     <string name="udp_warning_send_failed">لا يمكن إرسال حزم UDP إلى الخادم. يجري التبديل إلى وضع TCP.</string>
     <string name="udp_warning_receive_failed">لا يمكن استقبال حزم UDP من الخادم. يجري التبديل إلى وضع TCP.</string>
