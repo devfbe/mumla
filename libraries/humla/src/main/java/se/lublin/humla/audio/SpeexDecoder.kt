@@ -42,15 +42,6 @@ class SpeexDecoder @JvmOverloads @Throws(NativeAudioException::class) constructo
         return frameSize
     }
 
-    @Throws(NativeAudioException::class)
-    override fun decodeShort(input: ByteBuffer?, inputSize: Int, output: ShortArray, frameSize: Int): Int {
-        val floats = FloatArray(frameSize)
-        val result = api.decodeFloat(handle, PacketBytes.copy(input, inputSize), inputSize, floats)
-        if (result < 0) throw NativeAudioException("Speex decoding failed with error: $result")
-        for (i in 0 until frameSize) output[i] = floats[i].toInt().toShort()
-        return frameSize
-    }
-
     override fun destroy() {
         if (destroyed) return
         destroyed = true

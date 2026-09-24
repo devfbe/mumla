@@ -43,13 +43,6 @@ class CELT11Decoder @JvmOverloads @Throws(NativeAudioException::class) construct
         return frameSize
     }
 
-    @Throws(NativeAudioException::class)
-    override fun decodeShort(input: ByteBuffer?, inputSize: Int, output: ShortArray, frameSize: Int): Int {
-        val result = api.decodeShort(state, PacketBytes.copy(input, inputSize), inputSize, output, frameSize)
-        if (result < 0) throw NativeAudioException("CELT 0.11.0 decoding failed with error: $result")
-        return frameSize
-    }
-
     override fun destroy() {
         if (destroyed) return
         destroyed = true

@@ -176,29 +176,6 @@ JNIEXPORT jint JNICALL DEC(decodeFloat)(JNIEnv* env, jobject, jlong state, jbyte
     return result;
 }
 
-JNIEXPORT jint JNICALL DEC(decodeShort)(JNIEnv* env, jobject, jlong state, jbyteArray data, jint len, jshortArray out, jint frameSize, jint decodeFec) {
-    auto* h = fromHandle<DecoderHandle>(state);
-    if (h == nullptr || out == nullptr || frameSize <= 0 || !packetFits(env, data, len)) return OPUS_BAD_ARG;
-    frameSize = clampFrameSize(env, out, frameSize, h->channels);
-    if (frameSize <= 0) return OPUS_BUFFER_TOO_SMALL;
-    jbyte* dataPtr = nullptr;
-    if (data != nullptr) {
-        dataPtr = env->GetByteArrayElements(data, nullptr);
-        if (dataPtr == nullptr) return OPUS_ALLOC_FAIL;
-    }
-    jshort* outPtr = env->GetShortArrayElements(out, nullptr);
-    if (outPtr == nullptr) {
-        if (dataPtr != nullptr) env->ReleaseByteArrayElements(data, dataPtr, JNI_ABORT);
-        return OPUS_ALLOC_FAIL;
-    }
-    int result = opus_decode(h->state,
-                             dataPtr != nullptr ? reinterpret_cast<const unsigned char*>(dataPtr) : nullptr,
-                             dataPtr != nullptr ? len : 0, outPtr, frameSize, decodeFec);
-    env->ReleaseShortArrayElements(out, outPtr, 0);
-    if (dataPtr != nullptr) env->ReleaseByteArrayElements(data, dataPtr, JNI_ABORT);
-    return result;
-}
-
 JNIEXPORT void JNICALL DEC(destroy)(JNIEnv*, jobject, jlong state) {
     auto* h = fromHandle<DecoderHandle>(state);
     if (h == nullptr) return;

@@ -43,13 +43,6 @@ class OpusDecoder @JvmOverloads @Throws(NativeAudioException::class) constructor
         return result
     }
 
-    @Throws(NativeAudioException::class)
-    override fun decodeShort(input: ByteBuffer?, inputSize: Int, output: ShortArray, frameSize: Int): Int {
-        val result = api.decodeShort(state, PacketBytes.copy(input, inputSize), inputSize, output, frameSize, 0)
-        if (result < 0) throw NativeAudioException("Opus decoding failed with error: $result")
-        return result
-    }
-
     override fun destroy() {
         if (destroyed) return
         destroyed = true

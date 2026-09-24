@@ -246,8 +246,6 @@ class AudioOutputTest {
         }
         override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int =
             AudioHandler.FRAME_SIZE
-        override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int): Int =
-            AudioHandler.FRAME_SIZE
         override fun destroy(state: Long) = Unit
         override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = 1
         override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int = AudioHandler.FRAME_SIZE

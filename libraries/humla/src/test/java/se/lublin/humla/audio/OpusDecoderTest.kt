@@ -13,7 +13,6 @@ class OpusDecoderTest {
             return 11L
         }
         override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int = frameSize
-        override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int): Int = frameSize
         override fun destroy(state: Long) {
             destroys++
         }

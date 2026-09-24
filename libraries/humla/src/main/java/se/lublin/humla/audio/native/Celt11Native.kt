@@ -24,7 +24,6 @@ interface Celt11Api {
     fun encoderDestroy(state: Long)
     fun decoderCreate(sampleRate: Int, channels: Int, error: IntArray): Long
     fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int): Int
-    fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int): Int
     fun decoderDestroy(state: Long)
 }
 
@@ -38,6 +37,5 @@ object Celt11Native : Celt11Api {
     external override fun encoderDestroy(state: Long)
     external override fun decoderCreate(sampleRate: Int, channels: Int, error: IntArray): Long
     external override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int): Int
-    external override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int): Int
     external override fun decoderDestroy(state: Long)
 }

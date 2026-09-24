@@ -70,17 +70,6 @@ JNIEXPORT jint JNICALL C7(decodeFloat)(JNIEnv* env, jobject, jlong state, jbyteA
     return result;
 }
 
-JNIEXPORT jint JNICALL C7(decodeShort)(JNIEnv* env, jobject, jlong state, jbyteArray data, jint len, jshortArray out) {
-    jbyte* dataPtr = data != nullptr ? env->GetByteArrayElements(data, nullptr) : nullptr;
-    jshort* outPtr = env->GetShortArrayElements(out, nullptr);
-    int result = celt_decode(fromHandle<CELTDecoder>(state),
-                             dataPtr != nullptr ? reinterpret_cast<const unsigned char*>(dataPtr) : nullptr,
-                             dataPtr != nullptr ? len : 0, outPtr);
-    env->ReleaseShortArrayElements(out, outPtr, 0);
-    if (dataPtr != nullptr) env->ReleaseByteArrayElements(data, dataPtr, JNI_ABORT);
-    return result;
-}
-
 JNIEXPORT void JNICALL C7(decoderDestroy)(JNIEnv*, jobject, jlong state) {
     celt_decoder_destroy(fromHandle<CELTDecoder>(state));
 }

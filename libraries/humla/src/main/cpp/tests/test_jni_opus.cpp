@@ -34,7 +34,6 @@ JNIEXPORT jint JNICALL ENC(ctlGetInt)(JNIEnv*, jobject, jlong, jint, jintArray);
 JNIEXPORT void JNICALL ENC(destroy)(JNIEnv*, jobject, jlong);
 JNIEXPORT jlong JNICALL DEC(create)(JNIEnv*, jobject, jint, jint, jintArray);
 JNIEXPORT jint JNICALL DEC(decodeFloat)(JNIEnv*, jobject, jlong, jbyteArray, jint, jfloatArray, jint, jint);
-JNIEXPORT jint JNICALL DEC(decodeShort)(JNIEnv*, jobject, jlong, jbyteArray, jint, jshortArray, jint, jint);
 JNIEXPORT void JNICALL DEC(destroy)(JNIEnv*, jobject, jlong);
 JNIEXPORT jint JNICALL DEC(packetGetNbFrames)(JNIEnv*, jobject, jbyteArray, jint);
 JNIEXPORT jint JNICALL DEC(packetGetSamplesPerFrame)(JNIEnv*, jobject, jbyteArray, jint);
@@ -121,21 +120,12 @@ static void test_decoder(Env& env) {
         CHECK(jnistub::outstanding_copies() == 0, "float decode releases its copies");
     }
     {
-        Array<jshort> out(kFrame);
-        CHECK(DEC(decodeShort)(e, nullptr, dec, packet.as<jbyteArray>(), len, out.as<jshortArray>(), kFrame, 0)
-                  == kFrame, "short decode of an honest packet");
-    }
-    {
         /* The frame size claims more room than the array has: clamped, so opus reports the
          * buffer as too small instead of writing past the array. */
         Array<jfloat> out(kFrame / 2);
         int result = DEC(decodeFloat)(e, nullptr, dec, packet.as<jbyteArray>(), len,
                                       out.as<jfloatArray>(), 5760, 0);
         CHECK(result == OPUS_BUFFER_TOO_SMALL, "an oversized frame size is clamped to the float array");
-        Array<jshort> outShort(kFrame / 2);
-        result = DEC(decodeShort)(e, nullptr, dec, packet.as<jbyteArray>(), len,
-                                  outShort.as<jshortArray>(), 5760, 0);
-        CHECK(result == OPUS_BUFFER_TOO_SMALL, "an oversized frame size is clamped to the short array");
     }
     {
         Array<jfloat> out(kFrame);

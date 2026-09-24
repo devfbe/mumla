@@ -26,7 +26,6 @@ class CELT7DecoderTest {
             return 3L
         }
         override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray): Int = 0
-        override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray): Int = 0
         override fun decoderDestroy(state: Long) {
             decoderDestroys++
         }
