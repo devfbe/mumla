@@ -4,7 +4,6 @@ import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
-import se.lublin.humla.Constants
 import se.lublin.mumla.db.PublicServer
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
@@ -13,7 +12,7 @@ class ServerMatcherTest {
     private fun server(name: String, country: String = "SE") =
         PublicServer(name, "0", "EU", country, country, "$name.example", 64738, "", "")
 
-    private fun reply(server: PublicServer, users: Int, latency: Int, version: Int = Constants.PROTOCOL_VERSION) =
+    private fun reply(server: PublicServer, users: Int, latency: Int, version: Int = 0x10400) =
         ServerInfoResponse(
             server,
             ByteBuffer.allocate(24).putInt(version).putLong(0).putInt(users).putInt(10).putInt(0).array(),
@@ -39,12 +38,24 @@ class ServerMatcherTest {
     }
 
     @Test
-    fun serversOnAnotherProtocolVersionOrWithoutReplyAreIgnored() = runTest {
+    fun serversOlderThanOneThreeOrWithoutReplyAreIgnored() = runTest {
         val old = server("old")
         val silent = server("silent")
-        val replies = mapOf(old to reply(old, users = 0, latency = 1, version = 0x10203), silent to ServerInfoResponse())
+        val replies = mapOf(
+            old to reply(old, users = 0, latency = 1, version = 0x10205),
+            silent to ServerInfoResponse(),
+        )
 
         assertThat(matchServer(listOf(old, silent), null, { replies.getValue(it) })).isNull()
+    }
+
+    @Test
+    fun anyServerFromOneThreeOnMatches() = runTest {
+        for (version in listOf(0x10300, 0x10400, 0x10500, 0x105FF, 0x20000)) {
+            val s = server("s")
+            val match = matchServer(listOf(s), null, { reply(it, users = 0, latency = 1, version = version) })
+            assertThat(match?.version).isEqualTo(version)
+        }
     }
 
     @Test
