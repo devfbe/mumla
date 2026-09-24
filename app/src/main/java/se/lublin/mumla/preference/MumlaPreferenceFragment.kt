@@ -11,7 +11,7 @@ import se.lublin.mumla.R
  * A screen of [SettingsActivity] built from [preferencesXml]. Titles the action bar with the
  * [ARG_TITLE] argument, and shows the dialogs of Mumla's own dialog preferences.
  */
-abstract class MumlaPreferenceFragment(@XmlRes private val preferencesXml: Int) : PreferenceFragmentCompat() {
+abstract class MumlaPreferenceFragment(@param:XmlRes private val preferencesXml: Int) : PreferenceFragmentCompat() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(preferencesXml, rootKey)

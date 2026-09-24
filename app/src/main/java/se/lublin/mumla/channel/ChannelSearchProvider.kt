@@ -79,7 +79,7 @@ class ChannelSearchProvider : ContentProvider() {
         channelsMatching(root, query).forEachIndexed { index, channel ->
             val users = channel.subchannelUserCount
             cursor.addRow(
-                arrayOf(
+                arrayOf<Any?>(
                     index, INTENT_DATA_CHANNEL, channel.name, R.drawable.ic_action_channels,
                     context.resources.getQuantityString(R.plurals.search_channel_users, users, users), channel.id,
                 ),
@@ -87,7 +87,7 @@ class ChannelSearchProvider : ContentProvider() {
         }
         usersMatching(root, query).forEachIndexed { index, user ->
             cursor.addRow(
-                arrayOf(
+                arrayOf<Any?>(
                     index, INTENT_DATA_USER, user.name, R.drawable.ic_action_user_dark,
                     context.getString(R.string.user), user.session,
                 ),
