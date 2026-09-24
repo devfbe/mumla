@@ -242,6 +242,9 @@ class ChannelTest {
             while (!done.get()) {
                 root.setLinks(linked)
                 relinks.incrementAndGet()
+                // Monitors are not fair: without a pause the writer re-takes the lock at once
+                // and the reader waits seconds for each observation.
+                Thread.yield()
             }
         }
         try {

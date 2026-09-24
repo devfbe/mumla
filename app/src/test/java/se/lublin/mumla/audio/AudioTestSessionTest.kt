@@ -92,7 +92,7 @@ class AudioTestSessionTest {
         resamplerFactory = resamplerFactory,
     ).also { session = it }
 
-    private fun await(condition: () -> Boolean) = awaitUntil(4_000L, condition = condition)
+    private fun await(condition: () -> Boolean) = awaitUntil(condition = condition)
 
     // --- what the meter reports ----------------------------------------------------------------
 
