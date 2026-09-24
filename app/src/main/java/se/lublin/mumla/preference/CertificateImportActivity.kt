@@ -17,13 +17,13 @@
 
 package se.lublin.mumla.preference
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.text.InputType
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -43,29 +43,19 @@ import java.util.UUID
 
 class CertificateImportActivity : AppCompatActivity() {
 
+    private val picker = registerForActivityResult(ActivityResultContracts.GetContent(), ::onFilePicked)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val fileIntent = Intent(Intent.ACTION_GET_CONTENT)
-        fileIntent.setType("*/*")
-        fileIntent.addCategory(Intent.CATEGORY_OPENABLE)
-        @Suppress("DEPRECATION")
-        startActivityForResult(fileIntent, REQUEST_FILE)
+        // A recreated activity gets the pending pick's result without asking again.
+        if (savedInstanceState == null) picker.launch("*/*")
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        @Suppress("DEPRECATION")
-        super.onActivityResult(requestCode, resultCode, data)
+    private fun onFilePicked(uri: Uri?) {
+        if (uri == null) finish() else import(uri)
+    }
 
-        if (requestCode != REQUEST_FILE) return
-
-        if (resultCode == RESULT_CANCELED) {
-            finish()
-            return
-        }
-
-        val uri: Uri = data!!.data!!
+    private fun import(uri: Uri) {
         // Read once: the picker's stream is spent after one read, and a password retry needs the bytes.
         val pkcs12: ByteArray = try {
             contentResolver.openInputStream(uri)!!.use { it.readBytes() }
@@ -147,9 +137,5 @@ class CertificateImportActivity : AppCompatActivity() {
         e.printStackTrace()
         Toast.makeText(this, R.string.invalid_certificate, Toast.LENGTH_LONG).show()
         finish()
-    }
-
-    companion object {
-        const val REQUEST_FILE = 0
     }
 }

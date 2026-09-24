@@ -163,7 +163,6 @@
     <ID>ReturnCount:AudioSettingsFragment.kt$AudioSettingsFragment$private fun restartSession( loopback: Boolean = findPreference&lt;SwitchPreferenceCompat&gt;(KEY_LOOPBACK)?.isChecked ?: false, )</ID>
     <ID>ReturnCount:BluetoothScoToggle.kt$BluetoothScoToggle$fun request(enabled: Boolean): Result</ID>
     <ID>ReturnCount:BoundedBitmapDecoder.kt$BoundedBitmapDecoder$private fun decode(bytes: ByteArray, maxWidth: Int, maxHeight: Int, exactFit: Boolean): Bitmap?</ID>
-    <ID>ReturnCount:CertificateImportActivity.kt$CertificateImportActivity$@Deprecated("Deprecated in Java") override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?)</ID>
     <ID>ReturnCount:CertificateImportActivityTest.kt$CertificateImportActivityTest$private fun findEditText(view: View): EditText?</ID>
     <ID>ReturnCount:ChannelChatFragmentTest.kt$ChannelChatFragmentTest$private fun View.firstImageView(): ImageView?</ID>
     <ID>ReturnCount:ChatAdapter.kt$ChatAdapter$private fun targetLabel(context: Context, message: IMessage): String</ID>

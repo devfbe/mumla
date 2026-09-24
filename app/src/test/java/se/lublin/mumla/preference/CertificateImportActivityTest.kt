@@ -89,6 +89,19 @@ class CertificateImportActivityTest {
     }
 
     @Test
+    fun anyOpenableDocumentIsAskedFor_andCancellingLeaves() {
+        val activity = Robolectric.buildActivity(CertificateImportActivity::class.java).setup().get()
+        val request = shadowOf(activity).nextStartedActivityForResult
+
+        assertThat(request.intent.action).isEqualTo(Intent.ACTION_GET_CONTENT)
+        assertThat(request.intent.type).isEqualTo("*/*")
+        assertThat(request.intent.categories).contains(Intent.CATEGORY_OPENABLE)
+
+        shadowOf(activity).receiveResult(request.intent, Activity.RESULT_CANCELED, null)
+        assertThat(activity.isFinishing).isTrue()
+    }
+
+    @Test
     fun anUnreadableDocumentIsClosed() {
         val stream = RecordingStream(byteArrayOf(1, 2, 3))
 
