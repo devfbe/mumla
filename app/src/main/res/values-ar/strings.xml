@@ -36,7 +36,6 @@
     <string name="mute">أكتم</string>
     <string name="ptt">اضغط للتحدث</string>
     <string name="connecting_to_server">يتصل ب %s…</string>
-    <string name="connecting">يتصل</string>
     <string name="server_label">التسمية</string>
     <string name="server_host">العنوان</string>
     <string name="server_port">منفذ</string>
@@ -138,7 +137,6 @@
 \nيعيد الاتصال…</string>
     <string name="change_requires_reconnect">أعد الاتصال لتطبيق الاعدادات الجديدة.</string>
     <string name="no_certificate">بدون شهادة</string>
-    <string name="certificates">الشهادات</string>
     <string name="decrypt_certificate">فك تشفير الشهادة</string>
     <string name="password">كلمة السر</string>
     <string name="invalid_certificate">شهادة غير صالة، تعذر التحميل.</string>
@@ -154,10 +152,8 @@
         <item quantity="many">%d مستخدمًا</item>
         <item quantity="other">%d مستخدم</item>
     </plurals>
-    <string name="mumlaConnected">موملا متصلة</string>
     <string name="connect">اتصل</string>
     <string name="search_name">الاسم</string>
-    <string name="bluetooth">بلوتوث</string>
     <string name="connectToServer">اتصل بخادم</string>
     <string name="remove">أزل</string>
     <string name="delete">احذف</string>

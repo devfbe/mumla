@@ -60,7 +60,6 @@
     <string name="server_port">Port</string>
     <string name="server_host">Adres</string>
     <string name="server_label">Etykieta</string>
-    <string name="connecting">Łączenie</string>
     <string name="connecting_to_server">Łączenie z %s…</string>
     <string name="ptt">Naciśnij i mów</string>
     <string name="mute">Wycisz</string>
@@ -84,7 +83,6 @@
     <string name="generateCertProgress">Generowanie certyfikatu…</string>
     <string name="search">Wyszukaj</string>
     <string name="searchHint">Wyszukaj kanały i użytkowników</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="quickConnect">Szybkie połączenie</string>
     <string name="connect">Połącz</string>
     <string name="connectToServer">Połącz z serwerem</string>
@@ -97,7 +95,6 @@
     <string name="offline">Offline</string>
     <string name="clearChat">Wyczyść czat</string>
     <string name="connected">Połączono</string>
-    <string name="mumlaConnected">Mumla połączona</string>
     <string name="mumlaConnecting">Mumla łączy się…</string>
     <string name="mumlaDisconnected">Mumla rozłączona</string>
     <string name="channel">Kanał</string>
@@ -153,7 +150,6 @@
     <string name="attempting_reconnect">Błąd: %s.\n\nPonowne połączenie…</string>
     <string name="change_requires_reconnect">Połącz ponownie, aby użyć nowych ustawień.</string>
     <string name="no_certificate">Brak certyfikatu</string>
-    <string name="certificates">Certyfikaty</string>
     <string name="decrypt_certificate">Odszyfruj certyfikat</string>
     <string name="password">Hasło</string>
     <string name="invalid_certificate">Nieprawidłowy certyfikat nie mógł zostać załadowany.</string>
@@ -170,7 +166,6 @@
     <string name="shout_target">Krzyczenie do %s</string>
     <string name="shout_configure">Konfiguruj cel głosu</string>
     <string name="grant_perm_microphone">Proszę udzielić pozwolenia na mikrofon.</string>
-    <string name="grant_perm_storage">Proszę udzielić pozwolenia na pamięć zewnętrzną.</string>
     <string name="grant_perm_draw_over_apps">Proszę udzielić pozwolenia na wyświetlanie w innych aplikacjach.</string>
     <string name="orbot_not_installed">Aplikacja Orbot nie jest zainstalowana. Nie używam sieci Tor.</string>
     <string name="orbot_tor_failed">Nie udało się połączyć z lokalnym serwerem proxy sieci Tor na porcie %d (SOCKS).

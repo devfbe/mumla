@@ -28,7 +28,6 @@
     <string name="vadFloorSum">Huoneen taso, josta kynnys mitataan, desibeleinä täyden skaalan alapuolella. Käytössä vain, kun ”Seuraa taustakohinaa” on pois päältä.</string>
     <string name="vadRecalibrate">Mittaa uudelleen</string>
     <string name="vadRecalibrateSum">Unohtaa, mitä huoneesta ja äänestäsi on opittu, ja aloittaa mittauksen alusta.</string>
-    <string name="vadRecalibrateDone">Mitataan uudelleen.</string>
     <string name="vadOnset">Ohita lyhyet äänet</string>
     <string name="vadOnsetSum">Kuinka kauan äänen on kestettävä, ennen kuin se lasketaan puheeksi. Pidemmät asetukset pitävät yksittäiset näppäimistön napsahdukset poissa; jokainen askel vie 10 ms sanan alusta.</string>
     <string name="vadOnsetOff">Pois (0 ms)</string>

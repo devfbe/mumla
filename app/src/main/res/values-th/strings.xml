@@ -13,7 +13,6 @@
 \nกรุณาตรวจสอบว่า Orbot กำลังทำงานอยู่หรือไม่.</string>
     <string name="orbot_not_installed">ไม่ได้ติดตั้งแอพ Orbot. ใช้ Tor ไม่ได้</string>
     <string name="grant_perm_draw_over_apps">กรุณาอนุญาตให้แสดง Mumla เหนือแอพอื่นๆ</string>
-    <string name="grant_perm_storage">กรุณาอนุญาติให้ใช้พื้นที่จัดเก็บภายนอก</string>
     <string name="grant_perm_microphone">กรุณาอนุญาตให้ใช้ไมโครโฟน</string>
     <string name="shout_configure">ปรับแต่งเป้าหมายการส่งเสียง</string>
     <string name="shout_target">ตะโกนไปยัง %s</string>
@@ -30,7 +29,6 @@
     <string name="invalid_certificate">ใบรับรองไม่ถูกต้องไม่สามารถใช้งานได้</string>
     <string name="password">รหัสผ่าน</string>
     <string name="decrypt_certificate">ถอดรหัสใบรับรอง</string>
-    <string name="certificates">ใบรับรอง</string>
     <string name="no_certificate">ไม่มีใบรับรอง</string>
     <string name="change_requires_reconnect">กำลังเชื่อมต่อจากการตั้งค่าใหม่</string>
     <string name="attempting_reconnect">Error: %s.
@@ -88,7 +86,6 @@
     <string name="channel">แชทเนล</string>
     <string name="mumlaDisconnected">Mumla ออกจากระบบ</string>
     <string name="mumlaConnecting">Mumla กำลังเชื่อมต่อ…</string>
-    <string name="mumlaConnected">Mumla เชื่อมต่อแล้ว</string>
     <string name="connected">เชื่อมต่อแล้ว</string>
     <string name="clearChat">ล้างแชท</string>
     <string name="offline">ออฟไลน์</string>
@@ -101,7 +98,6 @@
     <string name="connectToServer">เชื่อมต่อเซิฟเวอร์</string>
     <string name="connect">เชื่อมต่อ</string>
     <string name="quickConnect">เชื่อมต่อแบบรวดเร็ว</string>
-    <string name="bluetooth">บลูทูธ</string>
     <string name="searchHint">ค้นหาแชนเนลและผู้ใช้</string>
     <string name="search">ค้นหา</string>
     <string name="generateCertProgress">กำลังสร้างใบรับรอง…</string>
@@ -125,7 +121,6 @@
     <string name="mute">เงียบ</string>
     <string name="ptt">กดพูด</string>
     <string name="connecting_to_server">กำลังเชื่อมต่อ %s…</string>
-    <string name="connecting">กำลังเชื่อมต่อ</string>
     <string name="server_label">ชื่อเซิฟเวอร์</string>
     <string name="server_host">ไอพีแอดเดรส</string>
     <string name="server_port">พอร์ต</string>

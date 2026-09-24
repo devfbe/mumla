@@ -51,7 +51,6 @@
     <string name="pttButtonHeight">Висота кнопки Натисни-щоб-говорити</string>
     <string name="general">Загальні</string>
     <string name="appearance">Вигляд</string>
-    <string name="themeSum">Змінити зовнішній вигляд додатку.</string>
     <string name="theme">Тема</string>
     <string name="forceTcpSum">Вимикає передачу через протокол UDP.</string>
     <string name="audio">Аудіо</string>
@@ -77,8 +76,6 @@
     <string name="halfDuplexSum">Приглушує інші звуки під час передачі, щоб уникнути звукових петель та ехо.</string>
     <string name="pttSound">Звук \"Натисни-щоб-говорити\"</string>
     <string name="pttSoundSum">Відтворення звукового ефекту при натисканні кнопки \"Натисни-щоб-говорити\".</string>
-    <string name="preprocessor_enabled">Попередня обробка вхідного сигналу</string>
-    <string name="preprocessor_enabled_sum">Придушення фонового шуму і нормалізація гучності.</string>
     <string name="audio_per_packet">Звук на пакет</string>
     <string name="audio_per_packet_sum">Довжина аудіо в голосовому пакеті.</string>
     <string name="stay_awake">Тримати дисплей увімкненим</string>
@@ -117,7 +114,6 @@
     <string name="vadFloorSum">Рівень кімнати, від якого відраховується поріг, у дБ нижче повної шкали. Діє лише тоді, коли «Стежити за фоновим шумом» вимкнено.</string>
     <string name="vadRecalibrate">Виміряти знову</string>
     <string name="vadRecalibrateSum">Забуває все, що було виміряно про кімнату та ваш голос, і починає вимірювання спочатку.</string>
-    <string name="vadRecalibrateDone">Вимірювання розпочато знову.</string>
     <string name="vadOnset">Ігнорувати короткі шуми</string>
     <string name="vadOnsetSum">Скільки має тривати звук, щоб вважатися мовленням. Довші значення відсікають поодинокі клацання клавіатури; кожен крок коштує 10 мс початку слова.</string>
     <string name="vadOnsetOff">Викл (0 мс)</string>

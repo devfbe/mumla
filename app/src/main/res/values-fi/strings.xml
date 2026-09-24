@@ -2,7 +2,6 @@
 <resources>
     <string name="sortBy">Järjestä…</string>
     <string name="connecting_to_server">Yhdistetään %s…</string>
-    <string name="connecting">Yhdistetään</string>
     <plurals name="notification_unread_many">
         <item quantity="one">%d uusi viesti</item>
         <item quantity="other">%d uusia viestejä</item>
@@ -18,7 +17,6 @@
 \nVarmista, että Orbot-sovellus on käynnissä.</string>
     <string name="orbot_not_installed">Orbot-sovellusta ei ole asennettu. Ei käytä Tor-verkkoa tällä hetkellä.</string>
     <string name="grant_perm_draw_over_apps">Myönnä käyttöoikeus näyttää muiden sovellusten päällä.</string>
-    <string name="grant_perm_storage">Anna ulkoiselle tallennustilalle lupa.</string>
     <string name="grant_perm_microphone">Anna mikrofonin käyttöoikeus.</string>
     <string name="shout_configure">Määritä äänikohde</string>
     <string name="shout_target">Huudetaan henkilölle %s</string>
@@ -35,7 +33,6 @@
     <string name="invalid_certificate">Virheellinen sertifikaatti, lataaminen epäonnistui.</string>
     <string name="password">Salasana</string>
     <string name="decrypt_certificate">Pura Sertifikaatti</string>
-    <string name="certificates">Sertifikaatit</string>
     <string name="no_certificate">Ei sertifikaattia</string>
     <string name="change_requires_reconnect">Muodosta yhteys uudelleen käyttääksesi uusia asetuksia.</string>
     <string name="attempting_reconnect">Virhe: %s.
@@ -105,7 +102,6 @@
     <string name="channel">Kanava</string>
     <string name="mumlaDisconnected">Mumla katkaisi yhteyden</string>
     <string name="mumlaConnecting">Mumla-yhteyden muodostaminen…</string>
-    <string name="mumlaConnected">Mumla yhdistetty</string>
     <string name="connected">Yhdistetty</string>
     <string name="clearChat">Tyhjennä chat</string>
     <string name="offline">Offline-tilassa</string>
@@ -118,7 +114,6 @@
     <string name="connectToServer">Yhdistä palvelimeen</string>
     <string name="connect">Yhdistä</string>
     <string name="quickConnect">Pikayhteys</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="searchHint">Hae kanavia ja käyttäjiä</string>
     <string name="search">Haku</string>
     <string name="generateCertProgress">Luodaan sertifikaattia…</string>

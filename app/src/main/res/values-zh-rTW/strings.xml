@@ -38,7 +38,6 @@
     <string name="server_port">連接埠</string>
     <string name="server_host">位址</string>
     <string name="server_label">標籤</string>
-    <string name="connecting">連線中</string>
     <string name="connecting_to_server">正在連上 %s…</string>
     <string name="disconnect">離線</string>
     <string name="save">儲存</string>
@@ -67,7 +66,6 @@
     <string name="change_requires_reconnect">重新連線以套用新的設定。</string>
     <string name="first_run_generate_certificate">強烈建議產生憑證，部份伺服器需要憑證才能進行連線。</string>
     <string name="reconnect_dialog_message">你已連線至伺服器。確定要改為連線至這個伺服器嗎？</string>
-    <string name="mumlaConnected">Mumla 已連線</string>
     <string name="mumlaConnecting">Mumla 正在連線中…</string>
     <string name="mumlaDisconnected">Mumla 已離線</string>
     <string name="connectionRefused">連線被拒</string>
@@ -90,7 +88,6 @@
     <string name="addFavorite">新增收藏</string>
     <string name="search">搜尋</string>
     <string name="searchHint">搜尋頻道及使用者</string>
-    <string name="bluetooth">藍牙</string>
     <string name="generateCertProgress">正在產生憑證…</string>
     <string name="messageReceived">新訊息</string>
     <string name="generateCertFailure">無法產生憑證。</string>
@@ -142,7 +139,6 @@
     <string name="invalid_host">無效主機</string>
     <string name="certificate_info">核發對象:\n%1$s\n\n有效自:\n%2$s\n\n有效至:\n%3$s\n\n摘要 (SHA-1):\n%4$s\n\n摘要 (SHA-256):\n%5$s</string>
     <string name="invalid_port_range">無效連接埠 (1-65535)</string>
-    <string name="certificates">憑證</string>
     <string name="decrypt_certificate">解密憑證</string>
     <string name="no_certificate">沒有憑證</string>
     <string name="password">密碼</string>
@@ -161,7 +157,6 @@
     <string name="shout_configure">設定語音目標</string>
     <string name="grant_perm_microphone">請允許麥克風存取權限。</string>
     <string name="grant_perm_notifications">請允許發送通知權限。</string>
-    <string name="grant_perm_storage">請允許外部儲存空間存取權限。</string>
     <string name="grant_perm_draw_over_apps">請允許顯示於其他 app 之上的權限。</string>
     <string name="orbot_not_installed">未安裝 Orbot app。不使用 Tor。</string>
     <string name="orbot_tor_failed">無法連接本機 Tor 代理伺服器，連接埠 %d (SOCKS)\n\n請確認 Orbot app 正在執行中。</string>

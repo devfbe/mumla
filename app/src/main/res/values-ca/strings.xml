@@ -19,7 +19,6 @@
     <string name="channel">Canal</string>
     <string name="mumlaDisconnected">El Mumla està desconnectat</string>
     <string name="mumlaConnecting">El Mumla està connectant…</string>
-    <string name="mumlaConnected">El Mumla està connectat</string>
     <string name="connected">Connectat</string>
     <string name="clearChat">Neteja el xat</string>
     <string name="online">En línia</string>
@@ -40,7 +39,6 @@
     <string name="mute">Silencia</string>
     <string name="ptt">Premeu per parlar</string>
     <string name="connecting_to_server">S\'està connectant a %s…</string>
-    <string name="connecting">Connectant</string>
     <string name="server_label">Etiqueta</string>
     <string name="server_host">Adreça</string>
     <string name="server_username">Nom d\'usuari</string>
@@ -105,7 +103,6 @@
     <string name="messageToChannel">Escriviu un missatge al canal \'%s\'</string>
     <string name="messageToUser">Escriviu un missatge a \'%s\'</string>
     <string name="offline">Fora de línia</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="messageReceived">Missatge nou</string>
     <string name="delete">Suprimeix</string>
     <string name="generateCertFailure">No s\'ha pogut generar el certificat.</string>
@@ -159,7 +156,6 @@
     <string name="default_">Predeterminat</string>
     <string name="orbot_not_installed">L\'apliació Orbot no està instal·lada. No s\'usa Tor.</string>
     <string name="grant_perm_draw_over_apps">Permeteu a l\'aplicació mostrar-se per sobre d\'altres aplicacions.</string>
-    <string name="grant_perm_storage">Permeteu l\'accés a l\'emmagatzemament extern.</string>
     <string name="grant_perm_microphone">Permeteu l\'accés al micròfon.</string>
     <string name="shout_configure">Configurar destí de la veu</string>
     <string name="shout_failed">No s\'ha pogut crear el destí de la veu.</string>
@@ -173,7 +169,6 @@
     <string name="invalid_certificate">Certificat no vàlid, no s\'ha pogut carregar.</string>
     <string name="password">Contrasenya</string>
     <string name="decrypt_certificate">Desxifrar certificat</string>
-    <string name="certificates">Certificats</string>
     <string name="no_certificate">Cap certificat</string>
     <string name="change_requires_reconnect">Torneu a establir la connexió per a fer servir la nova configuració.</string>
     <string name="attempting_reconnect">Error: %s.

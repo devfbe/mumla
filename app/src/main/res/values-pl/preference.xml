@@ -30,7 +30,6 @@
     <string name="hotCornerSum">Naciśnij narożnik ekranu, aby przekazywać audio w całym systemie Android.</string>
     <string name="general">Ogólne</string>
     <string name="appearance">Wygląd</string>
-    <string name="themeSum">Zmień wygląd aplikacji.</string>
     <string name="theme">Motyw</string>
     <string name="advancedAudio">Zaawansowane</string>
     <string name="forceTcp">Tylko TCP</string>
@@ -76,8 +75,6 @@
     <string name="halfDuplexSum">Wycisza inne odtwarzanie podczas korzystania z funkcji „Naciśnij i mów”, aby uniknąć pętli audio/sprzężenia zwrotnego.</string>
     <string name="pttSound">Dźwięk funkcji „Naciśnij i mów”</string>
     <string name="pttSoundSum">Odtwórz efekt dźwiękowy po naciśnięciu przycisku funkcji „Naciśnij i mów”.</string>
-    <string name="preprocessor_enabled">Wstępne przetwarzanie wejścia</string>
-    <string name="preprocessor_enabled_sum">Tłumi hałas otoczenia i normalizuje głośność audio.</string>
     <string name="audio_per_packet">Audio na pakiet</string>
     <string name="audio_per_packet_sum">Długość audio na pakiet głosowy.</string>
     <string name="stay_awake">Nie usypiaj</string>
@@ -123,7 +120,6 @@
     <string name="vadFloorSum">Poziom otoczenia, od którego liczony jest próg, w dB poniżej pełnej skali. Używany tylko, gdy opcja „Podążaj za szumem tła” jest wyłączona.</string>
     <string name="vadRecalibrate">Zmierz ponownie</string>
     <string name="vadRecalibrateSum">Zapomina to, czego nauczono się o otoczeniu i Twoim głosie, i zaczyna pomiar od nowa.</string>
-    <string name="vadRecalibrateDone">Ponowny pomiar.</string>
     <string name="vadOnset">Ignoruj krótkie dźwięki</string>
     <string name="vadOnsetSum">Jak długo dźwięk musi trwać, zanim zostanie uznany za mowę. Dłuższe ustawienia odfiltrowują pojedyncze kliknięcia klawiatury; każdy krok kosztuje 10 ms początku słowa.</string>
     <string name="vadOnsetOff">Wyłączone (0 ms)</string>

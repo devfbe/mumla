@@ -64,7 +64,6 @@
     <string name="server_port">Port</string>
     <string name="server_host">Adresse</string>
     <string name="server_label">Libellé</string>
-    <string name="connecting">Connexion</string>
     <string name="connecting_to_server">Connexion à %s…</string>
     <string name="ptt">Appuyer pour parler</string>
     <string name="mute">Muet</string>
@@ -88,7 +87,6 @@
     <string name="generateCertProgress">Génération d\'un certificat…</string>
     <string name="search">Rechercher</string>
     <string name="searchHint">Rechercher des salons et des utilisateurs</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="quickConnect">Connexion rapide</string>
     <string name="connect">Connexion</string>
     <string name="connectToServer">Connexion au serveur</string>
@@ -101,7 +99,6 @@
     <string name="offline">Hors ligne</string>
     <string name="clearChat">Effacer la discussion</string>
     <string name="connected">Connecté</string>
-    <string name="mumlaConnected">Mumla connecté</string>
     <string name="mumlaConnecting">Mumla en connexion…</string>
     <string name="mumlaDisconnected">Mumla déconnecté</string>
     <string name="channel">Salon</string>
@@ -189,7 +186,6 @@
 \nVeuillez vous assurer que l\'application Orbot est en cours d\'exécution.</string>
     <string name="orbot_not_installed">L\'application Orbot n\'est pas installée. Ne pas utiliser Tor.</string>
     <string name="grant_perm_draw_over_apps">Veuillez autoriser l\'affichage sur d\'autres applications.</string>
-    <string name="grant_perm_storage">Veuillez accorder une autorisation de stockage externe.</string>
     <string name="grant_perm_microphone">Veuillez autoriser le microphone.</string>
     <string name="shout_configure">Configurer la cible vocale</string>
     <string name="shout_target">Destination vocale %s</string>
@@ -204,7 +200,6 @@
     <string name="invalid_certificate">Un certificat invalide n\'a pas pu être chargé.</string>
     <string name="password">Mot de passe</string>
     <string name="decrypt_certificate">Déchiffrer le certificat</string>
-    <string name="certificates">Certificats</string>
     <string name="no_certificate">Aucun certificat</string>
     <string name="change_requires_reconnect">Reconnectez-vous pour utiliser les nouveaux paramètres.</string>
     <string name="chat_message_tts_short_link">(Lien vers %1$s)</string>

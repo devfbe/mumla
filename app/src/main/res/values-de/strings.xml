@@ -59,7 +59,6 @@
     <string name="server_port">Port</string>
     <string name="server_host">Adresse</string>
     <string name="server_label">Beschriftung</string>
-    <string name="connecting">Verbinden</string>
     <string name="connecting_to_server">Zu Server %s verbinden …</string>
     <string name="ptt">Zum Sprechen drücken</string>
     <string name="mute">Stumm stellen</string>
@@ -83,7 +82,6 @@
     <string name="generateCertProgress">Erzeuge Zertifikat…</string>
     <string name="search">Suche</string>
     <string name="searchHint">Suche nach Kanälen und Benutzern</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="audio_device">Audiogerät</string>
     <string name="audio_device_earpiece">Hörmuschel</string>
     <string name="audio_device_speaker">Lautsprecher</string>
@@ -104,7 +102,6 @@
     <string name="offline">Offline</string>
     <string name="clearChat">Chatverlauf löschen</string>
     <string name="connected">Verbunden</string>
-    <string name="mumlaConnected">Mumla ist verbunden</string>
     <string name="mumlaConnecting">Mumla verbindet …</string>
     <string name="mumlaDisconnected">Mumla wurde getrennt</string>
     <string name="channel">Kanal</string>
@@ -180,7 +177,6 @@
 \nBitte stelle sicher, dass die Orbot-app läuft.</string>
     <string name="orbot_not_installed">Die Orbot-App ist nicht installiert. Tor wird nicht benutzt.</string>
     <string name="grant_perm_draw_over_apps">Bitte setze die Berechtigung, dass die App über anderen Apps angezeigt werden darf.</string>
-    <string name="grant_perm_storage">Bitte Zugriff auf externen Speicher erlauben.</string>
     <string name="grant_perm_microphone">Bitte Zugriff auf das Mikrofon erlauben.</string>
     <string name="export_success">Zertifikat exportiert nach %s.</string>
     <string name="certificate_import_success">Zertifikat %s importiert.</string>
@@ -188,7 +184,6 @@
     <string name="invalid_certificate">Ungültiges Zertifikat, konnte nicht geladen werden.</string>
     <string name="password">Passwort</string>
     <string name="decrypt_certificate">Zertifikate entschlüsseln</string>
-    <string name="certificates">Zertifikate</string>
     <string name="no_certificate">Kein Zertifikat</string>
     <string name="shout_include_linked">Stimme zu verknüpften Kanälen</string>
     <string name="shout_configure">Sprachziel konfigurieren</string>

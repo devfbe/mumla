@@ -19,7 +19,6 @@
 \nZkontrolujte, zda je spuštěna aplikace Orbot.</string>
     <string name="orbot_not_installed">Aplikace Orbot není nainstalována. Nepoužívá se Tor.</string>
     <string name="grant_perm_draw_over_apps">Udělte prosím oprávnění k zobrazování nad ostatními aplikacemi.</string>
-    <string name="grant_perm_storage">Udělte prosím oprávnění k používání externího úložiště.</string>
     <string name="grant_perm_microphone">Udělte prosím oprávnění na používání mikrofonu.</string>
     <string name="shout_configure">Konfigurovat hlasový cíl</string>
     <string name="shout_target">Křik do %s</string>
@@ -36,7 +35,6 @@
     <string name="invalid_certificate">Neplatný certifikát nelze načíst.</string>
     <string name="password">Heslo</string>
     <string name="decrypt_certificate">Dešifrovat certifikát</string>
-    <string name="certificates">Certifikáty</string>
     <string name="no_certificate">Žádný certifikát</string>
     <string name="change_requires_reconnect">Pro použití nových nastavení se znovu připojte.</string>
     <string name="attempting_reconnect">Chyba: %s.
@@ -107,7 +105,6 @@
     <string name="channel">Kanál</string>
     <string name="mumlaDisconnected">Mumla odpojen</string>
     <string name="mumlaConnecting">Mumla se připojuje…</string>
-    <string name="mumlaConnected">Mumla připojen</string>
     <string name="connected">Připojeno</string>
     <string name="clearChat">Vyčistit chat</string>
     <string name="offline">Offline</string>
@@ -120,7 +117,6 @@
     <string name="connectToServer">Připojit k serveru</string>
     <string name="connect">Připojit</string>
     <string name="quickConnect">Rychlé připojení</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="searchHint">Prohledat kanály a uživatele</string>
     <string name="search">Hledat</string>
     <string name="generateCertProgress">Generování certifikátu…</string>
@@ -144,7 +140,6 @@
     <string name="mute">Ztlumit</string>
     <string name="ptt">Mluvení při stisku tlačítka</string>
     <string name="connecting_to_server">Připojování na %s…</string>
-    <string name="connecting">Připojování</string>
     <string name="server_label">Popisek</string>
     <string name="server_host">Adresa</string>
     <string name="server_port">Port</string>

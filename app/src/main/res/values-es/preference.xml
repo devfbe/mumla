@@ -30,7 +30,6 @@
     <string name="hotCornerSum">Pulsa una esquina de la pantalla para transmitir sonido en cualquier parte de Android.</string>
     <string name="general">General</string>
     <string name="appearance">Apariencia</string>
-    <string name="themeSum">Cambia la apariencia de la aplicación.</string>
     <string name="theme">Tema</string>
     <string name="advancedAudio">Avanzado</string>
     <string name="forceTcp">Sólo usar TCP</string>
@@ -72,8 +71,6 @@
     <string name="halfDuplexSum">Silencia otras reproducciones durante la pulsación para hablar para evitar bucles/retroalimentación de audio.</string>
     <string name="pttSound">Sonido al pulsar para hablar</string>
     <string name="pttSoundSum">Reproducir un efecto de sonido al pulsar el botón de pulsar para hablar.</string>
-    <string name="preprocessor_enabled">Pretratamiento de las entradas</string>
-    <string name="preprocessor_enabled_sum">Suprime el ruido ambiental y normaliza el volumen del audio.</string>
     <string name="audio_per_packet">Audio por paquete</string>
     <string name="audio_per_packet_sum">La cantidad de audio por paquete de voz.</string>
     <string name="stay_awake">Mantener la pantalla siempre encendida</string>
@@ -120,7 +117,6 @@
     <string name="vadFloorSum">Nivel de la sala desde el que se mide el umbral, en dB por debajo de la escala completa. Solo se usa cuando «Seguir el ruido de fondo» está desactivado.</string>
     <string name="vadRecalibrate">Volver a medir</string>
     <string name="vadRecalibrateSum">Olvida lo aprendido sobre la sala y tu voz, y empieza a medir desde cero.</string>
-    <string name="vadRecalibrateDone">Midiendo de nuevo.</string>
     <string name="vadOnset">Ignorar ruidos breves</string>
     <string name="vadOnsetSum">Cuánto debe durar un sonido para contar como voz. Los valores más largos evitan clics sueltos del teclado; cada paso cuesta 10 ms del comienzo de una palabra.</string>
     <string name="vadOnsetOff">Desactivado (0 ms)</string>

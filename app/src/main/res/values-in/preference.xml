@@ -42,7 +42,6 @@
     <string name="hotCornerSum">Tekan area di pojok layar untuk fungsi push-to-talk.</string>
     <string name="general">Umum</string>
     <string name="appearance">Tampilan</string>
-    <string name="themeSum">Ubah tampilan pada aplikasi.</string>
     <string name="theme">Tema</string>
     <string name="advancedAudio">Pengaturan Lanjut</string>
     <string name="forceTcp">Hanya TCP</string>
@@ -75,8 +74,6 @@
     <string name="halfDuplex">Audio satu arah</string>
     <string name="pttSound">Suara push-to-talk</string>
     <string name="pttSoundSum">Memutar efek suara saat menekan tombol push-to-talk.</string>
-    <string name="preprocessor_enabled">Pre-processing input</string>
-    <string name="preprocessor_enabled_sum">Mengecilkan suara lingkungan sekitar dan menormalisasi volume audio.</string>
     <string name="audio_per_packet_sum">Lama audio per voice packet.</string>
     <string name="stay_awake">Layar tetap menyala</string>
     <string name="stay_awake_sum">Memastikan layar device tetap menyala selama aplikasi Mumla dibuka.</string>
@@ -118,7 +115,6 @@
     <string name="vadFloorSum">Level ruangan yang menjadi dasar batas, dalam dB di bawah skala penuh. Hanya dipakai saat \"Ikuti kebisingan latar\" mati.</string>
     <string name="vadRecalibrate">Ukur ulang</string>
     <string name="vadRecalibrateSum">Melupakan data yang telah dipelajari tentang ruangan dan suara anda, lalu mulai mengukur dari awal.</string>
-    <string name="vadRecalibrateDone">Mengukur ulang.</string>
     <string name="vadOnset">Abaikan suara singkat</string>
     <string name="vadOnsetSum">Berapa lama suatu bunyi harus berlangsung sebelum dianggap sebagai suara bicara. Pengaturan lebih lama mencegah klik keyboard tunggal; setiap langkah memotong 10 ms dari awal kata.</string>
     <string name="vadOnsetOff">Mati (0 ms)</string>

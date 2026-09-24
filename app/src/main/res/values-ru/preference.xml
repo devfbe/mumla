@@ -30,7 +30,6 @@
     <string name="hotCornerSum">Нажмите на угол экрана из любого приложения Android, чтобы начать вещать.</string>
     <string name="general">Основные</string>
     <string name="appearance">Внешний вид</string>
-    <string name="themeSum">Изменить внешний вид программы.</string>
     <string name="theme">Тема</string>
     <string name="advancedAudio">Расширенные</string>
     <string name="forceTcp">Только TCP</string>
@@ -76,8 +75,6 @@
     <string name="halfDuplexSum">Не принимать звук при передаче, чтобы избежать звуковых петель и эхо.</string>
     <string name="pttSound">Звук нажатия Push-to-talk</string>
     <string name="pttSoundSum">Проиграть звук при нажатии кнопки Push-to-talk.</string>
-    <string name="preprocessor_enabled">Обработка входящего звука</string>
-    <string name="preprocessor_enabled_sum">Подавление фонового шума и нормализация громкости.</string>
     <string name="audio_per_packet">Звук на пакет</string>
     <string name="audio_per_packet_sum">Длина аудиозаписи в голосовом пакете.</string>
     <string name="stay_awake">Держать экран включенным</string>
@@ -123,7 +120,6 @@
     <string name="vadFloorSum">Уровень комнаты, от которого отсчитывается порог, в дБ ниже полной шкалы. Действует, только если «Следить за фоновым шумом» выключено.</string>
     <string name="vadRecalibrate">Измерить заново</string>
     <string name="vadRecalibrateSum">Забывает всё, что было измерено о комнате и вашем голосе, и начинает измерение заново.</string>
-    <string name="vadRecalibrateDone">Измерение начато заново.</string>
     <string name="vadOnset">Игнорировать короткие шумы</string>
     <string name="vadOnsetSum">Как долго должен длиться звук, чтобы считаться речью. Более длинные значения отсекают отдельные щелчки клавиатуры; каждый шаг стоит 10 мс начала слова.</string>
     <string name="vadOnsetOff">Выкл (0 мс)</string>

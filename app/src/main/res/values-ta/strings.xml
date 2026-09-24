@@ -51,7 +51,6 @@
     <string name="server_port">துறைமுகம்</string>
     <string name="server_host">முகவரி</string>
     <string name="server_label">சிட்டை</string>
-    <string name="connecting">இணைத்தல்</string>
     <string name="connecting_to_server">%s உடன் இணைக்கிறது…</string>
     <string name="ptt">பேசுவதற்கு-தள்ளு</string>
     <string name="mute">முடக்கு</string>
@@ -74,7 +73,6 @@
     <string name="generateCertProgress">சான்றிதழ் உருவாக்குதல்…</string>
     <string name="search">தேடல்</string>
     <string name="searchHint">தடங்கள் மற்றும் பயனர்களைத் தேடுங்கள்</string>
-    <string name="bluetooth">ஊடலை</string>
     <string name="quickConnect">விரைவான இணைப்பு</string>
     <string name="connect">இணை</string>
     <string name="connectToServer">சேவையகத்துடன் இணைக்கவும்</string>
@@ -87,7 +85,6 @@
     <string name="offline">இணையம் இல்லாமல்</string>
     <string name="clearChat">அரட்டை அழி</string>
     <string name="connected">இணைக்கப்பட்டுள்ளது</string>
-    <string name="mumlaConnected">மும்லா இணைக்கப்பட்டுள்ளது</string>
     <string name="mumlaConnecting">மும்லா இணைத்தல்…</string>
     <string name="mumlaDisconnected">மும்லா துண்டிக்கப்பட்டது</string>
     <string name="channel">தடம்</string>
@@ -142,7 +139,6 @@
     <string name="attempting_reconnect">பிழை: %s.\n\nமீண்டும் இணைத்தல்…</string>
     <string name="change_requires_reconnect">புதிய அமைப்புகளைப் பயன்படுத்த மீண்டும் இணை.</string>
     <string name="no_certificate">சான்றிதழ் இல்லை</string>
-    <string name="certificates">சான்றிதழ்கள்</string>
     <string name="decrypt_certificate">மறைவிலக்கு சான்றிதழ்</string>
     <string name="password">கடவுச்சொல்</string>
     <string name="invalid_certificate">தவறான சான்றிதழை ஏற்ற முடியவில்லை.</string>
@@ -171,7 +167,6 @@
     <string name="add">கூட்டு</string>
     <string name="grant_perm_microphone">ஓரி இசைவு வழங்கவும்.</string>
     <string name="grant_perm_notifications">அறிவிப்புகளை அனுப்ப இசைவு வழங்கவும்.</string>
-    <string name="grant_perm_storage">வெளிப்புற சேமிப்பக அனுமதியை வழங்கவும்.</string>
     <string name="grant_perm_draw_over_apps">பிற பயன்பாடுகளைக் காண்பிக்க இசைவு வழங்கவும்.</string>
     <string name="orbot_not_installed">ஆர்போட் பயன்பாடு நிறுவப்படவில்லை. டோர் பயன்படுத்தவில்லை.</string>
     <string name="default_">இயல்புநிலை</string>

@@ -52,7 +52,6 @@
     <string name="pttKeySum">Usa un pulsante fisico per trasmettere l\'audio.</string>
     <string name="hotCornerSum">Premere un angolo schermo, in tutto Android, per trasmettere l\'audio.</string>
     <string name="appearance">Aspetto</string>
-    <string name="themeSum">Cambia l\'aspetto dell\'app.</string>
     <string name="defaultUsername">Nome utente predefinito</string>
     <string name="audioSampleRateSum">Frequenza di campionamento audio preferita. Alcuni dispositivi supportano meno frequenze.</string>
     <string name="defaultUsernameSum">Nome precompilato usato quando si aggiunge un server o ci si connette a un server pubblico.</string>
@@ -69,10 +68,8 @@
     <string name="clearServerCertificatesSum">Rimuovere tutti i certificati server attendibili da Mumla.</string>
     <string name="halfDuplexSum">Disattiva altre riproduzioni durante il push-to-talk, per evitare loop/feedback audio.</string>
     <string name="pressKeyInfo">L\'app deve essere aperta (a causa di restrizioni Android).</string>
-    <string name="preprocessor_enabled">Pre-elaborazione dell\'input</string>
     <string name="pttSoundSum">Riprodurre un suono alla pressione del pulsante push-to-talk.</string>
     <string name="pref_export_certificate_summary">Esporta nella memoria esterna.</string>
-    <string name="preprocessor_enabled_sum">Sopprime il rumore ambientale e normalizza il volume dell\'audio.</string>
     <string name="pref_import_certificate_summary">Importa dalla memoria esterna.</string>
     <string name="pref_start_up_in_pinned_mode">Modalità canali fissati</string>
     <string name="pttSettings">Impostazioni push-to-talk</string>
@@ -123,7 +120,6 @@
     <string name="vadFloorSum">Il livello dell\'ambiente da cui viene misurata la soglia, in dB sotto il fondo scala. Usato solo se \"Segui il rumore di fondo\" è disattivato.</string>
     <string name="vadRecalibrate">Misura di nuovo</string>
     <string name="vadRecalibrateSum">Dimentica quanto appreso sull\'ambiente e sulla tua voce e ricomincia a misurare da zero.</string>
-    <string name="vadRecalibrateDone">Nuova misurazione in corso.</string>
     <string name="vadOnset">Ignora i rumori brevi</string>
     <string name="vadOnsetSum">Quanto deve durare un suono prima di essere considerato voce. Valori più lunghi escludono i singoli clic della tastiera; ogni passo costa 10 ms dell\'inizio di una parola.</string>
     <string name="vadOnsetOff">Disattivato (0 ms)</string>

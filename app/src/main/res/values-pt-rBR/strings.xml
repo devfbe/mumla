@@ -53,7 +53,6 @@
 \nVerifique se o aplicativo Orbot está em execução.</string>
     <string name="orbot_not_installed">O aplicativo Orbot não está instalado. Não usando o Tor.</string>
     <string name="grant_perm_draw_over_apps">Por favor, conceda permissão para exibir sobre outros aplicativos.</string>
-    <string name="grant_perm_storage">Por favor, conceda permissão de armazenamento externo.</string>
     <string name="grant_perm_microphone">Por favor, conceda permissão de microfone.</string>
     <string name="export_success">Certificado exportado para %s.</string>
     <string name="error_writing_to_storage">Não foi possível gravar no armazenamento externo.</string>
@@ -61,7 +60,6 @@
     <string name="certificate_load_failed">Não foi possível armazenar o certificado.</string>
     <string name="invalid_certificate">O certificado inválido não pôde ser carregado.</string>
     <string name="password">Senha</string>
-    <string name="certificates">Certificados</string>
     <string name="no_certificate">Nenhum Certificado</string>
     <string name="attempting_reconnect">Erro: %s.
 \n
@@ -103,7 +101,6 @@
     <string name="user">Usuário</string>
     <string name="channel">Canal</string>
     <string name="mumlaDisconnected">Mumla desconectou</string>
-    <string name="mumlaConnected">Mumla conectou</string>
     <string name="mumlaConnecting">Mumla conectando…</string>
     <string name="connected">Conectado</string>
     <string name="online">Disponível</string>
@@ -113,7 +110,6 @@
     <string name="edit">Editar</string>
     <string name="connectToServer">Conectar ao Servidor</string>
     <string name="connect">Conectar</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="searchHint">Pesquisar canais e usuários</string>
     <string name="search">Pesquisar</string>
     <string name="generateCertProgress">Gerando certificado…</string>
@@ -129,7 +125,6 @@
     <string name="disconnect">Desconectar</string>
     <string name="ptt">Pressione para falar</string>
     <string name="connecting_to_server">Conectando a %s…</string>
-    <string name="connecting">Conectando</string>
     <string name="server_host">Endereço</string>
     <string name="server_port">Porta</string>
     <string name="server_username">Nome de usuário</string>

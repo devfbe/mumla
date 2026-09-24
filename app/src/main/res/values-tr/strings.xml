@@ -23,7 +23,6 @@
 \nLütfen Orbot uygulamasının çalıştığından emin olun.</string>
     <string name="orbot_not_installed">Orbot uygulaması kurulu değil. Tor kullanılmıyor.</string>
     <string name="grant_perm_draw_over_apps">Lütfen diğer uygulamaların üzerinde görüntüleme izni verin.</string>
-    <string name="grant_perm_storage">Lütfen harici depolama izni verin.</string>
     <string name="grant_perm_microphone">Lütfen mikrofon izni verin.</string>
     <string name="shout_configure">Ses Hedefini Yapılandır</string>
     <string name="shout_target">%s\'ye sesleniliyor</string>
@@ -40,7 +39,6 @@
     <string name="invalid_certificate">Geçersiz sertifika yüklenemedi.</string>
     <string name="password">Parola</string>
     <string name="decrypt_certificate">Sertifikanın Şifresini Çöz</string>
-    <string name="certificates">Sertifikalar</string>
     <string name="no_certificate">Sertifika Yok</string>
     <string name="change_requires_reconnect">Yeni ayarları kullanmak için yeniden bağlanın.</string>
     <string name="attempting_reconnect">Hata: %s.
@@ -110,7 +108,6 @@
     <string name="channel">Kanal</string>
     <string name="mumlaDisconnected">Mumla bağlantısı kesildi</string>
     <string name="mumlaConnecting">Mumla bağlanıyor…</string>
-    <string name="mumlaConnected">Mumla bağlandı</string>
     <string name="connected">Bağlandı</string>
     <string name="clearChat">Sohbeti Temizle</string>
     <string name="offline">Çevrim dışı</string>
@@ -123,7 +120,6 @@
     <string name="connectToServer">Sunucuya Bağlan</string>
     <string name="connect">Bağlan</string>
     <string name="quickConnect">Hızlı Bağlan</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="searchHint">Kanalları ve kullanıcıları arayın</string>
     <string name="search">Ara</string>
     <string name="generateCertProgress">Sertifika oluşturuluyor…</string>
@@ -146,7 +142,6 @@
     <string name="mute">Sesini Kapat</string>
     <string name="ptt">Bas konuş</string>
     <string name="connecting_to_server">%s ile bağlantı kuruluyor…</string>
-    <string name="connecting">Bağlanıyor</string>
     <string name="server_label">Etiket</string>
     <string name="server_host">Adres</string>
     <string name="server_port">Bağlantı Noktası</string>

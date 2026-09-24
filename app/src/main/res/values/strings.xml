@@ -85,7 +85,6 @@
     <string name="server_port">Port</string>
     <string name="server_host">Address</string>
     <string name="server_label">Label</string>
-    <string name="connecting">Connecting</string>
     <string name="connecting_to_server">Connecting to %s…</string>
     <string name="ptt">Push-to-talk</string>
     <string name="mute">Mute</string>
@@ -110,7 +109,6 @@
     <string name="generateCertProgress">Generating certificate…</string>
     <string name="search">Search</string>
     <string name="searchHint">Search channels and users</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="audio_device">Audio device</string>
     <string name="audio_device_earpiece">Earpiece</string>
     <string name="audio_device_speaker">Speaker</string>
@@ -131,7 +129,6 @@
     <string name="offline">Offline</string>
     <string name="clearChat">Clear Chat</string>
     <string name="connected">Connected</string>
-    <string name="mumlaConnected">Mumla connected</string>
     <string name="mumlaConnecting">Mumla connecting…</string>
     <string name="connection_lost_reconnecting">Connection lost – reconnecting…</string>
     <string name="foreground_start_failed">Could not keep Mumla running in the background. Voice may stop when the screen turns off.</string>
@@ -192,7 +189,6 @@
     <string name="attempting_reconnect">Error: %s.\n\nReconnecting…</string>
     <string name="change_requires_reconnect">Reconnect to use new settings.</string>
     <string name="no_certificate">No Certificate</string>
-    <string name="certificates">Certificates</string>
     <string name="decrypt_certificate">Decrypt Certificate</string>
     <string name="password">Password</string>
     <string name="invalid_certificate">Invalid certificate could not be loaded.</string>
@@ -217,7 +213,6 @@
     <string name="shout_configure">Configure Voice Target</string>
     <string name="grant_perm_microphone">Please grant microphone permission.</string>
     <string name="grant_perm_notifications">Please grant permission to send notifications.</string>
-    <string name="grant_perm_storage">Please grant external storage permission.</string>
     <string name="grant_perm_draw_over_apps">Please grant permission to display over other apps.</string>
     <string name="bluetooth_perm_denied">Bluetooth headset stays switched on. Without the Nearby devices permission, some devices will refuse to route audio to it.</string>
     <string name="orbot_not_installed">The Orbot app is not installed. Not using Tor.</string>

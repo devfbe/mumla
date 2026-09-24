@@ -47,7 +47,6 @@
     <string name="server_port">Port</string>
     <string name="server_host">Address</string>
     <string name="server_label">Label</string>
-    <string name="connecting">Menyambungkan</string>
     <string name="connecting_to_server">Menyambungkan ke %s…</string>
     <string name="ptt">Push-to-talk</string>
     <string name="mute">Matikan Mikrofon</string>
@@ -78,7 +77,6 @@
     <string name="online">Online</string>
     <string name="offline">Offline</string>
     <string name="clearChat">Bersihkan Chat</string>
-    <string name="mumlaConnected">Mumla tersambung</string>
     <string name="mumlaConnecting">Mumla sedang menyambungkan…</string>
     <string name="mumlaDisconnected">Mumla terputus</string>
     <string name="channel">Channel</string>
@@ -114,7 +112,6 @@
     <string name="attempting_reconnect">Error: %s.\n\nMenyambungkan ulang…</string>
     <string name="change_requires_reconnect">Sambung ulang untuk menggunakan pengaturan baru.</string>
     <string name="no_certificate">Tidak ada Sertifikat Keamanan</string>
-    <string name="certificates">Sertifikat Keamanan</string>
     <string name="decrypt_certificate">Dekripsi Sertifikat Keamanan</string>
     <string name="certificate_load_failed">Tidak dapat menyimpan sertifikat keamanan.</string>
     <string name="certificate_import_success">Sertifikat keamanan %s berhasil diimpor.</string>
@@ -129,7 +126,6 @@
     <string name="shout_configure">Atur Target Suara</string>
     <string name="grant_perm_microphone">Mohon izinkan penggunaan mikrofon.</string>
     <string name="grant_perm_notifications">Mohon izinkan pengiriman notifikasi.</string>
-    <string name="grant_perm_storage">Mohon izinkan pemberian akses ke penyimpanan eksternal.</string>
     <string name="orbot_not_installed">Aplikasi Orbot tidak terinstal. Tor tidak digunakan.</string>
     <string name="default_">Default</string>
     <string name="donation_thanks">Terima kasih atas donasi anda.</string>
@@ -149,7 +145,6 @@
     <string name="server_match_description">Mumla dapat secara otomatis mencarikan anda server kosong yang teroptimisasi sesuai dengan lokasi, versi, dan latensi.</string>
     <string name="no_ptt_key">Tidak ada tombol</string>
     <string name="accessAdd">Tambah Token Akses</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="connect">Sambung</string>
     <string name="generateCertProgress">Membuat sertifikat keamanan…</string>
     <string name="connected">Tersambung</string>

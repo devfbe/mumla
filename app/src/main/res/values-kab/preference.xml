@@ -57,7 +57,6 @@
     <string name="vadFloorSum">Aswir n texxamt ara yettwaktalen seg-s tilist, s dB ddaw n uswir afellay. Yettwaseqdac kan ma \"Ḍfeṛ ahewwel n ugilal\" yensa.</string>
     <string name="vadRecalibrate">Ales aktal</string>
     <string name="vadRecalibrateSum">Yettettu ayen yettwalemden ɣef texxamt d taɣect-ik, yebda aktal seg tazwara.</string>
-    <string name="vadRecalibrateDone">Aktal i tikelt-nniḍen.</string>
     <string name="vadOnset">Zgel ihewwalen iwezlen</string>
     <string name="vadOnsetSum">Acḥal ilaq ad yeqqim yiwen n yimesli send ad yettwaḥseb d taɣect. Iɣewwaren iɣezfanen ttḥebbisen isitiyen n unasiw; yal aḥric ad yekkes 10 ms seg tazwara n wawal.</string>
     <string name="vadOnsetOff">Yensa (0 ms)</string>

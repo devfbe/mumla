@@ -30,7 +30,6 @@
     <string name="hotCornerSum">Appuyez sur un coin de l\'écran pour transmettre le son dans tout Android.</string>
     <string name="general">Général</string>
     <string name="appearance">Apparence</string>
-    <string name="themeSum">Changer l\'apparence de l\'application.</string>
     <string name="theme">Thème</string>
     <string name="advancedAudio">Avancé</string>
     <string name="forceTcp">Uniquement TCP</string>
@@ -72,8 +71,6 @@
     <string name="halfDuplexSum">Met en sourdine les autres lectures pendant que vous appuyez pour parler pour éviter les boucles audio et les retours.</string>
     <string name="pttSound">Son « Appuyer pour parler »</string>
     <string name="pttSoundSum">Joue un effet sonore lorsque vous appuyez sur le bouton « Appuyer pour parler ».</string>
-    <string name="preprocessor_enabled">Prétraitement des données d\'entrée</string>
-    <string name="preprocessor_enabled_sum">Active le codec Speex pour la suppression de bruit ambiante et la normalisation du volume.</string>
     <string name="audio_per_packet"> Trames audio par paquet</string>
     <string name="audio_per_packet_sum">Durée de la trame audio par paquet.</string>
     <string name="stay_awake">Rester activé</string>
@@ -120,7 +117,6 @@
     <string name="vadFloorSum">Niveau de la pièce à partir duquel le seuil est mesuré, en dB sous la pleine échelle. Utilisé uniquement lorsque « Suivre le bruit de fond » est désactivé.</string>
     <string name="vadRecalibrate">Mesurer à nouveau</string>
     <string name="vadRecalibrateSum">Oublie ce qui a été appris sur la pièce et votre voix, et recommence la mesure à zéro.</string>
-    <string name="vadRecalibrateDone">Nouvelle mesure en cours.</string>
     <string name="vadOnset">Ignorer les bruits brefs</string>
     <string name="vadOnsetSum">Durée minimale d\'un son pour qu\'il soit considéré comme de la parole. Des valeurs plus longues écartent les clics de clavier isolés ; chaque palier coûte 10 ms du début d\'un mot.</string>
     <string name="vadOnsetOff">Désactivé (0 ms)</string>

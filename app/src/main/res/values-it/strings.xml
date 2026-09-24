@@ -32,7 +32,6 @@
     <string name="server_username">Nome utente</string>
     <string name="server_port">Porta</string>
     <string name="server_host">Indirizzo</string>
-    <string name="connecting">Connessione</string>
     <string name="connecting_to_server">Connessione a %s…</string>
     <string name="mute">Muto</string>
     <string name="disconnect">Disconnetti</string>
@@ -49,7 +48,6 @@
     <string name="generateCertProgress">Generazione certificato…</string>
     <string name="search">Cerca</string>
     <string name="searchHint">Cerca canali e utenti</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="quickConnect">Connessione rapida</string>
     <string name="connect">Connetti</string>
     <string name="connectToServer">Connetti al server</string>
@@ -60,7 +58,6 @@
     <string name="offline">Non in linea</string>
     <string name="clearChat">Pulisci chat</string>
     <string name="connected">Connesso</string>
-    <string name="mumlaConnected">Mumla connesso</string>
     <string name="mumlaConnecting">Mumla in connessione…</string>
     <string name="mumlaDisconnected">Mumla disconnesso </string>
     <string name="channel">Canale</string>
@@ -121,7 +118,6 @@
 \nAssicurarsi che l\'app Orbot sia in esecuzione.</string>
     <string name="orbot_not_installed">App Orbot non installata. Tor non verrà utilizzato.</string>
     <string name="grant_perm_draw_over_apps">Fornire l\'autorizzazione per la visualizzazione sopra le altre app.</string>
-    <string name="grant_perm_storage">Fornire l\'autorizzazione per al memoria esterna.</string>
     <string name="grant_perm_microphone">Fornire l\'autorizzazione per il microfono.</string>
     <string name="context_channel_unlink_all">Scollega Tutti</string>
     <string name="context_channel_link">Collega</string>
@@ -131,7 +127,6 @@
     <string name="certificate_load_failed">Impossibile memorizzare certificato.</string>
     <string name="invalid_certificate">Impossibile caricare, certificato non valido.</string>
     <string name="password">Password</string>
-    <string name="certificates">Certificati</string>
     <string name="no_certificate">Nessun Certificato</string>
     <string name="change_requires_reconnect">Riconnettiti per usare le nuove impostazioni.</string>
     <string name="attempting_reconnect">Errore: %s.

@@ -28,7 +28,6 @@
     <string name="vadFloorSum">Nivelul camerei de la care se măsoară pragul, în dB sub scala completă. Se folosește doar când „Urmărește zgomotul de fundal” este dezactivat.</string>
     <string name="vadRecalibrate">Măsoară din nou</string>
     <string name="vadRecalibrateSum">Uită ce s-a învățat despre cameră și vocea ta și începe măsurarea de la zero.</string>
-    <string name="vadRecalibrateDone">Se măsoară din nou.</string>
     <string name="vadOnset">Ignoră zgomotele scurte</string>
     <string name="vadOnsetSum">Cât trebuie să dureze un sunet pentru a fi considerat vorbire. Valorile mai lungi opresc clicurile izolate de tastatură; fiecare treaptă costă 10 ms din începutul unui cuvânt.</string>
     <string name="vadOnsetOff">Dezactivat (0 ms)</string>

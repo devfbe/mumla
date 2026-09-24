@@ -14,7 +14,6 @@
     <string name="audio">Audio</string>
     <string name="acknowledgementsSum">Skatīt, kuri veicināja Mumla attīstību, deva savu artavu (saite)</string>
     <string name="version">Versija</string>
-    <string name="themeSum">Mainīt lietotnes izskatu.</string>
     <string name="pref_show_user_count">Rādīt kanāla lietotāju skaitu</string>
     <string name="pref_show_user_count_summary">Rādīs lietotāju skaitu kanāla apakškokos.</string>
     <string name="noiseSuppression">Trokšņu slāpēšana</string>
@@ -45,7 +44,6 @@
     <string name="vadFloorSum">Telpas līmenis, no kura mēra slieksni, dB zem pilnas skalas. Tiek izmantots tikai tad, ja „Sekot fona troksnim” ir izslēgts.</string>
     <string name="vadRecalibrate">Mērīt no jauna</string>
     <string name="vadRecalibrateSum">Aizmirst visu uzzināto par telpu un jūsu balsi un sāk mērīt no sākuma.</string>
-    <string name="vadRecalibrateDone">Mēra no jauna.</string>
     <string name="vadOnset">Ignorēt īsus trokšņus</string>
     <string name="vadOnsetSum">Cik ilgi skaņai jāilgst, lai to uzskatītu par runu. Garāki iestatījumi aiztur atsevišķus tastatūras klikšķus; katrs solis maksā 10 ms no vārda sākuma.</string>
     <string name="vadOnsetOff">Izslēgts (0 ms)</string>
