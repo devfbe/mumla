@@ -22,12 +22,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
-import android.widget.ImageView
-import android.widget.TextView
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.OverlayUserRowBinding
 
 /**
  * Displays the users in a single channel. Holds one snapshot of the users, refreshed in
@@ -54,13 +53,11 @@ class ChannelAdapter(
     }
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-        val v = convertView
-            ?: LayoutInflater.from(context).inflate(R.layout.overlay_user_row, parent, false)
+        val binding = convertView?.let(OverlayUserRowBinding::bind)
+            ?: OverlayUserRowBinding.inflate(LayoutInflater.from(context), parent, false)
         val user = getItem(position) as IUser
-        v.findViewById<TextView>(R.id.user_row_name).text = user.name
-
-        val state = v.findViewById<ImageView>(R.id.user_row_state)
-        state.setImageResource(
+        binding.userRowName.text = user.name
+        binding.userRowState.setImageResource(
             when {
                 user.isSelfDeafened -> R.drawable.outline_circle_deafened
                 user.isSelfMuted -> R.drawable.outline_circle_muted
@@ -72,7 +69,7 @@ class ChannelAdapter(
             }
         )
 
-        return v
+        return binding.root
     }
 
     fun setChannel(channel: IChannel) {

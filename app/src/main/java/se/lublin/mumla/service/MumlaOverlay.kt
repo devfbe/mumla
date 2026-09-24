@@ -22,6 +22,7 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.util.Log
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
@@ -33,15 +34,17 @@ import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.ChannelAdapter
+import se.lublin.mumla.databinding.OverlayBinding
 import se.lublin.mumla.util.collectEvents
 
 /** An onscreen interactive overlay displaying the users in the current channel. */
 class MumlaOverlay(private val service: MumlaService) {
 
     private val windowManager = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private val overlayView: View = View.inflate(service, R.layout.overlay, null)
-    private val overlayList: ListView = overlayView.findViewById(R.id.overlay_list)
-    private val talkButton: ImageView = overlayView.findViewById(R.id.overlay_talk)
+    private val binding = OverlayBinding.inflate(LayoutInflater.from(service))
+    private val overlayView: View = binding.root
+    private val overlayList: ListView = binding.overlayList
+    private val talkButton: ImageView = binding.overlayTalk
     private val overlayParams: WindowManager.LayoutParams
     private var channelAdapter: ChannelAdapter? = null
 
@@ -52,10 +55,10 @@ class MumlaOverlay(private val service: MumlaService) {
         private set
 
     init {
-        overlayView.findViewById<View>(R.id.overlay_title).setOnTouchListener(MoveListener())
-        overlayView.findViewById<ImageView>(R.id.overlay_drag).setOnTouchListener(ResizeListener())
+        binding.overlayTitle.setOnTouchListener(MoveListener())
+        binding.overlayDrag.setOnTouchListener(ResizeListener())
         talkButton.setOnTouchListener(TalkListener())
-        overlayView.findViewById<ImageView>(R.id.overlay_close).setOnClickListener { hide() }
+        binding.overlayClose.setOnClickListener { hide() }
         setPushToTalkShown(Settings.getInstance(service).inputMethod == Settings.ARRAY_INPUT_METHOD_PTT)
 
         val density = service.resources.displayMetrics.density

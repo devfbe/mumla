@@ -34,6 +34,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.app.ServiceClient
 import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.app.bindClient
+import se.lublin.mumla.databinding.FragmentServerInfoBinding
 import se.lublin.mumla.service.IMumlaService
 
 /** Displays what is known about the connected server, refreshed every second. */
@@ -53,16 +54,16 @@ class ServerInfoFragment : Fragment(), ServiceClient {
     private lateinit var currentBandwidthView: TextView
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        val view = inflater.inflate(R.layout.fragment_server_info, container, false)
-        protocolView = view.findViewById(R.id.server_info_protocol)
-        osVersionView = view.findViewById(R.id.server_info_os_version)
-        tcpLatencyView = view.findViewById(R.id.server_info_tcp_latency)
-        udpLatencyView = view.findViewById(R.id.server_info_udp_latency)
-        hostView = view.findViewById(R.id.server_info_host)
-        maxBandwidthView = view.findViewById(R.id.server_info_max_bandwidth)
-        currentBandwidthView = view.findViewById(R.id.server_info_current_bandwidth)
-        codecView = view.findViewById(R.id.server_info_codec)
-        return view
+        val binding = FragmentServerInfoBinding.inflate(inflater, container, false)
+        protocolView = binding.serverInfoProtocol
+        osVersionView = binding.serverInfoOsVersion
+        tcpLatencyView = binding.serverInfoTcpLatency
+        udpLatencyView = binding.serverInfoUdpLatency
+        hostView = binding.serverInfoHost
+        maxBandwidthView = binding.serverInfoMaxBandwidth
+        currentBandwidthView = binding.serverInfoCurrentBandwidth
+        codecView = binding.serverInfoCodec
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

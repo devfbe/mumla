@@ -20,7 +20,6 @@ import android.text.InputType
 import android.util.Log
 import android.view.View
 import android.widget.EditText
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -31,6 +30,7 @@ import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.databinding.CertificateInfoBinding
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.util.MumlaTrustStore
 import se.lublin.mumla.util.toHex
@@ -156,8 +156,9 @@ class ConnectionDialogs(
     }
 
     private fun certificateInfoView(certificate: X509Certificate): View {
-        val layout = activity.layoutInflater.inflate(R.layout.certificate_info, null)
-        val textView = layout.findViewById<TextView>(R.id.certificate_info_text)
+        val binding = CertificateInfoBinding.inflate(activity.layoutInflater)
+        val layout = binding.root
+        val textView = binding.certificateInfoText
         textView.text = try {
             val encoded = certificate.encoded
             activity.getString(

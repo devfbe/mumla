@@ -41,6 +41,8 @@ import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.ChannelRowBinding
+import se.lublin.mumla.databinding.ChannelUserRowBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.drawable.CircleDrawable
 
@@ -108,11 +110,10 @@ class ChannelListAdapter(
     }
 
     override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-        val inflater = context.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
-        val view = inflater.inflate(viewType, viewGroup, false)
+        val inflater = LayoutInflater.from(context)
         return when (viewType) {
-            R.layout.channel_row -> ChannelViewHolder(view)
-            R.layout.channel_user_row -> UserViewHolder(view)
+            R.layout.channel_row -> ChannelViewHolder(ChannelRowBinding.inflate(inflater, viewGroup, false))
+            R.layout.channel_user_row -> UserViewHolder(ChannelUserRowBinding.inflate(inflater, viewGroup, false))
             else -> throw IllegalArgumentException("unknown view type $viewType")
         }
     }
@@ -460,20 +461,20 @@ class ChannelListAdapter(
         }
     }
 
-    private class UserViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val userHolder: LinearLayout = itemView.findViewById(R.id.user_row_title)
-        val userTalkHighlight: ImageView = itemView.findViewById(R.id.user_row_talk_highlight)
-        val userName: TextView = itemView.findViewById(R.id.user_row_name)
-        val moreButton: ImageView = itemView.findViewById(R.id.user_row_more)
+    private class UserViewHolder(binding: ChannelUserRowBinding) : RecyclerView.ViewHolder(binding.root) {
+        val userHolder: LinearLayout = binding.userRowTitle
+        val userTalkHighlight: ImageView = binding.userRowTalkHighlight
+        val userName: TextView = binding.userRowName
+        val moreButton: ImageView = binding.userRowMore
     }
 
-    private class ChannelViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val channelHolder: LinearLayout = itemView.findViewById(R.id.channel_row_title)
-        val channelExpandToggle: ImageView = itemView.findViewById(R.id.channel_row_expand)
-        val channelName: TextView = itemView.findViewById(R.id.channel_row_name)
-        val channelUserCount: TextView = itemView.findViewById(R.id.channel_row_count)
-        val joinButton: ImageView = itemView.findViewById(R.id.channel_row_join)
-        val moreButton: ImageView = itemView.findViewById(R.id.channel_row_more)
+    private class ChannelViewHolder(binding: ChannelRowBinding) : RecyclerView.ViewHolder(binding.root) {
+        val channelHolder: LinearLayout = binding.channelRowTitle
+        val channelExpandToggle: ImageView = binding.channelRowExpand
+        val channelName: TextView = binding.channelRowName
+        val channelUserCount: TextView = binding.channelRowCount
+        val joinButton: ImageView = binding.channelRowJoin
+        val moreButton: ImageView = binding.channelRowMore
     }
 
     /** A channel or user row in the flattened hierarchy. */

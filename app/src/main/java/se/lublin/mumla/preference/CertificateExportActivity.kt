@@ -21,7 +21,6 @@ import android.content.DialogInterface
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
@@ -38,6 +37,7 @@ import kotlinx.coroutines.withContext
 import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.R
 import se.lublin.mumla.app.showMessageDialog
+import se.lublin.mumla.databinding.DialogExportPasswordBinding
 import se.lublin.mumla.db.DatabaseCertificate
 import se.lublin.mumla.db.MumlaRepository
 import java.io.FileNotFoundException
@@ -85,9 +85,10 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
     }
 
     private fun askForPassword() {
-        val view = layoutInflater.inflate(R.layout.dialog_export_password, null)
-        val password = view.findViewById<EditText>(R.id.export_password)
-        val confirm = view.findViewById<EditText>(R.id.export_password_confirm)
+        val binding = DialogExportPasswordBinding.inflate(layoutInflater)
+        val view = binding.root
+        val password = binding.exportPassword
+        val confirm = binding.exportPasswordConfirm
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.export_password_title)
             .setMessage(R.string.export_password_message)

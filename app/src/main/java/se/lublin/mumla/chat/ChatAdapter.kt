@@ -38,6 +38,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.model.IMessage
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.ListChatItemBinding
+import se.lublin.mumla.databinding.ListChatItemImageBinding
 import se.lublin.mumla.service.IChatMessage
 import java.text.DateFormat
 import java.util.Date
@@ -107,9 +109,9 @@ class ChatAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val inflater = LayoutInflater.from(parent.context)
         return if (viewType == TYPE_IMAGE) {
-            ImageHolder(inflater.inflate(R.layout.list_chat_item_image, parent, false))
+            ImageHolder(ListChatItemImageBinding.inflate(inflater, parent, false))
         } else {
-            TextHolder(inflater.inflate(R.layout.list_chat_item, parent, false))
+            TextHolder(ListChatItemBinding.inflate(inflater, parent, false))
         }
     }
 
@@ -205,21 +207,20 @@ class ChatAdapter(
         }
     }
 
-    sealed class Holder(view: View) : RecyclerView.ViewHolder(view) {
-        val box: LinearLayout = view.findViewById(R.id.list_chat_item_box)
-        val target: TextView = view.findViewById(R.id.list_chat_item_target)
-        val time: TextView = view.findViewById(R.id.list_chat_item_time)
+    sealed class Holder(view: View, val box: LinearLayout, val target: TextView, val time: TextView) :
+        RecyclerView.ViewHolder(view)
+
+    class TextHolder(binding: ListChatItemBinding) :
+        Holder(binding.root, binding.listChatItemBox, binding.listChatItemTarget, binding.listChatItemTime) {
+        val text: TextView = binding.listChatItemText
     }
 
-    class TextHolder(view: View) : Holder(view) {
-        val text: TextView = view.findViewById(R.id.list_chat_item_text)
-    }
-
-    class ImageHolder(view: View) : Holder(view) {
-        val textBefore: TextView = view.findViewById(R.id.list_chat_item_text_before)
-        val textAfter: TextView = view.findViewById(R.id.list_chat_item_text_after)
-        val image: ImageView = view.findViewById(R.id.list_chat_item_image)
-        val status: TextView = view.findViewById(R.id.list_chat_item_image_status)
+    class ImageHolder(binding: ListChatItemImageBinding) :
+        Holder(binding.root, binding.listChatItemBox, binding.listChatItemTarget, binding.listChatItemTime) {
+        val textBefore: TextView = binding.listChatItemTextBefore
+        val textAfter: TextView = binding.listChatItemTextAfter
+        val image: ImageView = binding.listChatItemImage
+        val status: TextView = binding.listChatItemImageStatus
         var job: Job? = null
     }
 

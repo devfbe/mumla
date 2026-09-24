@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.DialogImageViewerBinding
 import java.io.IOException
 
 /**
@@ -47,15 +48,16 @@ class ImageViewerDialogFragment : DialogFragment() {
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
-        inflater.inflate(R.layout.dialog_image_viewer, container, false)
+        DialogImageViewerBinding.inflate(inflater, container, false).root
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val image: ZoomImageView = view.findViewById(R.id.image_viewer_image)
-        val progress: View = view.findViewById(R.id.image_viewer_progress)
-        val status: TextView = view.findViewById(R.id.image_viewer_status)
-        val share: View = view.findViewById(R.id.image_viewer_share)
-        view.findViewById<View>(R.id.image_viewer_close).setOnClickListener { dismiss() }
+        val binding = DialogImageViewerBinding.bind(view)
+        val image: ZoomImageView = binding.imageViewerImage
+        val progress: View = binding.imageViewerProgress
+        val status: TextView = binding.imageViewerStatus
+        val share: View = binding.imageViewerShare
+        binding.imageViewerClose.setOnClickListener { dismiss() }
         share.isEnabled = false
 
         /**
