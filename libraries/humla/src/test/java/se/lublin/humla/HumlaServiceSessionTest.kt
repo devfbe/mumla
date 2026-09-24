@@ -483,7 +483,7 @@ class HumlaServiceSessionTest {
     }
 
     private fun whisperTarget(h: HumlaServiceHarness) =
-        WhisperTargetChannel(h.service.getRootChannel(), false, false, null)
+        WhisperTargetChannel(h.service.getRootChannel()!!, false, false, null)
 
     /**
      * The thirty whisper slots are the session's, not the service's; without the clear on

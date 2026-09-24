@@ -142,8 +142,8 @@ class MumlaService : HumlaService(),
     }
 
     private fun requestAvatarIfMissing(user: IUser) {
-        if (user.getTextureHash() != null && user.getTexture() == null) {
-            requestAvatar(user.getSession())
+        if (user.textureHash != null && user.texture == null) {
+            requestAvatar(user.session)
         }
     }
 
@@ -155,12 +155,12 @@ class MumlaService : HumlaService(),
             return
         }
 
-        if (user.getSession() == selfSession) {
-            mSettings.setMutedAndDeafened(user.isSelfMuted(), user.isSelfDeafened())
+        if (user.session == selfSession) {
+            mSettings.setMutedAndDeafened(user.isSelfMuted, user.isSelfDeafened)
             if (mNotification.isForeground) {
-                val contentText = if (user.isSelfMuted() && user.isSelfDeafened()) {
+                val contentText = if (user.isSelfMuted && user.isSelfDeafened) {
                     getString(R.string.status_notify_muted_and_deafened)
-                } else if (user.isSelfMuted()) {
+                } else if (user.isSelfMuted) {
                     getString(R.string.status_notify_muted)
                 } else {
                     getString(R.string.connected)
@@ -174,9 +174,9 @@ class MumlaService : HumlaService(),
     }
 
     private fun onTextMessage(message: IMessage) {
-        val strippedMessage = HtmlUtils.toPlainText(message.getMessage())
+        val strippedMessage = HtmlUtils.toPlainText(message.message)
         val ttsMessage = if (mShortTtsMessagesEnabled) {
-            HtmlUtils.toPlainTextWithShortLinks(message.getMessage()) { host ->
+            HtmlUtils.toPlainTextWithShortLinks(message.message) { host ->
                 getString(R.string.chat_message_tts_short_link, host)
             }
         } else {
@@ -188,7 +188,7 @@ class MumlaService : HumlaService(),
 
         // mTTS is non-null exactly while the setting is on (the preference listener owns it).
         val tts = mTTS
-        if (tts != null && formattedTtsMessage.length <= TTS_THRESHOLD && getSessionUser()?.isSelfDeafened() == false) {
+        if (tts != null && formattedTtsMessage.length <= TTS_THRESHOLD && getSessionUser()?.isSelfDeafened == false) {
             @Suppress("DEPRECATION")
             tts.speak(formattedTtsMessage, TextToSpeech.QUEUE_ADD, null)
         }
@@ -209,7 +209,7 @@ class MumlaService : HumlaService(),
             Log.d(TAG, "exception in onUserTalkStateUpdated: $e")
         }
 
-        val selfStartedTalking = user.getSession() == selfSession && user.getTalkState() == TalkState.TALKING
+        val selfStartedTalking = user.session == selfSession && user.talkState == TalkState.TALKING
         val pttClick = mPTTSoundEnabled && getTransmitMode() == Constants.TRANSMIT_PUSH_TO_TALK
         if (pttClick && selfStartedTalking && isConnectionEstablished()) {
             keyClickSound()
@@ -440,8 +440,8 @@ class MumlaService : HumlaService(),
     override fun onMuteToggled() {
         val user = getSessionUser()
         if (isConnectionEstablished() && user != null) {
-            val muted = !user.isSelfMuted()
-            val deafened = user.isSelfDeafened() && muted
+            val muted = !user.isSelfMuted
+            val deafened = user.isSelfDeafened && muted
             setSelfMuteDeafState(muted, deafened)
         }
     }
@@ -449,7 +449,7 @@ class MumlaService : HumlaService(),
     override fun onDeafenToggled() {
         val user = getSessionUser()
         if (isConnectionEstablished() && user != null) {
-            setSelfMuteDeafState(!user.isSelfDeafened(), !user.isSelfDeafened())
+            setSelfMuteDeafState(!user.isSelfDeafened, !user.isSelfDeafened)
         }
     }
 
@@ -552,14 +552,14 @@ class MumlaService : HumlaService(),
         fun getService(): IMumlaService = mService
     }
 
-    override fun sendUserTextMessage(session: Int, message: String?): Message {
+    override fun sendUserTextMessage(session: Int, message: String): Message {
         val msg = super.sendUserTextMessage(session, message)
 
         mMessageLog.add(IChatMessage.TextMessage(msg))
         return msg
     }
 
-    override fun sendChannelTextMessage(channel: Int, message: String?, tree: Boolean): Message {
+    override fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message {
         val msg = super.sendChannelTextMessage(channel, message, tree)
 
         mMessageLog.add(IChatMessage.TextMessage(msg))

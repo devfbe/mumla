@@ -39,7 +39,7 @@ class ChannelAdapter(
     private var channel: IChannel,
 ) : BaseAdapter() {
 
-    // Copied: `Channel.getUsers()` returns an unmodifiable view of the live list.
+    // Copied: `Channel.users` returns an unmodifiable view of the live list.
     private var users: List<IUser?> = channel.users.toList()
 
     override fun getCount(): Int = users.size

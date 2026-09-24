@@ -15,32 +15,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.model;
+package se.lublin.humla.model
 
-import java.util.List;
+/** A text message from the server or another user. */
+interface IMessage {
+    /** The sender's session. Prefer [actorName]: the sender may have left the server. */
+    val actor: Int
 
-public interface IChannel {
-    List<? extends IUser> getUsers();
+    /** The sender's name, or null for a message from the server itself (or a nameless sender). */
+    val actorName: String?
 
-    int getId();
+    val targetChannels: List<Channel>
+    val targetTrees: List<Channel>
+    val targetUsers: List<User>
+    val message: String
 
-    int getPosition();
-
-    boolean isTemporary();
-
-    IChannel getParent();
-
-    String getName();
-
-    String getDescription();
-
-    byte[] getDescriptionHash();
-
-    List<? extends IChannel> getSubchannels();
-
-    int getSubchannelUserCount();
-
-    List<? extends IChannel> getLinks();
-
-    int getPermissions();
+    /** When the message arrived, in milliseconds since the epoch. */
+    val receivedTime: Long
 }

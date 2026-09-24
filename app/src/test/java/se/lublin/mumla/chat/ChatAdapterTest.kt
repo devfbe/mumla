@@ -320,24 +320,12 @@ class ChatAdapterTest {
 
     @Test
     fun aMessageNeverHandsOutANullTargetList() = runTest {
-        // targetLabel reads the three target lists without a null check: Message wraps each in
-        // Collections.unmodifiableList (a null list throws), and it is the only production IMessage.
         val full = Message(7, "alice", listOf(channel("Root")), listOf(channel("Sub")), listOf(User(3, "bob")), "hi")
         val empty = Message("just a body")
         for (message in listOf(full, empty)) {
             assertThat(message.targetChannels).isNotNull()
             assertThat(message.targetTrees).isNotNull()
             assertThat(message.targetUsers).isNotNull()
-        }
-
-        val nulls = Message(7, "alice", null, null, null, "hi")
-        for (read in listOf<() -> Any?>({ nulls.targetChannels }, { nulls.targetTrees }, { nulls.targetUsers })) {
-            try {
-                read()
-                fail("a null target list came back as null instead of throwing")
-            } catch (expected: NullPointerException) {
-                // The point: unreadable, not null.
-            }
         }
     }
 

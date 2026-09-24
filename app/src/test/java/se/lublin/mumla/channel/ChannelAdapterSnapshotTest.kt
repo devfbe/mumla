@@ -95,7 +95,7 @@ class ChannelAdapterSnapshotTest {
 
         assertThat(adapter.getChannel()).isEqualTo(other)
         assertThat(adapter.count).isEqualTo(1)
-        assertThat(adapter.getItem(0)).isEqualTo(other.getUsers()[0])
+        assertThat(adapter.getItem(0)).isEqualTo(other.users[0])
     }
 
     @Test

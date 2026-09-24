@@ -15,16 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.model;
+package se.lublin.humla.model
 
-import se.lublin.humla.protobuf.Mumble;
+import se.lublin.humla.protobuf.Mumble
 
-public interface WhisperTarget {
-    Mumble.VoiceTarget.Target createTarget();
+/** Where a whisper goes. */
+interface WhisperTarget {
+    /** A user-readable name for the UI: a channel name or a list of users. */
+    val name: String?
 
-    /**
-     * Returns a user-readable name for the whisper target, to display in the UI.
-     * @return A channel name or list of users, depending on the implementation.
-     */
-    String getName();
+    fun createTarget(): Mumble.VoiceTarget.Target
 }

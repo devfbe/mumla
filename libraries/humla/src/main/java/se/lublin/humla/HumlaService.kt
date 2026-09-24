@@ -216,9 +216,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
                     val connection = mConnection ?: return@post
                     val currentUser = modelHandler.getUser(connection.getSession()) ?: return@post
 
-                    currentUser.setTalkState(
-                        if (talking) TalkState.TALKING else TalkState.PASSIVE
-                    )
+                    currentUser.talkState = if (talking) TalkState.TALKING else TalkState.PASSIVE
                     emit(HumlaEvent.UserTalkStateUpdated(currentUser))
                 }
             }
@@ -737,9 +735,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun getSessionUser(): IUser? = model().getUser(getSessionId())
 
-    override fun getSessionChannel(): IChannel {
+    override fun getSessionChannel(): IChannel? {
         val user = getSessionUser()
-        if (user != null) return user.getChannel()
+        if (user != null) return user.channel
         throw IllegalStateException("Session user should be set post-synchronization!")
     }
 
@@ -858,37 +856,35 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         conn().sendTCPMessage(urb.build(), HumlaTCPMessageType.UserRemove)
     }
 
-    override fun sendUserTextMessage(session: Int, message: String?): Message {
+    override fun sendUserTextMessage(session: Int, message: String): Message {
         val model = model()
         val tmb = Mumble.TextMessage.newBuilder()
         tmb.addSession(session)
         tmb.setMessage(message)
         conn().sendTCPMessage(tmb.build(), HumlaTCPMessageType.TextMessage)
 
-        // A message to an unknown session carries a null user.
-        val users = ArrayList<User?>(1)
-        users.add(model.getUser(session))
-        return Message(getSessionId(), selfName(model), ArrayList<Channel?>(0), ArrayList<Channel?>(0), users, message)
+        // A message to an unknown session carries no user.
+        val users = listOfNotNull(model.getUser(session))
+        return Message(getSessionId(), selfName(model), emptyList(), emptyList(), users, message)
     }
 
-    override fun sendChannelTextMessage(channel: Int, message: String?, tree: Boolean): Message {
+    override fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message {
         val model = model()
         val tmb = Mumble.TextMessage.newBuilder()
         if (tree) tmb.addTreeId(channel) else tmb.addChannelId(channel)
         tmb.setMessage(message)
         conn().sendTCPMessage(tmb.build(), HumlaTCPMessageType.TextMessage)
 
-        // An unknown channel is added as null, as above.
-        val targetChannels = ArrayList<Channel?>()
-        targetChannels.add(model.getChannel(channel))
+        // An unknown channel is left out, as above.
+        val targetChannels = listOfNotNull(model.getChannel(channel))
         return Message(
             getSessionId(), selfName(model), targetChannels,
-            if (tree) targetChannels else ArrayList<Channel?>(0), ArrayList<User?>(0), message
+            if (tree) targetChannels else emptyList(), emptyList(), message
         )
     }
 
     private fun selfName(model: ModelHandler): String? =
-        checkNotNull(model.getUser(getSessionId())) { "No user for our own session" }.getName()
+        checkNotNull(model.getUser(getSessionId())) { "No user for our own session" }.name
 
     override fun setUserComment(session: Int, comment: String?) {
         val usb = Mumble.UserState.newBuilder()
@@ -930,23 +926,23 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun linkChannels(channelA: IChannel, channelB: IChannel) {
         val csb = Mumble.ChannelState.newBuilder()
-        csb.setChannelId(channelA.getId())
-        csb.addLinksAdd(channelB.getId())
+        csb.setChannelId(channelA.id)
+        csb.addLinksAdd(channelB.id)
         conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
     }
 
     override fun unlinkChannels(channelA: IChannel, channelB: IChannel) {
         val csb = Mumble.ChannelState.newBuilder()
-        csb.setChannelId(channelA.getId())
-        csb.addLinksRemove(channelB.getId())
+        csb.setChannelId(channelA.id)
+        csb.addLinksRemove(channelB.id)
         conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
     }
 
     override fun unlinkAllChannels(channel: IChannel) {
         val csb = Mumble.ChannelState.newBuilder()
-        csb.setChannelId(channel.getId())
-        for (linked in channel.getLinks()) {
-            csb.addLinksRemove(linked.getId())
+        csb.setChannelId(channel.id)
+        for (linked in channel.links) {
+            csb.addLinksRemove(linked.id)
         }
         conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
     }

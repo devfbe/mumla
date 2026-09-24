@@ -65,7 +65,7 @@ class HumlaServiceAudioTest {
 
         audioUp(h)
         assertThat(h.audioFactory.createThreads.single()).isEqualTo(AudioController.THREAD_NAME)
-        assertThat(h.audioFactory.sessionParams[0].self.getName()).isEqualTo("me")
+        assertThat(h.audioFactory.sessionParams[0].self.name).isEqualTo("me")
         assertThat(h.audioFactory.sessionParams[0].maxBandwidth).isEqualTo(72_000)
         assertThat(h.service.getCurrentBandwidth()).isEqualTo(12_345)
     }

@@ -50,38 +50,38 @@ class ChannelTest {
     @Test
     fun userListIsASnapshotUnaffectedByLaterMoves() {
         val root = Channel(0, false)
-        User(1, "a").setChannel(root)
+        User(1, "a").channel = root
 
-        val seen = root.getUsers()
-        User(2, "b").setChannel(root)
+        val seen = root.users
+        User(2, "b").channel = root
 
         assertThat(seen).hasSize(1)
-        assertThat(root.getUsers()).hasSize(2)
+        assertThat(root.users).hasSize(2)
     }
 
     @Test
     fun subchannelListIsASnapshotUnaffectedByLaterAdditions() {
         val root = Channel(0, false)
-        root.addSubchannel(Channel(1, false).apply { setName("a") })
+        root.addSubchannel(Channel(1, false).apply { name = "a" })
 
-        val seen = root.getSubchannels()
-        root.addSubchannel(Channel(2, false).apply { setName("b") })
+        val seen = root.subchannels
+        root.addSubchannel(Channel(2, false).apply { name = "b" })
 
         assertThat(seen).hasSize(1)
-        assertThat(root.getSubchannels()).hasSize(2)
+        assertThat(root.subchannels).hasSize(2)
     }
 
     @Test
     fun linkListIsASnapshot() {
-        val a = Channel(1, false).apply { setName("a") }
-        val b = Channel(2, false).apply { setName("b") }
+        val a = Channel(1, false).apply { name = "a" }
+        val b = Channel(2, false).apply { name = "b" }
         a.addLink(b)
 
-        val links = a.getLinks()
+        val links = a.links
         a.setLinks(emptyList())
 
         assertThat(links).containsExactly(b)
-        assertThat(a.getLinks()).isEmpty()
+        assertThat(a.links).isEmpty()
     }
 
     /**
@@ -91,35 +91,35 @@ class ChannelTest {
     @Test
     fun aSnapshotIsStillNotWritable() {
         val root = Channel(0, false)
-        User(1, "a").setChannel(root)
-        root.addSubchannel(Channel(1, false).apply { setName("s") })
-        root.addLink(Channel(2, false).apply { setName("l") })
+        User(1, "a").channel = root
+        root.addSubchannel(Channel(1, false).apply { name = "s" })
+        root.addLink(Channel(2, false).apply { name = "l" })
 
         @Suppress("UNCHECKED_CAST")
         val writes = listOf<() -> Unit>(
-            { (root.getUsers() as MutableList<User>).clear() },
-            { (root.getSubchannels() as MutableList<Channel>).clear() },
-            { (root.getLinks() as MutableList<Channel>).clear() },
+            { (root.users as MutableList<User>).clear() },
+            { (root.subchannels as MutableList<Channel>).clear() },
+            { (root.links as MutableList<Channel>).clear() },
         )
         writes.forEach { assertThrows(UnsupportedOperationException::class.java) { it() } }
 
-        assertThat(root.getUsers()).hasSize(1)
-        assertThat(root.getSubchannels()).hasSize(1)
-        assertThat(root.getLinks()).hasSize(1)
+        assertThat(root.users).hasSize(1)
+        assertThat(root.subchannels).hasSize(1)
+        assertThat(root.links).hasSize(1)
     }
 
     @Test
     fun subchannelsStaySortedByPositionThenName() {
         val root = Channel(0, false)
-        val b = Channel(1, false).apply { setName("b"); setPosition(1) }
-        val a = Channel(2, false).apply { setName("a"); setPosition(1) }
-        val z = Channel(3, false).apply { setName("z"); setPosition(0) }
+        val b = Channel(1, false).apply { name = "b"; position = 1 }
+        val a = Channel(2, false).apply { name = "a"; position = 1 }
+        val z = Channel(3, false).apply { name = "z"; position = 0 }
 
         root.addSubchannel(b)
         root.addSubchannel(a)
         root.addSubchannel(z)
 
-        assertThat(root.getSubchannels().map { it.getName() }).containsExactly("z", "a", "b").inOrder()
+        assertThat(root.subchannels.map { it.name }).containsExactly("z", "a", "b").inOrder()
     }
 
     /**
@@ -129,26 +129,26 @@ class ChannelTest {
     @Test
     fun namelessChannelsSortFirstInsteadOfThrowing() {
         val root = Channel(0, false)
-        root.addSubchannel(Channel(1, false).apply { setName("a") })
+        root.addSubchannel(Channel(1, false).apply { name = "a" })
         root.addSubchannel(Channel(2, false))
-        root.addLink(Channel(3, false).apply { setName("b") })
+        root.addLink(Channel(3, false).apply { name = "b" })
         root.addLink(Channel(4, false))
 
-        assertThat(root.getSubchannels().map { it.getId() }).containsExactly(2, 1).inOrder()
-        assertThat(root.getLinks().map { it.getId() }).containsExactly(4, 3).inOrder()
+        assertThat(root.subchannels.map { it.id }).containsExactly(2, 1).inOrder()
+        assertThat(root.links.map { it.id }).containsExactly(4, 3).inOrder()
     }
 
     @Test
     fun nullLinksAndSubchannelsAreIgnored() {
-        val a = Channel(1, false).apply { setName("a") }
+        val a = Channel(1, false).apply { name = "a" }
 
         a.addLink(null)
         a.removeLink(null)
         a.addSubchannel(null)
         a.removeSubchannel(null)
 
-        assertThat(a.getLinks()).isEmpty()
-        assertThat(a.getSubchannels()).isEmpty()
+        assertThat(a.links).isEmpty()
+        assertThat(a.subchannels).isEmpty()
     }
 
     /**
@@ -169,11 +169,11 @@ class ChannelTest {
             write = { i ->
                 val user = users[i % users.size]
                 val target = if ((i / users.size) % 2 == 0) root else other
-                if (user.getChannel() !== target) moves.incrementAndGet()
-                user.setChannel(target)
+                if (user.channel !== target) moves.incrementAndGet()
+                user.channel = target
             },
             read = {
-                root.getUsers().also {
+                root.users.also {
                     fullest.accumulateAndGet(it.size, ::maxOf)
                     emptiest.accumulateAndGet(it.size, ::minOf)
                 }
@@ -182,7 +182,7 @@ class ChannelTest {
 
         println(
             "MEASURE channel changes: ${moves.get()} of $WRITES," +
-                " root.getUsers() between ${emptiest.get()} and ${fullest.get()}"
+                " root.users between ${emptiest.get()} and ${fullest.get()}"
         )
         assertThat(damage.report()).isEmpty()
         assertThat(moves.get()).isAtLeast(WRITES / 2)
@@ -191,7 +191,7 @@ class ChannelTest {
     @Test
     fun readingSubchannelsWhileAnotherThreadAddsAndRemovesThemStaysUndamaged() {
         val root = Channel(0, false)
-        val subchannels = (1..50).map { Channel(it, false).apply { setName("channel $it") } }
+        val subchannels = (1..50).map { Channel(it, false).apply { name = "channel $it" } }
 
         val damage = race(
             write = { i ->
@@ -200,7 +200,7 @@ class ChannelTest {
                 val sub = subchannels[i % subchannels.size]
                 if ((i / subchannels.size) % 2 == 0) root.addSubchannel(sub) else root.removeSubchannel(sub)
             },
-            read = { root.getSubchannels() },
+            read = { root.subchannels },
         )
 
         assertThat(damage.report()).isEmpty()
@@ -208,15 +208,15 @@ class ChannelTest {
 
     @Test
     fun readingLinksWhileAnotherThreadRelinksStaysUndamaged() {
-        val root = Channel(0, false).apply { setName("root") }
-        val linked = (1..50).map { Channel(it, false).apply { setName("channel $it") } }
+        val root = Channel(0, false).apply { name = "root" }
+        val linked = (1..50).map { Channel(it, false).apply { name = "channel $it" } }
 
         val damage = race(
             write = { i ->
                 val link = linked[i % linked.size]
                 if ((i / linked.size) % 2 == 0) root.addLink(link) else root.removeLink(link)
             },
-            read = { root.getLinks() },
+            read = { root.links },
         )
 
         assertThat(damage.report()).isEmpty()
@@ -229,8 +229,8 @@ class ChannelTest {
      */
     @Test
     fun aRelinkIsNeverSeenHalfDone() {
-        val root = Channel(0, false).apply { setName("root") }
-        val linked = (1..50).map { Channel(it, false).apply { setName("channel $it") } }
+        val root = Channel(0, false).apply { name = "root" }
+        val linked = (1..50).map { Channel(it, false).apply { name = "channel $it" } }
         root.setLinks(linked)
 
         val partials = AtomicInteger()
@@ -252,7 +252,7 @@ class ChannelTest {
             // is ever scheduled and fail the floor below.
             awaitUntil(description = "the relinker's first pass") { relinks.get() > 0 }
             repeat(OBSERVATIONS) {
-                if (root.getLinks().size != linked.size) partials.incrementAndGet()
+                if (root.links.size != linked.size) partials.incrementAndGet()
             }
         } finally {
             done.set(true)
@@ -283,8 +283,8 @@ class ChannelTest {
      */
     @Test
     fun countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts() {
-        val root = Channel(0, false).apply { setName("root") }
-        val subchannels = (1..SUBCHANNELS).map { Channel(it, false).apply { setName("channel $it") } }
+        val root = Channel(0, false).apply { name = "root" }
+        val subchannels = (1..SUBCHANNELS).map { Channel(it, false).apply { name = "channel $it" } }
         val users = (0 until 50).map { User(it, "user$it") }
         // The tree starts empty on purpose: the writer's first pass attaches the subchannels, so
         // each is in the list exactly once or not at all.
@@ -303,7 +303,7 @@ class ChannelTest {
                 if ((i / subchannels.size) % 2 == 0) root.addSubchannel(sub) else root.removeSubchannel(sub)
                 val user = users[i % users.size]
                 val home = subchannels[(i % users.size) % subchannels.size]
-                user.setChannel(if ((i / users.size) % 2 == 0) home else null)
+                user.channel = if ((i / users.size) % 2 == 0) home else null
                 i++
                 writes.incrementAndGet()
             }
@@ -313,7 +313,7 @@ class ChannelTest {
             // Catch per observation so one throw does not hide later double counts.
             repeat(OBSERVATIONS) {
                 try {
-                    if (root.getSubchannelUserCount() > users.size) overcounts.incrementAndGet()
+                    if (root.subchannelUserCount > users.size) overcounts.incrementAndGet()
                 } catch (t: Throwable) {
                     firstThrow.compareAndSet(null, t)
                     throws.incrementAndGet()

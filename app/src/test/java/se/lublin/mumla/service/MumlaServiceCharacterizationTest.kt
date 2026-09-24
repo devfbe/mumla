@@ -119,12 +119,12 @@ class MumlaServiceCharacterizationTest {
 
     private fun user(session: Int, muted: Boolean = false, deafened: Boolean = false): User {
         val u = mockk<User>(relaxed = true)
-        every { u.getSession() } returns session
+        every { u.session } returns session
         every { u.isSelfMuted } returns muted
         every { u.isSelfDeafened } returns deafened
-        every { u.getName() } returns "user$session"
-        every { u.getTextureHash() } returns null
-        every { u.getTexture() } returns null
+        every { u.name } returns "user$session"
+        every { u.textureHash } returns null
+        every { u.texture } returns null
         return u
     }
 
@@ -143,13 +143,13 @@ class MumlaServiceCharacterizationTest {
     private fun reconnectPrompt(): Notification? = shadowOf(notificationManager).getNotification(RECONNECT_ID)
 
     private fun textMessage(body: String, actor: String? = "alice"): IMessage = object : IMessage {
-        override fun getActor(): Int = 1
-        override fun getActorName(): String? = actor
-        override fun getTargetChannels(): List<Channel> = emptyList()
-        override fun getTargetTrees(): List<Channel> = emptyList()
-        override fun getTargetUsers(): List<User> = emptyList()
-        override fun getMessage(): String = body
-        override fun getReceivedTime(): Long = 0L
+        override val actor: Int = 1
+        override val actorName: String? = actor
+        override val targetChannels: List<Channel> = emptyList()
+        override val targetTrees: List<Channel> = emptyList()
+        override val targetUsers: List<User> = emptyList()
+        override val message: String = body
+        override val receivedTime: Long = 0L
     }
 
     private fun error() = HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
@@ -606,7 +606,7 @@ class MumlaServiceCharacterizationTest {
     fun aUserWithAnUnfetchedAvatarHasItRequested() {
         connect()
         val other = user(9)
-        every { other.getTextureHash() } returns byteArrayOf(1)
+        every { other.textureHash } returns byteArrayOf(1)
 
         service.testEmit(HumlaEvent.UserConnected(other))
         service.testEmit(HumlaEvent.UserStateUpdated(other))
@@ -619,8 +619,8 @@ class MumlaServiceCharacterizationTest {
     fun anAvatarThatIsAlreadyThereOrDoesNotExistIsNotRequested() {
         connect()
         val fetched = user(9)
-        every { fetched.getTextureHash() } returns byteArrayOf(1)
-        every { fetched.getTexture() } returns byteArrayOf(2)
+        every { fetched.textureHash } returns byteArrayOf(1)
+        every { fetched.texture } returns byteArrayOf(2)
         val none = user(10)
 
         service.testEmit(HumlaEvent.UserConnected(fetched))
@@ -1036,7 +1036,7 @@ class MumlaServiceCharacterizationTest {
         preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()
         connect()
         val talking = user(SELF)
-        every { talking.getTalkState() } returns TalkState.TALKING
+        every { talking.talkState } returns TalkState.TALKING
         return talking
     }
 
@@ -1063,7 +1063,7 @@ class MumlaServiceCharacterizationTest {
     fun noClickForSomebodyElse() {
         clickReady()
         val other = user(SELF + 1)
-        every { other.getTalkState() } returns TalkState.TALKING
+        every { other.talkState } returns TalkState.TALKING
         talk(other)
         assertThat(clicks).isEqualTo(0)
     }
@@ -1079,7 +1079,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun noClickWhenTheTalkStateIsNotTalking() {
         val u = clickReady()
-        every { u.getTalkState() } returns TalkState.PASSIVE
+        every { u.talkState } returns TalkState.PASSIVE
         talk(u)
         assertThat(clicks).isEqualTo(0)
     }

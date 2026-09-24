@@ -434,7 +434,7 @@ class ChannelChatFragmentTest {
     }
 
     private fun settings(imageMessageLength: Int): ServerSettings =
-        mockk(relaxed = true) { every { getImageMessageLength() } returns imageMessageLength }
+        mockk(relaxed = true) { every { this@mockk.imageMessageLength } returns imageMessageLength }
 
     /**
      * `isConnected()` and the throw inside `HumlaSession()` read the same state in production, so

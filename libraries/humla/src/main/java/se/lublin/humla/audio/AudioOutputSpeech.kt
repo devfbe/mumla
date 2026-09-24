@@ -43,7 +43,7 @@ import se.lublin.humla.protocol.AudioHandler
  * default to the `*Native` objects, which load their `.so` on first touch.
  */
 class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) constructor(
-    private val user: User,
+    val user: User,
     private var requestedSamples: Int,
     private val talkStateListener: TalkStateListener,
     private val opusApi: OpusDecoderApi = OpusDecoderNative,
@@ -242,9 +242,8 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
         requestedSamples = samples
     }
 
-    fun getUser(): User = user
-
-    fun getSession(): Int = user.session
+    val session: Int
+        get() = user.session
 
     /** Cleans up all native resources linked to this instance. MUST be called eventually. */
     fun destroy() {

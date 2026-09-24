@@ -87,7 +87,7 @@ class ModelHandlerEventsTest {
             HumlaEvent.UserConnected::class,
         ).inOrder()
         assertThat(notices()).containsExactly(HumlaEvent.UserJoinedServer("Bob"))
-        assertThat(handler.getUser(3)!!.getChannel()!!.id).isEqualTo(0)
+        assertThat(handler.getUser(3)!!.channel!!.id).isEqualTo(0)
     }
 
     @Test
@@ -95,8 +95,8 @@ class ModelHandlerEventsTest {
         handler.onMessage(userState(4) { setName("Old").setUserId(40) })
         handler.onMessage(userState(5) { setName("Pest").setUserId(41) })
 
-        assertThat(handler.getUser(4)!!.isLocalMuted()).isTrue()
-        assertThat(handler.getUser(5)!!.isLocalIgnored()).isTrue()
+        assertThat(handler.getUser(4)!!.isLocalMuted).isTrue()
+        assertThat(handler.getUser(5)!!.isLocalIgnored).isTrue()
     }
 
     @Test
@@ -178,7 +178,7 @@ class ModelHandlerEventsTest {
         handler.onMessage(userState(2) { setChannelId(99).setComment("hi") })
 
         assertThat(events).isEmpty()
-        assertThat(handler.getUser(2)!!.getComment()).isNull()
+        assertThat(handler.getUser(2)!!.comment).isNull()
     }
 
     // ---- removals -------------------------------------------------------------------------------
@@ -210,8 +210,8 @@ class ModelHandlerEventsTest {
         assertThat(notices().map { it.level })
             .containsExactly(HumlaEvent.Level.WARNING, HumlaEvent.Level.INFO).inOrder()
         val removed = published<HumlaEvent.UserRemoved>()
-        assertThat(removed.map { it.user?.getSession() }).containsExactly(3, 2).inOrder()
-        assertThat(removed[0].user!!.getChannel()).isNull()
+        assertThat(removed.map { it.user?.session }).containsExactly(3, 2).inOrder()
+        assertThat(removed[0].user!!.channel).isNull()
     }
 
     // ---- permissions and messages ---------------------------------------------------------------
@@ -248,12 +248,12 @@ class ModelHandlerEventsTest {
         val messages = published<HumlaEvent.TextMessage>().map { it.message }
         assertThat(messages.map { it.actorName }).containsExactly("Ann", null).inOrder()
         assertThat(messages[0].targetChannels.single().id).isEqualTo(1)
-        assertThat(messages[1].targetUsers.single().getSession()).isEqualTo(1)
+        assertThat(messages[1].targetUsers.single().session).isEqualTo(1)
     }
 
     @Test
     fun aLocallyIgnoredSendersMessageIsDropped() {
-        handler.getUser(2)!!.setLocalIgnored(true)
+        handler.getUser(2)!!.isLocalIgnored = true
 
         handler.onMessage(Mumble.TextMessage.newBuilder().setActor(2).setMessage("hi").build())
 

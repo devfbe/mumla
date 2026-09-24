@@ -523,7 +523,7 @@ class ChannelListAdapterRebuildTest {
 
     /**
      * A null in `getUsers()` gets no row but is still counted, matching
-     * `Channel.getSubchannelUserCount()` (`mUsers.size()`).
+     * `Channel.subchannelUserCount` (`mUsers.size()`).
      */
     @Test
     fun aUserTheModelHasNotFilledInYetIsCountedButGetsNoRow() {
@@ -674,7 +674,7 @@ class ChannelListAdapterRebuildTest {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
         val view = attachedRecyclerView(adapter)
-        val user = ids.getValue(4).getUsers().first() as FakeUser
+        val user = ids.getValue(4).users.first() as FakeUser
 
         assertThat(talkHighlightResIdIn(view, 100))
             .isEqualTo(R.drawable.outline_circle_talking_off)
@@ -758,7 +758,7 @@ class ChannelListAdapterRebuildTest {
         val adapter = adapterOver(root, ids)
         val user = FakeUser(504, userId = 11)
 
-        user.setLocalMuted(true)
+        user.isLocalMuted = true
         adapter.onLocalUserStateUpdated(user)
 
         verify(exactly = 1) { database.addLocalMutedUser(SERVER_ID, 11) }
@@ -766,8 +766,8 @@ class ChannelListAdapterRebuildTest {
         verify(exactly = 0) { database.removeLocalMutedUser(any(), any()) }
         verify(exactly = 0) { database.addLocalIgnoredUser(any(), any()) }
 
-        user.setLocalMuted(false)
-        user.setLocalIgnored(true)
+        user.isLocalMuted = false
+        user.isLocalIgnored = true
         adapter.onLocalUserStateUpdated(user)
 
         verify(exactly = 1) { database.removeLocalMutedUser(SERVER_ID, 11) }
@@ -831,12 +831,12 @@ class ChannelListAdapterRebuildTest {
         val (root, ids) = smallTree()
         val channel = ids.getValue(4)
 
-        channel.removeUser(channel.getUsers().first())
+        channel.removeUser(channel.users.first())
         channel.addUser(FakeUser(100, texture = pngBytes()))
         assertThat(talkHighlightDrawableOf(adapterOver(root, ids)))
             .isInstanceOf(CircleDrawable::class.java)
 
-        channel.removeUser(channel.getUsers().first())
+        channel.removeUser(channel.users.first())
         channel.addUser(FakeUser(100))
         assertThat(talkStateDrawableOf(adapterOver(root, ids)))
             .isEqualTo(R.drawable.outline_circle_talking_off)
@@ -851,7 +851,7 @@ class ChannelListAdapterRebuildTest {
     fun aTextureThatDoesNotDecodeFallsBackToTheRestingDot() {
         val (root, ids) = smallTree()
         val channel = ids.getValue(4)
-        channel.removeUser(channel.getUsers().first())
+        channel.removeUser(channel.users.first())
         channel.addUser(FakeUser(100, texture = byteArrayOf(1, 2, 3)))
 
         assertThat(talkStateDrawableOf(adapterOver(root, ids)))

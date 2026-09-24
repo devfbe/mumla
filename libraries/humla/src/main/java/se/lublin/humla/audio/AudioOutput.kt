@@ -235,8 +235,8 @@ class AudioOutput @JvmOverloads constructor(
                         sources.add(result)
                     } else {
                         val speech = result.speechOutput
-                        Log.v(TAG, "Deleted audio user " + speech.getUser().getName())
-                        audioOutputs.remove(speech.getSession())
+                        Log.v(TAG, "Deleted audio user " + speech.user.name)
+                        audioOutputs.remove(speech.session)
                         speech.destroy()
                     }
                 }
@@ -273,18 +273,18 @@ class AudioOutput @JvmOverloads constructor(
         pds.skip(1)
         val session = pds.readLong().toInt()
         val user = listener.getUser(session)
-        if (user != null && !user.isLocalMuted()) {
+        if (user != null && !user.isLocalMuted) {
             // TODO check for whispers here
             val seq = pds.readLong().toInt()
 
             val aop = packetLock.withLock {
                 audioOutputs[session] ?: try {
                     speechFactory.create(user, bufferSize, this).also {
-                        Log.v(TAG, "Created audio user " + user.getName())
+                        Log.v(TAG, "Created audio user " + user.name)
                         audioOutputs[session] = it
                     }
                 } catch (e: NativeAudioException) {
-                    Log.v(TAG, "Failed to create audio user " + user.getName())
+                    Log.v(TAG, "Failed to create audio user " + user.name)
                     e.printStackTrace()
                     null
                 }
@@ -303,8 +303,8 @@ class AudioOutput @JvmOverloads constructor(
     override fun onTalkStateUpdated(session: Int, state: TalkState) {
         mainHandler.post {
             val user = listener.getUser(session)
-            if (user != null && user.getTalkState() != state) {
-                user.setTalkState(state)
+            if (user != null && user.talkState != state) {
+                user.talkState = state
                 listener.onUserTalkStateUpdated(user)
             }
         }

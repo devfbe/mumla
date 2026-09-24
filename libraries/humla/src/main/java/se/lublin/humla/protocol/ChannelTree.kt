@@ -51,8 +51,8 @@ internal class ChannelTree {
         val existing = channels[msg.channelId]
         val channel = existing ?: Channel(msg.channelId, msg.temporary).also { channels[msg.channelId] = it }
 
-        if (msg.hasName()) channel.setName(msg.name)
-        if (msg.hasPosition()) channel.setPosition(msg.position)
+        if (msg.hasName()) channel.name = msg.name
+        if (msg.hasPosition()) channel.position = msg.position
         // Looked up only after the channel itself exists, so a frame whose channel id is its own
         // parent id finds that channel.
         if (msg.hasParent()) hang(channel, getOrStub(msg.parent))
@@ -63,29 +63,29 @@ internal class ChannelTree {
 
     /** Removes the channel [id] from the tree; the root is never removed. */
     fun remove(id: Int): Channel? {
-        val channel = channels[id]?.takeIf { it.getId() != ROOT_CHANNEL_ID } ?: return null
+        val channel = channels[id]?.takeIf { it.id != ROOT_CHANNEL_ID } ?: return null
         channels.remove(id)
-        channel.getParent()?.removeSubchannel(channel)
+        channel.parent?.removeSubchannel(channel)
         return channel
     }
 
     /** Hangs [channel] under [named], or where [fallbackParent] says if that is refused. */
     private fun hang(channel: Channel, named: Channel) {
         val parent = (if (mayHang(channel, named)) named else fallbackParent(channel)) ?: return
-        val oldParent = channel.getParent()
-        channel.setParent(parent)
+        val oldParent = channel.parent
+        channel.parent = parent
         parent.addSubchannel(channel)
         oldParent?.removeSubchannel(channel)
     }
 
     private fun applyDescription(channel: Channel, msg: Mumble.ChannelState) {
         if (msg.hasDescriptionHash()) {
-            channel.setDescriptionHash(msg.descriptionHash.toByteArray())
-            channel.setDescription(null)
+            channel.descriptionHash = msg.descriptionHash.toByteArray()
+            channel.description = null
         }
         if (msg.hasDescription()) {
-            channel.setDescription(msg.description)
-            channel.setDescriptionHash(null)
+            channel.description = msg.description
+            channel.descriptionHash = null
         }
     }
 
@@ -120,12 +120,12 @@ internal class ChannelTree {
         var refusal: String? = null
         while (above != null && refusal == null) {
             refusal = when {
-                above === channel -> "refusing to make channel ${channel.getId()} its own ancestor"
+                above === channel -> "refusing to make channel ${channel.id} its own ancestor"
                 ++depth > MAX_CHANNEL_DEPTH ->
-                    "refusing to hang channel ${channel.getId()} deeper than $MAX_CHANNEL_DEPTH"
+                    "refusing to hang channel ${channel.id} deeper than $MAX_CHANNEL_DEPTH"
                 else -> null
             }
-            above = above.getParent()
+            above = above.parent
         }
         refusal?.let { Log.w(TAG, it) }
         return refusal == null
@@ -141,7 +141,7 @@ internal class ChannelTree {
      * it.
      */
     private fun fallbackParent(channel: Channel): Channel? {
-        if (channel.getParent() != null) return null
+        if (channel.parent != null) return null
         // The root's own frame need not have arrived first. The fallback is a hang like any other:
         // a frame naming the root as its own parent must not make the root its own parent.
         return getOrStub(ROOT_CHANNEL_ID).takeIf { mayHang(channel, it) }

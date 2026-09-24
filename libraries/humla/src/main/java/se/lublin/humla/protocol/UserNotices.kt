@@ -28,31 +28,31 @@ internal object UserNotices {
     /** The user id and hash, restoring a local mute or ignore remembered for the user id. */
     fun applyIdentity(user: User, msg: Mumble.UserState, muteHistory: List<Int>?, ignoreHistory: List<Int>?) {
         if (msg.hasUserId()) {
-            user.setUserId(msg.userId)
-            if (muteHistory?.contains(user.getUserId()) == true) user.setLocalMuted(true)
-            if (ignoreHistory?.contains(user.getUserId()) == true) user.setLocalIgnored(true)
+            user.userId = msg.userId
+            if (muteHistory?.contains(user.userId) == true) user.isLocalMuted = true
+            if (ignoreHistory?.contains(user.userId) == true) user.isLocalIgnored = true
         }
-        if (msg.hasHash()) user.setHash(msg.hash)
+        if (msg.hasHash()) user.hash = msg.hash
     }
 
     /** The user's own mute and deafen flags; false if the frame carries neither. */
     fun applySelfMute(user: User, msg: Mumble.UserState): Boolean {
-        if (msg.hasSelfMute()) user.setSelfMuted(msg.selfMute)
-        if (msg.hasSelfDeaf()) user.setSelfDeafened(msg.selfDeaf)
+        if (msg.hasSelfMute()) user.isSelfMuted = msg.selfMute
+        if (msg.hasSelfDeaf()) user.isSelfDeafened = msg.selfDeaf
         return msg.hasSelfMute() || msg.hasSelfDeaf()
     }
 
     /** The mute, deafen, suppress and priority speaker flags the server sets. */
     fun applyServerFlags(user: User, msg: Mumble.UserState) {
-        if (msg.hasDeaf()) user.setDeafened(msg.deaf)
-        if (msg.hasMute()) user.setMuted(msg.mute)
-        if (msg.hasSuppress()) user.setSuppressed(msg.suppress)
-        if (msg.hasPrioritySpeaker()) user.setPrioritySpeaker(msg.prioritySpeaker)
+        if (msg.hasDeaf()) user.isDeafened = msg.deaf
+        if (msg.hasMute()) user.isMuted = msg.mute
+        if (msg.hasSuppress()) user.isSuppressed = msg.suppress
+        if (msg.hasPrioritySpeaker()) user.isPrioritySpeaker = msg.prioritySpeaker
     }
 
     /** Name, avatar and comment; a new hash drops the cached blob, a new blob its hash. */
     fun applyProfile(user: User, msg: Mumble.UserState) {
-        if (msg.hasName()) user.setName(msg.name)
+        if (msg.hasName()) user.name = msg.name
         if (msg.hasTextureHash()) {
             user.setTextureHash(msg.textureHash)
             user.setTexture(null)
@@ -63,45 +63,45 @@ internal object UserNotices {
         }
         if (msg.hasCommentHash()) {
             user.setCommentHash(msg.commentHash)
-            user.setComment(null)
+            user.comment = null
         }
         if (msg.hasComment()) {
-            user.setComment(msg.comment)
+            user.comment = msg.comment
             user.setCommentHash(null)
         }
     }
 
     /** Our own mute change, or that of a user in our channel; null for anyone else. */
     fun selfMute(user: User, self: User): HumlaEvent.Notice? {
-        val userChannel = user.getChannel()
+        val userChannel = user.channel
         return when {
-            user.getSession() == self.getSession() ->
-                HumlaEvent.SelfMuteChanged(user.isSelfMuted(), user.isSelfDeafened())
-            userChannel != null && userChannel == self.getChannel() ->
-                HumlaEvent.UserMuteChanged(user.getName(), user.isSelfMuted(), user.isSelfDeafened())
+            user.session == self.session ->
+                HumlaEvent.SelfMuteChanged(user.isSelfMuted, user.isSelfDeafened)
+            userChannel != null && userChannel == self.channel ->
+                HumlaEvent.UserMuteChanged(user.name, user.isSelfMuted, user.isSelfDeafened)
             else -> null
         }
     }
 
     /** Our own recording change, or that of a user in our channel; null for anyone else. */
     fun recording(user: User, self: User): HumlaEvent.Notice? {
-        if (user.getSession() == self.getSession()) return HumlaEvent.SelfRecordingChanged(user.isRecording())
-        val selfChannel = self.getChannel()
+        if (user.session == self.session) return HumlaEvent.SelfRecordingChanged(user.isRecording)
+        val selfChannel = self.channel
         val nearby = selfChannel != null &&
-            (selfChannel.getLinks().contains(selfChannel) || selfChannel == user.getChannel())
-        return if (nearby) HumlaEvent.UserRecordingChanged(user.getName(), user.isRecording()) else null
+            (selfChannel.links.contains(selfChannel) || selfChannel == user.channel)
+        return if (nearby) HumlaEvent.UserRecordingChanged(user.name, user.isRecording) else null
     }
 
     /** Somebody else moved from [old] to [channel]: a notice if either is our channel. */
     fun move(user: User, actor: User?, old: Channel, channel: Channel, self: User): HumlaEvent.Notice? {
-        val selfChannel = self.getChannel() ?: return null
-        val byThemselves = actor != null && actor.getSession() == user.getSession()
-        val actorName = actor?.getName()
+        val selfChannel = self.channel ?: return null
+        val byThemselves = actor != null && actor.session == user.session
+        val actorName = actor?.name
         return when {
             selfChannel != channel && selfChannel == old ->
-                HumlaEvent.UserLeftChannel(user.getName(), channel.getName(), actorName, byThemselves)
+                HumlaEvent.UserLeftChannel(user.name, channel.name, actorName, byThemselves)
             selfChannel == channel ->
-                HumlaEvent.UserEnteredChannel(user.getName(), old.getName(), actorName, byThemselves)
+                HumlaEvent.UserEnteredChannel(user.name, old.name, actorName, byThemselves)
             else -> null
         }
     }

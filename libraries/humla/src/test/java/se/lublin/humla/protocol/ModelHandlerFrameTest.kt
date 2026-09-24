@@ -49,13 +49,13 @@ class ModelHandlerFrameTest {
 
         val stub = handler.getChannel(1)
         assertThat(stub).isNotNull()
-        assertThat(handler.getChannel(2)!!.getParent()).isEqualTo(stub)
-        assertThat(stub!!.getSubchannels().map { it.getId() }).containsExactly(2)
+        assertThat(handler.getChannel(2)!!.parent).isEqualTo(stub)
+        assertThat(stub!!.subchannels.map { it.id }).containsExactly(2)
 
         // The real ChannelState arrives later and lands on the same object, so nothing is lost.
         handler.onMessage(channelState(1, parent = 0, name = "parent"))
-        assertThat(handler.getChannel(1)!!.getName()).isEqualTo("parent")
-        assertThat(handler.getChannel(1)!!.getSubchannels().map { it.getId() }).containsExactly(2)
+        assertThat(handler.getChannel(1)!!.name).isEqualTo("parent")
+        assertThat(handler.getChannel(1)!!.subchannels.map { it.id }).containsExactly(2)
     }
 
     @Test
@@ -67,7 +67,7 @@ class ModelHandlerFrameTest {
             Mumble.ChannelState.newBuilder().setChannelId(1).addLinks(2).addLinks(99).build()
         )
 
-        assertThat(handler.getChannel(1)!!.getLinks().map { it.getId() }).containsExactly(2)
+        assertThat(handler.getChannel(1)!!.links.map { it.id }).containsExactly(2)
     }
 
     @Test
@@ -81,7 +81,7 @@ class ModelHandlerFrameTest {
             Mumble.ChannelState.newBuilder().setChannelId(1).addLinksRemove(99).build()
         )
 
-        assertThat(handler.getChannel(1)!!.getLinks()).isEmpty()
+        assertThat(handler.getChannel(1)!!.links).isEmpty()
     }
 
     /**
@@ -92,11 +92,11 @@ class ModelHandlerFrameTest {
     fun aFrameThatNamesItselfAsItsOwnParentDoesNotReplaceTheChannelItJustNamed() {
         handler.onMessage(channelState(3, parent = 3, name = "self"))
 
-        assertThat(handler.getChannel(3)!!.getName()).isEqualTo("self")
+        assertThat(handler.getChannel(3)!!.name).isEqualTo("self")
         // And the frame is refused: a channel that is its own parent is a one-frame cycle. It lands
         // under the root, so it is still in the list.
-        assertThat(handler.getChannel(3)!!.getParent()).isEqualTo(handler.getChannel(0))
-        assertThat(handler.getChannel(3)!!.getSubchannelUserCount()).isEqualTo(0)
+        assertThat(handler.getChannel(3)!!.parent).isEqualTo(handler.getChannel(0))
+        assertThat(handler.getChannel(3)!!.subchannelUserCount).isEqualTo(0)
     }
 
     /**
@@ -109,8 +109,8 @@ class ModelHandlerFrameTest {
         handler.onMessage(channelState(5, parent = 7, name = "a"))
         handler.onMessage(channelState(7, parent = 5, name = "b"))
 
-        assertThat(handler.getChannel(5)!!.getSubchannelUserCount()).isEqualTo(0)
-        assertThat(handler.getChannel(7)!!.getSubchannelUserCount()).isEqualTo(0)
+        assertThat(handler.getChannel(5)!!.subchannelUserCount).isEqualTo(0)
+        assertThat(handler.getChannel(7)!!.subchannelUserCount).isEqualTo(0)
     }
 
     /**
@@ -124,12 +124,12 @@ class ModelHandlerFrameTest {
             handler.onMessage(channelState(id, parent = id - 1, name = "channel $id"))
         }
 
-        assertThat(handler.getChannel(0)!!.getSubchannelUserCount()).isEqualTo(0)
-        assertThat(handler.getChannel(DEEP_CHAIN)!!.getName()).isEqualTo("channel $DEEP_CHAIN")
+        assertThat(handler.getChannel(0)!!.subchannelUserCount).isEqualTo(0)
+        assertThat(handler.getChannel(DEEP_CHAIN)!!.name).isEqualTo("channel $DEEP_CHAIN")
         var depth = 0
         var channel = handler.getChannel(0)!!
-        while (channel.getSubchannels().isNotEmpty()) {
-            channel = channel.getSubchannels()[0]
+        while (channel.subchannels.isNotEmpty()) {
+            channel = channel.subchannels[0]
             depth++
         }
         assertThat(depth).isAtMost(ModelHandler.MAX_CHANNEL_DEPTH)
@@ -144,10 +144,10 @@ class ModelHandlerFrameTest {
     fun aRefusedParentLeavesTheChannelAndItsUsersWhereTheListCanReachThem() {
         handler.onMessage(channelState(5, parent = 7, name = "a"))
         handler.onMessage(channelState(7, parent = 5, name = "b"))
-        User(1, "someone").setChannel(handler.getChannel(7))
+        User(1, "someone").channel = handler.getChannel(7)
 
-        assertThat(channelsBelowRoot().map { it.getId() }).containsExactly(5, 7)
-        assertThat(usersBelowRoot().map { it.getName() }).containsExactly("someone")
+        assertThat(channelsBelowRoot().map { it.id }).containsExactly(5, 7)
+        assertThat(usersBelowRoot().map { it.name }).containsExactly("someone")
     }
 
     /** The same for the other refusal: too deep is still in the tree, at the top of it. */
@@ -157,11 +157,11 @@ class ModelHandlerFrameTest {
             handler.onMessage(channelState(id, parent = id - 1, name = "channel $id"))
         }
         val tooDeep = ModelHandler.MAX_CHANNEL_DEPTH + 1
-        User(1, "someone").setChannel(handler.getChannel(tooDeep))
+        User(1, "someone").channel = handler.getChannel(tooDeep)
 
-        assertThat(handler.getChannel(tooDeep)!!.getParent()).isEqualTo(handler.getChannel(0))
-        assertThat(channelsBelowRoot().map { it.getId() }).contains(tooDeep)
-        assertThat(usersBelowRoot().map { it.getName() }).containsExactly("someone")
+        assertThat(handler.getChannel(tooDeep)!!.parent).isEqualTo(handler.getChannel(0))
+        assertThat(channelsBelowRoot().map { it.id }).contains(tooDeep)
+        assertThat(usersBelowRoot().map { it.name }).containsExactly("someone")
     }
 
     /**
@@ -177,8 +177,8 @@ class ModelHandlerFrameTest {
 
         handler.onMessage(channelState(5, parent = 5, name = "five"))
 
-        assertThat(handler.getChannel(5)!!.getParent()).isEqualTo(handler.getChannel(2))
-        assertThat(handler.getChannel(0)!!.getSubchannels().map { it.getId() }).containsExactly(2)
+        assertThat(handler.getChannel(5)!!.parent).isEqualTo(handler.getChannel(2))
+        assertThat(handler.getChannel(0)!!.subchannels.map { it.id }).containsExactly(2)
     }
 
     /**
@@ -192,7 +192,7 @@ class ModelHandlerFrameTest {
         early.onMessage(channelState(5, parent = 5, name = "five"))
 
         assertThat(early.getChannel(0)).isNotNull()
-        assertThat(early.getChannel(5)!!.getParent()).isEqualTo(early.getChannel(0))
+        assertThat(early.getChannel(5)!!.parent).isEqualTo(early.getChannel(0))
     }
 
     /**
@@ -203,20 +203,20 @@ class ModelHandlerFrameTest {
     fun aRootThatNamesItselfAsItsParentIsNotHungUnderItself() {
         handler.onMessage(channelState(0, parent = 0, name = "Root"))
 
-        assertThat(handler.getChannel(0)!!.getParent()).isNull()
-        assertThat(handler.getChannel(0)!!.getSubchannels()).isEmpty()
+        assertThat(handler.getChannel(0)!!.parent).isNull()
+        assertThat(handler.getChannel(0)!!.subchannels).isEmpty()
     }
 
     /** Every channel `ChannelListAdapter` would reach, in the order it reaches them. */
     private fun channelsBelowRoot(): List<Channel> = buildList {
         fun walk(channel: Channel) {
             add(channel)
-            channel.getSubchannels().forEach { walk(it) }
+            channel.subchannels.forEach { walk(it) }
         }
-        handler.getChannel(0)!!.getSubchannels().forEach { walk(it) }
+        handler.getChannel(0)!!.subchannels.forEach { walk(it) }
     }
 
-    private fun usersBelowRoot(): List<User> = channelsBelowRoot().flatMap { it.getUsers() }
+    private fun usersBelowRoot(): List<User> = channelsBelowRoot().flatMap { it.users }
 
     private fun channelState(id: Int, parent: Int? = null, name: String): Mumble.ChannelState =
         Mumble.ChannelState.newBuilder()

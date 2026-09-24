@@ -15,48 +15,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.model;
+package se.lublin.humla.model
 
-public interface IUser {
-    int getSession();
-
-    Channel getChannel();
-
-    int getUserId();
-
-    String getName();
-
-    String getComment();
-
-    byte[] getCommentHash();
-
-    byte[] getTexture();
-
-    byte[] getTextureHash();
-
-    String getHash();
-
-    boolean isMuted();
-
-    boolean isDeafened();
-
-    boolean isSuppressed();
-
-    boolean isSelfMuted();
-
-    boolean isSelfDeafened();
-
-    boolean isPrioritySpeaker();
-
-    boolean isRecording();
-
-    boolean isLocalMuted();
-
-    boolean isLocalIgnored();
-
-    void setLocalMuted(boolean muted);
-
-    void setLocalIgnored(boolean ignored);
-
-    TalkState getTalkState();
+/** A channel as the server tree exposes it. */
+interface IChannel {
+    val users: List<IUser>
+    val id: Int
+    val position: Int
+    val isTemporary: Boolean
+    val parent: IChannel?
+    val name: String?
+    val description: String?
+    val descriptionHash: ByteArray?
+    val subchannels: List<IChannel>
+    /** The users in this channel and all its subchannels. */
+    val subchannelUserCount: Int
+    val links: List<IChannel>
+    val permissions: Int
 }

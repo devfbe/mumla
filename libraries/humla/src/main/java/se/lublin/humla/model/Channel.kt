@@ -30,14 +30,14 @@ import java.util.Collections
  * late.
  */
 class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false) : IChannel, Comparable<Channel> {
-    private val mId = id
-    @Volatile private var mPosition = 0
-    @Volatile private var mTemporary = temporary
-    @Volatile private var mParent: Channel? = null
-    @Volatile private var mName: String? = null
-    @Volatile private var mDescription: String? = null
-    @Volatile private var mDescriptionHash: ByteArray? = null
-    @Volatile private var mPermissions = 0
+    override val id: Int = id
+    @Volatile override var position = 0
+    @Volatile override var isTemporary = temporary
+    @Volatile override var parent: Channel? = null
+    @Volatile override var name: String? = null
+    @Volatile override var description: String? = null
+    @Volatile override var descriptionHash: ByteArray? = null
+    @Volatile override var permissions = 0
     private val mSubchannels = ArrayList<Channel>() // guarded by this
     private val mUsers = ArrayList<User>() // guarded by this
     private val mLinks = ArrayList<Channel>() // guarded by this
@@ -60,49 +60,11 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
         mUsers.remove(user)
     }
 
-    @Synchronized
-    override fun getUsers(): List<User> = Collections.unmodifiableList(ArrayList(mUsers))
+    override val users: List<User>
+        @Synchronized get() = Collections.unmodifiableList(ArrayList(mUsers))
 
-    override fun getId(): Int = mId
-
-    override fun getPosition(): Int = mPosition
-
-    fun setPosition(position: Int) {
-        mPosition = position
-    }
-
-    override fun isTemporary(): Boolean = mTemporary
-
-    fun setTemporary(temporary: Boolean) {
-        mTemporary = temporary
-    }
-
-    override fun getParent(): Channel? = mParent
-
-    fun setParent(parent: Channel?) {
-        mParent = parent
-    }
-
-    override fun getName(): String? = mName
-
-    fun setName(name: String?) {
-        mName = name
-    }
-
-    override fun getDescription(): String? = mDescription
-
-    fun setDescription(description: String?) {
-        mDescription = description
-    }
-
-    override fun getDescriptionHash(): ByteArray? = mDescriptionHash
-
-    fun setDescriptionHash(descriptionHash: ByteArray?) {
-        mDescriptionHash = descriptionHash
-    }
-
-    @Synchronized
-    override fun getSubchannels(): List<Channel> = Collections.unmodifiableList(ArrayList(mSubchannels))
+    override val subchannels: List<Channel>
+        @Synchronized get() = Collections.unmodifiableList(ArrayList(mSubchannels))
 
     /**
      * Inserts [channel] at its sorted position. A null channel is ignored: the server can name a
@@ -126,8 +88,8 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
         if (channel != null) mSubchannels.remove(channel)
     }
 
-    @Synchronized
-    override fun getLinks(): List<Channel> = Collections.unmodifiableList(ArrayList(mLinks))
+    override val links: List<Channel>
+        @Synchronized get() = Collections.unmodifiableList(ArrayList(mLinks))
 
     /** @see addSubchannel for why a null channel is ignored rather than rejected. */
     @Synchronized
@@ -161,37 +123,29 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
      * Recursively fetches the subchannel user count, holding one channel's lock at a time: the
      * subchannels are copied under the lock and the recursion happens outside it, so no thread ever
      * holds two channel locks at once (no lock-order inversion possible).
-     *
-     * FIXME: is it necessary to cache this?
-     * @return The sum of users in this channel and its subchannels.
      */
-    override fun getSubchannelUserCount(): Int {
-        val direct: Int
-        val subchannels: List<Channel>
-        synchronized(this) {
-            direct = mUsers.size
-            subchannels = ArrayList(mSubchannels)
+    override val subchannelUserCount: Int
+        get() {
+            val direct: Int
+            val children: List<Channel>
+            synchronized(this) {
+                direct = mUsers.size
+                children = ArrayList(mSubchannels)
+            }
+            return direct + children.sumOf { it.subchannelUserCount }
         }
-        return direct + subchannels.sumOf { it.getSubchannelUserCount() }
-    }
-
-    override fun getPermissions(): Int = mPermissions
-
-    fun setPermissions(permissions: Int) {
-        mPermissions = permissions
-    }
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || javaClass != other.javaClass) return false
-        return mId == (other as Channel).mId
+        return id == (other as Channel).id
     }
 
-    override fun hashCode(): Int = mId
+    override fun hashCode(): Int = id
 
     /** Orders by position, then case-sensitively by name, with nameless (stub) channels first. */
     override fun compareTo(other: Channel): Int {
-        if (mPosition != other.getPosition()) return mPosition.compareTo(other.getPosition())
-        return (mName ?: "").compareTo(other.getName() ?: "")
+        if (position != other.position) return position.compareTo(other.position)
+        return (name ?: "").compareTo(other.name ?: "")
     }
 }

@@ -85,13 +85,13 @@ class ModelHandler(
 
     private fun permissionQuery(msg: Mumble.PermissionQuery) {
         if (msg.flush) {
-            for (channel in channels.all) channel.setPermissions(0)
+            for (channel in channels.all) channel.permissions = 0
         }
 
         val channel = channels[msg.channelId] ?: return
-        channel.setPermissions(msg.permissions)
+        channel.permissions = msg.permissions
         // The root channel's permissions are the server-wide ones.
-        if (msg.channelId == ROOT_CHANNEL_ID) permissions = channel.getPermissions()
+        if (msg.channelId == ROOT_CHANNEL_ID) permissions = channel.permissions
         events(HumlaEvent.ChannelPermissionsUpdated(channel))
     }
 
@@ -102,12 +102,12 @@ class ModelHandler(
         val actor = msg.takeIf { it.hasActor() }?.let { users[it.actor] }
 
         UserNotices.applyIdentity(user, msg, localMuteHistory, localIgnoreHistory)
-        if (known == null) events(HumlaEvent.UserJoinedServer(user.getName()))
+        if (known == null) events(HumlaEvent.UserJoinedServer(user.name))
 
         if (UserNotices.applySelfMute(user, msg)) self?.let { UserNotices.selfMute(user, it) }?.let(events)
 
         if (msg.hasRecording()) {
-            user.setRecording(msg.recording)
+            user.isRecording = msg.recording
             self?.let { UserNotices.recording(user, it) }?.let(events)
         }
 
@@ -126,7 +126,7 @@ class ModelHandler(
         // Joining into the root carries no channel ID, so a new user starts there.
         return User(msg.session, msg.name).also {
             users[msg.session] = it
-            it.setChannel(channels.getOrStub(ROOT_CHANNEL_ID))
+            it.channel = channels.getOrStub(ROOT_CHANNEL_ID)
         }
     }
 
@@ -137,8 +137,8 @@ class ModelHandler(
             Log.e(TAG, "Invalid channel for user!")
             return false
         }
-        val old = user.getChannel()
-        user.setChannel(channel)
+        val old = user.channel
+        user.channel = channel
         if (!isNew) events(HumlaEvent.UserJoinedChannel(user, channel, old))
         if (self != null && old != null && self != user) UserNotices.move(user, actor, old, channel, self)?.let(events)
         return true
@@ -151,26 +151,26 @@ class ModelHandler(
 
         events(
             when {
-                msg.session == session -> HumlaEvent.SelfKicked(actor?.getName(), reason, msg.ban)
-                actor != null -> HumlaEvent.UserKicked(user?.getName(), actor.getName(), reason, msg.ban)
-                else -> HumlaEvent.UserLeftServer(user?.getName())
+                msg.session == session -> HumlaEvent.SelfKicked(actor?.name, reason, msg.ban)
+                actor != null -> HumlaEvent.UserKicked(user?.name, actor.name, reason, msg.ban)
+                else -> HumlaEvent.UserLeftServer(user?.name)
             }
         )
 
-        user?.setChannel(null)
+        user?.channel = null
         events(HumlaEvent.UserRemoved(user, reason))
     }
 
     private fun textMessage(msg: Mumble.TextMessage) {
         val sender = users[msg.actor]
-        if (sender != null && sender.isLocalIgnored()) return
+        if (sender != null && sender.isLocalIgnored) return
 
         val message = Message(
             msg.actor,
-            sender?.getName(),
-            msg.channelIdList.map { channels[it] },
-            msg.treeIdList.map { channels[it] },
-            msg.sessionList.map { users[it] },
+            sender?.name,
+            msg.channelIdList.mapNotNull { channels[it] },
+            msg.treeIdList.mapNotNull { channels[it] },
+            msg.sessionList.mapNotNull { users[it] },
             msg.message,
         )
         events(HumlaEvent.TextMessage(message))

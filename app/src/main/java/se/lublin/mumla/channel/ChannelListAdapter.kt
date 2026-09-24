@@ -52,7 +52,7 @@ import se.lublin.mumla.service.MumlaService
  * - [updateChannels] only schedules: a burst of model events in one main-thread turn collapses
  *   into a single rebuild. Model events never carry deltas, so a rebuild just reads the model.
  * - One pass per rebuild, including collapsed subtrees: [constructNodes] carries subtree user
- *   counts back up instead of calling `IChannel.getSubchannelUserCount()` (O(n*depth)), and the
+ *   counts back up instead of calling `IChannel.subchannelUserCount` (O(n*depth)), and the
  *   counts land on the [Node] so binding a row reads no model at all.
  *
  * The recursion needs no depth check: `ModelHandler` refuses parent cycles and trees deeper than
@@ -395,7 +395,7 @@ class ChannelListAdapter(
      * Appends the [Node]s for [channel] and its subtree to [nodes] and returns the number of users
      * in it. The subtree is appended first and dropped again if the channel is contracted, because
      * that is only known once its users have been counted. A user the model has not filled in yet
-     * gets no row but is counted, matching `Channel.getSubchannelUserCount()`.
+     * gets no row but is counted, matching `Channel.subchannelUserCount`.
      */
     private fun constructNodes(
         parent: Node?,

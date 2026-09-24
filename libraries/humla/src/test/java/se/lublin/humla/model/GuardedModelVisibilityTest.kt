@@ -44,12 +44,12 @@ class GuardedModelVisibilityTest {
         val reader = thread(name = "channel-name-reader", isDaemon = true) {
             started.set(true)
             var spins = 0L
-            while (channel.getName() == null && spins < SPIN_LIMIT) spins++
+            while (channel.name == null && spins < SPIN_LIMIT) spins++
             sawIt.set(spins < SPIN_LIMIT)
         }
 
         awaitCompiledLoop(started)
-        channel.setName("named")
+        channel.name = "named"
         reader.join(JOIN_TIMEOUT_MILLIS)
 
         assertThat(sawIt.get()).isTrue()
@@ -64,12 +64,12 @@ class GuardedModelVisibilityTest {
         val reader = thread(name = "user-talkstate-reader", isDaemon = true) {
             started.set(true)
             var spins = 0L
-            while (user.getTalkState() == TalkState.PASSIVE && spins < SPIN_LIMIT) spins++
+            while (user.talkState == TalkState.PASSIVE && spins < SPIN_LIMIT) spins++
             sawIt.set(spins < SPIN_LIMIT)
         }
 
         awaitCompiledLoop(started)
-        user.setTalkState(TalkState.TALKING)
+        user.talkState = TalkState.TALKING
         reader.join(JOIN_TIMEOUT_MILLIS)
 
         assertThat(sawIt.get()).isTrue()

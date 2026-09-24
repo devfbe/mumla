@@ -414,7 +414,7 @@ class HumlaServiceCharacterizationTest {
         val calls = listOf<Pair<String, () -> Unit>>(
             "getTCPLatency" to { service.getTCPLatency() },
             "getUDPLatency" to { service.getUDPLatency() },
-            "getMaxBandwidth" to { service.getMaxBandwidth() },
+            "getMaxBandwidth" to { service.maxBandwidth },
             "getServerVersion" to { service.getServerVersion() },
             "getServerRelease" to { service.getServerRelease() },
             "getServerOSName" to { service.getServerOSName() },
@@ -441,7 +441,7 @@ class HumlaServiceCharacterizationTest {
             "getUser" to { service.getUser(1) },
             "getChannel" to { service.getChannel(1) },
             "getRootChannel" to { service.getRootChannel() },
-            "getPermissions" to { service.getPermissions() },
+            "getPermissions" to { service.permissions },
             "getServerSettings" to { service.getServerSettings() },
             "sendUserTextMessage" to { service.sendUserTextMessage(1, "m") },
             "sendChannelTextMessage" to { service.sendChannelTextMessage(1, "m", false) },
