@@ -55,6 +55,8 @@
     <string name="mediaButtonActionNone">Intet – lad medietasterne være til din musikapp</string>
     <string name="mediaButtonActionAuto">Slå tryk-for-snak til/fra, eller slå lyd fra i de andre sendetilstande</string>
     <string name="mediaButtonActionMute">Slå lyd fra/til</string>
-    <string name="bluetoothSco">Bluetooth-headset</string>
-    <string name="bluetoothScoSum">Send og modtag tale gennem et forbundet Bluetooth-headset, mens du er forbundet til en server. Forbliver slået til, hvis forbindelsen afbrydes, og genoprettes, når serveren forbindes igen. Beder om tilladelsen \"Enheder i nærheden\"; nogle enheder sender ikke lyd til et headset uden den.</string>
+    <string name="bluetoothSco">Brug Bluetooth-headset automatisk</string>
+    <string name="bluetoothScoSum">Send og modtag tale gennem et forbundet Bluetooth-headset, mens du er forbundet til en server, og skift til et headset, der forbindes under opkaldet. Lydenheden for opkaldet kan ændres i kanalmenuen. Beder om tilladelsen \"Enheder i nærheden\"; nogle enheder sender ikke lyd til et headset uden den.</string>
+    <string name="defaultOutput">Lyd uden headset</string>
+    <string name="defaultOutputSum">Hvor tale afspilles, når du forbinder, og der ikke er et Bluetooth-headset eller et headset med ledning. Ørehøjttaleren slukker også skærmen ved dit øre. Du kan skifte enhed under et opkald i kanalmenuen.</string>
 </resources>

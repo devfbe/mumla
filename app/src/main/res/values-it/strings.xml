@@ -237,4 +237,12 @@
     <string name="permission_denied_storage">Permesso di lettura della memoria negato</string>
     <string name="image_decode_failed">Impossibile leggere l\'immagine</string>
     <string name="image_too_large">Immagine troppo grande per questo server</string>
+    <string name="audio_device">Dispositivo audio</string>
+    <string name="audio_device_earpiece">Auricolare</string>
+    <string name="audio_device_speaker">Altoparlante</string>
+    <string name="audio_device_wired">Cuffie con cavo</string>
+    <string name="audio_device_usb">Cuffie USB</string>
+    <string name="audio_device_bluetooth">Cuffie Bluetooth</string>
+    <string name="audio_device_other">Dispositivo audio</string>
+    <string name="echo_cancellation">Cancellazione dell\'eco</string>
 </resources>

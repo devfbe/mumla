@@ -225,4 +225,12 @@
     <string name="permission_denied_storage">Нет разрешения на чтение хранилища</string>
     <string name="image_decode_failed">Не удалось прочитать это изображение</string>
     <string name="image_too_large">Изображение слишком большое для этого сервера</string>
+    <string name="audio_device">Аудиоустройство</string>
+    <string name="audio_device_earpiece">Разговорный динамик</string>
+    <string name="audio_device_speaker">Громкая связь</string>
+    <string name="audio_device_wired">Проводная гарнитура</string>
+    <string name="audio_device_usb">USB-гарнитура</string>
+    <string name="audio_device_bluetooth">Bluetooth-гарнитура</string>
+    <string name="audio_device_other">Аудиоустройство</string>
+    <string name="echo_cancellation">Эхоподавление</string>
 </resources>

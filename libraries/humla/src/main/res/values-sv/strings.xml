@@ -42,4 +42,5 @@
     <string name="no_session_user">Servern skickade inte sessionens egen användare; mikrofonen förblir avstängd.</string>
     <string name="no_target_server">Ingen server har konfigurerats för den här anslutningen.</string>
     <string name="udp_warning_thread_failed">UDP-anslutningen misslyckades. Rösten tunnlas via TCP medan UDP försöks igen.</string>
+    <string name="audio_route_refused">Enheten vägrade att byta ljudenhet. Ljudet stannar där det var.</string>
 </resources>

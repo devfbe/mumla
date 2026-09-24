@@ -55,6 +55,8 @@
     <string name="mediaButtonActionNone">Nimic — lasă tastele media aplicației de muzică</string>
     <string name="mediaButtonActionAuto">Comută push-to-talk sau microfonul în celelalte moduri de transmisie</string>
     <string name="mediaButtonActionMute">Comută microfonul</string>
-    <string name="bluetoothSco">Căști Bluetooth</string>
-    <string name="bluetoothScoSum">Trimite și primește voce prin căști Bluetooth conectate cât timp ești conectat la un server. Setarea rămâne activă dacă legătura se întrerupe și este restabilită la reconectarea serverului. Solicită permisiunea Dispozitive din apropiere; unele dispozitive nu direcționează sunetul către căști fără ea.</string>
+    <string name="bluetoothSco">Folosește automat căștile Bluetooth</string>
+    <string name="bluetoothScoSum">Trimite și primește voce prin căști Bluetooth conectate cât timp ești conectat la un server și comută pe căștile care se conectează în timpul apelului. Dispozitivul audio al apelului poate fi schimbat din meniul canalului. Solicită permisiunea Dispozitive din apropiere; unele dispozitive nu direcționează sunetul către căști fără ea.</string>
+    <string name="defaultOutput">Ieșire fără căști</string>
+    <string name="defaultOutputSum">Unde se aude vocea când te conectezi și nu există căști Bluetooth sau cu fir. Receptorul stinge și ecranul la ureche. Poți schimba dispozitivul în timpul unui apel din meniul canalului.</string>
 </resources>

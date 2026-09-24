@@ -145,4 +145,12 @@
     <string name="permission_denied_storage">Tettwagi tsiregt n tɣuri n usekles</string>
     <string name="image_decode_failed">Ulamek taɣuri n tugna-a</string>
     <string name="image_too_large">Tugna meqqret aṭas i uqeddac-a</string>
+    <string name="audio_device">Ibenk n imesli</string>
+    <string name="audio_device_earpiece">Ameslaw n umeẓẓuɣ</string>
+    <string name="audio_device_speaker">Ameslaw</string>
+    <string name="audio_device_wired">Akask s lxiḍ</string>
+    <string name="audio_device_usb">Akask USB</string>
+    <string name="audio_device_bluetooth">Akask n Bluetooth</string>
+    <string name="audio_device_other">Ibenk n imesli</string>
+    <string name="echo_cancellation">Tukksa n tuɣalin n imesli</string>
 </resources>

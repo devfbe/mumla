@@ -42,4 +42,5 @@
     <string name="no_session_user">服务器未发送本会话自己的用户信息；麦克风保持关闭。</string>
     <string name="no_target_server">此连接未配置服务器。</string>
     <string name="udp_warning_thread_failed">UDP 连接失败。在重试 UDP 期间，语音将通过 TCP 隧道传输。</string>
+    <string name="audio_route_refused">此设备拒绝切换音频设备。音频保持不变。</string>
 </resources>

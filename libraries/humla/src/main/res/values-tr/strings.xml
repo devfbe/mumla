@@ -42,4 +42,5 @@
     <string name="no_session_user">Sunucu bu oturumun kendi kullanıcısını göndermedi; mikrofon kapalı kalıyor.</string>
     <string name="no_target_server">Bu bağlantı için bir sunucu yapılandırılmadı.</string>
     <string name="udp_warning_thread_failed">UDP bağlantısı başarısız oldu. UDP yeniden denenirken ses TCP üzerinden tünelleniyor.</string>
+    <string name="audio_route_refused">Bu cihaz ses cihazını değiştirmeyi reddetti. Ses olduğu yerde kalır.</string>
 </resources>

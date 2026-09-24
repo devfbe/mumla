@@ -13,4 +13,5 @@
     <string name="no_session_user">Serveren sendte ikke denne sessions egen bruger; mikrofonen forbliver slået fra.</string>
     <string name="no_target_server">Der er ikke angivet nogen server for denne forbindelse.</string>
     <string name="udp_warning_thread_failed">UDP-forbindelsen mislykkedes. Tale tunneles over TCP, mens UDP forsøges igen.</string>
+    <string name="audio_route_refused">Denne enhed nægtede at skifte lydenhed. Lyden bliver, hvor den var.</string>
 </resources>

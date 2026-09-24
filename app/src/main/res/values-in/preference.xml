@@ -145,6 +145,8 @@
     <string name="mediaButtonActionNone">Tidak ada — biarkan tombol media untuk aplikasi musik</string>
     <string name="mediaButtonActionAuto">Toggle push-to-talk, atau matikan mikrofon di mode transmisi lain</string>
     <string name="mediaButtonActionMute">Toggle matikan mikrofon</string>
-    <string name="bluetoothSco">Headset Bluetooth</string>
-    <string name="bluetoothScoSum">Mengirim dan menerima suara melalui headset Bluetooth yang terhubung selama tersambung ke server. Pengaturan ini tetap aktif saat koneksi terputus dan dipulihkan saat tersambung ulang ke server. Meminta izin Perangkat di sekitar; beberapa perangkat tidak akan mengalihkan audio ke headset tanpa izin ini.</string>
+    <string name="bluetoothSco">Gunakan headset Bluetooth secara otomatis</string>
+    <string name="bluetoothScoSum">Mengirim dan menerima suara melalui headset Bluetooth yang terhubung selama tersambung ke server, dan beralih ke headset yang terhubung selama panggilan. Perangkat audio untuk panggilan dapat diubah dari menu channel. Meminta izin Perangkat di sekitar; beberapa perangkat tidak akan mengalihkan audio ke headset tanpa izin ini.</string>
+    <string name="defaultOutput">Output tanpa headset</string>
+    <string name="defaultOutputSum">Tempat suara diputar saat anda tersambung dan tidak ada headset Bluetooth atau berkabel. Earpiece juga mematikan layar saat didekatkan ke telinga. Anda dapat mengganti perangkat selama panggilan dari menu channel.</string>
 </resources>

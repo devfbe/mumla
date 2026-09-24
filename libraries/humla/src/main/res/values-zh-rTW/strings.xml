@@ -42,4 +42,5 @@
     <string name="no_session_user">伺服器未傳送此工作階段本身的使用者資訊；麥克風保持關閉。</string>
     <string name="no_target_server">此連線未設定伺服器。</string>
     <string name="udp_warning_thread_failed">UDP 連線失敗。重試 UDP 期間，語音將透過 TCP 通道傳輸。</string>
+    <string name="audio_route_refused">此裝置拒絕切換音訊裝置。音訊維持原狀。</string>
 </resources>

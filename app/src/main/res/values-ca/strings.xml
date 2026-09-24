@@ -213,4 +213,12 @@
     <string name="permission_denied_storage">S\'ha denegat el permís per llegir l\'emmagatzematge</string>
     <string name="image_decode_failed">No s\'ha pogut llegir aquesta imatge</string>
     <string name="image_too_large">La imatge és massa gran per a aquest servidor</string>
+    <string name="audio_device">Dispositiu d\'àudio</string>
+    <string name="audio_device_earpiece">Auricular del telèfon</string>
+    <string name="audio_device_speaker">Altaveu</string>
+    <string name="audio_device_wired">Auriculars amb cable</string>
+    <string name="audio_device_usb">Auriculars USB</string>
+    <string name="audio_device_bluetooth">Auriculars Bluetooth</string>
+    <string name="audio_device_other">Dispositiu d\'àudio</string>
+    <string name="echo_cancellation">Cancel·lació d\'eco</string>
 </resources>

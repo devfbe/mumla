@@ -164,4 +164,12 @@
     <string name="permission_denied_storage">ストレージの読み取り権限が拒否されました</string>
     <string name="image_decode_failed">その画像を読み込めませんでした</string>
     <string name="image_too_large">画像がこのサーバーには大きすぎます</string>
+    <string name="audio_device">オーディオデバイス</string>
+    <string name="audio_device_earpiece">受話口</string>
+    <string name="audio_device_speaker">スピーカー</string>
+    <string name="audio_device_wired">有線ヘッドセット</string>
+    <string name="audio_device_usb">USB ヘッドセット</string>
+    <string name="audio_device_bluetooth">Bluetooth ヘッドセット</string>
+    <string name="audio_device_other">オーディオデバイス</string>
+    <string name="echo_cancellation">エコーキャンセル</string>
 </resources>

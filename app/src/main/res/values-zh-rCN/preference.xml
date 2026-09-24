@@ -150,6 +150,8 @@
     <string name="mediaButtonActionNone">无——将媒体键留给音乐应用</string>
     <string name="mediaButtonActionAuto">切换按住发言，其他发送模式下开关麦克风</string>
     <string name="mediaButtonActionMute">开关麦克风</string>
-    <string name="bluetoothSco">蓝牙耳机</string>
-    <string name="bluetoothScoSum">连接到服务器时，通过已连接的蓝牙耳机收发语音。连接中断后此设置保持开启，并在重新连接服务器后恢复。需要“附近的设备”权限；没有该权限时，部分设备不会将音频切换到耳机。</string>
+    <string name="bluetoothSco">自动使用蓝牙耳机</string>
+    <string name="bluetoothScoSum">连接到服务器时，通过已连接的蓝牙耳机收发语音，并在通话期间切换到新连接的耳机。可在频道菜单中更改通话的音频设备。需要“附近的设备”权限；没有该权限时，部分设备不会将音频切换到耳机。</string>
+    <string name="defaultOutput">无耳机时的输出</string>
+    <string name="defaultOutputSum">连接时如果没有蓝牙耳机或有线耳机，语音从哪里播放。使用听筒时，贴近耳朵还会关闭屏幕。通话期间可在频道菜单中切换设备。</string>
 </resources>

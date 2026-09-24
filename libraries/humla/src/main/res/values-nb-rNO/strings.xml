@@ -42,4 +42,5 @@
     <string name="no_session_user">Tjeneren sendte ikke denne øktens egen bruker; mikrofonen forblir av.</string>
     <string name="no_target_server">Ingen tjener er satt opp for denne tilkoblingen.</string>
     <string name="udp_warning_thread_failed">UDP-tilkoblingen mislyktes. Tale tunneleres over TCP mens UDP forsøkes på nytt.</string>
+    <string name="audio_route_refused">Denne enheten nektet å bytte lydenhet. Lyden blir der den var.</string>
 </resources>

@@ -72,6 +72,8 @@
     <string name="mediaButtonActionNone">Neko — atstāt multivides pogas mūzikas lietotnei</string>
     <string name="mediaButtonActionAuto">Pārslēgt „Spied, lai runātu” vai skaņas izslēgšanu citos raidīšanas režīmos</string>
     <string name="mediaButtonActionMute">Pārslēgt skaņas izslēgšanu</string>
-    <string name="bluetoothSco">Bluetooth austiņas</string>
-    <string name="bluetoothScoSum">Sūtīt un saņemt balsi caur pievienotām Bluetooth austiņām, kamēr esat savienots ar serveri. Paliek ieslēgts arī pēc savienojuma pārtraukuma un tiek atjaunots, kad savienojums ar serveri atjaunojas. Pieprasa atļauju „Tuvumā esošās ierīces”; dažas ierīces bez tās nenovirza skaņu uz austiņām.</string>
+    <string name="bluetoothSco">Automātiski izmantot Bluetooth austiņas</string>
+    <string name="bluetoothScoSum">Sūtīt un saņemt balsi caur pievienotām Bluetooth austiņām, kamēr esat savienots ar serveri, un pārslēgties uz austiņām, kas tiek pievienotas zvana laikā. Zvana audioierīci var mainīt kanāla izvēlnē. Pieprasa atļauju „Tuvumā esošās ierīces”; dažas ierīces bez tās nenovirza skaņu uz austiņām.</string>
+    <string name="defaultOutput">Izvade bez austiņām</string>
+    <string name="defaultOutputSum">Kur skan balss, kad izveidojat savienojumu un nav pievienotas Bluetooth vai vadu austiņas. Klausule arī izslēdz ekrānu pie auss. Zvana laikā ierīci varat pārslēgt kanāla izvēlnē.</string>
 </resources>

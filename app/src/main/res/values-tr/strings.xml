@@ -231,4 +231,12 @@
     <string name="permission_denied_storage">Depolamayı okuma izni reddedildi</string>
     <string name="image_decode_failed">Bu resim okunamadı</string>
     <string name="image_too_large">Resim bu sunucu için çok büyük</string>
+    <string name="audio_device">Ses cihazı</string>
+    <string name="audio_device_earpiece">Ahize</string>
+    <string name="audio_device_speaker">Hoparlör</string>
+    <string name="audio_device_wired">Kablolu kulaklık</string>
+    <string name="audio_device_usb">USB kulaklık</string>
+    <string name="audio_device_bluetooth">Bluetooth kulaklık</string>
+    <string name="audio_device_other">Ses cihazı</string>
+    <string name="echo_cancellation">Yankı giderme</string>
 </resources>

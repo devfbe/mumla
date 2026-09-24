@@ -193,4 +193,12 @@
     <string name="permission_denied_storage">رُفض إذن قراءة وحدة التخزين</string>
     <string name="image_decode_failed">تعذّرت قراءة تلك الصورة</string>
     <string name="image_too_large">الصورة كبيرة جدًا على هذا الخادم</string>
+    <string name="audio_device">جهاز الصوت</string>
+    <string name="audio_device_earpiece">سماعة الهاتف</string>
+    <string name="audio_device_speaker">مكبّر الصوت</string>
+    <string name="audio_device_wired">سماعة رأس سلكية</string>
+    <string name="audio_device_usb">سماعة رأس USB</string>
+    <string name="audio_device_bluetooth">سماعة رأس بلوتوث</string>
+    <string name="audio_device_other">جهاز الصوت</string>
+    <string name="echo_cancellation">إلغاء الصدى</string>
 </resources>

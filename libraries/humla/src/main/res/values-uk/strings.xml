@@ -42,4 +42,5 @@
     <string name="no_session_user">Сервер не надіслав дані користувача цієї сесії; мікрофон залишається вимкненим.</string>
     <string name="no_target_server">Для цього з’єднання не задано сервер.</string>
     <string name="udp_warning_thread_failed">Збій UDP-з’єднання. Голос передається через TCP, доки UDP під’єднується знову.</string>
+    <string name="audio_route_refused">Пристрій відмовився перемкнути аудіопристрій. Звук залишається там, де був.</string>
 </resources>

@@ -55,6 +55,8 @@
     <string name="mediaButtonActionNone">Ei mitään – jätä mediapainikkeet musiikkisovellukselle</string>
     <string name="mediaButtonActionAuto">Vaihda puhepikanäppäintä tai mykistä muissa lähetystiloissa</string>
     <string name="mediaButtonActionMute">Vaihda mykistys</string>
-    <string name="bluetoothSco">Bluetooth-kuulokkeet</string>
-    <string name="bluetoothScoSum">Lähetä ja vastaanota puhetta yhdistettyjen Bluetooth-kuulokkeiden kautta, kun olet yhteydessä palvelimeen. Pysyy päällä yhteyskatkoksen yli ja palautuu, kun yhteys palvelimeen muodostetaan uudelleen. Pyytää Lähellä olevat laitteet -lupaa; jotkin laitteet eivät ohjaa ääntä kuulokkeisiin ilman sitä.</string>
+    <string name="bluetoothSco">Käytä Bluetooth-kuulokkeita automaattisesti</string>
+    <string name="bluetoothScoSum">Lähetä ja vastaanota puhetta yhdistettyjen Bluetooth-kuulokkeiden kautta, kun olet yhteydessä palvelimeen, ja vaihda kuulokkeisiin, jotka yhdistetään puhelun aikana. Puhelun äänilaitteen voi vaihtaa kanavavalikosta. Pyytää Lähellä olevat laitteet -lupaa; jotkin laitteet eivät ohjaa ääntä kuulokkeisiin ilman sitä.</string>
+    <string name="defaultOutput">Äänilähtö ilman kuulokkeita</string>
+    <string name="defaultOutputSum">Missä puhe kuuluu, kun muodostat yhteyden eikä Bluetooth- tai langallisia kuulokkeita ole käytettävissä. Puhelimen kuuloke myös sammuttaa näytön korvaa vasten. Voit vaihtaa laitetta puhelun aikana kanavavalikosta.</string>
 </resources>

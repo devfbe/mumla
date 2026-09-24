@@ -84,6 +84,8 @@
     <string name="mediaButtonActionNone">Ulac — eǧǧ tiqeffalin n umidya i usnas n uẓawan</string>
     <string name="mediaButtonActionAuto">Beddel \"sit akken ad temmeslayeḍ\", neɣ sgugem deg yiskaren-nniḍen n tuzna</string>
     <string name="mediaButtonActionMute">Beddel asgugem</string>
-    <string name="bluetoothSco">Akask n Bluetooth</string>
-    <string name="bluetoothScoSum">Azen yerna rmes taɣect s ukask n Bluetooth yeqqnen mi ara tiliḍ teqqneḍ ɣer uqeddac. Ad yeqqim yermed ma tegzem tuqqna, ad d-yuɣal mi ara teɛreḍ tuqqna ɣer uqeddac. Yessutur tasiregt n yibenkan iqerben; kra n yibenkan ur ttaznen ara imesli ɣer ukask war-s.</string>
+    <string name="bluetoothSco">Seqdec akask n Bluetooth s wudem awurman</string>
+    <string name="bluetoothScoSum">Azen yerna rmes taɣect s ukask n Bluetooth yeqqnen mi ara tiliḍ teqqneḍ ɣer uqeddac, yerna ɛeddi ɣer ukask ara yeqqnen deg usiwel. Ibenk n imesli n usiwel yezmer ad yettwabeddel seg wumuɣ n ubadu. Yessutur tasiregt n yibenkan iqerben; kra n yibenkan ur ttaznen ara imesli ɣer ukask war-s.</string>
+    <string name="defaultOutput">Tuffɣa war akask</string>
+    <string name="defaultOutputSum">Anida ara d-tettwasel taɣect mi ara teqqneḍ ma ulac akask n Bluetooth neɣ s lxiḍ. Ameslaw n umeẓẓuɣ yessensay daɣen agdil ɣer umeẓẓuɣ-ik. Tzemreḍ ad tbeddleḍ ibenk deg usiwel seg wumuɣ n ubadu.</string>
 </resources>

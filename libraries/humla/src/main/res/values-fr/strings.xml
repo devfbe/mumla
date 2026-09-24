@@ -42,4 +42,5 @@
     <string name="no_session_user">Le serveur n\'a pas envoyé l\'utilisateur propre à cette session ; le microphone reste coupé.</string>
     <string name="no_target_server">Aucun serveur n\'a été configuré pour cette connexion.</string>
     <string name="udp_warning_thread_failed">La connexion UDP a échoué. La voix passe par un tunnel TCP pendant que UDP est retenté.</string>
+    <string name="audio_route_refused">Cet appareil a refusé de changer d\'appareil audio. Le son reste là où il était.</string>
 </resources>

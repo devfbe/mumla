@@ -42,4 +42,5 @@
     <string name="no_session_user">El servidor no ha enviat l\'usuari propi d\'aquesta sessió; el micròfon es manté desactivat.</string>
     <string name="no_target_server">No s\'ha configurat cap servidor per a aquesta connexió.</string>
     <string name="udp_warning_thread_failed">La connexió UDP ha fallat. La veu passa per un túnel TCP mentre es torna a provar UDP.</string>
+    <string name="audio_route_refused">Aquest dispositiu s\'ha negat a canviar el dispositiu d\'àudio. L\'àudio es queda on era.</string>
 </resources>

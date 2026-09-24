@@ -222,4 +222,12 @@
     <string name="permission_denied_storage">Behörighet att läsa lagringen nekades</string>
     <string name="image_decode_failed">Det gick inte att läsa bilden</string>
     <string name="image_too_large">Bilden är för stor för den här servern</string>
+    <string name="audio_device">Ljudenhet</string>
+    <string name="audio_device_earpiece">Lur</string>
+    <string name="audio_device_speaker">Högtalare</string>
+    <string name="audio_device_wired">Headset med sladd</string>
+    <string name="audio_device_usb">USB-headset</string>
+    <string name="audio_device_bluetooth">Bluetooth-headset</string>
+    <string name="audio_device_other">Ljudenhet</string>
+    <string name="echo_cancellation">Ekoreducering</string>
 </resources>

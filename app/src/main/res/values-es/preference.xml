@@ -147,6 +147,8 @@
     <string name="mediaButtonActionNone">Nada: dejar las teclas multimedia a la app de música</string>
     <string name="mediaButtonActionAuto">Alternar pulsar para hablar, o silenciar en los demás modos de transmisión</string>
     <string name="mediaButtonActionMute">Alternar silencio</string>
-    <string name="bluetoothSco">Auriculares Bluetooth</string>
-    <string name="bluetoothScoSum">Enviar y recibir voz a través de unos auriculares Bluetooth conectados mientras estás conectado a un servidor. Sigue activado si se pierde la conexión y se restablece al reconectar con el servidor. Solicita el permiso «Dispositivos cercanos»; algunos dispositivos no envían audio a los auriculares sin él.</string>
+    <string name="bluetoothSco">Usar auriculares Bluetooth automáticamente</string>
+    <string name="bluetoothScoSum">Enviar y recibir voz a través de unos auriculares Bluetooth conectados mientras estás conectado a un servidor, y cambiar a unos auriculares que se conecten durante la llamada. El dispositivo de audio de la llamada se puede cambiar desde el menú del canal. Solicita el permiso «Dispositivos cercanos»; algunos dispositivos no envían audio a los auriculares sin él.</string>
+    <string name="defaultOutput">Salida sin auriculares</string>
+    <string name="defaultOutputSum">Dónde suena la voz al conectarte cuando no hay auriculares Bluetooth ni con cable. El auricular del teléfono también apaga la pantalla junto a la oreja. Puedes cambiar el dispositivo durante una llamada desde el menú del canal.</string>
 </resources>
