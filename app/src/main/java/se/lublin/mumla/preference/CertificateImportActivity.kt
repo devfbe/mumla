@@ -40,9 +40,6 @@ import java.security.NoSuchAlgorithmException
 import java.security.cert.CertificateException
 import java.util.UUID
 
-/**
- * Created by andrew on 11/01/16.
- */
 class CertificateImportActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,8 +65,7 @@ class CertificateImportActivity : AppCompatActivity() {
         }
 
         val uri: Uri = data!!.data!!
-        // Read once and closed right here: the stream is a descriptor the picker lent us, and a
-        // password retry needs the bytes again anyway -- the stream itself would be spent.
+        // Read once: the picker's stream is spent after one read, and a password retry needs the bytes.
         val pkcs12: ByteArray = try {
             contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         } catch (e: FileNotFoundException) {

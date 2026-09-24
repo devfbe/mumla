@@ -25,9 +25,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import se.lublin.mumla.R;
 import se.lublin.mumla.util.MumlaTrustStore;
 
-/**
- * Created by andrew on 13/01/16.
- */
 public class ServerCertificateClearActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {

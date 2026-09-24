@@ -16,13 +16,10 @@ class GeneralSettingsFragment : MumlaPreferenceFragment() {
 
     private lateinit var bluetoothToggle: BluetoothScoToggle
 
-    // Registered from the constructor because a fragment may not register a launcher once it has
-    // been created.
+    // Registered at construction: a fragment may not register a launcher once created.
     private val bluetoothPermissionRequester: ActivityResultLauncher<String> =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            // Keep asking, stop gating (spec 4.1). See BluetoothScoToggle for why the answer does
-            // not decide the wish; the box follows the wish, and the toast says what a denial may
-            // cost on a device that enforces more than the annotations declare.
+            // The answer does not decide the wish (see BluetoothScoToggle); the box follows it.
             bluetoothToggle.onPermissionAnswered()
             findPreference<CheckBoxPreference>(Settings.PREF_BLUETOOTH_SCO)?.isChecked =
                 bluetoothToggle.isEnabled
@@ -50,10 +47,7 @@ class GeneralSettingsFragment : MumlaPreferenceFragment() {
                 BluetoothScoToggle.Result.Enabled, BluetoothScoToggle.Result.Disabled -> true
                 BluetoothScoToggle.Result.PermissionNeeded -> {
                     bluetoothPermissionRequester.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                    // Refusing the change keeps the box empty until the dialog has been answered,
-                    // which is what makes P3's "asked before SCO is used" an ordering and not a
-                    // slogan: the callback above is what writes the wish, and the service starts
-                    // routing off that write.
+                    // Keep the box empty until the dialog is answered; the callback writes the wish.
                     false
                 }
             }

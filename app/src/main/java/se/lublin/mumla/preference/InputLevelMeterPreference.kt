@@ -27,11 +27,8 @@ import se.lublin.mumla.audio.MeterReading
 import kotlin.math.roundToInt
 
 /**
- * Spec B10: the live input level under the threshold slider, with the marks the tracker moves.
- *
- * The preference owns the last reading rather than the view, because a `Preference`'s view is
- * recycled and rebound: a reading pushed while the row is off screen would otherwise be lost, and
- * the bar would come back empty until the next frame.
+ * The live input level under the threshold slider, with the marks the tracker moves. The
+ * preference, not the recycled view, keeps the last reading so a rebind does not show an empty bar.
  */
 class InputLevelMeterPreference(context: Context, attrs: AttributeSet?) : Preference(context, attrs) {
     private var meter: LevelMeterView? = null
@@ -88,9 +85,7 @@ class InputLevelMeterPreference(context: Context, attrs: AttributeSet?) : Prefer
         view.holding = current.holding
         view.floorMark = current.floorDbfs?.let { MeterScale.position(it) }
         view.speechMark = current.speechDbfs?.let { MeterScale.position(it) }
-        // A mode with no level threshold gets no zones either: the bar would otherwise draw a
-        // boundary the gate does not use, which is the meter telling a different story than the
-        // microphone. Pushing both to zero paints the whole range as the "speech" zone.
+        // No level threshold in this mode: zero both so the whole range paints as "speech".
         val threshold = current.thresholdDbfs
         view.startThreshold = threshold?.let { MeterScale.position(it) } ?: 0f
         view.stopThreshold = threshold?.let { MeterScale.position(it - hysteresisDb) } ?: 0f

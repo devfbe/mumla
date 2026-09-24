@@ -48,12 +48,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.AudioTestSession
 import se.lublin.mumla.audio.MeterReading
 
-/**
- * The audio settings screen (spec B3-B6, B9, B10).
- *
- * Everything it decides lives in [AudioSettingsPolicy]; what is left here is the wiring to the
- * preference objects, which no host test can reach without an Activity and a window.
- */
+/** The audio settings screen; the decisions live in [AudioSettingsPolicy], this is the wiring. */
 open class AudioSettingsFragment : MumlaPreferenceFragment() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.settings_audio, rootKey)
@@ -97,9 +92,8 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
             }
         applyVadDependents(currentVadMode())
 
-        // Spec 4.1/B1, and it is the migration note the ledger addressed to this screen: since the
-        // preprocessor moved in front of the detector, the classic slider measures a denoised and
-        // possibly gain-controlled frame, so the same number means a different loudness than it did.
+        // The preprocessor runs before the detector, so the classic slider now measures a
+        // processed frame; the summary says so.
         findPreference<Preference>(Settings.PREF_THRESHOLD)?.summary =
             getString(R.string.detectionThresholdSum) + "\n\n" + getString(R.string.detectionThresholdMigration)
 
@@ -111,17 +105,14 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
         updateAudioDependents(preferenceScreen, inputPreference.value)
     }
 
-    // ---------------------------------------------------------------- the live meter (spec B10)
+    // ---------------------------------------------------------------- the live meter
 
     private var session: AudioTestSession? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
     /**
-     * Restarts the preview whenever a setting it was built from changes.
-     *
-     * It listens to [AudioPreferenceExtras.KEYS] rather than to a list of its own, so the preview
-     * cannot end up tracking a different set of settings than the service does -- two lists over
-     * one question is the shape this project keeps removing.
+     * Restarts the preview whenever a setting it was built from changes; keyed on
+     * [AudioPreferenceExtras.KEYS] so it tracks the same settings as the service.
      */
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key != null && key in se.lublin.mumla.service.AudioPreferenceExtras.KEYS) restartSession()
@@ -139,11 +130,9 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
 
     override fun onPause() {
         preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(prefsListener)
-        // The microphone goes back before the screen does, not after: this session holds an
-        // AudioRecord that silences the service's own capture while it is open.
+        // This session's AudioRecord silences the service's capture, so release it first.
         stopSession()
-        // The monitor is not persisted, so a screen that is left with it on comes back with it off;
-        // reset the switch as well so the two agree.
+        // The monitor is not persisted; reset the switch so both agree.
         findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.isChecked = false
         super.onPause()
     }
@@ -168,8 +157,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
             vad,
             settings.getNoiseSuppressionMode(),
             settings.getSpeexNoiseSuppressDb(),
-            // The meter plays its loopback out loud, so it measures what a call on the speaker
-            // would: with the speaker's canceller, as the user has it.
+            // The loopback plays out loud, so apply the speaker's canceller as the user has it.
             if (settings.isEchoCancellationEnabled(AudioDeviceCategory.SPEAKER)) EchoCancellationMode.WEBRTC
             else EchoCancellationMode.NONE,
             settings.getAndroidAudioEffects(),
@@ -193,7 +181,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
         findPreference<InputLevelMeterPreference>(KEY_METER)?.setReading(null)
     }
 
-    /** The mode as the preference file has it, which is the value [Settings] will read too. */
+    /** The mode as stored, which is what [Settings] will read. */
     protected fun currentVadMode(): VadMode =
         VadMode.fromPreferenceValue(findPreference<ListPreference>(Settings.PREF_VAD_MODE)?.value)
 
@@ -210,9 +198,8 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
     }
 
     /**
-     * Shows exactly the controls the chosen mode reads, and hides the rest rather than greying
-     * them out. Called with the mode from the listener, not from the preference: at that moment
-     * the preference has not been written yet.
+     * Shows exactly the controls [mode] reads and hides the rest. Called with the listener's value,
+     * since the preference has not been written yet at that point.
      */
     protected open fun applyVadDependents(mode: VadMode) {
         val dependents = AudioSettingsPolicy.vadDependents(mode)

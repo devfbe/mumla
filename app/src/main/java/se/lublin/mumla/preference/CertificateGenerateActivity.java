@@ -27,9 +27,6 @@ import se.lublin.mumla.R;
 import se.lublin.mumla.Settings;
 import se.lublin.mumla.db.DatabaseCertificate;
 
-/**
- * Created by andrew on 12/01/16.
- */
 public class CertificateGenerateActivity extends AppCompatActivity {
 
     @Override

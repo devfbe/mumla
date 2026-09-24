@@ -39,9 +39,6 @@ import se.lublin.mumla.db.DatabaseCertificate;
 import se.lublin.mumla.db.MumlaDatabase;
 import se.lublin.mumla.db.MumlaSQLiteDatabase;
 
-/**
- * Created by andrew on 11/01/16.
- */
 public class CertificateSelectActivity extends AppCompatActivity implements DialogInterface.OnClickListener, DialogInterface.OnDismissListener {
     private List<ICertificateItem> mCertificates;
 
