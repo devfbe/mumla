@@ -77,20 +77,20 @@ class FavouriteServerListFragment :
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
         when (menuItem.itemId) {
-            R.id.menu_add_server_item -> showEditDialog(null, ServerEditFragment.Action.ADD_ACTION, false)
-            R.id.menu_quick_connect -> showEditDialog(null, ServerEditFragment.Action.CONNECT_ACTION, true)
+            R.id.menu_add_server_item -> showEditDialog(null, ServerEditFragment.Action.ADD, false)
+            R.id.menu_quick_connect -> showEditDialog(null, ServerEditFragment.Action.CONNECT, true)
             else -> return false
         }
         return true
     }
 
     override fun editServer(server: Server) {
-        showEditDialog(server, ServerEditFragment.Action.EDIT_ACTION, false)
+        showEditDialog(server, ServerEditFragment.Action.EDIT, false)
     }
 
     private fun showEditDialog(server: Server?, action: ServerEditFragment.Action, ignoreTitle: Boolean) {
-        ServerEditFragment.createServerEditDialog(requireContext(), server, action, ignoreTitle)
-            .show(parentFragmentManager, "serverInfo")
+        // Shown by the activity's fragment manager, where MumlaActivity takes the result.
+        ServerEditFragment.newInstance(server, action, ignoreTitle).show(parentFragmentManager, "serverInfo")
     }
 
     override fun shareServer(server: Server) {

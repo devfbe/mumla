@@ -71,7 +71,6 @@ class MumlaActivity :
     AppCompatActivity(),
     ServiceClient,
     ConnectionDialogs.Listener,
-    ServerEditFragment.ServerEditListener,
     SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val serviceModel: ServiceViewModel by viewModels()
@@ -115,6 +114,9 @@ class MumlaActivity :
         supportActionBar?.setHomeButtonEnabled(true)
 
         serviceModel.bindClient(this, this)
+        supportFragmentManager.setFragmentResultListener(ServerEditFragment.REQUEST_KEY, this) { _, result ->
+            onServerEdited(ServerEditFragment.Result.from(result))
+        }
         lifecycleScope.launch { serviceModel.isConnected.collect { backCallback.isEnabled = it } }
         lifecycleScope.launch {
             serviceModel.connectRequests.collect { request ->
@@ -142,7 +144,7 @@ class MumlaActivity :
     private fun offerServerFromUrl(url: String?) {
         try {
             val server = MumbleURLParser.parseURL(url)
-            ServerEditFragment.createServerEditDialog(this, server, ServerEditFragment.Action.CONNECT_ACTION, true)
+            ServerEditFragment.newInstance(server, ServerEditFragment.Action.CONNECT, true)
                 .show(supportFragmentManager, "url_edit")
         } catch (e: MalformedURLException) {
             onBadUrl(e)
@@ -366,11 +368,12 @@ class MumlaActivity :
         }
     }
 
-    override fun onServerEdited(action: ServerEditFragment.Action, server: Server) {
-        when (action) {
-            ServerEditFragment.Action.ADD_ACTION -> saveThenShowFavourites { addServer(server) }
-            ServerEditFragment.Action.EDIT_ACTION -> saveThenShowFavourites { updateServer(server) }
-            ServerEditFragment.Action.CONNECT_ACTION -> connectFlow.connect(server)
+    private fun onServerEdited(result: ServerEditFragment.Result) {
+        val server = result.server
+        when (result.action) {
+            ServerEditFragment.Action.ADD -> saveThenShowFavourites { addServer(server) }
+            ServerEditFragment.Action.EDIT -> saveThenShowFavourites { updateServer(server) }
+            ServerEditFragment.Action.CONNECT -> connectFlow.connect(server)
         }
     }
 
