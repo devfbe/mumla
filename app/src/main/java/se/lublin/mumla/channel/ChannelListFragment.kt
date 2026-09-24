@@ -179,10 +179,8 @@ class ChannelListFragment :
         if (service != null && service.isConnected) {
             val session = service.session
 
-            // Color the action bar icons to the primary text color of the theme, TODO move this elsewhere
-            val foregroundColor = requireActivity().theme
-                .obtainStyledAttributes(intArrayOf(android.R.attr.textColorPrimaryInverse))
-                .getColor(0, -1)
+            // Tinted like the app bar title.
+            val foregroundColor = requireActivity().getColor(R.color.on_app_bar)
 
             val self = session.sessionUser
             if (self != null) {

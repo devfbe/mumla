@@ -24,7 +24,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="@dimen/chat_item_spacing"
-    style="?cardStyle">
+    style="@style/Widget.Mumla.CardView">
 
     <LinearLayout
         android:id="@+id/list_chat_item_box"
@@ -40,7 +40,7 @@
             tools:text="example username → channel"
             android:textSize="11sp"
             android:id="@+id/list_chat_item_target"
-            android:textColor="#999"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:layout_marginBottom="4dp" />
 
         <TextView
@@ -58,7 +58,7 @@
             tools:text="23:23:23"
             android:textSize="11sp"
             android:id="@+id/list_chat_item_time"
-            android:textColor="#999"/>
+            android:textColor="?attr/colorOnSurfaceVariant"/>
     </LinearLayout>
 
 </androidx.cardview.widget.CardView>

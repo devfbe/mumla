@@ -43,7 +43,7 @@
         android:paddingEnd="4dp"
         android:singleLine="true"
         tools:text="User name"
-        android:textColor="#333"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="12sp"/>
 
 </LinearLayout>

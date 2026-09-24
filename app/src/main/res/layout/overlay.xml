@@ -42,7 +42,7 @@
                 android:layout_height="fill_parent"
                 android:layout_weight="1"
                 android:text="@string/app_name"
-                android:textColor="#777"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textAllCaps="true"
                 android:gravity="start|center_vertical"
                 android:layout_marginStart="16dp"/>
@@ -50,7 +50,7 @@
             <View
                 android:layout_width="1dp"
                 android:layout_height="fill_parent"
-                android:background="#DDD"/>
+                android:background="?attr/colorOutlineVariant"/>
 
             <ImageView
                 android:id="@+id/overlay_talk"
@@ -59,13 +59,13 @@
                 android:padding="11dp"
                 android:scaleType="fitCenter"
                 app:srcCompat="@drawable/ic_action_microphone"
-                app:tint="@color/icon_on_light"
+                app:tint="?attr/colorOnSurfaceVariant"
                 android:background="?attr/selectableItemBackground"/>
 
             <View
                 android:layout_width="1dp"
                 android:layout_height="fill_parent"
-                android:background="#DDD"/>
+                android:background="?attr/colorOutlineVariant"/>
 
             <ImageView
                 android:layout_width="40dp"
@@ -73,7 +73,7 @@
                 android:padding="11dp"
                 android:id="@+id/overlay_close"
                 app:srcCompat="@drawable/ic_action_delete_dark"
-                app:tint="@color/icon_on_light"
+                app:tint="?attr/colorOnSurfaceVariant"
                 android:scaleType="fitCenter"
                 android:background="?attr/selectableItemBackground"/>
 
@@ -82,7 +82,7 @@
         <View
             android:layout_width="fill_parent"
             android:layout_height="1dp"
-            android:background="#DDD"/>
+            android:background="?attr/colorOutlineVariant"/>
 
         <ListView
             android:layout_width="fill_parent"
@@ -97,7 +97,7 @@
         <View
             android:layout_width="fill_parent"
             android:layout_height="1dp"
-            android:background="#DDD"/>
+            android:background="?attr/colorOutlineVariant"/>
 
     </LinearLayout>
 
@@ -108,5 +108,6 @@
         android:padding="8dp"
         android:layout_gravity="end|bottom"
         app:srcCompat="@drawable/ic_action_drag_handle"
+        app:tint="?attr/colorOnSurfaceVariant"
         android:background="?attr/selectableItemBackground"/>
 </FrameLayout>

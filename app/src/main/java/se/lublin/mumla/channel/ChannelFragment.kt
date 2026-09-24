@@ -33,7 +33,6 @@ import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
 import androidx.viewpager2.adapter.FragmentStateAdapter
-import com.google.android.material.color.MaterialColors
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import se.lublin.humla.model.IUser
@@ -124,8 +123,9 @@ class ChannelFragment :
     }
 
     private fun styleTabs(tabs: TabLayout) {
-        val background = MaterialColors.getColor(requireActivity(), android.R.attr.colorPrimary, -1)
-        val text = MaterialColors.getColor(requireActivity(), android.R.attr.textColorPrimaryInverse, -1)
+        val context = requireActivity()
+        val background = context.getColor(R.color.app_bar_background)
+        val text = context.getColor(R.color.on_app_bar)
         tabs.setBackgroundColor(background)
         tabs.setTabTextColors(text, text)
         tabs.setSelectedTabIndicatorColor(text)

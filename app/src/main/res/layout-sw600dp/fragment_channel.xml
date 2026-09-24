@@ -60,7 +60,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#dadada"
+                android:background="?attr/colorOutlineVariant"
                 android:layout_gravity="top"/>
 
             <TextView
@@ -96,7 +96,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#dadada" />
+                android:background="?attr/colorOutlineVariant" />
 
             <Button
                 android:id="@+id/pushtotalk"
@@ -106,7 +106,7 @@
                 android:textAllCaps="true"
                 android:textStyle="bold"
                 android:textSize="14sp"
-                android:textColor="#858585"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:background="?attr/selectableItemBackground"/>
         </LinearLayout>
     </LinearLayout>

@@ -57,7 +57,7 @@
         android:layout_width="240dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="?colorPrimaryDark"
+        android:background="?attr/colorSurfaceContainerLow"
         android:fitsSystemWindows="true"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
