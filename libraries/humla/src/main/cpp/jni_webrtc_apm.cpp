@@ -27,17 +27,9 @@ namespace {
 constexpr jint kNullPointerError = -5;
 constexpr jint kBadDataLengthError = -8;
 
-humla::HandleTable& handles() {
-    // Intentionally never destroyed: the table must outlive every handle it issued (static
-    // destruction order could hand a late audio callback a destroyed mutex), and staying
-    // reachable keeps LeakSanitizer quiet about the cells.
-    static humla::HandleTable* table = new humla::HandleTable();
-    return *table;
-}
-
 jint process(JNIEnv* env, jlong handle, jshortArray frame,
              int (*fn)(humla_apm*, int16_t*)) noexcept {
-    auto* apm = static_cast<humla_apm*>(handles().get(handle));
+    auto* apm = static_cast<humla_apm*>(humla::handleTable<humla_apm>().get(handle));
     if (apm == nullptr || frame == nullptr) return kNullPointerError;
     if (env->GetArrayLength(frame) < humla_apm_frame_size(apm)) return kBadDataLengthError;
     jshort* data = env->GetShortArrayElements(frame, nullptr);
@@ -59,7 +51,7 @@ Java_se_lublin_humla_audio_native_WebRtcApmNative_create(JNIEnv*, jobject, jint 
     humla_apm_config cfg{aec ? 1 : 0, ns ? 1 : 0, nsLevel, agc ? 1 : 0, highPass ? 1 : 0};
     humla_apm* apm = humla_apm_create(sampleRate, &cfg);
     if (apm == nullptr) return 0;
-    jlong handle = handles().add(apm);
+    jlong handle = humla::handleTable<humla_apm>().add(apm);
     if (handle == 0) humla_apm_destroy(apm);  // the table could not take ownership
     return handle;
 }
@@ -67,7 +59,7 @@ Java_se_lublin_humla_audio_native_WebRtcApmNative_create(JNIEnv*, jobject, jint 
 JNIEXPORT jint JNICALL
 Java_se_lublin_humla_audio_native_WebRtcApmNative_frameSize(JNIEnv*, jobject,
                                                             jlong handle) noexcept {
-    return humla_apm_frame_size(static_cast<humla_apm*>(handles().get(handle)));
+    return humla_apm_frame_size(static_cast<humla_apm*>(humla::handleTable<humla_apm>().get(handle)));
 }
 
 JNIEXPORT jint JNICALL
@@ -87,13 +79,13 @@ Java_se_lublin_humla_audio_native_WebRtcApmNative_processRender(JNIEnv* env, job
 JNIEXPORT jfloat JNICALL
 Java_se_lublin_humla_audio_native_WebRtcApmNative_lastCaptureLevelDbfs(JNIEnv*, jobject,
                                                                        jlong handle) noexcept {
-    return humla_apm_last_capture_level_dbfs(static_cast<humla_apm*>(handles().get(handle)));
+    return humla_apm_last_capture_level_dbfs(static_cast<humla_apm*>(humla::handleTable<humla_apm>().get(handle)));
 }
 
 JNIEXPORT void JNICALL
 Java_se_lublin_humla_audio_native_WebRtcApmNative_destroy(JNIEnv*, jobject, jlong handle) noexcept {
     // release() hands the instance to exactly one caller, so destroying twice frees once.
-    humla_apm_destroy(static_cast<humla_apm*>(handles().release(handle)));
+    humla_apm_destroy(static_cast<humla_apm*>(humla::handleTable<humla_apm>().release(handle)));
 }
 
 }  // extern "C"

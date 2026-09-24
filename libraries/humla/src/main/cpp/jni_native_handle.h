@@ -1,28 +1,28 @@
 /*
  * Handles that survive being released twice, and being used after release.
  *
- * The RNNoise and WebRTC APM bridges hand out cells, not object pointers: one word each, holding
- * the object pointer.
+ * Every JNI bridge hands out handles from a HandleTable instead of object pointers. A handle names
+ * a slot of the table and the generation the slot had when the object was added:
  *
- *   - release() atomically takes the pointer out of the cell. Exactly one caller gets it and
- *     destroys the object; every later release() of the same handle is a no-op.
- *   - get() reads the cell. After release() it reads nullptr, so a late frame from the audio
- *     thread becomes an error return instead of a use-after-free.
- *   - Cells are never freed or reused, so a stale handle stays safe to dereference. The cost is
- *     one small heap cell per create() (per audio session, not per frame). Cells stay reachable
- *     from the table, so LeakSanitizer will not flag a runaway create(); watch calls to add().
+ *   - release() takes the object out of its slot and bumps the slot's generation. Exactly one
+ *     caller gets the object and destroys it; every later release() of the same handle is a no-op.
+ *   - get() returns the object only while the handle's generation is still the slot's. After
+ *     release() it returns nullptr, so a late frame from the audio thread becomes an error return
+ *     instead of a use-after-free, even once the slot has been reused for a new object.
+ *   - Slot storage is allocated in fixed chunks that are never freed or moved, so get() may read
+ *     any slot without a lock. Released slots are reused, so memory is bounded by the number of
+ *     live objects, not by how many were ever created.
+ *   - A value that does not name a slot of this table (0, an invented number) reads as nullptr.
  *
- * Caller contract: a handle may only be passed back to the bridge (table) that issued it.
- * release() checks membership under the mutex and refuses foreign or stale values, but get()
- * runs on the audio thread, must not block, and therefore dereferences whatever it is given.
- * A handle from another bridge is a type-confused read; an invented jlong is a segfault. This is
- * enforced Kotlin-side: one handle in one private field of one owner.
+ * Caller contract: a handle may only be passed back to the table that issued it. A handle from
+ * another table names a slot of this one, which get() may answer with an unrelated object of this
+ * table's type. This is enforced Kotlin-side: one handle in one private field of one owner.
  *
- * release() is not safe against a process() call already inside the native object; the owner
- * must stop feeding frames before releasing.
+ * release() is not safe against a call already inside the native object; the owner must stop
+ * using the handle before releasing it.
  *
- * Threading: get() is lock-free and safe from the audio thread. add() and release() take a
- * mutex and are for the owning thread; they are never called per frame.
+ * Threading: get() is lock-free and safe from the audio thread. add() and release() take a mutex
+ * and may allocate; they belong to the owning thread and are never called per frame.
  */
 #ifndef HUMLA_JNI_NATIVE_HANDLE_H
 #define HUMLA_JNI_NATIVE_HANDLE_H
@@ -30,66 +30,137 @@
 #include <jni.h>
 
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <new>
-#include <unordered_set>
+#include <vector>
 
 namespace humla {
 
 class HandleTable {
   public:
-    /** Wraps object in a fresh cell. Returns 0 for a null object or if the cell cannot be
-     *  allocated, in which case the caller still owns object and must destroy it. */
+    HandleTable() = default;
+    HandleTable(const HandleTable&) = delete;
+    HandleTable& operator=(const HandleTable&) = delete;
+    /** Only for tables that provably have no handle in use; see handleTable(). */
+    ~HandleTable() {
+        for (auto& chunk : chunks_) delete[] chunk.load(std::memory_order_relaxed);
+    }
+
+    /** Stores object in a free slot. Returns 0 for a null object, or if no slot can be allocated,
+     *  in which case the caller still owns object and must destroy it. */
     jlong add(void* object) noexcept {
         if (object == nullptr) return 0;
-        Cell* cell = new (std::nothrow) Cell();
-        if (cell == nullptr) return 0;
-        // Release pairs with the acquire load in get(). Host tests (x86_64, TSO) cannot catch a
-        // weakening to relaxed; this matters on arm64.
-        cell->object.store(object, std::memory_order_release);
         try {
             std::lock_guard<std::mutex> lock(mutex_);
-            cells_.insert(cell);
-        } catch (...) {  // bad_alloc from the set, system_error from the mutex
-            delete cell;
+            std::uint32_t index;
+            if (!free_.empty()) {
+                index = free_.back();
+                free_.pop_back();
+            } else {
+                if (used_ == kMaxSlots) return 0;
+                index = used_;
+                std::uint32_t chunk = index / kChunkSize;
+                if (chunks_[chunk].load(std::memory_order_relaxed) == nullptr) {
+                    Slot* fresh = new Slot[kChunkSize];
+                    // Release pairs with the acquire load in slot().
+                    chunks_[chunk].store(fresh, std::memory_order_release);
+                }
+                used_++;
+            }
+            Slot* s = slotAt(index);
+            // The generation was bumped by the release() that freed the slot, under this mutex.
+            std::uint32_t generation = s->generation.load(std::memory_order_relaxed);
+            // Release pairs with the acquire load in get(): whoever sees the new object also sees
+            // the bumped generation, so a stale handle to this slot cannot read it.
+            s->object.store(object, std::memory_order_release);
+            return pack(index, generation);
+        } catch (...) {  // bad_alloc from the chunk or the free list, system_error from the mutex
             return 0;
         }
-        return reinterpret_cast<jlong>(cell);
     }
 
-    /** The object behind handle, or nullptr if the handle is 0 or has been released.
-     *  Lock-free; safe to call from the audio thread.
-     *
-     *  handle MUST be 0 or a handle THIS table handed out: membership is not checked. */
+    /** The object behind handle, or nullptr if the handle is 0, not from this table, or has been
+     *  released. Lock-free; safe to call from the audio thread. */
     void* get(jlong handle) const noexcept {
-        if (handle == 0) return nullptr;
-        return reinterpret_cast<const Cell*>(handle)->object.load(std::memory_order_acquire);
+        const Slot* s = slot(handle);
+        if (s == nullptr) return nullptr;
+        void* object = s->object.load(std::memory_order_acquire);
+        if (s->generation.load(std::memory_order_acquire) != generationOf(handle)) return nullptr;
+        return object;
     }
 
-    /** Takes the object out of the cell. Returns it to exactly one caller; every other call for
-     *  the same handle, and any handle this table did not hand out, returns nullptr. */
+    /** Takes the object out of its slot. Returns it to exactly one caller; every other call for the
+     *  same handle, and any value this table did not hand out, returns nullptr. */
     void* release(jlong handle) noexcept {
-        if (handle == 0) return nullptr;
-        Cell* cell = reinterpret_cast<Cell*>(handle);
         try {
             std::lock_guard<std::mutex> lock(mutex_);
-            // Check membership before dereferencing, so foreign or mangled handles are refused.
-            if (cells_.find(cell) == cells_.end()) return nullptr;
+            Slot* s = slot(handle);
+            if (s == nullptr) return nullptr;
+            if (s->generation.load(std::memory_order_relaxed) != generationOf(handle)) return nullptr;
+            void* object = s->object.exchange(nullptr, std::memory_order_acq_rel);
+            if (object == nullptr) return nullptr;
+            // Reserve the free-list entry before invalidating the handle, so a failed push cannot
+            // leave a slot that is neither live nor reusable.
+            free_.reserve(free_.size() + 1);
+            s->generation.store(s->generation.load(std::memory_order_relaxed) + 1,
+                                std::memory_order_release);
+            free_.push_back(indexOf(handle));
+            return object;
         } catch (...) {
             return nullptr;
         }
-        // The cell is deliberately kept (see file comment).
-        return cell->object.exchange(nullptr, std::memory_order_acq_rel);
     }
 
   private:
-    struct Cell {
+    struct Slot {
         std::atomic<void*> object{nullptr};
+        std::atomic<std::uint32_t> generation{1};
     };
 
+    static constexpr std::uint32_t kChunkSize = 256;
+    static constexpr std::uint32_t kMaxChunks = 256;
+    static constexpr std::uint32_t kMaxSlots = kChunkSize * kMaxChunks;
+
+    /* Low 32 bits: slot index + 1, so that no handle is 0. High 32 bits: generation. */
+    static jlong pack(std::uint32_t index, std::uint32_t generation) {
+        return static_cast<jlong>((static_cast<std::uint64_t>(generation) << 32) | (index + 1u));
+    }
+    static std::uint32_t indexOf(jlong handle) {
+        return static_cast<std::uint32_t>(static_cast<std::uint64_t>(handle)) - 1u;
+    }
+    static std::uint32_t generationOf(jlong handle) {
+        return static_cast<std::uint32_t>(static_cast<std::uint64_t>(handle) >> 32);
+    }
+
+    Slot* slotAt(std::uint32_t index) const {
+        return &chunks_[index / kChunkSize].load(std::memory_order_acquire)[index % kChunkSize];
+    }
+
+    /** The slot handle names, or nullptr if it names none (0 maps to index 0xFFFFFFFF). */
+    Slot* slot(jlong handle) const noexcept {
+        std::uint32_t index = indexOf(handle);
+        if (index >= kMaxSlots) return nullptr;
+        Slot* chunk = chunks_[index / kChunkSize].load(std::memory_order_acquire);
+        return chunk == nullptr ? nullptr : &chunk[index % kChunkSize];
+    }
+
     mutable std::mutex mutex_;
-    std::unordered_set<Cell*> cells_;
+    std::atomic<Slot*> chunks_[kMaxChunks] = {};
+    std::uint32_t used_ = 0;         // slots ever handed out; guarded by mutex_
+    std::vector<std::uint32_t> free_;  // released slots; guarded by mutex_
 };
+
+/**
+ * The table for one kind of native object. Intentionally never destroyed: it must outlive every
+ * handle it issued (static destruction order could hand a late audio callback a destroyed mutex),
+ * and staying reachable keeps LeakSanitizer quiet about the chunks.
+ */
+template <typename Tag>
+HandleTable& handleTable() {
+    static HandleTable* table = new HandleTable();
+    return *table;
+}
 
 }  // namespace humla
 

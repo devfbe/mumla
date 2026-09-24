@@ -152,6 +152,19 @@ if(HUMLA_HAVE_SANITIZERS)
   set_tests_properties(apm_is_instrumented PROPERTIES LABELS sanitized)
 endif()
 
+# ---------------------------------------------------------------- the handle table
+add_executable(test_handle_table test_handle_table.cpp)
+target_include_directories(test_handle_table PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+humla_add_labelled_test(handle_table test_handle_table plain)
+
+if(HUMLA_HAVE_SANITIZERS)
+  add_executable(test_handle_table_asan test_handle_table.cpp)
+  target_include_directories(test_handle_table_asan PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+  target_compile_options(test_handle_table_asan PRIVATE ${HUMLA_SAN_FLAGS})
+  target_link_options(test_handle_table_asan PRIVATE -fsanitize=address,undefined)
+  humla_add_labelled_test(handle_table_sanitized test_handle_table_asan sanitized)
+endif()
+
 # ---------------------------------------------------------------- the JNI bridges
 # jni_rnnoise.cpp and jni_webrtc_apm.cpp run here through a stand-in JNIEnv (jni_env_stub.h):
 # a missing length check, a double free or a bridge wired to the wrong C function produces no
