@@ -142,16 +142,16 @@ class MumlaServiceAudioPreferencesTest {
         assertThat(audioConfig().speexNoiseSuppressDb).isEqualTo(-35)
     }
 
-    /** The handset mode is the router's earpiece default now; the stream no longer decides it. */
+    /** The output without a headset - what the handset mode was - is the router's default. */
     @Test
-    fun `handset mode makes the earpiece the default output`() {
+    fun `the default output reaches the router`() {
         val router = field(service, "mRouter") as AudioRouter
-        prefs.edit().putBoolean(Settings.PREF_HANDSET_MODE, true).commit()
-        change(Settings.PREF_HANDSET_MODE)
+        prefs.edit().putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_EARPIECE).commit()
+        change(Settings.PREF_DEFAULT_OUTPUT)
         assertThat(router.earpieceByDefault).isTrue()
 
-        prefs.edit().putBoolean(Settings.PREF_HANDSET_MODE, false).commit()
-        change(Settings.PREF_HANDSET_MODE)
+        prefs.edit().putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_SPEAKER).commit()
+        change(Settings.PREF_DEFAULT_OUTPUT)
         assertThat(router.earpieceByDefault).isFalse()
     }
 

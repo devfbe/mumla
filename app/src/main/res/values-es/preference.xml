@@ -70,8 +70,6 @@
     <string name="version">Versión</string>
     <string name="halfDuplex">Audio en un solo sentido</string>
     <string name="halfDuplexSum">Silencia otras reproducciones durante la pulsación para hablar para evitar bucles/retroalimentación de audio.</string>
-    <string name="handsetMode">Auriculares</string>
-    <string name="handsetModeSum">Utiliza el altavoz frontal y el sensor de proximidad para simular una llamada de teléfono.</string>
     <string name="pttSound">Sonido al pulsar para hablar</string>
     <string name="pttSoundSum">Reproducir un efecto de sonido al pulsar el botón de pulsar para hablar.</string>
     <string name="preprocessor_enabled">Pretratamiento de las entradas</string>

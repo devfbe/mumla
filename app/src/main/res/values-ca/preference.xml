@@ -10,7 +10,6 @@
     <string name="advancedAudio">Avançat</string>
     <string name="forceTcp">Només TCP</string>
     <string name="useTor">Connecteu-vos mitjançant Tor</string>
-    <string name="handsetMode">Telèfon</string>
     <string name="audio_per_packet">Àudio per paquet</string>
     <string name="audio_per_packet_sum">La durada de l\'àudio per paquet de veu.</string>
     <string name="pref_certificate_title">Certificat</string>
@@ -52,7 +51,6 @@
     <string name="defaultUsernameDefault">Usuari_Mumla</string>
     <string name="certificateGenerateSum">Genera un nou certificat de Mumla autofirmat. Recomanat per a principiants.</string>
     <string name="voiceActivitySettings">Configuració de l\'activitat de veu</string>
-    <string name="handsetModeSum">Utilitza l\'altaveu frontal i el sensor de proximitat per simular una trucada telefònica tradicional.</string>
     <string name="pttSoundSum">Reprodueix l\'efecte de so en prémer el botó PTT.</string>
     <string name="preprocessor_enabled">Preprocessament d\'entrada</string>
     <string name="preprocessor_enabled_sum">Suprimeix el soroll ambiental i normalitza el volum d\'àudio.</string>

@@ -4,7 +4,6 @@
     <string name="forceTcpSum">Tắt UUDP cho liên lạc.</string>
     <string name="disableOpus">Tránh mã hóa Opus</string>
     <string name="useTts">Văn bản thành giọng nói</string>
-    <string name="handsetMode">Thiết bị cầm tay</string>
     <string name="pref_start_up_in_pinned_mode">Chế độ ghim kênh</string>
     <string name="pref_start_upIn_pinned_mode_sum">Bật chế độ \"Ghim kênh\" sau khi kết nối (ẩn các kênh không được ghim).</string>
     <string name="inputMethodContinuous">Liên tục</string>
@@ -81,7 +80,6 @@
     <string name="clearServerCertificatesSum">Xóa tất cả chứng chỉ server đáng tin cậy khỏi Mumla.</string>
     <string name="version">Phiên bản</string>
     <string name="halfDuplex">Thoại một chiều</string>
-    <string name="handsetModeSum">Sử dụng loa trước và cảm biến tiệm cận để mô phỏng cuộc gọi điện thoại truyền thống.</string>
     <string name="preprocessor_enabled_sum">Ngăn chặn tiếng ồn xung quanh và bình thường hóa âm lượng.</string>
     <string name="audio_per_packet">Âm thanh trên mỗi gói tin</string>
     <string name="audio_per_packet_sum">Độ dài của âm thanh trên mỗi gói thoại.</string>

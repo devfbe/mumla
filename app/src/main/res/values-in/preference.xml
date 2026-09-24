@@ -73,8 +73,6 @@
     <string name="clearServerCertificatesSum">Menghapus semua sertifikat server dari aplikasi.</string>
     <string name="version">Versi</string>
     <string name="halfDuplex">Audio satu arah</string>
-    <string name="handsetMode">Mode Handset</string>
-    <string name="handsetModeSum">Menggunakan speaker depan dan proximity sensor untuk mensimulasikan panggilan telepon.</string>
     <string name="pttSound">Suara push-to-talk</string>
     <string name="pttSoundSum">Memutar efek suara saat menekan tombol push-to-talk.</string>
     <string name="preprocessor_enabled">Pre-processing input</string>

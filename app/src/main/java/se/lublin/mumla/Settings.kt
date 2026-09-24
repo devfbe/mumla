@@ -42,9 +42,17 @@ class Settings private constructor(context: Context) {
 
     init {
         // One-time cleanup of keys the audio chooser replaced. Checked on every construction and
-        // written only while the old key is still there, so it costs one lookup afterwards.
+        // written only while an old key is still there, so it costs two lookups afterwards.
         if (preferences.contains(LEGACY_PREF_ECHO_CANCELLATION_METHOD)) {
             preferences.edit().remove(LEGACY_PREF_ECHO_CANCELLATION_METHOD).apply()
+        }
+        if (preferences.contains(LEGACY_PREF_HANDSET_MODE)) {
+            val editor = preferences.edit().remove(LEGACY_PREF_HANDSET_MODE)
+            // The handset mode was the earpiece; a default output the user already picked wins.
+            if (preferences.getBoolean(LEGACY_PREF_HANDSET_MODE, false) && !preferences.contains(PREF_DEFAULT_OUTPUT)) {
+                editor.putString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_EARPIECE)
+            }
+            editor.apply()
         }
     }
 
@@ -156,7 +164,12 @@ class Settings private constructor(context: Context) {
 
     fun isHalfDuplex(): Boolean = preferences.getBoolean(PREF_HALF_DUPLEX, DEFAULT_HALF_DUPLEX)
 
-    fun isHandsetMode(): Boolean = preferences.getBoolean(PREF_HANDSET_MODE, DEFAULT_HANDSET_MODE)
+    /**
+     * Where voice goes when no headset is there: the speaker, or the earpiece - which is what the
+     * handset mode was, proximity sensor included. The audio chooser overrides it per session.
+     */
+    fun isEarpieceDefaultOutput(): Boolean =
+        preferences.getString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_SPEAKER) == DEFAULT_OUTPUT_EARPIECE
 
     fun isPttSoundEnabled(): Boolean = preferences.getBoolean(PREF_PTT_SOUND, DEFAULT_PTT_SOUND)
 
@@ -407,8 +420,13 @@ class Settings private constructor(context: Context) {
         const val PREF_HALF_DUPLEX = "half_duplex"
         const val DEFAULT_HALF_DUPLEX = false
 
-        const val PREF_HANDSET_MODE = "handset_mode"
-        const val DEFAULT_HANDSET_MODE = false
+        /** A ListPreference: [DEFAULT_OUTPUT_SPEAKER] (the default) or [DEFAULT_OUTPUT_EARPIECE]. */
+        const val PREF_DEFAULT_OUTPUT = "default_output"
+        const val DEFAULT_OUTPUT_SPEAKER = "speaker"
+        const val DEFAULT_OUTPUT_EARPIECE = "earpiece"
+
+        /** The handset switch the default output replaced; migrated and removed on first read. */
+        private const val LEGACY_PREF_HANDSET_MODE = "handset_mode"
 
         const val PREF_PTT_SOUND = "ptt_sound"
         const val DEFAULT_PTT_SOUND = false

@@ -164,4 +164,14 @@
     <string name="license_apache2">Apache License Version 2.0</string>
     <string name="license_apache2_link">https://www.apache.org/licenses/LICENSE-2.0.html</string>
 
+    <!-- Must stay in lockstep with Settings.DEFAULT_OUTPUT_SPEAKER / DEFAULT_OUTPUT_EARPIECE. -->
+    <string-array name="defaultOutputNames">
+        <item>@string/audio_device_speaker</item>
+        <item>@string/audio_device_earpiece</item>
+    </string-array>
+
+    <string-array name="defaultOutputValues">
+        <item>speaker</item>
+        <item>earpiece</item>
+    </string-array>
 </resources>

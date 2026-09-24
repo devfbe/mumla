@@ -74,8 +74,6 @@
     <string name="version">Версия</string>
     <string name="halfDuplex">Звук в одну сторону</string>
     <string name="halfDuplexSum">Не принимать звук при передаче, чтобы избежать звуковых петель и эхо.</string>
-    <string name="handsetMode">Гарнитура</string>
-    <string name="handsetModeSum">Использовать передний динамик и датчик близости для симуляции традиционного телефонного вызова.</string>
     <string name="pttSound">Звук нажатия Push-to-talk</string>
     <string name="pttSoundSum">Проиграть звук при нажатии кнопки Push-to-talk.</string>
     <string name="preprocessor_enabled">Обработка входящего звука</string>

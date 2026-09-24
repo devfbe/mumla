@@ -60,7 +60,7 @@ object AudioPreferenceExtras {
     @JvmField
     val KEYS: Set<String> = VAD_KEYS + Settings.ECHO_CANCELLATION_KEYS + setOf(
         Settings.PREF_INPUT_METHOD,
-        Settings.PREF_HANDSET_MODE,
+        Settings.PREF_DEFAULT_OUTPUT,
         Settings.PREF_AMPLITUDE_BOOST,
         Settings.PREF_HALF_DUPLEX,
         Settings.PREF_NOISE_SUPPRESSION_METHOD,
@@ -87,8 +87,8 @@ object AudioPreferenceExtras {
         when (key) {
             Settings.PREF_INPUT_METHOD ->
                 extras.putInt(HumlaService.EXTRAS_TRANSMIT_MODE, settings.getHumlaInputMethod())
-            Settings.PREF_HANDSET_MODE ->
-                extras.putBoolean(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, settings.isHandsetMode())
+            Settings.PREF_DEFAULT_OUTPUT ->
+                extras.putBoolean(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, settings.isEarpieceDefaultOutput())
             Settings.PREF_AMPLITUDE_BOOST ->
                 extras.putFloat(HumlaService.EXTRAS_AMPLITUDE_BOOST, settings.getAmplitudeBoostMultiplier())
             Settings.PREF_HALF_DUPLEX ->

@@ -652,12 +652,15 @@ class MumlaServiceCharacterizationTest {
         assertThat(proximityLockHeld()).isFalse()
     }
 
+    /**
+     * The proximity lock is no longer a synchronization step: it follows the earpiece route, and
+     * `MumlaServiceAudioRouteTest` pins it there.
+     */
     @Test
-    fun synchronizingShowsTheHotCornerAndTakesTheProximityLockWhenAskedFor() {
-        // Written while disconnected: the preference listener sees them and shows nothing yet.
+    fun synchronizingShowsTheHotCornerWhenAskedFor() {
+        // Written while disconnected: the preference listener sees it and shows nothing yet.
         preferences().edit()
             .putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_TOP_LEFT)
-            .putBoolean(Settings.PREF_HANDSET_MODE, true)
             .commit()
         verify(exactly = 0) { hotCorner.setShown(true) }
         connect()
@@ -665,7 +668,6 @@ class MumlaServiceCharacterizationTest {
         synchronize()
 
         verify(exactly = 1) { hotCorner.setShown(true) }
-        assertThat(proximityLockHeld()).isTrue()
     }
 
     private fun proximityLockHeld(): Boolean {
@@ -677,13 +679,12 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun aDisconnectTearsDownWhatTheSessionShowed() {
-        preferences().edit().putBoolean(Settings.PREF_HANDSET_MODE, true).putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
         connect()
         service.logWarning("old")
         callbacks().onMessageLogged(textMessage("ping"))
         idle()
         synchronize()
-        val lock = mumlaField("mProximityLock").get(service) as PowerManager.WakeLock
 
         service.onConnectionDisconnected(null)
         idle()
@@ -691,7 +692,6 @@ class MumlaServiceCharacterizationTest {
         assertThat(talkReceivers()).isEmpty()
         verify { overlay.hide() }
         verify { hotCorner.setShown(false) }
-        assertThat(lock.isHeld).isFalse()
         assertThat(mumlaField("mProximityLock").get(service)).isNull()
         // Changed in task 12 (spec A3): the chat log and the chat notification survive a loss;
         // only the Disconnected state clears them. See the next test.
@@ -930,21 +930,6 @@ class MumlaServiceCharacterizationTest {
 
         verify(exactly = 1) { overlay.setPushToTalkShown(true) }
         verify(exactly = 1) { overlay.setPushToTalkShown(false) }
-    }
-
-    @Test
-    fun theHandsetPreferenceHoldsTheProximityLockOnlyWhileConnected() {
-        preferences().edit().putBoolean(Settings.PREF_HANDSET_MODE, true).commit()
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_HANDSET_MODE)
-        assertThat(proximityLockHeld()).isFalse()
-
-        connect()
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_HANDSET_MODE)
-        assertThat(proximityLockHeld()).isTrue()
-
-        preferences().edit().putBoolean(Settings.PREF_HANDSET_MODE, false).commit()
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_HANDSET_MODE)
-        assertThat(proximityLockHeld()).isFalse()
     }
 
     @Test

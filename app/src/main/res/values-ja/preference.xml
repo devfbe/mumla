@@ -70,8 +70,6 @@
     <string name="version">バージョン</string>
     <string name="halfDuplex">半二重モード</string>
     <string name="halfDuplexSum">プッシュツートークを使用する時に、デバイスのサウンドをミュートします。チャンネルのユーザーに対して音声フィードバックを除去します。</string>
-    <string name="handsetMode">ハンドセット モード</string>
-    <string name="handsetModeSum">従来の電話の呼び出しをシミュレートするために、フロントスピーカーと近接センサーを使用します。</string>
     <string name="pttSound">プッシュツートーク サウンド</string>
     <string name="pttSoundSum">プッシュツートーク ボタンが押されたときに効果音を再生します。</string>
     <string name="preprocessor_enabled">入力プリプロセッサを有効にする</string>

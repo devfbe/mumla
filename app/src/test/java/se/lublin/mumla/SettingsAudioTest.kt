@@ -120,6 +120,48 @@ class SettingsAudioTest {
             .contains(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
     }
 
+    @Test
+    fun `the output without a headset is the speaker unless the user picked the earpiece`() {
+        assertThat(settings.isEarpieceDefaultOutput()).isFalse()
+        prefs.edit().putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_EARPIECE).commit()
+        assertThat(settings.isEarpieceDefaultOutput()).isTrue()
+    }
+
+    /** Whoever had the handset mode on gets the earpiece as the default output, once. */
+    @Test
+    fun `handset mode becomes the earpiece as the default output`() {
+        prefs.edit().putBoolean("handset_mode", true).commit()
+
+        val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
+
+        assertThat(migrated.isEarpieceDefaultOutput()).isTrue()
+        assertThat(prefs.contains("handset_mode")).isFalse()
+    }
+
+    @Test
+    fun `handset mode switched off leaves the speaker and is removed`() {
+        prefs.edit().putBoolean("handset_mode", false).commit()
+
+        val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
+
+        assertThat(migrated.isEarpieceDefaultOutput()).isFalse()
+        assertThat(prefs.contains("handset_mode")).isFalse()
+    }
+
+    /** A default output the user already chose is theirs; a stale handset flag does not win. */
+    @Test
+    fun `a chosen default output is not overwritten by the old handset flag`() {
+        prefs.edit()
+            .putBoolean("handset_mode", true)
+            .putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_SPEAKER)
+            .commit()
+
+        val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
+
+        assertThat(migrated.isEarpieceDefaultOutput()).isFalse()
+        assertThat(prefs.contains("handset_mode")).isFalse()
+    }
+
     /** The global method is gone; the value it left on disk goes with it, once. */
     @Test
     fun `the old echo cancellation method is removed from the preferences`() {

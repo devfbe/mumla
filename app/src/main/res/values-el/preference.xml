@@ -42,8 +42,6 @@
     <string name="loadImagesSum">Λαμβάνει και εμφανίζει εικόνες σε συνομιλία.</string>
     <string name="loadImages">Εξωτερικές εικόνες</string>
     <string name="version">Έκδοση</string>
-    <string name="handsetMode">Ακουστικό</string>
-    <string name="handsetModeSum">Χρησιμοποιεί το μπροστινό ηχείο και τον αισθητήρα εγγύτητας για να προσομοιώσει μια παραδοσιακή τηλεφωνική κλήση.</string>
     <string name="pttSound">Ήχος για Πίεση-πλήκτρου-για-ομιλία</string>
     <string name="pttSoundSum">Παίξτε ηχητικό εφέ όταν πατάτε το κουμπί Πίεση-πλήκτρου-για-ομιλία.</string>
     <string name="preprocessor_enabled">Προεπεξεργασία εισόδου</string>

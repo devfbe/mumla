@@ -68,11 +68,9 @@
     <string name="halfDuplex">Audio a senso unico</string>
     <string name="clearServerCertificatesSum">Rimuovere tutti i certificati server attendibili da Mumla.</string>
     <string name="halfDuplexSum">Disattiva altre riproduzioni durante il push-to-talk, per evitare loop/feedback audio.</string>
-    <string name="handsetModeSum">Usa l\'altoparlante anteriore e il sensore di prossimità per simulare una telefonata tradizionale.</string>
     <string name="pressKeyInfo">L\'app deve essere aperta (a causa di restrizioni Android).</string>
     <string name="preprocessor_enabled">Pre-elaborazione dell\'input</string>
     <string name="pttSoundSum">Riprodurre un suono alla pressione del pulsante push-to-talk.</string>
-    <string name="handsetMode">Cornetta</string>
     <string name="pref_export_certificate_summary">Esporta nella memoria esterna.</string>
     <string name="preprocessor_enabled_sum">Sopprime il rumore ambientale e normalizza il volume dell\'audio.</string>
     <string name="pref_import_certificate_summary">Importa dalla memoria esterna.</string>

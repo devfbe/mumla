@@ -21,6 +21,7 @@ import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Binder
@@ -77,7 +78,7 @@ class MumlaService : HumlaService(),
     /** Channel view overlay. */
     private lateinit var mChannelOverlay: MumlaOverlay
 
-    /** Proximity lock for handset mode. */
+    /** Proximity lock, held while voice goes to the earpiece. */
     private var mProximityLock: PowerManager.WakeLock? = null
 
     /** Play sound when push to talk key is pressed */
@@ -413,10 +414,7 @@ class MumlaService : HumlaService(),
         if (mSettings.isHotCornerEnabled()) {
             mHotCorner.setShown(true)
         }
-        // Configure proximity sensor
-        if (mSettings.isHandsetMode()) {
-            setProximitySensorOn(true)
-        }
+        // The proximity sensor follows the earpiece route (onAudioRouteChanged), not this hook.
     }
 
     override fun onConnectionDisconnected(e: HumlaException?) {
@@ -447,8 +445,6 @@ class MumlaService : HumlaService(),
         when (key) {
             Settings.PREF_INPUT_METHOD ->
                 mChannelOverlay.setPushToTalkShown(mSettings.getHumlaInputMethod() == Constants.TRANSMIT_PUSH_TO_TALK)
-            Settings.PREF_HANDSET_MODE ->
-                setProximitySensorOn(isConnectionEstablished() && mSettings.isHandsetMode())
             Settings.PREF_HOT_CORNER_KEY -> {
                 mHotCorner.setGravity(mSettings.getHotCornerGravity())
                 mHotCorner.setShown(isConnectionEstablished() && mSettings.isHotCornerEnabled())
@@ -495,6 +491,15 @@ class MumlaService : HumlaService(),
      */
     private fun applyBluetoothPreference() {
         if (mSettings.isBluetoothScoEnabled()) enableBluetoothSco() else disableBluetoothSco()
+    }
+
+    /**
+     * The earpiece is the handset mode: routed there - chosen, or the default output - the screen
+     * goes off at the ear; any other device, or no route at all, turns the sensor off again. The
+     * superclass reports every change of the routed device, disconnects included.
+     */
+    override fun onAudioRouteChanged(type: Int?) {
+        setProximitySensorOn(type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
     }
 
     private fun setProximitySensorOn(on: Boolean) {

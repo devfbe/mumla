@@ -74,8 +74,6 @@
     <string name="version">版本</string>
     <string name="halfDuplex">单向音频</string>
     <string name="halfDuplexSum">按住发言时，不播放其他所有声音以避免音频反馈。</string>
-    <string name="handsetMode">听筒</string>
-    <string name="handsetModeSum">使用前置扬声器与距离传感器模拟传统电话（靠近听筒时关闭屏幕）。</string>
     <string name="pttSound">按住发言音效</string>
     <string name="pttSoundSum">按下按住发言按钮时播放音效。</string>
     <string name="preprocessor_enabled">输入预处理</string>
