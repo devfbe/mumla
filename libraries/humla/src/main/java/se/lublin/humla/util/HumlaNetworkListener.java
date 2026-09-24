@@ -157,11 +157,6 @@ public class HumlaNetworkListener implements HumlaTCPMessageListener, HumlaUDPMe
     }
 
     @Override
-    public void messageVoiceTarget(Mumble.VoiceTarget msg) {
-
-    }
-
-    @Override
     public void messageUDPPing(byte[] data) {
 
     }

@@ -167,10 +167,6 @@ public interface IHumlaSession {
 
     void sendAccessTokens(List<String> tokens);
 
-    void requestBanList();
-
-    void requestUserList();
-
     void requestPermissions(int channel);
 
     void requestComment(int session);

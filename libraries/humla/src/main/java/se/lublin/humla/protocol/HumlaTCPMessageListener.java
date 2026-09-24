@@ -46,7 +46,6 @@ public interface HumlaTCPMessageListener {
     public void messageUserStats(Mumble.UserStats msg);
     public void messageRequestBlob(Mumble.RequestBlob msg);
     public void messageSuggestConfig(Mumble.SuggestConfig msg);
-    public void messageVoiceTarget(Mumble.VoiceTarget msg);
 
     /**
      * Reads incoming protobuf TCP messages and performs the necessary action(s).
@@ -81,6 +80,5 @@ public interface HumlaTCPMessageListener {
         public void messageUserStats(Mumble.UserStats msg) {}
         public void messageRequestBlob(Mumble.RequestBlob msg) {}
         public void messageSuggestConfig(Mumble.SuggestConfig msg) {}
-        public void messageVoiceTarget(Mumble.VoiceTarget msg) {}
     }
 }

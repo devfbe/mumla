@@ -820,9 +820,6 @@ class HumlaServiceCharacterizationTest {
             Triple("getServerSettings", ise) { service.getServerSettings() },
             Triple("sendUserTextMessage", ise) { service.sendUserTextMessage(1, "m") },
             Triple("sendChannelTextMessage", ise) { service.sendChannelTextMessage(1, "m", false) },
-            // not implemented at all.
-            Triple("requestBanList", UnsupportedOperationException::class.java) { service.requestBanList() },
-            Triple("requestUserList", UnsupportedOperationException::class.java) { service.requestUserList() },
         )
 
         val wrong = calls.mapNotNull { (name, expected, call) ->

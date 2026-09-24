@@ -1100,7 +1100,7 @@ class HumlaConnection @JvmOverloads constructor(
                 HumlaTCPMessageType.UserStats -> handler.messageUserStats(msg as Mumble.UserStats)
                 HumlaTCPMessageType.RequestBlob -> handler.messageRequestBlob(msg as Mumble.RequestBlob)
                 HumlaTCPMessageType.SuggestConfig -> handler.messageSuggestConfig(msg as Mumble.SuggestConfig)
-                HumlaTCPMessageType.VoiceTarget -> handler.messageVoiceTarget(msg as Mumble.VoiceTarget)
+                HumlaTCPMessageType.VoiceTarget -> Unit // client-to-server only; never parsed
             }
         }
 

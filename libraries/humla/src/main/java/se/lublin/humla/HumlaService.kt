@@ -518,8 +518,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         auth.setUsername(mServer!!.username)
         auth.setPassword(mServer!!.password)
         for (celtVersion in celtVersions()) auth.addCeltVersions(celtVersion)
-        // FIXME: resolve issues with CELT 11 robot voices.
-        //     auth.addCeltVersions(Constants.CELT_11_VERSION);
         auth.setOpus(mUseOpus)
         auth.addAllTokens(mAccessTokens)
 
@@ -1185,14 +1183,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun sendAccessTokens(tokens: List<String>) {
         getConnection()!!.sendAccessTokens(tokens)
-    }
-
-    override fun requestBanList() {
-        throw UnsupportedOperationException("Not yet implemented") // TODO
-    }
-
-    override fun requestUserList() {
-        throw UnsupportedOperationException("Not yet implemented") // TODO
     }
 
     override fun requestPermissions(channel: Int) {

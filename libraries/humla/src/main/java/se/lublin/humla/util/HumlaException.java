@@ -17,30 +17,13 @@
 
 package se.lublin.humla.util;
 
-import android.os.Parcel;
-import android.os.Parcelable;
-
-import com.google.protobuf.InvalidProtocolBufferException;
-
 import se.lublin.humla.protobuf.Mumble;
 
 /**
  * Created by andrew on 14/07/13.
  */
 @SuppressWarnings("serial")
-public class HumlaException extends Exception implements Parcelable {
-
-    public static final Creator<HumlaException> CREATOR = new Creator<HumlaException>() {
-        @Override
-        public HumlaException createFromParcel(Parcel source) {
-            return new HumlaException(source);
-        }
-
-        @Override
-        public HumlaException[] newArray(int size) {
-            return new HumlaException[size];
-        }
-    };
+public class HumlaException extends Exception {
 
     private HumlaDisconnectReason mReason;
     /** Indicates that this exception was caused by a reject from the server. */
@@ -75,19 +58,6 @@ public class HumlaException extends Exception implements Parcelable {
         mReason = HumlaDisconnectReason.USER_REMOVE;
     }
 
-    private HumlaException(Parcel in) {
-        super(in.readString(), (Throwable) in.readSerializable());
-        mReason = HumlaDisconnectReason.values()[in.readInt()];
-        byte[] reject = in.createByteArray();
-        byte[] userRemove = in.createByteArray();
-        try {
-            mReject = reject == null ? null : Mumble.Reject.parseFrom(reject);
-            mUserRemove = userRemove == null ? null : Mumble.UserRemove.parseFrom(userRemove);
-        } catch (InvalidProtocolBufferException e) {
-            throw new IllegalArgumentException(e);
-        }
-    }
-
     public HumlaDisconnectReason getReason() {
         return mReason;
     }
@@ -98,20 +68,6 @@ public class HumlaException extends Exception implements Parcelable {
 
     public Mumble.UserRemove getUserRemove() {
         return mUserRemove;
-    }
-    @Override
-    public int describeContents() {
-        return 0;
-    }
-
-    @Override
-    public void writeToParcel(Parcel dest, int flags) {
-        dest.writeString(getMessage());
-        dest.writeSerializable(getCause());
-        dest.writeInt(mReason.ordinal());
-        // Lite messages are not Serializable; they travel as their wire bytes.
-        dest.writeByteArray(mReject == null ? null : mReject.toByteArray());
-        dest.writeByteArray(mUserRemove == null ? null : mUserRemove.toByteArray());
     }
 
     public enum HumlaDisconnectReason {
