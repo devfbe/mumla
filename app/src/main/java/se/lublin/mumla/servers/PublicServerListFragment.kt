@@ -33,6 +33,7 @@ import android.widget.FrameLayout
 import android.widget.GridView
 import android.widget.ProgressBar
 import android.widget.Toast
+import androidx.annotation.VisibleForTesting
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
@@ -63,6 +64,9 @@ class PublicServerListFragment :
     private var serverProgress: ProgressBar? = null
     private var serverAdapter: PublicServerAdapter? = null
     private val pinger = ServerPinger()
+
+    @VisibleForTesting
+    internal var fetcher = PublicServerFetcher()
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -98,6 +102,11 @@ class PublicServerListFragment :
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
         menuInflater.inflate(R.menu.fragment_public_server_list, menu)
+    }
+
+    override fun onPrepareMenu(menu: Menu) {
+        // Matching pings servers directly over UDP, which Tor cannot carry.
+        menu.findItem(R.id.menu_match_server)?.isVisible = !Settings.getInstance(requireContext()).isTorEnabled()
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
@@ -141,7 +150,7 @@ class PublicServerListFragment :
 
     private fun fillPublicList() {
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = PublicServerFetcher().fetch()
+            val result = fetcher.fetch()
             if (result == null) {
                 Toast.makeText(requireContext(), R.string.error_fetching_servers, Toast.LENGTH_SHORT).show()
             } else {

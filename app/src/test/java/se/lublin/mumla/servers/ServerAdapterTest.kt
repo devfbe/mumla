@@ -42,8 +42,10 @@ class ServerAdapterTest {
         }
     }
 
-    private fun adapter(servers: MutableList<Server> = mutableListOf(server)) =
-        object : ServerAdapter<Server>(context, R.layout.server_list_row, servers, scope, pinger, dispatcher) {
+    private fun adapter(servers: MutableList<Server> = mutableListOf(server), pingsAllowed: Boolean = true) =
+        object : ServerAdapter<Server>(
+            context, R.layout.server_list_row, servers, scope, pinger, dispatcher, { pingsAllowed },
+        ) {
             override val popupMenuResource: Int get() = R.menu.popup_favourite_server
             override fun onPopupItemClick(server: Server, menuItem: MenuItem) = false
         }
@@ -82,5 +84,40 @@ class ServerAdapterTest {
         scope.advanceUntilIdle()
 
         assertThat(sockets.get()).isEqualTo(0)
+    }
+
+    @Test
+    fun withPingsDisallowedNothingIsSentAndTheStatusIsADash() {
+        val adapter = adapter(pingsAllowed = false)
+
+        val row = adapter.getView(0, null, parent)
+        scope.advanceUntilIdle()
+
+        assertThat(sockets.get()).isEqualTo(0)
+        val status = row.findViewById<TextView>(R.id.server_row_version_status)
+        assertThat(status.visibility).isEqualTo(View.VISIBLE)
+        assertThat(status.text.toString()).isEqualTo("\u2013")
+        assertThat(row.findViewById<View>(R.id.server_row_ping_progress).visibility).isEqualTo(View.INVISIBLE)
+    }
+
+    @Test
+    fun byDefaultTorDisallowsPings() {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putBoolean("useTor", true).commit()
+        try {
+            val adapter = object : ServerAdapter<Server>(
+                context, R.layout.server_list_row, mutableListOf(server), scope, pinger, dispatcher,
+            ) {
+                override val popupMenuResource: Int get() = R.menu.popup_favourite_server
+                override fun onPopupItemClick(server: Server, menuItem: MenuItem) = false
+            }
+
+            adapter.getView(0, null, parent)
+            scope.advanceUntilIdle()
+
+            assertThat(sockets.get()).isEqualTo(0)
+        } finally {
+            prefs.edit().clear().commit()
+        }
     }
 }

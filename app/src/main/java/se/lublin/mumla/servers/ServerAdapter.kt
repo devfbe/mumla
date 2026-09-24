@@ -34,10 +34,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 
 /**
  * Server cards with a live ping status. Each server is pinged at most once at a time, on a shared
- * bounded dispatcher, and only while [scope] is active. Must be used from the main thread.
+ * bounded dispatcher, and only while [scope] is active and [pingsAllowed] says so (never over Tor,
+ * as the UDP ping would bypass it). Must be used from the main thread.
  */
 abstract class ServerAdapter<E : Server>(
     context: Context,
@@ -46,6 +48,7 @@ abstract class ServerAdapter<E : Server>(
     private val scope: CoroutineScope,
     private val pinger: ServerPinger = ServerPinger(),
     private val pingDispatcher: CoroutineDispatcher = PING_DISPATCHER,
+    private val pingsAllowed: () -> Boolean = { !Settings.getInstance(context).isTorEnabled() },
 ) : ArrayAdapter<E>(context, 0, servers) {
 
     private val responses = HashMap<Server, ServerInfoResponse>()
@@ -72,14 +75,20 @@ abstract class ServerAdapter<E : Server>(
         val usersText = view.findViewById<TextView>(R.id.server_row_usercount)
         val progress = view.findViewById<ProgressBar>(R.id.server_row_ping_progress)
 
-        val infoVisibility = if (response == null) View.INVISIBLE else View.VISIBLE
+        val pinging = response == null && pingsAllowed()
+        val infoVisibility = if (pinging) View.INVISIBLE else View.VISIBLE
         versionText.visibility = infoVisibility
         usersText.visibility = infoVisibility
         latencyText.visibility = infoVisibility
-        progress.visibility = if (response == null) View.VISIBLE else View.INVISIBLE
+        progress.visibility = if (pinging) View.VISIBLE else View.INVISIBLE
 
         when {
-            response == null -> requestPing(server)
+            pinging -> requestPing(server)
+            response == null -> {
+                versionText.text = NO_STATUS
+                usersText.text = ""
+                latencyText.text = ""
+            }
             response.isDummy -> {
                 versionText.setText(R.string.offline)
                 usersText.text = ""
@@ -118,6 +127,7 @@ abstract class ServerAdapter<E : Server>(
 
     companion object {
         private const val MAX_CONCURRENT_PINGS = 16
+        private const val NO_STATUS = "\u2013"
 
         /** Shared by every server list, so all of them together never exceed the ping bound. */
         private val PING_DISPATCHER: CoroutineDispatcher =
