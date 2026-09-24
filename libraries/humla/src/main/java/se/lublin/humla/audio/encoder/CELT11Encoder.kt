@@ -71,7 +71,7 @@ class CELT11Encoder @JvmOverloads @Throws(NativeAudioException::class) construct
 
     @Throws(NativeAudioException::class)
     override fun terminate() {
-        // The CELT 0.11 encoder has no partial-packet flush; kept as before.
+        // The CELT 0.11 encoder has no partial-packet flush.
     }
 
     override fun destroy() {

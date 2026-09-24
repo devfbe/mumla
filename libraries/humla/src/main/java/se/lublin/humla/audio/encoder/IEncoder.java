@@ -23,9 +23,7 @@ import se.lublin.humla.exception.NativeAudioException;
 import se.lublin.humla.net.PacketBuffer;
 
 /**
- * IEncoder provides an interface for native audio encoders to buffer and serve encoded audio
- * data.
- * Created by andrew on 07/03/14.
+ * Interface for native audio encoders that buffer and serve encoded audio data.
  */
 public interface IEncoder {
     /**
@@ -60,8 +58,6 @@ public interface IEncoder {
      */
     public void terminate() throws NativeAudioException;
 
-    /**
-     * Destroys the encoder, cleaning up natively allocated resources.
-     */
+    /** Releases natively allocated resources. */
     public void destroy();
 }
