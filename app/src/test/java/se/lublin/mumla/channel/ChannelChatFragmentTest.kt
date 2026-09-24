@@ -53,6 +53,8 @@ import se.lublin.mumla.R
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatImageLoader
 import se.lublin.mumla.chat.ChatImageLoaders
+import se.lublin.mumla.chat.ImageError
+import se.lublin.mumla.chat.ImageFetchException
 import se.lublin.mumla.chat.ImageResult
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImagePreparer
@@ -747,7 +749,9 @@ class ChannelChatFragmentTest {
     /** Tapping an image row opens the viewer through the `onImageClicked` wire. */
     @Test
     fun tappingAPictureInTheLogOpensTheViewerOnIt() {
-        installThumbnailLoader()
+        val (loader, _) = installThumbnailLoader()
+        // The viewer fetches the full image; this test is only about opening it.
+        coEvery { loader.fetchBytes(any()) } throws ImageFetchException(ImageError.NETWORK)
         try {
             log.value += imageMessage("data:image/png;base64,TAPPED")
             launch()
