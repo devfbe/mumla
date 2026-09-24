@@ -186,18 +186,21 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
-     * The transport reports the disconnect from [TcpTransport.disconnect] itself, i.e. from inside
-     * the teardown posted to the protocol looper. If the looper were quit before that teardown ran,
-     * the report would be lost and the session would never reconnect.
+     * The transport's own terminal callback, dispatched from inside the teardown, lands in the
+     * cancelled scope: the report the listener gets comes from disconnect() itself, exactly once.
      */
     @Test
-    fun theProtocolLooperStillAcceptsWorkWhileTheConnectionTearsItselfDown() {
+    fun theTransportsTerminalCallbackBehindTheTeardownIsDropped() {
         val tcp = connectAndEstablish()
 
         connection.disconnect()
         awaitUntil { tcp.disconnectCalls == 1 }
+        awaitUntil(description = "protocol thread quit") { !connection.protocolThread.isAlive }
+        awaitOnMain("disconnect delivered") { listener.disconnects.isNotEmpty() }
 
-        assertThat(tcp.terminalPostAccepted.get()).isTrue()
+        assertThat(tcp.terminalDelivered.get()).isFalse()
+        assertThat(listener.disconnects).containsExactly(null)
+        assertThat(listener.events.last()).isEqualTo("disconnected")
     }
 
     @Test
@@ -280,6 +283,22 @@ class HumlaConnectionProtocolThreadTest {
         awaitUntil(description = "the protocol thread kept working after a handler threw") { survivors.get() == 1 }
         mainLooper.idle()
         assertThat(listener.disconnects).isEmpty()
+    }
+
+    /** What the handlers do not catch ends the connection with an error instead of the process. */
+    @Test
+    fun anErrorNothingCaughtEndsTheConnectionWithAnError() {
+        val tcp = connectAndEstablish()
+        connection.addTcpHandler { if (it is Mumble.Version) { throw AssertionError("broken invariant") } }
+
+        tcp.simulateMessage(HumlaTCPMessageType.Version, versionFrame)
+        awaitUntil { tcp.disconnectCalls == 1 }
+        awaitOnMain("disconnect delivered") { listener.disconnects.isNotEmpty() }
+
+        val error = listener.disconnects.single()!!
+        assertThat(error.reason).isEqualTo(HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+        assertThat(error.cause).isInstanceOf(AssertionError::class.java)
+        assertThat(listener.events.last()).isEqualTo("disconnected")
     }
 
     @Test

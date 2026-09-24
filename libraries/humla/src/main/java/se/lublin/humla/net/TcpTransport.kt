@@ -23,18 +23,14 @@ import java.net.ConnectException
 /**
  * The TCP control channel to a Mumble server as seen by [HumlaConnection].
  *
- * Implementations post every [HumlaTCP.TCPConnectionListener] call to the handler they were given,
- * so the connection never sees a callback on a socket thread.
+ * Implementations dispatch every [HumlaTCP.TCPConnectionListener] call on the scope they were given,
+ * so the connection never sees a callback on a socket thread. Single-use.
  */
 interface TcpTransport {
     val isRunning: Boolean
     fun setTCPConnectionListener(listener: HumlaTCP.TCPConnectionListener?)
 
-    /**
-     * Opens the connection. An instance may be connected again after a previous connection ended,
-     * but not while one is still running or tearing down: an overlapping connect is refused with a
-     * ConnectException.
-     */
+    /** Opens the connection. A second call is refused with a ConnectException. */
     @Throws(ConnectException::class)
     fun connect(host: String, port: Int, useTor: Boolean)
     fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType)

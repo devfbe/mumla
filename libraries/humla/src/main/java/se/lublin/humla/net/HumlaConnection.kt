@@ -80,13 +80,14 @@ class HumlaConnection @JvmOverloads constructor(
 
     /** Builds the transports, so tests can supply fakes that never open a socket. */
     interface TransportFactory {
-        fun createTcp(socketFactory: HumlaSSLSocketFactory, callbackHandler: Handler): TcpTransport
+        /** [scope] is the connection's: cancelled on disconnect, dispatching on the protocol thread. */
+        fun createTcp(socketFactory: HumlaSSLSocketFactory, scope: CoroutineScope): TcpTransport
         fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, callbackHandler: Handler): UdpTransport
     }
 
     class DefaultTransportFactory : TransportFactory {
-        override fun createTcp(socketFactory: HumlaSSLSocketFactory, callbackHandler: Handler): TcpTransport =
-            HumlaTCP(socketFactory, callbackHandler)
+        override fun createTcp(socketFactory: HumlaSSLSocketFactory, scope: CoroutineScope): TcpTransport =
+            HumlaTCP(socketFactory, scope)
 
         override fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, callbackHandler: Handler): UdpTransport =
             HumlaUDP(cryptState, listener, callbackHandler)
@@ -413,7 +414,7 @@ class HumlaConnection @JvmOverloads constructor(
             // Must be assigned before the transport exists; see the field declaration.
             host = resolvedHost
             port = resolvedPort
-            val transport = transports.createTcp(socketFactory, protocolHandler)
+            val transport = transports.createTcp(socketFactory, scope)
             transport.setTCPConnectionListener(this@HumlaConnection)
             tcp = transport
             try {

@@ -3,6 +3,8 @@ package se.lublin.humla.net
 import android.os.Handler
 import android.os.Looper
 import com.google.protobuf.MessageLite
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import se.lublin.humla.util.HumlaException
 import java.security.cert.X509Certificate
 import java.util.concurrent.CopyOnWriteArrayList
@@ -12,10 +14,10 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * A TCP transport that never opens a socket; tests push frames through it as the read thread would.
  *
- * Like HumlaTCP, [disconnect] posts the terminal callback through [callbackHandler] rather than
- * calling the listener inline, so a test can see whether the connection's looper still accepts work.
+ * Like HumlaTCP, every callback, including the terminal one [disconnect] reports, is dispatched on
+ * [scope] rather than called inline.
  */
-class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
+class FakeTcpTransport(private val scope: CoroutineScope) : TcpTransport {
     @Volatile var listener: HumlaTCP.TCPConnectionListener? = null
     @Volatile var connectThread: String? = null
     @Volatile var connectHost: String? = null
@@ -36,11 +38,8 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
      */
     @Volatile var onSend: ((HumlaTCPMessageType) -> Unit)? = null
 
-    /**
-     * Whether the terminal callback [disconnect] posts was accepted by the callback handler. False
-     * means the looper had already quit.
-     */
-    val terminalPostAccepted = AtomicBoolean(false)
+    /** Whether the terminal callback [disconnect] dispatched actually ran. */
+    val terminalDelivered = AtomicBoolean(false)
 
     override val isRunning: Boolean get() = connectThread != null && disconnectCalls == 0
     override fun setTCPConnectionListener(listener: HumlaTCP.TCPConnectionListener?) { this.listener = listener }
@@ -71,9 +70,7 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
             return
         }
         val l = listener
-        if (l != null && callbackHandler.post { l.onTCPConnectionDisconnect() }) {
-            terminalPostAccepted.set(true)
-        }
+        if (l != null) scope.launch { terminalDelivered.set(true); l.onTCPConnectionDisconnect() }
         // Published last: tests wait on this counter, so it must imply everything this call did.
         disconnectCalls = 1
     }
@@ -86,7 +83,7 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
 
     /**
      * The read loop's finally block reporting the closed socket. Called **directly**, not through
-     * [callbackHandler]: in production the protocol looper may already have quit by then.
+     * [scope]: in production the scope may already have been cancelled by then.
      */
     fun simulateSocketClosed() {
         checkNotNull(listener) { "connect() was not called" }.onTCPConnectionDisconnect()
@@ -94,7 +91,7 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
 
     private fun post(block: (HumlaTCP.TCPConnectionListener) -> Unit) {
         val l = checkNotNull(listener) { "connect() was not called" }
-        check(callbackHandler.post { block(l) }) { "callback looper is no longer accepting work" }
+        scope.launch { block(l) }
     }
 }
 
@@ -145,8 +142,8 @@ class FakeTransports : HumlaConnection.TransportFactory {
     val tcps = CopyOnWriteArrayList<FakeTcpTransport>()
     val udps = CopyOnWriteArrayList<FakeUdpTransport>()
 
-    override fun createTcp(socketFactory: HumlaSSLSocketFactory, callbackHandler: Handler): TcpTransport =
-        FakeTcpTransport(callbackHandler).also { tcps += it }
+    override fun createTcp(socketFactory: HumlaSSLSocketFactory, scope: CoroutineScope): TcpTransport =
+        FakeTcpTransport(scope).also { tcps += it }
 
     override fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, callbackHandler: Handler): UdpTransport =
         FakeUdpTransport(callbackHandler, listener, cryptState).also { udps += it }
