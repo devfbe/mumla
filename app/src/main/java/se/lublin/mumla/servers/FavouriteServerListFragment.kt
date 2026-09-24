@@ -31,10 +31,10 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
+import se.lublin.mumla.app.showConfirmDialog
 import se.lublin.mumla.app.ServerRequest
 import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.db.MumlaRepository
@@ -102,14 +102,10 @@ class FavouriteServerListFragment :
     }
 
     override fun deleteServer(server: Server) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setMessage(R.string.confirm_delete_server)
-            .setPositiveButton(R.string.delete) { _, _ ->
-                serverAdapter?.remove(server)
-                lifecycleScope.launch { repository.io { removeServer(server) } }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        requireContext().showConfirmDialog(getString(R.string.confirm_delete_server), R.string.delete) {
+            serverAdapter?.remove(server)
+            lifecycleScope.launch { repository.io { removeServer(server) } }
+        }
     }
 
     private fun updateServers() {

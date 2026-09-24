@@ -252,14 +252,10 @@ class MumlaActivity :
     }
 
     private fun confirmDisconnect(service: IMumlaService) {
-        MaterialAlertDialogBuilder(this)
-            .setMessage(getString(R.string.disconnectSure, service.targetServer?.name))
-            .setPositiveButton(R.string.confirm) { _, _ ->
-                service.disconnect()
-                showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        showConfirmDialog(getString(R.string.disconnectSure, service.targetServer?.name), R.string.confirm) {
+            service.disconnect()
+            showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
+        }
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {

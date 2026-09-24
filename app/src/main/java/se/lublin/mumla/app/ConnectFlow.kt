@@ -117,22 +117,17 @@ class ConnectFlow(
         }
 
         override fun explainMicrophone(onContinue: () -> Unit) {
-            MaterialAlertDialogBuilder(activity)
-                .setMessage(R.string.microphone_permission_rationale)
-                .setPositiveButton(android.R.string.ok) { _, _ -> onContinue() }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+            activity.showConfirmDialog(activity.getString(R.string.microphone_permission_rationale)) { onContinue() }
         }
 
         override fun offerMicrophoneSettings() {
-            MaterialAlertDialogBuilder(activity)
-                .setMessage(R.string.microphone_permission_settings)
-                .setPositiveButton(R.string.open_settings) { _, _ ->
-                    val uri = Uri.fromParts("package", activity.packageName, null)
-                    activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+            activity.showConfirmDialog(
+                activity.getString(R.string.microphone_permission_settings),
+                R.string.open_settings,
+            ) {
+                val uri = Uri.fromParts("package", activity.packageName, null)
+                activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
+            }
         }
 
         override fun onMicrophoneDenied() {
@@ -147,14 +142,10 @@ class ConnectFlow(
     private fun connectNow(server: Server) {
         val service = service()
         if (service != null && service.isConnected) {
-            MaterialAlertDialogBuilder(activity)
-                .setMessage(R.string.reconnect_dialog_message)
-                .setPositiveButton(R.string.connect) { _, _ ->
-                    awaitDisconnectThenConnect(service, server)
-                    service.disconnect()
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+            activity.showConfirmDialog(activity.getString(R.string.reconnect_dialog_message), R.string.connect) {
+                awaitDisconnectThenConnect(service, server)
+                service.disconnect()
+            }
             return
         }
         when {
@@ -192,10 +183,7 @@ class ConnectFlow(
     }
 
     private fun showMessage(message: String) {
-        MaterialAlertDialogBuilder(activity)
-            .setMessage(message)
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
+        activity.showMessageDialog(message)
     }
 
     private companion object {

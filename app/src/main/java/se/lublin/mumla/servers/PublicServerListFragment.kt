@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
+import se.lublin.mumla.app.showConfirmDialog
 import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ServerRequest
 import se.lublin.mumla.app.ServiceViewModel
@@ -160,12 +161,11 @@ class PublicServerListFragment :
     }
 
     private fun showMatchDialog() {
-        MaterialAlertDialogBuilder(requireActivity())
-            .setTitle(R.string.server_match)
-            .setMessage(R.string.server_match_description)
-            .setPositiveButton(R.string.search) { _, _ -> findOptimalServer(Locale.getDefault().country) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        requireActivity().showConfirmDialog(
+            getString(R.string.server_match_description),
+            R.string.search,
+            title = getString(R.string.server_match),
+        ) { findOptimalServer(Locale.getDefault().country) }
     }
 
     /** Looks for an empty, nearby server in [countryCode] (anywhere when null) and offers to join it. */
@@ -209,12 +209,11 @@ class PublicServerListFragment :
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
         } else {
-            MaterialAlertDialogBuilder(requireActivity())
-                .setTitle(R.string.server_match_not_found)
-                .setMessage(R.string.server_match_expand_country)
-                .setPositiveButton(R.string.expand) { _, _ -> findOptimalServer(null) }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+            requireActivity().showConfirmDialog(
+                getString(R.string.server_match_expand_country),
+                R.string.expand,
+                title = getString(R.string.server_match_not_found),
+            ) { findOptimalServer(null) }
         }
     }
 

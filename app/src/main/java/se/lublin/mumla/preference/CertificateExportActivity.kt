@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.R
+import se.lublin.mumla.app.showMessageDialog
 import se.lublin.mumla.db.DatabaseCertificate
 import se.lublin.mumla.db.MumlaRepository
 import java.io.FileNotFoundException
@@ -166,11 +167,7 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
     }
 
     private fun showErrorDialog(resourceId: Int) {
-        MaterialAlertDialogBuilder(this)
-            .setMessage(resourceId)
-            .setPositiveButton(android.R.string.ok, null)
-            .setOnDismissListener { finish() }
-            .show()
+        showMessageDialog(getString(resourceId)) { finish() }
     }
 
     companion object {

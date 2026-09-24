@@ -20,9 +20,9 @@ package se.lublin.mumla.preference
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import se.lublin.mumla.R
+import se.lublin.mumla.app.showMessageDialog
 
 /** Generates a certificate, makes it the default and tells the user its name. */
 class CertificateGenerateActivity : AppCompatActivity() {
@@ -35,11 +35,7 @@ class CertificateGenerateActivity : AppCompatActivity() {
                 finish()
                 return@launch
             }
-            MaterialAlertDialogBuilder(this@CertificateGenerateActivity)
-                .setMessage(getString(R.string.generateCertSuccess, certificate.name))
-                .setPositiveButton(android.R.string.ok, null)
-                .setOnDismissListener { finish() }
-                .show()
+            showMessageDialog(getString(R.string.generateCertSuccess, certificate.name)) { finish() }
         }
     }
 }

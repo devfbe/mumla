@@ -3,12 +3,36 @@ package se.lublin.mumla.app
 import android.content.Context
 import android.util.Log
 import android.view.LayoutInflater
+import androidx.annotation.StringRes
+import androidx.appcompat.app.AlertDialog
 import androidx.core.text.HtmlCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.DialogNewsBinding
+
+/** Shows [message] with an OK button; [onDismiss] runs however the dialog is closed. */
+fun Context.showMessageDialog(message: CharSequence, onDismiss: (() -> Unit)? = null): AlertDialog =
+    MaterialAlertDialogBuilder(this)
+        .setMessage(message)
+        .setPositiveButton(android.R.string.ok, null)
+        .apply { if (onDismiss != null) setOnDismissListener { onDismiss() } }
+        .show()
+
+/** Asks [message], under [title] if given; [onConfirm] runs only if the user picks [confirmLabel]. */
+fun Context.showConfirmDialog(
+    message: CharSequence,
+    @StringRes confirmLabel: Int = android.R.string.ok,
+    title: CharSequence? = null,
+    onConfirm: () -> Unit,
+): AlertDialog =
+    MaterialAlertDialogBuilder(this)
+        .setTitle(title)
+        .setMessage(message)
+        .setPositiveButton(confirmLabel) { _, _ -> onConfirm() }
+        .setNegativeButton(android.R.string.cancel, null)
+        .show()
 
 /** The news of each release, oldest first; add new versions at the end. */
 private val NEWS_ITEMS = linkedMapOf(
