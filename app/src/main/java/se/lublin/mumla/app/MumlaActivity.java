@@ -66,16 +66,13 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.bouncycastle.util.encoders.Hex;
 
-import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
-import java.net.Socket;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import info.guardianproject.netcipher.proxy.OrbotHelper;
 import se.lublin.humla.IHumlaService;
@@ -106,6 +103,7 @@ import se.lublin.mumla.service.MumlaService;
 import se.lublin.mumla.util.HumlaServiceFragment;
 import se.lublin.mumla.util.HumlaServiceProvider;
 import se.lublin.mumla.util.MumlaTrustStore;
+import se.lublin.mumla.util.PortProbeKt;
 
 public class MumlaActivity extends AppCompatActivity implements ListView.OnItemClickListener,
         FavouriteServerListFragment.ServerConnectHandler, HumlaServiceProvider, DatabaseProvider,
@@ -618,17 +616,24 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
                         .setPositiveButton(android.R.string.ok, null)
                         .show();
                 return;
-            } else {
-                if (!isPortOpen(HumlaConnection.TOR_HOST, HumlaConnection.TOR_PORT, 2000)) {
+            }
+            PortProbeKt.probePort(this, HumlaConnection.TOR_HOST, HumlaConnection.TOR_PORT, 2000, open -> {
+                if (open) {
+                    startServerConnect(server);
+                } else {
                     new MaterialAlertDialogBuilder(MumlaActivity.this)
                             .setMessage(getString(R.string.orbot_tor_failed, HumlaConnection.TOR_PORT))
                             .setPositiveButton(android.R.string.ok, null)
                             .show();
-                    return;
                 }
-            }
+            });
+            return;
         }
 
+        startServerConnect(server);
+    }
+
+    private void startServerConnect(Server server) {
         ServerConnectTask connectTask = new ServerConnectTask(this, mDatabase);
         connectTask.execute(server);
     }
@@ -665,31 +670,6 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
                 connectToServerWithPerm();
                 break;
         }
-    }
-
-    private boolean isPortOpen(final String host, final int port, final int timeout) {
-        final AtomicBoolean open = new AtomicBoolean(false);
-        try {
-            Thread thread = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        Socket socket = new Socket();
-                        socket.connect(new InetSocketAddress(host, port), timeout);
-                        socket.close();
-                        open.set(true);
-                    } catch (Exception e) {
-                        Log.d(TAG, "isPortOpen() run()" + e);
-                    }
-                }
-            });
-            thread.start();
-            thread.join();
-            return open.get();
-        } catch (Exception e) {
-            Log.d(TAG, "isPortOpen() " + e);
-        }
-        return false;
     }
 
     public void connectToPublicServer(final PublicServer server) {
