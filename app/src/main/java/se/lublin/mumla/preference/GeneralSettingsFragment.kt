@@ -12,7 +12,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.BluetoothScoToggle
 import se.lublin.mumla.util.Orbot
 
-class GeneralSettingsFragment : MumlaPreferenceFragment() {
+class GeneralSettingsFragment : MumlaPreferenceFragment(R.xml.settings_general) {
 
     private lateinit var bluetoothToggle: BluetoothScoToggle
 
@@ -30,7 +30,7 @@ class GeneralSettingsFragment : MumlaPreferenceFragment() {
         }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        setPreferencesFromResource(R.xml.settings_general, rootKey)
+        super.onCreatePreferences(savedInstanceState, rootKey)
 
         val useOrbotPreference: Preference =
             requireNotNull(preferenceScreen.findPreference(Settings.PREF_USE_TOR))

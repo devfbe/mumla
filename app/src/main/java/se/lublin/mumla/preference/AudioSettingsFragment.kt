@@ -49,9 +49,9 @@ import se.lublin.mumla.audio.AudioTestSession
 import se.lublin.mumla.audio.MeterReading
 
 /** The audio settings screen; the decisions live in [AudioSettingsPolicy], this is the wiring. */
-open class AudioSettingsFragment : MumlaPreferenceFragment() {
+open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio) {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        setPreferencesFromResource(R.xml.settings_audio, rootKey)
+        super.onCreatePreferences(savedInstanceState, rootKey)
 
         val inputPreference = requireNotNull(findPreference<ListPreference>(Settings.PREF_INPUT_METHOD))
         inputPreference.setOnPreferenceChangeListener { _, newValue ->
