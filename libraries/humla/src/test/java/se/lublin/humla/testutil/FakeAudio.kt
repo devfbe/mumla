@@ -40,9 +40,8 @@ class FakeAudio : ManagedAudio {
     /** Held shut, [shutdown] parks in it - the only way to observe an asynchronous teardown. */
     @Volatile var shutdownGate: CountDownLatch? = null
 
-    // NOT `var warningListener`: a Kotlin `var` generates `setWarningListener`, which collides with
-    // the interface method of that name ("platform declaration clash"). Spec 4.05 carries this
-    // trap; private field plus a val accessor is the shape that compiles.
+    // Not a `var warningListener`: its generated `setWarningListener` would clash with the
+    // interface method of that name.
     @Volatile private var warningListenerField: ((String) -> Unit)? = null
     val warningListener: ((String) -> Unit)? get() = warningListenerField
     val targetIds = CopyOnWriteArrayList<Byte>()

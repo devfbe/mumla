@@ -21,22 +21,13 @@ import se.lublin.humla.session.CommunicationDevice
 import se.lublin.humla.session.CommunicationDevices
 
 /**
- * The communication-device seam as a map of ids to types, with every input the router branches on
- * expressible: a device list that holds none, one or several of a type, a platform that refuses a
- * selection, and a route the system changed by itself.
+ * The communication-device seam as a map of ids to types, able to express every input the router
+ * branches on: none, one or several devices of a type, a refused selection, and a route the system
+ * changed by itself. Unlike Robolectric's `AudioDeviceInfoBuilder`, devices get distinct ids.
  *
- * Distinct ids are the point of it. Robolectric's `AudioDeviceInfoBuilder` has no `setId`, so every
- * device it builds carries the same one and "the first SCO device" cannot be told from "any SCO
- * device" there; it can here.
- *
- * [notifiesOnChange] defaults to **false**, and that is the production ordering rather than a
- * convenience. `AndroidCommunicationDevices` hands `AudioManager` an Executor that posts to the
- * main looper, and the router is main-thread-only, so while `apply()` is running the platform's
- * own callback cannot run: `select` and `clear` return with the route already changed and the event
- * still queued. A fake that notifies inline models a state production cannot reach, and it hides
- * the only thing that reports the change in time - see
- * AudioRouterTest.applyReportsTheRouteItselfWhenTheSeamHasNotRaisedItsEventYet, which is the test the
- * inline default had made unwritable.
+ * [notifiesOnChange] defaults to false, matching production: the platform callback is posted to
+ * the main looper, so `select` and `clear` return with the route changed and the event still
+ * queued.
  */
 class FakeCommunicationDevices : CommunicationDevices {
     /** device id -> AudioDeviceInfo type, in the order the platform would report them. */

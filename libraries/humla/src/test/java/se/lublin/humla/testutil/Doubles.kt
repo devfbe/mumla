@@ -10,9 +10,8 @@ import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
 
 /**
- * An [IHumlaObserver] that does nothing, for tests whose subject is what the *producer* does. A
- * mock would work too, but recording thousands of invocations is exactly the cost these tests are
- * measuring around.
+ * An [IHumlaObserver] that does nothing, for tests about the producer. A mock would record
+ * thousands of invocations.
  */
 open class NoopObserver : IHumlaObserver {
     override fun onConnected() = Unit
