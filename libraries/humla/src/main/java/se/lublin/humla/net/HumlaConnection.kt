@@ -45,15 +45,24 @@ import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * One connection to a Mumble server. Single-use.
  *
- * Resolution, sockets, parsing, dispatch, voice routing, pings and transport callbacks run on the
- * "humla-protocol" [HandlerThread]; [HumlaConnectionListener] callbacks are posted to [mainHandler],
- * the service's main thread. [sendTCPMessage] and [sendUDPMessage] may
- * be called from any thread. State flags are only ever set, never cleared; [disconnect] closes
- * [isConnected]/[isSynchronized] via [disconnectRequested].
+ * All work of the connection runs in one [CoroutineScope], created with the connection and
+ * cancelled by [disconnect]. Resolution, parsing, dispatch, voice routing, pings and transport
+ * callbacks run strictly in order on the single "humla-protocol" thread; [HumlaConnectionListener]
+ * callbacks are posted to [mainHandler], the service's main thread. [sendTCPMessage] and
+ * [sendUDPMessage] may be called from any thread. State flags are only ever set, never cleared;
+ * the cancelled scope closes [isConnected]/[isSynchronized].
  */
 class HumlaConnection @JvmOverloads constructor(
     private val listener: HumlaConnectionListener,
@@ -83,15 +92,42 @@ class HumlaConnection @JvmOverloads constructor(
             HumlaUDP(cryptState, listener, callbackHandler)
     }
 
-    /** Not started by reading this; [protocolHandler] starts it. */
+    /** The thread behind the protocol dispatcher; not started by reading this. */
+    @VisibleForTesting
     internal val protocolThread = HandlerThread(PROTOCOL_THREAD_NAME)
 
-    /** Started on first access (by [connect]), so an unconnected connection leaks no thread. */
-    val protocolHandler: Handler by lazy {
+    /**
+     * Started on first access (by [connect]), so an unconnected connection leaks no thread. A looper
+     * rather than an executor, so delays run on the looper's clock, which tests can drive.
+     */
+    @VisibleForTesting
+    internal val protocolHandler: Handler by lazy {
         protocolThread.start()
         Handler(protocolThread.looper)
     }
-    val protocolLooper: Looper get() = protocolHandler.looper
+    @VisibleForTesting
+    internal val protocolLooper: Looper get() = protocolHandler.looper
+
+    /** Parent of all of the connection's coroutines; cancelled by [disconnect]. */
+    private val job = SupervisorJob()
+
+    /**
+     * Runs everything on the protocol thread, in submission order. An exception nothing caught ends
+     * the connection the way a transport failure does.
+     */
+    private val scope: CoroutineScope by lazy {
+        val onUncaught = CoroutineExceptionHandler { _, e ->
+            val reason = HumlaException.HumlaDisconnectReason.OTHER_ERROR
+            handleFatalException(HumlaException("Connection failed", e, reason))
+        }
+        CoroutineScope(job + protocolHandler.asCoroutineDispatcher(PROTOCOL_THREAD_NAME) + onUncaught)
+    }
+
+    /** True from [disconnect] on; every transport callback is inert from then on. */
+    private val closed: Boolean get() = !job.isActive
+
+    /** Guards [connectCalled] and [teardownStarted] against a racing connect/disconnect. */
+    private val lifecycleLock = Any()
 
     // Authentication
     @VisibleForTesting
@@ -126,8 +162,8 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var lastError: HumlaException? = null
     private val exceptionHandled = AtomicBoolean(false)
     private val disconnectDelivered = AtomicBoolean(false)
-    @Volatile private var connectCalled = false
-    @Volatile private var disconnectRequested = false
+    private var connectCalled = false
+    private var teardownStarted = false
 
     /** [mainHandler]'s thread only. */
     private var disconnectReported = false
@@ -182,33 +218,24 @@ class HumlaConnection @JvmOverloads constructor(
     private val tcpHandlers = ConcurrentLinkedQueue<TcpMessageHandler>()
     private val voiceHandlers = ConcurrentLinkedQueue<VoicePacketHandler>()
 
-    /** Sends the pings and reschedules itself; quitSafely drops a not-yet-due reschedule. */
-    private val pingRunnable = object : Runnable {
-        override fun run() {
-            sendPings()
-            protocolHandler.postDelayed(this, PING_INTERVAL_MILLIS)
-        }
-    }
+    /** Sends the pings every [PING_INTERVAL_MILLIS]. Protocol thread. */
+    private var pingJob: Job? = null
 
     /** UDP rebuilds since it last carried traffic, so the backoff is per outage. Protocol thread. */
     private var udpRestartAttempt = 0
 
-    /**
-     * Rebuilds the UDP transport after its thread died. Guarded by [disconnectRequested]: quitSafely
-     * still runs due posts, and a post-teardown restart would open a socket nothing closes.
-     */
-    private val udpRestartRunnable = Runnable {
-        if (disconnectRequested || shouldForceTCP()) return@Runnable
-        Log.i(TAG, "Restarting UDP transport, attempt $udpRestartAttempt")
-        startUdp()
-    }
-
+    /** Rebuilds the UDP transport after it failed, unless TCP was forced in the meantime. */
     private fun scheduleUdpRestart() {
         udpRestartAttempt += 1
         // No jitter: this is one socket in a live session. Null means the policy gave up.
-        val delay = udpRestartPolicy.delayFor(udpRestartAttempt, 0.0) ?: return
-        Log.i(TAG, "UDP restart scheduled in $delay ms")
-        protocolHandler.postDelayed(udpRestartRunnable, delay)
+        val delayMillis = udpRestartPolicy.delayFor(udpRestartAttempt, 0.0) ?: return
+        Log.i(TAG, "UDP restart scheduled in $delayMillis ms")
+        scope.launch {
+            delay(delayMillis)
+            if (shouldForceTCP()) return@launch
+            Log.i(TAG, "Restarting UDP transport, attempt $udpRestartAttempt")
+            startUdp()
+        }
     }
 
     /** Tunnels outgoing voice over TCP and tells the user why. Protocol thread. */
@@ -241,8 +268,13 @@ class HumlaConnection @JvmOverloads constructor(
         if (shouldForceTCP()) enableForceTCP()
 
         // Start pinging. FIXME is this the right place?
-        protocolHandler.removeCallbacks(pingRunnable)
-        protocolHandler.post(pingRunnable)
+        pingJob?.cancel()
+        pingJob = scope.launch {
+            while (true) {
+                sendPings()
+                delay(PING_INTERVAL_MILLIS)
+            }
+        }
 
         sessionId = msg.session
         serverMaxBandwidth = if (msg.hasMaxBandwidth()) msg.maxBandwidth else -1
@@ -360,25 +392,19 @@ class HumlaConnection @JvmOverloads constructor(
      * Starts connecting. Resolution (incl. the blocking SRV lookup, skipped over Tor), key store
      * loading and socket creation run on the protocol thread; every outcome goes to the listener.
      */
-    fun connect(server: Server) {
-        // Written before disconnectRequested is read (disconnect() mirrors this).
+    fun connect(server: Server): Unit = synchronized(lifecycleLock) {
         check(!connectCalled) { "HumlaConnection is single-use; create a new one for another connection" }
         connectCalled = true
-        check(!disconnectRequested) { "HumlaConnection is single-use; create a new one after disconnect()" }
+        check(!closed) { "HumlaConnection is single-use; create a new one after disconnect()" }
         usingUdp = !shouldForceTCP()
         startTimestamp = nanoClock()
 
-        protocolHandler.post {
-            if (disconnectRequested) {
-                // disconnect() ran before the thread existed, so it could not post the teardown.
-                quitProtocolThread()
-                return@post
-            }
+        scope.launch {
             val socketFactory = try {
                 createSocketFactory(server.host ?: "")
             } catch (e: HumlaException) {
                 handleFatalException(e)
-                return@post
+                return@launch
             }
             // Over Tor the proxy resolves the host; an SRV query would leak it to the local resolver.
             if (useTor) server.resolveWithoutSrv()
@@ -388,7 +414,7 @@ class HumlaConnection @JvmOverloads constructor(
             host = resolvedHost
             port = resolvedPort
             val transport = transports.createTcp(socketFactory, protocolHandler)
-            transport.setTCPConnectionListener(this)
+            transport.setTCPConnectionListener(this@HumlaConnection)
             tcp = transport
             try {
                 transport.connect(resolvedHost, resolvedPort, useTor)
@@ -398,10 +424,10 @@ class HumlaConnection @JvmOverloads constructor(
         }
     }
 
-    val isConnected: Boolean get() = connected && !disconnectRequested
+    val isConnected: Boolean get() = connected && !closed
 
     /** True once ServerSync arrived; don't log user actions before that. */
-    val isSynchronized: Boolean get() = synchronizedWithServer && !disconnectRequested
+    val isSynchronized: Boolean get() = synchronizedWithServer && !closed
 
     /**
      * Whether [sendUDPMessage] would use UDP for an unforced packet. [setForceTCP] mid-connection
@@ -481,31 +507,30 @@ class HumlaConnection @JvmOverloads constructor(
      * is delivered exactly once per started connection, and last.
      */
     fun disconnect() {
-        // Written before connectCalled is read; see connect().
-        disconnectRequested = true
-        if (protocolThread.isAlive) {
-            protocolHandler.post {
+        val started: Boolean
+        val tearDown: Boolean
+        synchronized(lifecycleLock) {
+            job.cancel()
+            started = connectCalled
+            tearDown = started && !teardownStarted
+            teardownStarted = true
+        }
+        // Behind whatever the protocol thread is running, so it never races a transport being
+        // built; not cancellable, as the scope it runs in has just been cancelled.
+        if (tearDown) {
+            scope.launch(NonCancellable) {
                 tcp?.disconnect()
                 tcp = null
                 udp?.disconnect()
                 udp = null
-                quitProtocolThread()
+                protocolThread.quitSafely()
             }
         }
-        deliverDisconnected()
-    }
-
-    /**
-     * Quits the protocol looper at the end of the teardown; earlier would refuse the transports'
-     * terminal callbacks, and an unreported disconnect never reconnects.
-     */
-    private fun quitProtocolThread() {
-        protocolThread.quitSafely()
+        if (started) deliverDisconnected() // nothing was ever started, so there is nothing to report
     }
 
     /** Reports the end of the connection to the listener, at most once. */
     private fun deliverDisconnected() {
-        if (!connectCalled) return // nothing was ever started, so there is nothing to report
         if (!disconnectDelivered.compareAndSet(false, true)) return
         val e = lastError
         mainHandler.post {
@@ -621,7 +646,7 @@ class HumlaConnection @JvmOverloads constructor(
 
     override fun onTCPMessageReceived(type: HumlaTCPMessageType, length: Int, data: ByteArray) {
         // Drop frames that arrive during teardown; the consumer's audio path is already gone.
-        if (disconnectRequested) return
+        if (closed) return
         if (!UNLOGGED_MESSAGES.contains(type)) Log.v(TAG, "IN: $type")
 
         if (type == HumlaTCPMessageType.UDPTunnel) {
@@ -642,7 +667,7 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     override fun onTCPConnectionEstablished() {
-        if (disconnectRequested) return
+        if (closed) return
         connected = true
         if (!shouldForceTCP()) startUdp()
         notifyListener { onConnectionEstablished() }
@@ -661,7 +686,7 @@ class HumlaConnection @JvmOverloads constructor(
 
     override fun onTCPConnectionFailed(e: HumlaException) {
         // Otherwise an already-reported clean disconnect would gain an error afterwards.
-        if (disconnectRequested) return
+        if (closed) return
         handleFatalException(e)
     }
 
@@ -673,7 +698,7 @@ class HumlaConnection @JvmOverloads constructor(
     // ---- UDPConnectionListener (protocol thread) ----
 
     override fun onUDPDataReceived(data: ByteArray) {
-        if (disconnectRequested || data.isEmpty()) return
+        if (closed || data.isEmpty()) return
         try {
             if (udpProtocol == UdpProtocol.PROTOBUF) onProtobufUdp(data) else onLegacyUdp(data)
         } catch (e: RuntimeException) {

@@ -80,6 +80,11 @@ protobuf {
     }
 }
 
+// Coroutine debug mode, on under -ea, renames threads while a coroutine runs; devices run without it.
+tasks.withType<Test>().configureEach {
+    systemProperty("kotlinx.coroutines.debug", "off")
+}
+
 dependencies {
     api(libs.protobuf.javalite)
     implementation(libs.bouncycastle.prov)
