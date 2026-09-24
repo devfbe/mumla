@@ -71,6 +71,7 @@ android {
     defaultConfig {
         minSdk = 31
         testApplicationId = "se.lublin.humla.test"
+        consumerProguardFiles 'consumer-rules.pro'
 
         ndk {
             abiFilters += ['arm64-v8a', 'armeabi-v7a', 'x86_64']
