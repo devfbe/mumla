@@ -52,7 +52,7 @@
         android:id="@+id/user_row_more"
         android:layout_width="32dp"
         android:layout_height="match_parent"
-        custom:srcCompat="@drawable/ic_more_vert_black_24dp"
+        custom:srcCompat="@drawable/ic_more_vert"
         android:layout_gravity="center"
         android:paddingStart="8dp"
         custom:tint="?android:textColorSecondary"

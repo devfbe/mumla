@@ -119,7 +119,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     android:layout_marginEnd="5dp"
-                    app:srcCompat="@drawable/ic_user_light"
+                    app:srcCompat="@drawable/ic_action_user_dark"
                     app:tint="?android:attr/textColorPrimary" />
 
                 <TextView
@@ -162,7 +162,8 @@
         android:paddingTop="4dp"
         android:layout_alignTop="@id/server_card"
         android:layout_alignEnd="@id/server_card"
-        app:srcCompat="@drawable/ic_card_overflow" />
+        app:srcCompat="@drawable/ic_more_vert"
+        app:tint="?android:textColorSecondary" />
 
 </RelativeLayout>
 </androidx.cardview.widget.CardView>

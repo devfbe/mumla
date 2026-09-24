@@ -162,7 +162,8 @@
         android:paddingTop="4dp"
         android:layout_alignTop="@id/server_card"
         android:layout_alignEnd="@id/server_card"
-        app:srcCompat="@drawable/ic_card_overflow" />
+        app:srcCompat="@drawable/ic_more_vert"
+        app:tint="?android:textColorSecondary" />
 
 </RelativeLayout>
     </androidx.cardview.widget.CardView>

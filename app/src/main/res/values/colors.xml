@@ -9,6 +9,11 @@
     <color name="md_theme_dark_primary_lighter_more">#0093eb</color> <!-- for higher-contrast buttons in dark mode -->
     <color name="md_theme_dark_onPrimary">#1795c2</color>
 
+    <!-- Icons on the always-light overlay and in light rows. -->
+    <color name="icon_on_light">#8a000000</color>
+    <!-- The idle talk-state glyph: readable on light and dark rows alike. -->
+    <color name="talk_state_idle">#ff8a8a8a</color>
+
     <color name="hot_corner_highlight">#ff2079ab</color>
 
     <color name="ripple_talk_state_on">#ffcc0000</color>

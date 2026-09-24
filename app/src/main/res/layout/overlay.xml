@@ -58,7 +58,8 @@
                 android:layout_height="40dp"
                 android:padding="11dp"
                 android:scaleType="fitCenter"
-                app:srcCompat="@drawable/ic_action_microphone_dark"
+                app:srcCompat="@drawable/ic_action_microphone"
+                app:tint="@color/icon_on_light"
                 android:background="?attr/selectableItemBackground"/>
 
             <View
@@ -71,7 +72,8 @@
                 android:layout_height="40dp"
                 android:padding="11dp"
                 android:id="@+id/overlay_close"
-                app:srcCompat="@drawable/ic_action_delete_light"
+                app:srcCompat="@drawable/ic_action_delete_dark"
+                app:tint="@color/icon_on_light"
                 android:scaleType="fitCenter"
                 android:background="?attr/selectableItemBackground"/>
 
