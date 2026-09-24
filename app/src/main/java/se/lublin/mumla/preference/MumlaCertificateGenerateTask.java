@@ -33,8 +33,7 @@ import java.util.Locale;
 import se.lublin.humla.net.HumlaCertificateGenerator;
 import se.lublin.mumla.R;
 import se.lublin.mumla.db.DatabaseCertificate;
-import se.lublin.mumla.db.MumlaDatabase;
-import se.lublin.mumla.db.MumlaSQLiteDatabase;
+import se.lublin.mumla.db.MumlaRepository;
 
 public class MumlaCertificateGenerateTask extends AsyncTask<Void, Void, DatabaseCertificate> {
     private static final String DATE_FORMAT = "yyyy-MM-dd-HH-mm-ss";
@@ -66,10 +65,7 @@ public class MumlaCertificateGenerateTask extends AsyncTask<Void, Void, Database
             SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT, Locale.getDefault());
             String fileName = context.getString(R.string.certificate_export_format, dateFormat.format(new Date()));
 
-            MumlaDatabase database = new MumlaSQLiteDatabase(context);
-            DatabaseCertificate dc = database.addCertificate(fileName, baos.toByteArray());
-            database.close();
-            return dc;
+            return MumlaRepository.get(context).getDatabase().addCertificate(fileName, baos.toByteArray());
         } catch (Exception e) {
             e.printStackTrace();
             return null;

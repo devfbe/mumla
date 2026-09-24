@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,12 +23,18 @@ import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaSQLiteDatabase
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.installDatabase
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
 @RunWith(RobolectricTestRunner::class)
 class CertificateExportActivityTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
+
+    @Before
+    fun setUp() {
+        installDatabase()
+    }
 
     @After
     fun tearDown() {

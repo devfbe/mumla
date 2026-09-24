@@ -38,8 +38,7 @@ import kotlinx.coroutines.withContext
 import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.R
 import se.lublin.mumla.db.DatabaseCertificate
-import se.lublin.mumla.db.MumlaDatabase
-import se.lublin.mumla.db.MumlaSQLiteDatabase
+import se.lublin.mumla.db.MumlaRepository
 import java.io.FileNotFoundException
 import java.io.IOException
 
@@ -49,8 +48,8 @@ import java.io.IOException
  */
 class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickListener {
 
-    private lateinit var database: MumlaDatabase
-    private lateinit var certificates: List<DatabaseCertificate>
+    private val repository get() = MumlaRepository.get(this)
+    private var certificates: List<DatabaseCertificate> = emptyList()
 
     private val documentCreator: ActivityResultLauncher<String> =
         registerForActivityResult(CreateDocument("application/x-pkcs12"), ::onDocumentCreated)
@@ -63,21 +62,20 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        database = MumlaSQLiteDatabase(this)
-        certificates = database.certificates
-
-        val labels = certificates.map { it.name as CharSequence }.toTypedArray()
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.pref_export_certificate_title)
-            .setItems(labels, this)
-            .setOnCancelListener { finish() }
-            .show()
+        lifecycleScope.launch {
+            certificates = repository.io { certificates }
+            val labels = certificates.map { it.name as CharSequence }.toTypedArray()
+            MaterialAlertDialogBuilder(this@CertificateExportActivity)
+                .setTitle(R.string.pref_export_certificate_title)
+                .setItems(labels, this@CertificateExportActivity)
+                .setOnCancelListener { finish() }
+                .show()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         clearPassword()
-        database.close()
     }
 
     override fun onClick(dialog: DialogInterface?, which: Int) {
@@ -121,9 +119,9 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
             finish()
             return
         }
-        val stored = database.getCertificateData(pending.id)
         lifecycleScope.launch {
             val exported = try {
+                val stored = repository.io { getCertificateData(pending.id) }
                 withContext(workDispatcher) { Pkcs12Certificates.exportWithPassword(stored, password) }
             } catch (e: Exception) {
                 Log.w(TAG, "Could not re-encrypt certificate for export", e)

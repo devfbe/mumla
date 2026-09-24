@@ -25,11 +25,12 @@ import android.text.InputType
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.launch
 import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.R
-import se.lublin.mumla.db.MumlaDatabase
-import se.lublin.mumla.db.MumlaSQLiteDatabase
+import se.lublin.mumla.db.MumlaRepository
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.FileNotFoundException
@@ -118,15 +119,13 @@ class CertificateImportActivity : AppCompatActivity() {
             }
         }
 
-        val database: MumlaDatabase = MumlaSQLiteDatabase(this)
-        try {
-            database.addCertificate(fileName, output.toByteArray())
-        } finally {
-            database.close()
+        val pkcs12Out = output.toByteArray()
+        val success = getString(R.string.certificate_import_success, fileName)
+        lifecycleScope.launch {
+            MumlaRepository.get(this@CertificateImportActivity).io { addCertificate(fileName, pkcs12Out) }
+            Toast.makeText(this@CertificateImportActivity, success, Toast.LENGTH_LONG).show()
+            finish()
         }
-
-        Toast.makeText(this, getString(R.string.certificate_import_success, fileName), Toast.LENGTH_LONG).show()
-        finish()
     }
 
     private fun askForPassword(fileName: String, pkcs12: ByteArray) {

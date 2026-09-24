@@ -92,7 +92,7 @@ import se.lublin.mumla.chat.NoticeFormatter;
 import se.lublin.mumla.db.DatabaseCertificate;
 import se.lublin.mumla.db.DatabaseProvider;
 import se.lublin.mumla.db.MumlaDatabase;
-import se.lublin.mumla.db.MumlaSQLiteDatabase;
+import se.lublin.mumla.db.MumlaRepository;
 import se.lublin.mumla.db.PublicServer;
 import se.lublin.mumla.preference.MumlaCertificateGenerateTask;
 import se.lublin.mumla.preference.SettingsActivity;
@@ -326,8 +326,7 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
         preferences.registerOnSharedPreferenceChangeListener(this);
 
-        mDatabase = new MumlaSQLiteDatabase(this); // TODO add support for cloud storage
-        mDatabase.open();
+        mDatabase = MumlaRepository.get(this).getDatabase();
 
         mDrawerLayout = findViewById(R.id.drawer_layout);
         ListView mDrawerList = findViewById(R.id.left_drawer);
@@ -445,7 +444,6 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
     protected void onDestroy() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
         preferences.unregisterOnSharedPreferenceChangeListener(this);
-        mDatabase.close();
         super.onDestroy();
     }
 

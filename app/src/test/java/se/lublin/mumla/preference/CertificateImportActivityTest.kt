@@ -31,6 +31,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -41,6 +42,7 @@ import se.lublin.humla.net.HumlaCertificateGenerator
 import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.db.MumlaSQLiteDatabase
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.installDatabase
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
@@ -49,6 +51,11 @@ import java.io.ByteArrayOutputStream
 class CertificateImportActivityTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val uri = Uri.parse("content://test.documents/cert.p12")
+
+    @Before
+    fun setUp() {
+        installDatabase()
+    }
 
     private open class RecordingStream(bytes: ByteArray) : ByteArrayInputStream(bytes) {
         var closed = false
