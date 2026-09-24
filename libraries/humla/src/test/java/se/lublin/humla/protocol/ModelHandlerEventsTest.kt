@@ -319,6 +319,15 @@ class ModelHandlerEventsTest {
     }
 
     @Test
+    fun userStatsArePublished() {
+        handler.onMessage(Mumble.UserStats.newBuilder().setSession(2).setOnlinesecs(10).build())
+
+        val stats = published<HumlaEvent.UserStatsReceived>().single().stats
+        assertThat(stats.session).isEqualTo(2)
+        assertThat(stats.onlineSeconds).isEqualTo(10)
+    }
+
+    @Test
     fun aTextMessageNamesItsSenderOrNobodyForTheServer() {
         handler.onMessage(Mumble.TextMessage.newBuilder().setActor(2).addChannelId(1).setMessage("hi").build())
         handler.onMessage(Mumble.TextMessage.newBuilder().setActor(0).addSession(1).setMessage("motd").build())

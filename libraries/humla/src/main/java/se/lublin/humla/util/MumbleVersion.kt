@@ -43,6 +43,25 @@ object MumbleVersion {
         else -> 0
     }
 
+    /** The version in [msg] as "major.minor.patch", preferring v2 when present; null if unknown. */
+    fun displayOf(msg: Mumble.Version): String? {
+        val v2 = when {
+            msg.hasVersionV2() -> msg.versionV2
+            msg.hasVersionV1() -> fromLegacy(msg.versionV1)
+            else -> return null
+        }
+        val major = (v2 ushr OFFSET_MAJOR) and FIELD_MASK
+        val minor = (v2 ushr OFFSET_MINOR) and FIELD_MASK
+        val patch = (v2 ushr OFFSET_PATCH) and FIELD_MASK
+        return "$major.$minor.$patch"
+    }
+
+    private fun fromLegacy(v1: Int): Long = v2(
+        v1 ushr LEGACY_OFFSET_MAJOR,
+        (v1 ushr LEGACY_OFFSET_MINOR) and LEGACY_MAX_MINOR_PATCH.toInt(),
+        v1 and LEGACY_MAX_MINOR_PATCH.toInt(),
+    )
+
     /** The Version message this client sends, with both version formats. */
     fun clientVersion(release: String, os: String, osVersion: String): Mumble.Version =
         Mumble.Version.newBuilder()

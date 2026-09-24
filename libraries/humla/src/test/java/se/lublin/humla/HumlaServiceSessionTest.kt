@@ -150,6 +150,18 @@ class HumlaServiceSessionTest {
         assertThat(states.none { it.hasChannelId() }).isTrue()
     }
 
+    @Test
+    fun userStatsAreRequestedInFull() {
+        val h = start()
+        val tcp = h.connectAndSynchronize()
+
+        h.service.session.requestUserStats(7)
+
+        val request = tcp.sentMessages.filterIsInstance<Mumble.UserStats>().single()
+        assertThat(request.session).isEqualTo(7)
+        assertThat(request.statsOnly).isFalse()
+    }
+
     /**
      * Four settings the service writes into a `HumlaConnection` it does not own. The certificate
      * and trust store matter only once a TLS socket opens, so the connection's fields are read back.

@@ -24,6 +24,7 @@ import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.User
+import se.lublin.humla.model.UserStats
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.HumlaEvent
 import java.util.concurrent.ConcurrentHashMap
@@ -81,6 +82,7 @@ class ModelHandler(
                 events(HumlaEvent.LogMessage(HumlaEvent.Level.INFO, msg.welcomeText))
             }
             is Mumble.ServerConfig -> serverSettings = ServerSettings(msg)
+            is Mumble.UserStats -> events(HumlaEvent.UserStatsReceived(UserStats.from(msg)))
             else -> Unit
         }
     }

@@ -84,9 +84,11 @@
         android:icon="@drawable/ic_action_comment"
         app:showAsAction="never"
         />
-    <!--<item android:id="@+id/context_info"-->
-        <!--android:title="@string/user_menu_information"-->
-        <!--android:icon="@drawable/ic_action_info_dark"/>-->
+    <item android:id="@+id/context_info"
+        android:title="@string/user_menu_information"
+        android:icon="@drawable/ic_action_info_dark"
+        app:showAsAction="never"
+        />
     <item android:id="@+id/context_register"
         android:title="@string/user_menu_register"
         android:icon="@drawable/ic_registered"

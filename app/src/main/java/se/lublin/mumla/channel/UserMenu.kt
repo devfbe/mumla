@@ -119,6 +119,7 @@ class UserMenu(
                     R.string.confirm,
                 ) { session?.setUserComment(user.session, "") }
             R.id.context_register -> session?.registerUser(user.session)
+            R.id.context_info -> showUserInfoDialog(context, service, user)
             else -> return false
         }
         return true

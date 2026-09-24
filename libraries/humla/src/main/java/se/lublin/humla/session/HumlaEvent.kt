@@ -19,6 +19,7 @@ package se.lublin.humla.session
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
+import se.lublin.humla.model.UserStats
 import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
@@ -94,6 +95,9 @@ sealed interface HumlaEvent {
         /** Any other refusal; the server's reason, if any, says why. */
         OTHER,
     }
+
+    /** The server's answer to `IHumlaSession.requestUserStats`. */
+    data class UserStatsReceived(val stats: UserStats) : HumlaEvent
 
     /** A text message from the server or another user. */
     data class TextMessage(val message: IMessage) : HumlaEvent

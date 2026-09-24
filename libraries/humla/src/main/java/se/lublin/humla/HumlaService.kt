@@ -868,6 +868,11 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     override fun requestChannelDescription(channel: Int) =
         send(Mumble.RequestBlob.newBuilder().addChannelDescription(channel).build(), HumlaTCPMessageType.RequestBlob)
 
+    override fun requestUserStats(session: Int) = send(
+        Mumble.UserStats.newBuilder().setSession(session).setStatsOnly(false).build(),
+        HumlaTCPMessageType.UserStats,
+    )
+
     override fun registerUser(session: Int) =
         send(Mumble.UserState.newBuilder().setSession(session).setUserId(0).build(), HumlaTCPMessageType.UserState)
 

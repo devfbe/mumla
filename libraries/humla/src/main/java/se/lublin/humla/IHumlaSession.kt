@@ -149,6 +149,9 @@ interface IHumlaSession {
 
     fun requestChannelDescription(channel: Int)
 
+    /** Asks for [session]'s connection statistics; they arrive as `HumlaEvent.UserStatsReceived`. */
+    fun requestUserStats(session: Int)
+
     fun registerUser(session: Int)
 
     fun kickBanUser(session: Int, reason: String?, ban: Boolean)
