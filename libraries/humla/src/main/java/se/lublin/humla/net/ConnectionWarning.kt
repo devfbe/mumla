@@ -31,4 +31,5 @@ enum class ConnectionWarning(val messageRes: Int) {
     UDP_PING_TIMEOUT(R.string.udp_warning_ping_timeout),
     UDP_RESTORED(R.string.udp_warning_restored),
     UDP_THREAD_FAILED(R.string.udp_warning_thread_failed),
+    NO_OPUS(R.string.codec_warning_no_opus),
 }

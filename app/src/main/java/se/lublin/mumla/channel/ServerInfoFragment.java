@@ -89,26 +89,8 @@ public class ServerInfoFragment extends HumlaServiceFragment {
                 getService().getTargetServer().getSrvHost(),
                 getService().getTargetServer().getSrvPort()));
 
-        String codecName = "<null>";
-        HumlaUDPMessageType codecType = session.getCodec();
-        if (codecType != null) {
-            switch (codecType) {
-                case UDPVoiceOpus:
-                    codecName = "Opus";
-                    break;
-                case UDPVoiceCELTBeta:
-                    codecName = "CELT 0.11.0";
-                    break;
-                case UDPVoiceCELTAlpha:
-                    codecName = "CELT 0.7.0";
-                    break;
-                case UDPVoiceSpeex:
-                    codecName = "Speex";
-                    break;
-                default:
-                    codecName = "???";
-            }
-        }
+        // Opus is the only codec; null means the server offers none this client can use.
+        String codecName = session.getCodec() == HumlaUDPMessageType.UDPVoiceOpus ? "Opus" : "<null>";
 
         mMaxBandwidthView.setText(getString(R.string.server_info_max_bandwidth, (float)session.getMaxBandwidth()/1000f));
         mCurrentBandwidthView.setText(getString(R.string.server_info_current_bandwidth, (float)session.getCurrentBandwidth()/1000f));

@@ -138,6 +138,8 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var remoteOsVersion: String? = null
     @Volatile private var serverMaxBandwidth = 0
     @Volatile private var serverCodec: HumlaUDPMessageType? = null
+    /** The server-lacks-Opus warning is shown once per connection; protocol thread only. */
+    private var noOpusWarned = false
 
     // Session
     @Volatile private var sessionId = 0
@@ -199,10 +201,15 @@ class HumlaConnection @JvmOverloads constructor(
         }
 
         override fun messageCodecVersion(msg: Mumble.CodecVersion) {
-            serverCodec = when {
-                msg.hasOpus() && msg.opus -> HumlaUDPMessageType.UDPVoiceOpus
-                msg.hasBeta() && !msg.preferAlpha -> HumlaUDPMessageType.UDPVoiceCELTBeta
-                else -> HumlaUDPMessageType.UDPVoiceCELTAlpha
+            if (msg.opus) {
+                serverCodec = HumlaUDPMessageType.UDPVoiceOpus
+                return
+            }
+            // Opus is the only codec this client has; without it there is no voice at all.
+            serverCodec = null
+            if (!noOpusWarned) {
+                noOpusWarned = true
+                warn(ConnectionWarning.NO_OPUS)
             }
         }
 
@@ -574,7 +581,6 @@ class HumlaConnection @JvmOverloads constructor(
     fun sendUDPMessage(data: ByteArray, length: Int, force: Boolean) {
         if (!isConnected) return
         require(length <= data.size) { "Requested length $length is longer than available data length ${data.size}!" }
-        if (remoteVersion == 0x10202) applyLegacyCodecWorkaround(data)
         val tcpTransport = tcp
         val udpTransport = udp
         if (!force && (shouldForceTCP() || !usingUdp) && tcpTransport != null) {
@@ -658,7 +664,6 @@ class HumlaConnection @JvmOverloads constructor(
 
     override fun onUDPDataReceived(data: ByteArray) {
         if (disconnectRequested) return
-        if (remoteVersion == 0x10202) applyLegacyCodecWorkaround(data)
         val dataType = (data[0].toInt() shr 5) and 0x7
         val types = HumlaUDPMessageType.values()
         if (dataType < 0 || dataType >= types.size) return // Discard invalid data types
@@ -681,17 +686,6 @@ class HumlaConnection @JvmOverloads constructor(
     override fun resyncCryptState() {
         // Through sendTCPMessage so the isConnected check applies.
         sendTCPMessage(Mumble.CryptSetup.newBuilder().build(), HumlaTCPMessageType.CryptSetup)
-    }
-
-    /** Workaround for 1.2.2 servers that report the old types for CELT alpha and beta. */
-    private fun applyLegacyCodecWorkaround(data: ByteArray) {
-        var dataType = HumlaUDPMessageType.values()[(data[0].toInt() shr 5) and 0x7]
-        if (dataType == HumlaUDPMessageType.UDPVoiceCELTBeta) {
-            dataType = HumlaUDPMessageType.UDPVoiceCELTAlpha
-        } else if (dataType == HumlaUDPMessageType.UDPVoiceCELTAlpha) {
-            dataType = HumlaUDPMessageType.UDPVoiceCELTBeta
-        }
-        data[0] = ((dataType.ordinal shl 5) and 0xFF).toByte()
     }
 
     /** If the connection was lost due to an error, the exception; else null. */

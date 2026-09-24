@@ -34,8 +34,6 @@ import se.lublin.humla.audio.capture.CaptureWiring;
 import se.lublin.humla.audio.capture.EchoCancellationMode;
 import se.lublin.humla.audio.capture.NoiseSuppressionMode;
 import se.lublin.humla.audio.capture.SpeexPreprocessor;
-import se.lublin.humla.audio.encoder.CELT11Encoder;
-import se.lublin.humla.audio.encoder.CELT7Encoder;
 import se.lublin.humla.audio.encoder.IEncoder;
 import se.lublin.humla.audio.encoder.OpusEncoder;
 import se.lublin.humla.audio.inputmode.IInputMode;
@@ -265,26 +263,14 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             return;
         }
 
-        IEncoder encoder;
-        switch (codec) {
-            case UDPVoiceCELTAlpha:
-                encoder = new CELT7Encoder(SAMPLE_RATE, AudioHandler.FRAME_SIZE, 1,
-                        mFramesPerPacket, mBitrate, MAX_BUFFER_SIZE);
-                break;
-            case UDPVoiceCELTBeta:
-                encoder = new CELT11Encoder(SAMPLE_RATE, 1, mFramesPerPacket);
-                break;
-            case UDPVoiceOpus:
-                encoder = new OpusEncoder(SAMPLE_RATE, 1, FRAME_SIZE, mFramesPerPacket, mBitrate,
-                        MAX_BUFFER_SIZE);
-                break;
-            default:
-                Log.w(TAG, "Unsupported codec, input disabled.");
-                return;
+        if (codec != HumlaUDPMessageType.UDPVoiceOpus) {
+            Log.w(TAG, "Unsupported codec, input disabled.");
+            return;
         }
 
         // Resampling and preprocessing happen in mCapturePipeline, before the voice detector.
-        mEncoder = encoder;
+        mEncoder = new OpusEncoder(SAMPLE_RATE, 1, FRAME_SIZE, mFramesPerPacket, mBitrate,
+                MAX_BUFFER_SIZE);
     }
 
     public int getAudioStream() {
@@ -390,14 +376,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         if (!mInitialized)
             return; // Only listen to change events in this handler.
 
-        HumlaUDPMessageType codec;
-        if (msg.hasOpus() && msg.getOpus()) {
-            codec = HumlaUDPMessageType.UDPVoiceOpus;
-        } else if (msg.hasBeta() && !msg.getPreferAlpha()) {
-            codec = HumlaUDPMessageType.UDPVoiceCELTBeta;
-        } else {
-            codec = HumlaUDPMessageType.UDPVoiceCELTAlpha;
-        }
+        // Without Opus there is no codec to encode with; null turns input off.
+        HumlaUDPMessageType codec = msg.getOpus() ? HumlaUDPMessageType.UDPVoiceOpus : null;
 
         synchronized (mEncoderLock) {
             if (codec == mCodec) return;

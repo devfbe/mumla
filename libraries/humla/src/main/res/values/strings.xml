@@ -54,6 +54,7 @@
     <string name="udp_warning_receive_failed">UDP packets cannot be received from the server. Switching to TCP mode.</string>
     <string name="udp_warning_ping_timeout">No UDP ping reply from the server for 15 seconds. Switching to TCP mode.</string>
     <string name="udp_warning_restored">UDP packets can be sent to and received from the server. Switching back to UDP mode.</string>
+    <string name="codec_warning_no_opus">This server does not support the Opus codec. Voice will not work.</string>
     <string name="reconnect_gave_up">Could not reconnect to the server. Giving up.</string>
     <string name="audio_route_refused">This device refused to switch the audio device. Audio stays where it was.</string>
     <string name="bluetooth_sco_denied">This device refused to route audio to a Bluetooth headset. Grant the Nearby devices permission in the system settings.</string>
