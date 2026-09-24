@@ -31,6 +31,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.flow.StateFlow
 import org.minidns.dnsserverlookup.android21.AndroidUsingLinkProperties
 import se.lublin.humla.audio.AudioOutput
@@ -113,7 +114,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private var mCertificate: ByteArray? = null
     private var mCertificatePassword: String? = null
     private var mUseOpus = false
-    private var mForceTcp = false
+    private var mForceTcpSetting = false
+
+    /** Voice goes over TCP when the user forces it or when Tor is on, which cannot carry UDP. */
+    private val mForceTcp: Boolean get() = mForceTcpSetting || mUseTor
+
+    @get:VisibleForTesting
+    internal val isTcpForced: Boolean get() = mForceTcp
     private var mUseTor = false
     private var mClientName: String? = null
     private var mAccessTokens: List<String>? = null
@@ -807,11 +814,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
         if (extras.containsKey(EXTRAS_USE_TOR)) {
             mUseTor = extras.getBoolean(EXTRAS_USE_TOR)
-            mForceTcp = mForceTcp or mUseTor // Tor requires TCP connections to work- if it's on, force TCP.
             reconnectNeeded = true
         }
         if (extras.containsKey(EXTRAS_FORCE_TCP)) {
-            mForceTcp = mForceTcp or extras.getBoolean(EXTRAS_FORCE_TCP)
+            mForceTcpSetting = extras.getBoolean(EXTRAS_FORCE_TCP)
             reconnectNeeded = true
         }
         if (extras.containsKey(EXTRAS_CLIENT_NAME)) {

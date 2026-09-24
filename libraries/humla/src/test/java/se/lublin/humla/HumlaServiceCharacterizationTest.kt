@@ -504,29 +504,31 @@ class HumlaServiceCharacterizationTest {
         assertThat(mode.vadConfig.startThreshold).isEqualTo(0.25f)
     }
 
-    /**
-     * `mUseTor` and `mForceTcp` accumulate with `|=`: Tor turns TCP on, and neither flag can be
-     * turned off again by a later write of `false`. Four corners over the two booleans, read back
-     * through the fields, because nothing else exposes them until a connection is built.
-     */
+    /** TCP is forced by either extra, recomputed from the last value each of them was given. */
     @Test
-    fun torForcesTcpAndNeitherFlagCanBeClearedAgain() {
+    fun tcpIsForcedWhileEitherForceTcpOrTorIsOn() {
         val service = service()
+        fun configure(key: String, value: Boolean) =
+            service.configureExtras(Bundle().apply { putBoolean(key, value) })
 
-        service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_FORCE_TCP, false) })
-        assertThat(field(service, "mForceTcp")).isEqualTo(false)
+        configure(HumlaService.EXTRAS_FORCE_TCP, false)
+        assertThat(service.isTcpForced).isFalse()
 
-        service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_USE_TOR, true) })
-        assertThat(field(service, "mUseTor")).isEqualTo(true)
-        assertThat(field(service, "mForceTcp")).isEqualTo(true)
+        configure(HumlaService.EXTRAS_USE_TOR, true)
+        assertThat(service.isTcpForced).isTrue()
 
-        // Neither `false` takes: the writes are `|=`, not `=`.
-        service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_FORCE_TCP, false) })
-        assertThat(field(service, "mForceTcp")).isEqualTo(true)
+        configure(HumlaService.EXTRAS_FORCE_TCP, false)
+        assertThat(service.isTcpForced).isTrue()
 
-        service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_USE_TOR, false) })
-        assertThat(field(service, "mUseTor")).isEqualTo(false)
-        assertThat(field(service, "mForceTcp")).isEqualTo(true)
+        configure(HumlaService.EXTRAS_USE_TOR, false)
+        assertThat(service.isTcpForced).isFalse()
+
+        configure(HumlaService.EXTRAS_FORCE_TCP, true)
+        configure(HumlaService.EXTRAS_USE_TOR, false)
+        assertThat(service.isTcpForced).isTrue()
+
+        configure(HumlaService.EXTRAS_FORCE_TCP, false)
+        assertThat(service.isTcpForced).isFalse()
     }
 
     /**
