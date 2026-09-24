@@ -18,10 +18,7 @@ class HostPolicyTest {
         }
     }
 
-    /**
-     * Every one of these is a legitimate spelling of the loopback interface that an `<img src>` in a
-     * chat message may carry, and the JDK resolves all of them without asking a name server.
-     */
+    /** Legitimate spellings of loopback, all resolved by the JDK without a name server. */
     @Test
     fun loopbackIsRefusedHoweverItIsSpelled() {
         assertThat(policy.isAllowed("127.0.0.1")).isFalse()
@@ -47,11 +44,8 @@ class HostPolicyTest {
     }
 
     /**
-     * "Public" has to mean more than "not RFC 1918". None of these is loopback, link-local,
-     * site-local, multicast or the unspecified address, so every predicate the JDK offers says
-     * nothing about them — and 100.64.0.0/10 is carrier-grade NAT, which on mobile data reaches
-     * other subscribers of the same carrier, exactly the kind of neighbour this class exists to
-     * keep a chat message away from.
+     * Special-purpose ranges no JDK predicate covers; 100.64.0.0/10 (CGNAT) reaches other
+     * subscribers of the same mobile carrier.
      */
     @Test
     fun rangesThatAreNotTheInternetAreRefusedToo() {
@@ -80,11 +74,7 @@ class HostPolicyTest {
         assertThat(policy.isAllowed("[2606:2800:220:1:248:1893:25c8:1946]")).isTrue()
     }
 
-    /**
-     * The literal spellings are the easy half. A name is what an attacker actually uses: nothing
-     * stops `images.example` from having an A record of 127.0.0.1, so the answer, not the spelling,
-     * has to decide.
-     */
+    /** A name can resolve to 127.0.0.1, so the resolver answer, not the spelling, decides. */
     @Test
     fun aNameThatResolvesIntoTheLanIsRefused() {
         val resolving = policyResolving("images.example" to listOf("192.168.0.5"))
@@ -104,9 +94,8 @@ class HostPolicyTest {
     }
 
     /**
-     * A host that does not resolve is left to the connection, which fails on its own and reports
-     * NETWORK. Refusing here would turn every DNS hiccup into "unsupported source", which is both
-     * untrue and permanently cached.
+     * A host that does not resolve is left to the connection (NETWORK, retryable); refusing here
+     * would cache every DNS hiccup as a permanent "unsupported source".
      */
     @Test
     fun anUnresolvableHostIsLeftToTheConnection() {

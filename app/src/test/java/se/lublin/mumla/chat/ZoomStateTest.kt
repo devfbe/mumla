@@ -4,11 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
-/**
- * Pure JVM test: not a Robolectric test on purpose, so the arithmetic of the zoom state is pinned
- * without any emulated graphics under it. [ZoomState.toMatrix] is the one method that needs
- * android.graphics and is therefore pinned in [ZoomImageViewTest].
- */
+/** Pure JVM; [ZoomState.toMatrix] needs android.graphics and is covered in [ZoomImageViewTest]. */
 class ZoomStateTest {
     // View 400x400, image 200x100 -> fit scale 2, displayed 400x200.
 
@@ -69,17 +65,7 @@ class ZoomStateTest {
         assertThat(clamped.ty).isEqualTo(0f)
     }
 
-    // --- the tests above are the plan's; the ones below close gaps it leaves ---
-
-    /**
-     * The mirror image of [clampLimitsPanToTheImageEdges].
-     *
-     * Not, as an earlier round claimed, because the mutation `offset.coerceAtMost(slack)` -- half of
-     * the pan clamp deleted -- would otherwise survive: measured, two tests kill it, and one of them
-     * is the plan's own `fitsTheImageCenteredAndAppliesZoomAndPan`. What is true is the weaker
-     * statement, that the plan's **ZoomStateTest on its own** leaves the opposite direction unpinned,
-     * which leaves the arithmetic depending on a view-level test to catch a pure-arithmetic bug.
-     */
+    /** The mirror image of [clampLimitsPanToTheImageEdges]. */
     @Test
     fun clampLimitsPanToTheOppositeEdgeToo() {
         val clamped = ZoomState(scale = 2f, tx = -500f, ty = 30f).clamped(400f, 400f, 200f, 100f)
@@ -97,15 +83,9 @@ class ZoomStateTest {
     }
 
     /**
-     * The `tx * k` half of the focus arithmetic: zooming an *already panned* state has to carry the
-     * existing offset along with the scale, or the image slides out from under the fingers -- a real
-     * pinch is many small `onScale` calls and every one after the first starts from `tx != 0`.
-     *
-     * Nothing else in this file pins it. Every other zoom test starts from `ZoomState()` (`tx = 0`,
-     * where `tx * k == tx`) or uses `factor = 1` (where `k == 1`, same thing), and the one view-level
-     * test that would reach it asserts *after* [clamped] has pulled both the correct and the mutated
-     * value to the same 0. Focus on the centre here, so the `(focusX - viewWidth / 2)` term is 0 and
-     * the offset is the only thing the numbers can come from.
+     * Zooming an already panned state carries the offset along with the scale (`tx * k`), or the
+     * image slides out from under the fingers during a pinch. Focus on the centre, so the offset is
+     * the only thing the numbers can come from.
      */
     @Test
     fun zoomingAnAlreadyPannedStateScalesTheOffsetWithIt() {
@@ -134,9 +114,8 @@ class ZoomStateTest {
     }
 
     /**
-     * A panorama: the fit is decided by width, and there is nothing to pan vertically, ever.
-     * Powers of two throughout, so the expected numbers are exact in binary32 and the test pins
-     * the rule rather than a rounding mode.
+     * A panorama: the fit is decided by width, and there is nothing to pan vertically. Powers of
+     * two, so the expected numbers are exact in binary32.
      */
     @Test
     fun anExtremelyWideImageIsFittedByWidthAndNeverPansVertically() {
@@ -164,9 +143,8 @@ class ZoomStateTest {
     }
 
     /**
-     * A view of zero size is real: Task 5 already had to deal with one, and this class is asked for
-     * a fit before the first layout pass. It refuses loudly instead of returning 0 or Infinity,
-     * which is what makes the caller's "not measured yet" check in [ZoomImageView] observable.
+     * A zero-size view (before the first layout) is refused loudly instead of returning 0 or
+     * Infinity, which makes the caller's "not measured yet" check observable.
      */
     @Test
     fun aViewWithoutAMeasuredSizeIsRejected() {
@@ -182,10 +160,8 @@ class ZoomStateTest {
     }
 
     /**
-     * The constructor's bound is a sanity bound, not the zoom ceiling -- the ceiling is per image
-     * and is [ZoomState.maxScale]'s business. What is left here catches arithmetic that has gone
-     * wrong: a zero or negative scale, and NaN, which fails the same check because no comparison
-     * with NaN is true and so can never poison the view's matrix for the rest of its life.
+     * The constructor's bound is a sanity bound (the ceiling is [ZoomState.maxScale]'s business):
+     * zero, negative and NaN scales fail it, so they never poison the view's matrix.
      */
     @Test
     fun aScaleOutsideTheSanityBoundCannotBeConstructed() {
@@ -196,8 +172,6 @@ class ZoomStateTest {
             ZoomState().scaledBy(Float.NaN, 0f, 0f, 400f, 400f, 200f, 100f)
         }
     }
-
-    // --- the zoom ceiling, which is a property of the image and not of the state ---
 
     /**
      * The budget: zoom until one source pixel covers one screen pixel. 1600 px of source into a
@@ -210,9 +184,8 @@ class ZoomStateTest {
     }
 
     /**
-     * An image the fit already had to enlarge has a budget below 1 -- that is every image the
-     * viewer decodes, since `resizeKeepingAspect` never enlarges and the decode is screen-sized.
-     * Refusing to zoom those at all would make a small picture impossible to look at.
+     * An image the fit already had to enlarge (every screen-sized decode) has a budget below 1 but
+     * can still be zoomed.
      */
     @Test
     fun anImageWithNoPixelsToSpareStillZoomsTwice() {
@@ -234,9 +207,8 @@ class ZoomStateTest {
     }
 
     /**
-     * A zoom above the ceiling is pulled down by [ZoomState.clamped] and not only by [scaledBy],
-     * because a state can arrive at a view without having been through a gesture: restored from a
-     * release whose ceiling was higher, or carried into a different image.
+     * [ZoomState.clamped] pulls a zoom above the ceiling down too: a state can arrive without a
+     * gesture (restored from a release with a higher ceiling, or carried into a different image).
      */
     @Test
     fun clampPullsAZoomAboveTheCeilingBackDown() {

@@ -112,21 +112,15 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * The classic RecyclerView failure: a row scrolls away and its job is cancelled while another
-     * row is waiting on the very same fetch. The waiter must not be dragged down with it.
-     *
-     * Three callers, not two, and the survivors are compared **by identity**. `fetched` alone cannot
-     * tell this apart from a `shared` that never shares: the second fetch of the same source is
-     * served from the `lastBytes` memo, so it never reaches the fetcher and never shows up in that
-     * list. The same instance coming out of two separate awaits is what says one job produced it.
+     * A row scrolls away and its job is cancelled while another row waits on the same fetch; the
+     * waiter must survive. Survivors are compared by identity, because a second fetch of the same
+     * source would be served from the `lastBytes` memo and never show up in `fetched`.
      */
     @Test
     fun cancellingOneCallerDoesNotCancelAnotherWaitingOnTheSameFetch() = runTest {
         val work = StandardTestDispatcher(TestCoroutineScheduler()) // advanced by hand, not by runTest
-        // Unconfined for the decode side: loadThumbnail hashes the source on that dispatcher before
-        // it ever reaches the shared fetch, and a TestDispatcher of a *second* scheduler cannot be
-        // switched to from inside runTest's. What this test is about is the fetch, which stays on
-        // `work` and therefore stays parked until this test advances it by hand.
+        // Unconfined for the decode side: a TestDispatcher of a second scheduler cannot be switched
+        // to from inside runTest's. The fetch stays parked on `work`.
         val l = ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, work, Dispatchers.Unconfined, clock::get)
         val scrolledAway = async { l.loadThumbnail(url, 240, 240) }
         val stillVisible = async { l.loadThumbnail(url, 240, 240) }
@@ -146,12 +140,8 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * The other half: when the last caller is gone, the download must not run on regardless.
-     *
-     * Two callers, so that "the last" means the last of several and the waiter count has to be a
-     * count rather than a flag. Losing the first one may not abandon anything; losing the second
-     * must. An empty `fetched` is a negative, so this half leans on the test above for the evidence
-     * that there was one shared job here at all.
+     * When the last of several callers is gone, the download is abandoned (the waiter count is a
+     * count, not a flag).
      */
     @Test
     fun cancellingTheLastCallerAbandonsTheFetch() = runTest {
@@ -171,12 +161,8 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * The shared job is created with `scope.async { … }` while `synchronized(inFlight)` is held, and
-     * on an immediate dispatcher a coroutine's body runs inline — so the whole fetch, blocking socket
-     * read included, would run under that monitor and every other bind in the process would queue
-     * behind it. With `Dispatchers.IO` it does not happen, which is exactly why "nothing suspends
-     * inside those sections" could stay wrong: the loader is one dispatcher change away from a
-     * process-wide lock around the network.
+     * The shared job is created while `synchronized(inFlight)` is held; on an immediate dispatcher
+     * its body, blocking read included, would run under that monitor.
      */
     @Test(timeout = 60_000)
     fun aFetchInProgressDoesNotKeepOtherBindsOut() {
@@ -243,11 +229,7 @@ class ChatImageLoaderTest {
         assertThat(calls).isEqualTo(1)
     }
 
-    /**
-     * The boundary itself, from the expired side: an entry whose expiry equals the current
-     * millisecond is gone, not kept for one more. Without this the comparison could be either way
-     * round and every other TTL test would stay green.
-     */
+    /** An entry whose expiry equals the current millisecond is gone. */
     @Test
     fun aTransientErrorExpiresExactlyAtTheTtl() = runTest(dispatcher) {
         var calls = 0
@@ -305,11 +287,8 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * Measured against the bitmaps the cache really holds, not against the cache's own accounting:
-     * an [android.util.LruCache] sized in kibibytes rounds every entry down, so twenty-two-pixel
-     * thumbnails of 2024 bytes each count as one KiB and ten of them fit a ten KiB budget — twice
-     * what was asked for. The whole point of this cache is to bound memory, so the bound is what is
-     * asserted.
+     * Measured against the bitmaps actually held: an [android.util.LruCache] sized in KiB rounds
+     * every entry down, so 2024-byte thumbnails would each count as one KiB.
      */
     @Test
     fun theCacheStaysWithinItsByteBudgetForManySmallBitmaps() = runTest(dispatcher) {
@@ -326,18 +305,15 @@ class ChatImageLoaderTest {
         val l = loader()
         val first = l.loadFull(url, 200, 200) as ImageResult.Ready
         val second = l.loadFull(url, 200, 200) as ImageResult.Ready
-        // 300 into 200: one halving lands at 150, which is inside the box. loadFull takes it,
-        // because the alternative is a second full-size bitmap alive beside the result — see
-        // BoundedBitmapDecoder.decodeAtMost.
+        // 300 into 200: one halving lands at 150, inside the box; see BoundedBitmapDecoder.decodeAtMost.
         assertThat(first.bitmap.width).isEqualTo(150)
         assertThat(second.bitmap).isNotSameInstanceAs(first.bitmap)
         assertThat(fetched).containsExactly(url)
     }
 
     /**
-     * A view that has not been measured yet is 0 px wide, which is a legitimate state, not a bug —
-     * but `BoundedBitmapDecoder` throws on a non-positive bound, and rightly so (a negative bound
-     * hangs its sampling loop). The loader therefore has to catch this itself.
+     * An unmeasured view is 0 px wide, but `BoundedBitmapDecoder` throws on a non-positive bound, so
+     * the loader has to catch this itself.
      */
     @Test
     fun nonPositiveBoundsSkipTheLoadInsteadOfCrashing() = runTest(dispatcher) {
@@ -352,10 +328,8 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * `ImageSource.parse` decodes the whole base64 payload before anything bounded sees it, so the
-     * only place to bound it is the length of the source string. TOO_LARGE rather than MALFORMED is
-     * what proves the payload was never decoded: these bytes are not an image, so a decode attempt
-     * would have reported MALFORMED.
+     * `ImageSource.parse` decodes the whole base64 payload, so the source string length is the only
+     * bound. TOO_LARGE rather than MALFORMED proves the payload was never decoded.
      */
     @Test
     fun anOversizedDataUriIsRefusedWithoutDecodingIt() = runTest(dispatcher) {
@@ -395,7 +369,7 @@ class ChatImageLoaderTest {
 
     /**
      * Holds [loads] loads inside the fetcher at once and reports how many ever got in together.
-     * A `null` limit means the production default, which is the number the app really runs with.
+     * A `null` limit means the production default.
      */
     private fun peakConcurrentFetches(loads: Int, maxConcurrentLoads: Int?): Int {
         val inFetch = AtomicInteger()
@@ -430,29 +404,19 @@ class ChatImageLoaderTest {
         }
     }
 
-    /**
-     * Peak memory is the fetcher's cap per fetch in flight, so the number of fetches in flight is
-     * part of the memory bound. Without the limit all four of these are in the fetcher at once.
-     */
+    /** Peak memory is the per-fetch cap times the fetches in flight, so their number is bounded. */
     @Test(timeout = 60_000)
     fun noMoreThanMaxConcurrentLoadsFetchAtTheSameTime() {
         assertThat(peakConcurrentFetches(loads = 4, maxConcurrentLoads = 2)).isEqualTo(2)
     }
 
-    /**
-     * And the *default*, which is the only value the app ever uses and which the test above hid by
-     * always handing one in: raising it to 100 left the whole suite green.
-     */
+    /** The production default. */
     @Test(timeout = 60_000)
     fun theDefaultLimitsThreeFetchesAtATime() {
         assertThat(peakConcurrentFetches(loads = 6, maxConcurrentLoads = null)).isEqualTo(3)
     }
 
-    /**
-     * The check existed but could never run: property initialisers go first, so `Semaphore(0)` threw
-     * its own message before `init {}` was reached — and `Semaphore(-1)` is what would have been
-     * worth a message of our own.
-     */
+    /** Property initialisers run before `init {}`, so the check must not rely on `Semaphore` failing. */
     @Test
     fun aNonPositiveConcurrencyLimitIsRejectedByThisClass() {
         listOf(0, -1).forEach { limit ->
@@ -465,10 +429,8 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * A remembered failure is a small object, but not free: a server that sends a thousand distinct
-     * broken URLs would otherwise fill the map without ever paying for it, and the LRU would never
-     * evict anything because nothing ever grew. At 256 bytes an entry a 1 KiB budget holds four, so
-     * the fifth failure has to push the first one out and asking for it again really re-fetches.
+     * Remembered failures are charged against the budget: at 256 bytes an entry a 1 KiB budget holds
+     * four, so the fifth pushes the first out.
      */
     @Test
     fun rememberedFailuresAreChargedAgainstTheBudget() = runTest(dispatcher) {
@@ -490,23 +452,14 @@ class ChatImageLoaderTest {
     fun cacheKeysAreStableAndSourceSpecific() {
         assertThat(ChatImageLoader.cacheKey("abc")).isEqualTo(ChatImageLoader.cacheKey("abc"))
         assertThat(ChatImageLoader.cacheKey("abc")).isNotEqualTo(ChatImageLoader.cacheKey("abd"))
-        // Used as a file name by ImageShareExporter (Task 8), so it must stay filesystem-safe.
+        // Used as a file name by ImageShareExporter, so it must stay filesystem-safe.
         assertThat(ChatImageLoader.cacheKey("a/b?c=d")).matches("[0-9a-f]{40}")
     }
 
     /**
-     * `fetcher: ImageFetcher = HttpImageFetcher()` is the single line that gives the process-wide
-     * loader its host policy, its byte cap, its timeouts and its redirect limit, and nothing used to
-     * look at it: replacing it with `ImageFetcher { ByteArray(0) }` left the whole suite green, and
-     * the only test on the real constructor path checked instance identity and never loaded
-     * anything. This is the same argument the fetcher's own
-     * `theDefaultPolicyRefusesTheDevicesOwnNetworkWithoutOpeningAnything` makes one layer down.
-     *
-     * Both ends of the production path are exercised: the default constructor argument, and
-     * `ChatImageLoaders.get`, which is what a chat row actually calls and which brings the real
-     * `Settings` lookup with it. A loopback `<img src>` must be refused without the server ever
-     * being asked — a stub fetcher would report MALFORMED for its empty bytes instead, and a
-     * fetcher wired to `ANY_HOST` would trip the wire.
+     * The default fetcher carries the host policy, byte cap, timeouts and redirect limit. Both the
+     * default constructor argument and `ChatImageLoaders.get` (with the real `Settings` lookup) are
+     * exercised: a loopback `<img src>` must be refused without the server ever being asked.
      */
     @Test(timeout = 120_000)
     fun theRealLoaderIsWiredToTheRealFetcherAndItsHostPolicy() = runBlocking {
@@ -526,8 +479,7 @@ class ChatImageLoaderTest {
             val processWide = ChatImageLoaders.get(ApplicationProvider.getApplicationContext())
                 .loadThumbnail(target, 240, 240)
 
-            // The tripwire first: the error code is the weaker claim, and a fetcher wired to
-            // ANY_HOST would fail this one and the codes both.
+            // The tripwire first: the error code is the weaker claim.
             assertWithMessage("a loopback <img src> from a chat message was fetched")
                 .that(reached.get()).isFalse()
             assertWithMessage("the default constructor argument").that(fromTheDefaultArgument)
@@ -549,14 +501,10 @@ class ChatImageLoaderTest {
         assertThat(ChatImageLoaders.get(context)).isSameInstanceAs(stub)
     }
 
-    // --- Where the key is computed. cacheKey() hashes the whole source, and for a `data:` source
-    // --- the source *is* the image — megabytes of it. Everything below is about making sure that
-    // --- work never happens on the thread that binds the row.
+    // cacheKey() hashes the whole source, and a `data:` source can be megabytes: the tests below
+    // make sure that never happens on the thread that binds the row.
 
-    /**
-     * The control for the two tests below: they assert that SHA-1 was *not* invoked, or not on a
-     * particular thread, and a count of zero is also what a probe that never took effect looks like.
-     */
+    /** Control for the tests below: the SHA-1 probe really counts. */
     @Test
     fun theDigestProbeReallySeesThisClassesHashing() {
         Sha1Probe.reset()
@@ -565,11 +513,7 @@ class ChatImageLoaderTest {
         assertThat(Sha1Probe.threads()).contains(Thread.currentThread().name.substringBefore(" @"))
     }
 
-    /**
-     * The length cap is the whole defence against a megabytes-long source, so nothing expensive may
-     * run before it — and hashing the source is the most expensive thing this class does. The error
-     * code alone cannot tell the two orders apart, so the digest itself is counted.
-     */
+    /** Nothing expensive (hashing included) may run before the length cap; the digest is counted. */
     @Test
     fun anOversizedSourceIsRefusedBeforeItsKeyIsComputed() = runTest(dispatcher) {
         val l = loader()
@@ -584,11 +528,8 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * The expensive half: a `data:` source at the cap is 7 MB, and every bind needs its key — cache
-     * hits included, because the key is what the lookup is by. Doing that on the thread that called
-     * `loadThumbnail` is 7 MB allocated and hashed on the main thread per bound row, which is the
-     * "not responding" disease this whole stream exists to cure. So: which threads hashed, and how
-     * much did the caller's thread allocate.
+     * A `data:` source at the cap is 7 MB and every bind needs its key, cache hits included. The
+     * caller's thread must neither hash nor allocate it.
      */
     @Test(timeout = 120_000)
     fun bindingNeverHashesTheSourceOnTheCallersThread() {
@@ -621,10 +562,8 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * The key is hashed in chunks so that no full UTF-8 copy of a megabytes-long source is ever
-     * allocated. That is only allowed to be cheaper, never different: a chunk boundary that fell
-     * between the halves of a surrogate pair would encode them apart and silently change the key of
-     * every source long enough to have one.
+     * The key is hashed in chunks to avoid a full UTF-8 copy; a chunk boundary between the halves
+     * of a surrogate pair must not change the key.
      */
     @Test
     fun theKeyIsTheSha1OfTheWholeSourceHoweverLongItIs() {
@@ -645,18 +584,10 @@ class ChatImageLoaderTest {
     }
 
     /**
-     * The fullscreen decode must hold **one** bitmap. Its bound is the screen, so the exact fit's
-     * second bitmap is measured in tens of megabytes: sampling stops while the intermediate is
-     * still in [1x, 2x) of the target per axis, up to 4x the pixels, for a peak of just over 5x
-     * what is kept. Scaled to twice a 1080x2340 screen that is a 202 MB peak, against the 128 MiB
-     * `heapgrowthlimit` this spec measures itself by.
-     *
-     * The instrument is the shadow's own record of what the path built — `createdFromBitmap` is
-     * the instance `createScaledBitmap` scaled from — not a heap delta, which measures the opposite
-     * here because Robolectric allocates a full bitmap for the `inJustDecodeBounds` pass it does
-     * not implement. The thumbnail half is the instrument's validation: it must still show a chain
-     * of two, so a run in which the instrument read nothing back fails rather than reporting one
-     * bitmap everywhere.
+     * The fullscreen decode holds one bitmap: an exact fit would keep an intermediate of up to 4x
+     * the pixels alive beside the result. Checked via the shadow's `createdFromBitmap` record (a
+     * heap delta is useless because Robolectric does not implement `inJustDecodeBounds`); the
+     * thumbnail half still shows a chain of two, which validates the instrument.
      */
     @Test
     fun loadFullDecodesInOneAllocationWhileTheThumbnailStillFitsExactly() = runTest(dispatcher) {
@@ -677,11 +608,8 @@ class ChatImageLoaderTest {
 }
 
 /**
- * A JCE provider that hands out a recording SHA-1. Installed for the life of each test, it counts
- * every `MessageDigest.getInstance("SHA-1")` and records the thread that pushed bytes through it —
- * which is the only way from outside to tell *where* a key was computed, rather than what it was.
- * The digest itself is delegated to whatever provider would otherwise have answered, so nothing
- * about the resulting key changes.
+ * A JCE provider that hands out a recording SHA-1: counts every `MessageDigest.getInstance("SHA-1")`
+ * and records the thread that hashed. The digest itself is delegated, so keys do not change.
  */
 class RecordingSha1 : MessageDigestSpi() {
     private val delegate: MessageDigest = Sha1Probe.realSha1()
@@ -737,11 +665,7 @@ object Sha1Probe {
         instances.incrementAndGet()
     }
 
-    /**
-     * The *bare* thread name: kotlinx.coroutines renames a thread to "name @coroutine#n" for as long
-     * as a coroutine runs on it, so recording the name verbatim would make every assertion about a
-     * named thread pass for the wrong reason.
-     */
+    /** The bare thread name, without kotlinx.coroutines' " @coroutine#n" suffix. */
     fun countThread() {
         threadNames += Thread.currentThread().name.substringBefore(" @")
     }

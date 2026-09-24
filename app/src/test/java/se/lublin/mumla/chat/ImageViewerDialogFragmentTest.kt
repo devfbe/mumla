@@ -37,11 +37,10 @@ class ImageViewerDialogFragmentTest {
     private val source = "https://x.org/a.png"
     private val other = "https://x.org/b.png"
 
-    // Hand-computed, not derived from the code under test:
-    //   $ printf 'https://x.org/a.png' | sha1sum
+    // printf 'https://x.org/a.png' | sha1sum
     private val keyOfA = "c03da97f398e3f951d29689263e7fa31bf3c163d"
 
-    /** Runs nothing until it is told to; see `theZoomSurvivesTwoRecreationsWhileTheImageIsStillLoading`. */
+    /** Runs nothing until it is told to. */
     private class ParkingDispatcher : CoroutineDispatcher() {
         private val parked = ArrayDeque<Runnable>()
         override fun dispatch(context: CoroutineContext, block: Runnable) {
@@ -83,24 +82,9 @@ class ImageViewerDialogFragmentTest {
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     /**
-     * A tap that enters at the fragment's **root view** and is routed down to [id] by the ordinary
-     * hit-testing path, at coordinates inside the target's laid-out bounds.
-     *
-     * Three separate things, which the version this replaces ran together under "the way a finger
-     * does":
-     *  * **`isEnabled`.** [View.performClick] calls the listener whatever the view's state is, so
-     *    it cannot see a button production has disabled. Any `dispatchTouchEvent` can: the check
-     *    lives in `View.onTouchEvent`, which returns before `performClick`. The debounce
-     *    assertions here would hold with a tap aimed straight at the button.
-     *  * **Visibility.** That is the part a direct dispatch cannot see, because the filter lives in
-     *    the *parent* (`ViewGroup.canViewReceivePointerEvents`), not in the child. Entering at the
-     *    root is what makes a `GONE` button stop reporting -- and what stops a later test from
-     *    passing while the button it presses is unreachable.
-     *  * **Hit testing.** Coordinates inside the target's bounds, so a button laid out at 0x0
-     *    fails here rather than silently receiving a tap at (0, 0).
-     *
-     * The bounds check below is not decoration either: it is the assertion that the dialog's views
-     * really were measured and laid out, which is what makes the other two meaningful.
+     * A tap that enters at the fragment's root view and is hit-tested down to [id], so disabled,
+     * `GONE` and unlaid-out (0x0) targets fail as they would for a finger; [View.performClick]
+     * would see none of these.
      */
     private fun ImageViewerDialogFragment.tap(id: Int) {
         val root = requireView()
@@ -148,22 +132,15 @@ class ImageViewerDialogFragmentTest {
     private fun exportedFile(fragment: ImageViewerDialogFragment, name: String): File =
         File(fragment.requireContext().cacheDir, ImageShareExporter.DIRECTORY + "/" + name)
 
-    /**
-     * Sizes the image view by hand, for determinism rather than for necessity: the dialog's views
-     * *are* measured and laid out (attaching the decor happens inside `performTraversals`, which
-     * measures and lays out in the same pass), but at whatever size the window ends up with. The
-     * assertions below depend on a known 400x400, so it is set here instead of read.
-     */
+    /** Sizes the image view by hand so the assertions can rely on a known size. */
     private fun ImageViewerDialogFragment.layOutTheImage(side: Int = 400) {
         image().layout(0, 0, side, side)
     }
 
     /**
-     * The arguments go through `fragmentArgs`, **not** through the instantiating lambda, and that is
-     * not a style choice. `FragmentScenario` calls `fragment.setArguments(fragmentArgs)` on whatever
-     * the lambda returned, so the plan's `launchFragment { newInstance(source) }` overwrites the
-     * bundle `newInstance` had just put there with `null` -- a viewer with no source, silently. The
-     * bundle is still built by [ImageViewerDialogFragment.newInstance], so that stays covered.
+     * Arguments go through `fragmentArgs`: `FragmentScenario` calls `setArguments(fragmentArgs)` on
+     * whatever the lambda returned, which would overwrite the bundle [ImageViewerDialogFragment.newInstance]
+     * built with `null`.
      */
     private fun launch(source: String? = this.source): FragmentScenario<ImageViewerDialogFragment> =
         launchFragment(fragmentArgs = source?.let { ImageViewerDialogFragment.newInstance(it).arguments }) {
@@ -171,16 +148,12 @@ class ImageViewerDialogFragmentTest {
         }
 
     /**
-     * [launch], one block on the fragment, and **close the scenario**. A `FragmentScenario` holds a
-     * host activity open until it is closed; `everyOutcomeThatIsNotAReadyBitmapEndsAsAVisibleFailure`
-     * opens seven in one method, and an activity still in the stack is exactly what
-     * `shadowOf(activity).nextStartedActivity` reads from.
+     * [launch], one block on the fragment, and close the scenario, so no host activity stays in the
+     * stack where `shadowOf(activity).nextStartedActivity` would read it.
      */
     private fun launched(source: String? = this.source, block: (ImageViewerDialogFragment) -> Unit) {
         launch(source).use { it.onFragment(block) }
     }
-
-    // --- the brief's three tests ----------------------------------------------------------------
 
     @Test
     fun aLoadedImageIsShownAndCanBeShared() {
@@ -231,23 +204,15 @@ class ImageViewerDialogFragmentTest {
                 .isEqualTo(expected)
             // Without ClipData the chooser drops the grant; assert it is carried.
             assertThat(send.clipData!!.getItemAt(0).uri.toString()).isEqualTo(expected)
-            // The debounce releases on the way out of a *successful* share too, not only a failed
-            // one: a share that finished must not leave the button dead.
+            // The debounce also releases after a successful share.
             assertThat(fragment.share().isEnabled).isTrue()
         }
     }
 
-    // --- Spec 4.1, first requirement: decode at K x screen, K = 2 -------------------------------
-
     /**
-     * `BitmapUtils.resizeKeepingAspect` never enlarges, so whatever bound the viewer asks for is
-     * exactly what the bitmap ends up being on the limiting axis. Asking for the screen would make
-     * every zoom past the fit pure interpolation; asking for twice the screen buys one doubling of
-     * real detail and costs four times the pixels, which is the largest factor that still fits
-     * beside the thumbnail cache in the 128 MiB heap growth limit task 6 measured.
-     *
-     * The factor is what is pinned, not the pixel count: the expectation is built from the
-     * environment's own metrics, so the same assertion holds under the second screen below.
+     * `BitmapUtils.resizeKeepingAspect` never enlarges, so the requested bound (twice the screen)
+     * is exactly the bitmap's size on the limiting axis. The expectation is built from the
+     * environment's own metrics.
      */
     @Test
     fun theImageIsDecodedBetweenOneAndTwoScreensSoThereIsDetailToZoomInto() {
@@ -263,11 +228,7 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    /**
-     * The same claim on a different screen. A suite that only ever runs Robolectric's default
-     * 320x470 device pins one configuration, and a mutation that replaced the metrics with two
-     * constants would survive it.
-     */
+    /** The same on a different screen, so a constant bound cannot pass. */
     @Test
     @Config(qualifiers = "w480dp-h800dp-mdpi")
     fun theDecodeBoundFollowsTheScreenRatherThanAConstant() {
@@ -278,18 +239,14 @@ class ImageViewerDialogFragmentTest {
             assertThat(metrics.widthPixels).isEqualTo(480)
             assertThat(metrics.heightPixels).isEqualTo(800)
             val bitmap = (fragment.image().drawable as BitmapDrawable).bitmap
-            // 3000 into 960 samples at 8, into 640 at 16: the same source gives 750 here and 375
-            // on the default screen, so a constant bound cannot satisfy both.
+            // 3000 into 960 samples at 8, into 640 at 16: 750 here, 375 on the default screen.
             assertThat(bitmap.width).isEqualTo(750)
             assertThat(bitmap.width).isAtMost(2 * metrics.widthPixels)
             assertThat(bitmap.width).isAtLeast(metrics.widthPixels)
         }
     }
 
-    /**
-     * What the doubling *keeps* on the phone the spec picked the factor for: 1080x2340 at xxhdpi.
-     * 2160x4680 ARGB_8888 is 40_435_200 B, which is the spec's number for K=2.
-     */
+    /** 1080x2340 at xxhdpi: the doubled bound is 2160x4680 ARGB_8888 = 40_435_200 B. */
     @Test
     @Config(qualifiers = "w360dp-h780dp-xxhdpi")
     fun theDoubledDecodeKeepsFortyMegabytesOnAFullHdPhone() {
@@ -301,9 +258,7 @@ class ImageViewerDialogFragmentTest {
             assertThat(metrics.heightPixels).isEqualTo(2340)
 
             val shown = (fragment.image().drawable as BitmapDrawable).bitmap
-            // 2400 x 5200 into 2160 x 4680 samples at 2 and stops there. What the doubling bounds
-            // is 2160 x 4680 = 40_435_200 B, and since the decode allocates once, that ceiling is
-            // now the peak rather than a fifth of it.
+            // 2400 x 5200 into 2160 x 4680 samples at 2 and stops there.
             assertThat(shown.width).isEqualTo(1200)
             assertThat(shown.height).isEqualTo(2600)
             assertThat(shown.byteCount).isAtMost(40_435_200)
@@ -312,30 +267,13 @@ class ImageViewerDialogFragmentTest {
     }
 
     /**
-     * ...and what it costs **while it is being made**, which is the number the spec did not have
-     * until this test measured it — and which is why the fullscreen path stopped fitting exactly.
-     *
-     * Before: `BoundedBitmapDecoder.decode` sampled by powers of two and then called
-     * `Bitmap.createScaledBitmap`, so the intermediate and the result were both alive for the
-     * length of that call. Sampling stopped as soon as one more halving would undershoot, which
-     * left the intermediate anywhere in [1x, 2x) of the target per axis — up to four times the
-     * pixels — for a peak just **over five times** the bitmap the viewer keeps. Measured at this
-     * screen: 9_612_964 B beside 2_402_640 B, a peak of 12_015_604 B at a ratio of 5.0010. Scaled
-     * to 1080x2340 at K=2 that is **202_176_000 B, about 193 MiB**, against the 128 MiB
-     * `heapgrowthlimit` floor task 6 measured, with nothing catching the `OutOfMemoryError`.
-     *
-     * After: `loadFull` decodes with `decodeAtMost`, which takes the halving the exact fit
-     * declines. The decoded bitmap is then at or below the box, there is nothing to scale, and the
-     * peak **is** what is kept — 2_400_084 B here, a factor of 5.006 less. What it costs is up to
-     * one halving of detail, which the assertions above bound: the bitmap is never smaller than
-     * one screen on the limiting axis, so zooming to one source pixel per screen pixel is still
-     * reachable, and `ZoomImageView` derives its ceiling from the intrinsic size rather than
-     * assuming a fit scale of 1.
+     * The decode peak is the bitmap that is kept: `loadFull` uses `decodeAtMost`, so there is no
+     * scaled intermediate alive beside the result. The bitmap is still never smaller than one
+     * screen on the limiting axis.
      */
     @Test
     fun theDecodeHoldsNothingBesideTheBitmapItKeeps() {
-        // 1279x1879 into the 640x940 box: the case that used to peak, because one halving would
-        // have undershot the exact fit and nothing was sampled away.
+        // 1279x1879 into the 640x940 box: one halving would undershoot the exact fit.
         installLoader { TestImages.png(1279, 1879) }
         launched { fragment ->
             idle()
@@ -353,25 +291,10 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    // --- Spec 4.1, second requirement: the two restore conditions --------------------------------
-
     /**
-     * Pins both conditions [ZoomImageView]'s KDoc states and neither the plan nor the brief
-     * mentions, in the suite of the screen that has to satisfy them:
-     *
-     *  1. **The view has an `android:id`.** Without one `View.dispatchSaveInstanceState` stores
-     *     nothing at all, and the zoom is gone after the first rotation.
-     *  2. **Nothing else is ever put in this view.** A placeholder or an error icon with an
-     *     intrinsic size is a drawable like any other: it would spend the restored zoom, and the
-     *     real image arriving afterwards would count as a second image and snap back to the fit.
-     *     That is why the progress spinner and the failure message are separate views.
-     *
-     * Two recreations, and they are deliberately **not** the same case -- the KDoc used to say "both
-     * in the waiting window", which is true of the second only. The first `release()` runs *before*
-     * the first `recreate()`, so recreation one carries a zoom that was applied to a finished image;
-     * the second happens while the new fragment's load is still parked, which is the ordinary case
-     * for a dialog that loads over the network and the one that catches a restore saving live state
-     * instead of the pending one. Covering both is better than covering the window twice.
+     * [ZoomImageView] restores its zoom only if the view has an `android:id` and nothing else
+     * (placeholder, error icon) is ever put into it. The first recreation carries a zoom applied to
+     * a finished image; the second happens while the new fragment's load is still parked.
      */
     @Test
     fun theZoomSurvivesTwoRecreationsWhileTheImageIsStillLoading() {
@@ -409,20 +332,13 @@ class ImageViewerDialogFragmentTest {
         scenario.close()
     }
 
-    // --- the outcome set, not one member of it ---------------------------------------------------
-
     /**
-     * Every outcome that is not a bitmap has to end the same way: no spinner, a message, no share.
-     * The set is iterated rather than written out, so a seventh [ImageError] or a fourth
-     * [ImageResult] fails this test until somebody decides what the viewer does with it -- which is
-     * also how [ImageResult.Skipped] got a branch at all. The plan's `when` had two arms for a
-     * sealed class with three members.
+     * Every outcome that is not a bitmap ends the same way: no spinner, a message, no share. The
+     * set is iterated, so a new [ImageError] or [ImageResult] fails this test until handled.
      */
     @Test
     fun everyOutcomeThatIsNotAReadyBitmapEndsAsAVisibleFailure() {
-        // The JVM's own record of the sealed hierarchy (`PermittedSubclasses`), not
-        // `KClass.sealedSubclasses`: the latter needs kotlin-reflect, which is on this classpath
-        // only because mockk happens to drag it in.
+        // `PermittedSubclasses` rather than `KClass.sealedSubclasses`, which needs kotlin-reflect.
         assertThat(ImageResult::class.java.permittedSubclasses!!.map { it.simpleName })
             .containsExactly("Ready", "Failed", "Skipped")
         val outcomes: List<ImageResult> =
@@ -431,8 +347,7 @@ class ImageViewerDialogFragmentTest {
 
         for (outcome in outcomes) {
             val mocked = mockk<ChatImageLoader>()
-            // The viewer fetches the bytes it will later share before it asks for a decode; this
-            // test is about what the *decode* answered, so the fetch always succeeds here.
+            // This test is about the decode result, so the byte fetch always succeeds.
             coEvery { mocked.fetchBytes(any()) } returns TestImages.png(4, 4)
             coEvery { mocked.loadFull(any(), any(), any()) } returns outcome
             ChatImageLoaders.setForTests(mocked)
@@ -448,18 +363,10 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    // --- one share at a time ----------------------------------------------------------------------
-
     /**
-     * `share.setOnClickListener` debounces nothing, so two quick taps used to start two coroutines
-     * -- and `ImageShareExporter.export` writes unconditionally, to a name derived from the source,
-     * so both wrote **the same file** on two IO threads. Export B truncates and rewrites while the
-     * chooser from export A is already handing the URI out, and the receiver reads a half-written
-     * image. Two choosers land on top of each other as well.
-     *
-     * The export is parked here so that the second tap arrives while the first one is still inside
-     * the write, which is the window that matters; a tap after the first share has finished is a
-     * legitimate second share and is allowed.
+     * Two quick taps must not start two exports: both would write the same file on two IO threads
+     * while the first chooser already hands out the URI. The export is parked so the second tap
+     * lands inside the first write.
      */
     @Test
     fun aSecondTapWhileTheFirstShareIsStillWritingIsRefused() {
@@ -482,17 +389,10 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    // --- what leaves the app is what was on the screen --------------------------------------------
-
     /**
-     * The share must hand out the bytes this dialog decoded, and a second fetch cannot promise that:
-     * the server is free to answer differently, `ImageShareExporter.typeOf` then re-decides the type
-     * from the new bytes, and the user sends something they never saw under a name this app chose.
-     * Nothing compared the exported bytes with the decoded ones.
-     *
-     * The displacement is not hypothetical -- it is the same one
-     * [aShareThatCannotBeWrittenSaysSoAndStartsNothing]'s neighbour used to build: the loader
-     * remembers exactly one payload, so one row binding behind the dialog is enough.
+     * The share hands out the bytes this dialog decoded; a second fetch could return different
+     * bytes (and a different type). The loader remembers one payload, so one row bound behind the
+     * dialog displaces it.
      */
     @Test
     fun theSharedBytesAreTheOnesThatWereShown() {
@@ -502,8 +402,7 @@ class ImageViewerDialogFragmentTest {
         launched { fragment ->
             fragment.ioDispatcher = Dispatchers.Unconfined
             idle()
-            // The server changes its mind, and a row bound behind the dialog displaces the one
-            // payload the loader remembers. A share that fetches again fetches *this*.
+            // The server changes its answer and a row bound behind the dialog displaces the payload.
             served = "not an image at all".toByteArray()
             runBlocking { loader!!.fetchBytes(other) }
 
@@ -515,11 +414,7 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    /**
-     * The privacy half of the same fix. A second request is a second contact with a host the user
-     * only ever agreed to look at once -- it re-announces their IP and the fact that they are still
-     * there, on a tap that says "share", and it is observable to the sender of the message.
-     */
+    /** Sharing must not contact the host a second time (privacy: it re-announces the user's IP). */
     @Test
     fun theShareDoesNotGoBackToTheNetwork() {
         val fetched = mutableListOf<String>()
@@ -536,19 +431,9 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    // --- the window, which is the dimension "fullscreen" actually lives in -----------------------
-
     /**
-     * The viewer is a *fullscreen* dialog, and "fullscreen" is a property of the **window**, not of
-     * the layout: `dialog_image_viewer.xml` asking for `match_parent` only fills whatever the window
-     * gives it. Four dimensions of this screen were swept -- the load outcomes, the arguments, the
-     * display metrics and the dispatchers -- and this one was never entered at all, which is why the
-     * line that used to sit in `onStart` could be deleted with the whole suite staying green.
-     *
-     * What holds the property up is `android:windowIsFloating=false` in `Theme.Mumla.ImageViewer`:
-     * `PhoneWindow.generateLayout` reads it and calls `setLayout(MATCH_PARENT, MATCH_PARENT)` for a
-     * non-floating window and `setLayout(WRAP_CONTENT, WRAP_CONTENT)` for a floating one. Measured
-     * by mutating the theme item to `true`: this test then reads WRAP_CONTENT (-2).
+     * Fullscreen is a property of the window: `android:windowIsFloating=false` in
+     * `Theme.Mumla.ImageViewer` makes `PhoneWindow.generateLayout` use MATCH_PARENT.
      */
     @Test
     fun theViewerWindowFillsTheScreen() {
@@ -561,12 +446,7 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    /**
-     * The black is the window's, once. A `android:background` on the layout root would paint a
-     * second full-screen layer over a window background that is already black -- lint's `Overdraw`,
-     * and a real extra fill of every pixel on every frame while a 40 MB bitmap is being drawn over
-     * it. This pins which of the two layers is the one that exists.
-     */
+    /** The black background is the window's only; a layout background would overdraw every frame. */
     @Test
     fun theBlackSurfaceIsTheWindowAndNotASecondLayerInTheLayout() {
         installLoader { TestImages.png(8, 8) }
@@ -578,13 +458,7 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    // --- the paths nobody asked for ---------------------------------------------------------------
-
-    /**
-     * A fragment the system rebuilt without its argument must end like any other failure, and must
-     * not ask the loader for a source it does not have. Not a self-dismissal: a dialog that
-     * disappears by itself is indistinguishable from a crash.
-     */
+    /** A fragment rebuilt without its argument fails visibly and does not ask the loader. */
     @Test
     fun aViewerWithoutASourceFailsWithoutAskingTheLoader() {
         val asked = mutableListOf<String>()
@@ -609,11 +483,7 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    /**
-     * The close button is the only way out of a wait that by design has no timeout, and it is wired
-     * before the load starts precisely so that it works during one. [theCloseButtonDismissesTheDialog]
-     * presses it after a finished image, which is the half that cannot fail; this is the other half.
-     */
+    /** The close button works while the load (which has no timeout) is still pending. */
     @Test
     fun theCloseButtonWorksWhileTheImageIsStillLoading() {
         val parked = ParkingDispatcher()
@@ -629,14 +499,7 @@ class ImageViewerDialogFragmentTest {
         }
     }
 
-    /**
-     * The share's whole failure surface, now that it does not fetch: the *write* fails. A plain file
-     * where the staging directory should be makes `mkdirs` fail and the write throw an
-     * `IOException`. There used to be a second test here for a re-fetch that fails; the share no
-     * longer fetches, so that path and its `catch (e: ImageFetchException)` are both gone -- a
-     * failing fetch is now a failing *load*, which
-     * [aFailedLoadShowsTheErrorAndKeepsSharingDisabled] covers.
-     */
+    /** A share whose write fails (a plain file where the staging directory should be). */
     @Test
     fun aShareThatCannotBeWrittenSaysSoAndStartsNothing() {
         installLoader { TestImages.png(4, 4) }
@@ -652,7 +515,7 @@ class ImageViewerDialogFragmentTest {
             assertThat(ShadowToast.getTextOfLatestToast())
                 .isEqualTo(fragment.getString(R.string.chat_image_load_failed))
             assertThat(shadowOf(fragment.requireActivity()).nextStartedActivity).isNull()
-            // ...and the button comes back, or one failed write would end sharing for this dialog.
+            // ...and the button comes back.
             assertThat(fragment.share().isEnabled).isTrue()
         }
     }

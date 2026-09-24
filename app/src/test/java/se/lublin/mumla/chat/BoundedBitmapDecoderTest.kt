@@ -17,10 +17,7 @@ import org.robolectric.shadows.ShadowBitmapFactory
 @RunWith(RobolectricTestRunner::class)
 class BoundedBitmapDecoderTest {
 
-    /**
-     * By default Robolectric invents a 100x100 bitmap for data it cannot decode, which real
-     * BitmapFactory never does. Every test in this class needs the realistic behaviour.
-     */
+    /** Robolectric otherwise invents a 100x100 bitmap for data it cannot decode. */
     @Before
     fun realisticDecoding() {
         ShadowBitmapFactory.setAllowInvalidImageData(false)
@@ -35,11 +32,7 @@ class BoundedBitmapDecoderTest {
         assertThat(BoundedBitmapDecoder.sampleSizeFor(4000, 4000, 240, 240)).isEqualTo(16)
     }
 
-    /**
-     * Exactly twice the bound must still be sampled: the sampled result lands exactly on the target,
-     * so the decode costs a quarter of the memory and no rescale follows. Stopping one step earlier
-     * here would decode the full image and throw three quarters of it away afterwards.
-     */
+    /** Exactly twice the bound is still sampled: the result lands on the target, no rescale. */
     @Test
     fun exactlyTwiceTheBoundIsStillSampled() {
         assertThat(BoundedBitmapDecoder.sampleSizeFor(480, 480, 240, 240)).isEqualTo(2)
@@ -49,7 +42,7 @@ class BoundedBitmapDecoderTest {
     @Test
     fun extremeAspectRatiosAreSampledDown() {
         // Bounded by width alone: 1000/240 -> 4, 12000/240 -> 32. A `&&` over both axes would
-        // return 1 here and decode the full image (12000 x 200 x 4 bytes ~ 9.6 MiB).
+        // return 1 here and decode the full image.
         assertThat(BoundedBitmapDecoder.sampleSizeFor(1000, 100, 240, 240)).isEqualTo(4)
         assertThat(BoundedBitmapDecoder.sampleSizeFor(12000, 200, 240, 240)).isEqualTo(32)
     }
@@ -66,12 +59,7 @@ class BoundedBitmapDecoderTest {
         assertThat(BoundedBitmapDecoder.sampleSizeFor(-1, -1, 240, 240)).isEqualTo(1)
     }
 
-    /**
-     * Not a taste question: with a negative bound the doubling loop never terminates. `fit` goes
-     * negative, `sample` overflows to Int.MIN_VALUE and then to 0, and `1f / 0` stays `>= fit`
-     * forever — measured on the JVM for (1000, 500, 240, -1), aborted after 200 iterations. This
-     * check is what stands between a bad bound and a hung decoding thread.
-     */
+    /** With a negative bound the doubling loop would never terminate (`sample` overflows to 0). */
     @Test
     fun nonPositiveBoundsAreRejectedBySampleSizeFor() {
         assertThat(
@@ -96,8 +84,7 @@ class BoundedBitmapDecoderTest {
         assertThrows(IllegalArgumentException::class.java) {
             BoundedBitmapDecoder.decode(png, 240, 0)
         }
-        // Also for input that would otherwise short-circuit to null: the bound is checked first,
-        // so a bad bound can never hide behind "not an image".
+        // Also for input that would otherwise short-circuit to null: the bound is checked first.
         assertThrows(IllegalArgumentException::class.java) {
             BoundedBitmapDecoder.decode("definitely not an image".toByteArray(), -5, 240)
         }
@@ -145,9 +132,8 @@ class BoundedBitmapDecoderTest {
     }
 
     /**
-     * The whole point of the class. Robolectric records the decode options on the bitmap and keeps
-     * that description across createScaledBitmap, so this is evidence about what the DECODER was
-     * asked to do, not merely about the size of the result.
+     * Robolectric records the decode options on the bitmap and keeps them across
+     * createScaledBitmap, so this is evidence about what the decoder was asked to do.
      */
     @Test
     fun aLargeImageIsSampledAtDecodeTimeAndNeverMaterialisedInFull() {
@@ -157,22 +143,16 @@ class BoundedBitmapDecoderTest {
         val bitmap = BoundedBitmapDecoder.decode(TestImages.png(4000, 3000), 240, 240)!!
         assertThat(shadowOf(bitmap).description).contains("inSampleSize=$sample")
 
-        // The bitmap `decode` actually materialised, recovered from the result instead of
-        // recomputed from constants here: createScaledBitmap records the instance it scaled from,
-        // so this is the real peak of the decoding path. It is 48 MB the moment the sampling stops
-        // working, which is the entire reason this class exists.
+        // The bitmap `decode` actually materialised (createScaledBitmap records its source), i.e.
+        // the real peak of the decoding path.
         val intermediate = shadowOf(bitmap).createdFromBitmap!!
         assertThat(intermediate.width).isEqualTo(4000 / sample)
         assertThat(intermediate.height).isEqualTo(3000 / sample)
         val unsampledBytes = 4000L * 3000L * 4L  // 48_000_000 B at 4 bytes per ARGB_8888 pixel
         assertThat(intermediate.byteCount.toLong() * 200).isLessThan(unsampledBytes)
 
-        // 3000/16 is 187.5 and this decoder floors it to 187, which puts the fitted height at
-        // 240 / (250/187) = 179.5 -> 179. The flooring is Robolectric's arithmetic
-        // (`point.y /= inSampleSize`), not a platform promise: a device may hand back 188 for the
-        // same request and then fit to 180. These two numbers pin what the JVM decoder does here;
-        // they are not a claim about what Android returns. A power-of-two sampled image only
-        // approximates its aspect ratio either way.
+        // 3000/16 = 187.5 floors to 187 in Robolectric's decoder, so the fitted height is 179. A
+        // device may return 188 and fit to 180; these numbers pin the JVM decoder only.
         assertThat(bitmap.width).isEqualTo(240)
         assertThat(bitmap.height).isEqualTo(179)
         assertThat(bitmap.byteCount.toLong()).isEqualTo(240L * 179L * 4L)
@@ -189,16 +169,9 @@ class BoundedBitmapDecoderTest {
     }
 
     /**
-     * A body cut short is a real case: HttpImageFetcher accepts a response that stops before the
-     * announced Content-Length. Decoding must report "not an image", not throw.
-     *
-     * Measured: for every prefix below the *bounds* pass already fails, so what this pins is the
-     * first of the two decode calls, never the second — with the catch around the second decode
-     * removed entirely, this test still passed. That holds for the prefixes that keep the header
-     * intact and cut into the pixel data too, because this test's decoder (ImageIO) reads the
-     * metadata across the whole stream. A cut that survives the bounds pass and then fails on the
-     * pixel pass is therefore not producible with real bytes here; that branch is covered by
-     * [aThrowingSampledPassIsReportedAsNotAnImage] instead.
+     * A body cut short (HttpImageFetcher accepts a response shorter than Content-Length) decodes to
+     * null rather than throwing. With ImageIO every such prefix already fails the bounds pass; the
+     * sampled-pass branch is covered by [aThrowingSampledPassIsReportedAsNotAnImage].
      */
     @Test
     fun aTruncatedImageDecodesToNull() {
@@ -208,11 +181,7 @@ class BoundedBitmapDecoderTest {
         }
     }
 
-    /**
-     * The sampled pass throwing is defence in depth rather than an observed case, so it takes a
-     * decoder double to reach: no byte sequence gets past the bounds pass and then throws (see
-     * [aTruncatedImageDecodesToNull]). A throwing decoder is still "not an image", not a crash.
-     */
+    /** The sampled pass throwing is only reachable with a decoder double; it is "not an image". */
     @Test
     @Config(shadows = [ArmedBitmapFactory::class])
     fun aThrowingSampledPassIsReportedAsNotAnImage() {
@@ -222,15 +191,9 @@ class BoundedBitmapDecoderTest {
     }
 
     /**
-     * The OOM policy, which until now existed only as prose in the KDoc: an [Error] is not an
-     * "undecodable image", it is the heap being gone, and it must reach the caller. Swallowing it
-     * would report a memory exhaustion as "not an image" and let the app run on a wrecked heap.
-     *
-     * The error is constructed rather than provoked on purpose. Really exhausting the heap in a
-     * unit test is neither reproducible nor survivable for the rest of the suite, and it would not
-     * test anything extra: both catches branch on the *type* of what was thrown, so a constructed
-     * instance takes the exact path an allocator-thrown one takes. A second, non-OOM [Error] is
-     * armed as well so the pinned policy is "no Error is caught" rather than "OOM is special-cased".
+     * An [Error] is not an undecodable image and must reach the caller. The error is constructed
+     * rather than provoked; both catches branch on the type. A non-OOM [Error] is armed as well, so
+     * the policy is "no Error is caught" rather than "OOM is special-cased".
      */
     @Test
     @Config(shadows = [ArmedBitmapFactory::class])
@@ -259,11 +222,7 @@ class BoundedBitmapDecoderTest {
         assertThrows(StackOverflowError::class.java) { BoundedBitmapDecoder.decode(png, 240, 240) }
     }
 
-    /**
-     * Measured boundary of the case above: cutting into the trailing IEND chunk leaves all pixel
-     * data intact, so this decodes normally. Pinned so that a later change to the truncation
-     * handling cannot quietly turn a complete image into a failure.
-     */
+    /** Cutting into the trailing IEND chunk leaves the pixel data intact, so this still decodes. */
     @Test
     fun anImageMissingOnlyItsEndMarkerStillDecodes() {
         val png = TestImages.png(1000, 500)
@@ -272,12 +231,9 @@ class BoundedBitmapDecoderTest {
         assertThat(bitmap.height).isEqualTo(120)
     }
 
-    // ---- the one-allocation decode the fullscreen viewer uses -------------------------------
-
     @Test
     fun theAtMostSampleTakesTheHalvingTheExactFitDeclines() {
-        // Just under twice the bound on both axes: the exact-fit sampler stops at 1 and hands the
-        // scaler the whole image, which is the case that peaks.
+        // Just under twice the bound on both axes: the exact-fit sampler stops at 1.
         assertThat(BoundedBitmapDecoder.sampleSizeFor(479, 479, 240, 240)).isEqualTo(1)
         assertThat(BoundedBitmapDecoder.sampleSizeAtMost(479, 479, 240, 240)).isEqualTo(2)
         // Exactly on twice: both agree, because one halving lands exactly on the bound.
@@ -325,20 +281,10 @@ class BoundedBitmapDecoderTest {
     }
 
     /**
-     * The measurement, and the whole reason the function exists.
-     *
-     * The instrument is the shadow's own record of what the path built, not a heap delta: a heap
-     * delta measures the opposite here, because Robolectric does not implement `inJustDecodeBounds`
-     * and allocates a full bitmap for the bounds pass. `createdFromBitmap` hands back the instance
-     * `createScaledBitmap` scaled from, so the sum below is every bitmap the decode created and
-     * held at once — a *structural* peak, exact for this path, and it does not depend on the JVM's
-     * allocator. It is validated in the same test: the exact-fit path must show a chain of two and
-     * the at-most path a chain of one, so a run in which the instrument read nothing back fails
-     * rather than reporting zero.
-     *
-     * The size is a tenth of the real one on each axis so the fixture stays cheap; bitmap bytes are
-     * w * h * 4, so the real figures at 2160 x 4680 (the viewer's bound on a 1080 x 2340 screen)
-     * are exactly a hundred times these, and the sample sizes are pinned at that size above.
+     * Peak bitmaps held by each path, from the shadow's `createdFromBitmap` record (a heap delta is
+     * useless because Robolectric does not implement `inJustDecodeBounds`). The exact-fit path must
+     * show a chain of two and the at-most path one, which also validates the instrument. Sizes are
+     * a tenth of the viewer's real 2160 x 4680 bound per axis.
      */
     @Test
     fun theFullscreenDecodeHoldsOneBitmapWhereTheExactFitHoldsTwo() {
@@ -360,10 +306,8 @@ class BoundedBitmapDecoderTest {
     }
 
     /**
-     * The same worst case at the size the viewer really asks for — sample sizes only, so nothing is
-     * allocated. 4319 x 9359 at 4 bytes a pixel is 161.7 MB decoded whole; the fitted copy beside
-     * it is 40.4 MB, so the exact fit peaks at 202.1 MB. One halving brings the decode to
-     * 2159 x 4679, which is 40.4 MB and the only bitmap there is.
+     * The same worst case at the viewer's real size, sample sizes only: the exact fit peaks at
+     * 202.1 MB, one halving gives a single 40.4 MB bitmap.
      */
     @Test
     fun atTwiceA1080x2340ScreenTheHalvingIsWhatSeparates202MBFrom40MB() {
@@ -375,12 +319,8 @@ class BoundedBitmapDecoderTest {
 
 /**
  * A [BitmapFactory] whose decode calls can be armed to throw, installed per test via `@Config`.
- *
- * Robolectric's own shadow cannot be driven into throwing and real bytes cannot reach the second
- * decode call in a throwing state, so this is the only way to cover what `decode` promises about
- * throwing decoders. Calls that are not the armed one report a plausible header on the options and
- * return nothing: `decode` reads the size off the options and discards the bitmap of the bounds
- * pass, so that is enough to get from the first call to the second.
+ * Calls that are not the armed one report a plausible header on the options and return nothing,
+ * which is enough for `decode` to get from the bounds pass to the sampled pass.
  */
 @Implements(BitmapFactory::class)
 class ArmedBitmapFactory {

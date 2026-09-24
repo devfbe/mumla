@@ -15,26 +15,18 @@ import java.io.File
 class ImageShareExporterTest {
     private val context: Context = RuntimeEnvironment.getApplication()
 
-    // Hand-computed, not derived from the code under test:
-    //   $ printf 'https://x.org/a.png' | sha1sum
-    //   c03da97f398e3f951d29689263e7fa31bf3c163d
+    // printf 'https://x.org/a.png' | sha1sum
     private val keyOfA = "c03da97f398e3f951d29689263e7fa31bf3c163d"
     private val sourceA = "https://x.org/a.png"
 
     private val dir: File get() = File(context.cacheDir, ImageShareExporter.DIRECTORY)
 
-    /**
-     * Robolectric hands every test in a class the same `cacheDir`, so a file one test wrote is a
-     * file the next test's prune sees. Without this, `theWholeDirectoryIsPrunedWhenTheClockJumps`
-     * would delete another test's fixture and `prune` would look load-bearing for the wrong reason.
-     */
+    /** Robolectric shares `cacheDir` between the tests of a class, so start from an empty one. */
     @Before
     fun emptyTheShareDirectory() {
         FileProviderCache.clear()
         dir.listFiles()?.forEach { it.deleteRecursively() }
     }
-
-    // --- the brief's three tests ----------------------------------------------------------------
 
     @Test
     fun exportsPngUnderTheFileProviderAuthority() {
@@ -69,10 +61,8 @@ class ImageShareExporterTest {
     // --- the magic-byte set, clause by clause ---------------------------------------------------
 
     /**
-     * The WEBP arm is three clauses in one bracket (`RIFF` prefix, at least 12 bytes, `WEBP` at
-     * offset 8) and each is mutated on its own: drop the prefix and `....    WEBP` would pass, drop
-     * the length and a 4-byte `RIFF` would index out of bounds, drop the tag and a `.wav` would be
-     * shared as an image.
+     * Each clause of the WEBP check (`RIFF` prefix, at least 12 bytes, `WEBP` at offset 8) on its
+     * own; without the tag a `.wav` would be shared as an image.
      */
     @Test
     fun aRiffContainerThatIsNotWebpIsNotAnImage() {
@@ -107,10 +97,8 @@ class ImageShareExporterTest {
     // --- the file name ---------------------------------------------------------------------------
 
     /**
-     * The share file is named after [ChatImageLoader.cacheKey], i.e. a chat message picks the name
-     * of a file this app hands to another app. The name must therefore stay inside the one
-     * directory the provider publishes whatever the message said, and it does so because the key is
-     * forty hex characters and nothing else -- there is no sanitiser here to carry the weight.
+     * A chat message picks the share file's name via [ChatImageLoader.cacheKey], so the name must
+     * stay inside the published directory; the key is forty hex characters and nothing else.
      */
     @Test
     fun aHostileSourceCannotSteerTheExportOutOfTheSharedDirectory() {
@@ -124,18 +112,13 @@ class ImageShareExporterTest {
         val exporter = ImageShareExporter(context)
         for (source in hostile) {
             val exported = exporter.export(source, TestImages.png(2, 2))
-            // One claim, not two: a name of forty hex digits plus ".png" has no separator and no
-            // parent reference in it, so "stays inside the directory" is not a second fact to
-            // assert -- it is this one restated, and a second assertion would read as a second
-            // piece of evidence.
             assertThat(exported.uri.lastPathSegment).matches("[0-9a-f]{40}\\.png")
         }
     }
 
     /**
-     * The provider publishes exactly one subtree. `getUriForFile` refusing everything else is what
-     * keeps `shared_image_paths.xml` from being widened to the whole cache without anyone noticing:
-     * the app's own HTTP cache and WebView data live one level up.
+     * The provider publishes exactly one subtree; the app's HTTP cache and WebView data live one
+     * level up.
      */
     @Test
     fun theProviderPublishesNothingButTheShareDirectory() {
@@ -151,16 +134,8 @@ class ImageShareExporterTest {
     }
 
     /**
-     * The manifest half of the same promise. `exported="false"` is what keeps another app from
-     * querying the provider directly instead of waiting to be handed a grant, and
-     * `grantUriPermissions="true"` is what makes the grant on the share intent mean anything at all
-     * -- without it the chooser's flag is silently inert and the receiver sees a SecurityException.
-     *
-     * **Scope.** This reads the declaration back through the `PackageManager`, i.e. it holds the
-     * manifest against itself. Both mutations die, so it catches an accidental edit of those two
-     * attributes; it cannot catch a wrong *design*, because there is nothing here that the manifest
-     * is not also the source of. What a widened `shared_image_paths.xml` would do is a different
-     * question and [theProviderPublishesNothingButTheShareDirectory] is where it is asked.
+     * `exported="false"` keeps other apps from querying the provider directly;
+     * `grantUriPermissions="true"` makes the share intent's grant work at all.
      */
     @Test
     fun theProviderIsPrivateAndGrantsPerUri() {
@@ -172,11 +147,7 @@ class ImageShareExporterTest {
 
     // --- the bytes are borrowed, and the pruning window ------------------------------------------
 
-    /**
-     * `ChatImageLoader.fetchBytes` hands out its own remembered array rather than a copy, so the
-     * array this method is given is shared with the loader's cache. Writing to it would corrupt
-     * every later use of that source.
-     */
+    /** The array is shared with the loader's cache (`fetchBytes` hands out no copy): never write it. */
     @Test
     fun theBytesHandedInAreNotModified() {
         val png = TestImages.png(8, 8)
@@ -211,9 +182,8 @@ class ImageShareExporterTest {
     }
 
     /**
-     * Pruning happens before the write, never after. With the clock past every existing file's age
-     * the whole directory goes, and the export still has to produce the file it was asked for --
-     * which is the assertion that tells the two orders apart.
+     * Pruning happens before the write: with the clock past every file's age the whole directory
+     * goes, and the export still produces its file.
      */
     @Test
     fun theWholeDirectoryIsPrunedWhenTheClockJumpsAndTheNewShareSurvives() {

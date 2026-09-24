@@ -52,8 +52,7 @@ class ChatAdapterTest {
 
     @Before
     fun rejectInvalidImageData() {
-        // Without this Robolectric invents a 100x100 bitmap for undecodable bytes and the
-        // failure test would be green without testing anything (spec 4.05).
+        // Without this Robolectric invents a 100x100 bitmap for undecodable bytes.
         ShadowBitmapFactory.setAllowInvalidImageData(false)
     }
 
@@ -90,9 +89,8 @@ class ChatAdapterTest {
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     /**
-     * Binds [position] into a freshly created holder that is **attached to a real window** and laid
-     * out. Attachment is not decoration: an unattached View queues its click in
-     * `HandlerActionQueue` instead of running it, so a tap on a detached row never reports.
+     * Binds [position] into a fresh holder attached to a real window and laid out: an unattached
+     * View queues its click in `HandlerActionQueue` instead of running it.
      */
     private fun ChatAdapter.holderAt(position: Int, viewType: Int): ChatAdapter.Holder {
         val holder = createViewHolder(parent, viewType)
@@ -108,12 +106,8 @@ class ChatAdapterTest {
     }
 
     /**
-     * A real touch **through the row**, not [View.performClick] and not a direct dispatch to the
-     * target either. `performClick` ignores `isEnabled` and visibility; a direct
-     * `view.dispatchTouchEvent` ignores visibility too, because it is the *parent* that filters
-     * GONE children out of hit-testing (`ViewGroup.canViewReceivePointerEvents`). Only a touch
-     * that enters at the row and is routed down sees what a finger sees — which is why
-     * [holderAt] attaches the row to a real window and lays it out.
+     * A real touch entering at the row and routed down, so disabled and GONE targets are filtered
+     * as for a finger ([View.performClick] and a direct dispatch to the target ignore visibility).
      */
     private fun tapRow(holder: ChatAdapter.Holder, targetId: Int) {
         val target = holder.itemView.findViewById<View>(targetId)
@@ -204,13 +198,8 @@ class ChatAdapterTest {
 
     @Test
     fun aPictureAUserSentIsAnImageRowAndNotItsRawMarkup() = runTest {
-        // getItemViewType branches on two booleans, and this is the corner the rest of the suite
-        // never builds: every other image fixture here is an InfoMessage, while the feature's
-        // actual use case is a TextMessage -- MumlaService wraps *every* incoming chat message in
-        // one (MumlaService.java:246), so a picture a user sends arrives as a TextMessage whose
-        // body holds the <img>. Under `content is Image && message is InfoMessage` this row falls
-        // through to the TextHolder, which finds no ChatContent.Text to unwrap and prints the raw
-        // body -- the user sees `look <img src="..."/>` where the picture should be.
+        // The real use case: MumlaService wraps every incoming chat message in a TextMessage, so a
+        // sent picture arrives as a TextMessage whose body holds the <img>, not as an InfoMessage.
         val adapter = adapter()
         val sent = text(body = "look <img src=\"$url\"/>")
         adapter.submitMessages(listOf(sent))
@@ -267,9 +256,7 @@ class ChatAdapterTest {
         assertThat(status.text.toString()).isEqualTo(activity.getString(R.string.chat_image_load_failed))
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Input sweep: every input ChatAdapter.kt branches on, enumerated from the production file.
-    // ------------------------------------------------------------------------------------------
+    // Input sweep: every input ChatAdapter.kt branches on.
 
     private fun channel(name: String?) = Channel().also { it.name = name }
 
@@ -310,11 +297,9 @@ class ChatAdapterTest {
             text(users = listOf(User(3, "bob"))),
             text(),
             text(actorName = null),
-            // Present but nameless: the old ListView adapter printed "Unknown" here and stopped.
+            // Present but nameless.
             text(channels = listOf(channel(null)), users = listOf(User(3, "bob"))),
-            // The same corner one target kind further down, which nothing used to build: a user
-            // that is there but has no name. Without the `?.name` on the user check this renders
-            // "alice -> null", the raw-null-into-setText defect this adapter exists to have fixed.
+            // A user that is there but has no name must not render "alice -> null".
             text(users = listOf(User(3, null))),
             text(actorName = null, users = listOf(User(3, null))),
         )
@@ -336,12 +321,8 @@ class ChatAdapterTest {
 
     @Test
     fun aMessageNeverHandsOutANullTargetList() = runTest {
-        // The premise under targetLabel reading the three target lists without a null check.
-        // Message wraps each one in Collections.unmodifiableList, so every Message the app can
-        // build answers non-null -- and one built with a null list *throws* there rather than
-        // answering null, so even that corner never reaches a null branch. Message is the only
-        // IMessage implementation in production (the one other implementation in the repo is a
-        // fake in NotificationPostingTest, which never meets this adapter).
+        // targetLabel reads the three target lists without a null check: Message wraps each in
+        // Collections.unmodifiableList (a null list throws), and it is the only production IMessage.
         val full = Message(7, "alice", listOf(channel("Root")), listOf(channel("Sub")), listOf(User(3, "bob")), "hi")
         val empty = Message("just a body")
         for (message in listOf(full, empty)) {
@@ -381,10 +362,8 @@ class ChatAdapterTest {
 
     @Test
     fun theCaptionsAroundAnOwnPictureFollowTheBubbleTheySitIn() = runTest {
-        // bindHeader aligns the box to the END for an own message, and the text row passes that on
-        // to its own TextView. bindImage did not, so the caption of a picture *you* sent sat
-        // left-aligned inside a right-aligned bubble while the plain text line next to it did not.
-        // One holder, bound twice, so the reset on reuse is pinned as well as the set.
+        // An own message aligns its caption to the END like its text line; one holder bound twice
+        // pins the reset on reuse as well.
         val adapter = adapter(selfSessionId = { 7 })
         adapter.submitMessages(
             listOf(
@@ -413,9 +392,7 @@ class ChatAdapterTest {
 
     @Test
     fun aRecycledRowResetsBothWaysRoundBetweenAnOwnMessageAndANotice() = runTest {
-        // One holder, both orders. Each direction pins a different line: a fresh row is already
-        // left-aligned with a visible name, so only the *reuse* makes the resets observable, and
-        // only doing it both ways round makes both resets observable.
+        // One holder, both orders: only reuse makes the resets observable.
         val adapter = adapter(selfSessionId = { 7 })
         adapter.submitMessages(listOf(text(actor = 7, channels = listOf(channel("Root"))), info("joined")))
         idle()
@@ -437,8 +414,7 @@ class ChatAdapterTest {
 
     @Test
     fun anUnparsedMessageStillRendersItsRawBodyInsteadOfCrashing() = runTest {
-        // submitList is not the supported entry point, but it is inherited and public. A message
-        // that reaches the list unparsed must render as text, not throw.
+        // submitList is inherited and public: an unparsed message must render as text, not throw.
         val adapter = adapter()
         val message = info("not parsed")
         adapter.submitList(listOf(message))
@@ -473,9 +449,7 @@ class ChatAdapterTest {
 
     @Test
     fun anEmptyTextAroundAnImageIsHiddenJustLikeAnAbsentOne() = runTest {
-        // ChatContentParser returns null rather than an empty Spanned, so this only reaches
-        // bindImage through the public ChatContent.Image/IChatMessage.content pair. An empty but
-        // VISIBLE TextView would still cost its 4dp bottom margin under the picture.
+        // An empty but VISIBLE TextView would still cost its bottom margin under the picture.
         val adapter = adapter()
         val message = info("<img src=\"$url\"/>")
         message.content = ChatContent.Image(url, SpannableStringBuilder(""), SpannableStringBuilder(""))
@@ -491,13 +465,7 @@ class ChatAdapterTest {
 
     @Test
     fun aTapOnARowWhoseImageFailedReportsNothing() = runTest {
-        // What this pins is the user-facing claim: a row whose picture failed is not tappable.
-        // The mechanism is more than one thing at once and the test does not isolate any of them --
-        // a failed row has no drawable, so it also measures 0x0 and isTransformedTouchPointInView
-        // turns the touch away before visibility is ever consulted. Either would do. The routing in
-        // tapRow still earns its keep: a performClick() would report a tap here whatever the row
-        // looked like, and it is the same routing that anImageRowShowsABoundedThumbnailAndReportsTaps
-        // needs on the other side of the claim.
+        // A row whose picture failed is not tappable (it is hidden and measures 0x0).
         remoteBody = "not an image".toByteArray()
         val adapter = adapter()
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
@@ -619,17 +587,12 @@ class ChatAdapterTest {
         assertThat(fetched).containsExactly(url)
     }
 
-    // ------------------------------------------------------------------------------------------
     // The snapshot and the submit ordering.
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theDifferOnlyEverAsksAboutTheContentsOfOneAndTheSameInstance() = runTest {
-        // The premise that lets areContentsTheSame be a constant: DiffUtil only asks it about
-        // pairs areItemsTheSame has already merged, and that callback merges by identity -- so
-        // both arguments are the same object every time and no comparison could answer otherwise.
-        // Collapsing two rows into one would take areItemsTheSame conflating two *distinct*
-        // instances, which is the assertion below it and a different method.
+        // areContentsTheSame can be a constant: DiffUtil only asks it about pairs areItemsTheSame
+        // merged, and that merges by identity.
         val pairs = mutableListOf<Pair<IChatMessage, IChatMessage>>()
         val recording = object : DiffUtil.ItemCallback<IChatMessage>() {
             override fun areItemsTheSame(oldItem: IChatMessage, newItem: IChatMessage) =
@@ -648,7 +611,7 @@ class ChatAdapterTest {
         adapter.submitMessages(listOf(first, second))
         idle()
         // A fresh list holding the same instances: AsyncListDiffer short-circuits on the identical
-        // List object, so this is what makes it compare contents at all.
+        // List object.
         adapter.submitMessages(listOf(first, second))
         idle()
 
@@ -657,8 +620,7 @@ class ChatAdapterTest {
             if (oldItem !== newItem) fail("asked about two different instances: $oldItem / $newItem")
         }
 
-        // The other half, which identity really does carry: two messages that read the same are
-        // still two rows.
+        // Two messages that read the same are still two rows.
         val twin = adapter(diff = ChatAdapter.DIFF)
         twin.submitMessages(listOf(info("same"), info("same")))
         idle()
@@ -667,9 +629,8 @@ class ChatAdapterTest {
 
     @Test
     fun replacingTheWholeLogRemovesAndInsertsRatherThanRebindingInPlace() = runTest {
-        // With areItemsTheSame always true, DiffUtil would pair row i with row i and report
-        // changes. The log only ever appends today, so this is the dimension that says what
-        // happens the day it does not.
+        // With areItemsTheSame always true, DiffUtil would pair row i with row i; the log only
+        // appends today, so this pins what happens the day it does not.
         val adapter = adapter()
         adapter.submitMessages(listOf(info("one"), info("two")))
         idle()
@@ -743,17 +704,14 @@ class ChatAdapterTest {
         assertThat(adapter.currentList.map { it.body }).containsExactly("one", "two").inOrder()
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Effect sweep: the layouts. Every attribute the adapter relies on, read back off the view.
-    // ------------------------------------------------------------------------------------------
+    // The layouts: every attribute the adapter relies on, read back off the view.
 
     private fun inflate(layout: Int): View =
         activity.layoutInflater.inflate(layout, parent, false)
 
     @Test
     fun bothRowLayoutsWrapTheirContentAndKeepTheOldDividerAsAMargin() = runTest {
-        // match_parent here is what the ListView tolerated and a RecyclerView does not: every row
-        // would be one viewport tall. The margin replaces ListView's dividerHeight.
+        // match_parent would make every RecyclerView row one viewport tall.
         val spacing = activity.resources.getDimensionPixelSize(R.dimen.chat_item_spacing)
         for (layout in intArrayOf(R.layout.list_chat_item, R.layout.list_chat_item_image)) {
             val params = inflate(layout).layoutParams as ViewGroup.MarginLayoutParams
@@ -773,11 +731,8 @@ class ChatAdapterTest {
         assertThat(image.maxHeight).isEqualTo(max)
         // Without adjustViewBounds the maxima above do nothing for a wrap_content ImageView.
         assertThat(image.adjustViewBounds).isTrue()
-        // Explicitly FOCUSABLE, not FOCUSABLE_AUTO. Measured: with the attribute removed,
-        // isFocusable is still true at minSdk 31 because FOCUSABLE_AUTO resolves itself from
-        // clickable — so isFocusable alone cannot tell the two apart and the attribute would read
-        // as unpinned. What the explicit value buys is that the thumbnail stays reachable by
-        // keyboard and switch access even if someone later drops android:clickable.
+        // Explicitly FOCUSABLE, not FOCUSABLE_AUTO (which resolves from clickable), so the thumbnail
+        // stays reachable by keyboard and switch access even without android:clickable.
         assertThat(image.focusable).isEqualTo(View.FOCUSABLE)
         assertThat(image.isFocusable).isTrue()
         assertThat(image.isClickable).isTrue()
@@ -790,17 +745,13 @@ class ChatAdapterTest {
     fun theImageRowStacksItsPartsAndKeepsTheTextSelectable() = runTest {
         val row = inflate(R.layout.list_chat_item_image)
         val box = row.findViewById<LinearLayout>(R.id.list_chat_item_box)
-        // The default for a LinearLayout is HORIZONTAL, which would put the target line, the
-        // caption, the thumbnail, the status and the timestamp side by side in one strip.
+        // The LinearLayout default is HORIZONTAL.
         assertThat(box.orientation).isEqualTo(LinearLayout.VERTICAL)
-        // The plain text row lets a message be selected and copied. Dropping it only around a
-        // picture would be a silent regression against the ListView row this replaces, and one
-        // nothing else here would notice.
+        // The plain text row lets a message be selected and copied; so must the picture row.
         for (id in intArrayOf(R.id.list_chat_item_text_before, R.id.list_chat_item_text_after)) {
             assertThat(row.findViewById<TextView>(id).isTextSelectable).isTrue()
         }
-        // The gap the comment in anEmptyTextAroundAnImageIsHiddenJustLikeAnAbsentOne leans on: a
-        // VISIBLE but empty caption would still cost this much space under the picture.
+        // A VISIBLE but empty caption would still cost this much space under the picture.
         for (id in intArrayOf(
             R.id.list_chat_item_text_before,
             R.id.list_chat_item_text_after,
@@ -837,11 +788,8 @@ class ChatAdapterTest {
             .isInstanceOf(ChatAdapter.ImageHolder::class.java)
     }
 
-    // ------------------------------------------------------------------------------------------
-    // The log is unbounded (stream A). Both of these compare index by index and report the first
-    // divergence: Truth renders both lists into the failure message, which on a list this size is
-    // the "TIMED OUT without output" failure mode of spec 4.05.
-    // ------------------------------------------------------------------------------------------
+    // The log is unbounded. These compare index by index: Truth would render both lists into the
+    // failure message, which on a list this size times out.
 
     @Test
     fun aLongSessionParsesEachMessageExactlyOnceNoMatterHowOftenTheLogIsResubmitted() = runTest {

@@ -39,8 +39,8 @@ class ImageSourceTest {
         assertThat(ImageSource.parse("javascript:alert(1)")).isEqualTo(ImageSource.Unsupported)
     }
 
-    // --- Hostile input. The parser (Task 2) hands the raw src attribute through byte for byte and
-    // --- deliberately does not check the scheme, so every dangerous source has to die here.
+    // Hostile input: the parser hands the raw src attribute through unchecked, so every dangerous
+    // source has to die here.
 
     @Test
     fun schemeMatchingIsCaseInsensitiveForTheSupportedSchemes() {
@@ -78,8 +78,7 @@ class ImageSourceTest {
 
     @Test
     fun controlCharactersInsideARemoteUrlSurviveToTheFetcherWhichRejectsThem() {
-        // parse() is deliberately not a URL validator: it classifies. Anything that is syntactically
-        // not a URL (embedded CR/LF, NUL, spaces) is rejected by HttpImageFetcher, see its test.
+        // parse() classifies, it does not validate: HttpImageFetcher rejects syntactically invalid URLs.
         assertThat(ImageSource.parse("http://x/a\u0000b.png")).isEqualTo(ImageSource.Remote("http://x/a\u0000b.png"))
         assertThat(ImageSource.parse("http://x/a\r\nHost:evil/b.png"))
             .isEqualTo(ImageSource.Remote("http://x/a\r\nHost:evil/b.png"))
@@ -112,8 +111,8 @@ class ImageSourceTest {
 
     @Test
     fun truncatedButDecodableBase64YieldsThoseBytes() {
-        // Truncation that still forms whole base64 units decodes to a short, non-image byte array.
-        // Rejecting it is the bitmap decoder's job (MALFORMED), not this classifier's.
+        // Truncation forming whole base64 units decodes to short non-image bytes; the bitmap
+        // decoder rejects those (MALFORMED).
         val source = ImageSource.parse("data:image/jpeg;base64,/9") as ImageSource.Data
         assertThat(source.bytes).isEqualTo(byteArrayOf(0xFF.toByte()))
     }
@@ -152,9 +151,8 @@ class ImageSourceTest {
 
     @Test
     fun caseInsensitivePrefixMatchingFoldsSomeUnicodeOntoAscii() {
-        // '\u017F' (long s) uppercases to 'S', so "httpſ://" matches the "https://" prefix and is
-        // classified Remote. Documented, not a hole: HttpImageFetcher checks the scheme exactly and
-        // refuses it (see HttpImageFetcherTest.unicodeCaseFoldingOfTheSchemeIsCaughtHere).
+        // 'ſ' (long s) uppercases to 'S', so "httpſ://" is classified Remote; HttpImageFetcher
+        // checks the scheme exactly and refuses it.
         assertThat(ImageSource.parse("http\u017F://evil.example/a.png"))
             .isEqualTo(ImageSource.Remote("http\u017F://evil.example/a.png"))
     }
@@ -174,18 +172,11 @@ class ImageSourceTest {
         assertThat(ImageSource.parse("http://user:pass@/a.png")).isEqualTo(ImageSource.Remote("http://user:pass@/a.png"))
     }
 
-    // --- The length cap. It exists to stop an allocation, not to name an error, so what it has to
-    // --- prevent lives inside this parser and nowhere else.
+    // The length cap exists to stop allocations inside this parser.
 
     /**
-     * `HtmlUtils.percentDecode` builds a `StringBuilder` of the input's length and then a
-     * `toString()` of it — two more full-size copies — and `Base64.getMimeDecoder().decode`
-     * materialises the whole payload as a byte array. Those three allocations are the reason the cap
-     * exists. A test that only reads the returned value cannot tell a refusal that skipped all of
-     * them from one that did them all and threw the result away: both say `TooLarge`. So this
-     * measures what the JVM really allocated on this thread. Moving the cap below the decode leaves
-     * the return value untouched and this assertion red, which is the whole point of writing it this
-     * way.
+     * `percentDecode` and the MIME decoder make three full-size copies of the payload; a refusal
+     * must skip all of them. The return value cannot tell, so the thread's allocations are measured.
      */
     @Test
     fun anOversizedSourceIsRefusedWithoutAllocatingACopyOfIt() {
@@ -200,33 +191,18 @@ class ImageSourceTest {
         val allocated = threads.currentThreadAllocatedBytes - before
 
         assertThat(parsed).isEqualTo(ImageSource.TooLarge)
-        // A tenth of a mebibyte, not "less than the source": the refusing path allocates nothing but
-        // the measurement's own boxing and whatever the first call on this thread loads, measured at
-        // 6_792 B. Anything that copies, decodes or even trims the source is orders of magnitude
-        // above this, and a bound of one source length would have let the whole decode through.
+        // A tenth of a mebibyte: the refusing path allocates almost nothing (about 7 KB), while any
+        // copy, decode or trim of the source is orders of magnitude above this.
         assertWithMessage("bytes allocated by parse() for a %s character source", source.length)
             .that(allocated).isLessThan(100L * 1024)
     }
 
     /**
-     * What one [ImageSource.parse] of a maximal source really costs, and what that multiplies out to.
-     *
-     * The cap is not a number about one call: [ChatImageLoader] lets
-     * [ChatImageLoader.DEFAULT_MAX_CONCURRENT_LOADS] loads run at once and its `fetchBytes` share
-     * path takes no permit at all, so the worst case is **four** maximal sources being parsed at the
-     * same instant, each by a different row of the chat log. Three of them holding a permit and the
-     * fourth sharing is a state an ordinary chat log reaches, not a contrived one.
-     *
-     * 48 MiB is the written-down budget for that worst case. On the smallest heap an Android 12
-     * device realistically hands out — a 128 MiB `dalvik.vm.heapgrowthlimit` — the thumbnail cache
-     * has already taken `maxMemory() / 8` = 16 MiB, so 48 MiB leaves 64 MiB for the rest of the app.
-     * At the cap this stream shipped first (7_000_000 characters) the same four parses came to
-     * 133 MB, i.e. more than the whole heap, and three of them at once needed an `-Xmx` of 160 MiB
-     * before they completed at all.
-     *
-     * The percent-encoded form is the expensive one and therefore the one measured: `percentDecode`
-     * returns its input unchanged when there is no `%` in it, so a plain `data:` URI costs 2.75 bytes
-     * per character and this one costs 4.75.
+     * One parse of a maximal source, times the worst-case concurrency: [ChatImageLoader] runs
+     * [ChatImageLoader.DEFAULT_MAX_CONCURRENT_LOADS] loads at once plus the ungated `fetchBytes`
+     * share path. The budget is 48 MiB, which leaves 64 MiB of a 128 MiB `heapgrowthlimit` after
+     * the 16 MiB thumbnail cache. The percent-encoded form is the expensive one (4.75 bytes per
+     * character instead of 2.75).
      */
     @Test
     fun fourMaximalSourcesParsedAtOnceFitTheMemoryBudget() {
@@ -242,7 +218,7 @@ class ImageSourceTest {
         val perParse = threads.currentThreadAllocatedBytes - before
 
         assertThat(parsed).isInstanceOf(ImageSource.Data::class.java)
-        // Measured: 10_137_896 B for the first parse on a thread, 9_961_760 B once warm.
+        // About 10 MB per parse.
         assertWithMessage("bytes allocated by one parse() of a %s character source", atCap.length)
             .that(perParse).isLessThan(11L * 1024 * 1024)
         val concurrent = ChatImageLoader.DEFAULT_MAX_CONCURRENT_LOADS + 1 // + the ungated share path
@@ -251,15 +227,9 @@ class ImageSourceTest {
     }
 
     /**
-     * The cap is a fact about Mumble servers, not a round number.
-     *
-     * Murmur's own default for `imagemessagelength` is 1_048_576, set in `src/murmur/Meta.cpp`
-     * (`MetaParams::MetaParams`: `iMaxImageMessageLength = 1048576;`) and overridden from the ini by
-     * `typeCheckedFromSettings("imagemessagelength", iMaxImageMessageLength)`. It bounds the **whole
-     * message**: `Server::isTextAllowed` in `src/murmur/Server.cpp` compares it against
-     * `text.length()`, i.e. the UTF-16 length of the entire HTML, markup and every `<img src>`
-     * together. One `src` can therefore never be longer than that on a default server, whatever it
-     * is spelled like. The factor two is the headroom for a server that raised the setting.
+     * Murmur's default `imagemessagelength` is 1_048_576 and bounds the UTF-16 length of the whole
+     * message (`Server::isTextAllowed`), so one `src` can never be longer on a default server. The
+     * factor two is headroom for a server that raised the setting.
      */
     @Test
     fun theCapIsTwiceWhatADefaultMurmurWillCarryInOneWholeMessage() {

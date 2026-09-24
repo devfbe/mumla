@@ -32,8 +32,7 @@ class HttpImageFetcherTest {
     @Before
     fun startServer() {
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        // Daemon threads: the endless/dribbling handlers below block on purpose, and a stuck
-        // handler must never be able to keep the Gradle test JVM alive.
+        // Daemon threads: a stuck handler must never keep the Gradle test JVM alive.
         server.executor = Executors.newCachedThreadPool { r -> Thread(r).apply { isDaemon = true } }
         server.start()
     }
@@ -121,8 +120,7 @@ class HttpImageFetcherTest {
         assertThat(e.error).isEqualTo(ImageError.UNSUPPORTED)
     }
 
-    // --- The fetcher is the second half of the scheme guarantee: it must refuse a source that
-    // --- ImageSource classifies as Unsupported outright, without opening anything.
+    // A source ImageSource classifies as Unsupported is refused without opening anything.
 
     private fun expectError(url: String, error: ImageError, fetcher: HttpImageFetcher = HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST)) {
         val e = assertThrows("expected $error for <$url>", ImageFetchException::class.java) { fetcher.fetch(url) }
@@ -237,8 +235,7 @@ class HttpImageFetcherTest {
 
     @Test
     fun aRelativeRedirectIsResolvedAgainstTheUrlThatSentIt() {
-        // HttpURLConnection used to resolve these; now the fetcher follows redirects itself, so it
-        // has to, and a Location of "/target.png" is what a real server sends.
+        // The fetcher follows redirects itself, so it resolves a relative Location.
         val body = ByteArray(10) { it.toByte() }
         serve("/relative-target.png", body)
         serveRedirect("/relative.png", "/relative-target.png")
@@ -258,15 +255,13 @@ class HttpImageFetcherTest {
             HttpImageFetcher(hostPolicy = HostPolicy.ANY_HOST).fetch(url("/loop.png"))
         }
         assertThat(e.error).isEqualTo(ImageError.NETWORK)
-        // Six requests: the original plus MAX_REDIRECTS. Following redirects by hand means the
-        // bound is ours now, so it is worth stating rather than trusting the platform's.
+        // Six requests: the original plus MAX_REDIRECTS.
         assertThat(hops.get()).isEqualTo(6)
     }
 
     /**
-     * The point of following redirects by hand. The policy is asked again for the second hop, and
-     * refusing it has to stop the request, not merely rename the error afterwards — so the target
-     * records whether it was ever reached, and that is what is asserted first.
+     * The policy is asked again for every hop, and a refusal stops the request: the target records
+     * whether it was ever reached.
      */
     @Test
     fun theHostPolicyIsAskedAgainForEveryRedirectHop() {
@@ -284,16 +279,11 @@ class HttpImageFetcherTest {
 
         assertWithMessage("the refused hop was requested anyway").that(reached.get()).isFalse()
         assertThat(asked).containsExactly("127.0.0.1", "127.0.0.1")
-        // NETWORK, not UNSUPPORTED: the source in the message was fine and it is the server's
-        // Location plus a resolver answer that were judged. See aRefusalByTheHostPolicyIsRetryable.
+        // NETWORK, not UNSUPPORTED: it is the server's Location that was judged.
         assertThat(e.error).isEqualTo(ImageError.NETWORK)
     }
 
-    /**
-     * That the *default* is the refusing policy is a claim of its own: every other test in this
-     * class hands in HostPolicy.ANY_HOST, so a default quietly changed to that would leave all of
-     * them green.
-     */
+    /** The default is the refusing policy (every other test here hands in ANY_HOST). */
     @Test
     fun theDefaultPolicyRefusesTheDevicesOwnNetworkWithoutOpeningAnything() {
         val reached = AtomicBoolean(false)
@@ -305,11 +295,7 @@ class HttpImageFetcherTest {
         assertThat(e.error).isEqualTo(ImageError.NETWORK)
     }
 
-    /**
-     * 304 is in the 300s but is not a redirect: it answers a conditional request, and a `Location`
-     * on one is not a place to go. Following it would let a server aim the next request with a
-     * header that nothing else in the response justifies.
-     */
+    /** 304 is not a redirect; a `Location` on it must not be followed. */
     @Test
     fun aNotModifiedResponseIsNotFollowedAsARedirect() {
         val reached = AtomicBoolean(false)
@@ -327,8 +313,7 @@ class HttpImageFetcherTest {
 
     @Test
     fun aRedirectWithNothingUsableToFollowIsANetworkError() {
-        // Not UNSUPPORTED: the source in the message parsed fine, and UNSUPPORTED is the error the
-        // loader caches for good. A server that answers badly must stay retryable.
+        // Not UNSUPPORTED (cached for good): a server that answers badly must stay retryable.
         serveRedirect("/no-location.png", "")
         serveRedirect("/torn-location.png", "http://[not a url")
         expectError(url("/no-location.png"), ImageError.NETWORK)
@@ -351,13 +336,9 @@ class HttpImageFetcherTest {
     }
 
     /**
-     * The two gates look alike from the outside and must not be reported alike. The syntactic one
-     * judges the string the message carried: it cannot become right later, so UNSUPPORTED, which
-     * the loader remembers for the life of the process. [PublicHostsOnly] judges a **resolver
-     * answer**, and that is exactly what a DNS blocker (`0.0.0.0`), a captive portal or a
-     * split-horizon company resolver (`192.168.x.x`) hands back for a perfectly good CDN name.
-     * Reporting that as terminal means turning the blocker off, signing in to the portal or moving
-     * to another network changes nothing until the app is restarted. So: retryable.
+     * The syntactic gate judges the message's string, which cannot become right later: UNSUPPORTED,
+     * cached for good. [PublicHostsOnly] judges a resolver answer, which DNS blockers, captive
+     * portals and split-horizon resolvers can change: NETWORK, retryable.
      */
     @Test
     fun aRefusalByTheHostPolicyIsRetryableWhileABrokenSourceIsNot() {
@@ -372,21 +353,14 @@ class HttpImageFetcherTest {
         expectError("http://@:8080/a.png", ImageError.UNSUPPORTED, HttpImageFetcher(hostPolicy = refusing))
     }
 
-    /**
-     * The same split one hop later. A `Location` that no connection can be opened for is the
-     * server's mistake, not the message's, so it may not be remembered for good either — which is
-     * already what a missing or torn `Location` costs.
-     */
+    /** A `Location` no connection can be opened for is the server's mistake: retryable. */
     @Test
     fun aRedirectToAnUnopenableUrlIsANetworkErrorNotAVerdictOnTheSource() {
         serveRedirect("/to-hostless.png", "http://@:8080/a.png")
         expectError(url("/to-hostless.png"), ImageError.NETWORK)
     }
 
-    /**
-     * At the hop limit the sixth `Location` is not followed, so it must cost nothing and decide
-     * nothing: no name lookup, and no chance for the host it names to set this call's error code.
-     */
+    /** At the hop limit the sixth `Location` is not followed: no lookup, no influence on the error. */
     @Test
     fun theHopLimitIsReachedBeforeTheNextLocationIsJudged() {
         val hops = AtomicInteger()
@@ -475,10 +449,8 @@ class HttpImageFetcherTest {
     }
 
     /**
-     * The other direction of a lying Content-Length, and the one that is silent: a body that stops
-     * early reaches the decoder as a truncated image, which is indistinguishable from a broken one
-     * — and the loader caches MALFORMED for the life of the process. Half a download must be a
-     * NETWORK error, which expires, not a verdict on the image.
+     * A body that stops short of its Content-Length would decode as MALFORMED (cached for good);
+     * half a download must be a NETWORK error, which expires.
      */
     @Test(timeout = 30_000)
     fun aBodyThatStopsShortOfItsContentLengthIsNotAccepted() {
@@ -493,10 +465,8 @@ class HttpImageFetcherTest {
     fun aContentLengthThatUnderstatesTheBodyCannotDefeatTheCap() {
         val truthful = ByteArray(10) { it.toByte() }
         val target = rawLyingServer(declared = 10, actual = truthful + ByteArray(512 * 1024) { 0x7F })
-        // Measured on JDK 21: the stream reports EOF once the declared length has been consumed in
-        // small reads, but a single large read overshoots it freely (asking for 16 KiB after a
-        // declared 10 returned 16384 bytes). The fetcher never asks for more than what is left of
-        // the cap, so the 512 KiB tail cannot reach the caller either way.
+        // The JDK stream may overshoot the declared length on a single large read; the fetcher
+        // never asks for more than what is left of the cap.
         val body = HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(target)
         assertWithMessage("body must never exceed the cap").that(body.size).isAtMost(1_000)
         assertThat(body).isEqualTo(truthful)
@@ -535,12 +505,8 @@ class HttpImageFetcherTest {
     }
 
     /**
-     * Authorities that name no host in the only sense that counts: the URL that would actually be
-     * opened has an empty `getHost()`. Two parsers read these differently — `URI.getHost()` is null
-     * for every one of them, and splitting the authority by hand finds a "host" in the ones with
-     * more than one `@` — while `URLStreamHandler.parseURL` refuses server-based parsing outright
-     * and leaves the host empty. An empty host resolves to localhost, so opening one of these would
-     * connect to 127.0.0.1 (port 80, or 443 for https) with no DNS lookup at all.
+     * Authorities whose URL has an empty `getHost()` (parsers disagree on them). An empty host
+     * resolves to localhost, so opening one would connect to 127.0.0.1 with no DNS lookup.
      */
     private fun hostlessAuthorityUrls(port: Int) = listOf(
         "http://@:$port/a.png",
@@ -557,18 +523,15 @@ class HttpImageFetcherTest {
 
     @Test
     fun anAuthorityWithoutAHostIsUnsupportedAndThrowsNothingUnchecked() {
-        // The platform HTTP stack throws a StringIndexOutOfBoundsException on these, which would
-        // escape fetch() as an unchecked exception; assertThrows(ImageFetchException) pins that it
-        // does not. It pins the reported error and nothing more — that no connection is opened is
-        // a separate claim, and aHostlessAuthorityOpensNoConnectionAtAll is what proves it.
+        // The platform HTTP stack throws StringIndexOutOfBoundsException on these; this pins that
+        // fetch() reports an ImageFetchException. No-connection is proven by the next test.
         hostlessAuthorityUrls(server.address.port).forEach { expectError(it, ImageError.UNSUPPORTED) }
     }
 
     @Test(timeout = 60_000)
     fun aHostlessAuthorityOpensNoConnectionAtAll() {
-        // An error code says nothing about whether a socket was opened, and for these authorities
-        // that is the whole question: the connection would go to loopback. So route every outgoing
-        // connection of this JVM through a trap socket on loopback and count what arrives there.
+        // Route every outgoing connection of this JVM through a loopback trap socket and count
+        // what arrives there.
         val trap = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
         closeables += trap
         val arrived = AtomicInteger()
@@ -588,8 +551,7 @@ class HttpImageFetcherTest {
         })
         try {
             val fetcher = HttpImageFetcher(connectTimeoutMs = 1_000, readTimeoutMs = 1_000, totalTimeoutMs = 2_000, hostPolicy = HostPolicy.ANY_HOST)
-            // Control first: without it a count of zero below would also be what a broken trap
-            // looks like. The trap never answers, so this fetch can only fail — that is fine.
+            // Control first. The trap never answers, so this fetch can only fail.
             assertThrows(ImageFetchException::class.java) { fetcher.fetch(url("/a.png")) }
             assertWithMessage("the trap must see the control connection").that(arrived.get()).isAtLeast(1)
 
@@ -597,8 +559,7 @@ class HttpImageFetcherTest {
             val outcomes = hostlessAuthorityUrls(server.address.port).associateWith {
                 runCatching { fetcher.fetch(it) }.exceptionOrNull()
             }
-            // The count is asserted before the error codes: the code is the weaker claim, and a
-            // failure here is the one worth reading.
+            // The count is asserted before the error codes: the code is the weaker claim.
             assertWithMessage("connections opened for hostless authorities %s", outcomes.keys)
                 .that(arrived.get()).isEqualTo(0)
             outcomes.forEach { (target, thrown) ->
@@ -612,10 +573,8 @@ class HttpImageFetcherTest {
 
     @Test
     fun anAuthorityThatDoesNameAHostIsNotRefusedByTheGate() {
-        // Every one of these names a host in a shape the hand-written gate had to special-case: a
-        // registry-based name (URI.getHost() is null for it), a non-ASCII one, a bracketed IPv6
-        // literal with and without userinfo, an empty port, a fully qualified name. The gate must
-        // let them through; what the network then makes of them is not this test's business.
+        // Host shapes the gate must let through: registry-based (URI.getHost() null), non-ASCII,
+        // bracketed IPv6 with and without userinfo, an empty port, a fully qualified name.
         val fetcher = HttpImageFetcher(connectTimeoutMs = 2_000, readTimeoutMs = 2_000, totalTimeoutMs = 6_000, hostPolicy = HostPolicy.ANY_HOST)
         listOf(
             "http://my_host.invalid/a.png",
@@ -634,8 +593,8 @@ class HttpImageFetcherTest {
 
     @Test
     fun unicodeCaseFoldingOfTheSchemeIsCaughtHere() {
-        // ImageSource.parse matches prefixes case-insensitively, and '\u017F' uppercases to 'S', so
-        // "httpſ://" classifies as Remote. The exact scheme check here is what stops it.
+        // 'ſ' uppercases to 'S', so "httpſ://" classifies as Remote; the exact scheme check
+        // stops it.
         expectError("http\u017F://evil.example/a.png", ImageError.UNSUPPORTED)
         expectError("HTTP\u017F://evil.example/a.png", ImageError.UNSUPPORTED)
         expectError("\uFF48\uFF54\uFF54\uFF50://evil.example/a.png", ImageError.UNSUPPORTED)
@@ -658,10 +617,7 @@ class HttpImageFetcherTest {
         assertThat(HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST).fetch(url("/exact"))).isEqualTo(body)
     }
 
-    /**
-     * The *default* cap, not a cap handed in by a test. Every size test above configures maxBytes,
-     * so the 5 MiB default is what the app actually runs with and the only place it is stated.
-     */
+    /** The default 5 MiB cap, which is what the app runs with. */
     @Test(timeout = 60_000)
     fun theDefaultByteCapIsFiveMebibytes() {
         serve("/over-default", ByteArray(5 * 1024 * 1024 + 1), declaredLength = 0)
@@ -679,11 +635,6 @@ class HttpImageFetcherTest {
         expectError(url("/justover"), ImageError.TOO_LARGE, HttpImageFetcher(maxBytes = 1_000, hostPolicy = HostPolicy.ANY_HOST))
     }
 
-    /**
-     * A connection the fetcher will really open and really use, so that [disconnect] can be made to
-     * throw on demand. `fetch` takes a string and opens the connection itself, so this is the only
-     * seam the JDK leaves: a stream handler of our own.
-     */
     /** A same-scheme 302 to a fixed [location], and nothing else. */
     private class RedirectingConnection(url: URL, private val location: String) : HttpURLConnection(url) {
         override fun connect() = Unit
@@ -702,10 +653,8 @@ class HttpImageFetcherTest {
     }
 
     /**
-     * A chunked 200 that hands over a few bytes and then stalls forever, and whose stream reports a
-     * clean end-of-file the moment the connection is disconnected — which is what the watchdog does
-     * at the deadline. A real socket usually throws instead; this is the case where it does not, and
-     * it is the only one the post-body `expired` check covers.
+     * A chunked 200 that stalls and then reports a clean EOF once disconnected (as the watchdog
+     * does at the deadline), which only the post-body `expired` check catches.
      */
     private class StallingChunkedConnection(url: URL) : HttpURLConnection(url) {
         private val closed = AtomicBoolean(false)
@@ -739,12 +688,8 @@ class HttpImageFetcherTest {
     }
 
     /**
-     * The silent half of a cut-off transfer. A chunked body has no declared length, so nothing
-     * downstream can tell sixteen bytes of a truncated image from a sixteen-byte image: the decoder
-     * calls it MALFORMED, and the loader remembers MALFORMED for the life of the process. The only
-     * thing standing between the two is the `expired` check *after* the body was read, because a
-     * connection the watchdog closed can surface as an ordinary end-of-file rather than an error.
-     * Its sibling case — a body that stops short of an announced length — is a different check.
+     * A chunked body cut off by the watchdog can surface as a clean EOF; without the post-body
+     * `expired` check the truncated image would be cached as MALFORMED.
      */
     @Test(timeout = 30_000)
     fun aChunkedBodyTheWatchdogCutOffIsNotHandedOverAsAnImage() {
@@ -758,13 +703,8 @@ class HttpImageFetcherTest {
 
     @Test
     fun anUncheckedExceptionFromDisconnectDoesNotReplaceTheRealFailure() {
-        // The watchdog thread and the calling thread can both be inside
-        // sun.net.www.protocol.http.HttpURLConnection.disconnect() at once. It is unsynchronised
-        // and re-reads its `http` field after a separate null check, so whichever thread gets there
-        // second can see it nulled and throw a NullPointerException. The watchdog's own call is
-        // wrapped; the one in the finally block must be too, or that NPE escapes fetch() unchecked
-        // and displaces the ImageFetchException already on its way out — precisely what the
-        // RuntimeException backstop inside fetch() exists to prevent.
+        // The JDK's HttpURLConnection.disconnect() is unsynchronised and can NPE when the watchdog
+        // and the calling thread race inside it; the finally-block call must be wrapped too.
         installSpyHttpsHandler()
         spyDisconnect.set { throw IllegalStateException("disconnect() raced the watchdog") }
         try {
@@ -779,24 +719,15 @@ class HttpImageFetcherTest {
     }
 
     /**
-     * The last place in this class where the server could still decide the caller's error code.
-     *
-     * Every other refusal now follows one rule: what the *message* got wrong is
-     * [ImageError.UNSUPPORTED] and is remembered for the life of the process, what a *server* got
-     * wrong is [ImageError.NETWORK] and expires. `openConnection()` handing back something that is
-     * not an [HttpURLConnection] was the exception — it said UNSUPPORTED whoever named the target.
-     *
-     * It takes a `URLStreamHandlerFactory` to reach at all, since the scheme is nailed down long
-     * before this point, and these tests install one — which is the whole reason it is worth
-     * closing: the moment anything in the process installs a factory of its own, one `302` can turn
-     * a perfectly good `<img src>` into a failure the loader never retries.
+     * `openConnection()` returning something that is not an [HttpURLConnection]: UNSUPPORTED when
+     * the message named it, NETWORK (retryable) when a redirect `Location` did.
      */
     @Test
     fun anUnopenableTargetIsTheServersFaultWhenAServerNamedIt() {
         installSpyHttpsHandler()
-        // The message named it: terminal, because that source cannot become a different one later.
+        // The message named it: terminal.
         expectError("https://$PLAIN_HOST/a.png", ImageError.UNSUPPORTED)
-        // A Location named it: retryable, exactly like every other thing a server answers wrong.
+        // A Location named it: retryable.
         expectError("https://$REDIRECT_TO_PLAIN_HOST/a.png", ImageError.NETWORK)
     }
 
@@ -817,10 +748,8 @@ class HttpImageFetcherTest {
 
         /**
          * Installs, once per JVM, an https stream handler that hands out [SpyConnection]s for
-         * [SPY_HOST]. The factory can only be set once and is global, which is tolerable here:
-         * setting it clears the handler cache, so it wins whatever ran first, it parses exactly
-         * like the real https handler (both inherit `URLStreamHandler.parseURL`), and no test in
-         * this module opens a real https connection. http is left untouched.
+         * [SPY_HOST]. The factory is global and settable once; it parses like the real https
+         * handler, and no test in this module opens a real https connection.
          */
         fun installSpyHttpsHandler() {
             if (spyHandlerInstalled) return
@@ -845,11 +774,8 @@ class HttpImageFetcherTest {
     }
 
     /**
-     * `totalTimeoutMs` is supposed to bound the call, and the connect phase is not something the
-     * watchdog can shorten — it can only close a connection that already exists. So the connect
-     * timeout has to be clamped to what is left of the budget, exactly as the read timeout is. The
-     * spy connection is the only seam that can be asked what the fetcher actually set, since `fetch`
-     * takes a string and opens the connection itself.
+     * The connect timeout is clamped to what is left of `totalTimeoutMs`, like the read timeout:
+     * the watchdog cannot shorten a connect.
      */
     @Test
     fun theConnectTimeoutIsClampedToWhatIsLeftOfTheTotalBudget() {
@@ -863,7 +789,7 @@ class HttpImageFetcherTest {
         assertWithMessage("connect timeout against a 500 ms total budget")
             .that(requireNotNull(spyConnection.get()).connectTimeout).isAtMost(500)
 
-        // And the other direction, so the clamp cannot become "always the smaller of nothing".
+        // And the other direction.
         spyConnection.set(null)
         expectError(
             "https://$SPY_HOST/a.png", ImageError.NETWORK,
