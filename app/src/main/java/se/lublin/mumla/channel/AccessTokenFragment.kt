@@ -17,25 +17,24 @@
 
 package se.lublin.mumla.channel
 
-import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
-import android.widget.ArrayAdapter
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.ListView
-import android.widget.TextView
-import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.DividerItemDecoration
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
-import se.lublin.mumla.R
 import se.lublin.mumla.app.ServiceViewModel
+import se.lublin.mumla.databinding.FragmentTokensBinding
+import se.lublin.mumla.databinding.TokenRowBinding
 import se.lublin.mumla.db.MumlaRepository
 
 /** Edits the access tokens stored for a server, and sends them to it while connected. */
@@ -46,21 +45,20 @@ class AccessTokenFragment : Fragment() {
     private val serverId get() = requireArguments().getLong(ARG_SERVER)
 
     private val tokens = mutableListOf<String>()
-    private lateinit var tokenAdapter: TokenAdapter
-    private lateinit var tokenList: ListView
-    private lateinit var tokenField: EditText
+    private val tokenAdapter = TokenAdapter()
+    private var binding: FragmentTokensBinding? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        val view = inflater.inflate(R.layout.fragment_tokens, container, false)
-        tokenAdapter = TokenAdapter(requireContext())
-        tokenList = view.findViewById(R.id.tokenList)
-        tokenList.adapter = tokenAdapter
-        tokenField = view.findViewById(R.id.tokenField)
-        tokenField.setOnEditorActionListener { _, actionId, _ ->
+        val binding = FragmentTokensBinding.inflate(inflater, container, false)
+        this.binding = binding
+        binding.tokenList.layoutManager = LinearLayoutManager(requireContext())
+        binding.tokenList.addItemDecoration(DividerItemDecoration(requireContext(), DividerItemDecoration.VERTICAL))
+        binding.tokenList.adapter = tokenAdapter
+        binding.tokenField.setOnEditorActionListener { _, actionId, _ ->
             (actionId == EditorInfo.IME_ACTION_SEND).also { if (it) addToken() }
         }
-        view.findViewById<ImageButton>(R.id.tokenAddButton).setOnClickListener { addToken() }
-        return view
+        binding.tokenAddButton.setOnClickListener { addToken() }
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -69,27 +67,34 @@ class AccessTokenFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             tokens.clear()
             tokens += repository.io { getAccessTokens(serverId) }
-            tokenAdapter.notifyDataSetChanged()
+            showTokens()
         }
     }
 
+    override fun onDestroyView() {
+        binding = null
+        super.onDestroyView()
+    }
+
+    private fun showTokens(then: Runnable? = null) = tokenAdapter.submitList(tokens.toList(), then)
+
     private fun addToken() {
-        val token = tokenField.text.toString().trim()
+        val field = binding?.tokenField ?: return
+        val token = field.text.toString().trim()
         if (token.isEmpty()) return
-        tokenField.setText("")
+        field.setText("")
         Log.i(TAG, "Adding a token")
 
         tokens += token
-        tokenAdapter.notifyDataSetChanged()
-        tokenList.smoothScrollToPosition(tokens.size - 1)
+        showTokens { binding?.tokenList?.smoothScrollToPosition(tokens.size - 1) }
         val serverId = serverId
         lifecycleScope.launch { repository.io { addAccessToken(serverId, token) } }
         sendTokens()
     }
 
-    private fun removeToken(position: Int) {
-        val token = tokens.removeAt(position)
-        tokenAdapter.notifyDataSetChanged()
+    private fun removeToken(token: String) {
+        if (!tokens.remove(token)) return
+        showTokens()
         val serverId = serverId
         lifecycleScope.launch { repository.io { removeAccessToken(serverId, token) } }
         sendTokens()
@@ -99,12 +104,20 @@ class AccessTokenFragment : Fragment() {
         serviceModel.service.value?.takeIf { it.isConnected }?.session?.sendAccessTokens(tokens.toList())
     }
 
-    private inner class TokenAdapter(context: Context) : ArrayAdapter<String>(context, 0, tokens) {
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val view = convertView ?: LayoutInflater.from(context).inflate(R.layout.token_row, parent, false)
-            view.findViewById<TextView>(R.id.tokenItemTitle).text = getItem(position)
-            view.findViewById<ImageButton>(R.id.tokenItemDelete).setOnClickListener { removeToken(position) }
-            return view
+    private class TokenHolder(val binding: TokenRowBinding) : RecyclerView.ViewHolder(binding.root)
+
+    private inner class TokenAdapter : ListAdapter<String, TokenHolder>(TOKEN_DIFF) {
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TokenHolder {
+            val holder = TokenHolder(TokenRowBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+            holder.binding.tokenItemDelete.setOnClickListener {
+                val position = holder.bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) removeToken(getItem(position))
+            }
+            return holder
+        }
+
+        override fun onBindViewHolder(holder: TokenHolder, position: Int) {
+            holder.binding.tokenItemTitle.text = getItem(position)
         }
     }
 
@@ -112,6 +125,13 @@ class AccessTokenFragment : Fragment() {
         private val TAG: String = AccessTokenFragment::class.java.name
         private const val ARG_SERVER = "server"
 
-        fun newInstance(serverId: Long) = AccessTokenFragment().apply { arguments = bundleOf(ARG_SERVER to serverId) }
+        private val TOKEN_DIFF = object : DiffUtil.ItemCallback<String>() {
+            override fun areItemsTheSame(oldItem: String, newItem: String) = oldItem == newItem
+            override fun areContentsTheSame(oldItem: String, newItem: String) = oldItem == newItem
+        }
+
+        fun newInstance(serverId: Long) = AccessTokenFragment().apply {
+            arguments = Bundle().apply { putLong(ARG_SERVER, serverId) }
+        }
     }
 }
