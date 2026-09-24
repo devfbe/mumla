@@ -154,7 +154,7 @@ dependencies {
     implementation libs.kotlinx.coroutines.android
     implementation libs.androidx.annotation
     implementation libs.minidns.hla
-    implementation libs.minidns.android21
+    implementation libs.minidns.android23
 
     testImplementation libs.bundles.unit.test
 }

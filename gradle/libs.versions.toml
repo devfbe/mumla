@@ -24,7 +24,7 @@ billing = "9.1.0"
 protobuf = "4.36.2"
 protobuf-plugin = "0.10.0"
 bouncycastle = "1.86"
-minidns = "1.0.5"
+minidns = "1.1.1"
 
 junit = "4.13.2"
 robolectric = "4.17"
@@ -56,7 +56,7 @@ protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protob
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 minidns-hla = { module = "org.minidns:minidns-hla", version.ref = "minidns" }
-minidns-android21 = { module = "org.minidns:minidns-android21", version.ref = "minidns" }
+minidns-android23 = { module = "org.minidns:minidns-android23", version.ref = "minidns" }
 
 junit = { module = "junit:junit", version.ref = "junit" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
