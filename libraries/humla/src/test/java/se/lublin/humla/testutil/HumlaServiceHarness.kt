@@ -89,9 +89,9 @@ class HumlaServiceHarness(
     fun destroy() {
         controller.destroy()
         mainLooper.idle()
-        awaitUntil(description = "no protocol thread left behind") {
+        awaitUntil(description = "nothing of the connection left behind") {
             mainLooper.idle()
-            service.getConnection()?.protocolThread?.isAlive != true
+            service.getConnection()?.isTerminated != false
         }
     }
 

@@ -24,7 +24,7 @@ class HumlaConnectionCodecTest {
     fun tearDown() {
         connection.disconnect()
         mainLooper.idle()
-        awaitUntil(description = "protocol thread gone") { !connection.protocolThread.isAlive }
+        awaitUntil(description = "connection terminated") { connection.isTerminated }
     }
 
     private val handledVersions = CopyOnWriteArrayList<Int>()

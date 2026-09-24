@@ -36,7 +36,7 @@ class HumlaConnectionSrvTest {
         connection?.let { c ->
             c.disconnect()
             shadowOf(Looper.getMainLooper()).idle()
-            awaitUntil(description = "protocol thread quit") { !c.protocolThread.isAlive }
+            awaitUntil(description = "connection terminated") { c.isTerminated }
         }
     }
 

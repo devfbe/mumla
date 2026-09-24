@@ -63,7 +63,7 @@ class HumlaConnectionUdpProtocolTest {
     fun tearDown() {
         connection.disconnect()
         mainLooper.idle()
-        awaitUntil(description = "protocol thread quit") { !connection.protocolThread.isAlive }
+        awaitUntil(description = "connection terminated") { connection.isTerminated }
     }
 
     private fun connect(clientV2: Long? = null, forceTcp: Boolean = false): FakeTcpTransport {

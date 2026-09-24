@@ -51,7 +51,7 @@ class HumlaConnectionUdpRecoveryTest {
     fun tearDown() {
         built.forEach { it.disconnect() }
         mainLooper.idle()
-        built.forEach { c -> awaitUntil(description = "protocol thread quit") { !c.protocolThread.isAlive } }
+        built.forEach { c -> awaitUntil(description = "connection terminated") { c.isTerminated } }
     }
 
     private fun HumlaConnection.establish(forceTcp: Boolean = false): FakeTcpTransport {
@@ -550,8 +550,8 @@ class HumlaConnectionUdpRecoveryTest {
 
     /**
      * A restart that comes due behind a disconnect must not open a socket nothing would close. The
-     * zero-delay policy forces the interleaving; with the production delay `quitSafely` would drop
-     * the restart anyway.
+     * zero-delay policy forces the interleaving; with the production delay the cancelled delay would
+     * drop the restart anyway.
      */
     @Test
     fun aRestartComingDueBehindADisconnectStartsNoSecondUdpTransport() {
@@ -565,7 +565,7 @@ class HumlaConnectionUdpRecoveryTest {
         connection.disconnect()
         gate.countDown()
         awaitUntil(description = "teardown ran behind the queued failure") { tcp.disconnectCalls == 1 }
-        awaitUntil(description = "protocol thread quit") { !connection.protocolThread.isAlive }
+        awaitUntil(description = "connection terminated") { connection.isTerminated }
 
         assertThat(transports.udps).hasSize(1)
     }

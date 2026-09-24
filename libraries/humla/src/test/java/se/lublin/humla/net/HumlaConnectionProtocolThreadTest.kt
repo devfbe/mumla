@@ -50,9 +50,7 @@ class HumlaConnectionProtocolThreadTest {
     fun tearDown() {
         connection.disconnect()
         mainLooper.idle()
-        awaitUntil(description = "no live protocol thread left by this test") {
-            !connection.protocolThread.isAlive
-        }
+        awaitUntil(description = "nothing of the connection left by this test") { connection.isTerminated }
     }
 
     /**
@@ -371,14 +369,34 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     @Test
-    fun aConnectionThatIsDisconnectedLeavesNoProtocolThreadBehind() {
+    fun aConnectionThatIsDisconnectedLeavesNoProtocolThreadAndNoCoroutineBehind() {
         connectAndEstablish()
         assertThat(connection.protocolThread.isAlive).isTrue()
+        assertThat(connection.isTerminated).isFalse()
 
         connection.disconnect()
 
-        awaitUntil(description = "protocol thread quit") { !connection.protocolThread.isAlive }
+        awaitUntil(description = "protocol thread quit and scope completed") { connection.isTerminated }
     }
+
+    /** Every piece of protocol work runs on the one protocol thread, in the order it was handed over. */
+    @Test
+    fun protocolWorkRunsInOrderOnTheOneProtocolThread() {
+        val tcp = connectAndEstablish()
+        val seen = CopyOnWriteArrayList<Pair<String, String>>()
+        connection.addTcpHandler { seen += Thread.currentThread().name to (it as Mumble.TextMessage).message }
+        val texts = (0 until 200).map { "message $it" }
+
+        thread(name = "fake-tcp-read") {
+            texts.forEach { tcp.simulateMessage(HumlaTCPMessageType.TextMessage, textFrame(it)) }
+        }
+
+        awaitUntil(description = "all messages handled") { seen.size == texts.size }
+        assertThat(seen.map { it.second }).containsExactlyElementsIn(texts).inOrder()
+        assertThat(seen.map { it.first }.toSet()).containsExactly(PROTOCOL_THREAD)
+    }
+
+    private fun textFrame(text: String) = Mumble.TextMessage.newBuilder().setMessage(text).build().toByteArray()
 
     /**
      * [HumlaConnection.onTCPConnectionEstablished] behind a disconnect. Observed via the UDP

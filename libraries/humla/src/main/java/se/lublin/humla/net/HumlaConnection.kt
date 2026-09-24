@@ -78,8 +78,10 @@ class HumlaConnection @JvmOverloads constructor(
     ),
 ) : HumlaTCP.TCPConnectionListener, HumlaUDP.UDPConnectionListener, MessageHandlerRegistry {
 
-    /** Builds the transports, so tests can supply fakes that never open a socket. */
-    /** Each transport gets the connection's scope: cancelled on disconnect, dispatching on the protocol thread. */
+    /**
+     * Builds the transports, so tests can supply fakes that never open a socket. Each gets the
+     * connection's scope: cancelled on disconnect, dispatching on the protocol thread.
+     */
     interface TransportFactory {
         fun createTcp(socketFactory: HumlaSSLSocketFactory, scope: CoroutineScope): TcpTransport
         fun createUdp(
@@ -130,6 +132,10 @@ class HumlaConnection @JvmOverloads constructor(
         }
         CoroutineScope(job + protocolHandler.asCoroutineDispatcher(PROTOCOL_THREAD_NAME) + onUncaught)
     }
+
+    /** True once no coroutine and no thread of this connection is left. */
+    @VisibleForTesting
+    internal val isTerminated: Boolean get() = job.isCompleted && !protocolThread.isAlive
 
     /** True from [disconnect] on; every transport callback is inert from then on. */
     private val closed: Boolean get() = !job.isActive
@@ -467,7 +473,7 @@ class HumlaConnection @JvmOverloads constructor(
         this.useTor = useTor
     }
 
-    /** Tunnel all voice packets over TCP, disabling the UDP thread. */
+    /** Tunnel all voice packets over TCP, disabling the UDP transport. */
     fun setForceTCP(forceTcp: Boolean) {
         this.forceTcp = forceTcp
     }
