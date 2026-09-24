@@ -44,11 +44,7 @@ import se.lublin.mumla.db.MumlaSQLiteDatabase
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
-/**
- * Importing a certificate reads a document the user picked. That stream was never closed, on any
- * path -- a ParcelFileDescriptor underneath on a device, reclaimed by the finalizer ("A resource
- * failed to call close").
- */
+/** Importing a certificate closes the picked document's stream on every path. */
 @RunWith(RobolectricTestRunner::class)
 class CertificateImportActivityTest {
     private val context: Context = ApplicationProvider.getApplicationContext()

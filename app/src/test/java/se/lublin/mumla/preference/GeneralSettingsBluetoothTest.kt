@@ -24,15 +24,9 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 
 /**
- * The settings half of spec P3: `BLUETOOTH_CONNECT` is asked for *before* SCO is used, wherever
- * the user flips the switch. Without the gate a tick here writes `true` and the service then
- * silently refuses to route anything -- a checked box that does nothing, which is worse than no
- * box, because the user has no way to see why they are not heard.
- *
- * The box is driven with `performClick()`, not `callChangeListener(...)`: the latter neither
- * ticks the box nor persists anything by itself, so every assertion about the box would hold
- * whatever the listener did. `performClick()` is the path `PreferenceGroupAdapter` runs when the
- * row is tapped, which is what makes `isChecked` and the persisted value observables at all.
+ * `BLUETOOTH_CONNECT` is asked for when the user ticks the Bluetooth switch. The box is driven
+ * with `performClick()`, the path a tap takes; `callChangeListener(...)` neither ticks nor
+ * persists anything.
  */
 @RunWith(RobolectricTestRunner::class)
 class GeneralSettingsBluetoothTest {
@@ -52,8 +46,8 @@ class GeneralSettingsBluetoothTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        // A stored value shadows the XML default, and preferences survive between test methods
-        // in one JVM. Without this the default test measures what an earlier method left behind.
+        // Preferences survive between test methods in one JVM, and a stored value shadows the
+        // XML default.
         PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
         settings = Settings.getInstance(app)
         ShadowToast.reset()
@@ -67,10 +61,7 @@ class GeneralSettingsBluetoothTest {
             .commitNow()
     }
 
-    /**
-     * The screen as a user who switched the headset off finds it. The default is on since the
-     * audio chooser, and ticking the box is the gesture that asks for the permission.
-     */
+    /** The default is on; ticking the box is the gesture that asks for the permission. */
     private fun openSwitchedOff() {
         settings.setBluetoothScoEnabled(false)
         open()
@@ -118,8 +109,7 @@ class GeneralSettingsBluetoothTest {
             .isNotNull()
 
         // Two sources for one default: android:defaultValue on this screen, and
-        // Settings.DEFAULT_BLUETOOTH_SCO, which is what every other reader gets. A divergence is
-        // invisible at runtime until the screen has been opened once.
+        // Settings.DEFAULT_BLUETOOTH_SCO, which every other reader gets.
         assertThat(checkBox().isChecked).isEqualTo(Settings.DEFAULT_BLUETOOTH_SCO)
         assertThat(settings.isBluetoothScoEnabled()).isEqualTo(Settings.DEFAULT_BLUETOOTH_SCO)
     }
@@ -127,8 +117,7 @@ class GeneralSettingsBluetoothTest {
     @Test
     fun theSummarySaysThatThePermissionIsNeeded() {
         open()
-        // The box can be tapped and stay empty. The only place that can be explained beforehand
-        // is the text under it.
+        // The box can be tapped and stay empty; only the text under it can explain that.
         val summary = checkBox().summary.toString().lowercase()
 
         assertWithMessage("the summary must name the permission the tick will ask for: %s", summary)
@@ -186,7 +175,7 @@ class GeneralSettingsBluetoothTest {
         assertThat(ShadowToast.getTextOfLatestToast()).isNull()
     }
 
-    /** Keep asking, stop gating (spec 4.1) -- the settings half of the same ruling. */
+    /** A denial is not a "no": the preference is kept regardless. */
     @Test
     fun denyingThePermissionStillTurnsItOnAndSaysWhatItMayCost() {
         openSwitchedOff()

@@ -47,10 +47,7 @@ class LevelMeterViewTest {
         assertThat(MeterScale.position(AdaptiveVadTracker.MAX_FLOOR_DBFS)).isGreaterThan(0f)
     }
 
-    /**
-     * The interesting range has to be visible, not squeezed into a corner: the measured floor and a
-     * normal talker must sit apart from each other and away from both ends.
-     */
+    /** The measured floor and a normal talker sit apart from each other and away from both ends. */
     @Test
     fun `the default floor and a normal talker are far apart in the middle of the bar`() {
         val floor = MeterScale.position(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS)
