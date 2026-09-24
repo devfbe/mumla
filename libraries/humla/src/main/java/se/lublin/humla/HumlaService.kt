@@ -82,10 +82,7 @@ import java.security.cert.X509Certificate
 
 /**
  * Owns one server session (connection, model, audio pipeline and audio routing) and exposes it
- * through [IHumlaService] and [IHumlaSession].
- *
- * Accessors stay functions rather than properties: a Kotlin property of the same name would clash
- * with the methods the Java interfaces declare.
+ * through [IHumlaService] and [IHumlaSession]. Accessors stay functions to match the Java interfaces.
  */
 open class HumlaService : Service(), IHumlaService, IHumlaSession,
     HumlaConnection.HumlaConnectionListener, HumlaLogger {
@@ -119,11 +116,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     /** The user's echo-cancellation choices per kind of device; see EXTRAS_ECHO_CANCELLATION_BY_DEVICE. */
     private var mEchoOverrides: Map<AudioDeviceCategory, Boolean> = emptyMap()
 
-    /**
-     * The input mode in force. Held by identity rather than derived from [mTransmitMode] at every
-     * read, because the audio thread and `isTalking()` must see the *same object*: the toggle a key
-     * press writes is the toggle the capture loop consults.
-     */
+    /** Held by identity: the audio thread and `isTalking()` must see the same toggle object. */
     private lateinit var mInputMode: IInputMode
 
     private var mVoiceTargetId: Byte = 0
@@ -143,16 +136,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     /** Owns the audio pipeline's lifecycle on its own thread, so nothing here joins on main. */
     private lateinit var mAudioController: AudioController
 
-    /**
-     * Routes voice to the user's choice, a Bluetooth headset or the platform default. Engaged only
-     * while a session is synchronized.
-     */
+    /** Engaged only while a session is synchronized. */
     private lateinit var mRouter: AudioRouter
 
-    /**
-     * The last warning written to the chat log. [AudioRouter.Listener.onRouteRefused] fires per
-     * `apply()`, so without this an auto-reconnect would repeat the same line on every attempt.
-     */
+    /** Last warning logged, so a refusal repeated per reconnect attempt is logged once. */
     @Volatile
     private var mLastWarning: String? = null
 
@@ -176,16 +163,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     /** Test seam: builds the audio pipeline. */
     var audioFactory: AudioHandlerFactory = DefaultAudioHandlerFactory()
 
-    /**
-     * The platform's routing API for this service life. A test may set a fake before `onCreate`;
-     * otherwise [onCreate] creates an [AndroidCommunicationDevices].
-     */
+    /** A test may set a fake before [onCreate]; otherwise [onCreate] creates the Android one. */
     var communicationDevices: CommunicationDevices? = null
 
-    /**
-     * Test seam: the CELT 0.7 bitstream versions announced in `Authenticate`. The default needs the
-     * native library, which is not available under Robolectric.
-     */
+    /** Test seam: CELT 0.7 bitstream versions for `Authenticate` (the default needs the native library). */
     var celtVersions: () -> IntArray = { intArrayOf(CELT7Encoder.getBitstreamVersion()) }
 
     /** Waits for a default network while the reconnect is on hold, and retries as soon as one is up. */
@@ -1214,10 +1195,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mCallbacks.onVoiceTargetChanged(VoiceTargetMode.fromId(targetId))
     }
 
-    /**
-     * Test seam: the settings the next pipeline would be built with. Public because the app's
-     * tests cannot see `internal`.
-     */
+    /** Test seam: the settings the next pipeline would be built with (public for the app's tests). */
     fun getAudioConfigForTest(): AudioConfig = mAudioConfig
 
     override fun getVoiceTargetId(): Byte = mVoiceTargetId
