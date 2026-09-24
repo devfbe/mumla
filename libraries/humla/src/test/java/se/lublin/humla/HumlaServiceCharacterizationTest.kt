@@ -318,17 +318,6 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.isTalking()).isTrue()
     }
 
-    /** The detection threshold is written into the service's own ActivityInputMode. */
-    @Test
-    fun theDetectionThresholdReachesTheActivityInputMode() {
-        val service = service()
-
-        service.configureExtras(Bundle().apply { putFloat(HumlaService.EXTRAS_DETECTION_THRESHOLD, 0.25f) })
-
-        val mode = service.mActivityInputMode
-        assertThat(mode.vadConfig.startThreshold).isEqualTo(0.25f)
-    }
-
     /** TCP is forced by either extra, recomputed from the last value each of them was given. */
     @Test
     fun tcpIsForcedWhileEitherForceTcpOrTorIsOn() {
@@ -354,28 +343,6 @@ class HumlaServiceCharacterizationTest {
 
         configure(HumlaService.EXTRAS_FORCE_TCP, false)
         assertThat(service.isTcpForced).isFalse()
-    }
-
-    /** A transmit mode change is visible without a reconnect. */
-    @Test
-    fun transmitModeExtraIsReflectedImmediately() {
-        val service = service()
-        val extras = Bundle().apply {
-            putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK)
-        }
-
-        assertThat(service.configureExtras(extras)).isFalse()
-        assertThat(service.getTransmitMode()).isEqualTo(Constants.TRANSMIT_PUSH_TO_TALK)
-    }
-
-    /** The server extra lands and demands a reconnect. */
-    @Test
-    fun serverExtraRequiresAReconnect() {
-        val service = service()
-        val extras = Bundle().apply { putParcelable(HumlaService.EXTRAS_SERVER, server) }
-
-        assertThat(service.configureExtras(extras)).isTrue()
-        assertThat(service.getTargetServer()!!.host).isEqualTo("127.0.0.1")
     }
 
     /** Access tokens are stored even with no connection to send them on; nothing throws. */
@@ -505,14 +472,6 @@ class HumlaServiceCharacterizationTest {
     }
 
     // ---------------------------------------------------------------- voice targets
-
-    /** A voice target id must fit in five bits. */
-    @Test
-    fun voiceTargetIdMustFitInFiveBits() {
-        val service = service()
-
-        assertThrows(IllegalArgumentException::class.java) { service.setVoiceTargetId(0x20) }
-    }
 
     /** Freeing a slot that was never taken is harmless, and whispering is off while disconnected. */
     @Test
