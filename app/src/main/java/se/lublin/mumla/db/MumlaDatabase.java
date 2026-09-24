@@ -21,10 +21,7 @@ import java.util.List;
 
 import se.lublin.humla.model.Server;
 
-/**
- * An interface for persistent storage services (i.e. databases, cloud) to implement.
- * Created by andrew on 13/08/13.
- */
+/** An interface for persistent storage services (i.e. databases, cloud) to implement. */
 public interface MumlaDatabase {
     public void open();
     public void close();
@@ -58,7 +55,7 @@ public interface MumlaDatabase {
      * Adds the given certificate binary blob to the database.
      * @param name The user-readable certificate name.
      * @param certificate A PKCS12 binary blob.
-     * @return A handle for the newly craeted certificate.
+     * @return A handle for the newly created certificate.
      */
     DatabaseCertificate addCertificate(String name, byte[] certificate);
     List<DatabaseCertificate> getCertificates();

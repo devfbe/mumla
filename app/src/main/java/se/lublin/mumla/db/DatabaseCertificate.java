@@ -17,10 +17,7 @@
 
 package se.lublin.mumla.db;
 
-/**
- * A stub for a certificate entry in Mumla's database.
- * Created by andrew on 11/01/16.
- */
+/** A stub for a certificate entry in Mumla's database. */
 public class DatabaseCertificate {
     private final long mId;
     private final String mName;

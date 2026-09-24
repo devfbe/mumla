@@ -93,7 +93,7 @@ class MumlaSQLiteDatabase @JvmOverloads constructor(
     }
 
     override fun open() {
-        // Do nothing. Database will be opened automatically when accessing it.
+        // Nothing to do: the database opens on first access.
     }
 
     override fun getServers(): List<Server> =
@@ -133,7 +133,6 @@ class MumlaSQLiteDatabase @JvmOverloads constructor(
     override fun removeServer(server: Server) {
         val id = arrayOf(server.id.toString())
         writableDatabase.delete(TABLE_SERVER, "$SERVER_ID=?", id)
-        // Clean up server-specific entries
         writableDatabase.delete(TABLE_FAVOURITES, "$FAVOURITES_SERVER=?", id)
         writableDatabase.delete(TABLE_TOKENS, "$TOKENS_SERVER=?", id)
         writableDatabase.delete(TABLE_LOCAL_MUTE, "$LOCAL_MUTE_SERVER=?", id)
