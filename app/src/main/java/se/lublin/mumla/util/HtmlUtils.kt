@@ -17,6 +17,9 @@
 
 package se.lublin.mumla.util
 
+import android.text.SpannableStringBuilder
+import android.text.style.URLSpan
+import androidx.core.text.HtmlCompat
 import java.io.ByteArrayOutputStream
 import java.net.URI
 
@@ -33,6 +36,35 @@ object HtmlUtils {
     }
 
     private val LINK_PATTERN = Regex("(https?://\\S+)")
+    private val WHITESPACE = Regex("\\s+")
+
+    /** The text of an HTML fragment, with images dropped and all whitespace collapsed to single spaces. */
+    @JvmStatic
+    fun toPlainText(html: String): String = collapse(fromHtml(html))
+
+    /**
+     * Like [toPlainText], but each link whose text is its own URL is replaced by [shorten] of the
+     * URL's host. Links with custom text, or without a host, are kept.
+     */
+    fun toPlainTextWithShortLinks(html: String, shorten: (host: String) -> String): String {
+        val text = SpannableStringBuilder(fromHtml(html))
+        text.getSpans(0, text.length, URLSpan::class.java)
+            .sortedByDescending { text.getSpanStart(it) }
+            .forEach { span ->
+                val start = text.getSpanStart(span)
+                val end = text.getSpanEnd(span)
+                if (text.substring(start, end) != span.url) return@forEach
+                val host = getHostnameFromLink(span.url) ?: return@forEach
+                text.replace(start, end, shorten(host))
+            }
+        return collapse(text)
+    }
+
+    private fun fromHtml(html: String) = HtmlCompat.fromHtml(html, HtmlCompat.FROM_HTML_MODE_LEGACY)
+
+    // U+FFFC is the placeholder Html.fromHtml leaves for each <img>.
+    private fun collapse(text: CharSequence): String =
+        text.toString().replace('\uFFFC', ' ').replace(WHITESPACE, " ").trim()
 
     /**
      * Decodes %XX escapes (UTF-8) and leaves everything else, including '+', untouched.

@@ -203,7 +203,6 @@ dependencies {
     implementation libs.androidx.exifinterface
     implementation libs.material
     implementation libs.androidx.preference
-    implementation libs.jsoup
 
     googImplementation libs.billing
 

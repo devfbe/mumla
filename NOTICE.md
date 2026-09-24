@@ -10,7 +10,6 @@ following third-party components. Every entry is GPLv3-compatible.
 | AndroidX (appcompat, activity, core, fragment, preference, recyclerview, cardview, documentfile, exifinterface) | see `gradle/libs.versions.toml` | Apache-2.0 | https://developer.android.com/jetpack |
 | Material Components for Android | 1.14.0 | Apache-2.0 | https://github.com/material-components/material-components-android |
 | Material Design icons (`headset_mic`, as the vector `app/src/main/res/drawable/ic_action_audio_device.xml`) | path data as published | Apache-2.0 | https://github.com/google/material-design-icons |
-| jsoup | 1.23.2 | MIT | https://jsoup.org |
 | MiniDNS | 1.0.5 | LGPL-2.1-or-later / Apache-2.0 / WTFPL (tri-licensed) | https://github.com/MiniDNS/minidns |
 | protobuf-javalite (runtime) and protoc (build only) | 4.36.2 | BSD-3-Clause | https://github.com/protocolbuffers/protobuf |
 | Bouncy Castle (bcprov-jdk18on, bcpkix-jdk18on, and bcutil-jdk18on pulled in by bcpkix) | 1.86 | MIT (Bouncy Castle Licence) — the artifacts ship `META-INF/LICENSE.md` containing the MIT License text | https://www.bouncycastle.org/ |

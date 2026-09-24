@@ -32,7 +32,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
-import org.jsoup.Jsoup
 import se.lublin.humla.Constants
 import se.lublin.humla.HumlaService
 import se.lublin.humla.model.IMessage
@@ -173,23 +172,11 @@ class MumlaService : HumlaService(),
         }
 
         override fun onMessageLogged(message: IMessage) {
-            // Split on / strip all HTML tags.
-            val parsedMessage = Jsoup.parseBodyFragment(message.getMessage())
-            val strippedMessage = parsedMessage.text()
-
+            val strippedMessage = HtmlUtils.toPlainText(message.getMessage())
             val ttsMessage = if (mShortTtsMessagesEnabled) {
-                for (anchor in parsedMessage.getElementsByTag("A")) {
-                    // Get just the domain portion of links
-                    val href = anchor.attr("href")
-                    // Only shorten anchors without custom text
-                    if (href == anchor.text()) {
-                        val urlHostname = HtmlUtils.getHostnameFromLink(href)
-                        if (urlHostname != null) {
-                            anchor.text(getString(R.string.chat_message_tts_short_link, urlHostname))
-                        }
-                    }
+                HtmlUtils.toPlainTextWithShortLinks(message.getMessage()) { host ->
+                    getString(R.string.chat_message_tts_short_link, host)
                 }
-                parsedMessage.text()
             } else {
                 strippedMessage
             }
