@@ -32,6 +32,30 @@ class ManifestAuditTest {
             .requestedPermissions!!.toList()
 
     @Test
+    fun theAppSupportsRightToLeftLayouts() {
+        val flags = pm.getApplicationInfo(context.packageName, 0).flags
+
+        assertThat(flags and android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL).isNotEqualTo(0)
+    }
+
+    /** Layouts mirror under RTL only when they say start/end; left/right stays put. */
+    @Test
+    fun noLayoutUsesLeftOrRight() {
+        val layouts = java.io.File("src/main/res").walk()
+            .filter { it.isFile && it.parentFile!!.name.startsWith("layout") && it.extension == "xml" }
+            .toList()
+        assertThat(layouts).isNotEmpty()
+        val offenders = layouts
+            .flatMap { file ->
+                file.readLines().mapIndexedNotNull { i, line ->
+                    if (LEFT_RIGHT.containsMatchIn(line)) "${file.parentFile!!.name}/${file.name}:${i + 1}" else null
+                }
+            }
+
+        assertThat(offenders).isEmpty()
+    }
+
+    @Test
     fun requestsBluetoothConnectInsteadOfLegacyBluetooth() {
         val permissions = requestedPermissions()
 
@@ -187,5 +211,12 @@ class ManifestAuditTest {
             .that(sawCloudBackupRootExclude).isTrue()
         assertWithMessage("<device-transfer> is declared (so it does not fall back to cloud-backup's rules)")
             .that(sawDeviceTransfer).isTrue()
+    }
+
+    private companion object {
+        val LEFT_RIGHT = Regex(
+            """android:(layout_)?(margin|padding)(Left|Right)=|android:layout_(alignParent|to|align)(Left|Right)(Of)?=|""" +
+                """android:drawable(Left|Right)=|android:(layout_)?gravity="[^"]*\b(left|right)\b""",
+        )
     }
 }

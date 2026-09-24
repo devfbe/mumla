@@ -64,7 +64,7 @@
                         android:layout_height="300dp"
                         android:id="@+id/comment_edit"
                         android:inputType="textMultiLine|textNoSuggestions"
-                        android:gravity="top|left"/>
+                        android:gravity="top|start"/>
                 </LinearLayout>
             </FrameLayout>
         </LinearLayout>

@@ -27,7 +27,7 @@
         android:id="@+id/user_row_state"
         android:layout_width="18dp"
         android:layout_height="match_parent"
-        android:layout_marginLeft="8dp"
+        android:layout_marginStart="8dp"
         app:srcCompat="@drawable/ic_talking_off" />
 
     <TextView
@@ -38,8 +38,8 @@
         android:ellipsize="end"
         android:gravity="center_vertical"
         android:lines="1"
-        android:paddingLeft="4dp"
-        android:paddingRight="4dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
         android:singleLine="true"
         android:text="User name"
         android:textColor="#333"

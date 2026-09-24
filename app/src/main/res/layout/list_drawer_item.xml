@@ -37,7 +37,7 @@
             android:text="@string/action_settings"
             android:id="@+id/drawer_item_title"
             android:gravity="center_vertical"
-            android:layout_marginLeft="8dp"
+            android:layout_marginStart="8dp"
             android:textSize="16sp"
             android:fontFamily="sans-serif-light"
             android:textColor="?android:textColorPrimaryInverse"

@@ -33,7 +33,7 @@
         android:id="@+id/channel_name"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:gravity="center|left"
+        android:gravity="center|start"
         android:text="@string/app_name"
         android:textColor="#FFFFFF"
         android:lines="2"
@@ -46,8 +46,8 @@
         android:layout_height="match_parent"
         android:textColor="#FFFFFF"
         android:lines="1"
-        android:paddingLeft="5dp"
-        android:gravity="center|right"
-        android:layout_gravity="right"/>
+        android:paddingStart="5dp"
+        android:gravity="center|end"
+        android:layout_gravity="end"/>
 
 </LinearLayout>

@@ -49,7 +49,7 @@
             android:textSize="6pt"
             android:textColor="?android:textColorPrimaryInverse"
             android:singleLine="true"
-            android:gravity="left|center_vertical"
+            android:gravity="start|center_vertical"
             android:textStyle="italic"
             android:padding="8dp"/>
 
