@@ -1,16 +1,21 @@
 # RNNoise model (pinned)
 
-RNNoise v0.2 keeps its weights out of git; `autogen.sh`/`download_model.sh`
-downloads `https://media.xiph.org/rnnoise/models/rnnoise_data-0b50c45.tar.gz`
-(22 270 507 bytes,
-sha256 `4ac81c5c0884ec4bd5907026aaae16209b7b76cd9d7f71af582094a2f98f4b43`,
-`model_version` = `0b50c45` at tag v0.2).
+RNNoise keeps its weights out of git; `autogen.sh`/`download_model.sh`
+downloads `https://media.xiph.org/rnnoise/models/rnnoise_data-<model_version>.tar.gz`
+and checks that its sha256 equals `model_version`. The submodule is at 70f1d25
+(2025-02-22), whose `model_version` is
+`0a8755f8e2d834eff6a54714ecc7d75f9932e845df35f8b59bc52a7cfe6e8b37`
+(58 603 099 bytes).
 
-We build RNNoise with `-DUSE_WEIGHTS_FILE`, so the 29 MB `rnnoise_data.c`
+The tarball ships two models with the same layer sizes: the default one
+(`src/rnnoise_data.c`, dense) and a sparser "little" one
+(`src/rnnoise_data_little.c`, blob 1 553 664 bytes). We embed the default.
+
+We build RNNoise with `-DUSE_WEIGHTS_FILE`, so the 78 MB `rnnoise_data.c`
 arrays are compiled out, and embed the binary weight blob instead:
 
-- `weights_blob.bin` (1 401 600 bytes,
-  sha256 `47edcad7baeffb6442d9bfe8ea3b3ae728b50055c3abca1d69b4e31a806da27d`)
+- `weights_blob.bin` (3 544 320 bytes,
+  sha256 `1ad07b428be34c74d9678d05b3c387b73ccf0e6203a1a5f9ce58689b30b303c8`)
   produced from the tarball's `src/rnnoise_data.c` with
 
   ```sh
@@ -18,11 +23,11 @@ arrays are compiled out, and embed the binary weight blob instead:
       -o dump_weights_blob src/write_weights.c && ./dump_weights_blob
   ```
 
-  in a checkout of rnnoise v0.2 that has the tarball's `src/rnnoise_data.[ch]`
-  copied in. `-DDISABLE_DEBUG_FLOAT` is upstream's own default
+  in a checkout of the submodule's commit with the tarball extracted into it.
+  `-DDISABLE_DEBUG_FLOAT` is upstream's own default
   (`configure.ac:81-87`, `--enable-dnn-debug-float` defaults to `no`); it drops
   the seven float duplicates of the int8-quantised `conv2`/`gru*` weight
-  matrices, which exist only for debugging. Without it the blob is 5 530 816
+  matrices, which exist only for debugging. Without it the blob is 14 751 424
   bytes and does not match the hash above — and, more importantly, it is not the
   same network. `compute_linear_` (`src/nnet_arch.h:138-140`) tests
   `linear->float_weights != NULL` *before* the int8 path, and `linear_init`

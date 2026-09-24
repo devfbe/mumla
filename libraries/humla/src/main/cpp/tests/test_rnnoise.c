@@ -15,6 +15,60 @@ static double energy(const int16_t *f, int n) {
 static uint32_t seed = 12345;
 static int16_t noise_sample(void) { seed = seed * 1664525u + 1013904223u; return (int16_t)((seed >> 16) % 8000) - 4000; }
 
+/* Speech-like input: a 140 Hz harmonic series gated on and off at 2 Hz ("syllables" of 250 ms),
+   plus white noise about 10 dB below the voiced parts. After warm-up, the voiced frames must keep
+   most of their energy, the noise-only frames must be attenuated, and the VAD must separate them. */
+static void speech_in_noise(void) {
+    humla_rnnoise *h = humla_rnnoise_create();
+    CHECK(h != NULL, "create returns a state for the speech test");
+    if (!h) return;
+    const double pi = 3.14159265358979323846;
+    const int frames = 400, warmup = 100;
+    double voiced_in = 0, voiced_out = 0, noise_in = 0, noise_out = 0;
+    double vad_voiced = 0, vad_noise = 0;
+    int n_voiced = 0, n_noise = 0, vad_in_range = 1;
+    seed = 4242;
+    int16_t frame[HUMLA_RNNOISE_FRAME_SIZE];
+    double clean[HUMLA_RNNOISE_FRAME_SIZE];
+    for (int n = 0; n < frames; n++) {
+        /* 25 frames voiced, 25 frames pause; the edges are skipped when measuring. */
+        int phase = n % 50;
+        int voiced = phase < 25;
+        for (int i = 0; i < HUMLA_RNNOISE_FRAME_SIZE; i++) {
+            double t = (double)(n * HUMLA_RNNOISE_FRAME_SIZE + i) / 48000.0;
+            double s = 0;
+            if (voiced) for (int k = 1; k <= 20; k++) s += sin(2 * pi * 140.0 * k * t) / k;
+            clean[i] = 3000.0 * s;
+            frame[i] = (int16_t)lrint(clean[i] + noise_sample() / 4);
+        }
+        double in_e = energy(frame, HUMLA_RNNOISE_FRAME_SIZE);
+        float p = humla_rnnoise_process(h, frame);
+        if (!(p >= 0.0f && p <= 1.0f)) vad_in_range = 0;
+        if (n < warmup) continue;
+        if (voiced && phase >= 5 && phase < 22) {
+            double ce = 0;
+            for (int i = 0; i < HUMLA_RNNOISE_FRAME_SIZE; i++) ce += clean[i] * clean[i];
+            voiced_in += ce / HUMLA_RNNOISE_FRAME_SIZE;
+            voiced_out += energy(frame, HUMLA_RNNOISE_FRAME_SIZE);
+            vad_voiced += p; n_voiced++;
+        } else if (!voiced && phase >= 30) {
+            noise_in += in_e;
+            noise_out += energy(frame, HUMLA_RNNOISE_FRAME_SIZE);
+            vad_noise += p; n_noise++;
+        }
+    }
+    humla_rnnoise_destroy(h);
+    double voiced_db = 10.0 * log10(voiced_out / voiced_in);
+    double noise_db = 10.0 * log10(noise_in / noise_out);
+    vad_voiced /= n_voiced; vad_noise /= n_noise;
+    printf("speech: voiced level %+.1f dB, pause noise attenuation %.1f dB, VAD %.2f vs %.2f\n",
+           voiced_db, noise_db, vad_voiced, vad_noise);
+    CHECK(vad_in_range, "VAD probability stays within [0,1] on speech in noise");
+    CHECK(voiced_db > -6.0 && voiced_db < 3.0, "voiced frames keep their level within -6..+3 dB");
+    CHECK(noise_db > 10.0, "noise in the pauses is attenuated by at least 10 dB");
+    CHECK(vad_voiced > vad_noise + 0.3, "VAD is clearly higher for voiced frames than for pauses");
+}
+
 int main(void) {
     humla_rnnoise *h = humla_rnnoise_create();
     CHECK(h != NULL, "create returns a state (embedded model loads)");
@@ -42,6 +96,8 @@ int main(void) {
     CHECK(out_e * 100.0 < in_e, "stationary white noise is attenuated by at least 20 dB");
 
     humla_rnnoise_destroy(h);
+
+    speech_in_noise();
 
     /* Every state shares the one static blob (rnnoise_model_from_buffer keeps a pointer into
        it), and the Kotlin layer runs the capture pipeline and the settings loopback test at
