@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="perm_denied">Không có quyền.</string>
+    <string name="udp_warning_unavailable">Không thể gửi gói UDP đến hoặc nhận từ máy chủ. Đang chuyển sang chế độ TCP.</string>
+    <string name="udp_warning_send_failed">Không thể gửi gói UDP đến máy chủ. Đang chuyển sang chế độ TCP.</string>
+    <string name="udp_warning_receive_failed">Không thể nhận gói UDP từ máy chủ. Đang chuyển sang chế độ TCP.</string>
+    <string name="udp_warning_ping_timeout">Máy chủ không phản hồi UDP ping trong 15 giây. Đang chuyển sang chế độ TCP.</string>
+    <string name="udp_warning_restored">Đã có thể gửi và nhận gói UDP với máy chủ. Đang chuyển lại chế độ UDP.</string>
+    <string name="reconnect_gave_up">Không thể kết nối lại với máy chủ. Đã bỏ cuộc.</string>
+    <string name="sco_unavailable">Không có tai nghe Bluetooth. Âm thanh vẫn phát trên điện thoại.</string>
+    <string name="bluetooth_sco_denied">Thiết bị này từ chối chuyển âm thanh sang tai nghe Bluetooth. Hãy cấp quyền Thiết bị ở gần trong cài đặt hệ thống.</string>
+    <string name="no_session_user">Máy chủ không gửi thông tin người dùng của phiên này; micro vẫn tắt.</string>
+    <string name="no_target_server">Chưa cấu hình máy chủ cho kết nối này.</string>
+    <string name="udp_warning_thread_failed">Kết nối UDP bị lỗi. Giọng nói được truyền qua TCP trong khi thử lại UDP.</string>
 </resources>

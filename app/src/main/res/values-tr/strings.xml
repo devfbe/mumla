@@ -219,4 +219,16 @@
     <string name="app_news_items_v3_7_1">• Çoğunlukla çeviri güncellemeleri içeren küçük bir sürüm, tüm çevirmenlere teşekkürler!\n</string>
     <string name="app_news_items_v3_7_2">• Başlangıçta meydana gelebilecek çökme sorunu giderildi.\n • Bazı çeviriler eklendi, tüm çevirmenlere teşekkürler!\n</string>
     <string name="app_news_items_v3_7_3">• Android 12 ve sonraki sürümlerde, ayrıca koyu ve açık arka planlarda PTT kısayol köşesi görünür hale getirildi\n • Android 16 ve sonraki sürümlerde, Geri düğmesine basıldığında sunucuyla bağlantının kesilip kesilmeyeceği sorulur hale getirildi\n</string>
+    <string name="connection_lost_reconnecting">Bağlantı koptu – yeniden bağlanılıyor…</string>
+    <string name="foreground_start_failed">Mumla arka planda çalışır durumda tutulamadı. Ekran kapandığında ses kesilebilir.</string>
+    <string name="bluetooth_perm_denied">Bluetooth kulaklık açık kalır. Yakındaki cihazlar izni olmadan bazı cihazlar sesi ona yönlendirmeyi reddeder.</string>
+    <string name="chat_image_share">Resmi paylaş</string>
+    <string name="chat_image_close">Kapat</string>
+    <string name="chat_image_load_failed">Resim yüklenemedi</string>
+    <string name="chat_image_viewer_image">Resim</string>
+    <string name="chat_image_open">Resmi aç</string>
+    <string name="chat_image_placeholder">[resim]</string>
+    <string name="permission_denied_storage">Depolamayı okuma izni reddedildi</string>
+    <string name="image_decode_failed">Bu resim okunamadı</string>
+    <string name="image_too_large">Resim bu sunucu için çok büyük</string>
 </resources>

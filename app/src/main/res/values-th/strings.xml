@@ -200,4 +200,16 @@
     <string name="app_news_items_v3_7_0">• มีการปรับปรุงแอป Mumla สำหรับ Android 15 และ 16 (API 35 และ 36).\n• ด้วยเหตุนี้ จึงจำเป็นต้องใช้ Android 5.0 (API 21) หรือเวอร์ชันที่ใหม่กว่า.\n• ปรับปรุงธีมให้รองรับโหมดสว่าง/มืดของระบบ.\n• หน้าจอการตั้งค่าต้องปรับให้เข้ากับ API เวอร์ชันใหม่กว่า.\n• เพิ่มการตั้งค่าภาษาภายในแอป.\n</string>
     <string name="app_news_items_v3_7_2">• แก้ไขปัญหาที่อาจทำให้โปรแกรมหยุดทำงานขณะเริ่มต้นระบบ.\n• เพิ่มคำแปลบางส่วน, ขอขอบคุณนักแปลทุกท่าน!\n</string>
     <string name="app_news_items_v3_7_3">• ทำให้ปุ่ม PTT (ปุ่มลัดสำหรับใช้งานปุ่ม PTT) ปรากฏให้เห็นบน Android 12 และเวอร์ชันที่ใหม่กว่า รวมถึงบนพื้นหลังสีเข้มและสีอ่อนด้วย.\n• ทำให้ปุ่มย้อนกลับถามก่อนตัดการเชื่อมต่อจากเซิร์ฟเวอร์อีกครั้งบน Android 16 ขึ้นไป.\n</string>
+    <string name="connection_lost_reconnecting">การเชื่อมต่อหลุด – กำลังเชื่อมต่อใหม่…</string>
+    <string name="foreground_start_failed">ไม่สามารถให้ Mumla ทำงานต่อในเบื้องหลังได้ เสียงอาจหยุดเมื่อปิดหน้าจอ</string>
+    <string name="bluetooth_perm_denied">ชุดหูฟังบลูทูธยังเปิดอยู่ หากไม่มีสิทธิ์อุปกรณ์ที่อยู่ใกล้เคียง อุปกรณ์บางรุ่นจะไม่ยอมส่งเสียงไปยังชุดหูฟัง</string>
+    <string name="chat_image_share">แชร์รูปภาพ</string>
+    <string name="chat_image_close">ปิด</string>
+    <string name="chat_image_load_failed">โหลดรูปภาพไม่ได้</string>
+    <string name="chat_image_viewer_image">รูปภาพ</string>
+    <string name="chat_image_open">เปิดรูปภาพ</string>
+    <string name="chat_image_placeholder">[รูปภาพ]</string>
+    <string name="permission_denied_storage">ไม่ได้รับสิทธิ์อ่านที่เก็บข้อมูล</string>
+    <string name="image_decode_failed">อ่านรูปภาพนั้นไม่ได้</string>
+    <string name="image_too_large">รูปภาพใหญ่เกินไปสำหรับเซิฟเวอร์นี้</string>
 </resources>

@@ -213,4 +213,16 @@
     <string name="app_news_items_v3_7_1">• Незначительное обновление, в основном касающееся переводов. Спасибо всем переводчикам!\n</string>
     <string name="app_news_items_v3_7_2">• Исправление возможного сбоя при запуске.\n• Добавлены новые переводы, спасибо всем переводчикам!\n</string>
     <string name="app_news_items_v3_7_3">• Активный угол PTT теперь отображается на Android 12 и выше, а также на светлом и темном фоне\n• На Android 16 и выше кнопка \"Назад\" снова запрашивает подтверждение перед отключением от сервера\n</string>
+    <string name="connection_lost_reconnecting">Соединение потеряно – переподключение…</string>
+    <string name="foreground_start_failed">Не удалось оставить Mumla работать в фоне. Звук может пропасть при выключении экрана.</string>
+    <string name="bluetooth_perm_denied">Bluetooth-гарнитура остаётся включённой. Без разрешения «Устройства поблизости» некоторые устройства откажутся направлять на неё звук.</string>
+    <string name="chat_image_share">Поделиться изображением</string>
+    <string name="chat_image_close">Закрыть</string>
+    <string name="chat_image_load_failed">Не удалось загрузить изображение</string>
+    <string name="chat_image_viewer_image">Изображение</string>
+    <string name="chat_image_open">Открыть изображение</string>
+    <string name="chat_image_placeholder">[изображение]</string>
+    <string name="permission_denied_storage">Нет разрешения на чтение хранилища</string>
+    <string name="image_decode_failed">Не удалось прочитать это изображение</string>
+    <string name="image_too_large">Изображение слишком большое для этого сервера</string>
 </resources>

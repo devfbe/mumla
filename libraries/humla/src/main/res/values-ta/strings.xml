@@ -32,4 +32,15 @@
     <string name="perm_denied">இசைவு மறுக்கப்பட்டது.</string>
     <string name="server">சேவையகம்</string>
     <string name="the_server">அந்தச் சேவையகம்</string>
+    <string name="udp_warning_unavailable">UDP பொதிகளைச் சேவையகத்திற்கு அனுப்பவோ அதிலிருந்து பெறவோ முடியவில்லை. TCP பயன்முறைக்கு மாறுகிறது.</string>
+    <string name="udp_warning_send_failed">UDP பொதிகளைச் சேவையகத்திற்கு அனுப்ப முடியவில்லை. TCP பயன்முறைக்கு மாறுகிறது.</string>
+    <string name="udp_warning_receive_failed">UDP பொதிகளைச் சேவையகத்திலிருந்து பெற முடியவில்லை. TCP பயன்முறைக்கு மாறுகிறது.</string>
+    <string name="udp_warning_ping_timeout">15 வினாடிகளாகச் சேவையகத்திலிருந்து UDP ping பதில் இல்லை. TCP பயன்முறைக்கு மாறுகிறது.</string>
+    <string name="udp_warning_restored">UDP பொதிகளைச் சேவையகத்திற்கு அனுப்பவும் அதிலிருந்து பெறவும் முடிகிறது. மீண்டும் UDP பயன்முறைக்கு மாறுகிறது.</string>
+    <string name="reconnect_gave_up">சேவையகத்துடன் மீண்டும் இணைக்க முடியவில்லை. முயற்சி கைவிடப்பட்டது.</string>
+    <string name="sco_unavailable">Bluetooth தலையணி எதுவும் கிடைக்கவில்லை. ஒலி தொலைபேசியிலேயே இருக்கும்.</string>
+    <string name="bluetooth_sco_denied">இந்தச் சாதனம் ஒலியை Bluetooth தலையணிக்கு அனுப்ப மறுத்தது. கணினி அமைப்புகளில் அருகிலுள்ள சாதனங்கள் இசைவை வழங்கவும்.</string>
+    <string name="no_session_user">இந்த அமர்வின் சொந்தப் பயனரைச் சேவையகம் அனுப்பவில்லை; ஓரி அணைந்தே இருக்கும்.</string>
+    <string name="no_target_server">இந்த இணைப்புக்கு எந்தச் சேவையகமும் அமைக்கப்படவில்லை.</string>
+    <string name="udp_warning_thread_failed">UDP இணைப்பு தோல்வியடைந்தது. UDP மீண்டும் முயலப்படும்போது குரல் TCP வழியாகச் சுரங்கப்படுத்தப்படுகிறது.</string>
 </resources>

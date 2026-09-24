@@ -32,4 +32,15 @@
     <string name="deny_reason_other">Причина: %s</string>
     <string name="server">Сервер</string>
     <string name="the_server">сервер</string>
+    <string name="udp_warning_unavailable">Не вдається надсилати UDP-пакети на сервер і отримувати їх із нього. Перемикання в режим TCP.</string>
+    <string name="udp_warning_send_failed">Не вдається надсилати UDP-пакети на сервер. Перемикання в режим TCP.</string>
+    <string name="udp_warning_receive_failed">Не вдається отримувати UDP-пакети із сервера. Перемикання в режим TCP.</string>
+    <string name="udp_warning_ping_timeout">Сервер не відповідає на UDP-пінг уже 15 секунд. Перемикання в режим TCP.</string>
+    <string name="udp_warning_restored">UDP-пакети знову надсилаються й отримуються. Повернення в режим UDP.</string>
+    <string name="reconnect_gave_up">Не вдалося повторно під’єднатися до сервера. Спроби припинено.</string>
+    <string name="sco_unavailable">Немає доступної Bluetooth-гарнітури. Звук залишається на телефоні.</string>
+    <string name="bluetooth_sco_denied">Пристрій відмовився спрямовувати звук на Bluetooth-гарнітуру. Надайте дозвіл «Пристрої поблизу» в налаштуваннях системи.</string>
+    <string name="no_session_user">Сервер не надіслав дані користувача цієї сесії; мікрофон залишається вимкненим.</string>
+    <string name="no_target_server">Для цього з’єднання не задано сервер.</string>
+    <string name="udp_warning_thread_failed">Збій UDP-з’єднання. Голос передається через TCP, доки UDP під’єднується знову.</string>
 </resources>

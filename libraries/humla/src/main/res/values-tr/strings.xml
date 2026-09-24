@@ -32,4 +32,15 @@
     <string name="chat_notify_muted">Sesi kapatıldı.</string>
     <string name="chat_notify_muted_deafened">Sesi kapatıldı ve duyması engellendi.</string>
     <string name="audio_max_bandwidth">Azami sunucu ağ bant genişliği yalnızca %1$d kbit/s\'dir. Ses kalitesi %2$d kbit/s (%3$d ms) olarak ayarlanıyor.</string>
+    <string name="udp_warning_unavailable">Sunucuya UDP paketleri gönderilemiyor veya sunucudan alınamıyor. TCP moduna geçiliyor.</string>
+    <string name="udp_warning_send_failed">Sunucuya UDP paketleri gönderilemiyor. TCP moduna geçiliyor.</string>
+    <string name="udp_warning_receive_failed">Sunucudan UDP paketleri alınamıyor. TCP moduna geçiliyor.</string>
+    <string name="udp_warning_ping_timeout">Sunucudan 15 saniyedir UDP ping yanıtı yok. TCP moduna geçiliyor.</string>
+    <string name="udp_warning_restored">Sunucuya UDP paketleri gönderilebiliyor ve sunucudan alınabiliyor. UDP moduna geri dönülüyor.</string>
+    <string name="reconnect_gave_up">Sunucuya yeniden bağlanılamadı. Vazgeçiliyor.</string>
+    <string name="sco_unavailable">Kullanılabilir Bluetooth kulaklık yok. Ses telefonda kalıyor.</string>
+    <string name="bluetooth_sco_denied">Bu cihaz sesi Bluetooth kulaklığa yönlendirmeyi reddetti. Sistem ayarlarından Yakındaki cihazlar iznini verin.</string>
+    <string name="no_session_user">Sunucu bu oturumun kendi kullanıcısını göndermedi; mikrofon kapalı kalıyor.</string>
+    <string name="no_target_server">Bu bağlantı için bir sunucu yapılandırılmadı.</string>
+    <string name="udp_warning_thread_failed">UDP bağlantısı başarısız oldu. UDP yeniden denenirken ses TCP üzerinden tünelleniyor.</string>
 </resources>

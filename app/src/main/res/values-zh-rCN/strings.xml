@@ -207,4 +207,16 @@
     <string name="app_news_items_v3_7_1">• 这个小版本主要是翻译更新，感谢所有翻译者！\n</string>
     <string name="app_news_items_v3_7_2">• 修复在启动时可能的崩溃。\n • 添加一些翻译，感谢所有翻译者！\n</string>
     <string name="app_news_items_v3_7_3">• 使按键发言触发角在 Android 12 和更高版本，以及暗黑和明亮背景上可见\n • 使返回按钮在 Android 16+ 上再次询问是否从服务器断开连接\n</string>
+    <string name="connection_lost_reconnecting">连接已断开——正在重新连接…</string>
+    <string name="foreground_start_failed">无法让 Mumla 在后台保持运行。屏幕关闭后语音可能会中断。</string>
+    <string name="bluetooth_perm_denied">蓝牙耳机保持开启。没有“附近的设备”权限时，部分设备会拒绝将音频切换到耳机。</string>
+    <string name="chat_image_share">分享图片</string>
+    <string name="chat_image_close">关闭</string>
+    <string name="chat_image_load_failed">无法加载图片</string>
+    <string name="chat_image_viewer_image">图片</string>
+    <string name="chat_image_open">打开图片</string>
+    <string name="chat_image_placeholder">[图片]</string>
+    <string name="permission_denied_storage">读取存储的权限被拒绝</string>
+    <string name="image_decode_failed">无法读取该图片</string>
+    <string name="image_too_large">图片对此服务器来说太大</string>
 </resources>
