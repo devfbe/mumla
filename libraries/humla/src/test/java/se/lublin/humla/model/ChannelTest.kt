@@ -225,7 +225,11 @@ class ChannelTest {
     /**
      * A server re-announces a channel's links as a whole set, and a set arriving in pieces would
      * make the italics of linked channels blink. [Channel.setLinks] replaces the list under the
-     * lock, so this assertion is exact: a reader sees the old set or the new one.
+     * lock, so a reader sees the old set or the new one.
+     *
+     * Deterministic: halfway through the new set, the writer starts a reader and waits until that
+     * reader is either done (it read without waiting for the relink) or blocked on the channel's
+     * monitor. Only the second outcome is correct.
      */
     @Test
     fun aRelinkIsNeverSeenHalfDone() {
@@ -233,36 +237,31 @@ class ChannelTest {
         val linked = (1..50).map { Channel(it, false).apply { name = "channel $it" } }
         root.setLinks(linked)
 
-        val partials = AtomicInteger()
-        val relinks = AtomicInteger()
-        val done = AtomicBoolean(false)
-        // The reader takes a fixed number of observations and the writer runs until it has them.
-        // The other way round, a relink (50 sorted inserts under the monitor) starves the reader.
-        val writer = thread(name = "relinker") {
-            while (!done.get()) {
-                root.setLinks(linked)
-                relinks.incrementAndGet()
-                // Monitors are not fair: without a pause the writer re-takes the lock at once
-                // and the reader waits seconds for each observation.
-                Thread.yield()
+        val seen = AtomicInteger(-1)
+        val reader = Thread({ seen.set(root.links.size) }, "reader")
+        val midway = linked.size / 2
+        val gated = object : AbstractCollection<Channel?>() {
+            override val size = linked.size
+            override fun iterator() = object : Iterator<Channel?> {
+                private var next = 0
+                override fun hasNext() = next < linked.size
+                override fun next(): Channel? {
+                    if (!hasNext()) throw NoSuchElementException()
+                    if (next == midway) {
+                        reader.start()
+                        awaitUntil(description = "the reader to finish or to wait for the lock") {
+                            reader.state == Thread.State.BLOCKED || reader.state == Thread.State.TERMINATED
+                        }
+                    }
+                    return linked[next++]
+                }
             }
-        }
-        try {
-            // Started, not merely spawned: otherwise the reader could finish before the writer
-            // is ever scheduled and fail the floor below.
-            awaitUntil(description = "the relinker's first pass") { relinks.get() > 0 }
-            repeat(OBSERVATIONS) {
-                if (root.links.size != linked.size) partials.incrementAndGet()
-            }
-        } finally {
-            done.set(true)
-            writer.join()
         }
 
-        assertThat(partials.get()).isEqualTo(0)
-        // Every observation was taken between the first relink and the last; check there were
-        // enough relinks to overlap.
-        assertThat(relinks.get()).isAtLeast(MIN_OVERLAPPING_READS)
+        root.setLinks(gated)
+        reader.join()
+
+        assertThat(seen.get()).isEqualTo(linked.size)
     }
 
     /**
@@ -278,8 +277,6 @@ class ChannelTest {
      * [User.setChannel] leaves before it joins, so the sum can exceed the number of users only
      * through a duplicated subchannel. Users wandering between subchannels would break the ceiling
      * without a race, by design (see [Channel]: a snapshot of one list, not of the tree).
-     *
-     * The reader's count is fixed, as in [aRelinkIsNeverSeenHalfDone].
      */
     @Test
     fun countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts() {
