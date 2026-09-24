@@ -18,69 +18,25 @@
 package se.lublin.humla.net
 
 /**
- * Decides whether voice should flow over UDP or be tunneled over TCP (spec A5).
+ * Decides whether voice should flow over UDP or be tunneled over TCP.
  *
- * Two independent reasons to give up on UDP, and they are separate because they fail separately:
+ * Two independent reasons to give up on UDP:
  *
- * - **No packets in the last [windowMicros].** The counters the server and the crypt state keep are
- *   cumulative, so the check this replaces ("either count is still zero") answered a question about
- *   the whole session: a connection that carried one packet in its first second and nothing since
- *   read as healthy for as long as it lasted. A delta over a sliding window asks about now.
- * - **No reply to a UDP ping for [pingTimeoutMicros], while the window does not vouch for the
- *   link.** It is evidence of last resort, and the qualification is the whole of it. The reason
- *   first written here - "the counters keep climbing while voice still arrives" - does not survive
- *   reading what the counters are: `remoteGood` is what the *server* decrypted, so if it climbs the
- *   server is hearing us, and a link whose counters both climb is carrying voice in both
- *   directions by definition. Measured on a Galaxy S25 against a real server: voice worked
- *   throughout and the reply to our own UDP ping never once came back, and this half took the call
- *   off UDP every fifteen seconds. So the timeout may fire only where the window is silent in at
- *   least one direction - which is the firewall case it was written for, and it still fires there
- *   before a full window has accumulated.
+ * - **No packets in the last [windowMicros]**, judged on deltas of the cumulative counters over a
+ *   sliding window rather than on the counters themselves.
+ * - **No reply to a UDP ping for [pingTimeoutMicros]**, but only while the window is silent in at
+ *   least one direction. Some servers never answer our UDP ping while voice works fine in both
+ *   directions (`remoteGood` climbing means the server hears us), so the timeout alone must not
+ *   switch.
  *
- * On top of both, **hysteresis**: a decision is not reversed inside one window of taking it. A
- * window is the shortest history this class can judge, so reversing a decision sooner is reversing
- * it on evidence it already had. Two state changes inside one window are always a fault of the
- * procedure, never a state of the network.
+ * **Hysteresis**: a decision is not reversed within one window of taking it. This bounds the rate
+ * of route changes, not their number; a bursty link can still flip once per window, and
+ * [HumlaConnection]'s `warn` de-duplicates the announcements. The cost is that a link dying right
+ * after a restore stays on UDP until the lockout expires.
  *
- * **What the lockout costs, and it is paid in one direction more than the other.** It locks out the
- * *reversal*, so a link that dies in the instant it was restored keeps the voice on UDP until the
- * window is up. Measured against the shipped monitor (20 s window, 15 s ping timeout) on a history
- * whose ping replies sit at the start of the window and stop there: the switch back to TCP is taken
- * at 40 s with the lockout and at 25 s with the line deleted - **three TCP pings, 15 s, of voice
- * that only goes one way**. It is a delay and not a loss: the lockout expires and the switch is
- * taken at the first ping afterwards. It is also bounded by one window and scenario-dependent -
- * four other histories in the same probe paid nothing, because the window trim had not yet rolled
- * past the traffic that justified the restore and neither arm was decidable either way, so the trim
- * was already charging what the lockout would have.
- * [UdpHealthMonitorTest.aSwitchIsDelayedByAWholeWindowWhenTheLinkDiesRightAfterARestoration] is
- * that measurement, and it is the second direction of one guard: the first,
- * aDecisionIsNotReversedWithinOneWindowOfTakingIt, only ever drove restore-after-switch.
- *
- * **And the lockout bounds the rate, not the number.** "Two state changes inside one window are
- * always a fault of the procedure" is a statement about a window, and it says nothing about how
- * many windows there are. A link that delivers a burst every forty seconds is judged healthy,
- * then silent, then healthy again, for as long as it lasts: one change per window, forever.
- * Counted over 300 s against the shipped monitor, **15 route changes** - and this class limits
- * none of it, because every one of them is a correct answer to the twenty seconds in front of it.
- * What keeps the user's chat log readable is not here but in [HumlaConnection]'s `warn`, which
- * de-duplicates the announcements. That makes the de-duplication the repair rather than the second
- * line, and it has a price of its own; it is written down there.
- *
- * Two properties of the window that are scoped rather than guaranteed, both measured:
- *
- * - **The effective window widens across a gap in the TCP pings.** The head is kept until the
- *   sample behind it is a whole window old, so after a gap the base can be much older than
- *   [windowMicros]: samples at 0 s and 60 s carrying three packets each way yield RESTORE_UDP,
- *   although three packets in sixty seconds are well under what the threshold is meant to ask for.
- *   It is conservative where it switches away and permissive where it restores, which is the safe
- *   way round of the two, and capping the window a second time would reintroduce the late-ping bug
- *   the trim above exists to avoid. Deliberately not fixed.
- * - **[samples] is bounded by the *server's* ping rate, not by this class.** The trim keeps roughly
- *   [windowMicros] worth of them, so at the protocol's five second ping that is five samples and at
- *   a server that pings a thousand times a second it is twenty thousand - a few hundred kilobytes
- *   that the window sheds again as it moves, not a leak and not a crash. A cap belongs on the
- *   frame boundary where the server-controlled rate enters, next to the channel depth guard, not
- *   here; writing one here would be a branch no test of this class can reach.
+ * After a gap in TCP pings the effective window widens (the head is kept until the sample behind it
+ * is a whole window old). That is conservative when switching away and permissive when restoring,
+ * and deliberately not fixed. [samples] is bounded by the server's ping rate.
  *
  * All times are microseconds on the connection's clock ([HumlaConnection.elapsed]), which only ever
  * moves forward. Not thread-safe: the protocol thread raises every event and reads every decision.
@@ -102,24 +58,14 @@ class UdpHealthMonitor(
     private var lastChangeMicros = -1L
 
     init {
-        // A zero or negative window is not a crash, which is what makes it worth refusing: the trim
-        // then always reduces to the newest sample alone, every delta is zero against itself, and
-        // the monitor answers SWITCH_TO_TCP_BOTH forever without anything looking wrong.
+        // Non-positive values don't crash; they silently tunnel every connection forever.
         require(windowMicros > 0) { "windowMicros must be positive, was $windowMicros" }
-        // Word for word the same argument, and it was missing because this parameter had only ever
-        // been driven at its default: `nowMicros - reference > 0` is already true at the ping that
-        // records the first send, so a non-positive timeout tunnels every connection's voice from
-        // its first ping onwards and never lets it back.
         require(pingTimeoutMicros > 0) { "pingTimeoutMicros must be positive, was $pingTimeoutMicros" }
     }
 
     /**
-     * A UDP ping went out. Only the *first* send is remembered, and that is the whole point of the
-     * field: it answers "has UDP ever been asked anything" for the case where no reply has ever
-     * come back. The connection sends a ping every five seconds, so a reference that moved with
-     * each send would never be [pingTimeoutMicros] old and this half of spec A5 would be dead code
-     * - which is what aResentPingDoesNotRestartTheTimeoutClock fails on when the condition goes.
-     * Once a reply has arrived, [lastPingReplyMicros] answers instead and this field is unread.
+     * A UDP ping went out. Only the first send is remembered: it is the timeout reference until a
+     * reply arrives. A reference that moved with each (5 s) send would never time out.
      */
     fun onUdpPingSent(nowMicros: Long) {
         if (firstPingSentMicros < 0) firstPingSentMicros = nowMicros
@@ -140,28 +86,21 @@ class UdpHealthMonitor(
      */
     fun onTcpPing(nowMicros: Long, localGood: Int, remoteGood: Int, usingUdp: Boolean): Decision {
         samples.addLast(Sample(nowMicros, localGood, remoteGood))
-        // The head goes only once the sample behind it can take over as the base, i.e. is itself a
-        // whole window old. Dropping every sample older than the window instead - which is the
-        // obvious way to write this and the way it was written first - throws away the only sample
-        // that could make the window full: pings are `postDelayed(5 s)` and land a few milliseconds
-        // late, the lateness accumulates, and from the first late tick onwards the oldest surviving
-        // sample is always younger than a window. Measured: the decision is then never taken again
-        // for the rest of the session. aWindowOfLatePingsStillReachesADecision is the difference.
+        // Drop the head only once the sample behind it is itself a whole window old. Dropping
+        // everything older than the window would, with pings landing slightly late, never leave a
+        // full window and never decide again.
         while (samples.size > 1 && nowMicros - samples[1].atMicros >= windowMicros) samples.removeFirst()
 
         val first = samples.first()
         val localDelta = localGood - first.localGood
         val remoteDelta = remoteGood - first.remoteGood
-        // Positive evidence needs no full window. "Silent for a window" is a claim that needs the
-        // whole window under it; "carrying right now" needs one counted packet each way, and the
-        // two are not symmetric. This is what the ping timeout is measured against.
+        // Positive evidence needs no full window: one counted packet each way suffices.
         val carriesBothWays = localDelta > 0 && remoteDelta > 0
 
         val decision = decide(nowMicros, usingUdp, first, localDelta, remoteDelta, carriesBothWays)
         if (decision == Decision.KEEP) return decision
-        // Every non-KEEP decision here is a state change: the switch arms are reachable only while
-        // UDP is in use and RESTORE_UDP only while it is not, so one counter serves both directions
-        // of the lockout.
+        // Every non-KEEP decision is a state change, so one timestamp serves both directions of
+        // the lockout.
         if (lastChangeMicros >= 0 && nowMicros - lastChangeMicros < windowMicros) return Decision.KEEP
         lastChangeMicros = nowMicros
         return decision
@@ -175,10 +114,7 @@ class UdpHealthMonitor(
         remoteDelta: Int,
         carriesBothWays: Boolean,
     ): Decision {
-        // Still ahead of the window test: a link that is silent one way and answers no ping is
-        // decidable from the first send onwards, and waiting for a full window would add five
-        // seconds of one-way voice to every one of these. What changed is `!carriesBothWays`, and
-        // it is the fix for a measured flap - see the class doc.
+        // Ahead of the window test: decidable from the first send, without waiting a full window.
         if (usingUdp && firstPingSentMicros >= 0 && !carriesBothWays) {
             val reference = if (lastPingReplyMicros >= 0) lastPingReplyMicros else firstPingSentMicros
             if (nowMicros - reference > pingTimeoutMicros) return Decision.SWITCH_TO_TCP_PING_TIMEOUT
@@ -194,9 +130,7 @@ class UdpHealthMonitor(
                 else -> Decision.KEEP
             }
         } else {
-            // Both directions, because voice that only goes one way is not a working connection -
-            // and `and` rather than `or` is a claim about the two corners where they disagree, which
-            // doNotRestoreUdpWhenOnlyThe{Receiving,Sending}DirectionRecovers are.
+            // Both directions: voice that only goes one way is not a working connection.
             if (localDelta > restoreThreshold && remoteDelta > restoreThreshold) Decision.RESTORE_UDP else Decision.KEEP
         }
     }

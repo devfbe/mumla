@@ -22,8 +22,7 @@ import se.lublin.humla.R
 /**
  * Connection-level warnings the service shows in the chat log; each maps to a string resource.
  *
- * The connection raises the value, the consumer resolves the text: a warning raised on the protocol
- * thread must not depend on a Context, and a translated string cannot be built where there is none.
+ * The consumer resolves the text, so the protocol thread needs no Context.
  */
 enum class ConnectionWarning(val messageRes: Int) {
     UDP_UNAVAILABLE(R.string.udp_warning_unavailable),

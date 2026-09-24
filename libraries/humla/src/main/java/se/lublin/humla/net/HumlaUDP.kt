@@ -31,14 +31,10 @@ import java.util.concurrent.LinkedBlockingQueue
 /**
  * Receives and sends OCB-AES encrypted voice datagrams over the UDP connection to a Mumble server.
  *
- * Receives on "humla-udp-recv", sends on "humla-udp-send" (both existed before this rewrite; they
- * are the socket loops, not new bare threads). Every listener callback is posted to
- * [callbackHandler], which defaults to the main looper so that today's consumers keep seeing
- * callbacks exactly where they saw them before.
+ * Receives on "humla-udp-recv", sends on "humla-udp-send". Every listener callback is posted to
+ * [callbackHandler].
  *
- * Single-use: [connect] may be called once. UDP recovery restarts by creating a new transport, so
- * nothing in production reconnects an instance, and the tested path is the production path.
- * [socketFactory] is the seam a test uses to get hold of the receive socket.
+ * Single-use: [connect] may be called once; UDP recovery creates a new transport.
  *
  * The public interface is not thread safe.
  *
@@ -85,7 +81,6 @@ class HumlaUDP @JvmOverloads constructor(
             udpSocket.connect(address, port)
             Log.d(TAG, "Created socket")
 
-            // Start the outgoing consumer once the UDP socket is open, as a child thread.
             sendThread = Thread(OutgoingConsumer(udpSocket, sendQueue), "humla-udp-send").also { it.start() }
             // A disconnect() that arrived while the socket was being built must not be overwritten.
             connected = !stopRequested
@@ -151,19 +146,8 @@ class HumlaUDP @JvmOverloads constructor(
             return
         }
         if (!connected) {
-            // A deliberate change from the Java original, which set mConnected at the head of run():
-            // packets produced while the host was resolved and the socket built were encrypted and
-            // queued there, and went out once the socket opened, because a connected DatagramSocket
-            // fills in the address a queued packet left null. They are dropped here instead. The
-            // window is one cached DNS lookup plus a socket creation wide, a voice frame held back
-            // over it would be played late anyway, and dropping before encrypt() keeps a connection
-            // that never opens from accumulating packets nobody will ever send.
-            //
-            // The old route also cost more than a late frame: encrypt() consumes an OCB2 sequence
-            // number when it is called, so every packet queued here and sent late - or never -
-            // punched a hole in the sequence the server's replay window expects. And the window is
-            // nearly unreachable in practice anyway, because the isValid check above only passes
-            // once the server's CryptSetup has arrived, which is well after the socket is up.
+            // Drop before encrypt(): encrypt() consumes an OCB2 sequence number, so a packet that is
+            // never sent would punch a hole in the server's replay window.
             Log.w(TAG, "Tried to send UDP message without an active connection.")
             return
         }

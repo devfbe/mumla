@@ -54,13 +54,9 @@ object HumlaCertificateGenerator {
     private const val YEARS_VALID = 20
 
     /**
-     * PBE iterations for the store's MAC. The PKCS#12 is written with an empty password and kept
-     * in the app's private database, so iterating the key derivation protects nothing while
-     * costing real time on the thread that connects: BouncyCastle 1.86 defaults to 1,200,000 for
-     * the MAC and 600,000 for an encrypted bag, which measured 0.8-0.9 s per store and per load on
-     * a desktop JVM and would be several seconds on a phone. 2048 is what BouncyCastle used before
-     * 1.86, what OpenSSL's PKCS12_create defaults to, and therefore what existing Mumla and Mumble
-     * certificates already carry.
+     * PBE iterations for the store's MAC. The store has an empty password and lives in the app's
+     * private database, so a high count protects nothing but costs seconds per load on a phone.
+     * 2048 matches OpenSSL's PKCS12_create default and existing Mumble certificates.
      */
     private const val MAC_ITERATIONS = 2048
 
@@ -107,14 +103,10 @@ object HumlaCertificateGenerator {
         val certificate = JcaX509CertificateConverter().setProvider(provider)
             .getCertificate(certificateHolder)
 
-        // Built bag by bag rather than through KeyStore.store(), which offers no way to set the
-        // iteration count other than the JVM-wide org.bouncycastle.pkcs12.store_it_count system
-        // property. That property is global mutable state read at store time: any other code in
-        // the process can set, clear or overwrite it, and it would silently change the iteration
-        // count of every other PKCS#12 the process writes. Building the PFX here is local and
-        // deterministic, and it produces exactly the shape Mumble itself writes -- an unencrypted
-        // keyBag and certBag, both tagged with the alias, MAC over the empty password -- which
-        // Pkcs12Certificates already loads and has a test for.
+        // Built bag by bag rather than through KeyStore.store(): the only other way to set the
+        // iteration count is the JVM-wide org.bouncycastle.pkcs12.store_it_count property. This
+        // produces the shape Mumble writes (unencrypted keyBag and certBag tagged with the alias,
+        // MAC over the empty password).
         val friendlyName = DERBMPString(ALIAS)
         val localKeyId = DEROctetString(
             MessageDigest.getInstance("SHA-1").digest(keyPair.public.encoded)

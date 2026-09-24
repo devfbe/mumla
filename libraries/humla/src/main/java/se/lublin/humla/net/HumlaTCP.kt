@@ -43,29 +43,19 @@ class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
  * to the Mumble protocol specification.
  *
  * Reads on "humla-tcp-read", writes on "humla-tcp-send"; every listener callback is posted to
- * [callbackHandler], which defaults to the main looper so that today's consumers keep seeing
- * callbacks exactly where they saw them before.
+ * [callbackHandler].
  *
  * Reusable, one connection at a time: [connect] is refused until the previous connection's read
  * loop has finished unwinding, which is later than [disconnect] returns.
  *
- * onTCPConnectionDisconnect is delivered exactly once per [connect]: either by [disconnect], so the
- * caller hears about its own request immediately even while the read thread is still stuck in a
- * connect that has no timeout, or by the read loop when it ends on its own. It is also terminal -
- * no callback of this connection follows it, however far the read thread still has to unwind. That
- * is decided when a callback is delivered, not when it is queued, so it holds for one that was
- * already on its way when the disconnect happened; and it is decided against that connection's own
- * disconnect, so a disconnect still in flight cannot silence the connection after it.
+ * onTCPConnectionDisconnect is delivered exactly once per [connect]: by [disconnect] (so the caller
+ * hears about it even while the read thread is stuck in a connect without timeout) or by the read
+ * loop when it ends on its own. It is terminal: no callback of that connection is delivered after
+ * it, decided at delivery time against that connection's own [epoch].
  *
- * Before adding another state flag here, ask of it: which thread closes its window, and does
- * anything fence that thread in? [running], [connected], [disconnectReported] and [inUse] are all
- * opened and closed on the connect/read side, so [inUse] - released last, in the read loop's
- * finally - keeps their windows inside one connection. A flag whose closing edge runs on the
- * callback handler has no such fence: it outlives its connection and resetting it in [connect]
- * does not help, because the previous connection's setter arrives afterwards. Make that state per
- * connection instead, the way [epoch] is. Asking it per invariant rather than per symbol is what
- * finds this, and a test only sees it if it crosses the connection boundary - which is why three
- * flags in a row got here with a green suite.
+ * State flags opened and closed on the connect/read side are fenced by [inUse]. State whose closing
+ * edge runs on the callback handler outlives its connection and must be per connection, like
+ * [epoch].
  */
 class HumlaTCP @JvmOverloads constructor(
     private val socketFactory: HumlaSSLSocketFactory,
@@ -85,19 +75,10 @@ class HumlaTCP @JvmOverloads constructor(
     private val disconnectReported = AtomicBoolean(true)
 
     /**
-     * Marks the connection whose disconnect callback has been delivered. [post] captures the epoch
-     * when it queues a callback, the disconnect callback marks that same object when it runs, so
-     * [post] can tell a callback queued before the disconnect from one queued after it.
-     * [disconnectReported] cannot answer that: it flips when the disconnect is *queued*, and the
-     * failure report of a connect that never came up is queued before it and still has to be
-     * delivered.
-     *
-     * It is per connection, and a plain flag reset in [connect] would not do. This is the only one
-     * of this class's flags whose closing edge runs on the callback handler, and that is the one
-     * thread [inUse] does not fence in: a disconnect belonging to a connection that has already
-     * released the transport is delivered *after* the next [connect], and a flag would then be set
-     * behind that connect's reset and silence the new connection for good - no established, no
-     * frame, and a failure arriving as a bare disconnect the consumer cannot reconnect from.
+     * Marks the connection whose disconnect callback has been delivered, so [post] can drop
+     * callbacks queued before but delivered after it. [disconnectReported] cannot answer that: it
+     * flips when the disconnect is queued. Per connection because the disconnect of a previous
+     * connection can be delivered after the next [connect]; a reset flag would silence the new one.
      */
     private class Epoch {
         @Volatile var terminated = false
@@ -106,13 +87,9 @@ class HumlaTCP @JvmOverloads constructor(
     @Volatile private var epoch = Epoch()
 
     /**
-     * Held from [connect] until the read loop has fully unwound - which is later than [running]
-     * clears, because [disconnect] clears that immediately while the read thread may still be stuck
-     * in a connect with no timeout. Replaces HumlaNetworkThread's mInitialized flag, which was
-     * cleared at the very end of stopThreads() for exactly this reason: a connect() landing in the
-     * teardown window would have had its disconnect token consumed and its fresh executors shut
-     * down by the outgoing connection's finally block, leaving sendMessage a silent no-op and
-     * nobody reporting a disconnect.
+     * Held from [connect] until the read loop has fully unwound, which is later than [running]
+     * clears. Otherwise a connect() during teardown would have its executors shut down and its
+     * disconnect token consumed by the outgoing connection's finally block.
      */
     private val inUse = AtomicBoolean(false)
 
@@ -133,16 +110,13 @@ class HumlaTCP @JvmOverloads constructor(
             epoch = Epoch()
             running = true
             sendExecutor = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-send") }
-            // Publish the executor before handing the read loop to it: the loop's finally shuts it
-            // down and would otherwise be able to observe the field still null and leak a live,
-            // non-daemon thread for every connection attempt.
+            // Publish the executor before starting the loop: its finally shuts it down and must not
+            // see null.
             val reader = Executors.newSingleThreadExecutor { Thread(it, "humla-tcp-read") }
             readExecutor = reader
             reader.execute(::readLoop)
         } catch (e: Throwable) {
-            // The read loop never started, so its finally will not release the transport. Untested:
-            // reaching this needs the executor construction itself to fail, which takes an
-            // injectable executor factory - a seam not worth adding for it. Do not assume coverage.
+            // The read loop never started, so its finally will not release the transport.
             running = false
             inUse.set(false)
             throw e
@@ -205,18 +179,10 @@ class HumlaTCP @JvmOverloads constructor(
             } catch (e: IOException) {
                 Log.w(TAG, "Error closing TCP socket", e)
             }
-            // Drop the streams, not just close them: on a reconnect the new send executor is live
-            // from connect() on, while these fields are only replaced after the new handshake, so a
-            // send in between would otherwise be written into the connection that just ended. The
-            // message is lost either way - those streams were closed three lines up, so on a real
-            // socket the write throws an IOException the send thread swallows. What this buys is
-            // not writing into a dead stream at all, and not keeping the previous connection's
-            // streams reachable from a live transport.
-            //
-            // It frees no socket buffers: [socket] still points at them and is deliberately left
-            // set, because disconnect() closes it from the send thread and can get there after this
-            // block has run. So socket != null does not mean "connected" - it is the one field here
-            // that outlives its connection, and that asymmetry to input/output is on purpose.
+            // Drop the streams so a send queued for the next connection before its handshake never
+            // writes into this one. [socket] stays set on purpose: disconnect() closes it from the
+            // send thread and may get there after this block, so socket != null does not mean
+            // "connected".
             input = null
             output = null
             running = false
@@ -261,14 +227,8 @@ class HumlaTCP @JvmOverloads constructor(
     }
 
     /**
-     * The named exit for a send that finds no stream - before the handshake, or after the read loop
-     * ended. Dropping is the only option left on the send thread: there is nowhere to write and
-     * nobody to throw at, so say it out loud rather than lose the message silently.
-     *
-     * Untested, and only half of what leads here is pinned:
-     * aSendBetweenTwoConnectionsDoesNotReachThePreviousConnectionsStream covers that output is
-     * null after a connection ended, not that this line runs or what it says. Do not read coverage
-     * of the one as coverage of the other.
+     * A send that finds no stream (before the handshake, or after the read loop ended) is dropped
+     * with a log line; there is nowhere to write and nobody to throw at.
      */
     private fun logNoStream(messageType: HumlaTCPMessageType) {
         Log.w(TAG, "Dropping $messageType, the TCP connection has no stream")
@@ -284,25 +244,17 @@ class HumlaTCP @JvmOverloads constructor(
         if (!running) return
         running = false
         enqueueSend { socket?.close() }
-        // Report now rather than from the read loop: createSocket() has no connect timeout, so a
-        // blackholed server can keep the read thread blocked for minutes with no socket to close,
-        // and the caller must not be left believing it is still connected. The read loop's own
-        // attempt is then suppressed, which is what makes the callback exactly-once.
+        // Report now rather than from the read loop: createSocket() has no connect timeout, so the
+        // read thread can stay blocked for minutes. The read loop's own attempt is then suppressed.
         postDisconnectOnce()
     }
 
     /** Posts onTCPConnectionDisconnect if no one has posted it yet for this connect(). */
     private fun postDisconnectOnce() {
         if (!disconnectReported.compareAndSet(false, true)) return
-        // Only a callback that was actually queued consumes the token: post() returns false once
-        // the handler's looper has quit, and a report dropped there must not suppress the read
-        // loop's own attempt, or nobody reports the disconnect at all.
-        //
-        // Handing the token back is not a retry - whoever lost the compareAndSet above has already
-        // given up and returned. That is harmless for exactly one reason: Handler.post fails only
-        // on a looper that has quit, and a looper never comes back, so the attempt a retry would
-        // have made was doomed too. Anything that could make post() fail transiently would turn
-        // this into a lost disconnect.
+        // Only a callback that was actually queued consumes the token: post() fails once the
+        // looper has quit, and the read loop's attempt must then still be allowed. (A quit looper
+        // never comes back, so the lost race is harmless.)
         val current = epoch // captured here, so a disconnect still in flight cannot mark the next connection
         if (!deliver { current.terminated = true; it.onTCPConnectionDisconnect() }) disconnectReported.set(false)
     }
@@ -329,22 +281,13 @@ class HumlaTCP @JvmOverloads constructor(
     }
 
     /**
-     * Posts a listener callback, unless this connection's disconnect has already been delivered -
-     * which is [epoch], not [disconnectReported]; the latter only says the disconnect was queued.
-     * The read thread parks inside readFrame and cannot see a disconnect that happens meanwhile, so
-     * a frame - or a late onTCPConnectionEstablished - can still complete afterwards. The consumer has torn its
-     * message handlers down by then, so anything arriving behind the disconnect is dropped here.
+     * Posts a listener callback, unless this connection's disconnect has already been delivered
+     * ([epoch], not [disconnectReported]). The read thread cannot see a disconnect while parked in
+     * readFrame, so a late frame or onTCPConnectionEstablished is dropped here.
      *
-     * The decision is made inside the posted runnable, and only there. Checking before queueing
-     * cannot decide it: reading the flag and queueing the callback are two steps, and a
-     * disconnect() running to completion between them gets its terminal callback queued first and
-     * this one behind it. At delivery the handler's FIFO order has already settled the question -
-     * this callback ran before the disconnect or it did not - which is what makes "terminal" hold
-     * literally rather than almost always. A pre-check would now only save queueing a runnable
-     * that drops itself, at the price of a branch no test can reach.
-     *
-     * The disconnect report itself does not come through here; it goes straight to [deliver], or it
-     * would suppress itself.
+     * The check runs inside the posted runnable: only the handler's FIFO order decides whether
+     * this callback ran before the disconnect. The disconnect report itself goes straight to
+     * [deliver], or it would suppress itself.
      */
     private fun post(block: (TCPConnectionListener) -> Unit) {
         val current = epoch // captured here: at delivery time [epoch] may already be the next connection's
@@ -372,27 +315,22 @@ class HumlaTCP @JvmOverloads constructor(
         private val TAG = HumlaTCP::class.java.name
 
         /**
-         * Largest frame the Mumble protocol allows; anything above it is a broken peer. Mumble's
-         * Connection.cpp uses this same bound at both ends - socketRead() drops the connection for
-         * a packet above 0x7fffff, messageToNetwork() refuses to send one - so 8 MiB minus one
-         * byte, not 8 MiB, is the number no server will ever exceed.
+         * Largest frame the Mumble protocol allows (Mumble's Connection.cpp rejects packets above
+         * 0x7fffff at both ends); anything above it is a broken peer.
          */
         private const val MAX_FRAME_LENGTH = 0x7fffff
 
         /**
          * Reads one frame: int16 type, int32 length, payload. Returns null (payload consumed) for
-         * a type this client does not know, so the stream stays in sync. Lifted out of the Java
-         * read loop, with the length field validated before it is used to allocate.
+         * a type this client does not know, so the stream stays in sync.
          */
         @JvmStatic
         @Throws(IOException::class)
         fun readFrame(input: DataInputStream): TcpFrame? {
             val messageType = input.readShort().toInt()
             val length = input.readInt()
-            // The peer controls this field. Allocating on it unchecked turns a negative value into
-            // a NegativeArraySizeException and a huge one into an OutOfMemoryError - neither is an
-            // IOException, so both would escape the read loop and take the process down instead of
-            // reporting a connection error the caller can reconnect from.
+            // Peer-controlled: validate before allocating, or a bad value escapes the read loop as
+            // NegativeArraySizeException/OutOfMemoryError instead of a connection error.
             if (length < 0 || length > MAX_FRAME_LENGTH) {
                 throw IOException("Invalid frame length: $length")
             }

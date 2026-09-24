@@ -23,13 +23,10 @@ import java.nio.BufferUnderflowException
  * The legacy UDP connectivity ping: one header byte and the timestamp as a Mumble varint, exactly
  * as long as that varint is (mumble `UDPPingEncoder::encodePingPacket_legacy`).
  *
- * Exact length is the whole point. Humla announces protocol 1.2.5, so a 1.5 server decodes the
- * ping with `decodePing_legacy`, which accepts at most nine bytes behind the header as a varint and
- * otherwise only the 12-byte extended-information request. The sixteen padded bytes this client
- * sent before were neither and were dropped without an answer; servers before 1.5 echoed them.
- *
- * A 1.5 server answers with the same shape, and an older one echoes the datagram unchanged, which
- * is also the same shape - so one reader serves both.
+ * The exact length matters: a 1.5 server decodes the ping with `decodePing_legacy`, which accepts
+ * at most nine varint bytes behind the header (or the 12-byte extended-information request) and
+ * silently drops anything else. Older servers echo the datagram unchanged, so one reader serves
+ * both.
  */
 internal object UdpPing {
     private val HEADER = ((HumlaUDPMessageType.UDPPing.ordinal shl 5) and 0xFF).toByte()

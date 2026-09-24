@@ -17,9 +17,6 @@
 
 package se.lublin.humla.net;
 
-/**
- * Created by andrew on 21/08/13.
- */
 public class Permissions {
     public static final int None = 0x0,
     Write = 0x1,

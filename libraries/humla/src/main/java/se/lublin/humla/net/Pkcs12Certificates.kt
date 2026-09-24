@@ -49,15 +49,12 @@ import java.security.cert.X509Certificate
  * MAC over the empty password) and the ones [HumlaCertificateGenerator] writes.
  *
  * The bundled BouncyCastle provider is passed explicitly rather than registered globally, so the
- * parse is always done by the BouncyCastle version this app ships instead of whatever the device
- * ROM happens to provide under the name "BC", and the result does not depend on the order in
- * which providers were registered.
+ * parse never depends on whatever "BC" provider the device ROM ships.
  */
 object Pkcs12Certificates {
 
     /**
-     * Constructing a provider registers on the order of a thousand algorithm entries, and this
-     * runs on every connection attempt and every certificate import, so keep one around.
+     * Kept around: constructing a provider is expensive and this runs on every connection attempt.
      */
     private val PROVIDER = BouncyCastleProvider()
 
