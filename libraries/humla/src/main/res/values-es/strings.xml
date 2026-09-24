@@ -32,4 +32,15 @@
     <string name="perm_denied">Permiso denegado.</string>
     <string name="server">Servidor</string>
     <string name="the_server">el servidor</string>
+    <string name="udp_warning_unavailable">No se pueden enviar ni recibir paquetes UDP con el servidor. Cambiando al modo TCP.</string>
+    <string name="udp_warning_send_failed">No se pueden enviar paquetes UDP al servidor. Cambiando al modo TCP.</string>
+    <string name="udp_warning_receive_failed">No se pueden recibir paquetes UDP del servidor. Cambiando al modo TCP.</string>
+    <string name="udp_warning_ping_timeout">Sin respuesta al ping UDP del servidor durante 15 segundos. Cambiando al modo TCP.</string>
+    <string name="udp_warning_restored">Ya se pueden enviar y recibir paquetes UDP con el servidor. Volviendo al modo UDP.</string>
+    <string name="reconnect_gave_up">No se pudo volver a conectar al servidor. Se abandona.</string>
+    <string name="sco_unavailable">No hay auriculares Bluetooth disponibles. El audio sigue en el teléfono.</string>
+    <string name="bluetooth_sco_denied">Este dispositivo se negó a enviar audio a unos auriculares Bluetooth. Concede el permiso «Dispositivos cercanos» en los ajustes del sistema.</string>
+    <string name="no_session_user">El servidor no envió el usuario propio de esta sesión; el micrófono sigue desactivado.</string>
+    <string name="no_target_server">No se configuró ningún servidor para esta conexión.</string>
+    <string name="udp_warning_thread_failed">La conexión UDP ha fallado. La voz se envía por un túnel TCP mientras se reintenta UDP.</string>
 </resources>

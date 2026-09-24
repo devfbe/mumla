@@ -32,4 +32,15 @@
     <string name="chat_notify_muted">Mykistetty.</string>
     <string name="chat_notify_muted_deafened">Mykistetty ja hiljennetty.</string>
     <string name="audio_max_bandwidth">Palvelimen maksimi kaistanleveys on vain %1$d kbit/s. Mukautetaan äänen laatua %2$d kbit/s (%3$d ms).</string>
+    <string name="udp_warning_unavailable">UDP-paketteja ei voi lähettää palvelimelle eikä vastaanottaa siltä. Vaihdetaan TCP-tilaan.</string>
+    <string name="udp_warning_send_failed">UDP-paketteja ei voi lähettää palvelimelle. Vaihdetaan TCP-tilaan.</string>
+    <string name="udp_warning_receive_failed">UDP-paketteja ei voi vastaanottaa palvelimelta. Vaihdetaan TCP-tilaan.</string>
+    <string name="udp_warning_ping_timeout">Palvelin ei ole vastannut UDP-pingiin 15 sekuntiin. Vaihdetaan TCP-tilaan.</string>
+    <string name="udp_warning_restored">UDP-paketteja voi taas lähettää palvelimelle ja vastaanottaa siltä. Vaihdetaan takaisin UDP-tilaan.</string>
+    <string name="reconnect_gave_up">Palvelimeen ei saatu uudelleen yhteyttä. Yrittäminen lopetetaan.</string>
+    <string name="sco_unavailable">Bluetooth-kuulokkeita ei ole käytettävissä. Ääni pysyy puhelimessa.</string>
+    <string name="bluetooth_sco_denied">Tämä laite kieltäytyi ohjaamasta ääntä Bluetooth-kuulokkeisiin. Myönnä Lähellä olevat laitteet -lupa järjestelmäasetuksissa.</string>
+    <string name="no_session_user">Palvelin ei lähettänyt tämän istunnon omaa käyttäjää; mikrofoni pysyy pois päältä.</string>
+    <string name="no_target_server">Tälle yhteydelle ei ole määritetty palvelinta.</string>
+    <string name="udp_warning_thread_failed">UDP-yhteys epäonnistui. Puhe tunneloidaan TCP:n kautta, kun UDP:tä yritetään uudelleen.</string>
 </resources>

@@ -201,4 +201,16 @@
         <item quantity="other">%d felhasználók</item>
     </plurals>
     <string name="no_ptt_key">Nincs kulcs</string>
+    <string name="connection_lost_reconnecting">A kapcsolat megszakadt – újrakapcsolódás…</string>
+    <string name="foreground_start_failed">Nem sikerült a Mumlát a háttérben futtatni. A hang leállhat, amikor kikapcsol a képernyő.</string>
+    <string name="bluetooth_perm_denied">A Bluetooth headset bekapcsolva marad. A „Közeli eszközök” engedély nélkül egyes eszközök megtagadják, hogy a hangot rá irányítsák.</string>
+    <string name="chat_image_share">Kép megosztása</string>
+    <string name="chat_image_close">Bezárás</string>
+    <string name="chat_image_load_failed">A képet nem sikerült betölteni</string>
+    <string name="chat_image_viewer_image">Kép</string>
+    <string name="chat_image_open">Kép megnyitása</string>
+    <string name="chat_image_placeholder">[kép]</string>
+    <string name="permission_denied_storage">Nincs engedély a tárhely olvasására</string>
+    <string name="image_decode_failed">Ezt a képet nem sikerült beolvasni</string>
+    <string name="image_too_large">A kép túl nagy ehhez a szerverhez</string>
 </resources>

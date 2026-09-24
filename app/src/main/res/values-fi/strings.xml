@@ -199,4 +199,16 @@
     <string name="drawer_close">Sulje alasvetovalikko</string>
     <string name="drawer_open">Avaa alasvetovalikko</string>
     <string name="image_confirm_send">Lähetä tämä kuva\?</string>
+    <string name="connection_lost_reconnecting">Yhteys katkesi – yhdistetään uudelleen…</string>
+    <string name="foreground_start_failed">Mumlaa ei voitu pitää käynnissä taustalla. Ääni voi katketa, kun näyttö sammuu.</string>
+    <string name="bluetooth_perm_denied">Bluetooth-kuulokkeet pysyvät päällä. Ilman Lähellä olevat laitteet -lupaa jotkin laitteet kieltäytyvät ohjaamasta ääntä niihin.</string>
+    <string name="chat_image_share">Jaa kuva</string>
+    <string name="chat_image_close">Sulje</string>
+    <string name="chat_image_load_failed">Kuvaa ei voitu ladata</string>
+    <string name="chat_image_viewer_image">Kuva</string>
+    <string name="chat_image_open">Avaa kuva</string>
+    <string name="chat_image_placeholder">[kuva]</string>
+    <string name="permission_denied_storage">Lupa tallennustilan lukemiseen evätty</string>
+    <string name="image_decode_failed">Kuvaa ei voitu lukea</string>
+    <string name="image_too_large">Kuva on liian suuri tälle palvelimelle</string>
 </resources>

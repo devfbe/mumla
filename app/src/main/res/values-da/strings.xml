@@ -108,4 +108,16 @@
     <string name="certificates">Certifikater</string>
     <string name="certificate_import_success">Importérede certifikat %s.</string>
     <string name="comment_view">Se</string>
+    <string name="connection_lost_reconnecting">Forbindelsen mistet – forbinder igen…</string>
+    <string name="foreground_start_failed">Mumla kunne ikke holdes kørende i baggrunden. Tale kan stoppe, når skærmen slukker.</string>
+    <string name="bluetooth_perm_denied">Bluetooth-headsettet forbliver slået til. Uden tilladelsen \"Enheder i nærheden\" vil nogle enheder nægte at sende lyd til det.</string>
+    <string name="chat_image_share">Del billede</string>
+    <string name="chat_image_close">Luk</string>
+    <string name="chat_image_load_failed">Billedet kunne ikke indlæses</string>
+    <string name="chat_image_viewer_image">Billede</string>
+    <string name="chat_image_open">Åbn billede</string>
+    <string name="chat_image_placeholder">[billede]</string>
+    <string name="permission_denied_storage">Ingen tilladelse til at læse lageret</string>
+    <string name="image_decode_failed">Billedet kunne ikke læses</string>
+    <string name="image_too_large">Billedet er for stort til denne server</string>
 </resources>

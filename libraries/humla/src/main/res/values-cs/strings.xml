@@ -32,4 +32,15 @@
     <string name="chat_notify_muted_deafened">Ztlumen a ohlušen.</string>
     <string name="server">Server</string>
     <string name="perm_denied">Přístup zamítnut.</string>
+    <string name="udp_warning_unavailable">UDP pakety nelze posílat na server ani z něj přijímat. Přepíná se do režimu TCP.</string>
+    <string name="udp_warning_send_failed">UDP pakety nelze posílat na server. Přepíná se do režimu TCP.</string>
+    <string name="udp_warning_receive_failed">UDP pakety nelze přijímat ze serveru. Přepíná se do režimu TCP.</string>
+    <string name="udp_warning_ping_timeout">Server 15 sekund neodpověděl na UDP ping. Přepíná se do režimu TCP.</string>
+    <string name="udp_warning_restored">UDP pakety lze opět posílat na server a přijímat z něj. Přepíná se zpět do režimu UDP.</string>
+    <string name="reconnect_gave_up">Opětovné připojení k serveru se nezdařilo. Pokusy byly ukončeny.</string>
+    <string name="sco_unavailable">Žádný Bluetooth headset není k dispozici. Zvuk zůstává v telefonu.</string>
+    <string name="bluetooth_sco_denied">Toto zařízení odmítlo přesměrovat zvuk do Bluetooth headsetu. Udělte oprávnění „Zařízení v okolí“ v nastavení systému.</string>
+    <string name="no_session_user">Server neposlal vlastního uživatele této relace; mikrofon zůstává vypnutý.</string>
+    <string name="no_target_server">Pro toto připojení nebyl nastaven žádný server.</string>
+    <string name="udp_warning_thread_failed">Spojení UDP selhalo. Hlas se tuneluje přes TCP, zatímco se UDP zkouší znovu.</string>
 </resources>
