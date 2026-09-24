@@ -127,12 +127,16 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.material)
     implementation(libs.androidx.preference)
+    implementation(libs.coil.core)
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.okhttp)
 
     "googImplementation"(libs.billing)
 
     testImplementation(libs.bundles.unit.test)
     testImplementation(testFixtures(project(":libraries:humla")))
     testImplementation(libs.androidx.fragment.testing)
+    testImplementation(libs.okhttp.mockwebserver)
     // A manifest-only artifact: it must reach the merged debug manifest Robolectric reads.
     debugImplementation(libs.androidx.fragment.testing.manifest)
 }
