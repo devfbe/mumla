@@ -260,6 +260,9 @@ class Settings private constructor(private val context: Context) {
 
     val shouldShowUserCount: Boolean by booleanPref(PREF_SHOW_USER_COUNT, DEFAULT_SHOW_USER_COUNT)
 
+    /** Wallpaper-based colours instead of the brand scheme, where the platform offers them. */
+    val isDynamicColorEnabled: Boolean by booleanPref(PREF_DYNAMIC_COLORS, DEFAULT_DYNAMIC_COLORS)
+
     val shouldStartUpInPinnedMode: Boolean by booleanPref(PREF_START_UP_IN_PINNED_MODE, DEFAULT_START_UP_IN_PINNED_MODE)
 
     val newsShownVersions: Set<String>
@@ -347,6 +350,8 @@ class Settings private constructor(private val context: Context) {
         const val DEFAULT_AUTO_RECONNECT = true
 
         const val PREF_THEME = "theme"
+        const val PREF_DYNAMIC_COLORS = "dynamic_colors"
+        const val DEFAULT_DYNAMIC_COLORS = false
         const val PREF_LANGUAGE = "language"
 
         const val PREF_PTT_BUTTON_HEIGHT = "pttButtonHeight"

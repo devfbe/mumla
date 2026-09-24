@@ -8,8 +8,11 @@ import androidx.appcompat.app.AppCompatDelegate.setApplicationLocales
 import androidx.core.content.edit
 import androidx.core.os.LocaleListCompat
 import androidx.preference.PreferenceManager
+import com.google.android.material.color.DynamicColors
+import com.google.android.material.color.DynamicColorsOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
+import se.lublin.mumla.Settings
 import se.lublin.mumla.Settings.Companion.PREF_LANGUAGE
 import se.lublin.mumla.Settings.Companion.PREF_THEME
 import se.lublin.mumla.db.MumlaRepository
@@ -41,6 +44,13 @@ class MumlaApplication : Application(), SharedPreferences.OnSharedPreferenceChan
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         applyTheme(preferences)
         preferences.registerOnSharedPreferenceChangeListener(this)
+        // Decided per activity creation, so a changed setting applies to recreated activities.
+        DynamicColors.applyToActivitiesIfAvailable(
+            this,
+            DynamicColorsOptions.Builder()
+                .setPrecondition { _, _ -> Settings.getInstance(this).isDynamicColorEnabled }
+                .build(),
+        )
     }
 
     override fun onSharedPreferenceChanged(preferences: SharedPreferences, key: String?) {

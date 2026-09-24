@@ -82,6 +82,9 @@ class MumlaActivity :
     private lateinit var dialogs: ConnectionDialogs
     private lateinit var connectFlow: ConnectFlow
 
+    /** The dynamic colour setting this activity was themed with. */
+    private var themedWithDynamicColors = false
+
     /** The service [onServiceBound] got, until [onServiceUnbound]. */
     private var boundService: IMumlaService? = null
 
@@ -97,6 +100,7 @@ class MumlaActivity :
 
     override fun onCreate(savedInstanceState: Bundle?) {
         settings = Settings.getInstance(this)
+        themedWithDynamicColors = settings.isDynamicColorEnabled
         super.onCreate(savedInstanceState)
         val binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -168,6 +172,8 @@ class MumlaActivity :
 
     override fun onResume() {
         super.onResume()
+        // Changed in the settings screen, which recreates only itself.
+        if (settings.isDynamicColorEnabled != themedWithDynamicColors) recreate()
         bindService(Intent(this, MumlaService::class.java), connection, 0)
     }
 
