@@ -1,7 +1,6 @@
 package se.lublin.mumla.channel
 
 import android.os.Bundle
-import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -9,7 +8,6 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -106,25 +104,6 @@ class ChannelListFragmentTest {
     private fun rebind() {
         controller.get().bind(null)
         controller.get().bind(service)
-    }
-
-    private fun newListFragment() = ChannelListFragment().apply {
-        arguments = Bundle().apply { putBoolean("pinned", false) }
-    }
-
-    /** A host or parent that cannot serve the fragment is refused at once, naming the gap. */
-    @Test
-    fun aParentThatCannotProvideChatTargetsIsRefusedWhenTheFragmentAttaches() {
-        val plainParent = Fragment()
-        controller.get().supportFragmentManager.beginTransaction()
-            .add(plainParent, "plain").commitNow()
-
-        val thrown = assertThrows(ClassCastException::class.java) {
-            plainParent.childFragmentManager.beginTransaction()
-                .add(newListFragment(), "list").commitNow()
-        }
-
-        assertThat(thrown).hasMessageThat().contains("ChatTargetProvider")
     }
 
     @Test
@@ -254,15 +233,15 @@ class ChannelListFragmentTest {
 
         // No target yet: opens one.
         fragment.onChannelClick(first)
-        assertThat(parent.chatTarget?.channel).isEqualTo(first)
+        assertThat((parent.chatTargets.target.value as? ChatTarget.Channel)?.channel).isEqualTo(first)
 
         // A target, but not this channel: switches it.
         fragment.onChannelClick(second)
-        assertThat(parent.chatTarget?.channel).isEqualTo(second)
+        assertThat((parent.chatTargets.target.value as? ChatTarget.Channel)?.channel).isEqualTo(second)
 
         // The open target, tapped again.
         fragment.onChannelClick(second)
-        assertThat(parent.chatTarget).isNull()
+        assertThat(parent.chatTargets.target.value).isNull()
     }
 
     /**
@@ -272,16 +251,16 @@ class ChannelListFragmentTest {
     @Test
     fun tappingTheChannelOfATargetThisFragmentDidNotOpenOpensAModeForIt() {
         val channel = FakeChannel(1)
-        parent.setChatTarget(ChatTargetProvider.ChatTarget(channel))
+        parent.chatTargets.select(ChatTarget.Channel(channel))
 
         fragment.onChannelClick(channel)
 
-        assertThat(parent.chatTarget?.channel).isEqualTo(channel)
+        assertThat((parent.chatTargets.target.value as? ChatTarget.Channel)?.channel).isEqualTo(channel)
 
         // Now there is one to dismiss, proving a mode was opened above.
         fragment.onChannelClick(channel)
 
-        assertThat(parent.chatTarget).isNull()
+        assertThat(parent.chatTargets.target.value).isNull()
     }
 
     @Test
@@ -290,27 +269,27 @@ class ChannelListFragmentTest {
         val second = FakeUser(2)
 
         fragment.onUserClick(first)
-        assertThat(parent.chatTarget?.user).isEqualTo(first)
+        assertThat((parent.chatTargets.target.value as? ChatTarget.User)?.user).isEqualTo(first)
 
         fragment.onUserClick(second)
-        assertThat(parent.chatTarget?.user).isEqualTo(second)
+        assertThat((parent.chatTargets.target.value as? ChatTarget.User)?.user).isEqualTo(second)
 
         fragment.onUserClick(second)
-        assertThat(parent.chatTarget).isNull()
+        assertThat(parent.chatTargets.target.value).isNull()
     }
 
     @Test
     fun tappingTheUserOfATargetThisFragmentDidNotOpenOpensAModeForIt() {
         val user = FakeUser(1)
-        parent.setChatTarget(ChatTargetProvider.ChatTarget(user))
+        parent.chatTargets.select(ChatTarget.User(user))
 
         fragment.onUserClick(user)
 
-        assertThat(parent.chatTarget?.user).isEqualTo(user)
+        assertThat((parent.chatTargets.target.value as? ChatTarget.User)?.user).isEqualTo(user)
 
         fragment.onUserClick(user)
 
-        assertThat(parent.chatTarget).isNull()
+        assertThat(parent.chatTargets.target.value).isNull()
     }
 
     /**
@@ -324,7 +303,7 @@ class ChannelListFragmentTest {
         fragment.onUserClick(FakeUser(1))
         fragment.onChannelClick(channel)
 
-        assertThat(parent.chatTarget?.channel).isSameInstanceAs(channel)
+        assertThat((parent.chatTargets.target.value as? ChatTarget.Channel)?.channel).isSameInstanceAs(channel)
     }
 
     @Test
@@ -334,6 +313,6 @@ class ChannelListFragmentTest {
         fragment.onChannelClick(FakeChannel(1))
         fragment.onUserClick(user)
 
-        assertThat(parent.chatTarget?.user).isSameInstanceAs(user)
+        assertThat((parent.chatTargets.target.value as? ChatTarget.User)?.user).isSameInstanceAs(user)
     }
 }

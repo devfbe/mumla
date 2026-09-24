@@ -52,13 +52,15 @@ import se.lublin.mumla.app.bindClient
 import se.lublin.mumla.service.IMumlaService
 import java.util.Locale
 
-/** Holds a [ChannelListFragment] and a [ChannelChatFragment], as tabs or side by side. */
-@Suppress("TooManyFunctions") // Framework callbacks plus the ChatTargetProvider methods.
+/**
+ * Holds a [ChannelListFragment] and a [ChannelChatFragment], as tabs or side by side, which share
+ * the chat target through this fragment's [ChatTargetViewModel].
+ */
+@Suppress("TooManyFunctions") // Framework callbacks, each delegating.
 class ChannelFragment :
     Fragment(),
     ServiceClient,
-    SharedPreferences.OnSharedPreferenceChangeListener,
-    ChatTargetProvider {
+    SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
     private val service: IMumlaService? get() = serviceModel.service.value
@@ -68,9 +70,6 @@ class ChannelFragment :
     private lateinit var talkView: View
     private lateinit var targetPanel: View
     private lateinit var targetPanelText: TextView
-
-    private var chatTarget: ChatTargetProvider.ChatTarget? = null
-    private val chatTargetListeners = mutableListOf<ChatTargetProvider.OnChatTargetSelectedListener>()
 
     /** True while a touch is down on the talk button, i.e. while this fragment holds transmission. */
     private var talkButtonHeld = false
@@ -279,21 +278,6 @@ class ChannelFragment :
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
         if (key in INPUT_PREFERENCES) configureInput()
-    }
-
-    override fun getChatTarget(): ChatTargetProvider.ChatTarget? = chatTarget
-
-    override fun setChatTarget(target: ChatTargetProvider.ChatTarget?) {
-        chatTarget = target
-        chatTargetListeners.forEach { it.onChatTargetSelected(target) }
-    }
-
-    override fun registerChatTargetListener(listener: ChatTargetProvider.OnChatTargetSelectedListener) {
-        chatTargetListeners += listener
-    }
-
-    override fun unregisterChatTargetListener(listener: ChatTargetProvider.OnChatTargetSelectedListener) {
-        chatTargetListeners -= listener
     }
 
     private fun newListFragment() = ChannelListFragment().apply {

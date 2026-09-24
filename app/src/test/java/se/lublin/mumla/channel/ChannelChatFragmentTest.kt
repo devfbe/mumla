@@ -71,7 +71,7 @@ import se.lublin.mumla.testing.stubEvents
 
 /**
  * Driven through a real host: an `Activity` whose [se.lublin.mumla.app.ServiceViewModel] holds the
- * service, and a parent `Fragment` that is a `ChatTargetProvider`.
+ * service, and a parent `Fragment` that holds the chat target.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelChatFragmentTest {
@@ -104,6 +104,11 @@ class ChannelChatFragmentTest {
     // ---- harness ----------------------------------------------------------------------------
 
     /** Brings the host up with [withService] already bound, then attaches the fragment. */
+    /** Delivered at once: the fragment collects on the immediate main dispatcher. */
+    private fun selectTarget(target: ChatTarget) {
+        parent.chatTargets.select(target)
+    }
+
     private fun launch(withService: IMumlaService? = service) {
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java)
         activity = controller.create().get()
@@ -183,14 +188,14 @@ class ChannelChatFragmentTest {
     @Test
     fun theHintNamesTheTargetUser() {
         launch()
-        fragment.onChatTargetSelected(ChatTargetProvider.ChatTarget(user("Ann")))
+        selectTarget(ChatTarget.User(user("Ann")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
     }
 
     @Test
     fun theHintNamesTheTargetChannel() {
         launch()
-        fragment.onChatTargetSelected(ChatTargetProvider.ChatTarget(channel("Lounge")))
+        selectTarget(ChatTarget.Channel(channel("Lounge")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Lounge"))
     }
 
@@ -237,8 +242,7 @@ class ChannelChatFragmentTest {
         val self = user("Me", session = 7)
         every { session.sessionUser } returns self
         launch()
-        parent.target = ChatTargetProvider.ChatTarget(user("Ann"))
-        fragment.onChatTargetSelected(parent.target)
+        selectTarget(ChatTarget.User(user("Ann")))
         every { session.sessionChannel } returns channel("Lounge")
         fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
@@ -280,7 +284,7 @@ class ChannelChatFragmentTest {
     fun sendingWithAUserTargetGoesToThatUser() {
         every { session.sendUserTextMessage(any(), any()) } returns Message("out")
         launch()
-        parent.target = ChatTargetProvider.ChatTarget(user("Ann", session = 42))
+        selectTarget(ChatTarget.User(user("Ann", session = 42)))
         editor.setText("hi")
         sendButton.performClick()
         verify { session.sendUserTextMessage(42, "hi") }
@@ -290,7 +294,7 @@ class ChannelChatFragmentTest {
     fun sendingWithAChannelTargetGoesToThatChannel() {
         every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
         launch()
-        parent.target = ChatTargetProvider.ChatTarget(channel("Lounge", id = 9))
+        selectTarget(ChatTarget.Channel(channel("Lounge", id = 9)))
         editor.setText("hi")
         sendButton.performClick()
         verify { session.sendChannelTextMessage(9, "hi", false) }
@@ -449,7 +453,7 @@ class ChannelChatFragmentTest {
         launch()
         val before = editor.hint.toString()
         disconnect()
-        fragment.onChatTargetSelected(ChatTargetProvider.ChatTarget(user("Ann")))
+        selectTarget(ChatTarget.User(user("Ann")))
         assertThat(editor.hint.toString()).isEqualTo(before)
     }
 
@@ -469,13 +473,14 @@ class ChannelChatFragmentTest {
     }
 
     @Test
-    fun theTargetListenerIsHeldOnlyWhileResumed() {
+    fun aTargetSelectedWhilePausedIsShownOnResumption() {
         launch()
-        assertThat(parent.listeners).contains(fragment)
         controller.pause()
-        assertThat(parent.listeners).doesNotContain(fragment)
+        selectTarget(ChatTarget.User(user("Ann")))
+        assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
         controller.resume()
-        assertThat(parent.listeners).contains(fragment)
+        idleMainLooper()
+        assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
     }
 
     @Test
@@ -584,7 +589,7 @@ class ChannelChatFragmentTest {
         )
         root.layout(0, 0, 1080, 1920)
         assertThat(editor.isLayoutRequested).isFalse()
-        fragment.onChatTargetSelected(ChatTargetProvider.ChatTarget(user("Ann")))
+        selectTarget(ChatTarget.User(user("Ann")))
         assertThat(editor.isLayoutRequested).isTrue()
     }
 

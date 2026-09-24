@@ -11,7 +11,6 @@
     <ID>EmptyFunctionBlock:ChannelChatFragment.kt$ChannelChatFragment.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:NotificationPostingTest.kt$NotificationPostingTest.NoopActions${}</ID>
     <ID>ForbiddenComment:ChannelListAdapter.kt$ChannelListAdapter$// FIXME: cache bitmaps</ID>
-    <ID>ForbiddenComment:ChannelListFragment.kt$ChannelListFragment$// Dismiss action mode if double pressed. FIXME: use list view selection instead?</ID>
     <ID>ImplicitDefaultLocale:ChannelListAdapter.kt$ChannelListAdapter$String.format("%d", node.subtreeUserCount)</ID>
     <ID>LargeClass:ChannelChatFragmentTest.kt$ChannelChatFragmentTest</ID>
     <ID>LargeClass:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest</ID>
@@ -170,7 +169,6 @@
     <ID>ReturnCount:BoundedBitmapDecoder.kt$BoundedBitmapDecoder$private fun decode(bytes: ByteArray, maxWidth: Int, maxHeight: Int, exactFit: Boolean): Bitmap?</ID>
     <ID>ReturnCount:CertificateImportActivity.kt$CertificateImportActivity$@Deprecated("Deprecated in Java") override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?)</ID>
     <ID>ReturnCount:CertificateImportActivityTest.kt$CertificateImportActivityTest$private fun findEditText(view: View): EditText?</ID>
-    <ID>ReturnCount:ChannelChatFragment.kt$ChannelChatFragment$fun updateChatTargetText(target: ChatTargetProvider.ChatTarget?)</ID>
     <ID>ReturnCount:ChannelChatFragmentTest.kt$ChannelChatFragmentTest$private fun View.firstImageView(): ImageView?</ID>
     <ID>ReturnCount:ChannelListFragment.kt$ChannelListFragment$override fun onOptionsItemSelected(item: MenuItem): Boolean</ID>
     <ID>ReturnCount:ChatAdapter.kt$ChatAdapter$private fun targetLabel(context: Context, message: IMessage): String</ID>
@@ -210,9 +208,9 @@
     <ID>TooGenericExceptionCaught:SecretCipher.kt$SecretCodec$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ServerPinger.kt$ServerPinger$e: Exception</ID>
     <ID>TooManyFunctions:AudioSettingsFragment.kt$AudioSettingsFragment : MumlaPreferenceFragment</ID>
-    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentServiceClientOnChatTargetSelectedListener</ID>
+    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentServiceClient</ID>
     <ID>TooManyFunctions:ChannelListAdapter.kt$ChannelListAdapter : AdapterIUserLocalStateListener</ID>
-    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentServiceClientOnChannelClickListenerOnUserClickListenerOnSharedPreferenceChangeListener</ID>
+    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentServiceClientOnSharedPreferenceChangeListener</ID>
     <ID>TooManyFunctions:ChatImageLoader.kt$ChatImageLoader</ID>
     <ID>TooManyFunctions:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase : SQLiteOpenHelperMumlaDatabase</ID>
     <ID>TooManyFunctions:MumlaService.kt$MumlaService : HumlaServiceOnSharedPreferenceChangeListenerOnActionListenerOnActionListenerIMumlaService</ID>

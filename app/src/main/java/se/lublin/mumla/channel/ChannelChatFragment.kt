@@ -78,13 +78,13 @@ import se.lublin.mumla.util.HtmlUtils
  * is the uniqueness gate `ChatAdapter.onImageClicked` requires, [sessionId] never throws, and the
  * adapter gets a `lifecycleScope` (`Dispatchers.Main.immediate`) because its coroutines touch views.
  */
-class ChannelChatFragment : Fragment(), ServiceClient, ChatTargetProvider.OnChatTargetSelectedListener {
+class ChannelChatFragment : Fragment(), ServiceClient {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
     private val service: IMumlaService? get() = serviceModel.service.value
     private var bound = false
 
-    private lateinit var targetProvider: ChatTargetProvider
+    private val chatTargets by parentChatTargets()
     private lateinit var chatList: RecyclerView
     private lateinit var chatTextEdit: EditText
     private lateinit var sendButton: ImageButton
@@ -118,7 +118,7 @@ class ChannelChatFragment : Fragment(), ServiceClient, ChatTargetProvider.OnChat
     override fun onServiceEvent(event: HumlaEvent) {
         if (event !is HumlaEvent.UserJoinedChannel) return
         val session = service?.takeIf { it.isConnected }?.session ?: return
-        if (event.user == session.sessionUser && targetProvider.chatTarget == null) {
+        if (event.user == session.sessionUser && chatTargets.target.value == null) {
             // The user changed channels without a target: follow them.
             updateChatTargetText(null)
         }
@@ -128,23 +128,6 @@ class ChannelChatFragment : Fragment(), ServiceClient, ChatTargetProvider.OnChat
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION") // Options-menu migration pending.
         setHasOptionsMenu(true)
-    }
-
-    override fun onAttach(context: Context) {
-        super.onAttach(context)
-        val parent = parentFragment
-        targetProvider = parent as? ChatTargetProvider
-            ?: throw ClassCastException("$parent must implement ChatTargetProvider")
-    }
-
-    override fun onResume() {
-        super.onResume()
-        targetProvider.registerChatTargetListener(this)
-    }
-
-    override fun onPause() {
-        super.onPause()
-        targetProvider.unregisterChatTargetListener(this)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
@@ -189,7 +172,13 @@ class ChannelChatFragment : Fragment(), ServiceClient, ChatTargetProvider.OnChat
         // android:enabled does not apply to an ImageButton, and the watcher only fires on change.
         sendButton.isEnabled = chatTextEdit.text.isNotEmpty()
 
-        updateChatTargetText(targetProvider.chatTarget)
+        updateChatTargetText(chatTargets.target.value)
+        viewLifecycleOwner.lifecycleScope.launch {
+            // While resumed, as the target changes; catching up on resumption.
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                chatTargets.target.collect(::updateChatTargetText)
+            }
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 boundService.collectLatest { service ->
@@ -230,32 +219,22 @@ class ChannelChatFragment : Fragment(), ServiceClient, ChatTargetProvider.OnChat
     override fun onServiceBound(service: IMumlaService) {
         boundService.value = service
         // onCreateView may have run before the service was bound, so set the hint here too.
-        updateChatTargetText(targetProvider.chatTarget)
+        updateChatTargetText(chatTargets.target.value)
     }
 
     override fun onServiceUnbound() {
         boundService.value = null
     }
 
-    override fun onChatTargetSelected(target: ChatTargetProvider.ChatTarget?) {
-        updateChatTargetText(target)
-    }
-
     /** Updates the compose hint that shows where the next message goes. */
-    fun updateChatTargetText(target: ChatTargetProvider.ChatTarget?) {
+    fun updateChatTargetText(target: ChatTarget?) {
         if (!this::chatTextEdit.isInitialized) return
-        val service = service ?: return
-        if (!service.isConnected) return
-        val session = service.session
-        // Local vals: Kotlin cannot smart-cast the result of a Java getter.
-        val targetUser = target?.user
-        val targetChannel = target?.channel
+        val session = service?.takeIf { it.isConnected }?.session ?: return
         val sessionChannel = session.sessionChannel
-        val hint = when {
-            targetUser != null -> getString(R.string.messageToUser, targetUser.name)
-            targetChannel != null -> getString(R.string.messageToChannel, targetChannel.name)
-            sessionChannel != null -> getString(R.string.messageToChannel, sessionChannel.name)
-            else -> null
+        val hint = when (target) {
+            is ChatTarget.User -> getString(R.string.messageToUser, target.name)
+            is ChatTarget.Channel -> getString(R.string.messageToChannel, target.name)
+            null -> sessionChannel?.let { getString(R.string.messageToChannel, it.name) }
         }
         chatTextEdit.hint = hint
         chatTextEdit.requestLayout() // Needed to update bounds after a hint change.
@@ -392,14 +371,11 @@ class ChannelChatFragment : Fragment(), ServiceClient, ChatTargetProvider.OnChat
         }
         val session = service.session
         val formatted = HtmlUtils.markupOutgoingMessage(message)
-        val target = targetProvider.chatTarget
-        val targetUser = target?.user
-        val targetChannel = target?.channel
         // The service adds the sent message to its log, which the list shows.
-        when {
-            targetUser != null -> session.sendUserTextMessage(targetUser.session, formatted)
-            targetChannel != null -> session.sendChannelTextMessage(targetChannel.id, formatted, false)
-            else -> session.sessionChannel?.let { session.sendChannelTextMessage(it.id, formatted, false) }
+        when (val target = chatTargets.target.value) {
+            is ChatTarget.User -> session.sendUserTextMessage(target.user.session, formatted)
+            is ChatTarget.Channel -> session.sendChannelTextMessage(target.channel.id, formatted, false)
+            null -> session.sessionChannel?.let { session.sendChannelTextMessage(it.id, formatted, false) }
         }
     }
 

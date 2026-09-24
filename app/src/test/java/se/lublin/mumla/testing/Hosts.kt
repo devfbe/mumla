@@ -25,10 +25,11 @@ import android.widget.FrameLayout
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import io.mockk.mockk
 import se.lublin.mumla.R
 import se.lublin.mumla.app.ServiceViewModel
-import se.lublin.mumla.channel.ChatTargetProvider
+import se.lublin.mumla.channel.ChatTargetViewModel
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.service.IMumlaService
 
@@ -62,28 +63,14 @@ class ServiceHostActivity : ThemedActivity() {
 }
 
 /**
- * The parent fragment that holds the chat target for its children. It shows an empty container
- * with id [CONTAINER_ID] to add children into.
+ * The parent fragment that holds the chat target for its children, as `ChannelFragment` does. It
+ * shows an empty container with id [CONTAINER_ID] to add children into.
  */
-class ChatTargetParentFragment : Fragment(), ChatTargetProvider {
-    var target: ChatTargetProvider.ChatTarget? = null
-    val listeners = mutableListOf<ChatTargetProvider.OnChatTargetSelectedListener>()
+class ChatTargetParentFragment : Fragment() {
+    val chatTargets: ChatTargetViewModel get() = ViewModelProvider(this)[ChatTargetViewModel::class.java]
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         FrameLayout(requireContext()).also { it.id = CONTAINER_ID }
-
-    override fun getChatTarget(): ChatTargetProvider.ChatTarget? = target
-    override fun setChatTarget(target: ChatTargetProvider.ChatTarget?) {
-        this.target = target
-    }
-
-    override fun registerChatTargetListener(listener: ChatTargetProvider.OnChatTargetSelectedListener) {
-        listeners += listener
-    }
-
-    override fun unregisterChatTargetListener(listener: ChatTargetProvider.OnChatTargetSelectedListener) {
-        listeners -= listener
-    }
 
     companion object {
         const val CONTAINER_ID = 0x0f0f0f

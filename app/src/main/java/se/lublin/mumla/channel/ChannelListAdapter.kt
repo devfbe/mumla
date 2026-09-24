@@ -78,8 +78,12 @@ class ChannelListAdapter(
      * If a key is not mapped, default to hiding empty channels.
      */
     private val expandedChannels = HashMap<Int, Boolean>()
-    private var userClickListener: OnUserClickListener? = null
-    private var channelClickListener: OnChannelClickListener? = null
+
+    /** Called when a channel's row is tapped. */
+    var onChannelClick: ((IChannel) -> Unit)? = null
+
+    /** Called when a user's row is tapped. */
+    var onUserClick: ((IUser) -> Unit)? = null
     private var showChannelUserCount: Boolean = showUserCount
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -117,7 +121,7 @@ class ChannelListAdapter(
         if (channel != null) {
             val cvh = viewHolder as ChannelViewHolder
             cvh.itemView.setOnClickListener {
-                channelClickListener?.onChannelClick(channel)
+                onChannelClick?.invoke(channel)
             }
 
             val expandUsable = node.hasSubchannels || node.subtreeUserCount > 0
@@ -208,7 +212,7 @@ class ChannelListAdapter(
         } else if (user != null) {
             val uvh = viewHolder as UserViewHolder
             uvh.itemView.setOnClickListener {
-                userClickListener?.onUserClick(user)
+                onUserClick?.invoke(user)
             }
 
             uvh.userName.text = user.name
@@ -375,14 +379,6 @@ class ChannelListAdapter(
         rebuildIfScheduled()
         val itemId = channelId.toLong() or CHANNEL_ID_MASK
         return nodes.indexOfFirst { it.nodeId == itemId }
-    }
-
-    fun setOnUserClickListener(listener: OnUserClickListener?) {
-        userClickListener = listener
-    }
-
-    fun setOnChannelClickListener(listener: OnChannelClickListener?) {
-        channelClickListener = listener
     }
 
     /** Sets whether to show the channel user count in a channel row. */

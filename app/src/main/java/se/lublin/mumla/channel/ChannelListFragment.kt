@@ -52,8 +52,7 @@ import se.lublin.mumla.app.bindClient
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.service.IMumlaService
 
-class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, OnUserClickListener,
-    SharedPreferences.OnSharedPreferenceChangeListener {
+class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
     private val service: IMumlaService? get() = serviceModel.service.value
@@ -109,7 +108,7 @@ class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, O
 
     private lateinit var channelView: RecyclerView
     private var channelListAdapter: ChannelListAdapter? = null
-    private lateinit var targetProvider: ChatTargetProvider
+    private val chatTargets by parentChatTargets()
     private var actionMode: ActionMode? = null
     private lateinit var settings: Settings
 
@@ -120,8 +119,6 @@ class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, O
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
-        targetProvider = parentFragment as? ChatTargetProvider
-            ?: throw ClassCastException("$parentFragment must implement ChatTargetProvider")
         settings = Settings.getInstance(context)
         PreferenceManager.getDefaultSharedPreferences(context)
             .registerOnSharedPreferenceChangeListener(this)
@@ -347,8 +344,8 @@ class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, O
             requireActivity(), service, MumlaRepository.get(requireContext()).database, childFragmentManager,
             isShowingPinnedChannels(), settings.shouldShowUserCount,
         )
-        adapter.setOnChannelClickListener(this)
-        adapter.setOnUserClickListener(this)
+        adapter.onChannelClick = ::onChannelClick
+        adapter.onUserClick = ::onUserClick
         channelView.adapter = adapter
         adapter.notifyDataSetChanged()
         channelListAdapter = adapter
@@ -368,37 +365,20 @@ class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, O
 
     private fun isShowingPinnedChannels(): Boolean = requireArguments().getBoolean("pinned")
 
-    override fun onChannelClick(channel: IChannel) {
-        val current = targetProvider.chatTarget
-        if (current != null && channel == current.channel && actionMode != null) {
-            // Dismiss action mode if double pressed. FIXME: use list view selection instead?
-            actionMode?.finish()
-        } else {
-            val cb = object :
-                ChatTargetActionModeCallback(targetProvider, ChatTargetProvider.ChatTarget(channel)) {
-                override fun onDestroyActionMode(actionMode: ActionMode) {
-                    super.onDestroyActionMode(actionMode)
-                    this@ChannelListFragment.actionMode = null
-                }
-            }
-            actionMode = (requireActivity() as AppCompatActivity).startSupportActionMode(cb)
-        }
-    }
+    /** Makes [channel] the chat target, or closes the target if it is [channel] already. */
+    fun onChannelClick(channel: IChannel) = toggleTarget(ChatTarget.Channel(channel))
 
-    override fun onUserClick(user: IUser) {
-        val current = targetProvider.chatTarget
-        if (current != null && user == current.user && actionMode != null) {
-            // Dismiss action mode if double pressed. FIXME: use list view selection instead?
-            actionMode?.finish()
+    /** Makes [user] the chat target, or closes the target if it is [user] already. */
+    fun onUserClick(user: IUser) = toggleTarget(ChatTarget.User(user))
+
+    private fun toggleTarget(target: ChatTarget) {
+        val mode = actionMode
+        if (mode != null && chatTargets.target.value == target) {
+            // Tapped the open target again.
+            mode.finish()
         } else {
-            val cb = object :
-                ChatTargetActionModeCallback(targetProvider, ChatTargetProvider.ChatTarget(user)) {
-                override fun onDestroyActionMode(actionMode: ActionMode) {
-                    super.onDestroyActionMode(actionMode)
-                    this@ChannelListFragment.actionMode = null
-                }
-            }
-            actionMode = (requireActivity() as AppCompatActivity).startSupportActionMode(cb)
+            val callback = ChatTargetActionModeCallback(chatTargets, target) { actionMode = null }
+            actionMode = (requireActivity() as AppCompatActivity).startSupportActionMode(callback)
         }
     }
 

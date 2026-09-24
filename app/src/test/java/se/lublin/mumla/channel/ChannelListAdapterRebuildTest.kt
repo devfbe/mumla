@@ -544,8 +544,8 @@ class ChannelListAdapterRebuildTest {
         val adapter = adapterOver(root, ids)
         val channels = mutableListOf<Int>()
         val users = mutableListOf<Int>()
-        adapter.setOnChannelClickListener { channels.add(it.id) }
-        adapter.setOnUserClickListener { users.add(it.session) }
+        adapter.onChannelClick = { channels.add(it.id) }
+        adapter.onUserClick = { users.add(it.session) }
 
         rowOf(adapter, adapter.getChannelPosition(2)).performClick()
         rowOf(adapter, adapter.getChannelPosition(1)).performClick()
