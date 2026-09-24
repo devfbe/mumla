@@ -80,6 +80,7 @@ class ChannelListFragment :
             is HumlaEvent.ChannelRemoved,
             is HumlaEvent.ChannelStateUpdated,
             is HumlaEvent.UserConnected,
+            is HumlaEvent.UserListeningUpdated,
             -> channelListAdapter?.updateChannels()
             is HumlaEvent.UserRemoved -> {
                 // If we are the user being removed, don't update the channel list.

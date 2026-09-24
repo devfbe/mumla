@@ -31,6 +31,9 @@ interface IChannel {
     /** The users in this channel and all its subchannels. */
     val subchannelUserCount: Int
     val links: List<IChannel>
+
+    /** The users listening to this channel from elsewhere, sorted like [users]. */
+    val listeners: List<IUser>
     val permissions: Int
 
     /** Whether the channel's ACL restricts who may enter it. */

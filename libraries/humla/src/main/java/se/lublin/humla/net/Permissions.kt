@@ -30,6 +30,7 @@ object Permissions {
     const val WHISPER = 0x100
     const val TEXT_MESSAGE = 0x200
     const val MAKE_TEMP_CHANNEL = 0x400
+    const val LISTEN = 0x800
 
     // Root channel only
     const val KICK = 0x10000

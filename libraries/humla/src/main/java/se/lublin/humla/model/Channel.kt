@@ -43,6 +43,7 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     private val mSubchannels = ArrayList<Channel>() // guarded by this
     private val mUsers = ArrayList<User>() // guarded by this
     private val mLinks = ArrayList<Channel>() // guarded by this
+    private val mListeners = ArrayList<User>() // guarded by this
 
     /** @see User.setChannel */
     @Synchronized
@@ -64,6 +65,20 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
 
     override val users: List<User>
         @Synchronized get() = Collections.unmodifiableList(ArrayList(mUsers))
+
+    override val listeners: List<User>
+        @Synchronized get() = Collections.unmodifiableList(ArrayList(mListeners))
+
+    /** Adds [user] as a listener at its sorted position; a present listener is not added twice. */
+    @Synchronized
+    fun addListener(user: User) {
+        if (user in mListeners) return
+        val index = mListeners.indexOfFirst { user <= it }
+        if (index < 0) mListeners.add(user) else mListeners.add(index, user)
+    }
+
+    @Synchronized
+    fun removeListener(user: User): Boolean = mListeners.remove(user)
 
     override val subchannels: List<Channel>
         @Synchronized get() = Collections.unmodifiableList(ArrayList(mSubchannels))

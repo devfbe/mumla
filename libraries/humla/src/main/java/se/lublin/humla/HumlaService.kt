@@ -814,6 +814,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         moveUserToChannel(sessionId, channel)
     }
 
+    override fun setListening(channel: Int, listen: Boolean) {
+        val usb = Mumble.UserState.newBuilder().setSession(sessionId)
+        if (listen) usb.addListeningChannelAdd(channel) else usb.addListeningChannelRemove(channel)
+        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
+    }
+
     override fun moveUserToChannel(session: Int, channel: Int) {
         val usb = Mumble.UserState.newBuilder()
         usb.setSession(session)

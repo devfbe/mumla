@@ -126,6 +126,9 @@ interface IHumlaSession {
 
     fun joinChannel(channel: Int)
 
+    /** Starts or stops listening to [channel] without joining it. */
+    fun setListening(channel: Int, listen: Boolean)
+
     fun moveUserToChannel(session: Int, channel: Int)
 
     fun createChannel(parent: Int, name: String, description: String, position: Int, temporary: Boolean)

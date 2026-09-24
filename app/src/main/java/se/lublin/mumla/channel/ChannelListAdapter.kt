@@ -42,6 +42,7 @@ import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.ChannelListenerRowBinding
 import se.lublin.mumla.databinding.ChannelRowBinding
 import se.lublin.mumla.databinding.ChannelUserRowBinding
 import se.lublin.mumla.db.MumlaRepository
@@ -115,6 +116,8 @@ class ChannelListAdapter(
         return when (viewType) {
             R.layout.channel_row -> ChannelViewHolder(ChannelRowBinding.inflate(inflater, viewGroup, false))
             R.layout.channel_user_row -> UserViewHolder(ChannelUserRowBinding.inflate(inflater, viewGroup, false))
+            R.layout.channel_listener_row ->
+                ListenerViewHolder(ChannelListenerRowBinding.inflate(inflater, viewGroup, false))
             else -> throw IllegalArgumentException("unknown view type $viewType")
         }
     }
@@ -123,13 +126,16 @@ class ChannelListAdapter(
         val node = nodes[position]
         val channel = node.channel
         val user = node.user
-        if (channel != null) {
+        val listener = node.listener
+        if (listener != null) {
+            bindListener(viewHolder as ListenerViewHolder, node, listener)
+        } else if (channel != null) {
             val cvh = viewHolder as ChannelViewHolder
             cvh.itemView.setOnClickListener {
                 onChannelClick?.invoke(channel)
             }
 
-            val expandUsable = node.hasSubchannels || node.subtreeUserCount > 0
+            val expandUsable = node.hasSubchannels || node.subtreeUserCount > 0 || node.subtreeListenerCount > 0
             cvh.channelExpandToggle.setImageResource(
                 if (node.isExpanded) R.drawable.ic_action_expanded
                 else R.drawable.ic_action_collapsed
@@ -268,11 +274,34 @@ class ChannelListAdapter(
         }
     }
 
+    /** A listener's row: the user's name, and for the local user's own listener a stop button. */
+    private fun bindListener(lvh: ListenerViewHolder, node: Node, listener: IUser) {
+        val channel = checkNotNull(node.parent?.channel) { "A listener row always hangs under its channel" }
+        lvh.name.text = listener.name
+        lvh.itemView.contentDescription = context.getString(R.string.a11y_listener, listener.name)
+        val service = humlaService
+        val own = service.isConnected && try {
+            service.session.sessionId == listener.session
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "exception in bindListener: $e")
+            false
+        }
+        lvh.stop.visibility = if (own) View.VISIBLE else View.GONE
+        lvh.stop.setOnClickListener {
+            val current = humlaService
+            if (current.isConnected) current.session.setListening(channel.id, false)
+        }
+        val metrics = context.resources.displayMetrics
+        val margin = (node.depth + 1) * TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 25f, metrics)
+        lvh.holder.setPadding(margin.toInt(), lvh.holder.paddingTop, lvh.holder.paddingRight, lvh.holder.paddingBottom)
+    }
+
     override fun getItemCount(): Int = nodes.size
 
     override fun getItemViewType(position: Int): Int {
         val node = nodes[position]
         return when {
+            node.listener != null -> R.layout.channel_listener_row
             node.channel != null -> R.layout.channel_row
             node.user != null -> R.layout.channel_user_row
             else -> 0
@@ -405,6 +434,13 @@ class ChannelListAdapter(
         return nodes.indexOfFirst { it.nodeId == itemId }
     }
 
+    /** The list position of [session]'s listener row under [channelId], or -1. Same caveat as [getUserPosition]. */
+    fun getListenerPosition(channelId: Int, session: Int): Int {
+        rebuildIfScheduled()
+        val itemId = listenerId(channelId, session)
+        return nodes.indexOfFirst { it.nodeId == itemId }
+    }
+
     /** Sets whether to show the channel user count in a channel row. */
     fun setShowChannelUserCount(showUserCount: Boolean) {
         showChannelUserCount = showUserCount
@@ -412,17 +448,19 @@ class ChannelListAdapter(
     }
 
     /**
-     * Appends the [Node]s for [channel] and its subtree to [nodes] and returns the number of users
-     * in it. The subtree is appended first and dropped again if the channel is contracted, because
-     * that is only known once its users have been counted. A user the model has not filled in yet
-     * gets no row but is counted, matching `Channel.subchannelUserCount`.
+     * Appends the [Node]s for [channel] and its subtree to [nodes] and returns the channel's node,
+     * which carries the subtree counts. The subtree is appended first and dropped again if the
+     * channel is contracted, because that is only known once its users have been counted. A user
+     * the model has not filled in yet gets no row but is counted, matching
+     * `Channel.subchannelUserCount`. Listeners get rows after the users; they are not counted as
+     * users, but keep a channel expanded by default.
      */
     private fun constructNodes(
         parent: Node?,
         channel: IChannel,
         depth: Int,
         nodes: MutableList<Node>,
-    ): Int {
+    ): Node {
         val channelNode = Node(parent, depth, channel)
         nodes.add(channelNode)
         val subtreeStart = nodes.size
@@ -435,21 +473,29 @@ class ChannelListAdapter(
             }
             nodes.add(Node(channelNode, depth, user))
         }
+        val listeners = channel.listeners
+        for (listener in listeners) {
+            nodes.add(Node.listener(channelNode, depth, listener))
+        }
+        var listenerCount = listeners.size
         val subchannels = channel.subchannels
         channelNode.hasSubchannels = subchannels.isNotEmpty()
         for (subc in subchannels) {
-            userCount += constructNodes(channelNode, subc, depth + 1, nodes)
+            val subNode = constructNodes(channelNode, subc, depth + 1, nodes)
+            userCount += subNode.subtreeUserCount
+            listenerCount += subNode.subtreeListenerCount
         }
         channelNode.subtreeUserCount = userCount
+        channelNode.subtreeListenerCount = listenerCount
 
         val expandSetting = expandedChannels[channel.id]
-        if (expandSetting ?: (userCount != 0)) {
-            return userCount
+        if (expandSetting ?: (userCount != 0 || listenerCount != 0)) {
+            return channelNode
         }
         channelNode.isExpanded = false
         // Contracted or empty: the subtree was walked to count it, but it is not shown.
         nodes.subList(subtreeStart, nodes.size).clear()
-        return userCount
+        return channelNode
     }
 
     /** Changes the service backing the adapter and updates the list. */
@@ -500,41 +546,46 @@ class ChannelListAdapter(
         val moreButton: ImageView = binding.channelRowMore
     }
 
-    /** A channel or user row in the flattened hierarchy. */
-    private class Node {
-        val parent: Node?
-        val channel: IChannel?
-        val user: IUser?
-        val depth: Int
-        var isExpanded: Boolean
+    private class ListenerViewHolder(binding: ChannelListenerRowBinding) : RecyclerView.ViewHolder(binding.root) {
+        val holder: LinearLayout = binding.listenerRowTitle
+        val name: TextView = binding.listenerRowName
+        val stop: ImageView = binding.listenerRowStop
+    }
+
+    /** A channel, user or listener row in the flattened hierarchy. A listener's parent is its channel. */
+    private class Node private constructor(
+        val parent: Node?,
+        val depth: Int,
+        val channel: IChannel?,
+        val user: IUser?,
+        val listener: IUser?,
+    ) {
+        var isExpanded: Boolean = channel != null
 
         /** Users in this channel and everything below it, as of the rebuild that made this node. */
         var subtreeUserCount: Int = 0
+
+        /** Listeners in this channel and everything below it. */
+        var subtreeListenerCount: Int = 0
         var hasSubchannels: Boolean = false
 
-        constructor(parent: Node?, depth: Int, channel: IChannel) {
-            this.parent = parent
-            this.channel = channel
-            this.user = null
-            this.depth = depth
-            this.isExpanded = true
-        }
+        constructor(parent: Node?, depth: Int, channel: IChannel) : this(parent, depth, channel, null, null)
 
-        constructor(parent: Node?, depth: Int, user: IUser) {
-            this.parent = parent
-            this.channel = null
-            this.user = user
-            this.depth = depth
-            this.isExpanded = false
-        }
+        constructor(parent: Node?, depth: Int, user: IUser) : this(parent, depth, null, user, null)
 
         /** Applies flags to differentiate integer-length identifiers. */
         val nodeId: Long?
             get() = when {
+                listener != null -> listenerId(checkNotNull(parent?.channel).id, listener.session)
                 channel != null -> CHANNEL_ID_MASK or channel.id.toLong()
                 user != null -> USER_ID_MASK or user.session.toLong()
                 else -> null
             }
+
+        companion object {
+            fun listener(channelNode: Node, depth: Int, listener: IUser) =
+                Node(channelNode, depth, null, null, listener)
+        }
     }
 
     companion object {
@@ -543,5 +594,12 @@ class ChannelListAdapter(
         // Set particular bits to make the integer-based model item ids unique.
         const val CHANNEL_ID_MASK = 0x1L shl 32
         const val USER_ID_MASK = 0x1L shl 33
+        private const val LISTENER_ID_MASK = 0x1L shl 62
+        private const val ID_BITS = 31
+        private const val ID_MASK = (1L shl ID_BITS) - 1
+
+        /** A listener row's id: channel ids and sessions below 2^31 never collide. */
+        private fun listenerId(channelId: Int, session: Int): Long =
+            LISTENER_ID_MASK or ((channelId.toLong() and ID_MASK) shl ID_BITS) or (session.toLong() and ID_MASK)
     }
 }

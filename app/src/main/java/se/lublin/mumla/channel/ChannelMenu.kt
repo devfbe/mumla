@@ -67,7 +67,15 @@ class ChannelMenu(
             if (ourChannel != null) {
                 menu.findItem(R.id.context_channel_link).isChecked = channel.links.contains(ourChannel)
             }
+            prepareListen(menu.findItem(R.id.context_channel_listen), permissions, ourChannel)
         }
+    }
+
+    /** Offered with the Listen permission, and always to stop listening; never for the own channel. */
+    private fun prepareListen(item: MenuItem, permissions: Int, ourChannel: IChannel?) {
+        val listening = channel.isListenedToBy(service)
+        item.isChecked = listening
+        item.isVisible = channel != ourChannel && (listening || permissions and Permissions.LISTEN > 0)
     }
 
     @Suppress("CyclomaticComplexMethod", "ReturnCount") // One branch per item.
@@ -83,6 +91,7 @@ class ChannelMenu(
             R.id.context_channel_link -> session.sessionChannel?.let { ours ->
                 if (item.isChecked) session.unlinkChannels(ours, channel) else session.linkChannels(ours, channel)
             }
+            R.id.context_channel_listen -> session.setListening(channel.id, !channel.isListenedToBy(service))
             R.id.context_channel_unlink_all -> session.unlinkAllChannels(channel)
             R.id.context_channel_shout -> showShoutDialog()
             else -> return false
@@ -162,4 +171,15 @@ class ChannelMenu(
     private companion object {
         val TAG: String = ChannelMenu::class.java.name
     }
+}
+
+/** Whether the local user listens to this channel. */
+private fun IChannel.isListenedToBy(service: IHumlaService): Boolean {
+    val self = try {
+        service.session.sessionId
+    } catch (e: IllegalStateException) {
+        Log.d("ChannelMenu", "exception in isListenedToBy: $e")
+        return false
+    }
+    return listeners.any { it.session == self }
 }

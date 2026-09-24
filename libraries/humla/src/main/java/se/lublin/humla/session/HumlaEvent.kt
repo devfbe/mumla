@@ -63,6 +63,9 @@ sealed interface HumlaEvent {
 
     data class UserTalkStateUpdated(val user: IUser) : HumlaEvent
 
+    /** [user] started or stopped listening to channels; see [IChannel.listeners]. */
+    data class UserListeningUpdated(val user: IUser) : HumlaEvent
+
     data class UserJoinedChannel(val user: IUser, val newChannel: IChannel, val oldChannel: IChannel?) : HumlaEvent
 
     /** [user] is null when the server removed a session the model never knew. */

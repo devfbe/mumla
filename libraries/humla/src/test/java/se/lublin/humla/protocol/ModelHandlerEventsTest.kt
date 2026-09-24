@@ -98,6 +98,39 @@ class ModelHandlerEventsTest {
     // ---- users ----------------------------------------------------------------------------------
 
     @Test
+    fun listenersAreTrackedPerChannelFromEveryUsersState() {
+        handler.onMessage(userState(1) { addListeningChannelAdd(2).addListeningChannelAdd(0) })
+        handler.onMessage(userState(2) { addListeningChannelAdd(2) })
+
+        assertThat(handler.getChannel(2)!!.listeners.map { it.session }).containsExactly(1, 2)
+        assertThat(handler.getChannel(0)!!.listeners.map { it.session }).containsExactly(1)
+        assertThat(published<HumlaEvent.UserListeningUpdated>().map { it.user.session }).containsExactly(1, 2).inOrder()
+
+        events.clear()
+        handler.onMessage(userState(1) { addListeningChannelRemove(2) })
+        handler.onMessage(userState(1) { setSelfMute(true) })
+
+        assertThat(handler.getChannel(2)!!.listeners.map { it.session }).containsExactly(2)
+        assertThat(published<HumlaEvent.UserListeningUpdated>().map { it.user.session }).containsExactly(1)
+    }
+
+    @Test
+    fun aListenerForAnUnknownChannelIsIgnoredAndARemovedUserStopsListening() {
+        handler.onMessage(userState(2) { addListeningChannelAdd(2).addListeningChannelAdd(99) })
+        handler.onMessage(Mumble.UserRemove.newBuilder().setSession(2).build())
+
+        assertThat(handler.getChannel(2)!!.listeners).isEmpty()
+        assertThat(handler.getChannel(99)).isNull()
+    }
+
+    @Test
+    fun aNewUserFrameMayAlreadyListen() {
+        handler.onMessage(userState(3) { setName("Bob").setChannelId(1).addListeningChannelAdd(2) })
+
+        assertThat(handler.getChannel(2)!!.listeners.map { it.name }).containsExactly("Bob")
+    }
+
+    @Test
     fun aNewUserIsAnnouncedThenPublishedAsConnected() {
         handler.onMessage(userState(3) { setName("Bob") })
 

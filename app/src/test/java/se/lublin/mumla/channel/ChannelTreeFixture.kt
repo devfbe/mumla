@@ -85,6 +85,13 @@ class FakeChannel(
         }
 
     override val links: List<IChannel> get() = linkList
+
+    private val listenerList = mutableListOf<IUser>()
+    override val listeners: List<IUser> get() = listenerList
+
+    fun addListener(user: IUser) {
+        listenerList.add(user)
+    }
     override val permissions: Int = 0
     override var isEnterRestricted: Boolean = false
     override var canEnter: Boolean = true

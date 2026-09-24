@@ -121,6 +121,35 @@ class HumlaServiceSessionTest {
         assertThat(auth.celtVersionsList).isEmpty()
     }
 
+    @Test
+    fun theHandshakeAdvertisesVersion140InBothFormats() {
+        val h = start()
+
+        h.service.connect()
+        h.openSocket(0)
+
+        val version = h.transports.tcps[0].sentMessages.filterIsInstance<Mumble.Version>().single()
+        assertThat(version.versionV1).isEqualTo(0x010400)
+        assertThat(version.versionV2).isEqualTo(0x0001_0004_0000_0000L)
+    }
+
+    @Test
+    fun listeningToAChannelAddsAndRemovesItForTheOwnSession() {
+        val h = start()
+        val tcp = h.connectAndSynchronize()
+
+        h.service.session.setListening(5, true)
+        h.service.session.setListening(6, false)
+
+        val states = tcp.sentMessages.filterIsInstance<Mumble.UserState>()
+        assertThat(states.map { it.session }).containsExactly(1, 1)
+        assertThat(states[0].listeningChannelAddList).containsExactly(5)
+        assertThat(states[0].listeningChannelRemoveList).isEmpty()
+        assertThat(states[1].listeningChannelRemoveList).containsExactly(6)
+        assertThat(states[1].listeningChannelAddList).isEmpty()
+        assertThat(states.none { it.hasChannelId() }).isTrue()
+    }
+
     /**
      * Four settings the service writes into a `HumlaConnection` it does not own. The certificate
      * and trust store matter only once a TLS socket opens, so the connection's fields are read back.
