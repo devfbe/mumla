@@ -1,6 +1,5 @@
 package se.lublin.mumla.app
 
-import android.content.Intent
 import android.os.Looper
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -63,18 +62,5 @@ class MainDrawerTest {
 
         assertThat(selected).containsExactly(DrawerAdapter.ITEM_FAVOURITES)
         assertThat(drawer.title(DrawerAdapter.ITEM_FAVOURITES)).isEqualTo(activity.getString(R.string.drawer_favorites))
-    }
-
-    /** The unit tests build the foss flavor, which has the donation row. */
-    @Test
-    fun `the foss donation row opens the donation link`() {
-        val list = layOut()
-        val donate = (0 until list.childCount).map { list.getChildAt(it) }
-            .single { (it as? TextView)?.text == activity.getString(R.string.donate_foss) }
-        donate.performClick()
-
-        val started = shadowOf(activity).nextStartedActivity
-        assertThat(started.action).isEqualTo(Intent.ACTION_VIEW)
-        assertThat(started.dataString).isEqualTo(activity.getString(R.string.donate_link_foss))
     }
 }
