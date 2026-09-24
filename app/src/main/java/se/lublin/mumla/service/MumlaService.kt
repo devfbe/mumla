@@ -212,7 +212,7 @@ class MumlaService : HumlaService(),
 
             // TODO: create a customizable notification sieve
             if (mSettings.isChatNotifyEnabled()) {
-                mMessageNotification.show(message)
+                mMessageNotification.show(message.getActorName(), strippedMessage)
             }
 
             mMessageLog.add(IChatMessage.TextMessage(message))

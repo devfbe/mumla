@@ -14,9 +14,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import se.lublin.humla.model.Channel
-import se.lublin.humla.model.IMessage
-import se.lublin.humla.model.User
 
 /**
  * Pins that both user-visible notifications actually reach the notification manager across the
@@ -48,17 +45,7 @@ class NotificationPostingTest {
 
     private fun postedNotifications() = shadowOf(notificationManager).allNotifications
 
-    private val message = object : IMessage {
-        override fun getActor(): Int = 1
-        override fun getActorName(): String = "alice"
-        override fun getTargetChannels(): List<Channel> = emptyList()
-        override fun getTargetTrees(): List<Channel> = emptyList()
-        override fun getTargetUsers(): List<User> = emptyList()
-        override fun getMessage(): String = "hello"
-        override fun getReceivedTime(): Long = 0L
-    }
-
-    private fun showMessage() = MumlaMessageNotification(context).show(message)
+    private fun showMessage() = MumlaMessageNotification(context).show("alice", "hello")
 
     /**
      * Below API 33 ContextCompat.registerReceiver emulates RECEIVER_NOT_EXPORTED by registering

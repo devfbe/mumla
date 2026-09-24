@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Looper
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
+import androidx.core.app.NotificationCompat
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -266,6 +267,20 @@ class MumlaServiceCharacterizationTest {
         idle()
 
         assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
+    }
+
+    @Test
+    fun aNotifiedMessageShowsItsTextWithoutMarkup() {
+        connect()
+        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+
+        callbacks().onMessageLogged(textMessage("<b>hi</b> <a href=\"https://x.example\">there</a>"))
+        idle()
+
+        val extras = shadowOf(notificationManager).allNotifications.single().extras
+        assertThat(extras.getCharSequence(NotificationCompat.EXTRA_TEXT).toString()).isEqualTo("hi there")
+        assertThat(extras.getCharSequenceArray(NotificationCompat.EXTRA_TEXT_LINES)!!.map { it.toString() })
+            .containsExactly(app.getString(R.string.notification_message, "alice", "hi there"))
     }
 
     @Test
