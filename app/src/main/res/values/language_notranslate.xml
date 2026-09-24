@@ -4,6 +4,7 @@
         <item>ar</item>
         <item>ca</item>
         <item>cs</item>
+        <item>da</item>
         <item>de</item>
         <item>el</item>
         <item>en</item>
@@ -14,6 +15,7 @@
         <item>in</item>
         <item>it</item>
         <item>ja</item>
+        <item>kab</item>
         <item>nb-NO</item>
         <item>nl</item>
         <item>pl</item>
@@ -25,6 +27,8 @@
         <item>th</item>
         <item>tr</item>
         <item>uk</item>
+        <item>vi</item>
         <item>zh-CN</item>
+        <item>zh-TW</item>
     </string-array>
 </resources>
