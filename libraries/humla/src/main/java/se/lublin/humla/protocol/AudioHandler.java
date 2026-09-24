@@ -20,7 +20,6 @@ package se.lublin.humla.protocol;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.util.Log;
 
@@ -104,7 +103,6 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private boolean mInitialized;
     /** The own mute flags. Replaced by initialize(), updated by the protocol thread, read by capture. */
     private volatile SelfMuteState mMuteState = new SelfMuteState(false, false, false);
-    private boolean mBluetoothOn;
     private boolean mHalfDuplex;
     private boolean mPreprocessorEnabled;
     private final String mNoiseSuppressionMethod;
@@ -122,7 +120,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     public AudioHandler(Context context, HumlaLogger logger, int audioStream, int audioSource,
                         int sampleRate, int targetBitrate, int targetFramesPerPacket,
                         IInputMode inputMode, byte targetId, float amplitudeBoost,
-                        boolean bluetoothEnabled, boolean halfDuplexEnabled,
+                        boolean halfDuplexEnabled,
                         boolean preprocessorEnabled, String echoCancellationMethod,
                         String noiseSuppressionMethod, int speexNoiseSuppressDb,
                         AndroidAudioEffects androidAudioEffects,
@@ -136,7 +134,6 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         mFramesPerPacket = targetFramesPerPacket;
         mInputMode = inputMode;
         mAmplitudeBoost = amplitudeBoost;
-        mBluetoothOn = bluetoothEnabled;
         mHalfDuplex = halfDuplexEnabled;
         mPreprocessorEnabled = preprocessorEnabled;
         mNoiseSuppressionMethod = noiseSuppressionMethod;
@@ -166,23 +163,6 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         // canceller is no longer a global setting but follows the routed device (AEC3 or none).
         if (AudioSourcePolicy.needsCommunicationMode(mAndroidAudioEffects, echo)) {
             mAudioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-            // Pre-router fallback: route to the built-in speaker when playback is not on the
-            // voice-call stream and no route was claimed. Mumla always passes STREAM_VOICE_CALL,
-            // so the app never enters this branch; only a client that asks for another stream
-            // does.
-            if (mAudioStream != AudioManager.STREAM_VOICE_CALL) {
-                AudioDeviceInfo speaker = null;
-                for (AudioDeviceInfo d : mAudioManager.getAvailableCommunicationDevices()) {
-                    if (d.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) { speaker = d; break; }
-                }
-                AudioDeviceInfo current = mAudioManager.getCommunicationDevice();
-                boolean unclaimed = current == null
-                        || current.getType() == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
-                if (speaker != null && unclaimed) {
-                    mLogger.logInfo("routing playback to the loudspeaker for echo cancellation");
-                    mAudioManager.setCommunicationDevice(speaker);
-                }
-            }
         }
         mAudioSource = AudioSourcePolicy.resolve(audioSource, mAndroidAudioEffects, echo);
 
@@ -223,9 +203,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         mMuteState = new SelfMuteState(self.isMuted() || self.isLocalMuted(), self.isSelfMuted(),
                 self.isSuppressed());
         startRecording();
-        // Ensure that if a bluetooth SCO connection is active, we use the VOICE_CALL stream.
-        // This is required by Android for compatibility with SCO.
-        mOutput.startPlaying(mBluetoothOn ? AudioManager.STREAM_VOICE_CALL : mAudioStream);
+        mOutput.startPlaying(mAudioStream);
 
         mInitialized = true;
     }
@@ -422,7 +400,6 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             }
         }
         mInitialized = false;
-        mBluetoothOn = false;
 
         mEncodeListener.onTalkingStateChanged(false);
     }
@@ -574,7 +551,6 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         private int mTargetFramesPerPacket;
         private int mInputSampleRate;
         private float mAmplitudeBoost;
-        private boolean mBluetoothEnabled;
         private boolean mHalfDuplexEnabled;
         private boolean mPreprocessorEnabled;
         private String mEchoCancellationMethod;
@@ -622,11 +598,6 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
 
         public Builder setAmplitudeBoost(float amplitudeBoost) {
             mAmplitudeBoost = amplitudeBoost;
-            return this;
-        }
-
-        public Builder setBluetoothEnabled(boolean bluetoothEnabled) {
-            mBluetoothEnabled = bluetoothEnabled;
             return this;
         }
 
@@ -689,7 +660,7 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         public AudioHandler initialize(User self, int maxBandwidth, HumlaUDPMessageType codec, byte targetId) throws AudioException {
             AudioHandler handler = new AudioHandler(mContext, mLogger, mAudioStream, mAudioSource,
                     mInputSampleRate, mTargetBitrate, mTargetFramesPerPacket, mInputMode, targetId,
-                    mAmplitudeBoost, mBluetoothEnabled, mHalfDuplexEnabled,
+                    mAmplitudeBoost, mHalfDuplexEnabled,
                     mPreprocessorEnabled, mEchoCancellationMethod,
                     mNoiseSuppressionMethod, mSpeexNoiseSuppressDb,
                     new AndroidAudioEffects(mAndroidNoiseSuppressor, mAndroidAutomaticGainControl),

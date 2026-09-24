@@ -19,7 +19,6 @@
 
 package se.lublin.humla.session
 
-import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaRecorder
 import se.lublin.humla.Constants
@@ -76,9 +75,6 @@ data class AudioConfig(
      * `copy` re-derives, so no test can tell the two apart, and none claims to.
      */
     val halfDuplex: Boolean get() = halfDuplexRequested && transmitMode == Constants.TRANSMIT_PUSH_TO_TALK
-
-    /** True while a Bluetooth SCO route is the routed communication device. */
-    val bluetoothActive: Boolean get() = routedDeviceType == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
 
     /**
      * The stream the playback track is opened on. [audioStream] is what the client asked for and

@@ -335,12 +335,12 @@ class HumlaServiceBluetoothTest {
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
         awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
-        assertThat(h.audioFactory.configs[0].bluetoothActive).isFalse()
+        assertThat(h.audioFactory.configs[0].routedDeviceType).isNull()
 
         h.service.enableBluetoothSco()
 
         awaitUntil(description = "audio rebuilt for sco") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
-        assertThat(h.audioFactory.configs[1].bluetoothActive).isTrue()
+        assertThat(h.audioFactory.configs[1].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
         assertThat(h.audioFactory.createThreads.distinct())
             .containsExactly(se.lublin.humla.session.AudioController.THREAD_NAME)
     }
@@ -358,7 +358,7 @@ class HumlaServiceBluetoothTest {
         h.devices!!.systemSelects(null) // the headset walked away
 
         awaitUntil(description = "audio rebuilt without sco") { h.mainLooper.idle(); h.audioFactory.created.size == 3 }
-        assertThat(h.audioFactory.configs[2].bluetoothActive).isFalse()
+        assertThat(h.audioFactory.configs[2].routedDeviceType).isNull()
         assertThat(h.service.isBluetoothScoActive()).isFalse()
         assertThat(h.service.usingBluetoothSco()).isTrue() // still wanted; the headset is not there
     }

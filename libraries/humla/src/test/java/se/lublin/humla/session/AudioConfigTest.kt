@@ -69,14 +69,6 @@ class AudioConfigTest {
         }
     }
 
-    /** SCO is the one route with its own sample rate, and the one the pipeline is told about. */
-    @Test
-    fun onlyAnScoRouteIsBluetoothToThePipeline() {
-        assertThat(AudioConfig().bluetoothActive).isFalse()
-        assertThat(AudioConfig(routedDeviceType = AudioDeviceInfo.TYPE_BLUETOOTH_SCO).bluetoothActive).isTrue()
-        assertThat(AudioConfig(routedDeviceType = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER).bluetoothActive).isFalse()
-    }
-
     /**
      * Enumerated from the class rather than written out, so a field stream B adds is covered the
      * moment it exists: a property that does not reach `equals` leaves HumlaService believing the

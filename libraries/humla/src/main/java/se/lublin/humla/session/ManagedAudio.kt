@@ -122,7 +122,6 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
             .setTargetBitrate(config.targetBitrate)
             .setTargetFramesPerPacket(config.targetFramesPerPacket)
             .setAmplitudeBoost(config.amplitudeBoost)
-            .setBluetoothEnabled(config.bluetoothActive)
             .setHalfDuplexEnabled(config.halfDuplex)
             .setPreprocessorEnabled(config.preprocessorEnabled)
             .setEchoCancellationMethod(

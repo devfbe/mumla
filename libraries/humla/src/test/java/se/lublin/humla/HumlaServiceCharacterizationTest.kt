@@ -433,7 +433,7 @@ class HumlaServiceCharacterizationTest {
             )
         )
         // The fields no extra writes: the route decides them, not a setting.
-        assertThat(service.getAudioConfigForTest().bluetoothActive).isFalse()
+        assertThat(service.getAudioConfigForTest().routedDeviceType).isNull()
         assertThat(service.getAudioConfigForTest().echoCancellation).isFalse()
     }
 
