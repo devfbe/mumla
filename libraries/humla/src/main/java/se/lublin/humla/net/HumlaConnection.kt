@@ -549,7 +549,10 @@ class HumlaConnection @JvmOverloads constructor(
         tcp?.sendMessage(message, messageType)
     }
 
-    /** Sends over UDP, or tunnels through TCP unless [force]; the only gate on the voice path. */
+    /**
+     * Sends over UDP, or tunnels through TCP unless [force]; the only gate on the voice path.
+     * [data] is not kept after this returns, so the caller may reuse it.
+     */
     fun sendUDPMessage(data: ByteArray, length: Int, force: Boolean) {
         if (!isConnected) return
         require(length <= data.size) { "Requested length $length is longer than available data length ${data.size}!" }

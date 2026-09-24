@@ -556,4 +556,40 @@ class HumlaTCPTest {
         }
         awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
     }
+
+    /**
+     * The voice path hands over one reused packet buffer; the send thread writes later, so the
+     * transport must copy it before returning.
+     */
+    @Test
+    fun aTunnelledPacketIsCopiedSoTheCallerMayReuseItsBuffer() {
+        val written = ByteArrayOutputStream()
+        val writing = CountDownLatch(1)
+        val gate = CountDownLatch(1)
+        val output = object : java.io.OutputStream() {
+            override fun write(b: Int) {
+                writing.countDown()
+                gate.await(5, TimeUnit.SECONDS)
+                written.write(b)
+            }
+        }
+        val toClient = PipedOutputStream()
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socket.inputStream } returns PipedInputStream(toClient, 64)
+        every { socket.outputStream } returns output
+        every { socketFactory.createSocket(any(), any()) } returns socket
+        val transport = newTransport(Handler(callbackThread.looper))
+        transport.connect("example.invalid", 64738, false)
+        assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
+
+        val packet = byteArrayOf(1, 2, 3, 4)
+        transport.sendMessage(packet, 3, HumlaTCPMessageType.UDPTunnel)
+        assertThat(writing.await(5, TimeUnit.SECONDS)).isTrue()
+        packet.fill(9) // the caller's next packet, while the first is still being written
+        gate.countDown()
+
+        awaitUntil(description = "the whole frame is written") { written.size() == 2 + 4 + 3 }
+        assertThat(written.toByteArray().takeLast(3)).containsExactly(1.toByte(), 2.toByte(), 3.toByte()).inOrder()
+        toClient.close()
+    }
 }

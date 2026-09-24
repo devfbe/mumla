@@ -41,7 +41,6 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaUDPMessageType
-import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.util.HumlaLogger
 
@@ -51,7 +50,7 @@ import se.lublin.humla.util.HumlaLogger
  * restarting afterwards is safe. Built with [Builder].
  */
 class AudioHandler private constructor(builder: Builder, targetId: Byte) :
-    TcpMessageHandler, VoicePacketHandler, AudioInput.AudioInputListener {
+    TcpMessageHandler, VoicePacketHandler {
 
     private val context: Context = builder.context
     private val logger: HumlaLogger = builder.logger
@@ -64,14 +63,12 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
     /** Capture chain in front of the encoder. Touched only by the capture thread, released in [shutdown]. */
     private val capturePipeline: CapturePipeline
 
+    /** Captured frames to voice packets; the capture thread's listener. */
+    private val transmitter: VoiceTransmitter
+
     private var session = 0
 
-    /** Written under [encoderLock], read without it. */
-    @Volatile var codec: HumlaUDPMessageType? = null
-        private set
-    private var encoder: IEncoder? = null
-    private var frameCounter = 0
-    private val encoderLock = Any()
+    val codec: HumlaUDPMessageType? get() = transmitter.codec
 
     val audioStream: Int = builder.audioStream
     val audioSource: Int
@@ -89,15 +86,6 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
     var isInitialized = false
         private set
 
-    /** The own mute flags. Replaced by [initialize], updated by the protocol thread, read by capture. */
-    @Volatile private var muteState = SelfMuteState(serverMuted = false, selfMuted = false, suppressed = false)
-
-    /** The last observed talking state. False if muted, or the input mode is not active. */
-    private var talking = false
-
-    /** Set from the service, read by the capture thread for each packet. */
-    @Volatile private var targetId: Byte = targetId
-
     init {
         val effects = AndroidAudioEffects(builder.androidNoiseSuppressor, builder.androidAutomaticGainControl)
         val echo = EchoCancellationMode.fromPreferenceValue(builder.echoCancellationMethod)
@@ -113,7 +101,11 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             throw AudioInitializationException("RECORD_AUDIO permission not granted")
         }
-        input = AudioInput(this, audioSource, sampleRate, echo.preferenceValue, effects)
+        // The listener is the transmitter below; AudioInput only calls it once recording starts.
+        input = AudioInput(
+            { frame, size -> transmitter.onAudioInputReceived(frame, size) },
+            audioSource, sampleRate, echo.preferenceValue, effects,
+        )
         // `preprocessor_enabled` means "suppress noise" (RNNoise). Echo cancellation is AEC3 or
         // none, per routed device. Both ends of the canceller come from one call: the chain goes
         // to the capture thread, the far-end tap to AudioOutput's playback thread, which must feed
@@ -124,6 +116,11 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
             input.sampleRate, inputMode, amplitudeBoost, noise, echo, builder.speexNoiseSuppressDb, logger,
         )
         capturePipeline = wiring.pipeline
+        transmitter = VoiceTransmitter(capturePipeline, inputMode, encodeListener) { talking ->
+            @Suppress("DEPRECATION")
+            if (isHalfDuplex) audioManager.setStreamMute(audioStream, talking)
+        }
+        transmitter.targetId = targetId
         output = AudioOutput(builder.talkingListener, wiring.farEnd)
     }
 
@@ -136,8 +133,8 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         if (isInitialized) return
         session = self.session
         setMaxBandwidth(maxBandwidth)
-        synchronized(encoderLock) { setCodecLocked(codec) }
-        muteState = SelfMuteState(self.isMuted || self.isLocalMuted, self.isSelfMuted, self.isSuppressed)
+        transmitter.setCodec(codec, ::createEncoder)
+        transmitter.muteState = SelfMuteState(self.isMuted || self.isLocalMuted, self.isSelfMuted, self.isSuppressed)
         synchronized(input) {
             if (input.isRecording()) throw AudioException("Attempted to start recording while recording!")
             input.startRecording()
@@ -150,20 +147,16 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         get() = synchronized(output) { output.isPlaying() }
 
     /**
-     * Replaces the encoder; called under [encoderLock], so that destroying the old encoder cannot
-     * race encoding or [shutdown], which hold the same lock.
-     * @throws NativeAudioException if the new encoder cannot be created.
+     * The encoder for [codec], or null (input disabled) for one it cannot encode.
+     * @throws NativeAudioException if the encoder cannot be created.
      */
-    private fun setCodecLocked(codec: HumlaUDPMessageType?) {
-        this.codec = codec
-        encoder?.destroy()
-        encoder = null
-        when (codec) {
-            null -> Log.w(TAG, "setCodec(null) Input disabled.")
-            // Resampling and preprocessing happen in capturePipeline, before the voice detector.
-            HumlaUDPMessageType.UDPVoiceOpus ->
-                encoder = OpusEncoder(SAMPLE_RATE, 1, FRAME_SIZE, framesPerPacket, bitrate, MAX_BUFFER_SIZE)
-            else -> Log.w(TAG, "Unsupported codec, input disabled.")
+    private fun createEncoder(codec: HumlaUDPMessageType): IEncoder? = when (codec) {
+        // Resampling and preprocessing happen in capturePipeline, before the voice detector.
+        HumlaUDPMessageType.UDPVoiceOpus ->
+            OpusEncoder(SAMPLE_RATE, 1, FRAME_SIZE, framesPerPacket, bitrate, MAX_BUFFER_SIZE)
+        else -> {
+            Log.w(TAG, "Unsupported codec, input disabled.")
+            null
         }
     }
 
@@ -192,10 +185,7 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         // release() frees native state the loop reaches on every frame.
         capturePipeline.release()
         synchronized(output) { output.stopPlaying() }
-        synchronized(encoderLock) {
-            encoder?.destroy()
-            encoder = null
-        }
+        transmitter.releaseEncoder()
         isInitialized = false
         encodeListener.onTalkingStateChanged(false)
     }
@@ -207,7 +197,7 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
             // Stop audio input if the user is muted, and resume if the user has set talking enabled.
             // Before ServerSync there is nothing to update.
             is Mumble.UserState ->
-                if (isInitialized && msg.hasSession() && msg.session == session) muteState.update(msg)
+                if (isInitialized && msg.hasSession() && msg.session == session) transmitter.muteState.update(msg)
         }
     }
 
@@ -216,13 +206,10 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
 
         // Without Opus there is no codec to encode with; null turns input off.
         val newCodec = if (msg.opus) HumlaUDPMessageType.UDPVoiceOpus else null
-        synchronized(encoderLock) {
-            if (newCodec == codec) return
-            try {
-                setCodecLocked(newCodec)
-            } catch (e: NativeAudioException) {
-                Log.e(TAG, "Could not create the encoder", e)
-            }
+        try {
+            transmitter.setCodecIfChanged(newCodec, ::createEncoder)
+        } catch (e: NativeAudioException) {
+            Log.e(TAG, "Could not create the encoder", e)
         }
     }
 
@@ -230,61 +217,12 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         synchronized(output) { output.queueVoiceData(data, messageType) }
     }
 
-    override fun onAudioInputReceived(frame: ShortArray, frameSize: Int) {
-        // Resample, preprocess every frame, then detect, then boost. The result and its samples
-        // belong to the pipeline and are valid only until the next call.
-        val processed = capturePipeline.process(frame, frameSize)
-        val nowTalking = processed.transmit && !muteState.isMuted
-
-        if (talking != nowTalking) {
-            encodeListener.onTalkingStateChanged(nowTalking)
-            @Suppress("DEPRECATION")
-            if (isHalfDuplex) audioManager.setStreamMute(audioStream, nowTalking)
-        }
-
-        synchronized(encoderLock) {
-            val encoder = encoder ?: return@synchronized
-            try {
-                if (nowTalking) {
-                    // Already boosted by the pipeline; length is the produced frame's, not the array's.
-                    encoder.encode(processed.samples, processed.length)
-                    frameCounter++
-                } else if (talking) {
-                    encoder.terminate()
-                }
-            } catch (e: NativeAudioException) {
-                Log.e(TAG, "Encoding failed", e)
-            }
-            if (encoder.isReady) sendEncodedAudio(encoder)
-        }
-
-        talking = nowTalking
-        if (!nowTalking) inputMode.waitForInput()
-    }
-
     fun setVoiceTargetId(id: Byte) {
-        targetId = id
-    }
-
-    /** Sends the buffered audio of [encoder] to the server. Called under [encoderLock]. */
-    private fun sendEncodedAudio(encoder: IEncoder) {
-        val frames = encoder.bufferedFrames
-        val flags = (checkNotNull(codec).ordinal shl CODEC_SHIFT) or (targetId.toInt() and TARGET_MASK)
-
-        val packetBuffer = ByteArray(PACKET_SIZE)
-        packetBuffer[0] = flags.toByte()
-
-        val ds = PacketBuffer(packetBuffer, PACKET_SIZE)
-        ds.skip(1)
-        ds.writeLong((frameCounter - frames).toLong())
-        encoder.getEncodedData(ds)
-        val length = ds.size()
-        ds.rewind()
-
-        encodeListener.onAudioEncoded(ds.dataBlock(length), length)
+        transmitter.targetId = id
     }
 
     interface AudioEncodeListener {
+        /** [data] is reused for the next packet: valid only until this call returns. */
         fun onAudioEncoded(data: ByteArray, length: Int)
         fun onTalkingStateChanged(talking: Boolean)
     }
@@ -368,9 +306,6 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
 
         private const val BPS_PER_KBPS = 1000
         private const val MS_PER_FRAME = 10
-        private const val PACKET_SIZE = 1024
-        private const val CODEC_SHIFT = 5
-        private const val TARGET_MASK = 0x1F
     }
 }
 

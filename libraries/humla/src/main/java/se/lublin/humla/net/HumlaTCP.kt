@@ -186,14 +186,15 @@ class HumlaTCP @JvmOverloads constructor(
         }
     }
 
-    /** Thread-safe; writes on the send thread. */
+    /** Thread-safe; writes a copy of [data] on the send thread, so the caller may reuse it. */
     override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) {
+        val bytes = data.copyOf(length)
         enqueueSend {
             if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) Log.v(TAG, "OUT: $messageType")
             val out = output ?: return@enqueueSend logNoStream(messageType)
             out.writeShort(messageType.ordinal)
             out.writeInt(length)
-            out.write(data, 0, length)
+            out.write(bytes, 0, length)
         }
     }
 
