@@ -45,6 +45,7 @@ import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.NoticeFormatter
+import se.lublin.mumla.chat.outgoingMessageHtml
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.util.HtmlUtils
 import se.lublin.mumla.util.collectEvents
@@ -337,7 +338,7 @@ class MumlaService : HumlaService(),
             mMessageNotification.refresh()
             return
         }
-        sendChannelTextMessage(channel.id, HtmlUtils.markupOutgoingMessage(reply), false)
+        sendChannelTextMessage(channel.id, outgoingMessageHtml(reply, mSettings.isMarkdownEnabled), false)
         mMessageNotification.showReply(reply, conversation())
     }
 

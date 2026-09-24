@@ -337,6 +337,8 @@
     <string name="user_info_certificate">Certificate</string>
     <string name="user_info_certificate_strong">%1$s (verified)</string>
     <string name="user_info_certificate_weak">%1$s (not verified)</string>
+    <string name="markdownMessages">Format messages with Markdown</string>
+    <string name="markdownMessagesSum">Send **bold**, *italic*, `code` and [links](https://…) as formatted text</string>
     <string name="channel_enter_denied">You are not allowed to enter %1$s.</string>
     <string name="a11y_channel_options">Channel options</string>
     <string name="a11y_user_options">User options</string>

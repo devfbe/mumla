@@ -156,6 +156,9 @@ class Settings private constructor(private val context: Context) {
     var isFirstRun: Boolean by booleanPref(PREF_FIRST_RUN, DEFAULT_FIRST_RUN)
 
     /** Whether remote chat images may be fetched; never while Tor is on, since the fetch would bypass it. */
+    /** Whether typed chat messages are sent as Markdown turned into HTML. */
+    val isMarkdownEnabled: Boolean by booleanPref(PREF_MARKDOWN, DEFAULT_MARKDOWN)
+
     val shouldLoadExternalImages: Boolean
         get() = preferences.getBoolean(PREF_LOAD_IMAGES, DEFAULT_LOAD_IMAGES) && !isTorEnabled
 
@@ -378,6 +381,8 @@ class Settings private constructor(private val context: Context) {
         const val PREF_FIRST_RUN = "firstRun"
         const val DEFAULT_FIRST_RUN = true
 
+        const val PREF_MARKDOWN = "markdown_messages"
+        const val DEFAULT_MARKDOWN = true
         const val PREF_LOAD_IMAGES = "load_images"
         const val DEFAULT_LOAD_IMAGES = true
 

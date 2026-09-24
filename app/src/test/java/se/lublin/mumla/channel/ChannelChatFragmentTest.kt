@@ -32,6 +32,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import se.lublin.mumla.Settings
+import androidx.test.core.app.ApplicationProvider
+import androidx.preference.PreferenceManager
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -280,6 +283,26 @@ class ChannelChatFragmentTest {
             )
         }
         assertThat(editor.text.toString()).isEmpty()
+    }
+
+    @Test
+    fun typedMarkdownIsSentAsHtmlAndTypedHtmlIsEscaped() {
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        launch()
+        editor.setText("**hi** <b>there</b>")
+        sendButton.performClick()
+        verify { session.sendChannelTextMessage(1, "<b>hi</b> &lt;b&gt;there&lt;/b&gt;", false) }
+    }
+
+    @Test
+    fun withoutMarkdownTheTextIsSentAsBefore() {
+        PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
+            .edit().putBoolean(Settings.PREF_MARKDOWN, false).commit()
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        launch()
+        editor.setText("**hi** <b>there</b>")
+        sendButton.performClick()
+        verify { session.sendChannelTextMessage(1, "**hi** <b>there</b>", false) }
     }
 
     @Test

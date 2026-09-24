@@ -49,6 +49,13 @@
 
     <CheckBoxPreference
         android:defaultValue="true"
+        android:key="markdown_messages"
+        android:summary="@string/markdownMessagesSum"
+        android:title="@string/markdownMessages"
+        app:iconSpaceReserved="false" />
+
+    <CheckBoxPreference
+        android:defaultValue="true"
         android:key="load_images"
         android:summary="@string/loadImagesSum"
         android:title="@string/loadImages"

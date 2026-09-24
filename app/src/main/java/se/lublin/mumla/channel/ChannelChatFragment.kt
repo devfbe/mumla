@@ -59,6 +59,7 @@ import kotlinx.coroutines.withContext
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ServiceClient
 import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.app.bindClient
@@ -68,10 +69,10 @@ import se.lublin.mumla.chat.ChatImageLoaders
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImageEncoder
 import se.lublin.mumla.chat.OutgoingImagePreparer
+import se.lublin.mumla.chat.outgoingMessageHtml
 import se.lublin.mumla.databinding.FragmentChatBinding
 import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.util.HtmlUtils
 
 /**
  * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. Parsing and rendering
@@ -338,7 +339,7 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
                 return@launch
             }
             try {
-                sendMessage(html)
+                sendHtml(html)
             } catch (e: HumlaDisconnectedException) {
                 Log.d(TAG, "exception from sendMessage: $e")
             }
@@ -355,20 +356,25 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
         }
     }
 
+    /** Sends what the user typed, formatted as the settings say. */
     @Throws(HumlaDisconnectedException::class)
     private fun sendMessage(message: String) {
+        sendHtml(outgoingMessageHtml(message, Settings.getInstance(requireContext()).isMarkdownEnabled))
+    }
+
+    @Throws(HumlaDisconnectedException::class)
+    private fun sendHtml(html: String) {
         val service = service
         if (service == null) {
             Log.d(TAG, "service==null in sendMessage")
             return
         }
         val session = service.session
-        val formatted = HtmlUtils.markupOutgoingMessage(message)
         // The service adds the sent message to its log, which the list shows.
         when (val target = chatTargets.target.value) {
-            is ChatTarget.User -> session.sendUserTextMessage(target.user.session, formatted)
-            is ChatTarget.Channel -> session.sendChannelTextMessage(target.channel.id, formatted, false)
-            null -> session.sessionChannel?.let { session.sendChannelTextMessage(it.id, formatted, false) }
+            is ChatTarget.User -> session.sendUserTextMessage(target.user.session, html)
+            is ChatTarget.Channel -> session.sendChannelTextMessage(target.channel.id, html, false)
+            null -> session.sessionChannel?.let { session.sendChannelTextMessage(it.id, html, false) }
         }
     }
 
