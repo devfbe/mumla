@@ -152,25 +152,22 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         final EchoCancellationMode echo = EchoCancellationMode.fromPreferenceValue(echoCancellationMethod);
         // One decision for the recording source and the audio mode, because they have to agree:
         // AudioSourcePolicy also resolves the source inside PcmCaptureSource, so asking it here
-        // rather than testing for "system" is what keeps the WebRTC canceller from capturing on
-        // VOICE_COMMUNICATION while the manager still sits in MODE_NORMAL. Some AECs -- ours
-        // included, it needs a shared clock with the playback path -- will not work otherwise.
+        // rather than testing the canceller by name is what keeps the WebRTC canceller from
+        // capturing on VOICE_COMMUNICATION while the manager still sits in MODE_NORMAL. Some AECs
+        // -- ours included, it needs a shared clock with the playback path -- will not work otherwise.
         //
-        // KNOWN DEFECT, and the reason echo cancellation is not the default: this mode changes
-        // how Android routes *output*, and initialize() below still opens the playback track on
-        // whatever stream the app chose -- STREAM_MUSIC unless handset mode is on. A media-stream
-        // track does not follow the communication route, and a Galaxy S25 on "system" reports
-        // hearing nobody at all. The fix belongs to the routing seam (setCommunicationDevice to
-        // the built-in speaker when handset mode is off, track on the communication stream), not
-        // here. Settings.DEFAULT_ECHO_CANCELLATION_METHOD and EchoCancellationDefaultRouteTest
-        // hold the default at "none" until it lands.
+        // In a session this is a second request for a mode AudioRouter already holds: the router
+        // takes MODE_IN_COMMUNICATION when it engages, gives MODE_NORMAL back when it disengages,
+        // and routes every device explicitly (Bluetooth, a plugged-in headset, the speaker, or the
+        // earpiece as the default output). Playback is always on the voice-call stream
+        // (Settings.PLAYBACK_STREAM in the app), which is what follows that route. The echo
+        // canceller is no longer a global setting but follows the routed device (AEC3 or none).
         if (AudioSourcePolicy.needsCommunicationMode(mAndroidAudioEffects, echo)) {
             mAudioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-            // Keep playback audible: in MODE_IN_COMMUNICATION the route follows the
-            // communication device, which defaults to the earpiece. Select the built-in
-            // speaker unless the user asked for handset mode -- and never touch a route
-            // something else already claimed (a Bluetooth headset chosen by ScoRouter),
-            // which is what the null/earpiece test below is for.
+            // Pre-router fallback: route to the built-in speaker when playback is not on the
+            // voice-call stream and no route was claimed. Mumla always passes STREAM_VOICE_CALL,
+            // so the app never enters this branch; only a client that asks for another stream
+            // does.
             if (mAudioStream != AudioManager.STREAM_VOICE_CALL) {
                 AudioDeviceInfo speaker = null;
                 for (AudioDeviceInfo d : mAudioManager.getAvailableCommunicationDevices()) {
@@ -193,10 +190,9 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
         }
         mInput = new AudioInput(this, mAudioSource, mSampleRate, mEchoCancellationMethod, mAndroidAudioEffects);
         // The existing `preprocessor_enabled` switch keeps its meaning -- "suppress noise" -- and
-        // changes what does the suppressing: RNNoise instead of speex inside the encoder. The echo
-        // setting picks between the platform canceller, which AudioInput attaches to the
-        // AudioRecord session exactly as before, and ours -- never both, they are two values of
-        // one preference.
+        // changes what does the suppressing: RNNoise instead of speex inside the encoder. Echo
+        // cancellation is WebRTC's AEC3 or none, chosen per routed device; the platform
+        // AcousticEchoCanceler is no longer attached.
         //
         // Both ends of the WebRTC canceller are taken from one call and handed to the two threads
         // that need them: the chain to the capture thread, and the far-end tap to AudioOutput's

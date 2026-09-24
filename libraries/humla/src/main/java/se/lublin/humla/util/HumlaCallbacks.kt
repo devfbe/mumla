@@ -115,7 +115,7 @@ import java.util.concurrent.ConcurrentHashMap
  *     four are raised on [handler]'s own thread: `HumlaConnection` posts every listener callback
  *     to its `mainHandler` (`deliverDisconnected`, `notifyListener`), `HumlaTCP` posts
  *     `onTLSHandshakeFailed` to its callback handler, `HumlaService.connect()` raises
- *     [onConnecting] on main, and `HumlaService.setReconnecting()` posts the retry to a main
+ *     [onConnecting] on main, and `HumlaService.scheduleReconnect()` posts the retry to a main
  *     `Handler`. So for as long as that thread is stuck - the only condition under which this
  *     queue grows at all - **no lifecycle event can arrive to grow it**, and the invariant above
  *     is `absoluteCeiling` plus whatever handful was already queued when the thread stopped
@@ -123,17 +123,18 @@ import java.util.concurrent.ConcurrentHashMap
  *
  *     It is worth saying what does *not* hold it up, because it reads as if it should: the count
  *     is **not** the connection's to choose rather than the server's. `HumlaService`
- *     `onConnectionDisconnected` turns a `CONNECTION_ERROR` into `setReconnecting(true)`, which
- *     posts `connect()` after the auto-reconnect delay, and each cycle raises [onConnecting] and
- *     [onDisconnected] again. There is no attempt cap in the production path today - the session
- *     state machine that adds one is tasks 6, 9 and 12 - so over a long enough disconnect loop the
- *     server does choose the number. Confinement is what carries this, and it is the thing that
- *     has to be rechecked when [handler] and the connection's own handler stop being one thread.
+ *     `onConnectionDisconnected` hands a `CONNECTION_ERROR` to the session state machine, and
+ *     `scheduleReconnect()` posts the retry after the `ReconnectPolicy` backoff; each cycle raises
+ *     [onConnecting] and [onDisconnected] again. The policy caps a run at `maxAttempts` (10), but a
+ *     successful session or a connectivity change resets the count, so over a long enough
+ *     disconnect loop the server still chooses the number. Confinement is what carries this, and
+ *     it is the thing that has to be rechecked when [handler] and the connection's own handler
+ *     stop being one thread.
  *
  *     What that costs, plainly.
  *     - **Chat.** A dropped [onMessageLogged] is lost for good: `MumlaService` accumulates chat
- *       into an unbounded `mMessageLog` from this callback, so this queue is the only place one
- *       can go missing, and the user sees a gap at the *old* end of the chat pane. Log lines are
+ *       into `mMessageLog` (a `ChatMessageLog` bounded at 500) from this callback, so this
+ *       queue is the only place one can go missing, and the user sees a gap at the *old* end of the chat pane. Log lines are
  *       lost here too, but this queue is not their only loss - `HumlaService.logInfo` already
  *       discards every info line raised before synchronisation.
  *     - **A folded refresh**, which is the one that can also be felt as a hang:
