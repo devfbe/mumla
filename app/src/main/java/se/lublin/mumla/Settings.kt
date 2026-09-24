@@ -120,6 +120,10 @@ class Settings private constructor(context: Context) {
 
     fun isPushToTalkToggle(): Boolean = preferences.getBoolean(PREF_PTT_TOGGLE, DEFAULT_PTT_TOGGLE)
 
+    /** Whether other apps may start and stop transmission through the talk broadcast. */
+    fun isExternalPushToTalkAllowed(): Boolean =
+        preferences.getBoolean(PREF_ALLOW_EXTERNAL_PTT, DEFAULT_ALLOW_EXTERNAL_PTT)
+
     fun isPushToTalkButtonShown(): Boolean = !preferences.getBoolean(PREF_PUSH_BUTTON_HIDE_KEY, DEFAULT_PUSH_BUTTON_HIDE)
 
     fun isChatNotifyEnabled(): Boolean = preferences.getBoolean(PREF_CHAT_NOTIFY, DEFAULT_CHAT_NOTIFY)
@@ -359,6 +363,9 @@ class Settings private constructor(context: Context) {
 
         const val PREF_PTT_TOGGLE = "togglePtt"
         const val DEFAULT_PTT_TOGGLE = false
+
+        const val PREF_ALLOW_EXTERNAL_PTT = "allow_external_ptt"
+        const val DEFAULT_ALLOW_EXTERNAL_PTT = false
 
         const val PREF_INPUT_RATE = "input_quality"
         const val DEFAULT_RATE = "48000"

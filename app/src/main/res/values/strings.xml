@@ -201,6 +201,8 @@
     <string name="export_password_confirm">Confirm password</string>
     <string name="export_password_empty">Enter a password.</string>
     <string name="export_password_mismatch">The passwords do not match.</string>
+    <string name="allowExternalPtt">Allow other apps to control push-to-talk</string>
+    <string name="allowExternalPttSum">Any installed app can then start and stop your transmission, e.g. automation apps like Tasker.</string>
     <string name="context_channel_link">Link</string>
     <string name="context_channel_unlink_all">Unlink All</string>
     <string name="context_channel_shout">Set Voice Target</string>

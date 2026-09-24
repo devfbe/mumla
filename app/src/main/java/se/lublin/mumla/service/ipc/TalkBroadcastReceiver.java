@@ -21,11 +21,14 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
+import java.util.function.BooleanSupplier;
+
 import se.lublin.humla.IHumlaService;
 import se.lublin.humla.IHumlaSession;
 
 /**
- * Created by andrew on 08/08/14.
+ * Lets other apps (Tasker and the like) drive push-to-talk. Broadcasts are ignored unless the
+ * user allowed it, since any installed app can send them.
  */
 public class TalkBroadcastReceiver extends BroadcastReceiver {
     public static final String BROADCAST_TALK = "se.lublin.mumla.action.TALK";
@@ -34,16 +37,18 @@ public class TalkBroadcastReceiver extends BroadcastReceiver {
     public static final String TALK_STATUS_OFF = "off";
     public static final String TALK_STATUS_TOGGLE = "toggle";
 
-    private IHumlaService mService;
+    private final IHumlaService mService;
+    private final BooleanSupplier mAllowed;
 
-    public TalkBroadcastReceiver(IHumlaService service) {
+    public TalkBroadcastReceiver(IHumlaService service, BooleanSupplier allowed) {
         mService = service;
+        mAllowed = allowed;
     }
 
     @Override
     public void onReceive(Context context, Intent intent) {
         if (BROADCAST_TALK.equals(intent.getAction())) {
-            if (!mService.isConnected())
+            if (!mAllowed.getAsBoolean() || !mService.isConnected())
                 return;
             IHumlaSession session = mService.HumlaSession();
             String status = intent.getStringExtra(EXTRA_TALK_STATUS);

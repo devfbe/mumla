@@ -210,6 +210,7 @@ class MumlaServiceAudioPreferencesTest {
             "hotCorner" to "read by MumlaService's hot corner, in its own case",
             "hidePtt" to "read by the channel fragment when it builds the PTT button",
             "togglePtt" to "read by the PTT button when it handles a press",
+            "allow_external_ptt" to "read by the talk broadcast receiver on each broadcast",
             "ptt_sound" to "read by MumlaService's own field, in its own case",
             "disableOpus" to "flagged as requiring a reconnect, in its own case",
         )

@@ -203,6 +203,12 @@
             app:iconSpaceReserved="false"/>
         <CheckBoxPreference
             android:defaultValue="false"
+            android:key="allow_external_ptt"
+            android:summary="@string/allowExternalPttSum"
+            android:title="@string/allowExternalPtt"
+            app:iconSpaceReserved="false"/>
+        <CheckBoxPreference
+            android:defaultValue="false"
             android:key="half_duplex"
             android:title="@string/halfDuplex"
             android:summary="@string/halfDuplexSum"

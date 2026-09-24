@@ -281,7 +281,7 @@ class MumlaService : HumlaService(),
         // Set up TTS
         if (mSettings.isTextToSpeechEnabled()) mTTS = TextToSpeech(this, mTTSInitListener)
 
-        mTalkReceiver = TalkBroadcastReceiver(this)
+        mTalkReceiver = TalkBroadcastReceiver(this) { mSettings.isExternalPushToTalkAllowed() }
 
         mMediaSession = MumlaMediaSession(this, HumlaMediaKeyTarget(this), mSettings).also { it.attach(this) }
 
