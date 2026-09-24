@@ -1,0 +1,3 @@
+Android 12 or later is now required. New: RNNoise noise suppression, echo cancellation that follows the audio device, an audio device picker (Bluetooth used automatically, earpiece turns the screen off at your ear), adaptive voice threshold with level meter, fullscreen chat images. Fixed: microphone and Bluetooth lost after a reconnect or with the screen off, hangs, UDP with Mumble 1.5 servers.
+
+Help translating Mumla at https://hosted.weblate.org/engage/mumla/

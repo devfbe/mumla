@@ -5,16 +5,18 @@ Some of the features:
 * Certificate generation, import and export
 * Browse public servers
 * Voice activated transmission (the default), or different Push-to-talk buttons
-* Bluetooth headset support
+* Adaptive voice detection threshold, with a live input level meter in the settings
+* Noise suppression with RNNoise, switchable during a call
+* Echo cancellation (WebRTC AEC3) that follows the audio device and can be switched per type of device
+* Audio device picker like the phone app: Bluetooth, speaker, earpiece (screen turns off at your ear), wired or USB headset
+* Bluetooth headsets are used automatically
 * Self-registration on server
 * Access tokens
 * Opus, CELT, and Speex codec support
-* Automatic reconnection
+* Automatic reconnection, which keeps the microphone working with the screen off
+* Chat images shown scaled down, tap for fullscreen
 * Tor support through the Orbot app
 * Text-to-speech for messages (turned on by default)
 * Light and dark theme
-
-Voice activated transmission currently works best when using a headset. Echo cancellation and noise reduction needs work.
-Tweaking the Detection threshold in the settings helps.
 
 Mumla is copylefted libre software. Find out more at: https://mumla-app.gitlab.io/
