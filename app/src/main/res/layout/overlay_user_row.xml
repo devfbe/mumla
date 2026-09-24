@@ -17,6 +17,7 @@
   -->
 
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/channel_user_row_layout"
     android:layout_width="match_parent"
@@ -41,7 +42,7 @@
         android:paddingStart="4dp"
         android:paddingEnd="4dp"
         android:singleLine="true"
-        android:text="User name"
+        tools:text="User name"
         android:textColor="#333"
         android:textSize="12sp"/>
 

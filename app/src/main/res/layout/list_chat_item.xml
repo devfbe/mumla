@@ -19,6 +19,7 @@
 
 <androidx.cardview.widget.CardView
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:orientation="horizontal"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -36,7 +37,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceSmall"
-            android:text="example username → channel"
+            tools:text="example username → channel"
             android:textSize="11sp"
             android:id="@+id/list_chat_item_target"
             android:textColor="#999"
@@ -45,7 +46,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="example message"
+            tools:text="example message"
             android:id="@+id/list_chat_item_text"
             android:layout_marginBottom="4dp"
             android:textIsSelectable="true"/>
@@ -54,7 +55,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceSmall"
-            android:text="23:23:23"
+            tools:text="23:23:23"
             android:textSize="11sp"
             android:id="@+id/list_chat_item_time"
             android:textColor="#999"/>
