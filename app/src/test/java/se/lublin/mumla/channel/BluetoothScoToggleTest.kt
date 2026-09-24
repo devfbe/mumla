@@ -14,7 +14,7 @@ import se.lublin.mumla.Settings
 
 /**
  * The decision behind "Bluetooth headset": what the user *wants* (a persisted preference) as
- * opposed to what is *active* (an SCO link, which stream A's ScoRouter owns). Only the first
+ * opposed to what is *active* (an SCO link, which stream A's AudioRouter owns). Only the first
  * survives a disconnect -- `HumlaService.onConnectionDisconnected` stops SCO on every drop,
  * including the ones auto-reconnect recovers from, and nothing ever started it again. That is
  * the user's original complaint, and this class holds the half of the fix that is a setting.
@@ -41,7 +41,10 @@ class BluetoothScoToggleTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
+        // Switched off explicitly: the default is on since the audio chooser, and every corner
+        // below that says "from off" means a user who switched it off.
+        PreferenceManager.getDefaultSharedPreferences(app).edit().clear()
+            .putBoolean(Settings.PREF_BLUETOOTH_SCO, false).commit()
         settings = Settings.getInstance(app)
         toggle = BluetoothScoToggle(app, settings)
     }

@@ -80,10 +80,9 @@ class CapturePreprocessorFactoryTest {
         assertThat(apm.createdWith).isNull()
     }
 
-    /** Android's own canceller is attached to the AudioRecord session (spec B6), not to the chain. */
     @Test
-    fun `android echo cancellation adds no webrtc stage`() {
-        val chain = factory.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.ANDROID)
+    fun `no echo cancellation adds no webrtc stage`() {
+        val chain = factory.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.NONE)
 
         chain.preprocessor.process(ShortArray(FRAME))
 
@@ -93,8 +92,8 @@ class CapturePreprocessorFactoryTest {
     }
 
     @Test
-    fun `none noise suppression with android echo is the no-op stage itself`() {
-        val chain = factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.ANDROID)
+    fun `none noise suppression without echo cancellation is the no-op stage itself`() {
+        val chain = factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.NONE)
 
         assertThat(chain.preprocessor).isSameInstanceAs(NoopPreprocessor)
     }

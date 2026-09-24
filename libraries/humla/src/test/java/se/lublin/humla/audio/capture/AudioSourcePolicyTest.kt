@@ -50,7 +50,7 @@ class AudioSourcePolicyTest {
 
     @Test
     fun `communication mode is needed exactly when an effect or a canceller is active`() {
-        assertThat(corners).hasSize(12)
+        assertThat(corners).hasSize(8) // four effect corners times two cancellers
         val wrong = corners.filter {
             AudioSourcePolicy.needsCommunicationMode(it.first, it.second) != it.third
         }
@@ -93,10 +93,9 @@ class AudioSourcePolicyTest {
      * capture and playback clocks the communication path shares.
      */
     @Test
-    fun `webrtc echo cancellation forces voice communication just like the android one`() {
+    fun `webrtc echo cancellation forces voice communication`() {
         val none = AndroidAudioEffects()
         assertThat(AudioSourcePolicy.resolve(mic, none, EchoCancellationMode.WEBRTC)).isEqualTo(voiceComm)
-        assertThat(AudioSourcePolicy.resolve(mic, none, EchoCancellationMode.ANDROID)).isEqualTo(voiceComm)
         assertThat(AudioSourcePolicy.resolve(mic, none, EchoCancellationMode.NONE)).isEqualTo(mic)
     }
 }

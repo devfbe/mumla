@@ -70,8 +70,6 @@
     <string name="version">Version</string>
     <string name="halfDuplex">Einweg-Audio</string>
     <string name="halfDuplexSum">Andere Wiedergabe während Zum Sprechen drücken stummschalten, um Rückkopplung zu verhindern.</string>
-    <string name="handsetMode">Ohrhörer</string>
-    <string name="handsetModeSum">Verwendet die Lautsprecher des Ohrhörers und den Näherungssensor, um einen normalen Telefonanruf zu simulieren.</string>
     <string name="pttSound">Zum Sprechen drücken-Ton</string>
     <string name="pttSoundSum">Spiele einen Ton ab, wenn der Zum Sprechen drücken-Knopf gedrückt wird.</string>
     <string name="preprocessor_enabled">Eingabe-Präprozessor</string>
@@ -151,4 +149,6 @@
     <string name="mediaButtonActionMute">Stummschaltung umschalten</string>
     <string name="bluetoothSco">Bluetooth-Headset</string>
     <string name="bluetoothScoSum">Sprache über ein verbundenes Bluetooth-Headset senden und empfangen, solange Sie mit einem Server verbunden sind. Bleibt bei einem Verbindungsabbruch aktiv und wird wiederhergestellt, sobald die Verbindung zum Server wieder steht. Fragt nach der Berechtigung „Geräte in der Nähe“; manche Geräte leiten ohne sie keinen Ton an ein Headset.</string>
+    <string name="defaultOutput">Ausgabe ohne Headset</string>
+    <string name="defaultOutputSum">Wo die Sprache zu hören ist, wenn du dich verbindest und kein Bluetooth- oder Kabel-Headset da ist. Die Hörmuschel schaltet außerdem den Bildschirm am Ohr aus. Während eines Gesprächs lässt sich das Gerät im Kanalmenü wechseln.</string>
 </resources>

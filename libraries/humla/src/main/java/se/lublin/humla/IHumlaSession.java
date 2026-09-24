@@ -1,5 +1,7 @@
 package se.lublin.humla;
 
+import androidx.annotation.Nullable;
+
 import java.util.List;
 
 import se.lublin.humla.model.IChannel;
@@ -8,6 +10,7 @@ import se.lublin.humla.model.Message;
 import se.lublin.humla.model.ServerSettings;
 import se.lublin.humla.model.WhisperTarget;
 import se.lublin.humla.net.HumlaUDPMessageType;
+import se.lublin.humla.session.CommunicationDevice;
 import se.lublin.humla.util.VoiceTargetMode;
 
 /**
@@ -104,19 +107,53 @@ public interface IHumlaSession {
 
     HumlaUDPMessageType getCodec();
 
+    /**
+     * @return whether a connected Bluetooth headset is taken automatically - the standing wish the
+     *         app keeps in its preference, not the route.
+     */
     boolean usingBluetoothSco();
 
     /**
-     * @return true if voice is actually routed over a Bluetooth SCO device right now, as opposed
+     * @return true if voice is actually routed over a Bluetooth headset right now, as opposed
      *         to {@link #usingBluetoothSco()}, which reports what the user asked for (spec A4).
-     *         The two differ whenever the headset is absent, has walked away, or the platform
-     *         refused the route.
+     *         The two differ whenever the headset is absent, has walked away, the user chose
+     *         another device, or the platform refused the route.
      */
     boolean isBluetoothScoActive();
 
+    /** Take a connected Bluetooth headset automatically, now and whenever one connects. */
     void enableBluetoothSco();
 
+    /** Stop taking Bluetooth headsets automatically; a route taken for one is given back. */
     void disableBluetoothSco();
+
+    /**
+     * @return every device voice can be routed to right now, in the platform's order - earpiece,
+     *         speaker, wired and USB headsets, Bluetooth headsets with their own names. Empty while
+     *         no session is synchronized.
+     */
+    List<CommunicationDevice> getAudioDevices();
+
+    /**
+     * @return the device voice goes to right now, whether it was chosen, taken automatically or
+     *         is simply where the platform plays; null while no session is synchronized.
+     */
+    @Nullable
+    CommunicationDevice getActiveAudioDevice();
+
+    /**
+     * Routes voice to the device with this id from {@link #getAudioDevices()}, as the user's
+     * explicit choice - the phone app's audio chooser. It holds across a dropped connection and
+     * ends with the session, when the device goes away, or when a newly connected headset takes
+     * over. Choosing the device the default would give anyway returns to the default.
+     */
+    void selectAudioDevice(int id);
+
+    /**
+     * @return whether the echo canceller runs for the device voice goes to right now - its kind's
+     *         default or the user's override for that kind.
+     */
+    boolean isEchoCancellationEnabled();
 
     boolean isTalking();
 

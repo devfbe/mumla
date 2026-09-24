@@ -33,7 +33,6 @@
     <string name="pref_certificate_summary">O padrão para usar quando conectar-se a um servidor.</string>
     <string name="disableOpusSum">Desativa o suporte ao codec de áudio Opus para servidores Mumble versão 1.2.4.</string>
     <string name="appearance">Aparência</string>
-    <string name="handsetMode">Aparelho portátil</string>
     <string name="hot_corner_top_left">↖ canto superior esquerdo</string>
     <string name="pttSoundSum">Reproduz um efeito sonoro quando o botão do Pressione para falar é pressionado.</string>
     <string name="preprocessor_enabled">Pré-processamento de entrada</string>
@@ -58,7 +57,6 @@
     <string name="pref_certificate_title">Certificado</string>
     <string name="clearServerCertificates">Limpar certificados de servidor</string>
     <string name="pressKey">Pressione um botão físico para usá-lo para o Pressione para falar.</string>
-    <string name="handsetModeSum">Use o alto-falante frontal e o sensor de proximidade para simular uma chamada telefônica tradicional.</string>
     <string name="halfDuplexSum">Silencia outras reproduções de áudio durante atividade do Pressione para falar para evitar retorno e/ou loops de áudio.</string>
     <string name="hidePttSum">Útil apenas se você utiliza um botão físico ou o recurso Canto do Pressione para falar.</string>
     <string name="shortTtsMessagesSum">Reduz o tamanho das mensagens lendo apenas os nomes de domínio dos links.</string>

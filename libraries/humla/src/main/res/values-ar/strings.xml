@@ -15,7 +15,6 @@
     <string name="udp_warning_ping_timeout">لا رد على UDP ping من الخادم منذ 15 ثانية. يجري التبديل إلى وضع TCP.</string>
     <string name="udp_warning_restored">يمكن الآن إرسال حزم UDP إلى الخادم واستقبالها منه. تجري العودة إلى وضع UDP.</string>
     <string name="reconnect_gave_up">تعذّرت إعادة الاتصال بالخادم. توقفت المحاولات.</string>
-    <string name="sco_unavailable">لا تتوفر سماعة رأس بلوتوث. يبقى الصوت على الهاتف.</string>
     <string name="bluetooth_sco_denied">رفض هذا الجهاز توجيه الصوت إلى سماعة رأس بلوتوث. امنح إذن «الأجهزة المجاورة» من إعدادات النظام.</string>
     <string name="no_session_user">لم يرسل الخادم المستخدم الخاص بهذه الجلسة؛ يبقى الميكروفون مطفأً.</string>
     <string name="no_target_server">لم يُضبط أي خادم لهذا الاتصال.</string>

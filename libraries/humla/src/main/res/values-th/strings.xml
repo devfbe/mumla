@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">ไม่มีการตอบกลับ UDP ping จากเซิฟเวอร์เป็นเวลา 15 วินาที กำลังเปลี่ยนเป็นโหมด TCP</string>
     <string name="udp_warning_restored">ส่งและรับแพ็กเก็ต UDP กับเซิฟเวอร์ได้แล้ว กำลังกลับไปใช้โหมด UDP</string>
     <string name="reconnect_gave_up">ไม่สามารถเชื่อมต่อเซิฟเวอร์ใหม่ได้ ยกเลิกการลองใหม่</string>
-    <string name="sco_unavailable">ไม่มีชุดหูฟังบลูทูธ เสียงยังคงออกทางโทรศัพท์</string>
     <string name="bluetooth_sco_denied">อุปกรณ์นี้ไม่ยอมส่งเสียงไปยังชุดหูฟังบลูทูธ โปรดให้สิทธิ์อุปกรณ์ที่อยู่ใกล้เคียงในการตั้งค่าระบบ</string>
     <string name="no_session_user">เซิฟเวอร์ไม่ได้ส่งข้อมูลผู้ใช้ของเซสชันนี้ ไมโครโฟนจะยังปิดอยู่</string>
     <string name="no_target_server">ไม่ได้กำหนดเซิฟเวอร์สำหรับการเชื่อมต่อนี้</string>

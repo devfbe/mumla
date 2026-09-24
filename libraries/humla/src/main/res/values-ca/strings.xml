@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Cap resposta al ping UDP del servidor en 15 segons. Es canvia al mode TCP.</string>
     <string name="udp_warning_restored">Ja es poden enviar i rebre paquets UDP amb el servidor. Es torna al mode UDP.</string>
     <string name="reconnect_gave_up">No s\'ha pogut tornar a connectar al servidor. S\'abandona.</string>
-    <string name="sco_unavailable">No hi ha cap auricular Bluetooth disponible. L\'àudio es queda al telèfon.</string>
     <string name="bluetooth_sco_denied">Aquest dispositiu s\'ha negat a enviar l\'àudio a uns auriculars Bluetooth. Concediu el permís «Dispositius propers» a la configuració del sistema.</string>
     <string name="no_session_user">El servidor no ha enviat l\'usuari propi d\'aquesta sessió; el micròfon es manté desactivat.</string>
     <string name="no_target_server">No s\'ha configurat cap servidor per a aquesta connexió.</string>

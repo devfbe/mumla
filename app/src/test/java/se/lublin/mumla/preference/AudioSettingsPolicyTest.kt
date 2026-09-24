@@ -58,23 +58,6 @@ class AudioSettingsPolicyTest {
         assertThat(AudioSettingsPolicy.manualFloorVisible(VadMode.PROBABILITY, adaptiveFloor = false)).isFalse()
     }
 
-    @Test
-    fun `system echo cancellation is offered only when the device has one`() {
-        assertThat(AudioSettingsPolicy.echoCancellationValues(androidAecAvailable = true))
-            .containsExactly("none", "system", "webrtc").inOrder()
-        assertThat(AudioSettingsPolicy.echoCancellationValues(androidAecAvailable = false))
-            .containsExactly("none", "webrtc").inOrder()
-    }
-
-    @Test
-    fun `a stored value that is no longer offered falls back to none`() {
-        assertThat(AudioSettingsPolicy.fallbackEchoValue("system", listOf("none", "webrtc"))).isEqualTo("none")
-        assertThat(AudioSettingsPolicy.fallbackEchoValue("webrtc", listOf("none", "webrtc"))).isEqualTo("webrtc")
-        assertThat(AudioSettingsPolicy.fallbackEchoValue(null, listOf("none", "webrtc"))).isEqualTo("none")
-        assertThat(AudioSettingsPolicy.fallbackEchoValue("system", listOf("none", "system", "webrtc")))
-            .isEqualTo("system")
-    }
-
     /** The Speex depth does nothing unless Speex is the denoiser, so it is not shown otherwise. */
     @Test
     fun `the speex suppression depth is only offered while speex is the denoiser`() {

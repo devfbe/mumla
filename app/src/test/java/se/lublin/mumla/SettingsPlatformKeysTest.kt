@@ -21,18 +21,19 @@ class SettingsPlatformKeysTest {
         settings = Settings.getInstance(context)
     }
 
+    /** A connected Bluetooth headset is used without being asked for, as in the phone app. */
     @Test
-    fun bluetoothScoIsOffByDefault() {
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+    fun bluetoothScoIsOnByDefault() {
+        assertThat(settings.isBluetoothScoEnabled()).isTrue()
     }
 
     @Test
     fun bluetoothScoIsPersistedUnderTheSpecKey() {
-        settings.setBluetoothScoEnabled(true)
+        settings.setBluetoothScoEnabled(false)
 
         val raw = PreferenceManager.getDefaultSharedPreferences(context)
-        assertThat(raw.getBoolean("pref_bluetooth_sco", false)).isTrue()
-        assertThat(Settings.getInstance(context).isBluetoothScoEnabled()).isTrue()
+        assertThat(raw.getBoolean("pref_bluetooth_sco", true)).isFalse()
+        assertThat(Settings.getInstance(context).isBluetoothScoEnabled()).isFalse()
     }
 
     @Test

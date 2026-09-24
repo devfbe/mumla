@@ -10,8 +10,6 @@
     <string name="version">பதிப்பு</string>
     <string name="halfDuplex">ஒரு வழி ஒலிதம்</string>
     <string name="halfDuplexSum">ஒலிதம் சுழல்கள்/பின்னூட்டங்களைத் தவிர்க்க பேசுவதற்கு-தள்ளும் போது பிற பதிவு மீட்பொலித்தல்களை முடக்குகிறது.</string>
-    <string name="handsetMode">கைப்பேசி</string>
-    <string name="handsetModeSum">பாரம்பரிய தொலைபேசி அழைப்பை உருவகப்படுத்த முன் ஒலிப்பெட்டி மற்றும் அருகாமையில் உணரி பயன்படுத்துகிறது.</string>
     <string name="pttSound">பேசுவதற்கு-தள்ளு ஒலி</string>
     <string name="pttSoundSum">பேசுவதற்கு-தள்ளு பொத்தானை அழுத்தும்போது ஒலி விளைவு இயக்கு.</string>
     <string name="preprocessor_enabled">உள்ளீடு முன் செயலாக்கம்</string>

@@ -70,8 +70,6 @@
     <string name="version">Version</string>
     <string name="halfDuplex">Audio unidirectionnel</string>
     <string name="halfDuplexSum">Met en sourdine les autres lectures pendant que vous appuyez pour parler pour éviter les boucles audio et les retours.</string>
-    <string name="handsetMode">Combiné</string>
-    <string name="handsetModeSum">Utilise le haut-parleur frontal et le capteur de proximité pour simuler un appel.</string>
     <string name="pttSound">Son « Appuyer pour parler »</string>
     <string name="pttSoundSum">Joue un effet sonore lorsque vous appuyez sur le bouton « Appuyer pour parler ».</string>
     <string name="preprocessor_enabled">Prétraitement des données d\'entrée</string>

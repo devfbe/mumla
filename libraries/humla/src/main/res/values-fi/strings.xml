@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Palvelin ei ole vastannut UDP-pingiin 15 sekuntiin. Vaihdetaan TCP-tilaan.</string>
     <string name="udp_warning_restored">UDP-paketteja voi taas lähettää palvelimelle ja vastaanottaa siltä. Vaihdetaan takaisin UDP-tilaan.</string>
     <string name="reconnect_gave_up">Palvelimeen ei saatu uudelleen yhteyttä. Yrittäminen lopetetaan.</string>
-    <string name="sco_unavailable">Bluetooth-kuulokkeita ei ole käytettävissä. Ääni pysyy puhelimessa.</string>
     <string name="bluetooth_sco_denied">Tämä laite kieltäytyi ohjaamasta ääntä Bluetooth-kuulokkeisiin. Myönnä Lähellä olevat laitteet -lupa järjestelmäasetuksissa.</string>
     <string name="no_session_user">Palvelin ei lähettänyt tämän istunnon omaa käyttäjää; mikrofoni pysyy pois päältä.</string>
     <string name="no_target_server">Tälle yhteydelle ei ole määritetty palvelinta.</string>

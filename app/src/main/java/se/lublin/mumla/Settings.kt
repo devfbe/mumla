@@ -24,7 +24,7 @@ import androidx.preference.PreferenceManager
 import se.lublin.humla.Constants
 import se.lublin.humla.audio.capture.AdaptiveVadTracker
 import se.lublin.humla.audio.capture.AndroidAudioEffects
-import se.lublin.humla.audio.capture.EchoCancellationMode
+import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.VadConfig
@@ -39,6 +39,22 @@ import se.lublin.humla.audio.capture.VadMode
 class Settings private constructor(context: Context) {
 
     private val preferences: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
+
+    init {
+        // One-time cleanup of keys the audio chooser replaced. Checked on every construction and
+        // written only while an old key is still there, so it costs two lookups afterwards.
+        if (preferences.contains(LEGACY_PREF_ECHO_CANCELLATION_METHOD)) {
+            preferences.edit().remove(LEGACY_PREF_ECHO_CANCELLATION_METHOD).apply()
+        }
+        if (preferences.contains(LEGACY_PREF_HANDSET_MODE)) {
+            val editor = preferences.edit().remove(LEGACY_PREF_HANDSET_MODE)
+            // The handset mode was the earpiece; a default output the user already picked wins.
+            if (preferences.getBoolean(LEGACY_PREF_HANDSET_MODE, false) && !preferences.contains(PREF_DEFAULT_OUTPUT)) {
+                editor.putString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_EARPIECE)
+            }
+            editor.apply()
+        }
+    }
 
     fun getInputMethod(): String {
         val method = preferences.getString(PREF_INPUT_METHOD, ARRAY_INPUT_METHOD_VOICE)
@@ -148,25 +164,17 @@ class Settings private constructor(context: Context) {
 
     fun isHalfDuplex(): Boolean = preferences.getBoolean(PREF_HALF_DUPLEX, DEFAULT_HALF_DUPLEX)
 
-    fun isHandsetMode(): Boolean = preferences.getBoolean(PREF_HANDSET_MODE, DEFAULT_HANDSET_MODE)
+    /**
+     * Where voice goes when no headset is there: the speaker, or the earpiece - which is what the
+     * handset mode was, proximity sensor included. The audio chooser overrides it per session.
+     */
+    fun isEarpieceDefaultOutput(): Boolean =
+        preferences.getString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_SPEAKER) == DEFAULT_OUTPUT_EARPIECE
 
     fun isPttSoundEnabled(): Boolean = preferences.getBoolean(PREF_PTT_SOUND, DEFAULT_PTT_SOUND)
 
     fun isPreprocessorEnabled(): Boolean = preferences.getBoolean(PREF_PREPROCESSOR_ENABLED, DEFAULT_PREPROCESSOR_ENABLED)
 
-    /**
-     * The stream playback belongs on. Handset mode means the earpiece, so it is a voice call.
-     * And any echo canceller puts the AudioManager into MODE_IN_COMMUNICATION, where the
-     * platform routes *and* the volume rocker follow the voice-call stream whatever
-     * setVolumeControlStream said -- a media-stream track then plays on a route nobody can
-     * adjust, which is what "I cannot turn Mumla up" reduces to. One rule, read from three
-     * places (ServerConnectTask, AudioPreferenceExtras, MumlaActivity) so they cannot drift.
-     */
-    fun getPlaybackStream(): Int =
-        if (isHandsetMode() || getEchoCancellationMethod() != "none")
-            android.media.AudioManager.STREAM_VOICE_CALL
-        else
-            android.media.AudioManager.STREAM_MUSIC
 
     fun getNoiseSuppressionMethod(): String =
         preferences.getString(PREF_NOISE_SUPPRESSION_METHOD,
@@ -199,9 +207,6 @@ class Settings private constructor(context: Context) {
         return if (stored != null && stored in SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB) stored
         else DEFAULT_SPEEX_NOISE_SUPPRESS_DB
     }
-
-    fun getEchoCancellationMode(): EchoCancellationMode =
-        EchoCancellationMode.fromPreferenceValue(getEchoCancellationMethod())
 
     fun getVadMode(): VadMode = VadMode.fromPreferenceValue(preferences.getString(PREF_VAD_MODE, DEFAULT_VAD_MODE))
 
@@ -245,13 +250,27 @@ class Settings private constructor(context: Context) {
         automaticGainControl = preferences.getBoolean(PREF_ANDROID_AGC, DEFAULT_ANDROID_AGC),
     )
 
-    fun getEchoCancellationMethod(): String =
-        preferences.getString(PREF_ECHO_CANCELLATION_METHOD, DEFAULT_ECHO_CANCELLATION_METHOD)!!
-
-    /** Written by the channel-list menu so the chain can be switched without a restart. */
-    fun setEchoCancellationMethod(method: String) {
-        preferences.edit().putString(PREF_ECHO_CANCELLATION_METHOD, method).apply()
+    /**
+     * The user's echo-cancellation choice for a kind of device, or null while they have made none
+     * and the kind's default applies. Written by the audio chooser's switch, one key per kind, so
+     * the choice comes back the next time such a device is routed.
+     */
+    fun getEchoCancellationOverride(category: AudioDeviceCategory): Boolean? {
+        val key = echoCancellationKey(category)
+        return if (preferences.contains(key)) preferences.getBoolean(key, false) else null
     }
+
+    fun setEchoCancellationOverride(category: AudioDeviceCategory, enabled: Boolean) {
+        preferences.edit().putBoolean(echoCancellationKey(category), enabled).apply()
+    }
+
+    /** What runs on a device of [category]: the user's choice, else the kind's default. */
+    fun isEchoCancellationEnabled(category: AudioDeviceCategory): Boolean =
+        getEchoCancellationOverride(category) ?: category.echoCancellationByDefault
+
+    /** Every override the user has made, for `HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE`. */
+    fun getEchoCancellationOverrides(): Map<AudioDeviceCategory, Boolean> =
+        AudioDeviceCategory.entries.mapNotNull { c -> getEchoCancellationOverride(c)?.let { c to it } }.toMap()
 
     fun shouldStayAwake(): Boolean = preferences.getBoolean(PREF_STAY_AWAKE, DEFAULT_STAY_AWAKE)
 
@@ -401,8 +420,13 @@ class Settings private constructor(context: Context) {
         const val PREF_HALF_DUPLEX = "half_duplex"
         const val DEFAULT_HALF_DUPLEX = false
 
-        const val PREF_HANDSET_MODE = "handset_mode"
-        const val DEFAULT_HANDSET_MODE = false
+        /** A ListPreference: [DEFAULT_OUTPUT_SPEAKER] (the default) or [DEFAULT_OUTPUT_EARPIECE]. */
+        const val PREF_DEFAULT_OUTPUT = "default_output"
+        const val DEFAULT_OUTPUT_SPEAKER = "speaker"
+        const val DEFAULT_OUTPUT_EARPIECE = "earpiece"
+
+        /** The handset switch the default output replaced; migrated and removed on first read. */
+        private const val LEGACY_PREF_HANDSET_MODE = "handset_mode"
 
         const val PREF_PTT_SOUND = "ptt_sound"
         const val DEFAULT_PTT_SOUND = false
@@ -411,7 +435,6 @@ class Settings private constructor(context: Context) {
         const val DEFAULT_PREPROCESSOR_ENABLED = true
 
         const val PREF_NOISE_SUPPRESSION_METHOD = "noise_suppression_method"
-        const val PREF_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
 
         /** Stored as a string because it is a ListPreference; spec B9 allows -15/-25/-35. */
         const val PREF_SPEEX_NOISE_SUPPRESS_DB = "speex_noise_suppress_db"
@@ -472,21 +495,26 @@ class Settings private constructor(context: Context) {
 
 
         /**
-         * Still "none", and **blocked from moving** until the playback route is fixed.
-         *
-         * Any other value makes `AudioSourcePolicy.needsCommunicationMode` true, and
-         * `AudioHandler` then puts the AudioManager into `MODE_IN_COMMUNICATION` -- while the
-         * playback `AudioTrack` is opened on the stream `ServerConnectTask:61` chose, which is
-         * `STREAM_MUSIC` for everyone who has not switched handset mode on. In communication mode
-         * Android routes by the communication device, and a media-stream track no longer follows
-         * it. Reported from a Galaxy S25 on `"system"`: **the user hears nobody at all.**
-         *
-         * The fix is a routing one -- `AudioManager.setCommunicationDevice` to the built-in
-         * speaker when handset mode is off, and the track on the communication stream -- and the
-         * `AndroidCommunicationDevices` seam that owns it lives in the core stream, not here.
-         * `EchoCancellationDefaultRouteTest` fails the moment this constant changes, on purpose.
+         * The stream playback is always on. The audio router holds the communication mode for the
+         * session and routes every device explicitly, and only the voice-call stream follows that
+         * route - and in that mode it is also the stream the volume keys adjust. It used to be
+         * `STREAM_MUSIC` unless handset mode or a canceller was on, which is how a canceller once
+         * put playback on a route nobody could hear (EchoCancellationDefaultRouteTest).
          */
-        const val DEFAULT_ECHO_CANCELLATION_METHOD = "none"
+        const val PLAYBACK_STREAM = android.media.AudioManager.STREAM_VOICE_CALL
+
+        private const val PREF_ECHO_CANCELLATION_PREFIX = "echo_cancellation_"
+
+        /** The global echo method the audio chooser replaced; removed on first read. */
+        private const val LEGACY_PREF_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
+
+        /** The preference key of the echo-cancellation override for [category]. */
+        @JvmStatic
+        fun echoCancellationKey(category: AudioDeviceCategory): String =
+            PREF_ECHO_CANCELLATION_PREFIX + category.name.lowercase()
+
+        @JvmField
+        val ECHO_CANCELLATION_KEYS: Set<String> = AudioDeviceCategory.entries.map { echoCancellationKey(it) }.toSet()
 
         const val PREF_STAY_AWAKE = "stay_awake"
         const val DEFAULT_STAY_AWAKE = false
@@ -499,9 +527,13 @@ class Settings private constructor(context: Context) {
 
         const val PREF_NEWS_SHOWN_VERSIONS = "newsShownVersions"
 
-        /** Route audio through a Bluetooth headset (SCO) whenever connected. Spec P2. */
+        /**
+         * Take a connected Bluetooth headset automatically while connected to a server. Spec P2.
+         * On by default since the audio chooser: a headset is used without being asked for, as in
+         * the phone app, and the chooser in the channel menu picks another device for the session.
+         */
         const val PREF_BLUETOOTH_SCO = "pref_bluetooth_sco"
-        const val DEFAULT_BLUETOOTH_SCO = false
+        const val DEFAULT_BLUETOOTH_SCO = true
 
         /** Headset / AVRCP media button behavior, one of [MediaButtonAction.prefValue]. Spec P1. */
         const val PREF_MEDIA_BUTTON_ACTION = "media_button_action"

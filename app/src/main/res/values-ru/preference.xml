@@ -74,8 +74,6 @@
     <string name="version">Версия</string>
     <string name="halfDuplex">Звук в одну сторону</string>
     <string name="halfDuplexSum">Не принимать звук при передаче, чтобы избежать звуковых петель и эхо.</string>
-    <string name="handsetMode">Гарнитура</string>
-    <string name="handsetModeSum">Использовать передний динамик и датчик близости для симуляции традиционного телефонного вызова.</string>
     <string name="pttSound">Звук нажатия Push-to-talk</string>
     <string name="pttSoundSum">Проиграть звук при нажатии кнопки Push-to-talk.</string>
     <string name="preprocessor_enabled">Обработка входящего звука</string>
@@ -96,10 +94,6 @@
     <string name="pref_start_upIn_pinned_mode_sum">Показывать только закрепленные каналы после подключения к серверу (остальные скрыты).</string>
     <string name="theme_system">Системная</string>
     <string name="language">Язык</string>
-    <string name="echoCancellationMethod">Эхоподавление</string>
-    <string name="echoCancellationMethodSum">Снижает эхо от динамика вашего устройства во время разговора. Качество работы зависит от устройства.</string>
-    <string name="echoCancellationDisabled">Отключено</string>
-    <string name="echoCancellationSystem">Системное</string>
     <string name="language_system">Системный</string>
     <string name="noiseSuppression">Шумоподавление</string>
     <string name="noiseSuppressionSum">Убирает фоновый шум из сигнала микрофона перед отправкой.</string>

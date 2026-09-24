@@ -17,7 +17,6 @@
 
 package se.lublin.mumla.preference
 
-import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VadMode
 
@@ -29,10 +28,6 @@ data class VadDependents(val adaptive: Boolean, val amplitude: Boolean, val prob
  * Fragment, an Activity or a window.
  */
 object AudioSettingsPolicy {
-    val ECHO_NONE = EchoCancellationMode.NONE.preferenceValue
-    val ECHO_ANDROID = EchoCancellationMode.ANDROID.preferenceValue
-    val ECHO_WEBRTC = EchoCancellationMode.WEBRTC.preferenceValue
-
     /**
      * Hidden, not disabled. The three modes compare three quantities that are not comparable -- a
      * level in dBFS, a speech model's probability, and a fraction of a measured gap -- so a control
@@ -51,11 +46,4 @@ object AudioSettingsPolicy {
 
     /** Spec B9: the Speex depth reaches nothing unless Speex is the denoiser in the chain. */
     fun speexDepthVisible(mode: NoiseSuppressionMode): Boolean = mode == NoiseSuppressionMode.SPEEX
-
-    fun echoCancellationValues(androidAecAvailable: Boolean): List<String> =
-        if (androidAecAvailable) listOf(ECHO_NONE, ECHO_ANDROID, ECHO_WEBRTC)
-        else listOf(ECHO_NONE, ECHO_WEBRTC)
-
-    fun fallbackEchoValue(current: String?, available: List<String>): String =
-        if (current != null && current in available) current else ECHO_NONE
 }

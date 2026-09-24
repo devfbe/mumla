@@ -2,6 +2,8 @@
 
 package se.lublin.humla.session
 
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,6 +50,34 @@ class AudioConfigTest {
     }
 
     /**
+     * A media-stream track does not follow the communication device, so a routed device - any of
+     * them, not only a headset - moves playback to the voice-call stream, and only an unrouted
+     * session keeps the stream the settings chose.
+     */
+    @Test
+    fun aRoutedDeviceMovesPlaybackToTheVoiceCallStream() {
+        val unrouted = AudioConfig(audioStream = AudioManager.STREAM_MUSIC)
+        assertThat(unrouted.playbackStream).isEqualTo(AudioManager.STREAM_MUSIC)
+        for (type in listOf(
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        )) {
+            assertThat(unrouted.copy(routedDeviceType = type).playbackStream)
+                .isEqualTo(AudioManager.STREAM_VOICE_CALL)
+        }
+    }
+
+    /** SCO is the one route with its own sample rate, and the one the pipeline is told about. */
+    @Test
+    fun onlyAnScoRouteIsBluetoothToThePipeline() {
+        assertThat(AudioConfig().bluetoothActive).isFalse()
+        assertThat(AudioConfig(routedDeviceType = AudioDeviceInfo.TYPE_BLUETOOTH_SCO).bluetoothActive).isTrue()
+        assertThat(AudioConfig(routedDeviceType = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER).bluetoothActive).isFalse()
+    }
+
+    /**
      * Enumerated from the class rather than written out, so a field stream B adds is covered the
      * moment it exists: a property that does not reach `equals` leaves HumlaService believing the
      * settings did not change, and the pipeline keeps the old value until the next connect.
@@ -73,6 +103,7 @@ class AudioConfigTest {
     }
 
     private fun perturb(value: Any?): Any = when (value) {
+        null -> 1 // routedDeviceType, the one nullable field: null is "the platform's own route"
         is Boolean -> !value
         is Int -> value + 1
         is Float -> value + 1f

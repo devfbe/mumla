@@ -180,15 +180,14 @@ class CaptureWiringTest {
             .inOrder()
     }
 
-    /** The other canceller. One setting, two values: the platform effect builds nothing here. */
+    /** Without the canceller nothing is built: no APM, no far-end tap. */
     @Test
-    fun `the system canceller builds no apm and no tap`() {
+    fun `no canceller builds no apm and no tap`() {
         val apm = FakeWebRtcApmApi()
 
-        val wiring = wire(NoiseSuppressionMode.NONE, EchoCancellationMode.ANDROID, apmFactory(apm))
+        val wiring = wire(NoiseSuppressionMode.NONE, EchoCancellationMode.NONE, apmFactory(apm))
 
-        assertWithMessage("two cancellers on one signal is worse than one")
-            .that(apm.createdWith).isNull()
+        assertThat(apm.createdWith).isNull()
         assertThat(wiring.farEnd).isNull()
         assertThat(warnings).isEmpty()
     }

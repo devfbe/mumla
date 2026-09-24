@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Brak odpowiedzi serwera na ping UDP od 15 sekund. Przełączanie na tryb TCP.</string>
     <string name="udp_warning_restored">Pakiety UDP mogą być znowu wysyłane i odbierane. Powrót do trybu UDP.</string>
     <string name="reconnect_gave_up">Nie udało się ponownie połączyć z serwerem. Rezygnacja.</string>
-    <string name="sco_unavailable">Brak dostępnego zestawu słuchawkowego Bluetooth. Dźwięk pozostaje w telefonie.</string>
     <string name="bluetooth_sco_denied">To urządzenie odmówiło przekierowania dźwięku do zestawu słuchawkowego Bluetooth. Przyznaj uprawnienie „Urządzenia w pobliżu” w ustawieniach systemu.</string>
     <string name="no_session_user">Serwer nie przesłał własnego użytkownika tej sesji; mikrofon pozostaje wyłączony.</string>
     <string name="no_target_server">Nie skonfigurowano serwera dla tego połączenia.</string>

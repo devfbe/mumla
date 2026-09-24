@@ -362,7 +362,7 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
             }
         }
 
-        setVolumeControlStream(mSettings.getPlaybackStream());
+        setVolumeControlStream(Settings.PLAYBACK_STREAM);
 
         if (savedInstanceState == null) {
             // Got no instance bundle: this is run only on real app startup -- not when Android
@@ -834,10 +834,6 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
         switch (key) {
             case Settings.PREF_STAY_AWAKE:
                 setStayAwake(mSettings.shouldStayAwake());
-                break;
-            case Settings.PREF_HANDSET_MODE:
-            case Settings.PREF_ECHO_CANCELLATION_METHOD:
-                setVolumeControlStream(mSettings.getPlaybackStream());
                 break;
         }
     }

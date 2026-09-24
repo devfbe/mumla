@@ -24,7 +24,6 @@
     <string name="autoReconnect">Återanslut automatiskt</string>
     <string name="useTor">Anslut via Tor</string>
     <string name="useTorSum">Kräver Orbot-appen.</string>
-    <string name="handsetModeSum">Använder främre högtalaren och närhetssensorn för att simulera ett traditionellt telefonsamtal.</string>
     <string name="inputQualitySum">Föredragen överföringshastighet (i bitar per sekund).</string>
     <string name="pref_certificate_title">Välj certifikat</string>
     <string name="pressKeyInfo">Appen måste vara öppen för att använda det här (pga restriktioner i Android).</string>
@@ -76,7 +75,6 @@
     <string name="clearServerCertificatesSum">Tar bort alla betrodda servercertifikat från Mumla.</string>
     <string name="halfDuplex">Envägsljud</string>
     <string name="halfDuplexSum">Tystar annan uppspelning när push-to-talk är aktiv, för att undvika rundgång.</string>
-    <string name="handsetMode">Lur</string>
     <string name="pttSound">Push-to-talk-ton</string>
     <string name="pttSoundSum">Spelar en ljudeffekt när push-to-talk-knappen trycks ned.</string>
     <string name="preprocessor_enabled">Förbehandling av ingångsljud</string>

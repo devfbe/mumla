@@ -24,9 +24,10 @@ import androidx.core.content.ContextCompat
 import se.lublin.mumla.Settings
 
 /**
- * The decision behind the "Bluetooth" action-bar item and the "Bluetooth headset" settings
- * checkbox (spec P2/P3). Both write the persistent preference [Settings.PREF_BLUETOOTH_SCO] and
- * nothing else; the service reads it and does the routing.
+ * The decision behind the "Use Bluetooth headset automatically" settings checkbox (spec P2/P3). It
+ * writes the persistent preference [Settings.PREF_BLUETOOTH_SCO] and nothing else; the service
+ * reads it and does the routing. The action-bar "Bluetooth" item that shared it is gone: the audio
+ * chooser in the channel menu picks a device for the session, and this stays the standing wish.
  *
  * The split this class exists for is *wanted* against *active*. An SCO link is torn down by
  * `HumlaService.onConnectionDisconnected` on every drop, auto-reconnect included, and was never

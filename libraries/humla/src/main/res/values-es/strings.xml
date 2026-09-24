@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Sin respuesta al ping UDP del servidor durante 15 segundos. Cambiando al modo TCP.</string>
     <string name="udp_warning_restored">Ya se pueden enviar y recibir paquetes UDP con el servidor. Volviendo al modo UDP.</string>
     <string name="reconnect_gave_up">No se pudo volver a conectar al servidor. Se abandona.</string>
-    <string name="sco_unavailable">No hay auriculares Bluetooth disponibles. El audio sigue en el teléfono.</string>
     <string name="bluetooth_sco_denied">Este dispositivo se negó a enviar audio a unos auriculares Bluetooth. Concede el permiso «Dispositivos cercanos» en los ajustes del sistema.</string>
     <string name="no_session_user">El servidor no envió el usuario propio de esta sesión; el micrófono sigue desactivado.</string>
     <string name="no_target_server">No se configuró ningún servidor para esta conexión.</string>

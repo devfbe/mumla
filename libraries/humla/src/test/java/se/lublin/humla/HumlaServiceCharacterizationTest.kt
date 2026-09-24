@@ -179,7 +179,7 @@ class HumlaServiceCharacterizationTest {
 
     /**
      * **Gone with `BluetoothScoReceiver` (task A9b).** The service no longer registers a broadcast
-     * receiver for `ACTION_SCO_AUDIO_STATE_UPDATED`; the route goes through `ScoRouter` over
+     * receiver for `ACTION_SCO_AUDIO_STATE_UPDATED`; the route goes through `AudioRouter` over
      * `CommunicationDevices`, which is the API this module's minSdk of 31 has, and the listener is
      * registered on the platform's `AudioManager` instead of on the broadcast registry. The
      * lifetime property is pinned by
@@ -340,13 +340,14 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_LOCAL_MUTE_HISTORY to true,
             HumlaService.EXTRAS_LOCAL_IGNORE_HISTORY to true,
             HumlaService.EXTRAS_ENABLE_PREPROCESSOR to false,
-            HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD to false,
+            HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE to false,
             HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD to false,
             HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB to false,
             HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR to false,
             HumlaService.EXTRAS_ANDROID_AGC to false,
             HumlaService.EXTRAS_VAD_CONFIG to false,
             HumlaService.EXTRAS_BLUETOOTH_WANTED to false,
+            HumlaService.EXTRAS_EARPIECE_BY_DEFAULT to false,
         )
 
         assertThat(declaredExtraKeys()).containsExactlyElementsIn(reconnectNeeded.keys)
@@ -386,7 +387,10 @@ class HumlaServiceCharacterizationTest {
             HumlaService.EXTRAS_FORCE_TCP,
             HumlaService.EXTRAS_HALF_DUPLEX,
             HumlaService.EXTRAS_BLUETOOTH_WANTED,
+            HumlaService.EXTRAS_EARPIECE_BY_DEFAULT,
             HumlaService.EXTRAS_ENABLE_PREPROCESSOR -> putBoolean(key, true)
+            HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE ->
+                putBundle(key, Bundle().apply { putBoolean("SPEAKER", false) })
             else -> putString(key, "value-for-$key")
         }
     }
@@ -409,7 +413,6 @@ class HumlaServiceCharacterizationTest {
             putInt(HumlaService.EXTRAS_AUDIO_STREAM, 3)
             putInt(HumlaService.EXTRAS_FRAMES_PER_PACKET, 4)
             putBoolean(HumlaService.EXTRAS_ENABLE_PREPROCESSOR, true)
-            putString(HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD, "speex")
             putString(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD, "rnnoise")
             putInt(HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB, -40)
             putBoolean(HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR, true)
@@ -429,7 +432,6 @@ class HumlaServiceCharacterizationTest {
                 audioStream = 3,
                 targetFramesPerPacket = 4,
                 preprocessorEnabled = true,
-                legacyEchoCancellationMethod = "speex",
                 noiseSuppression = "rnnoise",
                 speexNoiseSuppressDb = -40,
                 androidNoiseSuppressor = true,
@@ -438,8 +440,9 @@ class HumlaServiceCharacterizationTest {
                 halfDuplexRequested = true,
             )
         )
-        // The one field no extra writes: the SCO route decides it, not a setting.
+        // The fields no extra writes: the route decides them, not a setting.
         assertThat(service.getAudioConfigForTest().bluetoothActive).isFalse()
+        assertThat(service.getAudioConfigForTest().echoCancellation).isFalse()
     }
 
     /**

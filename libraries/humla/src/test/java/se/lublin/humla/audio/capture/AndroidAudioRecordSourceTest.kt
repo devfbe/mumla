@@ -20,7 +20,6 @@ package se.lublin.humla.audio.capture
 import android.media.AudioDeviceInfo
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
@@ -217,17 +216,11 @@ class AndroidAudioRecordSourceTest {
             .containsExactly(NoiseSuppressor::class.java, AutomaticGainControl::class.java)
     }
 
-    @Test
-    fun `android echo cancellation attaches the platform canceller`() {
-        makeAvailable(AudioEffect.EFFECT_TYPE_AEC)
-
-        val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE, echo = EchoCancellationMode.ANDROID))
-
-        assertThat(source.effects.single()).isInstanceOf(AcousticEchoCanceler::class.java)
-        assertThat(source.effects.single().enabled).isTrue()
-    }
-
-    /** Ours cancels; a platform canceller in front of AEC3 would hand it an already-altered echo. */
+    /**
+     * Ours cancels; a platform canceller in front of AEC3 would hand it an already-altered echo.
+     * The platform canceller is not offered any more, so no request can attach one - even on a
+     * device that has it.
+     */
     @Test
     fun `webrtc echo cancellation attaches no platform canceller`() {
         makeAvailable(AudioEffect.EFFECT_TYPE_AEC)
@@ -254,7 +247,6 @@ class AndroidAudioRecordSourceTest {
                 MediaRecorder.AudioSource.MIC,
                 RATE,
                 effects = AndroidAudioEffects(noiseSuppressor = true, automaticGainControl = true),
-                echo = EchoCancellationMode.ANDROID,
             ),
         )
 

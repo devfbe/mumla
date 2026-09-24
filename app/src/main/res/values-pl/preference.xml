@@ -74,8 +74,6 @@
     <string name="version">Wersja</string>
     <string name="halfDuplex">Jednokierunkowe audio</string>
     <string name="halfDuplexSum">Wycisza inne odtwarzanie podczas korzystania z funkcji „Naciśnij i mów”, aby uniknąć pętli audio/sprzężenia zwrotnego.</string>
-    <string name="handsetMode">Słuchawka</string>
-    <string name="handsetModeSum">Używa przedniego głośnika i czujnika zbliżeniowego do symulacji tradycyjnego połączenia telefonicznego.</string>
     <string name="pttSound">Dźwięk funkcji „Naciśnij i mów”</string>
     <string name="pttSoundSum">Odtwórz efekt dźwiękowy po naciśnięciu przycisku funkcji „Naciśnij i mów”.</string>
     <string name="preprocessor_enabled">Wstępne przetwarzanie wejścia</string>
@@ -97,10 +95,6 @@
     <string name="theme_system">Domyślny systemowy</string>
     <string name="language">Język</string>
     <string name="language_system">Domyślny systemowy</string>
-    <string name="echoCancellationMethod">Usuwanie echa</string>
-    <string name="echoCancellationMethodSum">Zredukuj echo z głośnika urządzenia podczas rozmowy. Jakość zależy od urządzenia.</string>
-    <string name="echoCancellationDisabled">Wyłączone</string>
-    <string name="echoCancellationSystem">Systemowe</string>
     <string name="noiseSuppression">Tłumienie szumów</string>
     <string name="noiseSuppressionSum">Usuwa szumy tła z mikrofonu przed wysłaniem.</string>
     <string name="noiseSuppressionNone">Wyłączone</string>

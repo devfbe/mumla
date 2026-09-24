@@ -2,7 +2,6 @@ package se.lublin.mumla.service
 
 import android.Manifest
 import android.app.Application
-import android.content.Context
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -16,6 +15,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import android.media.AudioDeviceInfo
 import se.lublin.humla.net.HumlaConnection
+import se.lublin.humla.session.AudioRouter
+import se.lublin.humla.session.CommunicationDevice
 import se.lublin.humla.session.CommunicationDevices
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
@@ -24,25 +25,21 @@ import se.lublin.mumla.Settings
  * The line the user's complaint is actually about. `HumlaService.onConnectionDisconnected` stops
  * SCO on every dropped connection -- including the ones auto-reconnect recovers from -- and
  * nothing ever started it again, so "Bluetooth is off after the reconnect" was not a race but a
- * missing line in the recovery path. The service re-reads the stored wish on every
- * synchronization, and follows the preference while it is connected.
+ * missing line in the recovery path. The stored preference is the wish, the service hands it to
+ * the router from its first moment and on every change, and the router takes the route whenever a
+ * session is synchronized. Since the audio chooser, the preference defaults to on: a connected
+ * Bluetooth headset is used without being asked for, as in the phone app.
  *
- * The plan for this task said there is no JVM seam that reaches
- * `MumlaService.onConnectionSynchronized`, and built the decision as a pure function for that
- * reason. The pure function was the right call, but the premise is wrong twice over:
- * `Robolectric.buildService(MumlaService::class.java).create()` already survives both onCreate
- * implementations (MumlaServiceMediaSessionWiringTest has done it since task 4), and the
- * superclass hook returns *normally* -- it logs and returns -- when `mModelHandler` is null,
- * which is a state its own comment says it has seen in the field. That leaves the second half of
- * `MumlaService.onConnectionSynchronized` reachable without a native audio stack, and with it the
- * one call that fixes the complaint.
+ * `Robolectric.buildService(MumlaService::class.java).create()` survives both onCreate
+ * implementations, and the superclass `onConnectionSynchronized` returns *normally* when
+ * `mModelHandler` is null, so the service is reachable without a native audio stack.
  *
- * What is faked here is exactly one object: the `CommunicationDevices` seam, i.e. the four
- * one-line delegations to `AudioManager` inside the humla library. Everything between the hook and
- * it -- the preference, the permission, `isSynchronized()`, and `ScoRouter`'s own wanted-vs-active
- * reconciliation -- is the real code.
+ * What is faked here is exactly one object: the `CommunicationDevices` seam, i.e. the one-line
+ * delegations to `AudioManager` inside the humla library. Everything between the preference and
+ * it -- the permission, the listener registration, and `AudioRouter`'s own reconciliation -- is
+ * the real code.
  *
- * Task A9b replaced `BluetoothScoReceiver` with `ScoRouter` over `CommunicationDevices`, so the
+ * Task A9b replaced `BluetoothScoReceiver` with a router over `CommunicationDevices`, so the
  * calls this reads back are `select`/`clear` rather than `startBluetoothSco`/`stopBluetoothSco`.
  * Two tests went with that change and are named where they went, below.
  */
@@ -61,8 +58,8 @@ class MumlaServiceBluetoothTest {
         fun startCount(): Int = selectCalls.size
         fun stopCount(): Int = clearCalls
 
-        override fun availableIdsOfType(type: Int): List<Int> =
-            available.filterValues { it == type }.keys.toList()
+        override fun available(): List<CommunicationDevice> =
+            available.map { (id, type) -> CommunicationDevice(id, type, "") }
 
         override fun select(id: Int): Boolean {
             selectCalls += id
@@ -75,7 +72,10 @@ class MumlaServiceBluetoothTest {
             selectedId = null
         }
 
-        override fun currentType(): Int? = selectedId?.let { available[it] }
+        override fun setCommunicationMode(on: Boolean) = Unit
+
+        override fun current(): CommunicationDevice? =
+            selectedId?.let { id -> available[id]?.let { CommunicationDevice(id, it, "") } }
 
         override fun setOnChangedListener(listener: (() -> Unit)?) {
             this.listener = listener
@@ -95,31 +95,36 @@ class MumlaServiceBluetoothTest {
         Class.forName("se.lublin.humla.HumlaService").getDeclaredField(name)
             .apply { isAccessible = true }
 
-    private fun mumlaField(name: String) =
-        MumlaService::class.java.getDeclaredField(name).apply { isAccessible = true }
-
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
         PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
         settings = Settings.getInstance(app)
+        service = create()
+    }
 
+    private fun create(): MumlaService {
         receiver = RecordingDevices()
         val controller = Robolectric.buildService(MumlaService::class.java)
         // Before create(): HumlaService.onCreate wraps the platform AudioManager when the seam is
         // unset, and the router it builds there is the one that lives for the service.
         controller.get().communicationDevices = receiver
-        service = controller.create().get()
+        return controller.create().get()
     }
 
-    /** A connection that reports itself synchronized, which is all these two hooks ask it. */
+    /**
+     * A connection that reports itself synchronized, and the route the superclass takes for a
+     * synchronized session. mModelHandler stays null on purpose: the superclass hook then logs and
+     * returns instead of building an AudioHandler over the native stack, and MumlaService's own
+     * half runs. That early return also skips engaging the router - which takes no route before a
+     * session exists - so it is done here, the way a synchronized session does it.
+     */
     private fun connect() {
         val connection = mockk<HumlaConnection>(relaxed = true)
         every { connection.isConnected } returns true
         every { connection.isSynchronized } returns true
         humlaField("mConnection").set(service, connection)
-        // mModelHandler stays null on purpose: the superclass hook then logs and returns instead
-        // of building an AudioHandler over the native stack, and MumlaService's own half runs.
+        (humlaField("mRouter").get(service) as AudioRouter).engage()
     }
 
     private fun preferences() = PreferenceManager.getDefaultSharedPreferences(app)
@@ -130,116 +135,81 @@ class MumlaServiceBluetoothTest {
             .filter { it.type == IChatMessage.InfoMessage.Type.WARNING }
             .map { it.body }
 
+    /** The user's requirement: a connected Bluetooth headset is used without being asked for. */
     @Test
-    fun synchronizingTurnsTheHeadsetBackOnWhenItWasAskedFor() {
-        settings.setBluetoothScoEnabled(true)
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-        connect()
+    fun aHeadsetIsTakenByDefault() {
+        assertThat(service.usingBluetoothSco()).isTrue()
 
-        service.onConnectionSynchronized()
+        connect()
 
         assertThat(receiver.startCount()).isEqualTo(1)
     }
 
+    /**
+     * The service follows the stored preference from its first moment, not from the first
+     * synchronization: the router is engaged by the superclass before any line of this class's
+     * hook runs, so a wish that only arrived there would route the old one first and take it
+     * back a moment later.
+     */
     @Test
-    fun synchronizingLeavesTheHeadsetAloneWhenNobodyAskedForIt() {
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+    fun aStoredNoIsHonouredFromTheStart() {
+        settings.setBluetoothScoEnabled(false)
+        service = create()
+
+        assertThat(service.usingBluetoothSco()).isFalse()
         connect()
-
-        service.onConnectionSynchronized()
-
         assertThat(receiver.startCount()).isEqualTo(0)
     }
 
     /**
-     * Keep asking, stop gating -- the ruling in spec 4.1. The permission is still requested at
-     * both places the user can flip the switch, because P3 says so and because the store listing
-     * has carried the Nearby-devices entry since task 2; but a denial is an answer about the
+     * Keep asking, stop gating -- the ruling in spec 4.1. The permission is still requested where
+     * the user switches the preference on, because P3 says so and because the store listing has
+     * carried the Nearby-devices entry since task 2; but a denial is an answer about the
      * permission, not about what the user wants. Measured against the SDK's own annotation
-     * database: of 26 annotated `AudioManager` members exactly four carry a `RequiresPermission`
-     * and `startBluetoothSco()` is not among them, and `BLUETOOTH_CONNECT` appears on 136
-     * members, none of them in `android.media`. Gating here took a working headset away from
-     * every user who tapped "deny", and before this task the item asked for nothing at all.
+     * database: of 26 annotated `AudioManager` members exactly four carry a `RequiresPermission`,
+     * and `BLUETOOTH_CONNECT` appears on 136 members, none of them in `android.media` --
+     * `setCommunicationDevice` included.
      */
     @Test
-    fun synchronizingRoutesTheStoredWishEvenWithoutThePermission() {
-        settings.setBluetoothScoEnabled(true)
+    fun theHeadsetIsTakenEvenWithoutThePermission() {
         shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-        connect()
 
-        service.onConnectionSynchronized()
+        connect()
 
         assertThat(receiver.startCount()).isEqualTo(1)
     }
 
     /**
-     * **Two refusal tests lived here and are now unwritable at this level (task A9b).** They drove
-     * a `BluetoothScoReceiver` whose `startBluetoothSco`/`stopBluetoothSco` threw
-     * `SecurityException`, which `MumlaService.applyBluetoothSco` caught and turned into one chat
-     * line. The catch is now unreachable: `AndroidCommunicationDevices` wraps **every**
-     * `AudioManager` call one layer down, answers with the value that reads as "no headset", and
-     * reports the denial through a constructor callback that has no default - so nothing above it
-     * can see a `SecurityException` any more.
+     * **The ordering test that stood here is gone with the line it ordered.** The restore used to
+     * be `enableBluetoothSco()` in this class's `onConnectionSynchronized`, and it had to stand
+     * ahead of the hot corner and the proximity sensor, either of which can throw. The wish is now
+     * pushed into the router whenever the preference changes, and the route is taken by the
+     * superclass's `onConnectionSynchronized` - which runs, and engages the router, before any
+     * statement of this class's hook. Nothing here can throw in front of it any more; the restore
+     * itself is pinned by `HumlaServiceBluetoothTest.bluetoothScoIsRestartedAfterAReconnect`.
      *
-     * The property did not move, the layer did:
-     * `se.lublin.humla.HumlaServiceBluetoothTest.aPlatformRefusalIsReportedOnceAsAChatLine` drives
-     * the real wrapper against an `AudioManager` shadow that refuses, and asserts the one line.
-     * `MumlaService.applyBluetoothSco`'s catch is dead code for task A12 to remove with the file.
+     * The two refusal tests that lived here before task A9b moved to
+     * `se.lublin.humla.HumlaServiceBluetoothTest.aPlatformRefusalIsReportedOnceAsAChatLine`.
      */
-
-    /**
-     * M1 from the review. The restore used to be the *last* statement of the hook, behind
-     * `registerReceiver`, `mHotCorner.setShown(true)` and `setProximitySensorOn(true)`. Anything
-     * that throws in front of it -- `WindowManager.addView` and the proximity wake lock both can
-     * -- skips it and reproduces the user's complaint exactly: reconnected, and no headset. No
-     * triggering case was found in the field (`setShown` checks `canDrawOverlays` and returns
-     * early), so this pins an ordering rather than repairing a live defect, and the ordering
-     * costs nothing.
-     *
-     * The exception is not handled by the hook and is not meant to be; what this reads back is
-     * what had already happened when it was thrown.
-     */
-    @Test
-    fun aLaterStepThatThrowsDoesNotCostTheHeadset() {
-        settings.setBluetoothScoEnabled(true)
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-        preferences().edit()
-            .putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_TOP_LEFT).commit()
-        val hotCorner = mockk<MumlaHotCorner>(relaxed = true)
-        every { hotCorner.setShown(any()) } throws RuntimeException("addView refused")
-        mumlaField("mHotCorner").set(service, hotCorner)
-        connect()
-
-        try {
-            service.onConnectionSynchronized()
-            throw AssertionError("the hot corner was supposed to throw; this test proves nothing")
-        } catch (expected: RuntimeException) {
-            // what matters is the state it was thrown in
-        }
-
-        assertThat(receiver.startCount()).isEqualTo(1)
-    }
 
     @Test
     fun routingThatSucceedsSaysNothingInTheChatLog() {
-        settings.setBluetoothScoEnabled(true)
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         connect()
 
-        service.onConnectionSynchronized()
-
+        assertThat(receiver.startCount()).isEqualTo(1)
         assertThat(warnings()).isEmpty()
     }
 
-    // The four tests below never call onSharedPreferenceChanged themselves. MumlaService
-    // registers itself on the default SharedPreferences in onCreate, so writing the preference
-    // is the whole user gesture, and the registration is pinned along with the switch arm --
-    // an explicit call would have held even with the service unregistered.
+    // The tests below never call onSharedPreferenceChanged themselves. MumlaService registers
+    // itself on the default SharedPreferences in onCreate, so writing the preference is the whole
+    // user gesture, and the registration is pinned along with the switch arm -- an explicit call
+    // would have held even with the service unregistered.
 
     @Test
     fun turningThePreferenceOnWhileConnectedStartsTheHeadset() {
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        settings.setBluetoothScoEnabled(false)
         connect()
+        assertThat(receiver.startCount()).isEqualTo(0)
 
         settings.setBluetoothScoEnabled(true)
 
@@ -248,17 +218,13 @@ class MumlaServiceBluetoothTest {
     }
 
     /**
-     * The wish has to be routed before it can be taken back. `ScoRouter` clears the communication
-     * device only when the route it would clear is **its own** SCO route - clearing whatever else
-     * the platform chose would take the user off their own speaker or wired headset for a reason
-     * they never gave. So the switch is flipped on while connected first, which is the gesture, and
-     * the old `stopBluetoothSco()`-on-every-flip is what this no longer does.
+     * The router clears the communication device only when the route it would clear is **its
+     * own** - clearing whatever else the platform chose would take the user off their own speaker
+     * or wired headset for a reason they never gave.
      */
     @Test
     fun turningThePreferenceOffWhileConnectedStopsTheHeadset() {
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         connect()
-        settings.setBluetoothScoEnabled(true)
         assertThat(receiver.startCount()).isEqualTo(1)
 
         settings.setBluetoothScoEnabled(false)
@@ -269,7 +235,7 @@ class MumlaServiceBluetoothTest {
     /** And with no route held, turning it off asks the platform for nothing at all. */
     @Test
     fun turningThePreferenceOffWithNoRouteHeldTouchesNothing() {
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        receiver.available.clear()
         connect()
 
         settings.setBluetoothScoEnabled(false)
@@ -278,25 +244,17 @@ class MumlaServiceBluetoothTest {
         assertThat(receiver.startCount()).isEqualTo(0)
     }
 
+    /**
+     * No session, no route - but the wish still moves. The old hook checked `isSynchronized()` and
+     * dropped a change made while disconnected, so the next session routed the stale wish; the
+     * router only routes while engaged, so the wish can follow the preference at any time.
+     */
     @Test
-    fun aWishWithoutThePermissionStartsTheHeadsetAnyway() {
-        shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-        connect()
-
+    fun thePreferenceMovesTheWishButTouchesNothingWhileDisconnected() {
+        settings.setBluetoothScoEnabled(false)
+        assertThat(service.usingBluetoothSco()).isFalse()
         settings.setBluetoothScoEnabled(true)
-
-        assertThat(receiver.startCount()).isEqualTo(1)
-        assertThat(receiver.stopCount()).isEqualTo(0)
-    }
-
-    @Test
-    fun thePreferenceTouchesNothingWhileDisconnected() {
-        // No connection at all: getBluetoothReceiver() throws when the service is not
-        // synchronized, so a hook without the isSynchronized() check would not merely do nothing
-        // here, it would take the service down on a settings change.
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-
-        settings.setBluetoothScoEnabled(true)
+        assertThat(service.usingBluetoothSco()).isTrue()
 
         assertThat(receiver.startCount()).isEqualTo(0)
         assertThat(receiver.stopCount()).isEqualTo(0)
@@ -304,7 +262,7 @@ class MumlaServiceBluetoothTest {
 
     @Test
     fun anotherPreferenceDoesNotTouchTheHeadset() {
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        settings.setBluetoothScoEnabled(false)
         connect()
 
         preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()

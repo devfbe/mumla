@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Inget svar på UDP-ping från servern på 15 sekunder. Växlar till TCP-läge.</string>
     <string name="udp_warning_restored">UDP-paket kan skickas till och tas emot från servern. Växlar tillbaka till UDP-läge.</string>
     <string name="reconnect_gave_up">Det gick inte att återansluta till servern. Ger upp.</string>
-    <string name="sco_unavailable">Inget Bluetooth-headset tillgängligt. Ljudet stannar i telefonen.</string>
     <string name="bluetooth_sco_denied">Enheten vägrade att skicka ljud till ett Bluetooth-headset. Ge behörigheten Enheter i närheten i systeminställningarna.</string>
     <string name="no_session_user">Servern skickade inte sessionens egen användare; mikrofonen förblir avstängd.</string>
     <string name="no_target_server">Ingen server har konfigurerats för den här anslutningen.</string>

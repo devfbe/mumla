@@ -26,9 +26,7 @@
     <string name="loadImagesSum">Laster ned og viser bilder i sludringen.</string>
     <string name="version">Versjon</string>
     <string name="halfDuplex">Énveis lyd</string>
-    <string name="handsetMode">Håndsett</string>
     <string name="audio_per_packet">Lyd per pakke</string>
-    <string name="handsetModeSum">Bruker fronthøyttaleren og nærhetssensor for å simulere en tradisjonell telefonsamtale.</string>
     <string name="pttSound">Trykk-for-å-snakke -lyd</string>
     <string name="audio_per_packet_sum">Lengden for lyd per stemmepakke.</string>
     <string name="stay_awake_sum">Beholder skjermen påslått når Mumla er åpent.</string>

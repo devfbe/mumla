@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">服务器已 15 秒未回应 UDP ping。正在切换到 TCP 模式。</string>
     <string name="udp_warning_restored">已可向服务器发送和从服务器接收 UDP 数据包。正在切换回 UDP 模式。</string>
     <string name="reconnect_gave_up">无法重新连接到服务器。已放弃。</string>
-    <string name="sco_unavailable">没有可用的蓝牙耳机。音频仍通过手机播放。</string>
     <string name="bluetooth_sco_denied">此设备拒绝将音频切换到蓝牙耳机。请在系统设置中授予“附近的设备”权限。</string>
     <string name="no_session_user">服务器未发送本会话自己的用户信息；麦克风保持关闭。</string>
     <string name="no_target_server">此连接未配置服务器。</string>

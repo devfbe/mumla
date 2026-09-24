@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Al 15 seconden geen UDP-pingantwoord van de server. Overschakelen naar TCP-modus.</string>
     <string name="udp_warning_restored">UDP-pakketten kunnen weer naar de server worden verzonden en ervan worden ontvangen. Terugschakelen naar UDP-modus.</string>
     <string name="reconnect_gave_up">Kon niet opnieuw met de server verbinden. Opgegeven.</string>
-    <string name="sco_unavailable">Geen Bluetooth-headset beschikbaar. De audio blijft op de telefoon.</string>
     <string name="bluetooth_sco_denied">Dit toestel weigerde audio naar een Bluetooth-headset te sturen. Verleen de toestemming Apparaten in de buurt in de systeeminstellingen.</string>
     <string name="no_session_user">De server heeft de eigen gebruiker van deze sessie niet verzonden; de microfoon blijft uit.</string>
     <string name="no_target_server">Er is geen server ingesteld voor deze verbinding.</string>

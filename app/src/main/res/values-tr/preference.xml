@@ -23,7 +23,6 @@
     <string name="certificateGenerateSum">Kendinden imzalı yeni bir Mumla sertifikası oluşturur. Yeni başlayanlar için tavsiye edilir.</string>
     <string name="useTor">Tor aracılığıyla bağlan</string>
     <string name="version">Sürüm</string>
-    <string name="handsetModeSum">Geleneksel bir telefon görüşmesine benzemesi için ön hoparlörü ve yakınlık sensörünü kullanır.</string>
     <string name="audio_per_packet">Paket başına ses</string>
     <string name="audio_per_packet_sum">Ses paketi başına sesin uzunluğu.</string>
     <string name="pref_certificate_title">Sertifika</string>
@@ -58,7 +57,6 @@
     <string name="pttButtonHeightSum">Bas konuş düğmesinin dikey uzunluğunu değiştirin.</string>
     <string name="pressKey">Bas konuş için kullanmak üzere fiziksel bir tuşa bas.</string>
     <string name="halfDuplexSum">Ses döngülerini/geri bildirimi önlemek için bas konuş sırasında diğer oynatımları sessize alır.</string>
-    <string name="handsetMode">Ahize</string>
     <string name="pttSound">Bas konuş sesi</string>
     <string name="pttSoundSum">Bas konuş düğmesine basıldığında ses efekti oynat.</string>
     <string name="preprocessor_enabled">Giriş ön işlemesi</string>
@@ -94,10 +92,6 @@
     <string name="theme_system">Sistem öntanımlı değeri</string>
     <string name="language">Dil</string>
     <string name="language_system">Sistem öntanımlı değeri</string>
-    <string name="echoCancellationMethod">Yankı Giderme</string>
-    <string name="echoCancellationMethodSum">Konuşurken aygıtınızın hoparlöründen gelen yankıyı azaltın. Kalite, aygıta göre değişebilir.</string>
-    <string name="echoCancellationDisabled">Devre dışı</string>
-    <string name="echoCancellationSystem">Sistem</string>
     <string name="noiseSuppression">Gürültü bastırma</string>
     <string name="noiseSuppressionSum">Mikrofonunuzdaki arka plan gürültüsünü gönderilmeden önce temizler.</string>
     <string name="noiseSuppressionNone">Kapalı</string>

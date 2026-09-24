@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Aucune réponse au ping UDP du serveur depuis 15 secondes. Passage en mode TCP.</string>
     <string name="udp_warning_restored">Les paquets UDP peuvent de nouveau être envoyés au serveur et reçus de lui. Retour en mode UDP.</string>
     <string name="reconnect_gave_up">Impossible de se reconnecter au serveur. Abandon.</string>
-    <string name="sco_unavailable">Aucun casque Bluetooth disponible. Le son reste sur le téléphone.</string>
     <string name="bluetooth_sco_denied">Cet appareil a refusé d\'acheminer le son vers un casque Bluetooth. Accordez l\'autorisation « Appareils à proximité » dans les paramètres système.</string>
     <string name="no_session_user">Le serveur n\'a pas envoyé l\'utilisateur propre à cette session ; le microphone reste coupé.</string>
     <string name="no_target_server">Aucun serveur n\'a été configuré pour cette connexion.</string>

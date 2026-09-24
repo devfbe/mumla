@@ -111,6 +111,14 @@
     <string name="search">Search</string>
     <string name="searchHint">Search channels and users</string>
     <string name="bluetooth">Bluetooth</string>
+    <string name="audio_device">Audio device</string>
+    <string name="audio_device_earpiece">Earpiece</string>
+    <string name="audio_device_speaker">Speaker</string>
+    <string name="audio_device_wired">Wired headset</string>
+    <string name="audio_device_usb">USB headset</string>
+    <string name="audio_device_bluetooth">Bluetooth headset</string>
+    <string name="audio_device_other">Audio device</string>
+    <string name="echo_cancellation">Echo cancellation</string>
     <string name="quickConnect">Quick Connect</string>
     <string name="connect">Connect</string>
     <string name="connectToServer">Connect to Server</string>

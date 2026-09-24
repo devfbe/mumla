@@ -39,29 +39,19 @@ enum class NoiseSuppressionMode(val preferenceValue: String) {
 }
 
 /**
- * "system" is the legacy on-disk value of the android.media.audiofx.AcousticEchoCanceler option
- * and stays the canonical one (existing preferences hold it -- `echo_cancellation_method` with the
- * values `none`/`system` from `res/values/preference_notranslate.xml:95-98`, default `none`);
- * "android" is accepted as an alias because spec §4 spells the `EXTRAS_ECHO_CANCELLATION` values
- * "none"/"android"/"webrtc".
- *
- * The default is [NONE] rather than a canceller, matching today's `DEFAULT_ECHO_CANCELLATION_METHOD`
- * (`Settings.kt:292`): echo cancellation costs battery and can hurt on a headset, so an upgrade
- * must not silently switch it on.
+ * Which canceller runs: WebRTC's AEC3 or none. The platform's `AcousticEchoCanceler` ("system", or
+ * "android" in spec §4's spelling) is no longer offered - the canceller now follows the routed
+ * device (`AudioDeviceCategory`), and a platform canceller in front of AEC3 would hand it an
+ * already-altered echo. A value that is not one of the two reads as [NONE].
  */
 enum class EchoCancellationMode(val preferenceValue: String) {
     NONE("none"),
-    ANDROID("system"),
     WEBRTC("webrtc");
 
     companion object {
-        private const val ANDROID_ALIAS = "android"
-
         @JvmStatic
-        fun fromPreferenceValue(value: String?): EchoCancellationMode = when (value) {
-            ANDROID_ALIAS -> ANDROID
-            else -> entries.firstOrNull { it.preferenceValue == value } ?: NONE
-        }
+        fun fromPreferenceValue(value: String?): EchoCancellationMode =
+            entries.firstOrNull { it.preferenceValue == value } ?: NONE
     }
 }
 

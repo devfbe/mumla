@@ -21,21 +21,19 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
 class ModesTest {
+    /**
+     * The platform canceller is no longer offered; a stored or sent "system" (or the spec spelling
+     * "android") is read as no canceller rather than refused.
+     */
     @Test
-    fun `legacy echo value system maps to android effect`() {
-        assertThat(EchoCancellationMode.fromPreferenceValue("system")).isEqualTo(EchoCancellationMode.ANDROID)
+    fun `the retired platform canceller values read as none`() {
+        assertThat(EchoCancellationMode.fromPreferenceValue("system")).isEqualTo(EchoCancellationMode.NONE)
+        assertThat(EchoCancellationMode.fromPreferenceValue("android")).isEqualTo(EchoCancellationMode.NONE)
     }
 
     @Test
     fun `webrtc echo value is recognised`() {
         assertThat(EchoCancellationMode.fromPreferenceValue("webrtc")).isEqualTo(EchoCancellationMode.WEBRTC)
-    }
-
-    /** Spec §4 spells the EXTRAS_ECHO_CANCELLATION values "none"/"android"/"webrtc". */
-    @Test
-    fun `the spec spelling android is an alias for the legacy value system`() {
-        assertThat(EchoCancellationMode.fromPreferenceValue("android")).isEqualTo(EchoCancellationMode.ANDROID)
-        assertThat(EchoCancellationMode.ANDROID.preferenceValue).isEqualTo("system")
     }
 
     @Test
@@ -85,7 +83,7 @@ class ModesTest {
         assertThat(NoiseSuppressionMode.entries.associate { it.name to it.preferenceValue })
             .containsExactly("NONE", "none", "SPEEX", "speex", "RNNOISE", "rnnoise")
         assertThat(EchoCancellationMode.entries.associate { it.name to it.preferenceValue })
-            .containsExactly("NONE", "none", "ANDROID", "system", "WEBRTC", "webrtc")
+            .containsExactly("NONE", "none", "WEBRTC", "webrtc")
     }
 
     /** Two constants sharing an on-disk value would make one of them unreachable from settings. */

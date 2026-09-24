@@ -75,8 +75,6 @@
     <string name="pref_start_upIn_pinned_mode_sum">Показувати тільки закріплені канали після підключення до сервера (приховує інші канали).</string>
     <string name="halfDuplex">Одностороннє аудіо</string>
     <string name="halfDuplexSum">Приглушує інші звуки під час передачі, щоб уникнути звукових петель та ехо.</string>
-    <string name="handsetMode">Гарнітура</string>
-    <string name="handsetModeSum">Використовувати передній динамік і датчик наближення для імітації традиційного телефонного дзвінка.</string>
     <string name="pttSound">Звук \"Натисни-щоб-говорити\"</string>
     <string name="pttSoundSum">Відтворення звукового ефекту при натисканні кнопки \"Натисни-щоб-говорити\".</string>
     <string name="preprocessor_enabled">Попередня обробка вхідного сигналу</string>

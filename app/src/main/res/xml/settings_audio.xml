@@ -28,11 +28,14 @@
         android:title="@string/audioInputMethod"
         app:iconSpaceReserved="false"/>
 
-    <CheckBoxPreference
-        android:key="handset_mode"
-        android:title="@string/handsetMode"
-        android:summary="@string/handsetModeSum"
-        android:defaultValue="false"
+    <!-- android:defaultValue must equal Settings.DEFAULT_OUTPUT_SPEAKER. -->
+    <ListPreference
+        android:key="default_output"
+        android:title="@string/defaultOutput"
+        android:summary="@string/defaultOutputSum"
+        android:defaultValue="speaker"
+        android:entries="@array/defaultOutputNames"
+        android:entryValues="@array/defaultOutputValues"
         app:iconSpaceReserved="false"/>
 
     <se.lublin.mumla.preference.SeekBarDialogPreference
@@ -255,15 +258,6 @@
             android:title="@string/speexNoiseSuppress"
             android:summary="@string/speexNoiseSuppressSum"
             app:iconSpaceReserved="false"/>
-
-        <ListPreference
-            android:defaultValue="none"
-            android:entries="@array/echoCancellationNames"
-            android:entryValues="@array/echoCancellationValues"
-            android:key="echo_cancellation_method"
-            android:summary="@string/echoCancellationMethodSum"
-            android:title="@string/echoCancellationMethod"
-            app:iconSpaceReserved="false" />
 
         <CheckBoxPreference
             android:key="android_noise_suppressor"

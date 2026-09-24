@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Sunucudan 15 saniyedir UDP ping yanıtı yok. TCP moduna geçiliyor.</string>
     <string name="udp_warning_restored">Sunucuya UDP paketleri gönderilebiliyor ve sunucudan alınabiliyor. UDP moduna geri dönülüyor.</string>
     <string name="reconnect_gave_up">Sunucuya yeniden bağlanılamadı. Vazgeçiliyor.</string>
-    <string name="sco_unavailable">Kullanılabilir Bluetooth kulaklık yok. Ses telefonda kalıyor.</string>
     <string name="bluetooth_sco_denied">Bu cihaz sesi Bluetooth kulaklığa yönlendirmeyi reddetti. Sistem ayarlarından Yakındaki cihazlar iznini verin.</string>
     <string name="no_session_user">Sunucu bu oturumun kendi kullanıcısını göndermedi; mikrofon kapalı kalıyor.</string>
     <string name="no_target_server">Bu bağlantı için bir sunucu yapılandırılmadı.</string>

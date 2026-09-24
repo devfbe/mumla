@@ -6,7 +6,6 @@
     <string name="udp_warning_ping_timeout">Ulac tiririt n ping UDP seg uqeddac azal n 15 n tasinin. Ad nuɣal ɣer uskar TCP.</string>
     <string name="udp_warning_restored">Ikemmusen UDP zemren ad ttwaznen, ad d-ttwarmen seg uqeddac. Ad nuɣal ɣer uskar UDP.</string>
     <string name="reconnect_gave_up">Ulamek allus n tuqqna ɣer uqeddac. Yettwaḥbes.</string>
-    <string name="sco_unavailable">Ulac akask n Bluetooth. Imesli ad yeqqim deg tiliɣri.</string>
     <string name="bluetooth_sco_denied">Ibenk-a yugi ad yazen imesli ɣer ukask n Bluetooth. Efk tasiregt n yibenkan iqerben deg yiɣewwaren n unagraw.</string>
     <string name="no_session_user">Aqeddac ur d-yuzin ara aseqdac n tɣimit-a; asawaḍ ad yeqqim yensa.</string>
     <string name="no_target_server">Ulac aqeddac yettwasewlen i tuqqna-a.</string>

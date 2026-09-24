@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Καμία απάντηση UDP ping από τον διακομιστή για 15 δευτερόλεπτα. Μετάβαση σε λειτουργία TCP.</string>
     <string name="udp_warning_restored">Η αποστολή και λήψη πακέτων UDP με τον διακομιστή είναι ξανά δυνατή. Επιστροφή σε λειτουργία UDP.</string>
     <string name="reconnect_gave_up">Δεν ήταν δυνατή η επανασύνδεση στον διακομιστή. Οι προσπάθειες σταματούν.</string>
-    <string name="sco_unavailable">Δεν υπάρχουν διαθέσιμα ακουστικά Bluetooth. Ο ήχος παραμένει στο τηλέφωνο.</string>
     <string name="bluetooth_sco_denied">Αυτή η συσκευή αρνήθηκε να δρομολογήσει ήχο σε ακουστικά Bluetooth. Παραχωρήστε την άδεια «Συσκευές σε κοντινή απόσταση» στις ρυθμίσεις συστήματος.</string>
     <string name="no_session_user">Ο διακομιστής δεν έστειλε τον χρήστη αυτής της συνεδρίας· το μικρόφωνο παραμένει κλειστό.</string>
     <string name="no_target_server">Δεν έχει οριστεί διακομιστής για αυτή τη σύνδεση.</string>

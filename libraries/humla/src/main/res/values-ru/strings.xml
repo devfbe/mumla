@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Сервер не отвечает на UDP-пинг уже 15 секунд. Переключение в режим TCP.</string>
     <string name="udp_warning_restored">UDP-пакеты снова отправляются и принимаются. Возврат в режим UDP.</string>
     <string name="reconnect_gave_up">Не удалось переподключиться к серверу. Попытки прекращены.</string>
-    <string name="sco_unavailable">Нет доступной Bluetooth-гарнитуры. Звук остаётся на телефоне.</string>
     <string name="bluetooth_sco_denied">Устройство отказалось направлять звук на Bluetooth-гарнитуру. Выдайте разрешение «Устройства поблизости» в настройках системы.</string>
     <string name="no_session_user">Сервер не прислал данные пользователя этой сессии; микрофон остаётся выключенным.</string>
     <string name="no_target_server">Для этого подключения не задан сервер.</string>

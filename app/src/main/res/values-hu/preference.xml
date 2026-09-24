@@ -74,9 +74,7 @@
     <string name="version">Verzió</string>
     <string name="halfDuplex">Egyirányú hang</string>
     <string name="halfDuplexSum">Elnémítja a többi lejátszást a Nyomd-a-beszédhez ideje alatt a hanghurok / feedback elkerülése érdekében.</string>
-    <string name="handsetMode">Kihangosító</string>
     <string name="preprocessor_enabled_sum">Elnyomja a környezeti zajokat és normalizálja a hangerőt.</string>
-    <string name="handsetModeSum">Az első hangszórót és a közelségérzékelőt használja a hagyományos telefonhívás szimulálására.</string>
     <string name="pttSound">Nyomd-a-beszédhez hang</string>
     <string name="pttSoundSum">Hanghatás lejátszása a Nyomd-a-beszédhez gomb megnyomásakor.</string>
     <string name="preprocessor_enabled">Bemenet előfeldolgozás</string>

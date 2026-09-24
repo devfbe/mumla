@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">伺服器已 15 秒未回應 UDP ping。正在切換到 TCP 模式。</string>
     <string name="udp_warning_restored">已可向伺服器傳送及從伺服器接收 UDP 封包。正在切換回 UDP 模式。</string>
     <string name="reconnect_gave_up">無法重新連線到伺服器。已放棄。</string>
-    <string name="sco_unavailable">沒有可用的藍牙耳機。音訊仍由手機播放。</string>
     <string name="bluetooth_sco_denied">此裝置拒絕將音訊切換到藍牙耳機。請在系統設定中授予「鄰近裝置」權限。</string>
     <string name="no_session_user">伺服器未傳送此工作階段本身的使用者資訊；麥克風保持關閉。</string>
     <string name="no_target_server">此連線未設定伺服器。</string>

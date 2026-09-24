@@ -76,10 +76,6 @@
     <string name="voiceActivitySettings">Voice activity settings</string>
     <string name="disableOpus">Avoid Opus codec</string>
     <string name="disableOpusSum">Turn off Opus support for Mumble 1.2.4 servers.</string>
-    <string name="echoCancellationMethod">Echo Cancellation</string>
-    <string name="echoCancellationMethodSum">Reduce echo from your device\'s speaker while talking. Quality depends on the device.</string>
-    <string name="echoCancellationDisabled">Disabled</string>
-    <string name="echoCancellationSystem">System</string>
 
     <!-- Stream B: the audio settings screen (spec B3-B6, B9, B10). -->
     <string name="noiseSuppression">Noise suppression</string>
@@ -158,8 +154,6 @@
     <string name="version">Version</string>
     <string name="halfDuplex">One-way audio</string>
     <string name="halfDuplexSum">Mutes other playback during push-to-talk to avoid audio loops/feedback.</string>
-    <string name="handsetMode">Handset</string>
-    <string name="handsetModeSum">Uses the front speaker and proximity sensor to simulate a traditional phone call.</string>
     <string name="pttSound">Push-to-talk sound</string>
     <string name="pttSoundSum">Play sound effect when pressing the push-to-talk button.</string>
     <string name="preprocessor_enabled">Input pre-processing</string>
@@ -186,6 +180,8 @@
     <string name="mediaButtonActionNone">Nothing — leave the media keys to your music app</string>
     <string name="mediaButtonActionAuto">Toggle push-to-talk, or mute in the other transmit modes</string>
     <string name="mediaButtonActionMute">Toggle mute</string>
-    <string name="bluetoothSco">Bluetooth headset</string>
-    <string name="bluetoothScoSum">Send and receive voice through a connected Bluetooth headset while you are connected to a server. This stays on across a dropped connection and is restored when the server is reconnected. Asks for the Nearby devices permission; some devices will not route audio to a headset without it.</string>
+    <string name="bluetoothSco">Use Bluetooth headset automatically</string>
+    <string name="bluetoothScoSum">Send and receive voice through a connected Bluetooth headset while you are connected to a server, and switch to a headset that connects during the call. The audio device can be changed for the call from the channel menu. Asks for the Nearby devices permission; some devices will not route audio to a headset without it.</string>
+    <string name="defaultOutput">Output without a headset</string>
+    <string name="defaultOutputSum">Where voice plays when you connect and no Bluetooth or wired headset is there. The earpiece also turns the screen off at your ear. You can switch the device during a call from the channel menu.</string>
 </resources>

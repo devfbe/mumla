@@ -38,7 +38,6 @@
     <string name="udp_warning_ping_timeout">Server 15 sekund neodpověděl na UDP ping. Přepíná se do režimu TCP.</string>
     <string name="udp_warning_restored">UDP pakety lze opět posílat na server a přijímat z něj. Přepíná se zpět do režimu UDP.</string>
     <string name="reconnect_gave_up">Opětovné připojení k serveru se nezdařilo. Pokusy byly ukončeny.</string>
-    <string name="sco_unavailable">Žádný Bluetooth headset není k dispozici. Zvuk zůstává v telefonu.</string>
     <string name="bluetooth_sco_denied">Toto zařízení odmítlo přesměrovat zvuk do Bluetooth headsetu. Udělte oprávnění „Zařízení v okolí“ v nastavení systému.</string>
     <string name="no_session_user">Server neposlal vlastního uživatele této relace; mikrofon zůstává vypnutý.</string>
     <string name="no_target_server">Pro toto připojení nebyl nastaven žádný server.</string>

@@ -28,8 +28,6 @@
     <string name="theme_system">Asentel n unagraw</string>
     <string name="hot_corner_none">D arurmid</string>
     <string name="autoReconnect">Allus n tuqqna s wudem awurman</string>
-    <string name="echoCancellationDisabled">Arurmid</string>
-    <string name="echoCancellationSystem">Anagraw</string>
     <string name="forceTcp">TCP kan</string>
     <string name="noiseSuppression">Tukksa n uhewwel</string>
     <string name="noiseSuppressionSum">Yettekkes ahewwel n ugilal seg usawaḍ-ik send ad yettwazen.</string>
