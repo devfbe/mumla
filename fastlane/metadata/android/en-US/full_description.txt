@@ -12,7 +12,7 @@ Some of the features:
 * Bluetooth headsets are used automatically
 * Self-registration on server
 * Access tokens
-* Opus, CELT, and Speex codec support
+* Opus codec support
 * Automatic reconnection, which keeps the microphone working with the screen off
 * Chat images shown scaled down, tap for fullscreen
 * Tor support through the Orbot app
