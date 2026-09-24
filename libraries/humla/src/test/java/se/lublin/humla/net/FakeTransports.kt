@@ -2,7 +2,7 @@ package se.lublin.humla.net
 
 import android.os.Handler
 import android.os.Looper
-import com.google.protobuf.Message
+import com.google.protobuf.MessageLite
 import se.lublin.humla.util.HumlaException
 import java.security.cert.X509Certificate
 import java.util.concurrent.CopyOnWriteArrayList
@@ -52,7 +52,7 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
         // call recorded has to be in place before a waiter can see it.
         connectThread = Thread.currentThread().name
     }
-    override fun sendMessage(message: Message, messageType: HumlaTCPMessageType) { record(messageType) }
+    override fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType) { record(messageType) }
     override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) { record(messageType) }
 
     private fun record(messageType: HumlaTCPMessageType) {

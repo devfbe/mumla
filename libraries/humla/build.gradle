@@ -140,14 +140,14 @@ protobuf {
     generateProtoTasks {
         all().configureEach { task ->
             task.builtins {
-                java { }
+                java { option 'lite' }
             }
         }
     }
 }
 
 dependencies {
-    api libs.protobuf.java
+    api libs.protobuf.javalite
     api libs.bouncycastle.prov
     api libs.bouncycastle.pkix
 

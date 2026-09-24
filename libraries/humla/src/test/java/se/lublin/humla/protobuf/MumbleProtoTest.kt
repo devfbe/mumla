@@ -124,7 +124,6 @@ class MumbleProtoTest {
         val combined = known + unknownFieldBytes
 
         val parsed = Mumble.Version.parseFrom(combined)
-        assertThat(parsed.unknownFields.asMap().keys).contains(111)
 
         val reserialized = parsed.toByteArray()
         assertThat(reserialized).isEqualTo(combined)

@@ -20,7 +20,7 @@ package se.lublin.humla.net
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import com.google.protobuf.Message
+import com.google.protobuf.MessageLite
 import se.lublin.humla.util.HumlaException
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -234,7 +234,7 @@ class HumlaTCP @JvmOverloads constructor(
      * @param message The message to send.
      * @param messageType The type of the message to send.
      */
-    override fun sendMessage(message: Message, messageType: HumlaTCPMessageType) {
+    override fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType) {
         enqueueSend {
             if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) Log.v(TAG, "OUT: $messageType")
             val out = output ?: return@enqueueSend logNoStream(messageType)

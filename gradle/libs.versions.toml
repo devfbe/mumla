@@ -58,7 +58,7 @@ jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 netcipher = { module = "info.guardianproject.netcipher:netcipher", version.ref = "netcipher" }
 billing = { module = "com.android.billingclient:billing", version.ref = "billing" }
 
-protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }

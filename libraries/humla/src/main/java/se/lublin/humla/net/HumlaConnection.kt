@@ -23,7 +23,7 @@ import android.os.Looper
 import android.util.Log
 import com.google.protobuf.ByteString
 import com.google.protobuf.InvalidProtocolBufferException
-import com.google.protobuf.Message
+import com.google.protobuf.MessageLite
 import se.lublin.humla.exception.NotConnectedException
 import se.lublin.humla.exception.NotSynchronizedException
 import se.lublin.humla.model.Server
@@ -780,7 +780,7 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     /** Sends a protobuf message over TCP. Can silently fail. */
-    fun sendTCPMessage(message: Message, messageType: HumlaTCPMessageType) {
+    fun sendTCPMessage(message: MessageLite, messageType: HumlaTCPMessageType) {
         if (!isConnected) return
         tcp?.sendMessage(message, messageType)
     }
@@ -1036,7 +1036,7 @@ class HumlaConnection @JvmOverloads constructor(
         /** Parses the passed TCP payload once so every handler receives the same message object. */
         @JvmStatic
         @Throws(InvalidProtocolBufferException::class)
-        fun getProtobufMessage(data: ByteArray, messageType: HumlaTCPMessageType): Message = when (messageType) {
+        fun getProtobufMessage(data: ByteArray, messageType: HumlaTCPMessageType): MessageLite = when (messageType) {
             HumlaTCPMessageType.Authenticate -> Mumble.Authenticate.parseFrom(data)
             HumlaTCPMessageType.BanList -> Mumble.BanList.parseFrom(data)
             HumlaTCPMessageType.Reject -> Mumble.Reject.parseFrom(data)
@@ -1066,7 +1066,7 @@ class HumlaConnection @JvmOverloads constructor(
         }
 
         /** Routes a parsed TCP message into the matching responder method of the handler. */
-        private fun broadcastTCPMessage(handler: HumlaTCPMessageListener, msg: Message, messageType: HumlaTCPMessageType) {
+        private fun broadcastTCPMessage(handler: HumlaTCPMessageListener, msg: MessageLite, messageType: HumlaTCPMessageType) {
             when (messageType) {
                 HumlaTCPMessageType.Authenticate -> handler.messageAuthenticate(msg as Mumble.Authenticate)
                 HumlaTCPMessageType.BanList -> handler.messageBanList(msg as Mumble.BanList)

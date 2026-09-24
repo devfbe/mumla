@@ -17,7 +17,7 @@
 
 package se.lublin.humla.net
 
-import com.google.protobuf.Message
+import com.google.protobuf.MessageLite
 import java.net.ConnectException
 
 /**
@@ -37,7 +37,7 @@ interface TcpTransport {
      */
     @Throws(ConnectException::class)
     fun connect(host: String, port: Int, useTor: Boolean)
-    fun sendMessage(message: Message, messageType: HumlaTCPMessageType)
+    fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType)
     fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType)
 
     /**

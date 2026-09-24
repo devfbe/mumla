@@ -11,7 +11,7 @@ import androidx.core.app.NotificationCompat
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import com.google.protobuf.Message as ProtoMessage
+import com.google.protobuf.MessageLite as ProtoMessage
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
