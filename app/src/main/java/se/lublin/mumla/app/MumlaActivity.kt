@@ -116,6 +116,7 @@ class MumlaActivity :
         supportActionBar?.setHomeButtonEnabled(true)
 
         serviceModel.bindClient(this, this)
+        lifecycleScope.launch { serviceModel.isConnected.collect { backCallback.isEnabled = it } }
         lifecycleScope.launch {
             serviceModel.connectRequests.collect { request ->
                 when (request) {
@@ -242,16 +243,10 @@ class MumlaActivity :
         return server.name.ifEmpty { server.host }
     }
 
-    private val backCallback = object : OnBackPressedCallback(true) {
+    /** Enabled only while connected, so that back otherwise leaves with the predictive animation. */
+    private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
-            val service = service
-            if (service != null && service.isConnected) {
-                confirmDisconnect(service)
-            } else {
-                isEnabled = false
-                onBackPressedDispatcher.onBackPressed()
-                isEnabled = true
-            }
+            service?.takeIf { it.isConnected }?.let(::confirmDisconnect)
         }
     }
 
