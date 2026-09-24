@@ -19,7 +19,6 @@ import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.MAX_EVENTS_PER_SLICE
 import se.lublin.humla.session.inMainThreadSlices
-import se.lublin.humla.testutil.SilentLogger
 import se.lublin.humla.testutil.collectOnMain
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.HumlaException
@@ -138,8 +137,7 @@ class HumlaConnectionProtocolThreadTest {
                 if (Looper.myLooper() != Looper.getMainLooper()) addedOnMain.set(false)
             }
         }
-        val model = ModelHandler(RuntimeEnvironment.getApplication(), { events.tryEmit(it) }, SilentLogger, null, null)
-        connection.addTcpHandler(model)
+        connection.addTcpHandler(ModelHandler({ events.tryEmit(it) }, null, null))
         val processed = AtomicInteger()
         connection.addTcpHandler { if (it is Mumble.ChannelState) { processed.incrementAndGet() } }
         val frames = (0 until 5_000).map { i ->

@@ -347,6 +347,22 @@ class HumlaServiceCharacterizationTest {
         ).inOrder()
     }
 
+    /** Chat log notices follow the same rule: info waits for synchronization, warnings do not. */
+    @Test
+    fun onlyInfoNoticesAreSuppressedBeforeSynchronization() {
+        val service = service()
+        val recorder = EventRecorder(service)
+
+        service.emit(HumlaEvent.UserJoinedServer("Ann"))
+        service.emit(HumlaEvent.SelfKicked("Mod", "spam", ban = false))
+        service.emit(HumlaEvent.UserConnected(se.lublin.humla.model.User(2, "Ann")))
+
+        assertThat(recorder.events.map { it::class }).containsExactly(
+            HumlaEvent.SelfKicked::class,
+            HumlaEvent.UserConnected::class,
+        ).inOrder()
+    }
+
     /** A [ConnectionWarning] is resolved to a string through this service's resources. */
     @Test
     fun aConnectionWarningIsResolvedAgainstTheServicesResources() {

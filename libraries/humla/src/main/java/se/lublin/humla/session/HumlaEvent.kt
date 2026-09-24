@@ -68,8 +68,22 @@ sealed interface HumlaEvent {
     /** [user] is null when the server removed a session the model never knew. */
     data class UserRemoved(val user: IUser?, val reason: String?) : HumlaEvent
 
-    /** The server refused an operation; [reason] is ready to show. */
-    data class PermissionDenied(val reason: String) : HumlaEvent
+    /** The server refused an operation. [reason] is the server's own text, if it sent one. */
+    data class PermissionDenied(val type: DenyType, val reason: String?) : HumlaEvent
+
+    /** Why the server refused an operation, for the refusals the client explains itself. */
+    enum class DenyType {
+        CHANNEL_NAME,
+        TEXT_TOO_LONG,
+        TEMPORARY_CHANNEL,
+        MISSING_CERTIFICATE,
+        USER_NAME,
+        CHANNEL_FULL,
+        NESTING_LIMIT,
+
+        /** Any other refusal; the server's reason, if any, says why. */
+        OTHER,
+    }
 
     /** A text message from the server or another user. */
     data class TextMessage(val message: IMessage) : HumlaEvent
@@ -85,4 +99,70 @@ sealed interface HumlaEvent {
 
     /** A notice whose text is already final: server text or a message of the library's own. */
     data class LogMessage(override val level: Level, val text: String) : Notice
+
+    /** [user] connected to the server. */
+    data class UserJoinedServer(val user: String?) : Notice {
+        override val level get() = Level.INFO
+    }
+
+    /** [user] left the server on their own, or was removed without a known actor. */
+    data class UserLeftServer(val user: String?) : Notice {
+        override val level get() = Level.INFO
+    }
+
+    /** [actor] kicked (or with [ban], banned) [user] from the server. */
+    data class UserKicked(val user: String?, val actor: String?, val reason: String, val ban: Boolean) : Notice {
+        override val level get() = Level.WARNING
+    }
+
+    /** [actor] kicked (or with [ban], banned) the local user from the server. */
+    data class SelfKicked(val actor: String?, val reason: String, val ban: Boolean) : Notice {
+        override val level get() = Level.WARNING
+    }
+
+    /** The local user's own mute and deafen state changed. */
+    data class SelfMuteChanged(val muted: Boolean, val deafened: Boolean) : Notice {
+        override val level get() = Level.INFO
+    }
+
+    /** [user], in the local user's channel, changed their own mute and deafen state. */
+    data class UserMuteChanged(val user: String?, val muted: Boolean, val deafened: Boolean) : Notice {
+        override val level get() = Level.INFO
+    }
+
+    /** The local user started or stopped recording. */
+    data class SelfRecordingChanged(val recording: Boolean) : Notice {
+        override val level get() = Level.INFO
+    }
+
+    /** [user], in the local user's channel, started or stopped recording. */
+    data class UserRecordingChanged(val user: String?, val recording: Boolean) : Notice {
+        override val level get() = Level.INFO
+    }
+
+    /**
+     * [user] left the local user's channel for [channel]. [byThemselves] when they moved on their
+     * own; otherwise [actor] moved them, or the server when [actor] is null.
+     */
+    data class UserLeftChannel(
+        val user: String?,
+        val channel: String?,
+        val actor: String?,
+        val byThemselves: Boolean,
+    ) : Notice {
+        override val level get() = Level.INFO
+    }
+
+    /**
+     * [user] entered the local user's channel from [from]. [byThemselves] when they moved on their
+     * own; otherwise [actor] moved them, or the server when [actor] is null.
+     */
+    data class UserEnteredChannel(
+        val user: String?,
+        val from: String?,
+        val actor: String?,
+        val byThemselves: Boolean,
+    ) : Notice {
+        override val level get() = Level.INFO
+    }
 }

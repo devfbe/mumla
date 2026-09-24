@@ -42,6 +42,7 @@ import se.lublin.humla.testutil.testModelHandler
 import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.testing.createMumlaService
 import se.lublin.mumla.testing.idleMainLooper
@@ -141,9 +142,9 @@ class MumlaServiceCharacterizationTest {
 
     private fun reconnectPrompt(): Notification? = shadowOf(notificationManager).getNotification(RECONNECT_ID)
 
-    private fun textMessage(body: String, actor: String = "alice"): IMessage = object : IMessage {
+    private fun textMessage(body: String, actor: String? = "alice"): IMessage = object : IMessage {
         override fun getActor(): Int = 1
-        override fun getActorName(): String = actor
+        override fun getActorName(): String? = actor
         override fun getTargetChannels(): List<Channel> = emptyList()
         override fun getTargetTrees(): List<Channel> = emptyList()
         override fun getTargetUsers(): List<User> = emptyList()
@@ -198,6 +199,35 @@ class MumlaServiceCharacterizationTest {
 
         val entry = service.getMessageLog().value.single() as IChatMessage.TextMessage
         assertThat(entry.message).isSameInstanceAs(message)
+    }
+
+    @Test
+    fun aNoticeLandsInTheChatLogPhrasedAndWithItsLevel() {
+        connect()
+
+        service.testEmit(HumlaEvent.UserKicked("Ann", "Mod", "spam", ban = false))
+        service.testEmit(HumlaEvent.SelfMuteChanged(muted = true, deafened = false))
+        idleMainLooper()
+
+        val log = service.getMessageLog().value.map { (it as IChatMessage.InfoMessage).type to it.body }
+        assertThat(log).containsExactly(
+            IChatMessage.InfoMessage.Type.WARNING to NoticeFormatter(app)
+                .format(HumlaEvent.UserKicked("Ann", "Mod", "spam", ban = false)),
+            IChatMessage.InfoMessage.Type.INFO to "Muted.",
+        ).inOrder()
+    }
+
+    @Test
+    fun aMessageFromTheServerIsNotifiedAsFromTheServer() {
+        connect()
+        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+
+        service.testEmit(HumlaEvent.TextMessage(textMessage("motd", actor = null)))
+        idleMainLooper()
+
+        val extras = shadowOf(notificationManager).allNotifications.single().extras
+        assertThat(extras.getCharSequenceArray(NotificationCompat.EXTRA_TEXT_LINES)!!.map { it.toString() })
+            .containsExactly(app.getString(R.string.notification_message, app.getString(R.string.server), "motd"))
     }
 
     @Test
@@ -486,7 +516,7 @@ class MumlaServiceCharacterizationTest {
         idleMainLooper()
         val before = shadowOf(notificationManager).getNotification(FOREGROUND_ID)
 
-        service.testEmit(HumlaEvent.PermissionDenied("no"))
+        service.testEmit(HumlaEvent.PermissionDenied(HumlaEvent.DenyType.OTHER, "no"))
         idleMainLooper()
 
         assertThat(shadowOf(notificationManager).getNotification(FOREGROUND_ID)).isNotSameInstanceAs(before)
@@ -499,7 +529,7 @@ class MumlaServiceCharacterizationTest {
         val before = shadowOf(notificationManager).getNotification(FOREGROUND_ID)
         service.setSuppressNotifications(true)
 
-        service.testEmit(HumlaEvent.PermissionDenied("no"))
+        service.testEmit(HumlaEvent.PermissionDenied(HumlaEvent.DenyType.OTHER, "no"))
         idleMainLooper()
 
         assertThat(shadowOf(notificationManager).getNotification(FOREGROUND_ID)).isSameInstanceAs(before)
@@ -1143,7 +1173,7 @@ class MumlaServiceCharacterizationTest {
         connect()
 
         service.testEmit(HumlaEvent.UserStateUpdated(user(SELF, muted = true)))
-        service.testEmit(HumlaEvent.PermissionDenied("no"))
+        service.testEmit(HumlaEvent.PermissionDenied(HumlaEvent.DenyType.OTHER, "no"))
         idleMainLooper()
 
         assertThat(shadowOf(service).lastForegroundNotification).isNull()

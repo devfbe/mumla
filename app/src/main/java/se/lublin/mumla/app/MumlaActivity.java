@@ -88,6 +88,7 @@ import se.lublin.mumla.Settings;
 import se.lublin.mumla.channel.AccessTokenFragment;
 import se.lublin.mumla.channel.ChannelFragment;
 import se.lublin.mumla.channel.ServerInfoFragment;
+import se.lublin.mumla.chat.NoticeFormatter;
 import se.lublin.mumla.db.DatabaseCertificate;
 import se.lublin.mumla.db.DatabaseProvider;
 import se.lublin.mumla.db.MumlaDatabase;
@@ -186,7 +187,7 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
         } else if (event instanceof HumlaEvent.TlsCertificateChanged e) {
             onTLSCertificateChanged(e.getChain());
         } else if (event instanceof HumlaEvent.PermissionDenied e) {
-            onPermissionDenied(e.getReason());
+            onPermissionDenied(new NoticeFormatter(this).denial(e));
         }
     }
 

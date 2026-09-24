@@ -17,13 +17,11 @@
 package se.lublin.humla.protocol
 
 import com.google.common.truth.Truth.assertThat
-import io.mockk.mockk
 import org.junit.Before
 import org.junit.Test
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.User
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.testutil.SilentLogger
 
 /**
  * What [ModelHandler] does with a frame that names a channel it has never heard of. The server
@@ -40,20 +38,14 @@ class ModelHandlerFrameTest {
     @Before
     fun setUp() {
         handler = newHandler()
-        handler.messageChannelState(channelState(0, name = "Root"))
+        handler.onMessage(channelState(0, name = "Root"))
     }
 
-    private fun newHandler() = ModelHandler(
-        mockk(relaxed = true),
-        {},
-        SilentLogger,
-        null,
-        null,
-    )
+    private fun newHandler() = ModelHandler({}, null, null)
 
     @Test
     fun aChannelWhoseParentIsUnknownIsHungOffAStubInsteadOfKillingTheProtocolThread() {
-        handler.messageChannelState(channelState(2, parent = 1, name = "orphan"))
+        handler.onMessage(channelState(2, parent = 1, name = "orphan"))
 
         val stub = handler.getChannel(1)
         assertThat(stub).isNotNull()
@@ -61,17 +53,17 @@ class ModelHandlerFrameTest {
         assertThat(stub!!.getSubchannels().map { it.getId() }).containsExactly(2)
 
         // The real ChannelState arrives later and lands on the same object, so nothing is lost.
-        handler.messageChannelState(channelState(1, parent = 0, name = "parent"))
+        handler.onMessage(channelState(1, parent = 0, name = "parent"))
         assertThat(handler.getChannel(1)!!.getName()).isEqualTo("parent")
         assertThat(handler.getChannel(1)!!.getSubchannels().map { it.getId() }).containsExactly(2)
     }
 
     @Test
     fun aLinkSetNamingUnknownChannelsKeepsOnlyTheKnownOnes() {
-        handler.messageChannelState(channelState(1, parent = 0, name = "a"))
-        handler.messageChannelState(channelState(2, parent = 0, name = "b"))
+        handler.onMessage(channelState(1, parent = 0, name = "a"))
+        handler.onMessage(channelState(2, parent = 0, name = "b"))
 
-        handler.messageChannelState(
+        handler.onMessage(
             Mumble.ChannelState.newBuilder().setChannelId(1).addLinks(2).addLinks(99).build()
         )
 
@@ -80,12 +72,12 @@ class ModelHandlerFrameTest {
 
     @Test
     fun addingAndRemovingALinkToAnUnknownChannelIsIgnored() {
-        handler.messageChannelState(channelState(1, parent = 0, name = "a"))
+        handler.onMessage(channelState(1, parent = 0, name = "a"))
 
-        handler.messageChannelState(
+        handler.onMessage(
             Mumble.ChannelState.newBuilder().setChannelId(1).addLinksAdd(99).build()
         )
-        handler.messageChannelState(
+        handler.onMessage(
             Mumble.ChannelState.newBuilder().setChannelId(1).addLinksRemove(99).build()
         )
 
@@ -98,7 +90,7 @@ class ModelHandlerFrameTest {
      */
     @Test
     fun aFrameThatNamesItselfAsItsOwnParentDoesNotReplaceTheChannelItJustNamed() {
-        handler.messageChannelState(channelState(3, parent = 3, name = "self"))
+        handler.onMessage(channelState(3, parent = 3, name = "self"))
 
         assertThat(handler.getChannel(3)!!.getName()).isEqualTo("self")
         // And the frame is refused: a channel that is its own parent is a one-frame cycle. It lands
@@ -114,8 +106,8 @@ class ModelHandlerFrameTest {
      */
     @Test
     fun aParentCycleIsRefusedInsteadOfKillingTheMainThread() {
-        handler.messageChannelState(channelState(5, parent = 7, name = "a"))
-        handler.messageChannelState(channelState(7, parent = 5, name = "b"))
+        handler.onMessage(channelState(5, parent = 7, name = "a"))
+        handler.onMessage(channelState(7, parent = 5, name = "b"))
 
         assertThat(handler.getChannel(5)!!.getSubchannelUserCount()).isEqualTo(0)
         assertThat(handler.getChannel(7)!!.getSubchannelUserCount()).isEqualTo(0)
@@ -129,7 +121,7 @@ class ModelHandlerFrameTest {
     @Test
     fun aChainDeeperThanTheTreeMayBeIsCutOffInsteadOfKillingTheMainThread() {
         for (id in 1..DEEP_CHAIN) {
-            handler.messageChannelState(channelState(id, parent = id - 1, name = "channel $id"))
+            handler.onMessage(channelState(id, parent = id - 1, name = "channel $id"))
         }
 
         assertThat(handler.getChannel(0)!!.getSubchannelUserCount()).isEqualTo(0)
@@ -150,8 +142,8 @@ class ModelHandlerFrameTest {
      */
     @Test
     fun aRefusedParentLeavesTheChannelAndItsUsersWhereTheListCanReachThem() {
-        handler.messageChannelState(channelState(5, parent = 7, name = "a"))
-        handler.messageChannelState(channelState(7, parent = 5, name = "b"))
+        handler.onMessage(channelState(5, parent = 7, name = "a"))
+        handler.onMessage(channelState(7, parent = 5, name = "b"))
         User(1, "someone").setChannel(handler.getChannel(7))
 
         assertThat(channelsBelowRoot().map { it.getId() }).containsExactly(5, 7)
@@ -162,7 +154,7 @@ class ModelHandlerFrameTest {
     @Test
     fun aChannelRefusedForDepthIsHungUnderTheRootRatherThanDropped() {
         for (id in 1..ModelHandler.MAX_CHANNEL_DEPTH + 1) {
-            handler.messageChannelState(channelState(id, parent = id - 1, name = "channel $id"))
+            handler.onMessage(channelState(id, parent = id - 1, name = "channel $id"))
         }
         val tooDeep = ModelHandler.MAX_CHANNEL_DEPTH + 1
         User(1, "someone").setChannel(handler.getChannel(tooDeep))
@@ -180,10 +172,10 @@ class ModelHandlerFrameTest {
      */
     @Test
     fun aRefusedFrameLeavesAChannelWhereTheServerAlreadyPutIt() {
-        handler.messageChannelState(channelState(2, parent = 0, name = "two"))
-        handler.messageChannelState(channelState(5, parent = 2, name = "five"))
+        handler.onMessage(channelState(2, parent = 0, name = "two"))
+        handler.onMessage(channelState(5, parent = 2, name = "five"))
 
-        handler.messageChannelState(channelState(5, parent = 5, name = "five"))
+        handler.onMessage(channelState(5, parent = 5, name = "five"))
 
         assertThat(handler.getChannel(5)!!.getParent()).isEqualTo(handler.getChannel(2))
         assertThat(handler.getChannel(0)!!.getSubchannels().map { it.getId() }).containsExactly(2)
@@ -197,7 +189,7 @@ class ModelHandlerFrameTest {
     fun aFrameRefusedBeforeTheRootFrameArrivedStillLandsUnderTheRoot() {
         val early = newHandler()
 
-        early.messageChannelState(channelState(5, parent = 5, name = "five"))
+        early.onMessage(channelState(5, parent = 5, name = "five"))
 
         assertThat(early.getChannel(0)).isNotNull()
         assertThat(early.getChannel(5)!!.getParent()).isEqualTo(early.getChannel(0))
@@ -209,7 +201,7 @@ class ModelHandlerFrameTest {
      */
     @Test(timeout = 30_000)
     fun aRootThatNamesItselfAsItsParentIsNotHungUnderItself() {
-        handler.messageChannelState(channelState(0, parent = 0, name = "Root"))
+        handler.onMessage(channelState(0, parent = 0, name = "Root"))
 
         assertThat(handler.getChannel(0)!!.getParent()).isNull()
         assertThat(handler.getChannel(0)!!.getSubchannels()).isEmpty()

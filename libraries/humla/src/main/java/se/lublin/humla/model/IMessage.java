@@ -22,6 +22,7 @@ import java.util.List;
 public interface IMessage {
     int getActor();
 
+    /** The sender's name, or null for a message from the server itself (or a nameless sender). */
     String getActorName();
 
     List<Channel> getTargetChannels();

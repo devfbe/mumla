@@ -114,7 +114,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
-    // Written on the main thread, read on the protocol thread (ModelHandler logs through this).
+    // Written on the main thread, read on the protocol thread (emit() checks it).
     @Volatile
     @VisibleForTesting
     internal var mConnection: HumlaConnection? = null
@@ -322,7 +322,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         connection.setTrustStore(config.trustStorePath, config.trustStorePassword, config.trustStoreFormat)
 
         val modelHandler =
-            ModelHandler(this, ::emit, this, config.localMuteHistory, config.localIgnoreHistory)
+            ModelHandler(::emit, config.localMuteHistory, config.localIgnoreHistory)
         mModelHandler = modelHandler
         connection.addTcpHandler(modelHandler)
 
@@ -508,7 +508,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /** Publishes [event]; info notices only once synchronized. Any thread. */
-    private fun emit(event: HumlaEvent) {
+    @VisibleForTesting
+    internal fun emit(event: HumlaEvent) {
         if (event is HumlaEvent.Notice && event.level == HumlaEvent.Level.INFO && !isSynchronized()) return
         mEvents.tryEmit(event)
     }

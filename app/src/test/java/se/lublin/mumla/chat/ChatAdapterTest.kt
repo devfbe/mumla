@@ -288,7 +288,7 @@ class ChatAdapterTest {
     }
 
     @Test
-    fun theTargetLabelFallsThroughChannelTreeUserActorAndFinallyUnknown() = runTest {
+    fun theTargetLabelFallsThroughChannelTreeUserAndActorWithTheServerForNoActor() = runTest {
         val adapter = adapter()
         val messages = listOf(
             text(channels = listOf(channel("Root"))),
@@ -311,10 +311,10 @@ class ChatAdapterTest {
             "alice → Sub",
             "alice → bob",
             "alice",
-            activity.getString(R.string.unknown),
+            activity.getString(R.string.server),
             "alice → bob",
             "alice",
-            activity.getString(R.string.unknown),
+            activity.getString(R.string.server),
         ).inOrder()
     }
 

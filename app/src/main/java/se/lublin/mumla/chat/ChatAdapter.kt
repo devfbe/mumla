@@ -183,15 +183,16 @@ class ChatAdapter(
      * falls through to the next kind.
      */
     private fun targetLabel(context: Context, message: IMessage): String {
+        val sender = NoticeFormatter(context).senderName(message)
         val channel = message.targetChannels.firstOrNull() ?: message.targetTrees.firstOrNull()
         if (channel?.name != null) {
-            return context.getString(R.string.chat_message_to, message.actorName, channel.name)
+            return context.getString(R.string.chat_message_to, sender, channel.name)
         }
         val user = message.targetUsers.firstOrNull()
         if (user?.name != null) {
-            return context.getString(R.string.chat_message_to, message.actorName, user.name)
+            return context.getString(R.string.chat_message_to, sender, user.name)
         }
-        return message.actorName ?: context.getString(R.string.unknown)
+        return sender
     }
 
     private fun TextView.setTextOrGone(value: CharSequence?) {

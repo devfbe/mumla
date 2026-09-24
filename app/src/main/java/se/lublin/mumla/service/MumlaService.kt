@@ -44,6 +44,7 @@ import se.lublin.humla.session.SessionState
 import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.util.HtmlUtils
 import se.lublin.mumla.util.collectEvents
@@ -91,6 +92,7 @@ class MumlaService : HumlaService(),
     /** An error causing disconnection was dismissed by the user; a hint not to bother them again. */
     private var mErrorShown = false
     private val mMessageLog = ChatMessageLog()
+    private val mNotices by lazy { NoticeFormatter(this) }
     private var mSuppressNotifications = false
 
     @VisibleForTesting
@@ -131,7 +133,8 @@ class MumlaService : HumlaService(),
             is HumlaEvent.UserStateUpdated -> onUserStateUpdated(event.user)
             is HumlaEvent.UserTalkStateUpdated -> onUserTalkStateUpdated(event.user)
             is HumlaEvent.TextMessage -> onTextMessage(event.message)
-            is HumlaEvent.LogMessage -> mMessageLog.add(IChatMessage.InfoMessage(infoType(event.level), event.text))
+            is HumlaEvent.Notice ->
+                mMessageLog.add(IChatMessage.InfoMessage(infoType(event.level), mNotices.format(event)))
             is HumlaEvent.PermissionDenied ->
                 if (mNotification.isForeground && !mSuppressNotifications) mNotification.show()
             else -> Unit
@@ -180,7 +183,8 @@ class MumlaService : HumlaService(),
             strippedMessage
         }
 
-        val formattedTtsMessage = getString(R.string.notification_message, message.getActorName(), ttsMessage)
+        val sender = mNotices.senderName(message)
+        val formattedTtsMessage = getString(R.string.notification_message, sender, ttsMessage)
 
         // mTTS is non-null exactly while the setting is on (the preference listener owns it).
         val tts = mTTS
@@ -191,7 +195,7 @@ class MumlaService : HumlaService(),
 
         // Every message notifies while enabled; there is no per-sender filter yet.
         if (mSettings.isChatNotifyEnabled()) {
-            mMessageNotification.show(message.getActorName(), strippedMessage)
+            mMessageNotification.show(sender, strippedMessage)
         }
 
         mMessageLog.add(IChatMessage.TextMessage(message))

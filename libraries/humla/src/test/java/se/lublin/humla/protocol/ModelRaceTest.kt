@@ -18,12 +18,10 @@ package se.lublin.humla.protocol
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import io.mockk.mockk
 import org.junit.Test
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.testutil.SilentLogger
 import java.util.Random
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -55,16 +53,10 @@ class ModelRaceTest {
 
     @Test
     fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread() {
-        val handler = ModelHandler(
-            mockk(relaxed = true),
-            {},
-            SilentLogger,
-            null,
-            null,
-        )
+        val handler = ModelHandler({}, null, null)
         // The root channel the walk starts from exists before either thread runs: the question is
         // what happens to everything below it.
-        handler.messageChannelState(channel(0, name = "Root"))
+        handler.onMessage(channel(0, name = "Root"))
 
         val highestChannel = AtomicInteger(0)
         val highestSession = AtomicInteger(-1)
@@ -78,12 +70,12 @@ class ModelRaceTest {
 
         val protocolThread = thread(name = "humla-protocol") {
             for (id in 1..channelFrames) {
-                handler.messageChannelState(channel(id, parent = id / 4, name = "channel $id"))
+                handler.onMessage(channel(id, parent = id / 4, name = "channel $id"))
                 highestChannel.set(id)
                 frames.incrementAndGet()
             }
             for (session in 0 until userFrames) {
-                handler.messageUserState(
+                handler.onMessage(
                     user(session, name = "user $session", channelId = session % channelFrames + 1)
                 )
                 highestSession.set(session)
@@ -95,9 +87,9 @@ class ModelRaceTest {
             repeat(churnFrames) { i ->
                 if (i % 3 == 0) {
                     val id = random.nextInt(channelFrames) + 1
-                    handler.messageChannelState(channel(id, parent = id / 4, name = "channel $id"))
+                    handler.onMessage(channel(id, parent = id / 4, name = "channel $id"))
                 } else {
-                    handler.messageUserState(
+                    handler.onMessage(
                         user(random.nextInt(userFrames), channelId = random.nextInt(channelFrames) + 1)
                     )
                 }
@@ -152,13 +144,7 @@ class ModelRaceTest {
      */
     @Test
     fun aChannelLookupNeverMissesAChannelTheProtocolThreadAlreadyStored() {
-        val handler = ModelHandler(
-            mockk(relaxed = true),
-            {},
-            SilentLogger,
-            null,
-            null,
-        )
+        val handler = ModelHandler({}, null, null)
         val stored = AtomicInteger(-1)
         val done = AtomicBoolean(false)
         val bogusNulls = AtomicInteger(0)
@@ -166,7 +152,7 @@ class ModelRaceTest {
 
         val protocolThread = thread(name = "humla-protocol") {
             for (id in 0 until 5_000) {
-                handler.messageChannelState(channel(id, name = "channel $id"))
+                handler.onMessage(channel(id, name = "channel $id"))
                 stored.set(id)
             }
             done.set(true)
