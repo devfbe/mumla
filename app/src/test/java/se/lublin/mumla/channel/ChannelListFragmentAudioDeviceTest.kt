@@ -90,7 +90,7 @@ class ChannelListFragmentAudioDeviceTest {
     private fun prepared(): Menu {
         val menu = PopupMenu(activity, View(activity)).menu
         activity.menuInflater.inflate(R.menu.fragment_channel_list, menu)
-        fragment.onPrepareOptionsMenu(menu)
+        fragment.onPrepareMenu(menu)
         return menu
     }
 
@@ -141,7 +141,7 @@ class ChannelListFragmentAudioDeviceTest {
         val speakerItem = prepared().choices().single { it.itemId == 2 }
 
         @Suppress("DEPRECATION")
-        val consumed = fragment.onOptionsItemSelected(speakerItem)
+        val consumed = fragment.onMenuItemSelected(speakerItem)
 
         assertThat(consumed).isTrue()
         verify(exactly = 1) { session.selectAudioDevice(2) }
@@ -162,7 +162,7 @@ class ChannelListFragmentAudioDeviceTest {
         every { session.audioDevices } returns listOf(earpiece, speaker, headset)
         every { session.activeAudioDevice } returns headset
         @Suppress("DEPRECATION")
-        val consumed = fragment.onOptionsItemSelected(menu.chooser())
+        val consumed = fragment.onMenuItemSelected(menu.chooser())
 
         assertThat(consumed).isFalse()
         assertThat(menu.choices().map { it.itemId }).containsExactly(1, 2, 7).inOrder()
@@ -207,7 +207,7 @@ class ChannelListFragmentAudioDeviceTest {
         every { service.isConnected } returns false
 
         @Suppress("DEPRECATION")
-        fragment.onOptionsItemSelected(speakerItem)
+        fragment.onMenuItemSelected(speakerItem)
 
         verify(exactly = 0) { session.selectAudioDevice(any()) }
     }
@@ -238,7 +238,7 @@ class ChannelListFragmentAudioDeviceTest {
         val before = activity.menuInvalidations
 
         @Suppress("DEPRECATION")
-        val consumed = fragment.onOptionsItemSelected(prepared().echo())
+        val consumed = fragment.onMenuItemSelected(prepared().echo())
 
         assertThat(consumed).isTrue()
         assertThat(settings.echoCancellationOverrides)
@@ -248,7 +248,7 @@ class ChannelListFragmentAudioDeviceTest {
         every { session.isEchoCancellationEnabled } returns true
         every { session.activeAudioDevice } returns speaker
         @Suppress("DEPRECATION")
-        fragment.onOptionsItemSelected(prepared().echo())
+        fragment.onMenuItemSelected(prepared().echo())
 
         assertThat(settings.echoCancellationOverrides).containsExactly(
             AudioDeviceCategory.BLUETOOTH, true,

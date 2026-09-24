@@ -20,7 +20,6 @@ package se.lublin.mumla.channel
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
@@ -28,17 +27,15 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.ImageView
-import android.widget.TextView
+import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentManager
-import androidx.fragment.app.FragmentPagerAdapter
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
-import androidx.viewpager.widget.PagerTabStrip
-import androidx.viewpager.widget.ViewPager
+import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.google.android.material.color.MaterialColors
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
@@ -49,6 +46,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ServiceClient
 import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.app.bindClient
+import se.lublin.mumla.databinding.FragmentChannelBinding
 import se.lublin.mumla.service.IMumlaService
 import java.util.Locale
 
@@ -60,16 +58,13 @@ import java.util.Locale
 class ChannelFragment :
     Fragment(),
     ServiceClient,
-    SharedPreferences.OnSharedPreferenceChangeListener {
+    SharedPreferences.OnSharedPreferenceChangeListener,
+    MenuProvider {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
     private val service: IMumlaService? get() = serviceModel.service.value
 
-    private var viewPager: ViewPager? = null
-    private lateinit var talkButton: Button
-    private lateinit var talkView: View
-    private lateinit var targetPanel: View
-    private lateinit var targetPanelText: TextView
+    private var binding: FragmentChannelBinding? = null
 
     /** True while a touch is down on the talk button, i.e. while this fragment holds transmission. */
     private var talkButtonHeld = false
@@ -98,6 +93,7 @@ class ChannelFragment :
 
     /** Shows our talk state on the button, also when set by hot corners or a PTT toggle. */
     private fun onUserTalkStateUpdated(user: IUser) {
+        val talkButton = binding?.pushtotalk ?: return
         if (!isSelf(user)) return
         when (user.talkState) {
             TalkState.TALKING, TalkState.SHOUTING, TalkState.WHISPERING -> talkButton.isPressed = true
@@ -118,34 +114,21 @@ class ChannelFragment :
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION") // The channel screen's menus move to MenuProvider together.
-        setHasOptionsMenu(true)
-    }
-
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        val view = inflater.inflate(R.layout.fragment_channel, container, false)
-        viewPager = view.findViewById(R.id.channel_view_pager)
-        view.findViewById<PagerTabStrip?>(R.id.channel_tab_strip)?.let(::styleTabStrip)
-
-        talkView = view.findViewById(R.id.pushtotalk_view)
-        talkButton = view.findViewById(R.id.pushtotalk)
-        talkButton.setOnTouchListener { _, event -> onTalkButtonTouch(event) }
-        targetPanel = view.findViewById(R.id.target_panel)
-        view.findViewById<ImageView>(R.id.target_panel_cancel).setOnClickListener { cancelWhisper() }
-        targetPanelText = view.findViewById(R.id.target_panel_warning)
+        val binding = FragmentChannelBinding.inflate(inflater, container, false)
+        this.binding = binding
+        binding.pushtotalk.setOnTouchListener { _, event -> onTalkButtonTouch(event) }
+        binding.targetPanelCancel.setOnClickListener { cancelWhisper() }
         configureInput()
-        return view
+        return binding.root
     }
 
-    private fun styleTabStrip(tabStrip: PagerTabStrip) {
+    private fun styleTabs(tabs: TabLayout) {
         val background = MaterialColors.getColor(requireActivity(), android.R.attr.colorPrimary, -1)
         val text = MaterialColors.getColor(requireActivity(), android.R.attr.textColorPrimaryInverse, -1)
-        tabStrip.setTextColor(text)
-        tabStrip.tabIndicatorColor = text
-        tabStrip.setBackgroundColor(background)
-        tabStrip.setTextSize(TypedValue.COMPLEX_UNIT_SP, TAB_TEXT_SIZE_SP)
+        tabs.setBackgroundColor(background)
+        tabs.setTabTextColors(text, text)
+        tabs.setSelectedTabIndicatorColor(text)
     }
 
     private fun onTalkButtonTouch(event: MotionEvent): Boolean {
@@ -184,40 +167,42 @@ class ChannelFragment :
         PreferenceManager.getDefaultSharedPreferences(requireActivity())
             .registerOnSharedPreferenceChangeListener(this)
 
-        val pager = viewPager
-        if (pager != null) {
-            pager.adapter = ChannelFragmentPagerAdapter(childFragmentManager)
+        val binding = requireNotNull(binding)
+        val pager = binding.channelViewPager
+        val tabs = binding.channelTabs
+        if (pager != null && tabs != null) {
+            styleTabs(tabs)
+            pager.adapter = TabsAdapter()
+            TabLayoutMediator(tabs, pager) { tab, position -> tab.text = tabTitle(position) }.attach()
         } else {
             childFragmentManager.beginTransaction()
                 .replace(R.id.list_fragment, newListFragment())
                 .replace(R.id.chat_fragment, ChannelChatFragment())
                 .commit()
         }
+        requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         if (!bound) {
             bound = true
             serviceModel.bindClient(this, this)
         }
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        @Suppress("DEPRECATION")
-        super.onCreateOptionsMenu(menu, inflater)
-        inflater.inflate(R.menu.channel_menu, menu)
+    override fun onDestroyView() {
+        binding = null
+        super.onDestroyView()
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        val method = when (item.itemId) {
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+        menuInflater.inflate(R.menu.channel_menu, menu)
+    }
+
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+        settings.inputMethod = when (menuItem.itemId) {
             R.id.menu_input_voice -> Settings.ARRAY_INPUT_METHOD_VOICE
             R.id.menu_input_ptt -> Settings.ARRAY_INPUT_METHOD_PTT
             R.id.menu_input_continuous -> Settings.ARRAY_INPUT_METHOD_CONTINUOUS
-            else -> {
-                @Suppress("DEPRECATION")
-                return super.onOptionsItemSelected(item)
-            }
+            else -> return false
         }
-        settings.inputMethod = method
         return true
     }
 
@@ -239,21 +224,23 @@ class ChannelFragment :
     }
 
     private fun configureTargetPanel() {
+        val binding = binding ?: return
         val session = service?.takeIf { it.isConnected }?.session ?: return
         if (session.voiceTargetMode == VoiceTargetMode.WHISPER) {
-            targetPanel.visibility = View.VISIBLE
-            targetPanelText.text = getString(R.string.shout_target, session.whisperTarget?.name)
+            binding.targetPanel.visibility = View.VISIBLE
+            binding.targetPanelWarning.text = getString(R.string.shout_target, session.whisperTarget?.name)
         } else {
-            targetPanel.visibility = View.GONE
+            binding.targetPanel.visibility = View.GONE
         }
     }
 
     /** Applies the user's interface preferences and mute state to the push-to-talk button. */
     private fun configureInput() {
+        val binding = binding ?: return
         val settings = settings
-        val params = talkView.layoutParams
+        val params = binding.pushtotalkView.layoutParams
         params.height = settings.pttButtonHeight
-        talkButton.layoutParams = params
+        binding.pushtotalk.layoutParams = params
 
         val service = service
         val muted = if (service != null && service.isConnected) {
@@ -273,7 +260,7 @@ class ChannelFragment :
         val showPttButton = !muted &&
             settings.isPushToTalkButtonShown &&
             settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT
-        talkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
+        binding.pushtotalkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
@@ -284,25 +271,20 @@ class ChannelFragment :
         arguments = Bundle().apply { putBoolean("pinned", isShowingPinnedChannels) }
     }
 
-    @Suppress("DEPRECATION") // ViewPager2 replaces this with the channel screen's tab rework.
-    private inner class ChannelFragmentPagerAdapter(fm: FragmentManager) : FragmentPagerAdapter(fm) {
-        override fun getItem(position: Int): Fragment = when (position) {
-            0 -> newListFragment()
-            else -> ChannelChatFragment().apply { arguments = Bundle() }
-        }
+    private fun tabTitle(position: Int): String =
+        getString(if (position == TAB_CHANNEL) R.string.channel else R.string.chat).uppercase(Locale.getDefault())
 
-        override fun getPageTitle(position: Int): CharSequence? = when (position) {
-            0 -> getString(R.string.channel).uppercase(Locale.getDefault())
-            1 -> getString(R.string.chat).uppercase(Locale.getDefault())
-            else -> null
-        }
+    /** The channel list and the chat, as the pager's two pages. */
+    private inner class TabsAdapter : FragmentStateAdapter(childFragmentManager, viewLifecycleOwner.lifecycle) {
+        override fun getItemCount(): Int = 2
 
-        override fun getCount(): Int = 2
+        override fun createFragment(position: Int): Fragment =
+            if (position == TAB_CHANNEL) newListFragment() else ChannelChatFragment().apply { arguments = Bundle() }
     }
 
     private companion object {
         val TAG: String = ChannelFragment::class.java.name
-        const val TAB_TEXT_SIZE_SP = 12f
+        const val TAB_CHANNEL = 0
         val INPUT_PREFERENCES = setOf(
             Settings.PREF_INPUT_METHOD,
             Settings.PREF_PUSH_BUTTON_HIDE_KEY,

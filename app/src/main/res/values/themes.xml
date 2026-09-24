@@ -22,6 +22,12 @@
         <item name="android:theme">@style/ThemeOverlay.Material3.Dark.ActionBar</item>
     </style>
 
+    <!-- The channel screen's Channel/Chat tabs: small caps, as the tab strip before them. -->
+    <style name="TextAppearance.Mumla.ChannelTab" parent="TextAppearance.Material3.TitleSmall">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
     <style name="App.Widget.ActionMode" parent="Widget.AppCompat.ActionMode">
     </style>
 

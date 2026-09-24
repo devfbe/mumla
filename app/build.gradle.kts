@@ -123,6 +123,7 @@ dependencies {
     implementation(libs.androidx.media)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.viewpager2)
     implementation(libs.androidx.exifinterface)
     implementation(libs.material)
     implementation(libs.androidx.preference)

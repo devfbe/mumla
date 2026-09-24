@@ -22,6 +22,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.database.CursorWrapper
 import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -33,8 +34,10 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
+import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -49,10 +52,15 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ServiceClient
 import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.app.bindClient
+import se.lublin.mumla.databinding.FragmentChannelListBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.service.IMumlaService
 
-class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnSharedPreferenceChangeListener {
+class ChannelListFragment :
+    Fragment(),
+    ServiceClient,
+    SharedPreferences.OnSharedPreferenceChangeListener,
+    MenuProvider {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
     private val service: IMumlaService? get() = serviceModel.service.value
@@ -80,7 +88,7 @@ class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnShare
             }
             is HumlaEvent.UserStateUpdated -> {
                 channelListAdapter?.updateUserStates(event.user, channelView)
-                requireActivity().invalidateOptionsMenu() // Update self mute/deafen state
+                requireActivity().invalidateMenu() // Update self mute/deafen state
             }
             is HumlaEvent.UserTalkStateUpdated -> channelListAdapter?.updateUserStates(event.user, channelView)
             else -> Unit
@@ -112,11 +120,6 @@ class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnShare
     private var actionMode: ActionMode? = null
     private lateinit var settings: Settings
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setHasOptionsMenu(true)
-    }
-
     override fun onAttach(context: Context) {
         super.onAttach(context)
         settings = Settings.getInstance(context)
@@ -129,15 +132,16 @@ class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnShare
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
-        val view = inflater.inflate(R.layout.fragment_channel_list, container, false)
-        channelView = view.findViewById(R.id.channelUsers)
+        val binding = FragmentChannelListBinding.inflate(inflater, container, false)
+        channelView = binding.channelUsers
         channelView.layoutManager = LinearLayoutManager(activity)
-        return view
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         registerForContextMenu(channelView)
+        requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         if (!bound) {
             bound = true
             serviceModel.bindClient(this, this)
@@ -159,9 +163,7 @@ class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnShare
         }
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu) {
-        super.onPrepareOptionsMenu(menu)
-
+    override fun onPrepareMenu(menu: Menu) {
         fillAudioDevices(menu.findItem(R.id.menu_audio_device))
 
             // Writing the preference makes MumlaService reconfigure the audio subsystem live.
@@ -193,14 +195,15 @@ class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnShare
                     if (self.isSelfDeafened) R.drawable.ic_action_audio_muted
                     else R.drawable.ic_action_audio
                 )
-                muteItem.icon?.mutate()?.setColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
-                deafenItem.icon?.mutate()?.setColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
+                val tint = PorterDuffColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
+                muteItem.icon?.mutate()?.colorFilter = tint
+                deafenItem.icon?.mutate()?.colorFilter = tint
             }
         }
     }
 
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        inflater.inflate(R.menu.fragment_channel_list, menu)
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+        menuInflater.inflate(R.menu.fragment_channel_list, menu)
 
         val searchItem = menu.findItem(R.id.menu_search)
         val searchManager =
@@ -274,69 +277,56 @@ class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnShare
     private fun connectedSession(): IHumlaSession? =
         service?.takeIf { it.isConnected }?.session
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.menu_audio_device) {
-            fillAudioDevices(item)
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when {
+        menuItem.itemId == R.id.menu_audio_device -> {
+            fillAudioDevices(menuItem)
             // Not consumed, so the platform goes on to open the submenu just refilled.
-            return false
+            false
         }
-        if (item.itemId == R.id.menu_audio_echo) {
-            val session = connectedSession()
-            val active = session?.activeAudioDevice
-            if (session != null && active != null) {
-                // Remembered per device kind; the service applies it live and on every routing.
-                settings.setEchoCancellationOverride(
-                    AudioDeviceCategory.of(active.type), !session.isEchoCancellationEnabled,
-                )
-                requireActivity().invalidateOptionsMenu()
-            }
-            return true
+        menuItem.itemId == R.id.menu_audio_echo -> {
+            toggleEchoCancellation()
+            true
         }
-        if (item.groupId == R.id.menu_audio_device_group) {
+        menuItem.groupId == R.id.menu_audio_device_group -> {
             connectedSession()?.let {
-                it.selectAudioDevice(item.itemId)
-                requireActivity().invalidateOptionsMenu()
+                it.selectAudioDevice(menuItem.itemId)
+                requireActivity().invalidateMenu()
             }
-            return true
+            true
         }
-        val noise = when (item.itemId) {
-            R.id.menu_noise_none -> "none"
-            R.id.menu_noise_speex -> "speex"
-            R.id.menu_noise_rnnoise -> "rnnoise"
-            else -> null
+        menuItem.itemId in NOISE_METHODS -> {
+            settings.noiseSuppressionMethod = NOISE_METHODS.getValue(menuItem.itemId)
+            menuItem.isChecked = true
+            true
         }
-        if (noise != null) {
-            settings.noiseSuppressionMethod = noise
-            item.isChecked = true
-            return true
-        }
-        val service = service
-        if (service == null || !service.isConnected) {
-            return super.onOptionsItemSelected(item)
-        }
-        val session = service.session
+        menuItem.itemId == R.id.menu_mute_button || menuItem.itemId == R.id.menu_deafen_button ->
+            toggleSelfMuteDeaf(deafen = menuItem.itemId == R.id.menu_deafen_button)
+        else -> false
+    }
 
-        return when (item.itemId) {
-            R.id.menu_mute_button -> {
-                session.sessionUser?.let { self ->
-                    val muted = !self.isSelfMuted
-                    val deafened = self.isSelfDeafened && muted // Undeafen if mute is off
-                    session.setSelfMuteDeafState(muted, deafened)
-                }
-                requireActivity().invalidateOptionsMenu()
-                true
+    /** Flips the echo canceller of the active device's kind; the service applies it live and on every routing. */
+    private fun toggleEchoCancellation() {
+        val session = connectedSession() ?: return
+        val active = session.activeAudioDevice ?: return
+        settings.setEchoCancellationOverride(AudioDeviceCategory.of(active.type), !session.isEchoCancellationEnabled)
+        requireActivity().invalidateMenu()
+    }
+
+    /** Flips our own mute, or deafness with [deafen]; returns false while not connected. */
+    private fun toggleSelfMuteDeaf(deafen: Boolean): Boolean {
+        val session = connectedSession() ?: return false
+        session.sessionUser?.let { self ->
+            if (deafen) {
+                val deafened = !self.isSelfDeafened
+                session.setSelfMuteDeafState(deafened, deafened)
+            } else {
+                val muted = !self.isSelfMuted
+                // Unmuting undeafens too.
+                session.setSelfMuteDeafState(muted, self.isSelfDeafened && muted)
             }
-            R.id.menu_deafen_button -> {
-                session.sessionUser?.let { self ->
-                    val deafened = !self.isSelfDeafened
-                    session.setSelfMuteDeafState(deafened, deafened)
-                }
-                requireActivity().invalidateOptionsMenu()
-                true
-            }
-            R.id.menu_search -> false
-            else -> super.onOptionsItemSelected(item)
         }
+        requireActivity().invalidateMenu()
+        return true
     }
 
     private fun setupChannelList(service: IMumlaService) {
@@ -394,5 +384,12 @@ class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnShare
 
     companion object {
         private val TAG: String = ChannelListFragment::class.java.name
+
+        /** The noise suppression items and the methods they pick. */
+        private val NOISE_METHODS = mapOf(
+            R.id.menu_noise_none to "none",
+            R.id.menu_noise_speex to "speex",
+            R.id.menu_noise_rnnoise to "rnnoise",
+        )
     }
 }

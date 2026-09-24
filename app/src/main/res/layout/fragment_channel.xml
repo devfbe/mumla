@@ -22,17 +22,19 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <androidx.viewpager.widget.ViewPager
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/channel_tabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:tabGravity="fill"
+        app:tabMode="fixed"
+        app:tabTextAppearance="@style/TextAppearance.Mumla.ChannelTab" />
+
+    <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/channel_view_pager"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
-        <androidx.viewpager.widget.PagerTabStrip
-            android:id="@+id/channel_tab_strip"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top"/>
-    </androidx.viewpager.widget.ViewPager>
+        android:layout_weight="1" />
 
     <FrameLayout
         android:id="@+id/target_panel"

@@ -3,7 +3,6 @@
   <ManuallySuppressedIssues/>
   <CurrentIssues>
     <ID>CyclomaticComplexMethod:ChannelListAdapter.kt$ChannelListAdapter$override fun onBindViewHolder(viewHolder: RecyclerView.ViewHolder, position: Int)</ID>
-    <ID>CyclomaticComplexMethod:ChannelListFragment.kt$ChannelListFragment$override fun onOptionsItemSelected(item: MenuItem): Boolean</ID>
     <ID>CyclomaticComplexMethod:HttpImageFetcher.kt$HttpImageFetcher$private fun fetchHop(target: URL, deadline: Long, unopenable: ImageError): Hop</ID>
     <ID>CyclomaticComplexMethod:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase$private fun sealPlainSecrets(db: SQLiteDatabase)</ID>
     <ID>CyclomaticComplexMethod:MumlaService.kt$MumlaService$override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?)</ID>
@@ -16,7 +15,6 @@
     <ID>LargeClass:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest</ID>
     <ID>LargeClass:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest</ID>
     <ID>LongMethod:ChannelListAdapter.kt$ChannelListAdapter$override fun onBindViewHolder(viewHolder: RecyclerView.ViewHolder, position: Int)</ID>
-    <ID>LongMethod:ChannelListFragment.kt$ChannelListFragment$override fun onOptionsItemSelected(item: MenuItem): Boolean</ID>
     <ID>LongParameterList:AudioTestSession.kt$AudioTestSession$( private val audioManager: AudioManager, private val vadConfig: VadConfig, private val noiseSuppression: NoiseSuppressionMode, private val speexNoiseSuppressDb: Int, private val echoCancellation: EchoCancellationMode, private val effects: AndroidAudioEffects, private val loopback: Boolean, private val onReading: (MeterReading) -&gt; Unit, private val readingIntervalFrames: Int = DEFAULT_READING_INTERVAL_FRAMES, private val captureFactory: PcmCaptureSourceFactory = AndroidAudioRecordSource.Factory(), private val sinkFactory: PcmPlaybackSinkFactory = AndroidAudioTrackSink.Factory(), private val preprocessorFactory: CapturePreprocessorFactory = CapturePreprocessorFactory(log = { Log.w(TAG, it) }), private val resamplerFactory: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
     <ID>LongParameterList:AudioTestSessionTest.kt$AudioTestSessionTest$( source: TestCaptureSource, sink: TestPlaybackSink = TestPlaybackSink(), vad: VadConfig = VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1), noise: NoiseSuppressionMode = NoiseSuppressionMode.NONE, loopback: Boolean = false, effects: AndroidAudioEffects = AndroidAudioEffects(), echo: EchoCancellationMode = EchoCancellationMode.NONE, speexGain: Float = 1f, speexProbability: Int = 0, sinkFactory: TestPlaybackSink.Factory = TestPlaybackSink.Factory(sink), captureFactory: TestCaptureSource.Factory = TestCaptureSource.Factory(source), resamplerFactory: (Int, Int) -&gt; Resampler = { _, _ -&gt; error("no resampler expected at 48 kHz") }, )</ID>
     <ID>LongParameterList:ChannelTreeFixture.kt$FakeUser$( override val session: Int, override val name: String = "user-$session", var selfDeafened: Boolean = false, var deafened: Boolean = false, var selfMuted: Boolean = false, var muted: Boolean = false, var suppressed: Boolean = false, var state: TalkState = TalkState.PASSIVE, /** Negative for an unregistered user. */ override val userId: Int = -1, /** Raw avatar bytes that may or may not decode. */ override val texture: ByteArray? = null, )</ID>
@@ -168,7 +166,6 @@
     <ID>ReturnCount:CertificateImportActivity.kt$CertificateImportActivity$@Deprecated("Deprecated in Java") override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?)</ID>
     <ID>ReturnCount:CertificateImportActivityTest.kt$CertificateImportActivityTest$private fun findEditText(view: View): EditText?</ID>
     <ID>ReturnCount:ChannelChatFragmentTest.kt$ChannelChatFragmentTest$private fun View.firstImageView(): ImageView?</ID>
-    <ID>ReturnCount:ChannelListFragment.kt$ChannelListFragment$override fun onOptionsItemSelected(item: MenuItem): Boolean</ID>
     <ID>ReturnCount:ChatAdapter.kt$ChatAdapter$private fun targetLabel(context: Context, message: IMessage): String</ID>
     <ID>ReturnCount:ChatImageLoader.kt$ChatImageLoader$private fun cached(key: String): ImageResult?</ID>
     <ID>ReturnCount:ChatImageLoader.kt$ChatImageLoader$suspend fun loadFull(source: String, maxWidth: Int, maxHeight: Int): ImageResult</ID>
@@ -206,9 +203,9 @@
     <ID>TooGenericExceptionCaught:SecretCipher.kt$SecretCodec$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ServerPinger.kt$ServerPinger$e: Exception</ID>
     <ID>TooManyFunctions:AudioSettingsFragment.kt$AudioSettingsFragment : MumlaPreferenceFragment</ID>
-    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentServiceClient</ID>
+    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentServiceClientMenuProvider</ID>
     <ID>TooManyFunctions:ChannelListAdapter.kt$ChannelListAdapter : Adapter</ID>
-    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentServiceClientOnSharedPreferenceChangeListener</ID>
+    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentServiceClientOnSharedPreferenceChangeListenerMenuProvider</ID>
     <ID>TooManyFunctions:ChatImageLoader.kt$ChatImageLoader</ID>
     <ID>TooManyFunctions:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase : SQLiteOpenHelperMumlaDatabase</ID>
     <ID>TooManyFunctions:MumlaService.kt$MumlaService : HumlaServiceOnSharedPreferenceChangeListenerOnActionListenerOnActionListenerIMumlaService</ID>

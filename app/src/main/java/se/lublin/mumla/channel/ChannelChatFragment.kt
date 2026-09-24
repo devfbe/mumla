@@ -18,7 +18,6 @@
 package se.lublin.mumla.channel
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
@@ -43,6 +42,7 @@ import androidx.activity.result.contract.ActivityResultContracts.GetContent
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
+import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
@@ -68,6 +68,7 @@ import se.lublin.mumla.chat.ChatImageLoaders
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImageEncoder
 import se.lublin.mumla.chat.OutgoingImagePreparer
+import se.lublin.mumla.databinding.FragmentChatBinding
 import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.util.HtmlUtils
@@ -78,7 +79,7 @@ import se.lublin.mumla.util.HtmlUtils
  * is the uniqueness gate `ChatAdapter.onImageClicked` requires, [sessionId] never throws, and the
  * adapter gets a `lifecycleScope` (`Dispatchers.Main.immediate`) because its coroutines touch views.
  */
-class ChannelChatFragment : Fragment(), ServiceClient {
+class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
     private val service: IMumlaService? get() = serviceModel.service.value
@@ -124,21 +125,16 @@ class ChannelChatFragment : Fragment(), ServiceClient {
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION") // Options-menu migration pending.
-        setHasOptionsMenu(true)
-    }
-
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
-        inflater.inflate(R.layout.fragment_chat, container, false)
+        FragmentChatBinding.inflate(inflater, container, false).root
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        chatList = view.findViewById(R.id.chat_list)
-        imageProgress = view.findViewById(R.id.chat_image_progress)
-        chatTextEdit = view.findViewById(R.id.chatTextEdit)
-        sendButton = view.findViewById(R.id.chatTextSend)
+        val binding = FragmentChatBinding.bind(view)
+        chatList = binding.chatList
+        imageProgress = binding.chatImageProgress
+        chatTextEdit = binding.chatTextEdit
+        sendButton = binding.chatTextSend
 
         chatList.layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = true }
         val adapter = ChatAdapter(
@@ -151,7 +147,7 @@ class ChannelChatFragment : Fragment(), ServiceClient {
         )
         chatList.adapter = adapter
 
-        view.findViewById<ImageButton>(R.id.chatImageSend).setOnClickListener { pickImage() }
+        binding.chatImageSend.setOnClickListener { pickImage() }
         sendButton.setOnClickListener { sendMessageFromEditor() }
 
         chatTextEdit.setOnEditorActionListener { _, actionId, event ->
@@ -186,6 +182,7 @@ class ChannelChatFragment : Fragment(), ServiceClient {
                 }
             }
         }
+        requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         if (!bound) {
             bound = true
             serviceModel.bindClient(this, this)
@@ -197,18 +194,14 @@ class ChannelChatFragment : Fragment(), ServiceClient {
         super.onDestroyView()
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION") // Options-menu migration pending.
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        inflater.inflate(R.menu.fragment_chat, menu)
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+        menuInflater.inflate(R.menu.fragment_chat, menu)
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.menu_clear_chat) {
-            clear()
-            return true
-        }
-        return super.onOptionsItemSelected(item)
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+        if (menuItem.itemId != R.id.menu_clear_chat) return false
+        clear()
+        return true
     }
 
     /** Empties the service's chat log, and with it the list. */

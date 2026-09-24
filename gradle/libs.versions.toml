@@ -16,6 +16,7 @@ androidx-media = "1.8.0"
 androidx-lifecycle = "2.11.0"
 androidx-preference = "1.2.1"
 androidx-recyclerview = "1.4.0"
+androidx-viewpager2 = "1.1.0"
 material = "1.14.0"
 billing = "9.1.0"
 
@@ -49,6 +50,7 @@ androidx-media = { module = "androidx.media:media", version.ref = "androidx-medi
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }
 androidx-preference = { module = "androidx.preference:preference", version.ref = "androidx-preference" }
 androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version.ref = "androidx-recyclerview" }
+androidx-viewpager2 = { module = "androidx.viewpager2:viewpager2", version.ref = "androidx-viewpager2" }
 material = { module = "com.google.android.material:material", version.ref = "material" }
 billing = { module = "com.android.billingclient:billing", version.ref = "billing" }
 

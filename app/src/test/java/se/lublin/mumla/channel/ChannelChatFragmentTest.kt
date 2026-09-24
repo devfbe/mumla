@@ -7,16 +7,18 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.SystemClock
 import android.view.Gravity
-import android.view.MenuItem
 import android.view.KeyEvent
+import android.view.MenuItem
 import android.view.MotionEvent
-import android.view.inputmethod.EditorInfo
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
+import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.view.menu.MenuBuilder
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -488,7 +490,7 @@ class ChannelChatFragmentTest {
         log.value += info("older")
         launch()
         val item: MenuItem = mockk(relaxed = true) { every { itemId } returns R.id.menu_clear_chat }
-        assertThat(fragment.onOptionsItemSelected(item)).isTrue()
+        assertThat(fragment.onMenuItemSelected(item)).isTrue()
         drainMainUntil { itemCount() == 0 }
         verify { service.clearMessageLog() }
     }
@@ -974,12 +976,13 @@ class ChannelChatFragmentTest {
         assertThat(lm.findLastVisibleItemPosition()).isEqualTo(39)
     }
 
-    /** Needed for the clear-chat item to reach onCreateOptionsMenu. */
+    /** The clear-chat item reaches the activity's menu while the chat is shown. */
     @Test
-    fun theFragmentAsksForItsOwnMenu() {
+    fun theFragmentAddsItsOwnMenu() {
         launch()
-        @Suppress("DEPRECATION")
-        assertThat(fragment.hasOptionsMenu()).isTrue()
+        val menu = MenuBuilder(activity)
+        activity.onCreatePanelMenu(Window.FEATURE_OPTIONS_PANEL, menu)
+        assertThat(menu.findItem(R.id.menu_clear_chat)).isNotNull()
     }
 
     /**
