@@ -17,9 +17,6 @@
 
 package se.lublin.humla.audio;
 
-/**
- * Created by andrew on 23/04/14.
- */
 @SuppressWarnings("serial")
  public class InvalidSampleRateException extends Exception {
     public InvalidSampleRateException(Exception e) {

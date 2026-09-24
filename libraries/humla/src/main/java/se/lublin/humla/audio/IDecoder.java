@@ -21,9 +21,7 @@ import java.nio.ByteBuffer;
 
 import se.lublin.humla.exception.NativeAudioException;
 
-/**
- * Created by andrew on 07/03/14.
- */
+/** A native voice decoder producing float PCM. */
 public interface IDecoder {
     /**
      * Decodes the encoded data provided into float PCM data.
