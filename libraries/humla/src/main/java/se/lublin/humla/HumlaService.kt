@@ -30,6 +30,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import com.google.protobuf.MessageLite
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -45,6 +46,7 @@ import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
+import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.ServerSettings
@@ -123,6 +125,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     @Volatile
     @VisibleForTesting
     internal var mModelHandler: ModelHandler? = null
+    private var mLocalVolumes: LocalVolumes? = null
     /** Owns the audio pipeline's lifecycle on its own thread, so nothing here joins on main. */
     @VisibleForTesting
     internal lateinit var mAudioController: AudioController
@@ -320,8 +323,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         connection.setKeys(config.certificate?.pkcs12, config.certificate?.password)
         connection.setTrustStore(config.trustStorePath, config.trustStorePassword, config.trustStoreFormat)
 
+        val localVolumes = LocalVolumes(server, config.localVolumes)
+        mLocalVolumes = localVolumes
         val modelHandler =
-            ModelHandler(::emit, config.localMuteHistory, config.localIgnoreHistory)
+            ModelHandler(::emit, config.localMuteHistory, config.localIgnoreHistory, localVolumes)
         mModelHandler = modelHandler
         connection.addTcpHandler(modelHandler)
 
@@ -814,18 +819,21 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         moveUserToChannel(sessionId, channel)
     }
 
+    override fun setLocalVolume(session: Int, volume: Float) {
+        val user = mModelHandler?.getUser(session) ?: return
+        mLocalVolumes?.set(user, volume)
+    }
+
     override fun setListening(channel: Int, listen: Boolean) {
         val usb = Mumble.UserState.newBuilder().setSession(sessionId)
         if (listen) usb.addListeningChannelAdd(channel) else usb.addListeningChannelRemove(channel)
-        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
+        send(usb.build(), HumlaTCPMessageType.UserState)
     }
 
-    override fun moveUserToChannel(session: Int, channel: Int) {
-        val usb = Mumble.UserState.newBuilder()
-        usb.setSession(session)
-        usb.setChannelId(channel)
-        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
-    }
+    override fun moveUserToChannel(session: Int, channel: Int) = send(
+        Mumble.UserState.newBuilder().setSession(session).setChannelId(channel).build(),
+        HumlaTCPMessageType.UserState,
+    )
 
     override fun createChannel(
         parent: Int,
@@ -833,58 +841,42 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         description: String,
         position: Int,
         temporary: Boolean
-    ) {
-        val csb = Mumble.ChannelState.newBuilder()
-        csb.setParent(parent)
-        csb.setName(name)
-        csb.setDescription(description)
-        csb.setPosition(position)
-        csb.setTemporary(temporary)
-        conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
-    }
+    ) = send(
+        Mumble.ChannelState.newBuilder()
+            .setParent(parent)
+            .setName(name)
+            .setDescription(description)
+            .setPosition(position)
+            .setTemporary(temporary)
+            .build(),
+        HumlaTCPMessageType.ChannelState,
+    )
 
     override fun sendAccessTokens(tokens: List<String>) {
         conn().sendAccessTokens(tokens)
     }
 
-    override fun requestPermissions(channel: Int) {
-        val pqb = Mumble.PermissionQuery.newBuilder()
-        pqb.setChannelId(channel)
-        conn().sendTCPMessage(pqb.build(), HumlaTCPMessageType.PermissionQuery)
-    }
+    override fun requestPermissions(channel: Int) =
+        send(Mumble.PermissionQuery.newBuilder().setChannelId(channel).build(), HumlaTCPMessageType.PermissionQuery)
 
-    override fun requestComment(session: Int) {
-        val rbb = Mumble.RequestBlob.newBuilder()
-        rbb.addSessionComment(session)
-        conn().sendTCPMessage(rbb.build(), HumlaTCPMessageType.RequestBlob)
-    }
+    override fun requestComment(session: Int) =
+        send(Mumble.RequestBlob.newBuilder().addSessionComment(session).build(), HumlaTCPMessageType.RequestBlob)
 
-    override fun requestAvatar(session: Int) {
-        val rbb = Mumble.RequestBlob.newBuilder()
-        rbb.addSessionTexture(session)
-        conn().sendTCPMessage(rbb.build(), HumlaTCPMessageType.RequestBlob)
-    }
+    override fun requestAvatar(session: Int) =
+        send(Mumble.RequestBlob.newBuilder().addSessionTexture(session).build(), HumlaTCPMessageType.RequestBlob)
 
-    override fun requestChannelDescription(channel: Int) {
-        val rbb = Mumble.RequestBlob.newBuilder()
-        rbb.addChannelDescription(channel)
-        conn().sendTCPMessage(rbb.build(), HumlaTCPMessageType.RequestBlob)
-    }
+    override fun requestChannelDescription(channel: Int) =
+        send(Mumble.RequestBlob.newBuilder().addChannelDescription(channel).build(), HumlaTCPMessageType.RequestBlob)
 
-    override fun registerUser(session: Int) {
-        val usb = Mumble.UserState.newBuilder()
-        usb.setSession(session)
-        usb.setUserId(0)
-        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
-    }
+    override fun registerUser(session: Int) =
+        send(Mumble.UserState.newBuilder().setSession(session).setUserId(0).build(), HumlaTCPMessageType.UserState)
 
-    override fun kickBanUser(session: Int, reason: String?, ban: Boolean) {
-        val urb = Mumble.UserRemove.newBuilder()
-        urb.setSession(session)
-        urb.setReason(reason)
-        urb.setBan(ban)
-        conn().sendTCPMessage(urb.build(), HumlaTCPMessageType.UserRemove)
-    }
+    override fun kickBanUser(session: Int, reason: String?, ban: Boolean) = send(
+        Mumble.UserRemove.newBuilder().setSession(session).setReason(reason).setBan(ban).build(),
+        HumlaTCPMessageType.UserRemove,
+    )
+
+    private fun send(message: MessageLite, type: HumlaTCPMessageType) = conn().sendTCPMessage(message, type)
 
     override fun sendUserTextMessage(session: Int, message: String): Message {
         val model = model()
@@ -916,67 +908,48 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private fun selfName(model: ModelHandler): String? =
         checkNotNull(model.getUser(sessionId)) { "No user for our own session" }.name
 
-    override fun setUserComment(session: Int, comment: String?) {
-        val usb = Mumble.UserState.newBuilder()
-        usb.setSession(session)
-        usb.setComment(comment)
-        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
-    }
+    override fun setUserComment(session: Int, comment: String?) = send(
+        Mumble.UserState.newBuilder().setSession(session).setComment(comment).build(),
+        HumlaTCPMessageType.UserState,
+    )
 
-    override fun setPrioritySpeaker(session: Int, priority: Boolean) {
-        val usb = Mumble.UserState.newBuilder()
-        usb.setSession(session)
-        usb.setPrioritySpeaker(priority)
-        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
-    }
+    override fun setPrioritySpeaker(session: Int, priority: Boolean) = send(
+        Mumble.UserState.newBuilder().setSession(session).setPrioritySpeaker(priority).build(),
+        HumlaTCPMessageType.UserState,
+    )
 
-    override fun removeChannel(channel: Int) {
-        val crb = Mumble.ChannelRemove.newBuilder()
-        crb.setChannelId(channel)
-        conn().sendTCPMessage(crb.build(), HumlaTCPMessageType.ChannelRemove)
-    }
+    override fun removeChannel(channel: Int) =
+        send(Mumble.ChannelRemove.newBuilder().setChannelId(channel).build(), HumlaTCPMessageType.ChannelRemove)
 
     override fun setMuteDeafState(session: Int, mute: Boolean, deaf: Boolean) {
-        val usb = Mumble.UserState.newBuilder()
-        usb.setSession(session)
-        usb.setMute(mute)
-        usb.setDeaf(deaf)
+        val usb = Mumble.UserState.newBuilder().setSession(session).setMute(mute).setDeaf(deaf)
         if (!mute) usb.setSuppress(false)
-        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
+        send(usb.build(), HumlaTCPMessageType.UserState)
     }
 
-    override fun setSelfMuteDeafState(mute: Boolean, deaf: Boolean) {
-        val usb = Mumble.UserState.newBuilder()
-        usb.setSelfMute(mute)
-        usb.setSelfDeaf(deaf)
-        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
-    }
+    override fun setSelfMuteDeafState(mute: Boolean, deaf: Boolean) =
+        send(Mumble.UserState.newBuilder().setSelfMute(mute).setSelfDeaf(deaf).build(), HumlaTCPMessageType.UserState)
 
     override val isConnected: Boolean
         get() = mStateMachine.current == SessionState.Connected
 
-    override fun linkChannels(channelA: IChannel, channelB: IChannel) {
-        val csb = Mumble.ChannelState.newBuilder()
-        csb.setChannelId(channelA.id)
-        csb.addLinksAdd(channelB.id)
-        conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
-    }
+    override fun linkChannels(channelA: IChannel, channelB: IChannel) = send(
+        Mumble.ChannelState.newBuilder().setChannelId(channelA.id).addLinksAdd(channelB.id).build(),
+        HumlaTCPMessageType.ChannelState,
+    )
 
-    override fun unlinkChannels(channelA: IChannel, channelB: IChannel) {
-        val csb = Mumble.ChannelState.newBuilder()
-        csb.setChannelId(channelA.id)
-        csb.addLinksRemove(channelB.id)
-        conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
-    }
+    override fun unlinkChannels(channelA: IChannel, channelB: IChannel) = send(
+        Mumble.ChannelState.newBuilder().setChannelId(channelA.id).addLinksRemove(channelB.id).build(),
+        HumlaTCPMessageType.ChannelState,
+    )
 
-    override fun unlinkAllChannels(channel: IChannel) {
-        val csb = Mumble.ChannelState.newBuilder()
-        csb.setChannelId(channel.id)
-        for (linked in channel.links) {
-            csb.addLinksRemove(linked.id)
-        }
-        conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
-    }
+    override fun unlinkAllChannels(channel: IChannel) = send(
+        Mumble.ChannelState.newBuilder()
+            .setChannelId(channel.id)
+            .addAllLinksRemove(channel.links.map { it.id })
+            .build(),
+        HumlaTCPMessageType.ChannelState,
+    )
 
     override fun registerWhisperTarget(target: WhisperTarget): Byte {
         val id = mWhisperTargetList.append(target)

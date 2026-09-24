@@ -97,6 +97,7 @@ object SessionSettings {
             useTor = settings.isTorEnabled,
             localMuteHistory = if (server.isSaved) database.getLocalMutedUsers(server.id) else emptyList(),
             localIgnoreHistory = if (server.isSaved) database.getLocalIgnoredUsers(server.id) else emptyList(),
+            localVolumes = database.getLocalVolumes(),
             autoReconnect = settings.isAutoReconnectEnabled,
             accessTokens = database.getAccessTokens(server.id),
             audioStream = Settings.PLAYBACK_STREAM,

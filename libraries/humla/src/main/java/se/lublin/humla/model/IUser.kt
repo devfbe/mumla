@@ -42,4 +42,7 @@ interface IUser {
     /** Text messages ignored on this device only. */
     var isLocalIgnored: Boolean
     val talkState: TalkState
+
+    /** The playback gain set on this device, see [LocalVolumes]; 1 is unchanged. */
+    val localVolume: Float
 }

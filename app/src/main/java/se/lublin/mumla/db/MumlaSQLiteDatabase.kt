@@ -49,6 +49,7 @@ class MumlaSQLiteDatabase(
         db.execSQL(TABLE_LOCAL_MUTE_CREATE_SQL)
         db.execSQL(TABLE_LOCAL_IGNORE_CREATE_SQL)
         db.execSQL(TABLE_CERTIFICATES_CREATE_SQL)
+        db.execSQL(TABLE_LOCAL_VOLUME_CREATE_SQL)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -60,6 +61,7 @@ class MumlaSQLiteDatabase(
         if (oldVersion <= PRE_LOCAL_IGNORE_DB_VERSION) db.execSQL(TABLE_LOCAL_IGNORE_CREATE_SQL)
         if (oldVersion <= PRE_CERTIFICATES_DB_VERSION) db.execSQL(TABLE_CERTIFICATES_CREATE_SQL)
         if (oldVersion <= PRE_ENCRYPTED_SECRETS_DB_VERSION) sealPlainSecrets(db)
+        if (oldVersion <= PRE_LOCAL_VOLUME_DB_VERSION) db.execSQL(TABLE_LOCAL_VOLUME_CREATE_SQL)
     }
 
     /** Encrypts every secret still stored in plain text. Values that cannot be sealed stay as they are. */
@@ -233,6 +235,23 @@ class MumlaSQLiteDatabase(
         )
     }
 
+    override fun getLocalVolumes(): Map<String, Float> =
+        readableDatabase.query(
+            TABLE_LOCAL_VOLUME, arrayOf(LOCAL_VOLUME_KEY, LOCAL_VOLUME_VOLUME), null, null, null, null, null,
+        ).use { c -> c.readAll { c.getString(0) to c.getFloat(1) }.toMap() }
+
+    override fun setLocalVolume(key: String, volume: Float) {
+        if (volume == 1f) {
+            writableDatabase.delete(TABLE_LOCAL_VOLUME, "$LOCAL_VOLUME_KEY=?", arrayOf(key))
+            return
+        }
+        val values = ContentValues().apply {
+            put(LOCAL_VOLUME_KEY, key)
+            put(LOCAL_VOLUME_VOLUME, volume)
+        }
+        writableDatabase.replace(TABLE_LOCAL_VOLUME, null, values)
+    }
+
     override fun addCertificate(name: String, certificate: ByteArray): DatabaseCertificate {
         val values = ContentValues().apply {
             put(COLUMN_CERTIFICATES_NAME, name)
@@ -360,6 +379,14 @@ class MumlaSQLiteDatabase(
             "`" + COLUMN_CERTIFICATES_NAME + "` TEXT NOT NULL" +
             ");"
 
+        const val TABLE_LOCAL_VOLUME = "local_volume"
+        const val LOCAL_VOLUME_KEY = "user_key"
+        const val LOCAL_VOLUME_VOLUME = "volume"
+        const val TABLE_LOCAL_VOLUME_CREATE_SQL = "CREATE TABLE IF NOT EXISTS " + TABLE_LOCAL_VOLUME + " (" +
+            "`" + LOCAL_VOLUME_KEY + "` TEXT PRIMARY KEY NOT NULL," +
+            "`" + LOCAL_VOLUME_VOLUME + "` REAL NOT NULL" +
+            ");"
+
         const val PRE_FAVOURITES_DB_VERSION = 2
         const val PRE_TOKENS_DB_VERSION = 3
         const val PRE_COMMENTS_DB_VERSION = 4
@@ -367,6 +394,7 @@ class MumlaSQLiteDatabase(
         const val PRE_LOCAL_IGNORE_DB_VERSION = 6
         const val PRE_CERTIFICATES_DB_VERSION = 7
         const val PRE_ENCRYPTED_SECRETS_DB_VERSION = 8
-        const val CURRENT_DB_VERSION = 9
+        const val PRE_LOCAL_VOLUME_DB_VERSION = 9
+        const val CURRENT_DB_VERSION = 10
     }
 }

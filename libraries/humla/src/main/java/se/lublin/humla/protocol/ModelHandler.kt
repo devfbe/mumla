@@ -20,6 +20,7 @@ package se.lublin.humla.protocol
 import android.util.Log
 import com.google.protobuf.MessageLite
 import se.lublin.humla.model.Channel
+import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.User
@@ -41,6 +42,7 @@ class ModelHandler(
     private val events: (HumlaEvent) -> Unit,
     private val localMuteHistory: List<Int>?,
     private val localIgnoreHistory: List<Int>?,
+    private val localVolumes: LocalVolumes = LocalVolumes(null),
 ) : TcpMessageHandler {
 
     private val channels = ChannelTree()
@@ -112,27 +114,14 @@ class ModelHandler(
         }
 
         UserNotices.applyServerFlags(user, msg)
-        if (applyListening(user, msg)) events(HumlaEvent.UserListeningUpdated(user))
+        if (applyListening(user, msg, channels)) events(HumlaEvent.UserListeningUpdated(user))
 
         // A frame naming an unknown channel is dropped from here on.
         if (msg.hasChannelId() && !moveUser(user, msg.channelId, known == null, actor, self)) return
 
         UserNotices.applyProfile(user, msg)
+        applyLocalVolume(user, msg, known == null, localVolumes)
         events(if (known == null) HumlaEvent.UserConnected(user) else HumlaEvent.UserStateUpdated(user))
-    }
-
-    /** The channels [user] starts or stops listening to; false if the frame changes none. */
-    private fun applyListening(user: User, msg: Mumble.UserState): Boolean {
-        var changed = false
-        for (id in msg.listeningChannelAddList) {
-            val channel = channels[id] ?: continue
-            channel.addListener(user)
-            changed = true
-        }
-        for (id in msg.listeningChannelRemoveList) {
-            changed = channels[id]?.removeListener(user) == true || changed
-        }
-        return changed
     }
 
     /** The user a frame introduces, in the root channel; null for a frame without a name. */

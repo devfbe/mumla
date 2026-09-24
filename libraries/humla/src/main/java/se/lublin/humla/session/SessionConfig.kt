@@ -46,6 +46,11 @@ data class SessionConfig(
     val localMuteHistory: List<Int> = emptyList(),
     /** User ids ignored locally on connection. */
     val localIgnoreHistory: List<Int> = emptyList(),
+    /**
+     * Stored local volumes by `LocalVolumes.keyOf`, read when a connection starts. Not a
+     * connection field: the session keeps its own copy current through `setLocalVolume`.
+     */
+    val localVolumes: Map<String, Float> = emptyMap(),
 
     val autoReconnect: Boolean = false,
     /** Sent to the server right away while connected. */

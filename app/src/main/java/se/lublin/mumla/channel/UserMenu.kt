@@ -83,6 +83,7 @@ class UserMenu(
         menu.findItem(R.id.context_register).isVisible = user.userId < 0 && !user.hash.isNullOrEmpty() &&
             perms and (register or Permissions.WRITE) > 0
         menu.findItem(R.id.context_local_mute).isVisible = !self
+        menu.findItem(R.id.context_local_volume).isVisible = !self
         menu.findItem(R.id.context_ignore_messages).isVisible = !self
 
         menu.findItem(R.id.context_mute).isChecked = user.isMuted || user.isSuppressed
@@ -92,6 +93,7 @@ class UserMenu(
         menu.findItem(R.id.context_ignore_messages).isChecked = user.isLocalIgnored
     }
 
+    @Suppress("CyclomaticComplexMethod") // One branch per item.
     override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.context_ban, R.id.context_kick -> showKickDialog(ban = item.itemId == R.id.context_ban)
@@ -104,6 +106,7 @@ class UserMenu(
                 user.isLocalMuted = !user.isLocalMuted
                 onLocalStateChanged(user)
             }
+            R.id.context_local_volume -> session?.let { showLocalVolumeDialog(context, it, user, onLocalStateChanged) }
             R.id.context_ignore_messages -> {
                 user.isLocalIgnored = !user.isLocalIgnored
                 onLocalStateChanged(user)

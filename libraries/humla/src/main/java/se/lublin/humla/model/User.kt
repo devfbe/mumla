@@ -69,6 +69,7 @@ class User @JvmOverloads constructor(session: Int = 0, name: String? = null) : I
 
     @Volatile override var isLocalMuted = false
     @Volatile override var isLocalIgnored = false
+    @Volatile override var localVolume = 1f
 
     /** The number of samples normally available from the user. */
     @Volatile var averageAvailable = 0f

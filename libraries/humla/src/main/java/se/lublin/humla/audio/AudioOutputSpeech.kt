@@ -204,6 +204,11 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
             AudioHandler.FRAME_SIZE
         }
 
+        val gain = user.localVolume
+        if (gain != 1f) {
+            for (i in 0 until decodedSamples) out[i] *= gain
+        }
+
         if (!nextAlive) {
             for (i in 0 until AudioHandler.FRAME_SIZE) out[i] *= fadeOut[i]
         } else if (ts == 0) {

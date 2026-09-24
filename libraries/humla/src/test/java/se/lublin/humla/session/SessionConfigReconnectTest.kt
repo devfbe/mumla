@@ -62,6 +62,7 @@ class SessionConfigReconnectTest(
             "useTor" to (true to { c -> c.copy(useTor = true) }),
             "localMuteHistory" to (true to { c -> c.copy(localMuteHistory = listOf(7)) }),
             "localIgnoreHistory" to (true to { c -> c.copy(localIgnoreHistory = listOf(8)) }),
+            "localVolumes" to (false to { c -> c.copy(localVolumes = mapOf("cert:abc" to 0.5f)) }),
             "autoReconnect" to (false to { c -> c.copy(autoReconnect = true) }),
             "accessTokens" to (false to { c -> c.copy(accessTokens = listOf("token")) }),
             "transmitMode" to (false to { c -> c.copy(transmitMode = Constants.TRANSMIT_CONTINUOUS) }),

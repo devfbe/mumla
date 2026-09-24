@@ -58,6 +58,11 @@
         android:checkable="true"
         app:showAsAction="never"
         />
+    <item android:id="@+id/context_local_volume"
+        android:title="@string/user_menu_local_volume"
+        android:icon="@drawable/ic_action_audio"
+        app:showAsAction="never"
+        />
     <item android:id="@+id/context_ignore_messages"
         android:title="@string/user_menu_ignore_messages"
         android:icon="@drawable/ic_action_bad"

@@ -49,6 +49,12 @@ interface MumlaDatabase {
     fun addLocalIgnoredUser(serverId: Long, userId: Int)
     fun removeLocalIgnoredUser(serverId: Long, userId: Int)
 
+    /** Local playback volumes by `LocalVolumes.keyOf`. */
+    fun getLocalVolumes(): Map<String, Float>
+
+    /** Stores [volume] for [key]; a volume of 1 removes it. */
+    fun setLocalVolume(key: String, volume: Float)
+
     /** Stores the PKCS#12 blob [certificate] under the user-readable [name]. */
     fun addCertificate(name: String, certificate: ByteArray): DatabaseCertificate
     fun getCertificates(): List<DatabaseCertificate>

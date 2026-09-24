@@ -773,6 +773,21 @@ class ChannelListAdapterRebuildTest {
         verify(exactly = 1) { database.addLocalIgnoredUser(SERVER_ID, 11) }
     }
 
+    /** The local volume is stored by identity, also for unregistered users and unsaved servers. */
+    @Test
+    fun theLocalVolumeIsStoredForAnyIdentifiableUser() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        every { server.isSaved } returns false
+        every { server.host } returns "example.org"
+        every { server.port } returns 64738
+        val user = FakeUser(506, name = "Bob").apply { localVolume = 1.5f }
+
+        adapter.onLocalUserStateUpdated(user)
+
+        verify(exactly = 1) { database.setLocalVolume("name:example.org:64738:Bob", 1.5f) }
+    }
+
     /**
      * The list is redrawn for every local state change, whether or not it is persisted: local mute
      * is what the row shows, and a server we do not store still shows it.

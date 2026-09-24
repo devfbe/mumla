@@ -15,6 +15,8 @@ class AudioOutputSpeechTest {
     private class FakeOpusDecoder(
         private val nbFrames: Int = 1,
         private val samplesPerFrame: Int = AudioHandler.FRAME_SIZE,
+        /** Written to every decoded sample, if set. */
+        private val fill: Float? = null,
     ) : OpusDecoderApi {
         var destroys = 0
         override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {
@@ -29,8 +31,10 @@ class AudioOutputSpeechTest {
             out: FloatArray,
             frameSize: Int,
             decodeFec: Int,
-        ): Int =
-            AudioHandler.FRAME_SIZE
+        ): Int {
+            fill?.let { out.fill(it, 0, AudioHandler.FRAME_SIZE) }
+            return AudioHandler.FRAME_SIZE
+        }
         override fun destroy(state: Long) {
             destroys++
         }
@@ -92,6 +96,33 @@ class AudioOutputSpeechTest {
         assertThat(alive).isTrue()
         assertThat(speech.numSamples).isEqualTo(AudioHandler.FRAME_SIZE)
         assertThat(jitter.ticks).isEqualTo(1)
+    }
+
+    private fun decodedSamples(localVolume: Float): FloatArray {
+        val packet = opusPacket(byteArrayOf(0x41, 0x42, 0x43))
+        val jitter = FakeJitter().apply {
+            nextStatus = SpeexJitterNative.JITTER_BUFFER_OK
+            nextPacket = packet
+            nextMeta = intArrayOf(packet.size, 0, 480, 0, 0)
+            ctlResult = 3
+        }
+        val user = User(42, "alice").apply { this.localVolume = localVolume }
+        val speech = AudioOutputSpeech(user, AudioHandler.FRAME_SIZE, { _, _ -> }, FakeOpusDecoder(fill = 0.5f), jitter)
+        speech.decode()
+        return speech.samples.copyOf(speech.numSamples)
+    }
+
+    @Test
+    fun `the user's local volume scales the decoded samples`() {
+        val unity = decodedSamples(1f)
+        val half = decodedSamples(0.5f)
+        val double = decodedSamples(2f)
+
+        assertThat(unity.any { it != 0f }).isTrue()
+        for (i in unity.indices) {
+            assertThat(half[i]).isWithin(1e-6f).of(unity[i] * 0.5f)
+            assertThat(double[i]).isWithin(1e-6f).of(unity[i] * 2f)
+        }
     }
 
     @Test

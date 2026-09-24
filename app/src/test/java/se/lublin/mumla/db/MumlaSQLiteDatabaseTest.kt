@@ -127,6 +127,17 @@ class MumlaSQLiteDatabaseTest {
     }
 
     @Test
+    fun localVolumesAreStoredByKeyAndUnityVolumeIsForgotten() {
+        db.setLocalVolume("cert:abc", 1.5f)
+        db.setLocalVolume("name:h:1:Bob", 0.25f)
+        db.setLocalVolume("cert:abc", 0.5f)
+        assertThat(db.getLocalVolumes()).containsExactly("cert:abc", 0.5f, "name:h:1:Bob", 0.25f)
+
+        db.setLocalVolume("name:h:1:Bob", 1f)
+        assertThat(db.getLocalVolumes()).containsExactly("cert:abc", 0.5f)
+    }
+
+    @Test
     fun certificatesRoundTripWithTheirData() {
         val c = db.addCertificate("alice.p12", byteArrayOf(1, 2, 3))
 
@@ -161,7 +172,7 @@ class MumlaSQLiteDatabaseTest {
     @Test
     fun anUpgradeCreatesTheTablesNewerThanTheOldVersion() {
         val w = db.writableDatabase
-        val sinceV5 = listOf("local_mute", "local_ignore", "certificates")
+        val sinceV5 = listOf("local_mute", "local_ignore", "certificates", "local_volume")
         for (t in sinceV5) w.execSQL("DROP TABLE $t")
 
         db.onUpgrade(w, 5, MumlaSQLiteDatabase.CURRENT_DB_VERSION)
@@ -203,8 +214,9 @@ class MumlaSQLiteDatabaseTest {
             recording.getCertificateData(cert.id)
             recording.getCertificateData(cert.id + 1)
             recording.isCommentSeen("who", byteArrayOf(1))
+            recording.getLocalVolumes()
 
-            assertThat(opened).hasSize(11)
+            assertThat(opened).hasSize(12)
             assertThat(opened.filterNot { it.isClosed }).isEmpty()
         } finally {
             recording.close()

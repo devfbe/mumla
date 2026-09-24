@@ -129,6 +129,7 @@ class FakeUser(
     override var isLocalMuted: Boolean = false
     override var isLocalIgnored: Boolean = false
     override val talkState: TalkState get() = state
+    override var localVolume: Float = 1f
 }
 
 /**

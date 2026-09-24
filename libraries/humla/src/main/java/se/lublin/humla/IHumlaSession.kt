@@ -126,6 +126,12 @@ interface IHumlaSession {
 
     fun joinChannel(channel: Int)
 
+    /**
+     * Plays [session] at [volume], a linear gain, on this device only, and keeps it for users of
+     * the same identity for the rest of the session. Storing it is up to the client.
+     */
+    fun setLocalVolume(session: Int, volume: Float)
+
     /** Starts or stops listening to [channel] without joining it. */
     fun setListening(channel: Int, listen: Boolean)
 

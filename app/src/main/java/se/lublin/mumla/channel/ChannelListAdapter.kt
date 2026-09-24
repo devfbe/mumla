@@ -39,6 +39,7 @@ import se.lublin.humla.HumlaService
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
+import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
@@ -506,12 +507,20 @@ class ChannelListAdapter(
         }
     }
 
-    /** Redraws [user]'s local mute and ignore, and stores them for a registered user of a saved server. */
+    /**
+     * Redraws [user]'s local mute and ignore, and stores them for a registered user of a saved
+     * server; stores the local volume for anyone [LocalVolumes.keyOf] can identify.
+     */
     fun onLocalUserStateUpdated(user: IUser) {
         notifyDataSetChanged()
 
-        // Add or remove registered user from local mute history
         val server = humlaService.targetServer
+        LocalVolumes.keyOf(user, server)?.let { key ->
+            val volume = user.localVolume
+            repository.launchIo { setLocalVolume(key, volume) }
+        }
+
+        // Add or remove registered user from local mute history
 
         if (server != null && user.userId >= 0 && server.isSaved) {
             repository.launchIo {
