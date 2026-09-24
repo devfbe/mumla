@@ -147,6 +147,8 @@
     <string name="mediaButtonActionNone">Ingenting – lämna mediaknapparna åt musikappen</string>
     <string name="mediaButtonActionAuto">Växla Push-to-talk, eller tysta i de andra överföringslägena</string>
     <string name="mediaButtonActionMute">Växla tyst läge</string>
-    <string name="bluetoothSco">Bluetooth-headset</string>
-    <string name="bluetoothScoSum">Skicka och ta emot röst via ett anslutet Bluetooth-headset medan du är ansluten till en server. Inställningen finns kvar om anslutningen bryts och återställs när servern ansluts igen. Ber om behörigheten Enheter i närheten; vissa enheter skickar inte ljud till ett headset utan den.</string>
+    <string name="bluetoothSco">Använd Bluetooth-headset automatiskt</string>
+    <string name="bluetoothScoSum">Skicka och ta emot röst via ett anslutet Bluetooth-headset medan du är ansluten till en server, och byt till ett headset som ansluts under samtalet. Ljudenheten för samtalet kan ändras i kanalmenyn. Ber om behörigheten Enheter i närheten; vissa enheter skickar inte ljud till ett headset utan den.</string>
+    <string name="defaultOutput">Utgång utan headset</string>
+    <string name="defaultOutputSum">Var rösten spelas upp när du ansluter och inget Bluetooth-headset eller headset med sladd finns. Luren släcker också skärmen vid örat. Du kan byta enhet under ett samtal i kanalmenyn.</string>
 </resources>

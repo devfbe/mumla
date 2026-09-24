@@ -219,4 +219,12 @@
     <string name="permission_denied_storage">读取存储的权限被拒绝</string>
     <string name="image_decode_failed">无法读取该图片</string>
     <string name="image_too_large">图片对此服务器来说太大</string>
+    <string name="audio_device">音频设备</string>
+    <string name="audio_device_earpiece">听筒</string>
+    <string name="audio_device_speaker">扬声器</string>
+    <string name="audio_device_wired">有线耳机</string>
+    <string name="audio_device_usb">USB 耳机</string>
+    <string name="audio_device_bluetooth">蓝牙耳机</string>
+    <string name="audio_device_other">音频设备</string>
+    <string name="echo_cancellation">回声消除</string>
 </resources>

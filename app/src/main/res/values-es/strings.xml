@@ -201,4 +201,12 @@
     <string name="permission_denied_storage">Permiso denegado para leer el almacenamiento</string>
     <string name="image_decode_failed">No se pudo leer esa imagen</string>
     <string name="image_too_large">La imagen es demasiado grande para este servidor</string>
+    <string name="audio_device">Dispositivo de audio</string>
+    <string name="audio_device_earpiece">Auricular del teléfono</string>
+    <string name="audio_device_speaker">Altavoz</string>
+    <string name="audio_device_wired">Auriculares con cable</string>
+    <string name="audio_device_usb">Auriculares USB</string>
+    <string name="audio_device_bluetooth">Auriculares Bluetooth</string>
+    <string name="audio_device_other">Dispositivo de audio</string>
+    <string name="echo_cancellation">Cancelación de eco</string>
 </resources>

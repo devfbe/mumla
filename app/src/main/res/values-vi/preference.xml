@@ -144,6 +144,8 @@
     <string name="mediaButtonActionNone">Không làm gì — để các phím media cho ứng dụng nghe nhạc</string>
     <string name="mediaButtonActionAuto">Bật/tắt nhấn để nói, hoặc tắt tiếng ở các chế độ truyền khác</string>
     <string name="mediaButtonActionMute">Bật/tắt tiếng</string>
-    <string name="bluetoothSco">Tai nghe Bluetooth</string>
-    <string name="bluetoothScoSum">Gửi và nhận giọng nói qua tai nghe Bluetooth đã kết nối khi bạn đang kết nối với máy chủ. Tùy chọn vẫn bật khi mất kết nối và được khôi phục khi kết nối lại máy chủ. Cần quyền Thiết bị ở gần; một số thiết bị sẽ không chuyển âm thanh sang tai nghe nếu thiếu quyền này.</string>
+    <string name="bluetoothSco">Tự động dùng tai nghe Bluetooth</string>
+    <string name="bluetoothScoSum">Gửi và nhận giọng nói qua tai nghe Bluetooth đã kết nối khi bạn đang kết nối với máy chủ, và chuyển sang tai nghe được kết nối trong cuộc gọi. Có thể đổi thiết bị âm thanh cho cuộc gọi từ menu kênh. Cần quyền Thiết bị ở gần; một số thiết bị sẽ không chuyển âm thanh sang tai nghe nếu thiếu quyền này.</string>
+    <string name="defaultOutput">Đầu ra khi không có tai nghe</string>
+    <string name="defaultOutputSum">Nơi phát giọng nói khi bạn kết nối mà không có tai nghe Bluetooth hoặc có dây. Loa trong cũng tắt màn hình khi áp vào tai. Bạn có thể đổi thiết bị trong cuộc gọi từ menu kênh.</string>
 </resources>

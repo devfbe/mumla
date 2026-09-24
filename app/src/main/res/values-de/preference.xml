@@ -147,8 +147,8 @@
     <string name="mediaButtonActionNone">Nichts – Medientasten der Musik-App überlassen</string>
     <string name="mediaButtonActionAuto">Zum Sprechen drücken umschalten, in anderen Sendemodi stumm stellen</string>
     <string name="mediaButtonActionMute">Stummschaltung umschalten</string>
-    <string name="bluetoothSco">Bluetooth-Headset</string>
-    <string name="bluetoothScoSum">Sprache über ein verbundenes Bluetooth-Headset senden und empfangen, solange Sie mit einem Server verbunden sind. Bleibt bei einem Verbindungsabbruch aktiv und wird wiederhergestellt, sobald die Verbindung zum Server wieder steht. Fragt nach der Berechtigung „Geräte in der Nähe“; manche Geräte leiten ohne sie keinen Ton an ein Headset.</string>
+    <string name="bluetoothSco">Bluetooth-Headset automatisch verwenden</string>
+    <string name="bluetoothScoSum">Sprache über ein verbundenes Bluetooth-Headset senden und empfangen, solange Sie mit einem Server verbunden sind, und zu einem Headset wechseln, das sich während des Gesprächs verbindet. Das Audiogerät lässt sich für das Gespräch im Kanalmenü ändern. Fragt nach der Berechtigung „Geräte in der Nähe“; manche Geräte leiten ohne sie keinen Ton an ein Headset.</string>
     <string name="defaultOutput">Ausgabe ohne Headset</string>
     <string name="defaultOutputSum">Wo die Sprache zu hören ist, wenn du dich verbindest und kein Bluetooth- oder Kabel-Headset da ist. Die Hörmuschel schaltet außerdem den Bildschirm am Ohr aus. Während eines Gesprächs lässt sich das Gerät im Kanalmenü wechseln.</string>
 </resources>

@@ -13,4 +13,12 @@
     <string name="permission_denied_storage">Bị từ chối quyền đọc bộ nhớ</string>
     <string name="image_decode_failed">Không đọc được hình ảnh đó</string>
     <string name="image_too_large">Hình ảnh quá lớn đối với máy chủ này</string>
+    <string name="audio_device">Thiết bị âm thanh</string>
+    <string name="audio_device_earpiece">Loa trong</string>
+    <string name="audio_device_speaker">Loa ngoài</string>
+    <string name="audio_device_wired">Tai nghe có dây</string>
+    <string name="audio_device_usb">Tai nghe USB</string>
+    <string name="audio_device_bluetooth">Tai nghe Bluetooth</string>
+    <string name="audio_device_other">Thiết bị âm thanh</string>
+    <string name="echo_cancellation">Khử tiếng vọng</string>
 </resources>

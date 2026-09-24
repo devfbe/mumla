@@ -147,6 +147,8 @@
     <string name="mediaButtonActionNone">Hiçbir şey — medya tuşlarını müzik uygulamanıza bırak</string>
     <string name="mediaButtonActionAuto">Bas konuşu aç/kapat, diğer iletim modlarında sesi kapat</string>
     <string name="mediaButtonActionMute">Sesi kapat/aç</string>
-    <string name="bluetoothSco">Bluetooth kulaklık</string>
-    <string name="bluetoothScoSum">Bir sunucuya bağlıyken sesi bağlı bir Bluetooth kulaklık üzerinden gönderir ve alır. Bağlantı koptuğunda açık kalır ve sunucuya yeniden bağlanıldığında geri yüklenir. Yakındaki cihazlar iznini ister; bazı cihazlar bu izin olmadan sesi kulaklığa yönlendirmez.</string>
+    <string name="bluetoothSco">Bluetooth kulaklığı otomatik olarak kullan</string>
+    <string name="bluetoothScoSum">Bir sunucuya bağlıyken sesi bağlı bir Bluetooth kulaklık üzerinden gönderir ve alır, görüşme sırasında bağlanan bir kulaklığa geçer. Görüşmenin ses cihazı kanal menüsünden değiştirilebilir. Yakındaki cihazlar iznini ister; bazı cihazlar bu izin olmadan sesi kulaklığa yönlendirmez.</string>
+    <string name="defaultOutput">Kulaklık yokken çıkış</string>
+    <string name="defaultOutputSum">Bağlandığınızda Bluetooth veya kablolu kulaklık yoksa sesin çalındığı yer. Ahize ayrıca kulağınıza yaklaştığında ekranı kapatır. Görüşme sırasında cihazı kanal menüsünden değiştirebilirsiniz.</string>
 </resources>

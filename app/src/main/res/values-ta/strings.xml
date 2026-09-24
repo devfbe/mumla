@@ -190,4 +190,12 @@
     <string name="permission_denied_storage">சேமிப்பகத்தைப் படிக்க இசைவு மறுக்கப்பட்டது</string>
     <string name="image_decode_failed">அந்தப் படத்தைப் படிக்க முடியவில்லை</string>
     <string name="image_too_large">இந்தச் சேவையகத்திற்குப் படம் மிகப் பெரியது</string>
+    <string name="audio_device">ஒலிச் சாதனம்</string>
+    <string name="audio_device_earpiece">இயர்பீஸ்</string>
+    <string name="audio_device_speaker">ஒலிபெருக்கி</string>
+    <string name="audio_device_wired">வயர்டு தலையணி</string>
+    <string name="audio_device_usb">USB தலையணி</string>
+    <string name="audio_device_bluetooth">Bluetooth தலையணி</string>
+    <string name="audio_device_other">ஒலிச் சாதனம்</string>
+    <string name="echo_cancellation">எதிரொலி நீக்கம்</string>
 </resources>

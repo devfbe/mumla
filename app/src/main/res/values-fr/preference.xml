@@ -147,6 +147,8 @@
     <string name="mediaButtonActionNone">Rien — laisser les touches multimédias à l\'appli de musique</string>
     <string name="mediaButtonActionAuto">Basculer Appuyer pour parler, ou couper le micro dans les autres modes</string>
     <string name="mediaButtonActionMute">Basculer le mode muet</string>
-    <string name="bluetoothSco">Casque Bluetooth</string>
-    <string name="bluetoothScoSum">Envoyer et recevoir la voix via un casque Bluetooth connecté lorsque vous êtes connecté à un serveur. Reste actif en cas de perte de connexion et est rétabli à la reconnexion au serveur. Demande l\'autorisation « Appareils à proximité » ; sans elle, certains appareils n\'acheminent pas le son vers un casque.</string>
+    <string name="bluetoothSco">Utiliser automatiquement le casque Bluetooth</string>
+    <string name="bluetoothScoSum">Envoyer et recevoir la voix via un casque Bluetooth connecté lorsque vous êtes connecté à un serveur, et basculer vers un casque qui se connecte pendant l\'appel. L\'appareil audio de l\'appel peut être changé depuis le menu du salon. Demande l\'autorisation « Appareils à proximité » ; sans elle, certains appareils n\'acheminent pas le son vers un casque.</string>
+    <string name="defaultOutput">Sortie sans casque</string>
+    <string name="defaultOutputSum">Où la voix est diffusée lorsque vous vous connectez sans casque Bluetooth ni filaire. L\'écouteur éteint aussi l\'écran contre votre oreille. Vous pouvez changer d\'appareil pendant un appel depuis le menu du salon.</string>
 </resources>

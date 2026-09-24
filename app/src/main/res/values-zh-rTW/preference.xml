@@ -147,6 +147,8 @@
     <string name="mediaButtonActionNone">無——將媒體鍵留給音樂應用程式</string>
     <string name="mediaButtonActionAuto">切換按鍵發話，在其他發話模式下切換靜音</string>
     <string name="mediaButtonActionMute">切換靜音</string>
-    <string name="bluetoothSco">藍牙耳機</string>
-    <string name="bluetoothScoSum">連線到伺服器時，透過已連接的藍牙耳機收發語音。連線中斷後此設定仍保持開啟，並在重新連線到伺服器後恢復。需要「鄰近裝置」權限；沒有此權限時，部分裝置不會將音訊切換到耳機。</string>
+    <string name="bluetoothSco">自動使用藍牙耳機</string>
+    <string name="bluetoothScoSum">連線到伺服器時，透過已連接的藍牙耳機收發語音，並在通話期間切換到新連接的耳機。可在頻道選單中變更通話的音訊裝置。需要「鄰近裝置」權限；沒有此權限時，部分裝置不會將音訊切換到耳機。</string>
+    <string name="defaultOutput">沒有耳機時的輸出</string>
+    <string name="defaultOutputSum">連線時若沒有藍牙耳機或有線耳機，語音從哪裡播放。使用聽筒時，靠近耳朵也會關閉螢幕。通話期間可在頻道選單中切換裝置。</string>
 </resources>

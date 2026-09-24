@@ -223,4 +223,12 @@
     <string name="permission_denied_storage">Odmowa uprawnienia do odczytu pamięci</string>
     <string name="image_decode_failed">Nie udało się odczytać tego obrazu</string>
     <string name="image_too_large">Obraz jest za duży dla tego serwera</string>
+    <string name="audio_device">Urządzenie audio</string>
+    <string name="audio_device_earpiece">Słuchawka</string>
+    <string name="audio_device_speaker">Głośnik</string>
+    <string name="audio_device_wired">Przewodowy zestaw słuchawkowy</string>
+    <string name="audio_device_usb">Zestaw słuchawkowy USB</string>
+    <string name="audio_device_bluetooth">Zestaw słuchawkowy Bluetooth</string>
+    <string name="audio_device_other">Urządzenie audio</string>
+    <string name="echo_cancellation">Redukcja echa</string>
 </resources>

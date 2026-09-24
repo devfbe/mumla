@@ -211,4 +211,12 @@
     <string name="permission_denied_storage">Lupa tallennustilan lukemiseen evätty</string>
     <string name="image_decode_failed">Kuvaa ei voitu lukea</string>
     <string name="image_too_large">Kuva on liian suuri tälle palvelimelle</string>
+    <string name="audio_device">Äänilaite</string>
+    <string name="audio_device_earpiece">Puhelimen kuuloke</string>
+    <string name="audio_device_speaker">Kaiutin</string>
+    <string name="audio_device_wired">Langalliset kuulokkeet</string>
+    <string name="audio_device_usb">USB-kuulokkeet</string>
+    <string name="audio_device_bluetooth">Bluetooth-kuulokkeet</string>
+    <string name="audio_device_other">Äänilaite</string>
+    <string name="echo_cancellation">Kaiunpoisto</string>
 </resources>

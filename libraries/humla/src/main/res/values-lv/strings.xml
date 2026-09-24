@@ -14,4 +14,5 @@
     <string name="no_session_user">Serveris neatsūtīja šīs sesijas lietotāju; mikrofons paliek izslēgts.</string>
     <string name="no_target_server">Šim savienojumam nav konfigurēts serveris.</string>
     <string name="udp_warning_thread_failed">UDP savienojums neizdevās. Balss tiek tunelēta caur TCP, kamēr UDP tiek mēģināts atkārtoti.</string>
+    <string name="audio_route_refused">Šī ierīce atteicās pārslēgt audioierīci. Skaņa paliek, kur bija.</string>
 </resources>

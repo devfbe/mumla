@@ -11,4 +11,5 @@
     <string name="no_session_user">Máy chủ không gửi thông tin người dùng của phiên này; micro vẫn tắt.</string>
     <string name="no_target_server">Chưa cấu hình máy chủ cho kết nối này.</string>
     <string name="udp_warning_thread_failed">Kết nối UDP bị lỗi. Giọng nói được truyền qua TCP trong khi thử lại UDP.</string>
+    <string name="audio_route_refused">Thiết bị này từ chối chuyển thiết bị âm thanh. Âm thanh vẫn ở chỗ cũ.</string>
 </resources>

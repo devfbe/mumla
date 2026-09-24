@@ -200,4 +200,12 @@
     <string name="permission_denied_storage">Toestemming om opslag te lezen geweigerd</string>
     <string name="image_decode_failed">Kon die afbeelding niet lezen</string>
     <string name="image_too_large">Afbeelding is te groot voor deze server</string>
+    <string name="audio_device">Audioapparaat</string>
+    <string name="audio_device_earpiece">Oorspeaker</string>
+    <string name="audio_device_speaker">Luidspreker</string>
+    <string name="audio_device_wired">Bedrade headset</string>
+    <string name="audio_device_usb">USB-headset</string>
+    <string name="audio_device_bluetooth">Bluetooth-headset</string>
+    <string name="audio_device_other">Audioapparaat</string>
+    <string name="echo_cancellation">Echo-onderdrukking</string>
 </resources>

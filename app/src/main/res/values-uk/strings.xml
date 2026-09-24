@@ -217,4 +217,12 @@
     <string name="permission_denied_storage">Немає дозволу на читання сховища</string>
     <string name="image_decode_failed">Не вдалося прочитати це зображення</string>
     <string name="image_too_large">Зображення завелике для цього сервера</string>
+    <string name="audio_device">Аудіопристрій</string>
+    <string name="audio_device_earpiece">Розмовний динамік</string>
+    <string name="audio_device_speaker">Гучний зв’язок</string>
+    <string name="audio_device_wired">Дротова гарнітура</string>
+    <string name="audio_device_usb">USB-гарнітура</string>
+    <string name="audio_device_bluetooth">Bluetooth-гарнітура</string>
+    <string name="audio_device_other">Аудіопристрій</string>
+    <string name="echo_cancellation">Придушення луни</string>
 </resources>

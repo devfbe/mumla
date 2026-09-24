@@ -41,4 +41,12 @@
     <string name="permission_denied_storage">Atļauja lasīt krātuvi liegta</string>
     <string name="image_decode_failed">Neizdevās nolasīt šo attēlu</string>
     <string name="image_too_large">Attēls ir pārāk liels šim serverim</string>
+    <string name="audio_device">Audioierīce</string>
+    <string name="audio_device_earpiece">Klausule</string>
+    <string name="audio_device_speaker">Skaļrunis</string>
+    <string name="audio_device_wired">Vadu austiņas</string>
+    <string name="audio_device_usb">USB austiņas</string>
+    <string name="audio_device_bluetooth">Bluetooth austiņas</string>
+    <string name="audio_device_other">Audioierīce</string>
+    <string name="echo_cancellation">Atbalss slāpēšana</string>
 </resources>

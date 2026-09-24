@@ -212,4 +212,12 @@
     <string name="permission_denied_storage">Tilgang til å lese lagring nektet</string>
     <string name="image_decode_failed">Kunne ikke lese det bildet</string>
     <string name="image_too_large">Bildet er for stort for denne tjeneren</string>
+    <string name="audio_device">Lydenhet</string>
+    <string name="audio_device_earpiece">Ørehøyttaler</string>
+    <string name="audio_device_speaker">Høyttaler</string>
+    <string name="audio_device_wired">Kablet hodesett</string>
+    <string name="audio_device_usb">USB-hodesett</string>
+    <string name="audio_device_bluetooth">Bluetooth-hodesett</string>
+    <string name="audio_device_other">Lydenhet</string>
+    <string name="echo_cancellation">Ekkodemping</string>
 </resources>

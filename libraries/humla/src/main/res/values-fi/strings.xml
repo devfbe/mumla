@@ -42,4 +42,5 @@
     <string name="no_session_user">Palvelin ei lähettänyt tämän istunnon omaa käyttäjää; mikrofoni pysyy pois päältä.</string>
     <string name="no_target_server">Tälle yhteydelle ei ole määritetty palvelinta.</string>
     <string name="udp_warning_thread_failed">UDP-yhteys epäonnistui. Puhe tunneloidaan TCP:n kautta, kun UDP:tä yritetään uudelleen.</string>
+    <string name="audio_route_refused">Tämä laite kieltäytyi vaihtamasta äänilaitetta. Ääni pysyy siellä, missä se oli.</string>
 </resources>

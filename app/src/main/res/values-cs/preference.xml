@@ -70,6 +70,8 @@
     <string name="mediaButtonActionNone">Nic – mediální tlačítka nechat hudební aplikaci</string>
     <string name="mediaButtonActionAuto">Přepnout Drž-a-mluv, v ostatních režimech ztlumit</string>
     <string name="mediaButtonActionMute">Přepnout ztlumení</string>
-    <string name="bluetoothSco">Bluetooth headset</string>
-    <string name="bluetoothScoSum">Posílat a přijímat hlas přes připojený Bluetooth headset, když jste připojeni k serveru. Zůstává zapnuto i po výpadku spojení a obnoví se po opětovném připojení k serveru. Žádá o oprávnění „Zařízení v okolí“; některá zařízení bez něj zvuk do headsetu nepřesměrují.</string>
+    <string name="bluetoothSco">Automaticky používat Bluetooth headset</string>
+    <string name="bluetoothScoSum">Posílat a přijímat hlas přes připojený Bluetooth headset, když jste připojeni k serveru, a přepnout na headset, který se připojí během hovoru. Zvukové zařízení pro hovor lze změnit v nabídce kanálu. Žádá o oprávnění „Zařízení v okolí“; některá zařízení bez něj zvuk do headsetu nepřesměrují.</string>
+    <string name="defaultOutput">Výstup bez headsetu</string>
+    <string name="defaultOutputSum">Kde se přehrává hlas, když se připojíte a není k dispozici Bluetooth ani drátový headset. Sluchátko navíc u ucha vypíná obrazovku. Zařízení můžete během hovoru přepnout v nabídce kanálu.</string>
 </resources>

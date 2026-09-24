@@ -211,4 +211,12 @@
     <string name="permission_denied_storage">Permissão para ler o armazenamento negada</string>
     <string name="image_decode_failed">Não foi possível ler essa imagem</string>
     <string name="image_too_large">A imagem é grande demais para este servidor</string>
+    <string name="audio_device">Dispositivo de áudio</string>
+    <string name="audio_device_earpiece">Receptor</string>
+    <string name="audio_device_speaker">Alto-falante</string>
+    <string name="audio_device_wired">Fone de ouvido com fio</string>
+    <string name="audio_device_usb">Fone de ouvido USB</string>
+    <string name="audio_device_bluetooth">Fone de ouvido Bluetooth</string>
+    <string name="audio_device_other">Dispositivo de áudio</string>
+    <string name="echo_cancellation">Cancelamento de eco</string>
 </resources>

@@ -211,4 +211,12 @@
     <string name="permission_denied_storage">Δεν επιτρέπεται η ανάγνωση του αποθηκευτικού χώρου</string>
     <string name="image_decode_failed">Δεν ήταν δυνατή η ανάγνωση αυτής της εικόνας</string>
     <string name="image_too_large">Η εικόνα είναι πολύ μεγάλη για αυτόν τον διακομιστή</string>
+    <string name="audio_device">Συσκευή ήχου</string>
+    <string name="audio_device_earpiece">Ακουστικό τηλεφώνου</string>
+    <string name="audio_device_speaker">Ηχείο</string>
+    <string name="audio_device_wired">Ενσύρματα ακουστικά</string>
+    <string name="audio_device_usb">Ακουστικά USB</string>
+    <string name="audio_device_bluetooth">Ακουστικά Bluetooth</string>
+    <string name="audio_device_other">Συσκευή ήχου</string>
+    <string name="echo_cancellation">Ακύρωση ηχούς</string>
 </resources>

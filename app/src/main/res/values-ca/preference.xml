@@ -144,6 +144,8 @@
     <string name="mediaButtonActionNone">Res: deixa les tecles multimèdia a l\'aplicació de música</string>
     <string name="mediaButtonActionAuto">Commuta el PTT, o silencia en els altres modes de transmissió</string>
     <string name="mediaButtonActionMute">Commuta el silenci</string>
-    <string name="bluetoothSco">Auriculars Bluetooth</string>
-    <string name="bluetoothScoSum">Envia i rep la veu a través d\'uns auriculars Bluetooth connectats mentre esteu connectat a un servidor. Es manté activat si es perd la connexió i es restaura quan es torna a connectar al servidor. Demana el permís «Dispositius propers»; alguns dispositius no envien l\'àudio als auriculars sense aquest permís.</string>
+    <string name="bluetoothSco">Utilitza automàticament els auriculars Bluetooth</string>
+    <string name="bluetoothScoSum">Envia i rep la veu a través d\'uns auriculars Bluetooth connectats mentre esteu connectat a un servidor, i canvia a uns auriculars que es connectin durant la trucada. El dispositiu d\'àudio de la trucada es pot canviar des del menú del canal. Demana el permís «Dispositius propers»; alguns dispositius no envien l\'àudio als auriculars sense aquest permís.</string>
+    <string name="defaultOutput">Sortida sense auriculars</string>
+    <string name="defaultOutputSum">On sona la veu quan us connecteu i no hi ha auriculars Bluetooth ni amb cable. L\'auricular del telèfon també apaga la pantalla a l\'orella. Podeu canviar el dispositiu durant una trucada des del menú del canal.</string>
 </resources>

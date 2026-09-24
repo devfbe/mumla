@@ -42,4 +42,5 @@
     <string name="no_session_user">เซิฟเวอร์ไม่ได้ส่งข้อมูลผู้ใช้ของเซสชันนี้ ไมโครโฟนจะยังปิดอยู่</string>
     <string name="no_target_server">ไม่ได้กำหนดเซิฟเวอร์สำหรับการเชื่อมต่อนี้</string>
     <string name="udp_warning_thread_failed">การเชื่อมต่อ UDP ล้มเหลว เสียงจะส่งผ่าน TCP ระหว่างที่ลอง UDP ใหม่</string>
+    <string name="audio_route_refused">อุปกรณ์นี้ไม่ยอมสลับอุปกรณ์เสียง เสียงยังคงอยู่ที่เดิม</string>
 </resources>

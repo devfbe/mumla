@@ -42,4 +42,5 @@
     <string name="no_session_user">De server heeft de eigen gebruiker van deze sessie niet verzonden; de microfoon blijft uit.</string>
     <string name="no_target_server">Er is geen server ingesteld voor deze verbinding.</string>
     <string name="udp_warning_thread_failed">De UDP-verbinding is mislukt. Spraak wordt via TCP getunneld terwijl UDP opnieuw wordt geprobeerd.</string>
+    <string name="audio_route_refused">Dit toestel weigerde van audioapparaat te wisselen. De audio blijft waar die was.</string>
 </resources>

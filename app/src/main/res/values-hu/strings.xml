@@ -213,4 +213,12 @@
     <string name="permission_denied_storage">Nincs engedély a tárhely olvasására</string>
     <string name="image_decode_failed">Ezt a képet nem sikerült beolvasni</string>
     <string name="image_too_large">A kép túl nagy ehhez a szerverhez</string>
+    <string name="audio_device">Hangeszköz</string>
+    <string name="audio_device_earpiece">Fülhangszóró</string>
+    <string name="audio_device_speaker">Hangszóró</string>
+    <string name="audio_device_wired">Vezetékes headset</string>
+    <string name="audio_device_usb">USB headset</string>
+    <string name="audio_device_bluetooth">Bluetooth headset</string>
+    <string name="audio_device_other">Hangeszköz</string>
+    <string name="echo_cancellation">Visszhangszűrés</string>
 </resources>

@@ -213,4 +213,12 @@
     <string name="permission_denied_storage">Oprávnění ke čtení úložiště bylo zamítnuto</string>
     <string name="image_decode_failed">Tento obrázek nelze přečíst</string>
     <string name="image_too_large">Obrázek je pro tento server příliš velký</string>
+    <string name="audio_device">Zvukové zařízení</string>
+    <string name="audio_device_earpiece">Sluchátko</string>
+    <string name="audio_device_speaker">Reproduktor</string>
+    <string name="audio_device_wired">Drátový headset</string>
+    <string name="audio_device_usb">USB headset</string>
+    <string name="audio_device_bluetooth">Bluetooth headset</string>
+    <string name="audio_device_other">Zvukové zařízení</string>
+    <string name="echo_cancellation">Potlačení ozvěny</string>
 </resources>

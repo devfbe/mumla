@@ -42,4 +42,5 @@
     <string name="no_session_user">Serwer nie przesłał własnego użytkownika tej sesji; mikrofon pozostaje wyłączony.</string>
     <string name="no_target_server">Nie skonfigurowano serwera dla tego połączenia.</string>
     <string name="udp_warning_thread_failed">Połączenie UDP nie powiodło się. Głos jest przesyłany tunelem przez TCP, a UDP jest ponawiane.</string>
+    <string name="audio_route_refused">To urządzenie odmówiło przełączenia urządzenia audio. Dźwięk pozostaje tam, gdzie był.</string>
 </resources>

@@ -42,4 +42,5 @@
     <string name="no_session_user">இந்த அமர்வின் சொந்தப் பயனரைச் சேவையகம் அனுப்பவில்லை; ஓரி அணைந்தே இருக்கும்.</string>
     <string name="no_target_server">இந்த இணைப்புக்கு எந்தச் சேவையகமும் அமைக்கப்படவில்லை.</string>
     <string name="udp_warning_thread_failed">UDP இணைப்பு தோல்வியடைந்தது. UDP மீண்டும் முயலப்படும்போது குரல் TCP வழியாகச் சுரங்கப்படுத்தப்படுகிறது.</string>
+    <string name="audio_route_refused">இந்தச் சாதனம் ஒலிச் சாதனத்தை மாற்ற மறுத்தது. ஒலி முன்பு இருந்த இடத்திலேயே இருக்கும்.</string>
 </resources>

@@ -150,6 +150,8 @@
     <string name="mediaButtonActionNone">Niente — lascia i tasti multimediali all\'app musicale</string>
     <string name="mediaButtonActionAuto">Attiva/disattiva push-to-talk, o il muto nelle altre modalità di trasmissione</string>
     <string name="mediaButtonActionMute">Attiva/disattiva muto</string>
-    <string name="bluetoothSco">Cuffie Bluetooth</string>
-    <string name="bluetoothScoSum">Invia e ricevi la voce tramite cuffie Bluetooth collegate mentre sei connesso a un server. Resta attivo se la connessione cade e viene ripristinato quando il server si riconnette. Richiede il permesso Dispositivi nelle vicinanze; alcuni dispositivi non instradano l\'audio alle cuffie senza di esso.</string>
+    <string name="bluetoothSco">Usa automaticamente le cuffie Bluetooth</string>
+    <string name="bluetoothScoSum">Invia e ricevi la voce tramite cuffie Bluetooth collegate mentre sei connesso a un server e passa a cuffie che si collegano durante la chiamata. Il dispositivo audio della chiamata si può cambiare dal menu del canale. Richiede il permesso Dispositivi nelle vicinanze; alcuni dispositivi non instradano l\'audio alle cuffie senza di esso.</string>
+    <string name="defaultOutput">Uscita senza cuffie</string>
+    <string name="defaultOutputSum">Dove si sente la voce quando ti connetti e non ci sono cuffie Bluetooth o con cavo. L\'auricolare spegne anche lo schermo vicino all\'orecchio. Puoi cambiare dispositivo durante una chiamata dal menu del canale.</string>
 </resources>

@@ -120,4 +120,12 @@
     <string name="permission_denied_storage">Ingen tilladelse til at læse lageret</string>
     <string name="image_decode_failed">Billedet kunne ikke læses</string>
     <string name="image_too_large">Billedet er for stort til denne server</string>
+    <string name="audio_device">Lydenhed</string>
+    <string name="audio_device_earpiece">Ørehøjttaler</string>
+    <string name="audio_device_speaker">Højttaler</string>
+    <string name="audio_device_wired">Headset med ledning</string>
+    <string name="audio_device_usb">USB-headset</string>
+    <string name="audio_device_bluetooth">Bluetooth-headset</string>
+    <string name="audio_device_other">Lydenhed</string>
+    <string name="echo_cancellation">Ekkoannullering</string>
 </resources>

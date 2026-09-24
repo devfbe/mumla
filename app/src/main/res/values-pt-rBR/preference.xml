@@ -55,6 +55,8 @@
     <string name="mediaButtonActionNone">Nada — deixar os botões de mídia para o seu app de música</string>
     <string name="mediaButtonActionAuto">Alternar Pressione para falar, ou silenciar nos outros modos de transmissão</string>
     <string name="mediaButtonActionMute">Alternar silenciar</string>
-    <string name="bluetoothSco">Fone de ouvido Bluetooth</string>
-    <string name="bluetoothScoSum">Envia e recebe voz por um fone de ouvido Bluetooth conectado enquanto você está conectado a um servidor. Continua ativado se a conexão cair e é restaurado quando o servidor se reconectar. Pede a permissão Dispositivos próximos; alguns dispositivos não direcionam o áudio para o fone sem ela.</string>
+    <string name="bluetoothSco">Usar fone de ouvido Bluetooth automaticamente</string>
+    <string name="bluetoothScoSum">Envia e recebe voz por um fone de ouvido Bluetooth conectado enquanto você está conectado a um servidor e muda para um fone que se conectar durante a chamada. O dispositivo de áudio da chamada pode ser alterado no menu do canal. Pede a permissão Dispositivos próximos; alguns dispositivos não direcionam o áudio para o fone sem ela.</string>
+    <string name="defaultOutput">Saída sem fone de ouvido</string>
+    <string name="defaultOutputSum">Onde a voz toca quando você se conecta e não há fone de ouvido Bluetooth ou com fio. O receptor também desliga a tela junto ao ouvido. Você pode trocar o dispositivo durante uma chamada no menu do canal.</string>
 </resources>
