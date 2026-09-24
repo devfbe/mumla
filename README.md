@@ -56,10 +56,11 @@ NDK 29.0.14206865, SDK CMake 4.1.2, meson/ninja and `git`. Inside it:
 
 If you cloned without `--recursive`, run `git submodule update --init --recursive`
 first. `libraries/humla` is an ordinary directory in this repository, not a
-submodule; the submodules are the third-party native codec sources (opus,
-speex, speexdsp, CELT) under `libraries/humla/src/main/cpp/third_party/`,
-built for `arm64-v8a`, `armeabi-v7a` and `x86_64` via CMake with hand-written
-JNI glue.
+submodule; the submodules are the third-party native sources under
+`libraries/humla/src/main/cpp/third_party/` — the codecs opus, speex, CELT
+0.7.0 and CELT 0.11.0, and the audio processing libraries speexdsp, RNNoise,
+webrtc-audio-processing and its dependency abseil-cpp — built for
+`arm64-v8a`, `armeabi-v7a` and `x86_64` via CMake with hand-written JNI glue.
 
 [direnv](https://direnv.net/) users can `direnv allow` to enter the shell
 automatically. The same shell is what CI uses (`.gitlab-ci.yml`).
@@ -74,7 +75,8 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
 - `libraries/humla/` — the Mumble protocol implementation and audio pipeline
   (`se.lublin.humla`); `src/Mumble.proto` is compiled to Java at build time
   (nothing generated is checked in), crypto uses BouncyCastle, and
-  `src/main/cpp/CMakeLists.txt` builds the native codecs and their JNI glue.
+  `src/main/cpp/CMakeLists.txt` builds the native codecs and audio processing
+  libraries and their JNI glue.
 - `docs/superpowers/` — the ongoing modernization specification and plans.
 - `NOTICE.md` — third-party components and licenses.
 
@@ -94,7 +96,9 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
 - **Conventional Commits**, in English: `feat:`, `fix:`, `refactor:`,
   `build:`, `test:`, `docs:`, `chore:`, optional scope such as `fix(humla):`,
   imperative subject of at most 72 characters, no trailers.
-- **Strings** go to `app/src/main/res/values/strings.xml`; translations are
+- **Strings**: only the base (English) texts are edited in the repository, in
+  `app/src/main/res/values/` (`strings.xml`, `preference.xml`) or
+  `libraries/humla/src/main/res/values/strings.xml`; translations are
   handled on [Weblate](https://hosted.weblate.org/engage/mumla/) — please do
   not edit the translated resource files directly.
 - Work is currently organized in streams described in
