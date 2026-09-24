@@ -40,14 +40,8 @@ class ToggleInputModeTest {
     }
 
     /**
-     * Written against the thread's state rather than against a stopwatch, on purpose.
-     *
-     * The plan's form starts the thread, asserts that a latch does **not** count down within
-     * 200 ms and then toggles. That passes for two different reasons -- the thread blocked, or the
-     * thread had not been scheduled at all -- and only one of them is the property. It is the
-     * vacuous pass spec §4.05 names, and it costs 200 ms of wall clock per run to get it.
-     * `Condition.await()` with no timeout parks in [Thread.State.WAITING], so waiting *for* that
-     * state distinguishes the two and finishes as soon as it is true.
+     * Waits for [Thread.State.WAITING] rather than asserting a latch stays down for a while: the
+     * latter also passes when the thread was simply never scheduled.
      */
     @Test
     fun `waitForInput blocks while off and wakes when toggled on`() {
@@ -72,24 +66,9 @@ class ToggleInputModeTest {
     }
 
     /**
-     * **The `catch (InterruptedException)` around `await()` is not a log line, it is a control-flow
-     * arm**, and pinning it is what this test is for. Its effect is to swallow the exception so
-     * that [ToggleInputMode.waitForInput] **returns**; the `Log.w` inside it is incidental. Deleting
-     * the `try`/`catch` and leaving a bare `await()` used to survive the whole suite.
-     *
-     * What it costs, read off the chain rather than guessed: `AudioInput`'s capture thread runs
-     * `AudioInput.loop()`, which calls `onAudioInputReceived`, which reaches
-     * `AudioHandler:488` and `waitForInput()` -- so `await()` parks the **recording** thread.
-     * `AudioInput.stopRecording()` clears `recording`, stops the source, then `interrupt()`s that
-     * thread, then `join()`s it. Without the catch the `InterruptedException` leaves `waitForInput`,
-     * leaves `onAudioInputReceived`, leaves the `while (mRecording)` loop, and the thread dies
-     * **before `mAudioRecord.stop()` at `:213`**. The user-visible result: shutting down in push to
-     * talk with the button not held leaves the `AudioRecord` running and the microphone indicator
-     * lit. `AudioInput.loop`'s own KDoc names exactly the
-     * property this arm holds.
-     *
-     * Written against [Thread.State.WAITING] for the same reason the test above is: a latch that
-     * has not counted down does not distinguish "blocked" from "never scheduled".
+     * The `catch (InterruptedException)` makes [ToggleInputMode.waitForInput] return. Without it the
+     * interrupt from `AudioInput.stopRecording()` would kill the capture thread before it stops the
+     * `AudioRecord`, leaving the microphone running in push-to-talk.
      */
     @Test
     fun `waitForInput returns when the waiting thread is interrupted`() {
@@ -108,13 +87,13 @@ class ToggleInputModeTest {
         while (thread.state != Thread.State.WAITING && System.nanoTime() - deadline < 0) Thread.yield()
         assertThat(thread.state).isEqualTo(Thread.State.WAITING)
 
-        // Transmission stays off: the only thing that releases this thread is the interrupt.
+        // Transmission stays off: only the interrupt releases this thread.
         thread.interrupt()
         assertThat(returned.await(5, TimeUnit.SECONDS)).isTrue()
         assertThat(mode.isTalkingOn()).isFalse()
     }
 
-    /** The other half of the contract: while transmission is on, it must not block at all. */
+    /** While transmission is on, it must not block at all. */
     @Test
     fun `waitForInput returns immediately while toggled on`() {
         val mode = ToggleInputMode()
@@ -124,13 +103,7 @@ class ToggleInputModeTest {
         assertThat(returned.await(5, TimeUnit.SECONDS)).isTrue()
     }
 
-    /**
-     * `signalAll`, not `signal`. With the one capture thread there is today the two are the same
-     * call, which is why swapping them survived every other test here -- but the difference is not
-     * provably nil: nothing in this class restricts it to one waiter, and task 8's `CapturePipeline`
-     * is the kind of consumer that adds a second. Under `signal()` one of the two threads below
-     * stays parked for good, holding the microphone closed with transmission switched on.
-     */
+    /** `signalAll`, not `signal`: nothing restricts the mode to a single waiting thread. */
     @Test
     fun `toggling on releases every waiting thread, not just one`() {
         val mode = ToggleInputMode()
@@ -149,11 +122,8 @@ class ToggleInputModeTest {
     }
 
     /**
-     * The flag is written by whichever thread owns the button and read unsynchronised by the
-     * capture thread in [ToggleInputMode.shouldTransmit]. A missed publication is a JIT outcome,
-     * not a value this process can produce on demand, so what is pinned is the **declaration**:
-     * this is the one test that turns red if `@Volatile` is deleted. It is not a proof that the
-     * write is seen; it is a proof that nobody removed the only thing that makes it so.
+     * The flag is written by the button's thread and read unsynchronised by the capture thread. A
+     * missed publication cannot be provoked on demand, so the `@Volatile` declaration is pinned.
      */
     @Test
     fun `the talking flag is published`() {

@@ -33,17 +33,12 @@ class ActivityInputModeTest {
         assertThat(mode.shouldTransmit(constant(3277), 480, null)).isTrue()
     }
 
-    /**
-     * `HumlaService:270` writes exactly `new ActivityInputMode(0)`, an `int` literal against a
-     * `Float` parameter, and `:547` follows it with `setThreshold(float)`. Both are Java call
-     * sites this task must not break, and neither is covered by the Kotlin cases above --
-     * `ActivityInputMode(0)` in Kotlin would not even compile.
-     */
+    /** `HumlaService` starts with a zero threshold and adjusts it later through `setThreshold`. */
     @Test
     fun `the call HumlaService makes is a zero-threshold amplitude detector`() {
         val mode = ActivityInputMode(0f)
         assertThat(mode.vadConfig).isEqualTo(VadConfig(VadMode.AMPLITUDE, 0f, 0f, 250L))
-        // A zero threshold transmits on anything that is not digital silence, as it did before.
+        // A zero threshold transmits on anything that is not digital silence.
         assertThat(mode.shouldTransmit(constant(1), 480, null)).isTrue()
     }
 
@@ -54,22 +49,9 @@ class ActivityInputModeTest {
     }
 
     /**
-     * The length, not the array's size -- **both** the divisor and the loop bound. `AudioInput`
-     * hands the capture buffer down whole with the count of valid samples beside it, so reading
-     * `pcm.size` instead of `length` averages the frame against whatever is past the valid samples
-     * and reports a level that is wrong -- quietly, and only for a short frame.
-     *
-     * **The tail must not be zeros, and this test used to have zeros.** With a zero tail the two
-     * sums are bit-identical, so the assertion held for the wrong reason: it pinned the *divisor*
-     * and left the *loop bound* free, and a mutation of `0 until length` to `pcm.indices` survived
-     * the whole suite. The bracket below is two-sided on purpose -- one assertion cannot separate
-     * a reading that is too low from one that is too high.
-     *
-     * Computed for 480 samples of 3277 followed by 480 of 2000:
-     * - correct, `length = 480`: **0.79167**
-     * - loop bound over the whole array, `length = 480`: **0.80600** (too high; the upper bracket)
-     * - divisor `pcm.size`, `length = 480`: **0.76031** (too low; the lower bracket)
-     * - correct, `length = 960`: **0.77464**
+     * Both the divisor and the loop bound must use `length`, not the array's size. The tail is
+     * non-zero so that each mistake is detectable: 0.79167 correct, 0.80600 with the whole array as
+     * loop bound, 0.76031 with `pcm.size` as divisor, 0.77464 for `length = 960`.
      */
     @Test
     fun `only the first length samples are measured`() {
@@ -82,24 +64,14 @@ class ActivityInputModeTest {
     }
 
     /**
-     * The same defect in the units it will be met in, and it is not hypothetical: `AudioInput.loop`
-     * allocates its capture buffer **once, outside the loop**, so every
-     * short frame arrives in a buffer whose tail still holds the previous frame. Task 8's
-     * `CapturePipeline` opens exactly this dimension -- `a short resampler output is zero-padded`
-     * hands `length = 300` into a 480-sample buffer.
-     *
-     * 300 quiet samples (value 300) in a buffer whose remaining 180 still carry a loud tail
-     * (20000) score **0.5753** read correctly and **0.9322** read over the whole buffer. Against
-     * the same threshold that is silence against shouting: **the microphone opens on a quiet frame
-     * because of audio that is already gone.** `AudioInput.loop` shields this twice over since
-     * task 9: it zero-pads the buffer from the read count to the end, and it still hands over the
-     * whole frame size. From task 8 on, the pipeline is what has to keep doing both.
+     * The capture buffer is reused, so a short frame's tail holds the previous frame: 0.5753 read
+     * correctly, 0.9322 read over the whole buffer.
      */
     @Test
     fun `a short frame is not measured against the previous frame's tail`() {
         val reused = ShortArray(480) { if (it < 300) 300 else 20000 }
         assertThat(ActivityInputMode(0.6f).shouldTransmit(reused, 300, null)).isFalse()
-        // And the loud leftovers really are loud: read whole, the same buffer is far over.
+        // Read whole, the same buffer is far over the threshold.
         assertThat(ActivityInputMode(0.6f).shouldTransmit(reused, 480, null)).isTrue()
     }
 
@@ -115,11 +87,7 @@ class ActivityInputModeTest {
         assertThat(mode.vadConfig.startThreshold).isEqualTo(0.6f)
     }
 
-    /**
-     * The slider carries no hold time, so `setThreshold` has to keep the one already configured.
-     * Dropping it silently resets a user's hold to the 250 ms default every time they move the
-     * slider -- and the only visible symptom is that speech starts clipping again.
-     */
+    /** The slider carries no hold time, so `setThreshold` must keep the configured one. */
     @Test
     fun `setThreshold keeps the configured hold time`() {
         val mode = ActivityInputMode(0.5f)
