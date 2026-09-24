@@ -20,12 +20,9 @@ package se.lublin.humla.audio.capture.fakes
 import se.lublin.humla.audio.native.SpeexResamplerApi
 
 /**
- * Answers like `jni_speexdsp.cpp` does, including the one detail the adapter has to survive:
- * on an error the bridge returns **before** writing `outLen`, so the caller's own
- * `outLen[0] = output.size` is still standing when it comes back. A reader that trusts it
- * reports a full frame that was never produced.
- *
- * [produced] is the number of samples a successful call writes; [errorCode] makes every call fail.
+ * Answers like `jni_speexdsp.cpp`: on an error the bridge returns before writing `outLen`, so the
+ * caller's `outLen[0] = output.size` is still there. [produced] is the number of samples a
+ * successful call writes; [errorCode] makes every call fail.
  */
 class FakeSpeexResamplerApi(
     private val handle: Long = 7L,
@@ -60,8 +57,7 @@ class FakeSpeexResamplerApi(
         lastChannelIndex = channelIndex
         lastInLength = inLen[0]
         lastOutCapacity = outLen[0]
-        // A destroyed or null state is refused by the bridge with RESAMPLER_ERR_INVALID_ARG, and
-        // outLen is left exactly as the caller set it.
+        // The bridge refuses a destroyed or null state with RESAMPLER_ERR_INVALID_ARG, leaving outLen as set.
         if (state == 0L) return ERR_INVALID_ARG
         if (errorCode != 0) return errorCode
         val n = minOf(produced, out.size)

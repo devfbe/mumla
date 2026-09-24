@@ -20,11 +20,7 @@ package se.lublin.humla.audio.capture
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
-/**
- * The tracker is a pure state machine over dBFS readings, so every time constant claimed in its
- * KDoc is checkable here by feeding it frames and counting them. A number in a comment that no
- * test divides by is a wish; these are the divisions.
- */
+/** The tracker is a pure state machine over dBFS readings, so its time constants are checked by counting frames. */
 class AdaptiveVadTrackerTest {
     private fun tracker(floor: Float = -45f) = AdaptiveVadTracker(initialFloorDbfs = floor)
 
@@ -35,8 +31,8 @@ class AdaptiveVadTrackerTest {
 
     @Test
     fun `a fresh tracker demands exactly the window spec 4_1 adopted`() {
-        // speech is seeded at floor + 20 dB and the default fraction is 0.65, so 0.65 * 20 = 13.0 dB,
-        // which is the demand the fixed -45/-23.3 window makes at a start threshold of 0.6.
+        // Speech is seeded at floor + 20 dB and the default fraction is 0.65: 13.0 dB, the same
+        // demand as the fixed -45/-23.3 window at a start threshold of 0.6.
         val t = tracker(-45f)
         assertThat(t.gapDb).isWithin(0.001f).of(AdaptiveVadTracker.DEFAULT_GAP_DB)
         assertThat(t.marginDb(AdaptiveVadTracker.DEFAULT_FRACTION)).isWithin(0.001f).of(13.0f)
@@ -97,9 +93,8 @@ class AdaptiveVadTrackerTest {
 
     @Test
     fun `a silent minute relaxes the demand instead of latching the gate shut`() {
-        // Without this the loop eats itself: a loud close talker raises the threshold, he walks
-        // away, the gate never opens again, and because the speech estimate is only fed while
-        // transmitting it can never learn that he got quieter.
+        // The speech estimate is only fed while transmitting, so without this a talker who walked
+        // away after being loud could never open the gate again.
         val t = tracker(-45f).feed(level = -12f, transmitting = true, frames = 1)
         val demandWhileClose = t.marginDb(AdaptiveVadTracker.DEFAULT_FRACTION)
 
@@ -118,8 +113,7 @@ class AdaptiveVadTrackerTest {
 
     @Test
     fun `the margin is clamped at both ends`() {
-        // Shouting into the microphone from 10 cm must not raise the demand past what the chain's
-        // own curve calls full-scale speech, which is the 21.7 dB width of the adopted window.
+        // Even a very loud talker must not raise the demand past the window's 21.7 dB width.
         val loud = tracker(-90f).feed(level = -1f, transmitting = true, frames = 1)
         assertThat(loud.gapDb).isGreaterThan(AdaptiveVadTracker.MAX_MARGIN_DB)
         assertThat(loud.marginDb(1f)).isWithin(0.001f).of(AdaptiveVadTracker.MAX_MARGIN_DB)
@@ -131,9 +125,8 @@ class AdaptiveVadTrackerTest {
 
     @Test
     fun `the gap the design stops helping in is reported rather than hidden`() {
-        // -37 dBFS against a -45 floor is a gap of 8 dB, below what the design can work in, so
-        // the peak is held at the clamp and the tracker says so instead of pretending. 200 frames
-        // is 2 s, more than the 1.67 s the peak needs to fall the 10 dB from its seed at 6 dB/s.
+        // An 8 dB gap is below what the design can work in, so the peak is held at the clamp and
+        // reported. 200 frames outlast the 1.67 s the peak needs to fall 10 dB at 6 dB/s.
         val far = tracker(-45f).feed(level = -37f, transmitting = true, frames = 200)
         assertThat(far.speechDbfs).isWithin(0.001f).of(-35f)
         assertThat(far.gapDb).isWithin(0.001f).of(AdaptiveVadTracker.MIN_USABLE_GAP_DB)

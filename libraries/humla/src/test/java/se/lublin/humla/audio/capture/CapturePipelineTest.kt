@@ -31,7 +31,7 @@ import se.lublin.humla.audio.inputmode.ToggleInputMode
 class CapturePipelineTest {
     private fun constant(value: Int, size: Int = 480) = ShortArray(size) { value.toShort() }
 
-    /** Regression for the user-reported "voice activation triggered by background noise" (spec §6). */
+    /** Regression for voice activation being triggered by background noise. */
     @Test
     fun `vad decides on the preprocessed frame, not the raw frame`() {
         val loudNoise = constant(8000)   // level score 0.87243, far above a 0.5 amplitude threshold
@@ -95,23 +95,8 @@ class CapturePipelineTest {
     }
 
     /**
-     * The buffer question, and it is the pipeline's rather than the detector's.
-     *
-     * `AudioInput.loop` allocates its capture buffer **once outside the loop**, and this
-     * pipeline does the same with its own 480-sample frame -- so without the padding write the
-     * 180 samples behind a 300-sample frame still hold the previous frame's tail. That is not a
-     * measurement artefact: those 180 samples are handed to the encoder as part of the full frame
-     * and go out on the wire, a stutter of audio the microphone already sent.
-     *
-     * Measured on this fixture (300 samples of 300 behind 180 samples of 20 000), and the two
-     * readings are written out because a boolean cannot separate too low from too high:
-     * the frame really produced reads **0.57535**, the same samples with the tail zeroed but
-     * judged over all 480 read **0.55409**, and the tail left standing reads **0.91097** --
-     * silence against shouting, against the same threshold.
-     *
-     * (The 0.93226 recorded in task 7 is a third reading and a different mutation: it is
-     * `amplitudeScore` looping over the whole array while still dividing by `length`, which is
-     * pinned in `VoiceActivityDetectorTest`. Same defect class, one level down.)
+     * The pipeline reuses its frame buffer, so without the padding write the samples behind a short
+     * frame would still hold the previous frame's tail and go out on the wire again.
      */
     @Test
     fun `the samples behind a short frame are cleared rather than left from the previous frame`() {
@@ -141,11 +126,7 @@ class CapturePipelineTest {
             .that(mode.scores[1]).isWithin(1e-4f).of(0.57535f)
     }
 
-    /**
-     * A resampler that produced nothing has produced nothing, and the pipeline must say so rather
-     * than hand on the buffer it failed to fill. `SpeexResampler` returns 0 for every speex error
-     * code (see `SpeexResamplerTest`), so this is the production case, not a hypothetical.
-     */
+    /** `SpeexResampler` returns 0 for every speex error, so this is the production failure case. */
     @Test
     fun `a resampler that produces no samples yields a silent frame the vad refuses`() {
         val mode = RecordingInputMode()
@@ -220,9 +201,8 @@ class CapturePipelineTest {
     }
 
     /**
-     * The amplification slider must not double as a voice-activation gain. 500 reads 0.62157 and
-     * 4000 reads 0.80971, so a boost of 8 straddles a 0.7 threshold: applied before the detector it
-     * would open the microphone, applied after it cannot.
+     * The amplification slider must not act as a voice-activation gain: a boost of 8 applied before
+     * the detector would lift 0.62157 over a 0.7 threshold.
      */
     @Test
     fun `the boost does not reach the voice detector`() {
@@ -235,12 +215,7 @@ class CapturePipelineTest {
         assertThat(out.samples[0]).isEqualTo(4000.toShort())
     }
 
-    /**
-     * The premise of the `amplitudeBoost != 1f` fast path: at a factor of one the loop is the
-     * identity on every short, including both ends of the range where the clamps sit. Removing the
-     * fast path alone is behaviour-identical and no test can see it -- which is exactly why the
-     * premise is written down as a test instead of as a comment.
-     */
+    /** The premise of the `amplitudeBoost != 1f` fast path: a factor of one is the identity. */
     @Test
     fun `a boost of one changes no sample`() {
         val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode(), amplitudeBoost = 1f)
@@ -263,11 +238,8 @@ class CapturePipelineTest {
     }
 
     /**
-     * The amplification slider runs **0 to 200 %** (`settings_audio.xml`, `app:max="200"`, divided
-     * by 100 in `Settings.kt`), so a factor below one is a setting a user can choose and the whole
-     * lower half of the range had no fixture: every other boost test sits at 2 or 8. The narrowing
-     * truncates toward zero, which is what `AudioHandler.java:454-464` has always done, so a sample
-     * of 1 attenuates to 0 rather than to 1.
+     * The slider runs 0 to 200 %, so factors below one are real settings. The narrowing truncates
+     * toward zero, so a sample of 1 attenuates to 0.
      */
     @Test
     fun `a boost below one attenuates and truncates toward zero`() {
@@ -285,7 +257,7 @@ class CapturePipelineTest {
         assertThat(out.samples[5]).isEqualTo((-16384).toShort())
     }
 
-    /** The bottom of the same slider, which is a mute rather than an attenuation. */
+    /** The bottom of the slider mutes rather than attenuates. */
     @Test
     fun `the bottom of the slider silences the frame`() {
         val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode(), amplitudeBoost = 0f)
@@ -298,11 +270,7 @@ class CapturePipelineTest {
         }
     }
 
-    /**
-     * `frameSize` is a constructor parameter and every other test in this class takes the 480
-     * default, so without this one the dimension is closed by construction and a hardcoded 480
-     * anywhere in the file would pass the whole sweep.
-     */
+    /** Every other test uses the 480 default, which would hide a hardcoded 480. */
     @Test
     fun `the frame is the size it was given, not 480`() {
         val mode = RecordingInputMode()
@@ -318,10 +286,6 @@ class CapturePipelineTest {
         assertThat(logs).isEmpty()
     }
 
-    /**
-     * The copy path's own empty frame: `AudioInput.loop` skips a read of 0 before calling, but
-     * `AudioHandler:430` passes a read count straight through and task 11 replaces it with this.
-     */
     @Test
     fun `an input of no samples is judged as no signal and logged`() {
         val mode = RecordingInputMode()
@@ -345,10 +309,8 @@ class CapturePipelineTest {
     }
 
     /**
-     * The frame the pipeline hands back is its own and is reused, which is the contract task 11
-     * consumes: read it before the next [CapturePipeline.process], never keep it. Measured reason
-     * rather than taste -- a fresh wrapper per frame is 32.013 B cold on the audio thread, see
-     * `CaptureThreadAllocationTest`.
+     * The returned frame is reused to avoid a per-frame allocation on the audio thread: read it
+     * before the next [CapturePipeline.process], never keep it.
      */
     @Test
     fun `the returned frame is the pipeline's own and is reused`() {
@@ -377,10 +339,8 @@ class CapturePipelineTest {
     }
 
     /**
-     * A second [CapturePipeline.release] must not reach a resampler that is already gone, and a
-     * frame still in flight after the release must fall through to the copy path rather than call
-     * into it. Both are the field being cleared, and [FakeResampler.releases] counts because a
-     * boolean cannot tell one release from two.
+     * After release the resampler field is cleared: a second release does not reach it, and a frame
+     * still in flight falls through to the copy path.
      */
     @Test
     fun `release clears the resampler so it is neither released nor used twice`() {
@@ -421,7 +381,7 @@ class CapturePipelineTest {
         assertThat(mode.lengths).containsExactly(300)
     }
 
-    /** Copies what it is given, so the pipeline's buffer keeps whatever the shorter frame did not cover. */
+    /** Copies what it is given, leaving the rest of the output buffer untouched. */
     private class PassThroughResampler : Resampler {
         override fun resample(input: ShortArray, inputLength: Int, output: ShortArray): Int {
             val n = minOf(inputLength, output.size)

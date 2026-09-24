@@ -21,10 +21,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
 class ModesTest {
-    /**
-     * The platform canceller is no longer offered; a stored or sent "system" (or the spec spelling
-     * "android") is read as no canceller rather than refused.
-     */
+    /** The platform canceller is no longer offered; stored "system"/"android" values read as none. */
     @Test
     fun `the retired platform canceller values read as none`() {
         assertThat(EchoCancellationMode.fromPreferenceValue("system")).isEqualTo(EchoCancellationMode.NONE)
@@ -49,11 +46,7 @@ class ModesTest {
         assertThat(NoiseSuppressionMode.fromPreferenceValue(null)).isEqualTo(NoiseSuppressionMode.SPEEX)
     }
 
-    /**
-     * Both enums round-trip through their own on-disk value. This is the "pin the set, not the
-     * member" half: a constant added later without a mapping fails here instead of silently
-     * reading back as the default the first time a user selects it.
-     */
+    /** A constant added without a mapping fails here instead of reading back as the default. */
     @Test
     fun `every mode round-trips through its preference value`() {
         for (mode in NoiseSuppressionMode.entries) {
@@ -65,18 +58,9 @@ class ModesTest {
     }
 
     /**
-     * The on-disk spelling of every constant, pinned in the *writing* direction.
-     *
-     * [fromPreferenceValue] alone cannot pin it: `entries.firstOrNull { it.preferenceValue == value }`
-     * falls back to the same constant the misspelt entry would have matched, so
-     * `SPEEX("speex") -> "speexdsp"` and `NONE("none") -> "off"` both survive every read test,
-     * including the round-trip one -- that test looks the value up with the very field it compares
-     * against, which makes it tautological for a `firstOrNull` mapping.
-     *
-     * The direction that has no read test is the one that reaches the disk: task 12 builds the
-     * ListPreference from these strings, and a wrong one means the preference shows nothing
-     * selected and the user can no longer change the noise filter at all. `containsExactly` also
-     * pins the set, so a constant added without a decision about its on-disk value fails here.
+     * Pins the stored spelling directly: a misspelt value would still pass the round trip, because
+     * unknown values fall back to the same default. A wrong value would leave the settings list
+     * with nothing selected.
      */
     @Test
     fun `every constant keeps its on-disk value`() {
@@ -95,13 +79,7 @@ class ModesTest {
             .containsNoDuplicates()
     }
 
-    /**
-     * All four points of the input space, because three of them were not enough. With only `()`,
-     * `(ns)` and `(agc)` written down, `||` survives its mutation to `xor`: the one input that
-     * tells the two apart is the one a user produces by ticking both boxes. Then [any] is false,
-     * task 9/11 does not switch to VOICE_COMMUNICATION + MODE_IN_COMMUNICATION, and neither effect
-     * attaches to the session -- the user silently does not get the setting they turned on twice.
-     */
+    /** All four inputs: `||` mutated to `xor` differs only when both effects are ticked. */
     @Test
     fun `android effects any is true for every combination with an effect on`() {
         assertThat(AndroidAudioEffects(noiseSuppressor = false, automaticGainControl = false).any).isFalse()
@@ -110,7 +88,7 @@ class ModesTest {
         assertThat(AndroidAudioEffects(noiseSuppressor = true, automaticGainControl = true).any).isTrue()
     }
 
-    /** The defaults are what a caller that names neither effect gets; both off is "attach nothing". */
+    /** Both off means "attach nothing". */
     @Test
     fun `android effects default to both off`() {
         assertThat(AndroidAudioEffects().noiseSuppressor).isFalse()

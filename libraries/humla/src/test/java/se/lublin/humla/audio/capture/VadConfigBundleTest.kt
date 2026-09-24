@@ -27,9 +27,8 @@ import java.lang.reflect.Modifier
 @RunWith(RobolectricTestRunner::class)
 class VadConfigBundleTest {
     /**
-     * Pin the set, not the member (spec 4.04): a field added to [VadConfig] that this codec does
-     * not carry would otherwise be a setting the settings screen writes and the running detector
-     * never sees -- silently, because a `Bundle` answers a missing key with a default.
+     * A [VadConfig] field the codec does not carry would silently read back as a default, since a
+     * `Bundle` answers a missing key with one.
      */
     @Test
     fun `every field of the config survives the round trip`() {
@@ -45,8 +44,7 @@ class VadConfigBundleTest {
             manualFloorDbfs = -57f,
         )
         assertThat(VadConfigBundle.fromBundle(VadConfigBundle.toBundle(config))).isEqualTo(config)
-        // Every value above differs from the field's default, so a codec that dropped one would
-        // hand back the default and fail the comparison rather than agreeing by luck.
+        // Every value differs from its default, so a dropped field fails the comparison.
         val declared = VadConfig::class.java.declaredFields
             .filterNot { Modifier.isStatic(it.modifiers) || it.isSynthetic }
             .map { it.name }

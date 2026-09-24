@@ -21,28 +21,14 @@ import se.lublin.humla.audio.capture.WebRtcApmConfig
 import se.lublin.humla.audio.native.WebRtcApmApi
 
 /**
- * A [WebRtcApmApi] that behaves like `jni_webrtc_apm.cpp` does.
- *
- * Three behaviours are modelled rather than knobbed, each of them a return value the bridge
- * produces on its own:
- *
- * - an unsupported sample rate answers 0 from [create], which is the real reason a stage's
- *   construction fails; [failCreate] exists for the allocation failure that has no other cause.
+ * A [WebRtcApmApi] that behaves like `jni_webrtc_apm.cpp`:
+ * - an unsupported sample rate answers 0 from [create]; [failCreate] covers allocation failure.
  * - [processCapture] and [processRender] refuse a frame shorter than [frameSize] with
- *   [SHORT_FRAME] and never touch it, so a stage that ignores the return value cannot record a
- *   refused call as a successful one. The far-end direction is where that matters most: a
- *   dropped reference frame costs about 21 dB of echo cancellation and nothing above this layer
- *   can see it (task 2, `tests/test_apm.c`).
- * - [lastCaptureLevelDbfs] counts its reads, so a stage that reads the level of a frame the APM
- *   refused is visible here rather than only in the number it returns.
+ *   [SHORT_FRAME] and never record it.
+ * - [lastCaptureLevelDbfs] counts its reads, so reading the level of a refused frame is visible.
  *
- * [createdWith] reassembles the flat parameters back into a sample rate and a [WebRtcApmConfig]
- * so a test can compare one value. That only pins the *positional* mapping when the booleans it
- * compares differ -- see `WebRtcApmPreprocessorTest`, which passes two configs chosen so that
- * every pair of the four booleans differs in at least one of them. The two `Int` parameters are
- * covered by the sample rate alone: `noiseSuppressionLevel` is not part of the config (see
- * `WebRtcApmPreprocessor.UNUSED_NOISE_SUPPRESSION_LEVEL`), so a call that swapped the two would
- * report a rate of 0 here and fail.
+ * [createdWith] reassembles the flat parameters into a rate and a [WebRtcApmConfig]; see
+ * `WebRtcApmPreprocessorTest` for how swapped booleans are still caught.
  */
 class FakeWebRtcApmApi(
     var levelDbfs: Float = -100f,
@@ -50,10 +36,8 @@ class FakeWebRtcApmApi(
     var renderError: Int = 0,
     private val onCapture: (ShortArray) -> Unit = {},
     /**
-     * Called for every far-end frame the bridge accepts. Its reason for existing is the *relation*
-     * between the two streams: [onCapture] and this one can write into one list, and the order
-     * that list ends up in is the only place the "render before the capture frame that carries its
-     * echo" rule is observable from Kotlin at all.
+     * Called for every accepted far-end frame. Sharing a list with [onCapture] makes the order of
+     * the two streams observable.
      */
     private val onRender: (ShortArray) -> Unit = {},
 ) : WebRtcApmApi {

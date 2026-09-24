@@ -21,18 +21,12 @@ import se.lublin.humla.audio.native.RnnoiseApi
 import se.lublin.humla.audio.native.RnnoiseNative
 
 /**
- * A [RnnoiseApi] that behaves like `jni_rnnoise.cpp` does, not like `rnnoise.h` reads.
+ * A [RnnoiseApi] that behaves like `jni_rnnoise.cpp`: a frame shorter than
+ * [RnnoiseNative.FRAME_SIZE] answers -1 and is neither recorded in [processedLengths] nor passed to
+ * [onProcess], so a refused call cannot look like a successful one.
  *
- * The one behaviour that is modelled rather than knobbed is the short frame: the bridge answers
- * **-1** for a frame shorter than [RnnoiseNative.FRAME_SIZE] and never lets rnnoise touch it. A
- * fake that returns its configured probability for a short frame -- and records the call as
- * processed -- books a **refused** call as a successful one, which is the shape that let an
- * earlier round certify a `-1 -> "certainly speech"` mapping as green. So [processedLengths] gets
- * an entry only for a frame that was really denoised, and [onProcess] runs only then.
- *
- * `HANDLE` is deliberately not 0 and not [FakeWebRtcApmApi.HANDLE]: spec §4.1 says a handle may
- * only go back to the bridge that issued it, and [check] here is the Kotlin-side place that can
- * see an adapter hand the APM's handle to rnnoise.
+ * `HANDLE` differs from 0 and from [FakeWebRtcApmApi.HANDLE], so [check] catches a handle passed to
+ * the wrong bridge.
  */
 class FakeRnnoiseApi(
     /** What `rnnoise_process_frame` answers for an accepted frame. Unclamped on purpose. */
@@ -44,12 +38,7 @@ class FakeRnnoiseApi(
     var created = 0
         private set
 
-    /**
-     * Every call to [create], including the ones that answered 0. [created] cannot distinguish
-     * "never asked" from "asked and refused", and a test that wants to prove no native state was
-     * even *attempted* needs that difference -- the same one `FakeWebRtcApmApi.createdWith` and
-     * `FakeSpeexPreprocessApi.createdWith` give for free by recording before the failure check.
-     */
+    /** Every call to [create], including refused ones, so "never asked" is distinguishable. */
     var createAttempts = 0
         private set
 

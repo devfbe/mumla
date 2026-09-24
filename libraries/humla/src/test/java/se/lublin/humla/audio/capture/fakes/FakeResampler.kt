@@ -21,10 +21,7 @@ import se.lublin.humla.audio.capture.Resampler
 
 /**
  * Repeats each input sample [factor] times (a crude upsampler that keeps values recognisable).
- *
- * [releases] counts rather than flags, because "released" as a boolean cannot separate
- * "released once" from "released twice" -- and a double release is precisely what
- * `CapturePipeline.release()` clearing its field is there to prevent.
+ * [releases] counts, so a double release is visible.
  */
 class FakeResampler(private val factor: Int) : Resampler {
     var releases = 0
@@ -44,9 +41,8 @@ class FakeResampler(private val factor: Int) : Resampler {
 }
 
 /**
- * Produces nothing and writes nothing, which is what the real adapter does when speex answers
- * with an error code: the output buffer keeps whatever was in it. It is the fixture for
- * "a frame the pipeline could not fill must not be handed on as the previous frame".
+ * Produces and writes nothing, like the real adapter on a speex error: the output buffer keeps
+ * whatever was in it.
  */
 class FailingResampler : Resampler {
     var calls = 0

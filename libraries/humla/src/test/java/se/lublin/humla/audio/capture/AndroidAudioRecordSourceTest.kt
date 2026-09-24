@@ -36,21 +36,11 @@ import org.robolectric.util.ReflectionHelpers
 import java.util.UUID
 
 /**
- * The real capture source, as far as Robolectric reaches it. `AudioInputTest` runs against a fake,
- * which is the point of the seam -- and it is also the hole spec 4.04's fakes pass names: with only
- * that test, the hundred lines that talk to `AudioRecord` and `android.media.audiofx` would have no
- * test at all, and spec B6's whole content is in them.
- *
- * What Robolectric cannot express here, stated rather than quietly skipped:
- * - **The rate fallback.** `ShadowAudioRecord.native_get_min_buff_size` answers `2 * (rate / 4)` for
- *   every 16-bit rate, so it is never <= 0, and `AudioRecord`'s own parameter check accepts every
- *   one of [AndroidAudioRecordSource.SAMPLE_RATES]. The first probe therefore always succeeds and
- *   neither the fallback nor the "no rate worked" throw can be reached from a test.
- * - **Platform silencing.** It needs an `AudioRecordingConfiguration` delivered to a registered
- *   `AudioManager.AudioRecordingCallback`; `ShadowAudioRecord` shadows neither registration call.
- *   The mapping from `isClientSilenced` to `CaptureState` is pinned one level up, in
- *   `AudioInputTest`, over the fake.
- * - **The in-flight read/release race.** Two threads and a native window; see the `released` KDoc.
+ * The real capture source, as far as Robolectric reaches it. Not reachable here:
+ * - The rate fallback: the shadow's min buffer size is never <= 0, so the first probe always wins.
+ * - Platform silencing: `ShadowAudioRecord` does not shadow the recording-callback registration;
+ *   the mapping is covered in `AudioInputTest` over the fake.
+ * - The in-flight read/release race; see the `released` KDoc.
  */
 @RunWith(RobolectricTestRunner::class)
 class AndroidAudioRecordSourceTest {
@@ -81,10 +71,8 @@ class AndroidAudioRecordSourceTest {
     }
 
     /**
-     * `AudioDeviceInfoBuilder` leaves the underlying `AudioDevicePort`'s role at `ROLE_NONE`, and
-     * `AudioRecord.setPreferredDevice` refuses anything whose `isSource()` is false -- so a device
-     * straight from the builder is silently not routed to and the assertion reads `null` against
-     * correct production code. The role is `AudioPort.ROLE_SOURCE`, which is hidden API, hence 1.
+     * `AudioDeviceInfoBuilder` leaves the port role at `ROLE_NONE`, and `setPreferredDevice` refuses
+     * non-sources, so the role is set to `AudioPort.ROLE_SOURCE` (hidden API, hence 1).
      */
     private fun inputDevice(type: Int): AudioDeviceInfo {
         val info = AudioDeviceInfoBuilder.newBuilder().setType(type).build()
@@ -114,7 +102,7 @@ class AndroidAudioRecordSourceTest {
         assertThat(source.record.sampleRate).isEqualTo(RATE)
     }
 
-    /** The one place [AudioSourcePolicy] reaches production; without this it is a tested island. */
+    /** Verifies [AudioSourcePolicy] is actually applied. */
     @Test
     fun `plain capture opens the requested source`() {
         val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE))
@@ -140,7 +128,7 @@ class AndroidAudioRecordSourceTest {
         assertThat(source.record.audioSource).isEqualTo(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
     }
 
-    /** Spec B11: the SCO headset is routed to by device, not by hoping the default input is it. */
+    /** The SCO headset is routed to by device, not by hoping it is the default input. */
     @Test
     fun `a preferred device is routed to`() {
         val sco = inputDevice(AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
@@ -157,7 +145,7 @@ class AndroidAudioRecordSourceTest {
         assertThat(source.record.preferredDevice).isNull()
     }
 
-    // ------------------------------------------------------------------ spec B6, the effects
+    // ------------------------------------------------------------------ the effects
 
     @Test
     fun `no effects are attached when none were asked for`() {
@@ -195,10 +183,7 @@ class AndroidAudioRecordSourceTest {
         assertThat(source.effects.single().enabled).isTrue()
     }
 
-    /**
-     * Both at once: the corner spec 4.04 records as having cost a round ("a user who switched on
-     * both Android audio effects got neither, silently"), here one level below the policy.
-     */
+    /** Both effects requested at once must both be attached. */
     @Test
     fun `both effects at once are both attached`() {
         makeAvailable(AudioEffect.EFFECT_TYPE_NS)
@@ -217,9 +202,8 @@ class AndroidAudioRecordSourceTest {
     }
 
     /**
-     * Ours cancels; a platform canceller in front of AEC3 would hand it an already-altered echo.
-     * The platform canceller is not offered any more, so no request can attach one - even on a
-     * device that has it.
+     * A platform canceller in front of AEC3 would hand it an already-altered echo, so none is
+     * attached, even on devices that have one.
      */
     @Test
     fun `webrtc echo cancellation attaches no platform canceller`() {
@@ -271,7 +255,7 @@ class AndroidAudioRecordSourceTest {
         assertThat(buffer[300]).isEqualTo(0.toShort())
     }
 
-    /** The count asked for is the frame, not the buffer: a longer buffer may not be overrun. */
+    /** The count asked for is the frame, not the buffer: a longer buffer must not be overrun. */
     @Test
     fun `read never writes past the requested length`() {
         feed(value = 5, count = FRAME * 2)
@@ -288,9 +272,8 @@ class AndroidAudioRecordSourceTest {
     // ------------------------------------------------------------------ teardown
 
     /**
-     * Without the flag this reads `AudioRecord.ERROR_INVALID_OPERATION` (-3) on a good day and
-     * crashes natively on a bad one; either way the capture loop has to be able to tell it apart
-     * from a transient error, and -100 is that code.
+     * Without the released flag this reads -3 or crashes natively; -100 lets the capture loop tell
+     * it apart from a transient error.
      */
     @Test
     fun `a read after release reports the released code`() {
@@ -342,8 +325,7 @@ class AndroidAudioRecordSourceTest {
 
         source.release()
 
-        // A released AudioEffect answers nothing at all: `getEnabled()` throws on an uninitialized
-        // one, which is a sharper observable than `false` and the only one this class can give.
+        // `getEnabled()` throws on a released effect.
         assertThrows(IllegalStateException::class.java) { effect.enabled }
     }
 

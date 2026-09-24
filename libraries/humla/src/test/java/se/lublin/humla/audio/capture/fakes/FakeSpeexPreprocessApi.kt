@@ -21,20 +21,12 @@ import se.lublin.humla.audio.native.SpeexPreprocessApi
 import se.lublin.humla.audio.native.SpeexPreprocessNative
 
 /**
- * A [SpeexPreprocessApi] that behaves like `jni_speexdsp.cpp` does, not like libspeexdsp's header
- * reads.
- *
- * Three behaviours are modelled rather than knobbed, because every one of them is a `-1` the
- * bridge produces on its own and a stage can get wrong without any test noticing:
- *
- * - [run] refuses a frame shorter than the frame size the state was created with, exactly as
- *   `PP(run)` does, and the frame then never reaches [onRun] -- speex did not touch it either.
- * - [ctlInt] refuses any request outside [SpeexPreprocessorRequests.ALLOWED] with `-1`, exactly as
- *   `preprocessRequestAllowed` does, and the request never reaches the switch.
- * - a request in [refuse] answers `-1` too, which is what speex itself returns for a request this
- *   fixed-point build compiled out (`SET_AGC`, `SET_AGC_TARGET`). The two are indistinguishable
- *   from Kotlin, and that is the documented contract of `SpeexPreprocessApi.ctlInt` -- so the fake
- *   does not distinguish them either.
+ * A [SpeexPreprocessApi] that behaves like `jni_speexdsp.cpp`, including the `-1`s the bridge
+ * produces on its own:
+ * - [run] refuses a frame shorter than the state's frame size; [onRun] never sees it.
+ * - [ctlInt] refuses any request outside [SpeexPreprocessorRequests.ALLOWED].
+ * - requests in [refuse] also answer `-1`, as speex does for controls compiled out of this
+ *   fixed-point build (`SET_AGC`, `SET_AGC_TARGET`). Kotlin cannot tell the two apart.
  */
 class FakeSpeexPreprocessApi(
     /** What `SPEEX_PREPROCESS_GET_PROB` answers, in percent, unclamped on purpose. */
@@ -47,7 +39,7 @@ class FakeSpeexPreprocessApi(
     /** Every read-direction ctl that got through. */
     val getRequests = mutableListOf<Int>()
 
-    /** Every request the stage issued, whatever the answer was -- including the refused ones. */
+    /** Every request the stage issued, including refused ones. */
     val attemptedRequests = mutableListOf<Int>()
 
     /** Requests this build answers with -1, as the fixed-point AGC controls do. */
@@ -106,18 +98,11 @@ class FakeSpeexPreprocessApi(
 }
 
 /**
- * The speex request ids, from the one place that decides which of them exist at all.
+ * The speex request ids. The `const val`s are inlined, so this does not load
+ * `SpeexPreprocessNative` (and its native library) on the JVM.
  *
- * The values come from `SpeexPreprocessNative`'s `const val`s, which Kotlin inlines at this call
- * site -- so this object names them without loading that class, and therefore without
- * `System.loadLibrary("humla_speexdsp")` on a JVM that has no such library. It also means that
- * removing one of those constants breaks this file at **compile** time.
- *
- * [ALLOWED] mirrors `preprocessRequestAllowed` in `src/main/cpp/jni_speexdsp.cpp`, which that file
- * documents as being exactly the ctl requests `SpeexPreprocessNative` declares as constants.
- * Anything else is refused with -1 before it reaches speex -- and -1 is also what speex answers
- * for a request it does not implement, so a stage cannot tell the two apart at run time. The
- * checkable place is therefore here.
+ * [ALLOWED] mirrors `preprocessRequestAllowed` in `jni_speexdsp.cpp`; anything else is refused
+ * with -1, which a stage cannot tell apart from an unimplemented request.
  */
 object SpeexPreprocessorRequests {
     const val SET_DENOISE = SpeexPreprocessNative.SPEEX_PREPROCESS_SET_DENOISE          // 0
@@ -131,9 +116,8 @@ object SpeexPreprocessorRequests {
     const val SET_AGC_TARGET = SpeexPreprocessNative.SPEEX_PREPROCESS_SET_AGC_TARGET    // 46
 
     /**
-     * `SPEEX_PREPROCESS_SET_PROB_CONTINUE`. A literal, because `SpeexPreprocessNative` deliberately
-     * does not declare it: it is **not** on the bridge's allow list, so it never reaches speex and
-     * `ctlInt` answers -1 -- indistinguishable from a request speex does not know.
+     * `SPEEX_PREPROCESS_SET_PROB_CONTINUE`, a literal because `SpeexPreprocessNative` deliberately
+     * does not declare it: it is not on the bridge's allow list.
      */
     const val SET_PROB_CONTINUE = 16
 

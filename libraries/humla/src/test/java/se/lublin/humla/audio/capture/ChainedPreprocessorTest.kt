@@ -36,18 +36,8 @@ class ChainedPreprocessorTest {
     }
 
     /**
-     * The same two stages the other way round, so the pass is not an artefact of one arithmetic.
-     *
-     * It is honestly the weaker of the two, and the comment that used to stand here said the
-     * opposite: it claimed the test above alone is "also passed by a chain that reverses or sorts
-     * the list". Measured -- `stages.toTypedArray().reversedArray()` turns **three** tests red,
-     * the test above among them. On a two-stage chain every reordering this class could commit
-     * shows up in the first test as well, so nothing kills this one alone. It is a second sample,
-     * not a second pin, and calling it a second pin is what would let a later reader delete the
-     * first one.
-     *
-     * The order is semantics rather than taste either way: see the class KDoc on why echo
-     * cancellation has to run before noise suppression.
+     * The reverse order, as a second sample rather than a separate pin. Order matters: echo
+     * cancellation has to run before noise suppression (see the class KDoc).
      */
     @Test
     fun `the chain does not impose an order of its own`() {
@@ -80,7 +70,7 @@ class ChainedPreprocessorTest {
         assertThat(b.released).isTrue()
     }
 
-    /** Off has to be really off: no stage left to run "with neutral parameters". */
+    /** Off is really off: no stage left to run "with neutral parameters". */
     @Test
     fun `an empty chain touches nothing and has no opinion`() {
         val frame = shortArrayOf(1, -2, 3)
@@ -93,9 +83,8 @@ class ChainedPreprocessorTest {
     }
 
     /**
-     * The chain copies the list it is handed. A caller that keeps a mutable list and adds to it
-     * later would otherwise be changing the pipeline under the capture thread, with no lock and no
-     * announcement -- and the list it passed is exactly the list the factory built stage by stage.
+     * The chain copies the list, so a caller mutating it later cannot change the pipeline under the
+     * capture thread.
      */
     @Test
     fun `later changes to the caller's list do not reach the chain`() {

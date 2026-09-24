@@ -25,11 +25,9 @@ import se.lublin.humla.audio.capture.fakes.FakeSpeexResamplerApi
 import se.lublin.humla.audio.capture.fakes.RefusingSpeexResamplerApi
 
 /**
- * The adapter over F6's bridge. It is tested against the interface rather than against the
- * `SpeexResamplerNative` object the plan named directly: an adapter wired straight to an object
- * whose `init` block calls `System.loadLibrary` has no host test at all, and the one thing this
- * class does beyond forwarding -- reading speex's error code before believing its output count --
- * is exactly what cannot be checked on a device by looking.
+ * The adapter is tested against [se.lublin.humla.audio.native.SpeexResamplerApi], since the native
+ * object loads its library in `init`. Beyond forwarding, it checks speex's error code before
+ * trusting the output count.
  */
 class SpeexResamplerTest {
     @Test
@@ -43,7 +41,6 @@ class SpeexResamplerTest {
             .containsExactly(1, 16000, 48000, SpeexResampler.DEFAULT_QUALITY).inOrder()
     }
 
-    /** The quality is a parameter; without this the only value any fixture produces is the default. */
     @Test
     fun `a quality other than the default reaches speex`() {
         val api = FakeSpeexResamplerApi()
@@ -63,11 +60,8 @@ class SpeexResamplerTest {
     }
 
     /**
-     * The input array is deliberately **longer** than the count. `AudioInput.loop` allocates its
-     * capture buffer once at the frame size and passes the read count separately, so the two are
-     * different numbers in production -- and a fixture where they agree cannot tell `inputLength`
-     * from `input.size`, which is a whole frame of stale samples handed to speex. (Found as a
-     * mutation survivor against exactly such a fixture.)
+     * The input array is longer than the count, as in production, so `inputLength` and
+     * `input.size` cannot be confused unnoticed.
      */
     @Test
     fun `it passes the input length and the output capacity and returns what speex produced`() {
@@ -85,11 +79,8 @@ class SpeexResamplerTest {
     }
 
     /**
-     * The defect this class exists to close. `jni_speexdsp.cpp:163-173` returns
-     * `RESAMPLER_ERR_INVALID_ARG` **before** it writes `outLen`, so the `outLen[0] = output.size`
-     * the caller set is still standing. Returning it unchecked reports a full 480-sample frame that
-     * was never written -- and the pipeline's frame buffer is reused, so "never written" means
-     * "still holds the previous frame".
+     * On error the bridge returns before writing `outLen`, so the requested capacity is still
+     * there; trusting it would report a full frame that still holds the previous frame's samples.
      */
     @Test
     fun `an error code produces no samples, not the capacity it was asked for`() {

@@ -29,14 +29,10 @@ import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.util.HumlaLogger
 
 /**
- * The assurances the wiring carries, and nothing else: **the preprocessed frame is what reaches the
- * consumer**, **the mixed playback buffer reaches the canceller as frames of the APM's own length,
- * before the capture frame that carries their echo**, and **a chain that cannot be built takes
- * neither capture nor playback down with it.**
- *
- * The seam is here rather than in `AudioHandler` because that class cannot be instantiated on the
- * host: its constructor opens an `AudioRecord` and its encoders `System.loadLibrary`. The six lines
- * it gained are covered by the device build, and that is said in the report rather than implied.
+ * The wiring's guarantees: the preprocessed frame reaches the consumer, the mixed playback buffer
+ * reaches the canceller in frames of the APM's own length before the matching capture frame, and a
+ * chain that cannot be built takes neither capture nor playback down. The seam lives here because
+ * `AudioHandler` cannot be instantiated on the host.
  */
 @RunWith(RobolectricTestRunner::class)
 class CaptureWiringTest {
@@ -64,7 +60,7 @@ class CaptureWiringTest {
         factory: CapturePreprocessorFactory,
     ) = CaptureWiring.wire(48000, ContinuousInputMode(), 1f, noise, echo, logger = logger, factory = factory)
 
-    /** What the user gets by default: one stage, RNNoise, and its probability on every frame. */
+    /** The default: one RNNoise stage and its probability on every frame. */
     @Test
     fun `the default chain denoises every frame with rnnoise`() {
         val api = FakeRnnoiseApi(probability = 0.9f, onProcess = { it.fill(11) })
@@ -82,9 +78,8 @@ class CaptureWiringTest {
     }
 
     /**
-     * The first hard requirement of the wiring: a missing `.so` is a skipped stage, not a dead
-     * microphone. `RnnoiseNative` loads its library in its object initialiser, so the first touch
-     * arrives as an `ExceptionInInitializerError` -- a `LinkageError`, not an `Exception`.
+     * A missing `.so` is a skipped stage, not a dead microphone. The library loads in the object
+     * initialiser, so it fails as an `ExceptionInInitializerError`, not an `Exception`.
      */
     @Test
     fun `a chain that cannot be built leaves capture running and says so`() {
@@ -101,7 +96,7 @@ class CaptureWiringTest {
         assertThat(warnings.any { it.contains("rnnoise") }).isTrue()
     }
 
-    /** Off is off: no stage, and no warning about a stage nobody asked for. */
+    /** No stage, and no warning about a stage nobody asked for. */
     @Test
     fun `no noise suppression builds no stage and warns about nothing`() {
         val pipeline = CaptureWiring.wire(
@@ -115,11 +110,7 @@ class CaptureWiringTest {
 
     // ------------------------------------------------------------------ the far-end reference
 
-    /**
-     * What the user gets once the default says `webrtc`: the APM is in the chain **and** the
-     * playback path has somewhere to put the reference. Both halves in one assertion, because
-     * either one alone is the configuration task 2 measured at -0.62 dB.
-     */
+    /** The APM must be in the chain and the playback path must have a far-end tap; either alone is useless. */
     @Test
     fun `the webrtc canceller gets both a capture stage and a far-end tap`() {
         val apm = FakeWebRtcApmApi()
@@ -134,10 +125,8 @@ class CaptureWiringTest {
     }
 
     /**
-     * The length the sink sees is the **APM's frame**, not the playback buffer `AudioOutput` hands
-     * over -- that one is `minOf(minBufferSize, FRAME_SIZE * 12)` samples and has nothing to do
-     * with 10 ms. Getting it wrong upward is the silent direction: the bridge accepts a long frame
-     * and truncates it, so `rejectedFarEndFrames` stays at 0 while about 21 dB is gone.
+     * The sink sees the APM's frame, not `AudioOutput`'s playback buffer. A long frame would be
+     * silently truncated by the bridge, losing about 21 dB of cancellation.
      */
     @Test
     fun `the mixed playback buffer arrives as frames of the apm's own length`() {
@@ -155,14 +144,8 @@ class CaptureWiringTest {
     }
 
     /**
-     * The relation the two streams have to stand in, driven end to end for the first time: the
-     * far-end frame in, then the near-end frame that will carry its echo. Nothing in the JVM
-     * enforces it -- the capture and playback threads are independent -- so what this pins is that
-     * the wiring puts no *reordering* between the two calls. The real ordering is bought elsewhere
-     * (`AudioOutput` pushes before `AudioTrack.write`, i.e. before the samples have even been
-     * queued for the speaker) and absorbed by AEC3's delay estimator; this is the layer where a
-     * chunker that buffered a frame too long, or a chain that fed the reference to a different
-     * instance, would show up.
+     * Far-end frame first, then the near-end frame carrying its echo. The threads are independent,
+     * so this only pins that the wiring adds no reordering between the two calls.
      */
     @Test
     fun `each tick feeds the reference before the capture frame`() {
@@ -180,7 +163,6 @@ class CaptureWiringTest {
             .inOrder()
     }
 
-    /** Without the canceller nothing is built: no APM, no far-end tap. */
     @Test
     fun `no canceller builds no apm and no tap`() {
         val apm = FakeWebRtcApmApi()
@@ -193,9 +175,8 @@ class CaptureWiringTest {
     }
 
     /**
-     * The second hard requirement, for the half that did not have one: an APM that cannot be built
-     * leaves **playback** running too. `farEnd` is null rather than a tap that throws, which is what
-     * makes `AudioOutput`'s null check the whole of the fallback on the playback thread.
+     * `farEnd` is null rather than a throwing tap, so `AudioOutput`'s null check is the entire
+     * playback-side fallback.
      */
     @Test
     fun `an apm that cannot be built leaves capture and playback running and says so`() {
@@ -210,7 +191,7 @@ class CaptureWiringTest {
         assertThat(warnings.any { it.contains("echo cancellation (webrtc)") }).isTrue()
     }
 
-    /** The same fallback through the other door: the `.so` that is not on the device at all. */
+    /** The same fallback when the `.so` is missing from the device. */
     @Test
     fun `a missing apm library is a skipped stage rather than a dead microphone`() {
         val wiring = CaptureWiring.wire(
@@ -241,11 +222,7 @@ class CaptureWiringTest {
         assertThat(built).isEmpty()
     }
 
-    /**
-     * Spec B11 and the SCO case. Exactly one resampler may exist: the old `ResamplingEncoder` wrap
-     * in `AudioHandler.setCodecLocked` is removed in the same commit, or the frame is converted
-     * twice.
-     */
+    /** Exactly one resampler may exist, or the frame would be converted twice. */
     @Test
     fun `capture below 48 kHz gets a resampler up to the codec rate`() {
         val built = mutableListOf<Pair<Int, Int>>()

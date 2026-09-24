@@ -23,12 +23,8 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
- * The two things the user asked for, tested where they are decided: a gate that follows him around
- * the room, and one that a single keyboard click cannot open.
- *
- * Frames here are built to a level rather than to an amplitude, because every threshold in
- * [VadMode.ADAPTIVE] is in dBFS and a test written in sample values would not be readable against
- * the numbers in [AdaptiveVadTracker]'s KDoc.
+ * The adaptive gate: it follows a talker around the room, and a single keyboard click cannot open
+ * it. Frames are built to a level in dBFS, the unit of every threshold in [VadMode.ADAPTIVE].
  */
 class AdaptiveVoiceGateTest {
     private var nowNanos = 0L
@@ -52,13 +48,8 @@ class AdaptiveVoiceGateTest {
         }
 
     /**
-     * Speech-shaped input: 700 ms of talking, then 300 ms of room, repeated.
-     *
-     * A constant tone is **not** a fixture for speech, and using one is how a test proves the
-     * opposite of what it meant to. Fed a level that never stops, the floor estimator converges on
-     * it -- correctly, because something that never stops is by definition noise -- and the gate
-     * closes. The pauses are what let the floor fall back at 24 dB/s between words, and they are
-     * the reason the asymmetric rates work at all.
+     * 700 ms of talking, then 300 ms of room, repeated. A constant tone would be learned as noise
+     * and close the gate; the pauses let the floor fall back between words.
      */
     private fun VoiceActivityDetector.speak(
         speechDbfs: Float,
@@ -83,10 +74,7 @@ class AdaptiveVoiceGateTest {
         assertThat(VoiceActivityDetector.NO_SIGNAL_DBFS).isLessThan(AdaptiveVadTracker.MIN_FLOOR_DBFS)
     }
 
-    /**
-     * The legacy score and the level are two readings of the same energy, and the settings screen
-     * shows both, so a drift between them would be two numbers for one quantity.
-     */
+    /** The settings screen shows both, so they must agree. */
     @Test
     fun `the legacy score is the level on the legacy 96 dB scale`() {
         for (dbfs in listOf(-10f, -30f, -60f, -90f)) {
@@ -98,10 +86,7 @@ class AdaptiveVoiceGateTest {
 
     // --- the onset requirement, which is the keyboard-click fix ------------------------------
 
-    /**
-     * The reported symptom, reproduced as a fixture: continuous typing is suppressed but the first
-     * impulse after a pause is not. A click is one frame; speech is not.
-     */
+    /** A click is one frame; speech is not. */
     @Test
     fun `a single loud frame does not open the gate and two consecutive ones do`() {
         val config = VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 2)
@@ -122,10 +107,7 @@ class AdaptiveVoiceGateTest {
         assertThat(click.run(-20f, 1)).containsExactly(true)
     }
 
-    /**
-     * The price, in frames rather than in feeling. A frame is 10 ms at the 48 kHz the pipeline
-     * resamples to, so `onsetFrames` costs `(onsetFrames - 1) * 10 ms` of the start of a word.
-     */
+    /** A frame is 10 ms, so `onsetFrames` costs `(onsetFrames - 1) * 10 ms` at the start of a word. */
     @Test
     fun `the onset requirement costs exactly one frame of speech per frame demanded`() {
         for (onset in 1..4) {
@@ -137,23 +119,15 @@ class AdaptiveVoiceGateTest {
     }
 
     /**
-     * A gap inside a word must not pay the onset cost again; that is what the hold is for.
-     *
-     * **The hold is also what made the first version of this test toothless, and a mutation said
-     * so.** With a 100 ms hold and three demanded frames, dropping the `talking ||` arm changed
-     * nothing any assertion could see: the gate stayed open through the gap on the hold alone, and
-     * by the time the hold could have expired the onset counter had caught up again. The two
-     * versions only differ where the hold runs out **before** `onsetFrames` consecutive frames have
-     * accumulated -- 20 ms of hold against four demanded frames. Same shape as spec 4.05's
-     * shadowed assertion, one level up: the fixture, not the assertion, was doing the covering.
+     * A gap inside a word must not pay the onset cost again. The hold (20 ms) must run out before
+     * four onset frames could accumulate, or the hold alone would keep the gate open.
      */
     @Test
     fun `the onset is only demanded while the gate is shut`() {
         val d = detector(VadConfig.adaptive(holdTimeMs = 20, onsetFrames = 4))
         d.run(-60f, 20)
         assertThat(d.run(-20f, 4).last()).isTrue()
-        // One quiet frame, carried by the hold, then one loud one: open again immediately, on the
-        // first frame rather than on the fourth, and past the point where the hold has expired.
+        // One quiet frame carried by the hold, then loud: open again immediately, past the hold.
         assertThat(d.run(-60f, 1)).containsExactly(true)
         assertThat(d.run(-20f, 1)).containsExactly(true)
         assertThat(d.run(-20f, 1)).containsExactly(true)
@@ -192,17 +166,12 @@ class AdaptiveVoiceGateTest {
             .containsExactly(false)
     }
 
-    /**
-     * The case the user described: he walks away, loses about 6 dB per doubling of distance, and
-     * the gate has to come with him. Without the tracker the threshold stays at -32 dBFS and a
-     * talker at -37 is gone for good.
-     */
+    /** Walking away loses about 6 dB per doubling of distance; the gate has to follow. */
     @Test
     fun `a talker who walks away keeps the gate open`() {
         val d = detector(VadConfig.adaptive(holdTimeMs = 250, onsetFrames = 2))
-        // Three seconds at arm's length in a -45 dBFS room, then he walks about two doublings
-        // away (-15 dB). `dropLast(30)` lands the reading in the talking part of the last second
-        // rather than in its pause.
+        // Three seconds close by in a -45 dBFS room, then about two doublings away (-15 dB).
+        // `dropLast(30)` reads the talking part of the last second rather than its pause.
         assertThat(d.speak(-22f, -45f, 3).dropLast(30).last()).isTrue()
 
         val far = d.speak(-37f, -45f, 15)
@@ -211,35 +180,23 @@ class AdaptiveVoiceGateTest {
     }
 
     /**
-     * The same fixture against a fixed threshold, to show what the tracking is worth rather than
-     * asserting that it helps. The legacy amplitude gate is calibrated on the close half and the
-     * far half never reaches it again.
-     *
-     * **The pause has to be longer than the hold, and that is a finding rather than a fixture
-     * detail.** With the 200 ms pause this fixture first used, the legacy gate never closed at all:
-     * its hysteresis is [VadConfig.AMPLITUDE_HYSTERESIS] = 0.15 of the score, i.e. **14.4 dB**, so
-     * a talker four doublings away still sits over the stop threshold, and the 250 ms hold bridges
-     * every pause shorter than itself. So the legacy failure at distance is not only "he stops
-     * being heard" -- it is also "the gate latches open and the room goes out with him", depending
-     * on which side of 14.4 dB the distance puts him. The 6 dB in [VadConfig.hysteresisDb] is the
-     * other half of this task's answer to that.
+     * The same fixture against the legacy fixed threshold, for comparison. The pause is longer than
+     * the hold, because the legacy 14.4 dB hysteresis plus hold would otherwise latch the gate open.
      */
     @Test
     fun `a fixed threshold calibrated close by loses the same talker`() {
-        // -22 dBFS is a score of 0.771; a slider set just under it is the honest calibration.
+        // -22 dBFS is a score of 0.771; the slider is set just under it.
         val fixed = detector(VadConfig.amplitude(0.76f, holdTimeMs = 250, onsetFrames = 2))
         assertThat(fixed.speak(-22f, -45f, 3).dropLast(30).last()).isTrue()
-        // The first second of the far half is dropped: the 250 ms hold from the close half still
-        // reaches into it, and counting that as "he was heard" would be the shadowing 4.05 warns of.
+        // Skip the first second: the hold from the close half still reaches into it.
         assertThat(fixed.speak(-37f, -45f, 15).drop(100).any { it }).isFalse()
     }
 
-    /** And the honest half: the room does not follow him, so the demand cannot fall forever. */
+    /** The room does not follow the talker, so the demand cannot fall forever. */
     @Test
     fun `the gate reports when it has run out of room rather than opening on anything`() {
         val d = detector(VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 2))
-        // A room only 8 dB under the talker is below MIN_USABLE_GAP_DB, and no loop invents the
-        // signal-to-noise that is missing. The gate says so instead of opening on the room.
+        // A room only 8 dB under the talker is below MIN_USABLE_GAP_DB; the gate reports it.
         d.speak(-37f, -45f, 30)
         assertThat(d.tooClose).isTrue()
         assertThat(d.thresholdDbfs - d.floorDbfs).isWithin(0.01f).of(6.5f)
@@ -270,8 +227,7 @@ class AdaptiveVoiceGateTest {
         )
         assertThat(d.floorDbfs).isEqualTo(-60f)
         assertThat(d.thresholdDbfs).isWithin(0.01f).of(-47f)
-        // A thousand frames of room noise 30 dB over the hand-set floor move it by nothing. The
-        // gap is still tracked -- pinning the floor pins the floor, not the threshold.
+        // Room noise 30 dB over the hand-set floor does not move it.
         d.run(-30f, 1000)
         assertThat(d.floorDbfs).isEqualTo(-60f)
     }
@@ -296,14 +252,7 @@ class AdaptiveVoiceGateTest {
         assertThat(d.thresholdDbfs - learnedFloor).isLessThan(learnedGap)
     }
 
-    /**
-     * **Both estimates have to have moved before the reset, and the first version of this test
-     * moved neither.** It drove the detector with a loud constant level, which transmits on every
-     * frame -- so the floor was never learned and stayed at its fresh value, and the speech peak
-     * jumped straight back to that level on the frame after the reset. Emptying `recalibrate()`
-     * left it green. A quiet run moves the floor; a loud burst moves the peak; then the reset has
-     * something to undo.
-     */
+    /** Both estimates are moved first (quiet run for the floor, loud burst for the peak). */
     @Test
     fun `recalibrating puts the estimates back to the fresh state`() {
         val d = detector(VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1))
@@ -313,19 +262,14 @@ class AdaptiveVoiceGateTest {
         assertThat(d.speechDbfs).isWithin(0.1f).of(-10f)
 
         d.recalibrate()
-        // The reset belongs to the capture thread, so it lands on the next frame, not on the call.
+        // The reset is applied on the capture thread with the next frame, not on the call.
         assertThat(d.floorDbfs).isLessThan(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS - 5f)
         d.run(-70f, 1)
         assertThat(d.floorDbfs).isWithin(0.3f).of(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS)
         assertThat(d.speechDbfs - d.floorDbfs).isWithin(0.3f).of(AdaptiveVadTracker.DEFAULT_GAP_DB)
     }
 
-    /**
-     * H1-16 and H1-17 of the sweep: switching from the tracked floor to a hand-set one **while the
-     * detector is running** is the case the manual-floor test could not reach, because it built the
-     * detector with the manual floor already set and then fed it levels loud enough to transmit --
-     * so neither `setFloor` nor `learnFloor` had anything to do.
-     */
+    /** Switching to a hand-set floor while the detector is running. */
     @Test
     fun `switching to a hand-set floor moves the floor that was learned`() {
         val d = detector(VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1))
@@ -346,7 +290,7 @@ class AdaptiveVoiceGateTest {
         assertThat(d.floorDbfs).isEqualTo(-40f)
     }
 
-    /** The meter draws these; a mode with no tracker has to answer rather than throw. */
+    /** The level meter reads these; modes without a tracker must still answer. */
     @Test
     fun `the legacy modes still answer for the level meter`() {
         val amplitude = detector(VadConfig.amplitude(0.6f))

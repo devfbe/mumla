@@ -32,12 +32,11 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 /**
- * The lock contract of [SingleHandleStage], which is what spec §4.1 "One lock across both audio
- * streams" and "Native handles are not interchangeable" come down to in Kotlin.
+ * The lock contract of [SingleHandleStage]: one lock across both audio streams, and the native
+ * handle never leaves its owner.
  *
- * The blocking assertions are one-sided on purpose: a call that is *not* supposed to get through
- * is given 250 ms to prove it, and a call that *is* supposed to get through is given 5 s. Nothing
- * here fails because a machine was slow; it fails only when a call that should have waited did not.
+ * Blocking assertions are one-sided: a call that must wait gets 250 ms to prove it, a call that
+ * must get through gets 5 s, so a slow machine cannot cause a failure.
  */
 class SingleHandleStageTest {
     private companion object {
@@ -98,28 +97,10 @@ class SingleHandleStageTest {
     }
 
     /**
-     * Spec §4.1: a handle may only be passed back to the bridge that issued it, and the checkable
-     * place is Kotlin-side -- one handle, in one private field, of one owner.
-     *
-     * Three things this had to stop claiming, each of which made it weaker than it read:
-     *
-     * - `declaredFields` and `declaredMethods` see no **inherited** member, so a check run on one
-     *   class object is a statement about that class object, not about a stage. It goes vacuous
-     *   the day an intermediate class is inserted between a stage and this base -- which is why
-     *   the whole chain up from each stage class is walked, and why every stage class this file
-     *   builds is in the list. A stage from task 5 or 6 belongs here too, or in the same walk in
-     *   its own suite.
-     * - `type == Long::class.javaPrimitiveType` sees `long` and not `java.lang.Long`, so a second,
-     *   boxed handle field would have left "exactly one field" green.
-     * - A return type of `long` is not the only way out. `protected fun copyHandleInto(sink:
-     *   LongArray)` returns `Unit` and hands the handle to every subclass all the same. So the
-     *   demand is that no member **mentions** a long -- returned, taken, or inside an array --
-     *   except the three callbacks, which is how the handle is meant to travel: as an argument,
-     *   with the lock already held.
-     *
-     * What it still does not cover, because nothing in this package can: the handle arrives from
-     * the subclass through the constructor, so a subclass may keep the value it passed up. See the
-     * class KDoc for why creating it in the base was rejected rather than forgotten.
+     * A handle may only go back to the bridge that issued it, so it lives in one private field and
+     * no member mentions a long (returned, taken, or in an array) except the three callbacks. The
+     * whole class chain is walked because `declaredFields`/`declaredMethods` skip inherited members.
+     * A subclass can still keep the value it passed to the constructor; see the class KDoc.
      */
     @Test
     fun `the native handle never escapes its owner`() {
@@ -144,7 +125,7 @@ class SingleHandleStageTest {
             .containsExactly("onCaptureFrame", "onFarEndFrame", "onReleaseHandle")
     }
 
-    /** `long`, `java.lang.Long`, or an array of either -- an out-parameter is an escape hatch too. */
+    /** `long`, `java.lang.Long`, or an array of either (an out-parameter is an escape too). */
     private fun mentionsLong(type: Class<*>): Boolean = when {
         type == Long::class.javaPrimitiveType || type == java.lang.Long::class.java -> true
         type.isArray -> mentionsLong(type.componentType!!)
@@ -179,15 +160,6 @@ class SingleHandleStageTest {
         assertThat(stage.farEndHandles).isEmpty()
     }
 
-    /**
-     * Unpinned and, at a cost worth paying, unpinnable: that clearing the field and calling the
-     * free are **atomic** against the other two entry points. Every observation a test can make is
-     * taken through [SingleHandleStage.process] or [SingleHandleStage.analyzeReverseStream], and
-     * both take the same lock, so a test thread cannot be scheduled into the gap it would have to
-     * see. Only a stage that exposed its own state outside the lock could show it -- which is the
-     * thing this class exists to prevent. Recorded here rather than counted as covered by the four
-     * blocking tests above, which pin mutual exclusion and not atomicity.
-     */
     @Test
     fun `release frees exactly once`() {
         val stage = TestStage()
@@ -199,13 +171,8 @@ class SingleHandleStageTest {
     }
 
     /**
-     * The order inside [SingleHandleStage.release] -- clear the field, then free -- survives its
-     * own reversal only when the free cannot fail. Reversed, a throwing free leaves the field set
-     * and the stage keeps handing a freed handle to the bridge on every following frame, which is
-     * the use-after-free `HandleTable::get()` does not check for.
-     *
-     * This also pins that [SingleHandleStage.release] is not idempotent by swallowing: the throw
-     * reaches the caller, and the stage is released all the same.
+     * The field is cleared before the free, so a throwing free still leaves the stage released and
+     * the freed handle is never handed to the bridge again. The throw still reaches the caller.
      */
     @Test
     fun `a release whose native free throws still leaves the stage released`() {
@@ -219,11 +186,7 @@ class SingleHandleStageTest {
         assertThat(stage.farEndHandles).isEmpty()
     }
 
-    /**
-     * A stage with no reverse stream must say so rather than swallow the reference signal. A
-     * silently dropped far-end frame costs about 21 dB of echo cancellation and is invisible in
-     * every test above this layer (measured in task 2, `tests/test_apm.c`).
-     */
+    /** A silently dropped far-end frame would cost about 21 dB of echo cancellation. */
     @Test
     fun `a stage without a far-end path refuses the reverse stream instead of dropping it`() {
         assertThrows(UnsupportedOperationException::class.java) {
@@ -254,21 +217,9 @@ class SingleHandleStageTest {
     }
 
     /**
-     * The generalisation of the four tests above: *every* entry point has to wait for the one lock,
-     * not just the three that exist today. An entry point a later task adds -- a mode switch, a
-     * delay hint, a reset -- fails here until someone decides what it does while an audio thread is
-     * inside the native call.
-     *
-     * The set is the **public surface of the class**, not only the members of the two interfaces.
-     * Iterating the interfaces alone is what a public `fun setStreamDelayMs(ms: Int)` added
-     * straight onto [SingleHandleStage] slips past -- and that is not hypothetical: the shipped
-     * `WebRtcApmApi` carries an extra `frameSize(handle)`, the APM needs `set_stream_delay_ms`, and
-     * task 6 is the task that adds it. A method that belongs to no interface is exactly the one
-     * nobody remembers to lock.
-     *
-     * Protected members are deliberately out: [onCaptureFrame], [onFarEndFrame] and
-     * [onReleaseHandle] are the callbacks the lock is already held for, and calling them from here
-     * would be calling them the one way no caller ever does.
+     * Every public entry point, not just the interface members, must wait for the one lock, so a
+     * method added later fails here until its locking is decided. Protected callbacks are excluded:
+     * the lock is already held when they run.
      */
     @Test
     fun `every entry point of the stage takes the one lock`() {
@@ -323,16 +274,9 @@ class SingleHandleStageTest {
     }
 
     /**
-     * The window one audio thread is held inside the native call, plus what every arrival in a
-     * callback saw of it.
-     *
-     * The timing half alone -- "`done` did not count down within 250 ms" -- measures when a latch
-     * fell, not whether the second thread was inside the native call. It reads green on an
-     * overloaded machine with a broken lock, and worse, it reads green for a *correct* reason on
-     * any entry point whose body ends up blocked on this fixture's own latch rather than on the
-     * lock. Measured: a public, unlocked `setStreamDelayMs` routed through `onCaptureFrame`
-     * survives the timing assertion for exactly that reason. [record] is the causal half -- every
-     * arrival after the first one must find the window already closed -- and it kills that mutant.
+     * Holds one audio thread inside the native call and records, per callback arrival, whether the
+     * window was already closed. The timing check alone could pass for an entry point blocked on
+     * this fixture's latch rather than on the lock; [record] is the causal check.
      */
     private class Window {
         private val inside = CountDownLatch(1)
@@ -390,10 +334,8 @@ class SingleHandleStageTest {
         caller.join()
         error.get()?.let { fail("$what failed: $it") }
 
-        // The causal half. The first arrival is the holder, which is inside by definition; every
-        // later one belongs to $what and must have found the window closed. An entry point that
-        // reaches no callback at all leaves nothing to check here -- the timing assertion above is
-        // what covers those -- so this strengthens the test rather than replacing it.
+        // The first arrival is the holder; every later one belongs to $what and must have found the
+        // window closed. Entry points that reach no callback are covered by the timing check above.
         assertWithMessage("the holder must have arrived while the window was open")
             .that(window.arrivals.firstOrNull()).isFalse()
         assertWithMessage("$what was inside the stage's callbacks while an audio thread held the lock")

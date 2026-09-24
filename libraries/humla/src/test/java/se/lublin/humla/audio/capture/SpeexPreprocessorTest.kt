@@ -26,9 +26,8 @@ import se.lublin.humla.audio.capture.fakes.FakeSpeexPreprocessApi
 import se.lublin.humla.audio.capture.fakes.SpeexPreprocessorRequests as R
 
 /**
- * Spec B9. The stage is small; what is not small is the number of ways a `speex_preprocess_ctl`
- * call can look right and do nothing, so most of this file is about which control calls the
- * library actually answers.
+ * Many `speex_preprocess_ctl` calls can look right and do nothing, so most of this file is about
+ * which control calls the library actually answers.
  */
 class SpeexPreprocessorTest {
     private companion object {
@@ -69,25 +68,16 @@ class SpeexPreprocessorTest {
         SpeexPreprocessor(api)
 
         assertThat(api.setCalls).contains(R.SET_DENOISE to 1)
-        // SET_AGC and SET_AGC_TARGET are on the bridge's allow list but compiled out of this
-        // fixed-point libspeexdsp (preprocess.c:1057, 1193), so both answer -1 and today's
-        // PreprocessingEncoder sets an AGC that does not exist. SET_DEREVERB is answered, but
-        // st->dereverb_enabled is never read by anything in preprocess.c.
+        // SET_AGC and SET_AGC_TARGET are compiled out of fixed-point libspeexdsp and answer -1;
+        // SET_DEREVERB is answered but never read by preprocess.c.
         assertThat(api.attemptedRequests)
             .containsNoneOf(R.SET_AGC, R.SET_AGC_TARGET, R.SET_DEREVERB)
     }
 
     /**
-     * Spec B9 asks for the `GET_PROB_START` → `SET_PROB_START` fix, and this stage satisfies it by
-     * issuing **neither**: both the wrong request and the right one configure speex's own VAD
-     * hysteresis (`preprocess.c:993-1002`), which decides nothing but the return value of
-     * `speex_preprocess_run` -- and this stage discards that in favour of reading `GET_PROB`, the
-     * number the hysteresis is derived from. The point of the fix was to make the hysteresis work;
-     * reading the probability itself is strictly more than that.
-     *
-     * So this is not "the threshold happens to be unset". It is the assertion that the correction
-     * B9 names must not be re-added here, which is why it names the request the legacy code got
-     * wrong as well as the one it meant.
+     * `GET_PROB_START`/`SET_PROB_START` only tune speex's own VAD hysteresis, which affects just the
+     * return value of `speex_preprocess_run`. The stage reads `GET_PROB` directly instead, so
+     * neither request (nor `SET_VAD`) belongs here.
      */
     @Test
     fun `B9 is satisfied by reading the probability, not by setting a threshold on it`() {
@@ -104,13 +94,8 @@ class SpeexPreprocessorTest {
     }
 
     /**
-     * The guard that the rest of this file cannot provide. `PP(ctlInt)` refuses any request
-     * outside its allow list with -1, and `speex_preprocess_ctl` answers -1 for a request it does
-     * not know: a control call the bridge silently drops is a control call that looks exactly like
-     * one the library does not implement, and the stage ignores the status either way.
-     *
-     * `SET_PROB_CONTINUE` (16) is the live example -- it is the natural partner of
-     * `SET_PROB_START`, it is what the plan's own listing calls, and it is not on the list.
+     * `PP(ctlInt)` refuses requests outside its allow list with -1, indistinguishable from a request
+     * speex does not implement, and the stage ignores the status. `SET_PROB_CONTINUE` is not on it.
      */
     @Test
     fun `every control request the stage issues is one the bridge lets through`() {
@@ -119,8 +104,7 @@ class SpeexPreprocessorTest {
 
         assertWithMessage("a request off the allow list is refused with -1 before it reaches speex")
             .that(api.attemptedRequests.filterNot { it in R.ALLOWED }).isEmpty()
-        // The whole set, at one bottleneck: a request added anywhere in this stage lands here
-        // whether or not anyone remembered to widen the checks above.
+        // The whole set: any request added to the stage shows up here.
         assertThat(api.attemptedRequests).containsExactly(
             R.SET_DENOISE, R.SET_NOISE_SUPPRESS, R.GET_PROB,
         ).inOrder()
@@ -155,9 +139,8 @@ class SpeexPreprocessorTest {
     }
 
     /**
-     * Refused *before* `speex_preprocess_state_init`, which is the whole point of checking it
-     * here: the state is freed by [SpeexPreprocessor.release], the constructor threw, so there is
-     * no instance to call it on and a state created first would be leaked for the process's life.
+     * Refused before the native state is created: the constructor throws, so nobody could release a
+     * state created first.
      */
     @Test
     fun `rejects an unsupported noise suppression level without creating a state`() {
@@ -200,11 +183,8 @@ class SpeexPreprocessorTest {
     }
 
     /**
-     * The bridge refuses a frame shorter than the state's frame size with -1 rather than letting
-     * speex write past the array -- so -1 is reachable from a wrong-sized capture buffer, not only
-     * from a broken build. Mapping it with `!= 0` would report the most confident possible "this
-     * is speech" for a frame speex never looked at, and throwing would kill the capture thread
-     * once per frame.
+     * The bridge refuses a frame shorter than the state's frame size with -1. Reporting that as
+     * voice would be wrong, and throwing would kill the capture thread once per frame.
      */
     @Test
     fun `a frame too short for the state is dropped rather than reported as voice`() {
@@ -228,10 +208,8 @@ class SpeexPreprocessorTest {
     }
 
     /**
-     * A refused `GET_PROB` leaves the caller's `value[0]` untouched, which is 0 -- i.e. "certainly
-     * not speech". Reporting that is worse than reporting nothing: task 7 gates transmission on
-     * this number, so a 0.0 from a failed read mutes the user, while a null only means this stage
-     * has no opinion and lets the others speak.
+     * A refused `GET_PROB` leaves `value[0]` at 0 ("certainly not speech"), which would mute the
+     * user; null means no opinion.
      */
     @Test
     fun `a refused probability read is no opinion rather than certain silence`() {
@@ -267,11 +245,7 @@ class SpeexPreprocessorTest {
         assertThat(api.attemptedRequests).hasSize(requestsBefore)
     }
 
-    /**
-     * Speex has no reverse stream, so the stage must refuse one rather than swallow it: a
-     * far-end frame that lands here instead of on the echo canceller is 21 dB of cancellation
-     * nobody notices is missing (task 2, `tests/test_apm.c`).
-     */
+    /** A far-end frame swallowed here would silently cost about 21 dB of echo cancellation. */
     @Test
     fun `the stage refuses the reverse stream instead of dropping it`() {
         val stage = SpeexPreprocessor(api)
@@ -284,9 +258,8 @@ class SpeexPreprocessorTest {
     // ------------------------------------------------------------------ handle ownership
 
     /**
-     * The walk `SingleHandleStageTest` asks every stage to repeat in its own suite: the handle
-     * lives in exactly one private field of the base, and no member of this stage's class chain
-     * mentions a long except the three callbacks, which are called with the lock already held.
+     * The handle lives in exactly one private field of the base, and no member mentions a long
+     * except the three callbacks, which run with the lock held.
      */
     @Test
     fun `the native handle never escapes the stage`() {
@@ -312,7 +285,7 @@ class SpeexPreprocessorTest {
             .containsExactly("onCaptureFrame", "onFarEndFrame", "onReleaseHandle")
     }
 
-    /** `long`, `java.lang.Long`, or an array of either -- an out-parameter is an escape hatch too. */
+    /** `long`, `java.lang.Long`, or an array of either (an out-parameter is an escape too). */
     private fun mentionsLong(type: Class<*>): Boolean = when {
         type == Long::class.javaPrimitiveType || type == java.lang.Long::class.java -> true
         type.isArray -> mentionsLong(type.componentType!!)
