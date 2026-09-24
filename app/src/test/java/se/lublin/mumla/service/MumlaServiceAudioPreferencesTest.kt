@@ -19,6 +19,7 @@ package se.lublin.mumla.service
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.media.AudioDeviceInfo
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -29,6 +30,7 @@ import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.session.PreferredAudioDevice
 import se.lublin.humla.testutil.testActivityInputMode
 import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.R
@@ -125,11 +127,11 @@ class MumlaServiceAudioPreferencesTest {
         val router = service.testRouter
         prefs.edit().putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_EARPIECE).commit()
         change(Settings.PREF_DEFAULT_OUTPUT)
-        assertThat(router.earpieceByDefault).isTrue()
+        assertThat(router.preferred).isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE))
 
         prefs.edit().putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_SPEAKER).commit()
         change(Settings.PREF_DEFAULT_OUTPUT)
-        assertThat(router.earpieceByDefault).isFalse()
+        assertThat(router.preferred).isNull()
     }
 
     /**

@@ -18,8 +18,10 @@
 package se.lublin.mumla.service
 
 import android.content.Context
+import android.media.AudioDeviceInfo
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.ClientCertificate
+import se.lublin.humla.session.PreferredAudioDevice
 import se.lublin.humla.session.SessionConfig
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.R
@@ -74,7 +76,11 @@ object SessionSettings {
             androidNoiseSuppressor = effects.noiseSuppressor,
             androidAgc = effects.automaticGainControl,
             echoCancellationOverrides = settings.echoCancellationOverrides,
-            earpieceByDefault = settings.isEarpieceDefaultOutput,
+            preferredAudioDevice = if (settings.isEarpieceDefaultOutput) {
+                PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+            } else {
+                null
+            },
         )
     }
 

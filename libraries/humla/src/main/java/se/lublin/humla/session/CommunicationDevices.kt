@@ -26,9 +26,25 @@ import java.util.concurrent.Executor
 
 /**
  * One entry of `AudioManager.getAvailableCommunicationDevices()`: the platform [id] to select it
- * by, its [AudioDeviceInfo] [type], and its product [name] (empty if unnamed, never null).
+ * by, its [AudioDeviceInfo] [type], its product [name] and its [address] (each empty if unknown,
+ * never null). The id changes whenever the device reconnects; the address does not.
  */
-data class CommunicationDevice(val id: Int, val type: Int, val name: String)
+data class CommunicationDevice(val id: Int, val type: Int, val name: String, val address: String = "")
+
+/**
+ * What [AndroidCommunicationDevices.available] lists, for showing without a session: reads only,
+ * never routes or changes the audio mode. Empty if the platform refuses.
+ */
+fun listCommunicationDevices(audioManager: AudioManager): List<CommunicationDevice> =
+    try {
+        audioManager.availableCommunicationDevices.map { it.toCommunicationDevice() }
+    } catch (e: SecurityException) {
+        Log.w("CommunicationDevices", "The platform refused the communication device list", e)
+        emptyList()
+    }
+
+private fun AudioDeviceInfo.toCommunicationDevice() =
+    CommunicationDevice(id, type, productName?.toString().orEmpty(), address.orEmpty())
 
 /** The subset of `AudioManager`'s communication-device API (API 31) that routing needs. */
 interface CommunicationDevices {
@@ -148,9 +164,6 @@ class AndroidCommunicationDevices(
             Log.w(TAG, warning, e)
             fallback
         }
-
-    private fun AudioDeviceInfo.toCommunicationDevice() =
-        CommunicationDevice(id, type, productName?.toString().orEmpty())
 
     private inline fun <T> guarded(fallback: T, body: () -> T): T =
         try {

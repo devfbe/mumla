@@ -75,8 +75,8 @@ data class SessionConfig(
     val androidAgc: Boolean = false,
     /** The user's echo-cancellation choices; a category without an entry keeps its default. */
     val echoCancellationOverrides: Map<AudioDeviceCategory, Boolean> = emptyMap(),
-    /** Without a headset, route voice to the earpiece rather than the speaker. */
-    val earpieceByDefault: Boolean = false,
+    /** The audio device the user saved; null routes automatically. */
+    val preferredAudioDevice: PreferredAudioDevice? = null,
 ) {
     /** Whether going from [previous] to this config only takes effect after a reconnect. */
     fun needsReconnectAfter(previous: SessionConfig): Boolean = connectionFields() != previous.connectionFields()

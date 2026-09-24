@@ -22,10 +22,12 @@ import android.media.AudioDeviceInfo
 /**
  * Decides which device voice goes to, the way the phone app does. Main thread only.
  *
- * Default: a Bluetooth headset if [bluetoothAutomatic], then a wired headset, then the speaker (or
- * earpiece if [earpieceByDefault]). Everything is routed explicitly, because in communication mode
- * the platform default is the earpiece. [choice] overrides the default until its device goes away
- * or a newly connected headset takes over (newest wins). Only a change of the device set triggers a
+ * Default: the [preferred] device if it is a headset and there, then a Bluetooth headset if
+ * [bluetoothAutomatic], then a wired headset, then the [preferred] built-in device, then the speaker.
+ * A headset thus beats a saved built-in device.
+ * Everything is routed explicitly, because in communication mode the platform default is the
+ * earpiece. [choice] overrides the default until its device goes away or a newly connected headset
+ * (or the preferred one) takes over (newest wins). Only a change of the device set triggers a
  * new decision, so the router doesn't fight the dialler during a call. Nothing touches the platform
  * before [engage], so no SCO link is held open without a voice session.
  */
@@ -43,7 +45,8 @@ class AudioRouter(
 
     var bluetoothAutomatic: Boolean = false
 
-    var earpieceByDefault: Boolean = false
+    /** The device the user saved, across sessions; null for the automatic default alone. */
+    var preferred: PreferredAudioDevice? = null
 
     /** The user's explicit pick, or null for the default. */
     var choice: Int? = null
@@ -144,18 +147,18 @@ class AudioRouter(
     }
 
     private fun automatic(available: List<CommunicationDevice>): CommunicationDevice? {
+        val saved = preferred?.let { p -> available.firstOrNull(p::matches) }
+        if (saved != null && saved.type !in BUILT_IN) return saved
         if (bluetoothAutomatic) available.firstOrNull { it.type in BLUETOOTH }?.let { return it }
         available.firstOrNull { it.type in WIRED }?.let { return it }
-        val (preferred, other) = if (earpieceByDefault) {
-            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE to AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-        } else {
-            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER to AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-        }
-        return available.firstOrNull { it.type == preferred } ?: available.firstOrNull { it.type == other }
+        return saved
+            ?: available.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            ?: available.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
     }
 
     private fun takesOver(device: CommunicationDevice): Boolean =
-        device.type in WIRED || (bluetoothAutomatic && device.type in BLUETOOTH)
+        device.type in WIRED || (bluetoothAutomatic && device.type in BLUETOOTH) ||
+            (device.type !in BUILT_IN && preferred?.matches(device) == true)
 
     /** Only a route this router took is its to give back. */
     private fun giveBack() {
@@ -193,6 +196,11 @@ class AudioRouter(
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
             AudioDeviceInfo.TYPE_USB_HEADSET,
             AudioDeviceInfo.TYPE_USB_DEVICE,
+        )
+
+        private val BUILT_IN: Set<Int> = setOf(
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
         )
     }
 }

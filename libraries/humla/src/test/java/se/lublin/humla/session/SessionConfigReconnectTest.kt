@@ -17,6 +17,7 @@
 
 package se.lublin.humla.session
 
+import android.media.AudioDeviceInfo
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -82,7 +83,9 @@ class SessionConfigReconnectTest(
             "echoCancellationOverrides" to (false to { c ->
                 c.copy(echoCancellationOverrides = mapOf(AudioDeviceCategory.SPEAKER to false))
             }),
-            "earpieceByDefault" to (false to { c -> c.copy(earpieceByDefault = true) }),
+            "preferredAudioDevice" to (false to { c ->
+                c.copy(preferredAudioDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE))
+            }),
         )
 
         @JvmStatic
