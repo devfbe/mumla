@@ -319,6 +319,7 @@
     <string name="a11y_state_suppressed">Suppressed</string>
     <string name="a11y_transmitting">Transmitting</string>
     <string name="a11y_not_transmitting">Not transmitting</string>
+    <string name="tile_mute_label">Mumla mute</string>
     <string name="notification_you">You</string>
     <string name="notification_reply">Reply</string>
     <string name="notification_group_server">Server connection</string>

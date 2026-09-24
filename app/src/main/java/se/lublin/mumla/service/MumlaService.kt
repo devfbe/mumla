@@ -587,7 +587,7 @@ class MumlaService : HumlaService(),
         mSuppressNotifications = suppressNotifications
     }
 
-    class MumlaBinder internal constructor(private val mService: MumlaService) : Binder() {
+    class MumlaBinder internal constructor(private val mService: IMumlaService) : Binder() {
         fun getService(): IMumlaService = mService
     }
 

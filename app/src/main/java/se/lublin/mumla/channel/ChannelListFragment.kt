@@ -55,6 +55,7 @@ import se.lublin.mumla.app.bindClient
 import se.lublin.mumla.databinding.FragmentChannelListBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.service.toggleSelfMute
 
 class ChannelListFragment :
     Fragment(),
@@ -315,15 +316,13 @@ class ChannelListFragment :
     /** Flips our own mute, or deafness with [deafen]; returns false while not connected. */
     private fun toggleSelfMuteDeaf(deafen: Boolean): Boolean {
         val session = connectedSession() ?: return false
-        session.sessionUser?.let { self ->
-            if (deafen) {
+        if (deafen) {
+            session.sessionUser?.let { self ->
                 val deafened = !self.isSelfDeafened
                 session.setSelfMuteDeafState(deafened, deafened)
-            } else {
-                val muted = !self.isSelfMuted
-                // Unmuting undeafens too.
-                session.setSelfMuteDeafState(muted, self.isSelfDeafened && muted)
             }
+        } else {
+            toggleSelfMute(session)
         }
         requireActivity().invalidateMenu()
         return true
