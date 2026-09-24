@@ -19,7 +19,6 @@ package se.lublin.humla.util;
 
 /**
  * An interface for reporting user-readable information.
- * Created by andrew on 12/07/14.
  */
 public interface HumlaLogger {
     void logInfo(String message);

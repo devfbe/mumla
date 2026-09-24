@@ -27,7 +27,6 @@ import se.lublin.humla.model.Server;
 /**
  * An implementation of the Mumble URL scheme.
  * @see <a href="http://mumble.sourceforge.net/Mumble_URL">http://mumble.sourceforge.net/Mumble_URL</a>
- * Created by andrew on 03/03/14.
  */
 public class MumbleURLParser {
 

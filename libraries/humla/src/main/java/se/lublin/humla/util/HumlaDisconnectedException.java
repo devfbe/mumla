@@ -1,10 +1,8 @@
 package se.lublin.humla.util;
 
 /**
- * Called when a
- * Created by andrew on 01/03/17.
+ * Thrown when the session is requested while the service is not connected.
  */
-
 @SuppressWarnings("serial")
 public class HumlaDisconnectedException extends RuntimeException {
     public HumlaDisconnectedException() {

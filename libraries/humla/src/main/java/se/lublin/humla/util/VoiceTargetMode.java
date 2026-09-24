@@ -17,9 +17,6 @@
 
 package se.lublin.humla.util;
 
-/**
- * Created by andrew on 29/04/16.
- */
 public enum VoiceTargetMode {
     NORMAL,
     WHISPER,

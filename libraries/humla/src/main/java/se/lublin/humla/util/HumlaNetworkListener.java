@@ -22,9 +22,6 @@ import se.lublin.humla.protobuf.Mumble;
 import se.lublin.humla.protocol.HumlaTCPMessageListener;
 import se.lublin.humla.protocol.HumlaUDPMessageListener;
 
-/**
- * Created by andrew on 23/04/14.
- */
 public class HumlaNetworkListener implements HumlaTCPMessageListener, HumlaUDPMessageListener {
     @Override
     public void messageAuthenticate(Mumble.Authenticate msg) {

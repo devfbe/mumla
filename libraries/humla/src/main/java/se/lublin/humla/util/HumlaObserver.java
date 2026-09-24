@@ -25,7 +25,6 @@ import se.lublin.humla.model.IUser;
 
 /**
  * Stub class for Humla service observation.
- * Created by andrew on 31/07/13.
  */
 public class HumlaObserver implements IHumlaObserver {
     @Override

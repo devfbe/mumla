@@ -19,9 +19,6 @@ package se.lublin.humla.util;
 
 import se.lublin.humla.protobuf.Mumble;
 
-/**
- * Created by andrew on 14/07/13.
- */
 @SuppressWarnings("serial")
 public class HumlaException extends Exception {
 

@@ -23,9 +23,6 @@ import se.lublin.humla.model.IChannel;
 import se.lublin.humla.model.IMessage;
 import se.lublin.humla.model.IUser;
 
-/**
- * Created by andrew on 18/10/15.
- */
 public interface IHumlaObserver {
     void onConnected();
 
