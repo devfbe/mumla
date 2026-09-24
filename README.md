@@ -58,9 +58,9 @@ NDK 29.0.14206865, SDK CMake 4.1.2, meson/ninja and `git`. Inside it:
 If you cloned without `--recursive`, run `git submodule update --init --recursive`
 first. `libraries/humla` is an ordinary directory in this repository, not a
 submodule; the submodules are the third-party native sources under
-`libraries/humla/src/main/cpp/third_party/` — the codecs opus, speex, CELT
-0.7.0 and CELT 0.11.0, and the audio processing libraries speexdsp, RNNoise,
-webrtc-audio-processing and its dependency abseil-cpp — built for
+`libraries/humla/src/main/cpp/third_party/` — the Opus codec and the audio
+processing libraries speexdsp, RNNoise, webrtc-audio-processing and its
+dependency abseil-cpp — built for
 `arm64-v8a`, `armeabi-v7a` and `x86_64` via CMake with hand-written JNI glue.
 
 [direnv](https://direnv.net/) users can `direnv allow` to enter the shell
