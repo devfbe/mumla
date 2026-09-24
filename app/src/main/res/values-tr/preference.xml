@@ -41,8 +41,6 @@
     <string name="certificateGenerate">Sertifika oluştur</string>
     <string name="pttSettings">Bas konuş ayarları</string>
     <string name="voiceActivitySettings">Ses etkinliği ayarları</string>
-    <string name="disableOpus">Opus kod çözücüden kaçın</string>
-    <string name="disableOpusSum">Mumble 1.2.4 sunucuları için Opus desteğini kapatın.</string>
     <string name="hidePtt">Bas konuş düğmesini gizle</string>
     <string name="useTts">Metin okuma</string>
     <string name="shortTtsMessages">Kısaltılmış metin okuma mesajları</string>

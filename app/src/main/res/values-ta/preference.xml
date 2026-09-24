@@ -70,8 +70,6 @@
     <string name="certificateGenerateSum">புதிய தன்வய கையொப்பமிடப்பட்ட மும்லா சான்றிதழை உருவாக்குகிறது. ஆரம்பநிலைக்கு பரிந்துரைக்கப்படுகிறது.</string>
     <string name="pttSettings">பேசுவதற்கு-தள்ளு அமைப்புகள்</string>
     <string name="voiceActivitySettings">குரல் செயல்பாட்டு அமைப்புகள்</string>
-    <string name="disableOpus">ஓபச் கோடெக்கைத் தவிர்</string>
-    <string name="disableOpusSum">முணுமுணுப்பு 1.2.4 சேவையகங்களுக்கான ஓபச் ஆதரவை அணைக்கவும்.</string>
     <string name="hidePtt">பேசுவதற்கு-தள்ளு பொத்தானை மறை</string>
     <string name="hidePttSum">நீங்கள் பேசுவதற்கு-தள்ளு மூலையில் அல்லது பொருள் விசையைப் பயன்படுத்தினால் மட்டுமே பயனுள்ளதாக இருக்கும்.</string>
     <string name="useTts">உரை-க்கு-பேச்சு</string>

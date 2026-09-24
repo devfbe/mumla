@@ -46,8 +46,6 @@
     <string name="certificateGenerateSum">Создать новый самоподписанный сертификат Mumla. Рекомендуется для начинающих.</string>
     <string name="pttSettings">Настройки Push-to-talk</string>
     <string name="voiceActivitySettings">Настройки порога громкости</string>
-    <string name="disableOpus">Отключить кодек Opus</string>
-    <string name="disableOpusSum">Отключить кодек Opus для серверов Mumble 1.2.4.</string>
     <string name="hidePtt">Скрыть кнопку Push-to-talk</string>
     <string name="hidePttSum">Полезно, если используется активный угол или аппаратная кнопка.</string>
     <string name="useTts">Текст в речь</string>

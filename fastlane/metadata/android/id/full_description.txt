@@ -8,7 +8,6 @@ Berbagai macam fitur yang tersedia:
 * Dukungan untuk headset Bluetooth
 * Registrasi mandiri pada server
 * Token akses
-* Dukungan kodek Opus, CELT, dan Speex
 * Sambung ulang secara otomatis
 * Dukungan untuk Tor melalui aplikasi Orbot
 * Text-to-speech untuk pesan (nyala secara default)

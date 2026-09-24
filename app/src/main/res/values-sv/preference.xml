@@ -7,7 +7,6 @@
     <string name="voiceActivitySettings">Inställningar för röstaktivering</string>
     <string name="certificateGenerate">Generera certifikat</string>
     <string name="pttSettings">Inställningar för Push-to-talk</string>
-    <string name="disableOpus">Undvik Opus-kodek</string>
     <string name="hidePtt">Dölj Push-to-talk-knappen</string>
     <string name="useTts">Text-till-tal</string>
     <string name="inputMethodPtt">Tryck-för-att-prata</string>
@@ -56,7 +55,6 @@
     <string name="defaultUsernameSum">Ändrar förvalet för nytillagd server och för anslutning till publik server.</string>
     <string name="defaultUsernameDefault">Mumla_Användare</string>
     <string name="certificateGenerateSum">Genererar ett nytt självsignerat Mumla-certifikat. Rekommenderas för nybörjare.</string>
-    <string name="disableOpusSum">Stäng av Opus-stöd för Mumble 1.2.4-servrar.</string>
     <string name="hidePttSum">Endast användbart om du använder Push-to-talk-hörn eller fysisk knapp.</string>
     <string name="useTtsSum">Läser upp inkommande meddelanden med talsyntes.</string>
     <string name="shortTtsMessages">Förkortade text-till-tal-meddelanden</string>

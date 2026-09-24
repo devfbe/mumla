@@ -15,7 +15,6 @@
     <string name="audio">Audio</string>
     <string name="chatNotifications">Notifiche chat</string>
     <string name="certificateGenerate">Genera certificato</string>
-    <string name="disableOpus">Evita codec Opus</string>
     <string name="useTts">Sintesi vocale</string>
     <string name="autoReconnect">Riconnessione automatica</string>
     <string name="useTor">Connetti tramite Tor</string>
@@ -58,7 +57,6 @@
     <string name="defaultUsernameDefault">Mumla_User</string>
     <string name="chatNotificationsSum">Mostrate per nuovi messaggi.</string>
     <string name="voiceActivitySettings">Impostazioni attività vocale</string>
-    <string name="disableOpusSum">Disattiva il supporto Opus per i server Mumble 1.2.4.</string>
     <string name="shortTtsMessages">Messaggi sintesi vocale abbreviati</string>
     <string name="shortTtsMessagesSum">Accorcia i messaggi leggendo solo i nomi dei domini dei collegamenti.</string>
     <string name="autoReconnectSum">Ristabilisce la connessione al server quando viene persa.</string>

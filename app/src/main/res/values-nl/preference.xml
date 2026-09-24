@@ -46,8 +46,6 @@
     <string name="certificateGenerateSum">Genereert een nieuw self-signed Mumla certificaat. Annbevolen voor beginners.</string>
     <string name="pttSettings">Push-to-talk instellingen</string>
     <string name="voiceActivitySettings">Stem Activatie Instellingen</string>
-    <string name="disableOpus">Schakel Opus Codec uit</string>
-    <string name="disableOpusSum">Schakel Opus Codec uit voor Mumble 1.2.4 servers.</string>
     <string name="hidePtt">Verberg Push to Talk Knop</string>
     <string name="hidePttSum">Verbergt Push to Talk knop wanneer in Push to Talk modus. Nuttig indien u uitsluitend schermhoeken of hardware knop gebruikt.</string>
     <string name="useTts">Text-to-Speech</string>

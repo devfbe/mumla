@@ -46,8 +46,6 @@
     <string name="certificateGenerateSum">生成一份新的 Mumla 自签名证书。推荐新用户使用。</string>
     <string name="pttSettings">按住发言设置</string>
     <string name="voiceActivitySettings">语音激活设置</string>
-    <string name="disableOpus">禁用 Opus 编解码器</string>
-    <string name="disableOpusSum">为 Mumble 1.2.4 服务器禁用 Opus 支持。</string>
     <string name="hidePtt">隐藏按住发言按钮</string>
     <string name="hidePttSum">仅在使用按住发言触发角或物理按键时有意义。</string>
     <string name="useTts">文字转语音</string>

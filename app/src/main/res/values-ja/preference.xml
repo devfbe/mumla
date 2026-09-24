@@ -46,8 +46,6 @@
     <string name="certificateGenerateSum">新しい自己署名の Mumla 証明書を生成します。初心者におすすめです。</string>
     <string name="pttSettings">プッシュツートーク設定</string>
     <string name="voiceActivitySettings">音声機能設定</string>
-    <string name="disableOpus">Opus Codec を無効にする</string>
-    <string name="disableOpusSum">Mumble 1.2.4 サーバーで、Opus サポートを無効にします。</string>
     <string name="hidePtt">プッシュツートークボタンを非表示</string>
     <string name="hidePttSum">プッシュツートーク モードの時にプッシュツートークボタンを非表示にします。排他的にホットコーナーやハードウェアキーを使用する場合に便利です。</string>
     <string name="useTts">テキスト読み上げ</string>

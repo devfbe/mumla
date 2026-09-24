@@ -25,8 +25,6 @@
     <string name="defaultUsername">Nom d\'usuari per omissió</string>
     <string name="certificateGenerate">Genera un certificat</string>
     <string name="pttSettings">Configuració del PTT</string>
-    <string name="disableOpus">Evita el còdec Opus</string>
-    <string name="disableOpusSum">Desactiva el suport d\'Opus per als servidors Mumble 1.2.4.</string>
     <string name="hidePtt">Amaga el botó de prémer per parlar</string>
     <string name="useTts">Síntesi de veu</string>
     <string name="shortTtsMessages">Missatges de veu escurçats</string>

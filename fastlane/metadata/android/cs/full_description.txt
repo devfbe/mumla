@@ -8,7 +8,6 @@ Některé z funkcí:
 * Podpora Bluetooth headsetů
 * Samoobslužná registrace na serveru
 * Přístupové tokeny
-* Podpora kodeků Opus, CELT a Speex
 * Automatické opětovné připojení
 * Podpora sítě Tor prostřednictvím aplikace Orbot
 * Převod textu na řeč pro zprávy (ve výchozím nastavení zapnuto)

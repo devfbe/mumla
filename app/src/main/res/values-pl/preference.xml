@@ -46,8 +46,6 @@
     <string name="certificateGenerateSum">Generuje nowy samopodpisany certyfikat Mumli. Zalecane dla początkujących.</string>
     <string name="pttSettings">Ustawienia funkcji „Naciśnij i mów”</string>
     <string name="voiceActivitySettings">Ustawienia aktywności głosowej</string>
-    <string name="disableOpus">Unikaj kodeka Opus</string>
-    <string name="disableOpusSum">Wyłącz obsługę Opus dla serwerów Mumble 1.2.4.</string>
     <string name="hidePtt">Ukryj przycisk funkcji „Naciśnij i mów”</string>
     <string name="hidePttSum">Przydatne tylko wtedy, gdy używasz narożnika funkcji „Naciśnij i mów” lub przycisku sprzętowego.</string>
     <string name="useTts">Tekst na mowę</string>

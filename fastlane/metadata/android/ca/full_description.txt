@@ -8,7 +8,6 @@ Algunes de les característiques:
 * Compatible amb els cascs Bluetooth
 * Registre automàtic al servidor
 * Claus d'accés
-* Compatible amb els còdecs d'Opus, CELT i Speex
 * Reconnexió automàtica
 * Compatibile amb Tor amb l'aplicació Orbot
 * Síntesi de veu dels missatges (activada per omisió)

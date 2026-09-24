@@ -14,7 +14,6 @@
     <string name="chatNotificationsSum">Notifikasi ditampilkan untuk pesan masuk baru.</string>
     <string name="defaultUsername">Username default</string>
     <string name="defaultUsernameDefault">Mumla_User</string>
-    <string name="disableOpusSum">Mematikan dukungan untuk Opus untuk server Mumble versi 1.2.4.</string>
     <string name="pttButtonHeightSum">Mengganti ukuran vertikal tombol push-to-talk.</string>
     <string name="certificateGenerateSum">Membuat sertifikat keamanan self-signed Mumla baru. Direkomendasikan bagi pemula.</string>
     <string name="useTor">Sambung via Tor</string>
@@ -54,7 +53,6 @@
     <string name="certificateGenerate">Buat sertifikat keamanan baru</string>
     <string name="pttSettings">Pengaturan push-to-talk</string>
     <string name="voiceActivitySettings">Pengaturan aktivitas suara</string>
-    <string name="disableOpus">Matikan Opus codec</string>
     <string name="hidePtt">Sembunyikan tombol push-to-talk</string>
     <string name="hidePttSum">Hanya berguna ketika menggunakan push-to-talk corner atau tombol fisik untuk push-to-talk.</string>
     <string name="useTts">Text-to-speech</string>

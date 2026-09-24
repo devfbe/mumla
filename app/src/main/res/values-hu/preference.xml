@@ -46,8 +46,6 @@
     <string name="certificateGenerate">Tanúsítvány generálása</string>
     <string name="pttSettings">Nyomd-a-beszédhez beállítások</string>
     <string name="voiceActivitySettings">Hang aktivitás beállítások</string>
-    <string name="disableOpus">Tartózkodj az Opus kodektől</string>
-    <string name="disableOpusSum">Kapcsold ki az Opus támogatást Mumble 1.2.4 kiszolgálók esetén.</string>
     <string name="hidePtt">Rejtsd el a Nyomd-a-beszédhez gombot</string>
     <string name="hidePttSum">Csak akkor hasznos, ha Nyomd-a-beszédhez sarkot vagy fizikai gombot használsz.</string>
     <string name="useTts">Szöveg beszéddé</string>

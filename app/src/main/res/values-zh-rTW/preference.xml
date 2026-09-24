@@ -9,7 +9,6 @@
     <string name="advancedAudio">進階</string>
     <string name="appearance">外觀</string>
     <string name="theme">主題</string>
-    <string name="disableOpusSum">關閉 Opus 對 Mumble 1.2.4 伺服器的支援。</string>
     <string name="inputMethodVoice">語音活動</string>
     <string name="inputMethodPtt">按鍵發話</string>
     <string name="hot_corner_none">關閉</string>
@@ -28,7 +27,6 @@
     <string name="defaultUsername">預設使用者名稱</string>
     <string name="certificateGenerate">產生憑證</string>
     <string name="voiceActivitySettings">語音活動設定</string>
-    <string name="disableOpus">避免 Opus 編解碼器</string>
     <string name="useTts">文字轉語音</string>
     <string name="theme_system">系統預設</string>
     <string name="language_system">系統預設</string>

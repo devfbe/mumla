@@ -46,8 +46,6 @@
     <string name="certificateGenerateSum">Erzeugt ein neues, selbst signiertes Mumla-Zertifikat. Für unerfahrene Benutzer empfohlen.</string>
     <string name="pttSettings">Zum Sprechen drücken-Einstellungen</string>
     <string name="voiceActivitySettings">Sprachaktivierungs-Einstellungen</string>
-    <string name="disableOpus">Opus Codec vermeiden</string>
-    <string name="disableOpusSum">Opus Unterstützung für Mumble 1.2.4-Server deaktivieren.</string>
     <string name="hidePtt">Verstecke die Zum Sprechen drücken-Taste</string>
     <string name="hidePttSum">Nur nützlich bei Verwendung von Bildschirmecken oder Hardwaretasten.</string>
     <string name="useTts">Text-zu-Sprache</string>

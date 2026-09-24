@@ -71,9 +71,7 @@
     <string name="defaultUsernameDefault">Mumla_User</string>
     <string name="certificateGenerate">Δημιουργία πιστοποιητικού</string>
     <string name="certificateGenerateSum">Δημιουργεί ένα νέο πιστοποιητικό Mumla που έχει σχεδιαστεί με αυτο-υπογραφή. Συνιστάται για αρχάριους.</string>
-    <string name="disableOpus">Αποφυγή του κωδικοποιητή Opus</string>
     <string name="pttSettings">Ρυθμίσεις για Πίεση-πλήκτρου-για-ομιλία</string>
-    <string name="disableOpusSum">Απενεργοποιήστε την υποστήριξη Opus για διακομιστές Mumble 1.2.4.</string>
     <string name="hidePtt">Απόκρυψη του κουμπιού Πίεση-πλήκτρου-για-ομιλία</string>
     <string name="useTtsSum">Διαβάστε δυνατά το εισερχόμενο μήνυμα χρησιμοποιώντας τη σύνθεση ομιλίας.</string>
     <string name="clearServerCertificatesSum">Καταργήστε όλα τα πιστοποιητικά αξιόπιστων διακομιστών από το Mumla.</string>

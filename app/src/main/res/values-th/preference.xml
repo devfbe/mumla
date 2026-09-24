@@ -43,7 +43,6 @@
     <string name="certificateGenerateSum">สร้างใบรับรอง Mumla ที่ลงนามด้วยตนเองใหม่. เหมาะสำหรับผู้เริ่มต้น.</string>
     <string name="pttSettings">ตั้งค่ากดเพื่อพูด</string>
     <string name="voiceActivitySettings">ตั้งค่าสั่งงานด้วยเสียง</string>
-    <string name="disableOpusSum">ปิดการใช้งานการสนับสนุน Opus สำหรับเซิร์ฟเวอร์ Mumble 1.2.4</string>
     <string name="hidePtt">ซ่อนแถบปุ่มกดเพื่อพูด</string>
     <string name="useTts">แปลงข้อความเป็นเสียงพูด</string>
     <string name="useTtsSum">อ่านข้อความที่เข้ามาออกเสียงโดยใช้ระบบสังเคราะห์เสียง</string>
@@ -86,7 +85,6 @@
     <string name="stay_awake">หน้าจอไม่ดับ</string>
     <string name="hot_corner_none">ปิด</string>
     <string name="audioSampleRate">อัตราการสุ่มตัวอย่าง</string>
-    <string name="disableOpus">ปิดการใช้งาน Opus Codec</string>
     <string name="togglePtt">สลับการใช้งานปุ่มกดเพื่อพูด</string>
     <string name="hidePttSum">มีประโยชน์หากคุณใช้มุมลัดหรือปุ่มฮาร์ดแวร์เพียงอย่างเดียว.</string>
     <string name="noiseSuppression">การลดเสียงรบกวน</string>

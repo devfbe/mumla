@@ -46,8 +46,6 @@
     <string name="certificateGenerateSum">Genera un nuevo certificado de Mumla auto-firmado. Recomendado para principiantes.</string>
     <string name="pttSettings">Opciones de pulsar-para-hablar</string>
     <string name="voiceActivitySettings">Opciones de actividad de voz</string>
-    <string name="disableOpus">No usar códec Opus</string>
-    <string name="disableOpusSum">Desactiva el soporte de Opus para servidores Mumble 1.2.4.</string>
     <string name="hidePtt">Ocultar botón de pulsar-para-hablar</string>
     <string name="hidePttSum">Únicamente es útil si utilizas las esquinas de la pantalla o una tecla física.</string>
     <string name="useTts">Texto a voz</string>

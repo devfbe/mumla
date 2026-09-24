@@ -8,7 +8,6 @@ Einige der Funktionen:
 * Unterstützung für Bluetooth-Headsets
 * Selbstregistrierung auf dem Server
 * Zugriffstoken
-* Unterstützung für Opus-, CELT- und Speex-Codecs
 * Automatische Wiederverbindung
 * Tor-Unterstützung über die Orbot-App
 * Sprachsynthese für Nachrichten (standardmäßig aktiviert)

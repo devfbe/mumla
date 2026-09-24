@@ -30,7 +30,6 @@
     <string name="theme">Tema</string>
     <string name="pttKeySum">Use um botão físico para transmitir áudio.</string>
     <string name="pref_certificate_summary">O padrão para usar quando conectar-se a um servidor.</string>
-    <string name="disableOpusSum">Desativa o suporte ao codec de áudio Opus para servidores Mumble versão 1.2.4.</string>
     <string name="appearance">Aparência</string>
     <string name="hot_corner_top_left">↖ canto superior esquerdo</string>
     <string name="pttSoundSum">Reproduz um efeito sonoro quando o botão do Pressione para falar é pressionado.</string>
@@ -68,7 +67,6 @@
     <string name="inputMethodVoice">Ativação por nível de voz</string>
     <string name="certificateGenerateSum">Gera um novo certificado Mumla autoassinado. Recomendado para iniciantes.</string>
     <string name="advancedAudio">Avançado</string>
-    <string name="disableOpus">Evitar codec Opus</string>
     <string name="hot_corner_top_right">canto superior direito ↗</string>
     <string name="audioInputMethod">Modo de transmissão</string>
     <string name="clearServerCertificatesSum">Remove todos os certificados de servidor confiáveis do Mumla.</string>

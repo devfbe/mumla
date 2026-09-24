@@ -8,7 +8,6 @@ Mumble sesli sohbet sistemi için bir istemci. Barındırdığınız veya toplul
 * Bluetooth kulaklık desteği
 * Sunucuda kendi kendine kayıt
 * Erişim belirteçleri
-* Opus, CELT ve Speex kod çözücü desteği
 * Otomatik yeniden bağlanma
 * Orbot uygulaması aracılığıyla Tor desteği
 * Mesajlar için metinden konuşmaya dönüşüm (öntanımlı olarak etkindir)

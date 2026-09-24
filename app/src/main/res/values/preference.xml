@@ -73,8 +73,6 @@
     <string name="certificateGenerateSum">Generates a new self-signed Mumla certificate. Recommended for beginners.</string>
     <string name="pttSettings">Push-to-talk settings</string>
     <string name="voiceActivitySettings">Voice activity settings</string>
-    <string name="disableOpus">Avoid Opus codec</string>
-    <string name="disableOpusSum">Turn off Opus support for Mumble 1.2.4 servers.</string>
 
     <!-- Audio settings screen -->
     <string name="noiseSuppression">Noise suppression</string>

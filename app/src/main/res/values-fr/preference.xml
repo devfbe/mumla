@@ -46,8 +46,6 @@
     <string name="certificateGenerateSum">Générer un nouveau certificat Mumla auto-signé. Recommendé pour les débutants.</string>
     <string name="pttSettings">Paramètres de « appuyer pour parler »</string>
     <string name="voiceActivitySettings">Paramètres d\'activité vocale</string>
-    <string name="disableOpus">Éviter le codec Opus</string>
-    <string name="disableOpusSum">Désactiver la prise en charge d\'Opus pour les serveurs Mumble 1.2.4.</string>
     <string name="hidePtt">Masquer le bouton « Appuyer pour parler »</string>
     <string name="hidePttSum">Seulement utile si vous utilisez le coin « Appuyer pour parler » ou la touche physique.</string>
     <string name="useTts">Synthèse vocale</string>

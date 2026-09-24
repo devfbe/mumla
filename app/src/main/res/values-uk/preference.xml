@@ -36,7 +36,6 @@
     <string name="pttKey">Кнопка Push-to-talk</string>
     <string name="pttKeySum">Апаратна кнопка для передачі аудіо.</string>
     <string name="hotCorner">Кут для Push-to-talk</string>
-    <string name="disableOpusSum">Вимкнути підтримку кодека Opus для серверів Mumble 1.2.4.</string>
     <string name="hidePtt">Приховати кнопку push-to-talk</string>
     <string name="hidePttSum">Корисно, якщо ви використовуєте активний кут або апаратну кнопку.</string>
     <string name="useTts">Текст у мову</string>
@@ -63,7 +62,6 @@
     <string name="certificateGenerateSum">Створює новий самопідписаний сертифікат Mumla. Рекомендовано новачкам.</string>
     <string name="pttSettings">Налаштування Натисни-щоб-говорити</string>
     <string name="voiceActivitySettings">Налаштування порогу гучності</string>
-    <string name="disableOpus">Вимкнути кодек Opus</string>
     <string name="pressKeyInfo">Для використання кнопки додаток має бути відкритим (через обмеження Android).</string>
     <string name="loadImagesSum">Завантажувати і показувати зображення в чаті.</string>
     <string name="loadImages">Зовнішні зображення</string>

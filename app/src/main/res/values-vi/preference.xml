@@ -2,7 +2,6 @@
 <resources>
     <string name="audioInputMethod">Chế độ truyền</string>
     <string name="forceTcpSum">Tắt UUDP cho liên lạc.</string>
-    <string name="disableOpus">Tránh mã hóa Opus</string>
     <string name="useTts">Văn bản thành giọng nói</string>
     <string name="pref_start_up_in_pinned_mode">Chế độ ghim kênh</string>
     <string name="pref_start_upIn_pinned_mode_sum">Bật chế độ \"Ghim kênh\" sau khi kết nối (ẩn các kênh không được ghim).</string>
@@ -70,7 +69,6 @@
     <string name="defaultUsername">Tên người dùng mặc định</string>
     <string name="defaultUsernameSum">Tên điền sẵn được sử dụng khi thêm server hoặc kết nối với server công cộng.</string>
     <string name="defaultUsernameDefault">NguoiDung</string>
-    <string name="disableOpusSum">Tắ hỗ trơ Opus cho server phiên bản 1.2.4.</string>
     <string name="shortTtsMessagesSum">Rút ngắn tin nhắn bằng cách chỉ đọc tên miền của các liên kết.</string>
     <string name="togglePtt">Nút bấm để nói bắt dính</string>
     <string name="pttButtonHeight">Chiều cao nuuts bấm để nói</string>

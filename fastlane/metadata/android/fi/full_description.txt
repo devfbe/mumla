@@ -8,7 +8,6 @@ Ominaisuuksia:
 *Bluetooth headset tuki.
 *Itse-rekisteröinti palvelimella.
 *Pääsyavaimet.
-*OPUS,CELT ja Speex koodekki tuki.
 *Automaattinen uudelleenyhdistäminen.
 *TOR tuki Orbot-sovelluksen avulla.
 *Teksti-puheeksi viesteille (päällä oletuksena)
