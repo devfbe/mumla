@@ -17,9 +17,8 @@ import org.robolectric.Shadows.shadowOf
 import se.lublin.mumla.R
 
 /**
- * The prompt shown when a session ended with an error: what it says, and what its three
- * intents reach. Whether it is posted at all across the POST_NOTIFICATIONS boundary is
- * NotificationPostingTest's.
+ * The prompt shown when a session ended with an error: what it says and what its three intents
+ * reach. Posting across the POST_NOTIFICATIONS boundary is in NotificationPostingTest.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaReconnectNotificationTest {

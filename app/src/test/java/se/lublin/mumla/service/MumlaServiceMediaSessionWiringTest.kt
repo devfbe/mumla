@@ -10,10 +10,8 @@ import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.util.HumlaCallbacks
 
 /**
- * The media session is only reachable through the service, so the wiring in onCreate/onDestroy is
- * the whole feature as far as a user is concerned. Driven through the service's own observer
- * registry rather than by looking at the field: that a session object exists says nothing, and
- * after onDestroy an assertion about the session would hold whether it was detached or not.
+ * The media session wiring in onCreate/onDestroy, checked through the service's observer registry
+ * rather than the field: after onDestroy the session must be detached, not merely inactive.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceMediaSessionWiringTest {

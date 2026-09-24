@@ -37,12 +37,8 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 
 /**
- * The effect pass for the audio settings screen: for every switch it offers, the test that reads
- * the result back off the object the audio threads use.
- *
- * Without this the screen is a list of preferences that may or may not be connected to anything,
- * which is exactly the defect class this project keeps finding -- the media key that did nothing,
- * the AGC setting that never reached Speex, the preference whose default disagreed with its XML.
+ * For every switch on the audio settings screen, reads the result back off the object the audio
+ * threads use.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceAudioPreferencesTest {
@@ -69,11 +65,7 @@ class MumlaServiceAudioPreferencesTest {
         throw AssertionError("no field $name on ${target.javaClass}")
     }
 
-    /**
-     * Task A9b replaced the `AudioHandler.Builder` the service used to hold with an immutable
-     * [se.lublin.humla.session.AudioConfig], so what a preference lands in is a config field. The
-     * config-to-builder half moved with it and is pinned in `DefaultAudioHandlerFactoryTest`.
-     */
+    /** Preferences land in an immutable [se.lublin.humla.session.AudioConfig]. */
     private fun audioConfig() = service.getAudioConfigForTest()
 
     private fun vadConfig(): VadConfig = (field(service, "mActivityInputMode") as ActivityInputMode).vadConfig
@@ -97,8 +89,7 @@ class MumlaServiceAudioPreferencesTest {
             change(key)
             assertThat(vadConfig()).isEqualTo(Settings.getInstance(service).getVadConfig())
         }
-        // Read back the values themselves, not only the equality with Settings: an accessor that
-        // returned a constant would satisfy the line above on both sides.
+        // Read back the values themselves: an accessor returning a constant would pass the above.
         val config = vadConfig()
         assertThat(config.snrFraction).isWithin(0.001f).of(0.31f)
         assertThat(config.holdTimeMs).isEqualTo(410L)
@@ -192,11 +183,9 @@ class MumlaServiceAudioPreferencesTest {
     // --- pin the set ---------------------------------------------------------------------------
 
     /**
-     * Enumerated from the screen rather than from the diff: every `android:key` the audio settings
-     * XML declares is either turned into an extra by [AudioPreferenceExtras] or named here with the
-     * reason it is not. A switch added to the screen that reaches nothing fails this test instead
-     * of shipping, which is the case no per-key assertion above can cover -- they only know about
-     * the keys somebody already thought of.
+     * Every `android:key` in the audio settings XML is either turned into an extra by
+     * [AudioPreferenceExtras] or exempted here with a reason, so a new switch that reaches nothing
+     * fails this test.
      */
     @Test
     fun `every key on the audio settings screen is either wired or exempt with a reason`() {
@@ -228,9 +217,8 @@ class MumlaServiceAudioPreferencesTest {
     }
 
     /**
-     * And the other direction, because [AudioPreferenceExtras.KEYS] alone proves only that a key
-     * is listed: every key it claims must produce a non-empty bundle, and a key it does not claim
-     * must produce an empty one.
+     * The other direction: every key [AudioPreferenceExtras.KEYS] claims produces a non-empty
+     * bundle, and an unclaimed key an empty one.
      */
     @Test
     fun `every key the mapper claims produces an extra and every other key produces none`() {
@@ -250,10 +238,8 @@ class MumlaServiceAudioPreferencesTest {
         for (key in AudioPreferenceExtras.VAD_KEYS) {
             val extras = AudioPreferenceExtras.extrasFor(key, settings)
             assertThat(extras.keySet()).containsExactly(HumlaService.EXTRAS_VAD_CONFIG)
-            // `HumlaService.requiresAudioRebuild` is gone with task A9b: the rebuild is decided by
-            // the value of AudioConfig, not by the key, and EXTRAS_VAD_CONFIG reaches a live object
-            // rather than the config. That one drag costs no rebuild is pinned end to end by
-            // HumlaServiceAudioTest.aLiveExtraDoesNotRebuildThePipeline.
+            // The rebuild is decided by the AudioConfig value, and EXTRAS_VAD_CONFIG reaches a live
+            // object, so one drag costs no rebuild (see HumlaServiceAudioTest).
         }
     }
 

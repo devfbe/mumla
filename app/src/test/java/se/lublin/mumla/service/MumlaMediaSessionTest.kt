@@ -40,8 +40,7 @@ class MumlaMediaSessionTest {
         override fun setTalking(talking: Boolean) { this.talking = talking }
         override fun stopTalking() {
             stopTalkingCalls++
-            // The same early exit HumlaMediaKeyTarget has. Without it this fake can do something
-            // the production target cannot, and a test asserting it would be measuring the fake.
+            // Same early exit as HumlaMediaKeyTarget, so the fake can't do more than production.
             if (!isConnected) return
             talking = false
         }
@@ -166,12 +165,8 @@ class MumlaMediaSessionTest {
     }
 
     /**
-     * The half of the ACTION_DOWN/ACTION_UP question that can be executed here: whether the
-     * library between the framework and us filters by key action. It does not -- this drives the
-     * real androidx.media callback that MediaSessionCompat hands to the platform, not our own
-     * override -- so one press, which the platform delivers as a DOWN and an UP, reaches us as
-     * two events and must toggle exactly once. The other half (which of the two the platform
-     * sends at all) is answered in MediaKeyHandler's KDoc and belongs to hardware QA.
+     * The androidx.media callback does not filter by key action, so one press (DOWN + UP) arrives
+     * as two events and must toggle exactly once.
      */
     @Test
     fun theLibraryPassesBothKeyActionsThroughToTheHandler() {
@@ -208,18 +203,9 @@ class MumlaMediaSessionTest {
     }
 
     /**
-     * HumlaCallbacks dispatches on whatever thread fired the event, and MediaSessionCompat has to
-     * be built and driven from a looper thread -- so a callback landing elsewhere is posted, not
-     * run where it landed, pinned by watching that nothing happens until the looper is idled.
-     *
-     * It is `onDisconnected` that really lands elsewhere: HumlaConnection calls
-     * onConnectionDisconnected from the socket thread it is standing on, in
-     * `handleFatalException`, `onTCPConnectionDisconnect` and `onTLSHandshakeFailed`.
-     * `onConnected` does not -- its only caller, `HumlaService.onConnectionSynchronized`, is
-     * itself invoked from a Runnable HumlaConnection posts to the main looper -- so a test that
-     * starts a worker thread for `onConnected` drives a thread production never uses and would
-     * stay green whatever the production code did. This one uses the callback that can arrive off
-     * main, and it is the only one in this file that starts a thread.
+     * MediaSessionCompat must be driven from a looper thread, so a callback landing elsewhere is
+     * posted. `onDisconnected` is the one that really arrives off main (from HumlaConnection's
+     * socket thread).
      */
     @Test
     fun aDisconnectFromTheSocketThreadIsMovedToTheMainLooper() {
@@ -251,13 +237,8 @@ class MumlaMediaSessionTest {
     }
 
     /**
-     * Unregistering the preference listener has no consequence this wrapper can be asked about.
-     * After detach it believes it is disconnected, so `applyState` short-circuits on `connected`
-     * before it even reads the setting, and a listener left behind behaves exactly like one that
-     * is gone -- measured: an earlier version of this test watched the setting being read and
-     * stayed green against a detach that unregistered nothing, because of that short-circuit.
-     * What remains observable is the handover itself, so that is what is asserted: the listener
-     * registered on attach is the one handed back on detach.
+     * After detach `applyState` short-circuits on `connected`, so only the handover is observable:
+     * the listener registered on attach is the one handed back on detach.
      */
     @Test
     fun detachHandsBackTheVeryListenerAttachRegistered() {
@@ -281,10 +262,8 @@ class MumlaMediaSessionTest {
     }
 
     /**
-     * Giving up the session turns talking off. Nothing else does: ToggleInputMode.mInputOn lives
-     * as long as the service, and a talking state switched on by a headset button with the screen
-     * off has no other way back. Asserted while the wrapper still holds the fake, not after some
-     * later teardown that would clear it anyway.
+     * Giving up the session turns talking off; otherwise a talking state switched on by a headset
+     * button with the screen off has no way back.
      */
     @Test
     fun deactivateStopsTalking() {
@@ -311,9 +290,8 @@ class MumlaMediaSessionTest {
     }
 
     /**
-     * Only a session we were actually holding is ours to unwind. Otherwise every repeated
-     * deactivate -- and onDisconnected followed by onDestroy is exactly that -- and every
-     * unrelated change of the setting would reach into a talking state this class never set.
+     * Only a session we were holding is ours to unwind; a repeated deactivate (onDisconnected then
+     * onDestroy) or an unrelated setting change must not touch the talking state.
      */
     @Test
     fun deactivateWithoutASessionLeavesTalkingAlone() {
@@ -325,11 +303,7 @@ class MumlaMediaSessionTest {
         assertThat(target.isTalking).isTrue()
     }
 
-    /**
-     * The preference listener does not filter by key, so this pins what that costs: re-evaluating
-     * on a change that is none of our business must leave the held session and the talking state
-     * exactly as they were.
-     */
+    /** The preference listener does not filter by key; an unrelated change must change nothing. */
     @Test
     fun anUnrelatedPreferenceChangeLeavesTheSessionAndTalkingAlone() {
         var observer: IHumlaObserver? = null
@@ -348,13 +322,8 @@ class MumlaMediaSessionTest {
     }
 
     /**
-     * A [MediaSessionCompat] is a handle on a session registered with the system, and `release()`
-     * is the only thing that hands it back. Were it dropped instead, every connect/disconnect
-     * cycle and every switch to NONE would leave a live session behind, still advertising
-     * STATE_PLAYING and still taking play/pause away from every other app -- the exact damage this
-     * class exists to prevent. Nothing above the class can see it, because `isActive` and
-     * `sessionToken` read off the very reference that was dropped, so the session is handed in
-     * through the factory and the release is asserted on it.
+     * `release()` is the only way to hand a session back to the system; a dropped one would keep
+     * advertising STATE_PLAYING. The session is handed in through the factory to assert that.
      */
     @Test
     fun givingUpTheSessionHandsItBackToTheSystem() {
@@ -370,13 +339,9 @@ class MumlaMediaSessionTest {
     }
 
     /**
-     * What `stopTalking` reaches on the main path, stated with its scope rather than as a promise.
-     * `HumlaMediaKeyTarget.stopTalking` returns immediately while the service is disconnected, and
-     * `mConnectionState` is already DISCONNECTED before `onDisconnected` fires (spec 4.1) -- so on
-     * `onDisconnected -> deactivate -> releaseSession` the talking state is *not* cleared here.
-     * The fake carries the same early exit, so no test in this file can claim a reach the
-     * production target does not have. Closing this window is stream A's job, in
-     * `HumlaService.onConnectionDisconnected`.
+     * `HumlaMediaKeyTarget.stopTalking` returns early while disconnected, and the connection state
+     * is already DISCONNECTED when `onDisconnected` fires, so the talking state is *not* cleared
+     * on that path. The fake carries the same early exit.
      */
     @Test
     fun onDisconnectedTheTalkingStateIsLeftToStreamA() {

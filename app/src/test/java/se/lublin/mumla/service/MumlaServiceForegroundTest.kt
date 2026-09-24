@@ -25,13 +25,10 @@ import se.lublin.mumla.R
 import java.time.Duration
 
 /**
- * "The microphone is dead when the screen is off" (spec A3/A6), at the level of the service.
- *
- * The session runs through the real HumlaService and its state machine; only the connection is a
- * relaxed mock, so connect() opens nothing and the test delivers the connection's callbacks
- * itself. The platform's refusal is modelled with ShadowService.setThrowInStartForeground: once
- * the first start has succeeded, every later startForeground throws, exactly as it does on a
- * device whose screen is off (the restriction is re-checked on every call).
+ * Foreground behaviour of the service with the screen off. The session runs through the real
+ * HumlaService state machine; only the connection is a relaxed mock, and the test delivers its
+ * callbacks. ShadowService.setThrowInStartForeground models the platform refusing every
+ * startForeground after the first, as with the screen off.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceForegroundTest {
@@ -139,7 +136,7 @@ class MumlaServiceForegroundTest {
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }
 
-    // ---- the chat log across the session (spec A3, D5) ------------------------------------------
+    // ---- the chat log across the session --------------------------------------------------------
 
     private fun log() = service.getMessageLog().map { it.body }
 
@@ -223,7 +220,7 @@ class MumlaServiceForegroundTest {
         assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
     }
 
-    // ---- cancelling from the foreground notification (spec A6 follow-up) -----------------------
+    // ---- cancelling from the foreground notification --------------------------------------------
 
     private fun foregroundActions(): List<String> =
         shadowOf(service.getSystemService(android.app.NotificationManager::class.java))
@@ -299,7 +296,7 @@ class MumlaServiceForegroundTest {
         assertThat(reconnectPrompt()).isNotNull()
     }
 
-    // ---- spec A6: a refused start ---------------------------------------------------------------
+    // ---- a refused start ------------------------------------------------------------------------
 
     @Test
     fun aRefusedForegroundStartBecomesAWarningAndAPromptInsteadOfACrash() {
@@ -341,7 +338,7 @@ class MumlaServiceForegroundTest {
         assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
     }
 
-    // ---- spec A7 ---------------------------------------------------------------------------------
+    // ---- half duplex ----------------------------------------------------------------------------
 
     /**
      * Half duplex follows the transmit mode the service is in, which the connect intent always

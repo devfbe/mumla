@@ -34,12 +34,9 @@ import se.lublin.humla.session.AudioRouter
 import se.lublin.mumla.Settings
 
 /**
- * The earpiece is the handset mode now: routing voice to it - chosen in the audio chooser, or the
- * default output without a headset - holds the proximity lock that turns the screen off at the
- * ear, and every other device releases it. No switch of its own.
- *
- * Driven through the real chain: the router over a recording device seam, the service's route
- * report, and `MumlaService`'s hook - only the platform's `AudioManager` is replaced.
+ * Routing voice to the earpiece holds the proximity lock that turns the screen off at the ear;
+ * every other device releases it. Driven through the real router, route report and service hook;
+ * only the platform's `AudioManager` is replaced.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceAudioRouteTest {

@@ -28,12 +28,8 @@ import se.lublin.mumla.app.MumlaActivity
 
 /**
  * The foreground notification: what it shows, what its buttons reach, and when it holds the
- * service in the foreground.
- *
- * Every assertion reads a result back from an object the notification does not own -- the
- * notification manager, the service's foreground state, the registered receivers, a listener
- * called through the button's own PendingIntent -- because that is all this class does (spec
- * 4.04, sweep by effect).
+ * service in the foreground. Every assertion reads back from an object the notification does not
+ * own (notification manager, foreground state, receivers, the buttons' own PendingIntents).
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaConnectionNotificationTest {
@@ -74,7 +70,6 @@ class MumlaConnectionNotificationTest {
         controller.destroy()
     }
 
-    /** The only line that differs between the Java class and its Kotlin conversion. */
     private fun MumlaConnectionNotification.configure(text: String, actions: Boolean) {
         customContentText = text
         actionsShown = actions
@@ -161,8 +156,7 @@ class MumlaConnectionNotificationTest {
 
     /**
      * Extras are not part of a PendingIntent's identity, and MumlaMessageNotification asks for the
-     * same activity under the same request code. Both carry ITEM_SERVER today, so the only thing
-     * that shows the flag is the flag.
+     * same activity under the same request code, so the flag itself is asserted.
      */
     @Test
     fun theContentIntentReplacesAnyEarlierOneSoItsExtraIsTheOneSent() {
@@ -300,7 +294,7 @@ class MumlaConnectionNotificationTest {
         assertThat(ourReceivers()).isEmpty()
     }
 
-    // ---- spec A6: the foreground start is made once, and a refusal is survivable -----------
+    // ---- the foreground start is made once, and a refusal is survivable ---------------------
 
     @Test
     fun showReportsThatTheServiceIsInTheForeground() {
@@ -334,9 +328,8 @@ class MumlaConnectionNotificationTest {
     }
 
     /**
-     * ForegroundServiceStartNotAllowedException is an IllegalStateException, so this is the test
-     * that tells "catch the refusal" apart from "catch everything of its supertype": a manifest
-     * that lost its foregroundServiceType is a build defect and must not turn into a chat line.
+     * ForegroundServiceStartNotAllowedException is an IllegalStateException; only the refusal is
+     * caught, since a manifest without a foregroundServiceType is a build defect.
      */
     @Test
     fun anyOtherFailureOfTheForegroundStartStillPropagates() {
@@ -347,12 +340,9 @@ class MumlaConnectionNotificationTest {
     }
 
     /**
-     * The platform re-checks the background-start restriction on EVERY startForeground call,
-     * "regardless of whether stopForeground() has been called or not" (ActiveServices,
-     * setServiceForegroundInnerLocked, the `mStartForegroundCount >= 1` arm). A text change sent
-     * through startForeground while the screen is off is therefore refused exactly like a fresh
-     * start -- which is the complaint this task closes. From the second show on, the platform
-     * here refuses every start, and the update must still arrive.
+     * The platform re-checks the background-start restriction on every startForeground call, so a
+     * text update while the screen is off is refused like a fresh start. From the second show on
+     * every start is refused here, and the update must still arrive.
      */
     @Test
     fun aSecondShowUpdatesTheNotificationWithoutAnotherForegroundStart() {
@@ -410,9 +400,7 @@ class MumlaConnectionNotificationTest {
         assertThat(service.foregroundServiceType).isEqualTo(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }
 
-    /**
-     * Below 34 the call without a type takes every type the manifest declares.
-     */
+    /** Below 34 the call without a type takes every type the manifest declares. */
     @Test
     @Config(sdk = [33])
     fun belowAndroid14TheForegroundTakesTheManifestTypes() {

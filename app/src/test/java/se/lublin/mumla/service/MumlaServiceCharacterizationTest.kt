@@ -45,15 +45,10 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 
 /**
- * What MumlaService does, written against the Java service before its Kotlin conversion and left
- * unchanged across it (task 12). Enumerated from the production file: every observer callback,
- * every lifecycle hook, every preference arm that is not an audio extra (those are
- * MumlaServiceAudioPreferencesTest's) and every IMumlaService call.
- *
- * The collaborators that draw windows -- the overlay and the hot corner -- and TextToSpeech are
- * replaced by relaxed mocks after onCreate, through their fields, so the calls the service makes
- * on them can be read back. The session is a mocked HumlaConnection that reports itself connected
- * and synchronized, plus a mocked ModelHandler that knows the one user who is us.
+ * Characterizes MumlaService: observer callbacks, lifecycle hooks, non-audio preference arms and
+ * the IMumlaService calls. The overlay, hot corner and TextToSpeech are replaced by relaxed mocks
+ * after onCreate; the session is a mocked HumlaConnection plus a mocked ModelHandler that knows
+ * [SELF].
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceCharacterizationTest {
@@ -102,9 +97,8 @@ class MumlaServiceCharacterizationTest {
     }
 
     /**
-     * onConnectionSynchronized without the model handler: the superclass hook then returns before
-     * it builds an audio pipeline (a real AudioRecord on another thread whose failure would land in
-     * the chat log at an unpredictable moment), and MumlaService's own half runs in full.
+     * Without the model handler the superclass hook returns before building an audio pipeline, and
+     * MumlaService's own half runs in full.
      */
     private fun synchronize() {
         humlaField("mModelHandler").set(service, null)
@@ -408,7 +402,7 @@ class MumlaServiceCharacterizationTest {
         assertThat(mumlaField("mTTS").get(service)).isNotNull()
     }
 
-    // ---- the foreground notification, as the observer drives it today --------------------------
+    // ---- the foreground notification ------------------------------------------------------------
 
     @Test
     fun connectingEntersTheForegroundWithTheConnectingText() {
@@ -667,10 +661,7 @@ class MumlaServiceCharacterizationTest {
         assertThat(proximityLockHeld()).isFalse()
     }
 
-    /**
-     * The proximity lock is no longer a synchronization step: it follows the earpiece route, and
-     * `MumlaServiceAudioRouteTest` pins it there.
-     */
+    /** The proximity lock follows the earpiece route (see `MumlaServiceAudioRouteTest`). */
     @Test
     fun synchronizingShowsTheHotCornerWhenAskedFor() {
         // Written while disconnected: the preference listener sees it and shows nothing yet.
@@ -708,8 +699,7 @@ class MumlaServiceCharacterizationTest {
         verify { overlay.hide() }
         verify { hotCorner.setShown(false) }
         assertThat(mumlaField("mProximityLock").get(service)).isNull()
-        // Changed in task 12 (spec A3): the chat log and the chat notification survive a loss;
-        // only the Disconnected state clears them. See the next test.
+        // The chat log and the chat notification survive a loss; only Disconnected clears them.
         assertThat(service.getMessageLog()).isNotEmpty()
     }
 
@@ -1025,7 +1015,7 @@ class MumlaServiceCharacterizationTest {
         verify(exactly = 0) { overlay.setPushToTalkShown(any()) }
     }
 
-    // ---- the push-to-talk click (added with the Kotlin conversion's seam; not characterization) --
+    // ---- the push-to-talk click -----------------------------------------------------------------
 
     private var clicks = 0
 
@@ -1100,15 +1090,14 @@ class MumlaServiceCharacterizationTest {
         assertThat(clicks).isEqualTo(0)
     }
 
-    // ---- added in the sweep round of task 12 ----------------------------------------------------
+    // ---- notification actions and the talk receiver ---------------------------------------------
 
     private fun postedActions(): Array<Notification.Action>? =
         shadowOf(notificationManager).getNotification(FOREGROUND_ID)?.actions
 
     /**
-     * Connecting shows nothing; a lost connection shows only "Cancel reconnect" -- the session
-     * buttons go, since there is no session to mute. Changed on purpose: the loss used to show no
-     * action at all, which left no way to give up on the reconnect from the notification.
+     * Connecting shows nothing; a lost connection shows only "Cancel reconnect", since there is no
+     * session to mute.
      */
     @Test
     fun connectingShowsNoActionsAndALostConnectionOnlyTheCancel() {
