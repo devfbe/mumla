@@ -1,9 +1,9 @@
-# Post-link assertions about one of this directory's JNI shared libraries: that it exports its
-# Java_* entry points and nothing else, and that its segments are 16 KB aligned.
+# Post-link assertions about the JNI shared library: that it exports JNI_OnLoad and nothing else,
+# and that its segments are 16 KB aligned.
 #
-# Run as a POST_BUILD step of every shared library here (see humla_check_library). The properties
-# come from -Wl,--exclude-libs,ALL with -fvisibility=hidden, and -Wl,-z,max-page-size=16384; both
-# fail only on a device if lost.
+# Run as a POST_BUILD step (see humla_check_library). The properties come from
+# -Wl,--exclude-libs,ALL with -fvisibility=hidden, and -Wl,-z,max-page-size=16384; both fail only
+# on a device if lost.
 # Invoked with -DNM=<llvm-nm> -DREADELF=<llvm-readelf> -DLIBRARY=<path to the .so>.
 
 if(NOT NM OR NOT READELF OR NOT EXISTS "${LIBRARY}")
@@ -24,23 +24,24 @@ set(allowed "_init" "_fini" "__bss_start" "_edata" "_end" "__bss_start__" "_bss_
 
 string(REPLACE "\n" ";" lines "${symbols}")
 set(unexpected "")
-set(jni_count 0)
+set(has_onload FALSE)
 foreach(line IN LISTS lines)
   # "<address> <type> <name>", or "         <type> <name>" for absolute/undefined-value symbols.
   if(line MATCHES "[ \t]([A-Za-z])[ \t]+([^ \t]+)$")
     set(name "${CMAKE_MATCH_2}")
-    if(name MATCHES "^Java_")
-      math(EXPR jni_count "${jni_count} + 1")
+    if(name STREQUAL "JNI_OnLoad")
+      set(has_onload TRUE)
     elseif(NOT name IN_LIST allowed)
       list(APPEND unexpected "${name}")
     endif()
   endif()
 endforeach()
 
-if(jni_count EQUAL 0)
+if(NOT has_onload)
   message(FATAL_ERROR
-      "check_library: ${LIBRARY} exports no Java_* entry point at all. System.loadLibrary would "
-      "succeed and every external fun would then fail with UnsatisfiedLinkError.")
+      "check_library: ${LIBRARY} does not export JNI_OnLoad. System.loadLibrary would succeed "
+      "without registering anything, and every external fun would then fail with "
+      "UnsatisfiedLinkError.")
 endif()
 
 list(LENGTH unexpected n)
@@ -52,11 +53,11 @@ if(NOT n EQUAL 0)
   list(SUBLIST unexpected 0 ${show} head)
   string(REPLACE ";" "\n    " head "${head}")
   message(FATAL_ERROR
-      "check_library: ${LIBRARY} exports ${n} symbol(s) that are not JNI entry points, e.g.\n"
+      "check_library: ${LIBRARY} exports ${n} symbol(s) besides JNI_OnLoad, e.g.\n"
       "    ${head}\n"
-      "Every library here statically contains libc++ and its codec; exporting any of that lets the "
-      "dynamic linker bind one library's C++ runtime to another's. Check that "
-      "-Wl,--exclude-libs,ALL and -fvisibility=hidden are still on this target.")
+      "The library statically contains libc++ and the codecs, and the methods are registered by "
+      "JNI_OnLoad; nothing else is meant to be visible. Check that -Wl,--exclude-libs,ALL and "
+      "-fvisibility=hidden are still on this target.")
 endif()
 
 # ---------------------------------------------------------------- 16 KB page alignment

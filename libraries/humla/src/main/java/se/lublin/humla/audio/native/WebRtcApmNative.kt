@@ -20,8 +20,9 @@ package se.lublin.humla.audio.native
 /**
  * webrtc-audio-processing: AEC3, noise suppression, AGC2 and a high-pass filter.
  *
- * **A handle may only be passed back to the object that issued it.** 0 is always safe and [destroy]
- * refuses unknown values, but the per-frame functions dereference whatever they are given.
+ * **A handle may only be passed back to the object that issued it.** 0, released and invented
+ * handles are refused, but a handle from another bridge may name a live APM that belongs to
+ * someone else.
  * Each 10 ms tick, call [processRender] before [processCapture] with the frame containing its echo.
  */
 interface WebRtcApmApi {
@@ -64,13 +65,13 @@ interface WebRtcApmApi {
 }
 
 /**
- * JNI binding of `libhumlaapm`. [processCapture] and [processRender] take no lock and may run
- * concurrently, each from one thread per handle. [create] and [destroy] lock and allocate; keep
+ * JNI binding of the APM (`jni_webrtc_apm.cpp`). [processCapture] and [processRender] take no
+ * lock and may run concurrently, each from one thread per handle. [create] and [destroy] lock and allocate; keep
  * them off the audio threads.
  */
 object WebRtcApmNative : WebRtcApmApi {
     init {
-        System.loadLibrary("humlaapm")
+        HumlaNativeLibrary.load()
     }
 
     external override fun create(

@@ -53,9 +53,8 @@ android {
         }
         externalNativeBuild {
             cmake {
-                // Static libc++ is safe because each humla_*.so exports only its JNI entry
-                // points (enforced by src/main/cpp/check_library.cmake) and shares no C++
-                // objects or exceptions with the others.
+                // Static libc++ is safe because libhumla_native.so is the only native library and
+                // exports nothing but JNI_OnLoad (enforced by src/main/cpp/check_library.cmake).
                 arguments += "-DANDROID_STL=c++_static"
             }
         }

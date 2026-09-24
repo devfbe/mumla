@@ -40,7 +40,7 @@ interface SpeexResamplerApi {
 
 object SpeexResamplerNative : SpeexResamplerApi {
     init {
-        System.loadLibrary("humla_speexdsp")
+        HumlaNativeLibrary.load()
     }
 
     external override fun init(channels: Int, inRate: Int, outRate: Int, quality: Int, error: IntArray?): Long

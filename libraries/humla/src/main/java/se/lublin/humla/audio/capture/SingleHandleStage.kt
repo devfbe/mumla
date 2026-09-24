@@ -23,8 +23,8 @@ package se.lublin.humla.audio.capture
  * locking of their own.
  *
  * The native `destroy()` is not safe against a `process()` already running on another audio thread,
- * so all three entry points must share one lock. The handle table dereferences handles without
- * type-checking, so the handle stays a private field here and subclasses only see it as a callback
+ * so all three entry points must share one lock. The handle tables cannot tell whose handle they
+ * are given, so the handle stays a private field here and subclasses only see it as a callback
  * argument to pass back to their own bridge. [process], [release] and [analyzeReverseStream] are
  * final, so there is no unlocked route to the native layer.
  *

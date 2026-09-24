@@ -21,9 +21,9 @@ package se.lublin.humla.audio.native
  * xiph RNNoise with the model embedded in the library. Handles are opaque; 0 means failure. An
  * interface so the capture adapters can be tested against a fake.
  *
- * **A handle may only be passed back to the object that issued it.** 0 is always safe and
- * [destroy] refuses unknown values, but [processFrame] dereferences whatever it is given (no lock
- * on the audio thread), so a foreign or stale handle crashes in native code.
+ * **A handle may only be passed back to the object that issued it.** 0, released and invented
+ * handles are refused, but a handle from another bridge may name a live denoiser that belongs to
+ * someone else.
  */
 interface RnnoiseApi {
     /** A new denoiser, or 0 if one could not be allocated. */
@@ -46,7 +46,7 @@ interface RnnoiseApi {
 }
 
 /**
- * JNI binding of `libhumlarnnoise` (`jni_rnnoise.cpp`).
+ * JNI binding of RNNoise (`jni_rnnoise.cpp`).
  *
  * A handle must not be used from two threads at once. [processFrame] takes no lock; [create] and
  * [destroy] lock and allocate, so keep them off the audio thread.
@@ -56,8 +56,7 @@ object RnnoiseNative : RnnoiseApi {
     const val FRAME_SIZE = 480
 
     init {
-        // "humla_rnnoise" is the static library this one wraps.
-        System.loadLibrary("humlarnnoise")
+        HumlaNativeLibrary.load()
     }
 
     external override fun create(): Long

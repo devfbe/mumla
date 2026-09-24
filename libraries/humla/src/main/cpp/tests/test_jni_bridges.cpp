@@ -1,8 +1,7 @@
-/* Host test for the two hand-written JNI bridges, ../jni_rnnoise.cpp and ../jni_webrtc_apm.cpp.
+/* Host test for the JNI bridges ../jni_rnnoise.cpp and ../jni_webrtc_apm.cpp.
  *
  * The bridges run for real through a stand-in JNIEnv (jni_env_stub.h) whose arrays are exact-size
- * heap blocks; the entry points are plain C functions, so calling them directly is what the JVM
- * does. Three properties that are silent when broken:
+ * heap blocks; the registered functions are called directly, which is what the JVM does. Three properties that are silent when broken:
  *
  *   1. Every buffer crossing the boundary is length-checked (the wrappers write a fixed number of
  *      samples into a bare int16_t*). The error code is the assertion; the sanitized build
@@ -19,8 +18,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "humla_apm.h"
-#include "humla_rnnoise.h"
+#include "jni_bridges.h"
+#include "webrtc_apm/humla_apm.h"
+#include "rnnoise/humla_rnnoise.h"
 
 using jnistub::Array;
 using jnistub::Env;
@@ -34,30 +34,21 @@ static int failures = 0;
         }                                             \
     } while (0)
 
-/* The entry points under test. Declared rather than included, so that a signature drifting from
- * what the JVM calls (or the Kotlin `external fun` declares) stops this file linking. */
-extern "C" {
-JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_RnnoiseNative_create(JNIEnv*, jobject) noexcept;
-JNIEXPORT jfloat JNICALL Java_se_lublin_humla_audio_native_RnnoiseNative_processFrame(JNIEnv*, jobject, jlong, jshortArray) noexcept;
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_RnnoiseNative_destroy(JNIEnv*, jobject, jlong) noexcept;
+/* The entry points under test, looked up in what the bridges registered. jnistub::native() checks
+ * each registered signature against the type it is called through. */
+#define RN(name, type) (jnistub::native<type>("se/lublin/humla/audio/native/RnnoiseNative", name))
+#define APM(name, type) (jnistub::native<type>("se/lublin/humla/audio/native/WebRtcApmNative", name))
 
-JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_WebRtcApmNative_create(JNIEnv*, jobject, jint, jboolean, jboolean, jint, jboolean, jboolean) noexcept;
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_WebRtcApmNative_frameSize(JNIEnv*, jobject, jlong) noexcept;
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_WebRtcApmNative_processCapture(JNIEnv*, jobject, jlong, jshortArray) noexcept;
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_WebRtcApmNative_processRender(JNIEnv*, jobject, jlong, jshortArray) noexcept;
-JNIEXPORT jfloat JNICALL Java_se_lublin_humla_audio_native_WebRtcApmNative_lastCaptureLevelDbfs(JNIEnv*, jobject, jlong) noexcept;
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_WebRtcApmNative_destroy(JNIEnv*, jobject, jlong) noexcept;
-}
-
-#define RN_CREATE Java_se_lublin_humla_audio_native_RnnoiseNative_create
-#define RN_PROCESS Java_se_lublin_humla_audio_native_RnnoiseNative_processFrame
-#define RN_DESTROY Java_se_lublin_humla_audio_native_RnnoiseNative_destroy
-#define APM_CREATE Java_se_lublin_humla_audio_native_WebRtcApmNative_create
-#define APM_FRAME_SIZE Java_se_lublin_humla_audio_native_WebRtcApmNative_frameSize
-#define APM_CAPTURE Java_se_lublin_humla_audio_native_WebRtcApmNative_processCapture
-#define APM_RENDER Java_se_lublin_humla_audio_native_WebRtcApmNative_processRender
-#define APM_LEVEL Java_se_lublin_humla_audio_native_WebRtcApmNative_lastCaptureLevelDbfs
-#define APM_DESTROY Java_se_lublin_humla_audio_native_WebRtcApmNative_destroy
+#define RN_CREATE RN("create", jlong (*)(JNIEnv*, jobject) noexcept)
+#define RN_PROCESS RN("processFrame", jfloat (*)(JNIEnv*, jobject, jlong, jshortArray) noexcept)
+#define RN_DESTROY RN("destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
+#define APM_CREATE \
+    APM("create", jlong (*)(JNIEnv*, jobject, jint, jboolean, jboolean, jint, jboolean, jboolean) noexcept)
+#define APM_FRAME_SIZE APM("frameSize", jint (*)(JNIEnv*, jobject, jlong) noexcept)
+#define APM_CAPTURE APM("processCapture", jint (*)(JNIEnv*, jobject, jlong, jshortArray) noexcept)
+#define APM_RENDER APM("processRender", jint (*)(JNIEnv*, jobject, jlong, jshortArray) noexcept)
+#define APM_LEVEL APM("lastCaptureLevelDbfs", jfloat (*)(JNIEnv*, jobject, jlong) noexcept)
+#define APM_DESTROY APM("destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
 
 /* webrtc::AudioProcessing::Error values, spelled out to keep the webrtc C++ headers out. */
 enum { kNullPointerError = -5, kBadDataLengthError = -8 };
@@ -296,6 +287,8 @@ static void test_apm_wiring(Env& env) {
 
 int main() {
     Env env;
+    CHECK(humla::registerRnnoiseNatives(env.get()), "the rnnoise bridge registers");
+    CHECK(humla::registerWebRtcApmNatives(env.get()), "the apm bridge registers");
     test_rnnoise(env);
     test_apm_arguments(env);
     test_apm_wiring(env);

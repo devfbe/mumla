@@ -17,6 +17,8 @@
 
 #include <cstdio>
 
+#include "jni_bridges.h"
+
 using jnistub::Array;
 using jnistub::Env;
 
@@ -29,42 +31,39 @@ static int failures = 0;
         }                                             \
     } while (0)
 
-extern "C" {
-JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_init(JNIEnv*, jobject, jint, jint);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_run(JNIEnv*, jobject, jlong, jshortArray);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_destroy(JNIEnv*, jobject, jlong);
-
-JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_SpeexResamplerNative_init(JNIEnv*, jobject, jint, jint, jint, jint, jintArray);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexResamplerNative_processInt(JNIEnv*, jobject, jlong, jint, jshortArray, jintArray, jshortArray, jintArray);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexResamplerNative_destroy(JNIEnv*, jobject, jlong);
-
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_ctlInt(JNIEnv*, jobject, jlong, jint, jintArray);
-
-JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_init(JNIEnv*, jobject, jint);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_ctl(JNIEnv*, jobject, jlong, jint, jintArray);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_put(JNIEnv*, jobject, jlong, jbyteArray, jint, jint, jint, jint, jint);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_get(JNIEnv*, jobject, jlong, jbyteArray, jint, jintArray);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_pointerTimestamp(JNIEnv*, jobject, jlong);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_tick(JNIEnv*, jobject, jlong);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_updateDelay(JNIEnv*, jobject, jlong);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_destroy(JNIEnv*, jobject, jlong);
-}
-
-#define PP_INIT Java_se_lublin_humla_audio_native_SpeexPreprocessNative_init
-#define PP_RUN Java_se_lublin_humla_audio_native_SpeexPreprocessNative_run
-#define PP_CTL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_ctlInt
-#define PP_DESTROY Java_se_lublin_humla_audio_native_SpeexPreprocessNative_destroy
-#define RS_INIT Java_se_lublin_humla_audio_native_SpeexResamplerNative_init
-#define RS_PROCESS Java_se_lublin_humla_audio_native_SpeexResamplerNative_processInt
-#define RS_DESTROY Java_se_lublin_humla_audio_native_SpeexResamplerNative_destroy
-#define JB_INIT Java_se_lublin_humla_audio_native_SpeexJitterNative_init
-#define JB_PUT Java_se_lublin_humla_audio_native_SpeexJitterNative_put
-#define JB_GET Java_se_lublin_humla_audio_native_SpeexJitterNative_get
-#define JB_CTL Java_se_lublin_humla_audio_native_SpeexJitterNative_ctl
-#define JB_DESTROY Java_se_lublin_humla_audio_native_SpeexJitterNative_destroy
-#define JB_POINTER_TIMESTAMP Java_se_lublin_humla_audio_native_SpeexJitterNative_pointerTimestamp
-#define JB_TICK Java_se_lublin_humla_audio_native_SpeexJitterNative_tick
-#define JB_UPDATE_DELAY Java_se_lublin_humla_audio_native_SpeexJitterNative_updateDelay
+/* The entry points under test, looked up in what the bridge registered; jnistub::native() checks
+ * each registered signature against the type it is called through. */
+#define SPEEX(cls, name, type) (jnistub::native<type>("se/lublin/humla/audio/native/" cls, name))
+#define PP_INIT \
+    SPEEX("SpeexPreprocessNative", "init", jlong (*)(JNIEnv*, jobject, jint, jint) noexcept)
+#define PP_RUN \
+    SPEEX("SpeexPreprocessNative", "run", jint (*)(JNIEnv*, jobject, jlong, jshortArray) noexcept)
+#define PP_CTL \
+    SPEEX("SpeexPreprocessNative", "ctlInt", jint (*)(JNIEnv*, jobject, jlong, jint, jintArray) noexcept)
+#define PP_DESTROY \
+    SPEEX("SpeexPreprocessNative", "destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
+#define RS_INIT \
+    SPEEX("SpeexResamplerNative", "init", jlong (*)(JNIEnv*, jobject, jint, jint, jint, jint, jintArray) noexcept)
+#define RS_PROCESS \
+    SPEEX("SpeexResamplerNative", "processInt", jint (*)(JNIEnv*, jobject, jlong, jint, jshortArray, jintArray, jshortArray, jintArray) noexcept)
+#define RS_DESTROY \
+    SPEEX("SpeexResamplerNative", "destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
+#define JB_INIT \
+    SPEEX("SpeexJitterNative", "init", jlong (*)(JNIEnv*, jobject, jint) noexcept)
+#define JB_PUT \
+    SPEEX("SpeexJitterNative", "put", void (*)(JNIEnv*, jobject, jlong, jbyteArray, jint, jint, jint, jint, jint) noexcept)
+#define JB_GET \
+    SPEEX("SpeexJitterNative", "get", jint (*)(JNIEnv*, jobject, jlong, jbyteArray, jint, jintArray) noexcept)
+#define JB_CTL \
+    SPEEX("SpeexJitterNative", "ctl", jint (*)(JNIEnv*, jobject, jlong, jint, jintArray) noexcept)
+#define JB_DESTROY \
+    SPEEX("SpeexJitterNative", "destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
+#define JB_POINTER_TIMESTAMP \
+    SPEEX("SpeexJitterNative", "pointerTimestamp", jint (*)(JNIEnv*, jobject, jlong) noexcept)
+#define JB_TICK \
+    SPEEX("SpeexJitterNative", "tick", void (*)(JNIEnv*, jobject, jlong) noexcept)
+#define JB_UPDATE_DELAY \
+    SPEEX("SpeexJitterNative", "updateDelay", jint (*)(JNIEnv*, jobject, jlong) noexcept)
 
 enum { kJitterBadArgument = -2 };  /* JITTER_BUFFER_BAD_ARGUMENT */
 
@@ -515,6 +514,7 @@ static void test_allocation_failure(Env& env) {
 
 int main() {
     Env env;
+    CHECK(humla::registerSpeexdspNatives(env.get()), "the speexdsp bridge registers");
     test_preprocessor(env);
     test_resampler(env);
     test_resampler_channel_index(env);

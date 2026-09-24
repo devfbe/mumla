@@ -284,3 +284,19 @@ if(HUMLA_HAVE_SANITIZERS)
   target_link_libraries(test_jni_opus_asan PRIVATE opus m)
   humla_add_labelled_test(jni_opus_sanitized test_jni_opus_asan sanitized)
 endif()
+
+# ---------------------------------------------------------------- JNI_OnLoad
+# Every bridge in one binary, as in libhumla_native.so, registered through JNI_OnLoad and compared
+# with ../jni_registrations.txt.
+add_executable(test_jni_registration
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_jni_registration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_onload.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_opus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_speexdsp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_rnnoise.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_webrtc_apm.cpp)
+target_include_directories(test_jni_registration PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+target_link_libraries(test_jni_registration PRIVATE opus speexdsp_hosttest humla_rnnoise humla_apm m)
+add_test(NAME jni_registration
+         COMMAND test_jni_registration ${CMAKE_CURRENT_SOURCE_DIR}/../jni_registrations.txt)
+set_tests_properties(jni_registration PROPERTIES LABELS plain)

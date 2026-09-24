@@ -63,7 +63,7 @@ object SpeexPreprocessNative : SpeexPreprocessApi {
     const val SPEEX_PREPROCESS_SET_AGC_TARGET = 46
 
     init {
-        System.loadLibrary("humla_speexdsp")
+        HumlaNativeLibrary.load()
     }
 
     external override fun init(frameSize: Int, sampleRate: Int): Long

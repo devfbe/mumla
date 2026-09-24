@@ -28,7 +28,7 @@ interface OpusDecoderApi {
 
 object OpusDecoderNative : OpusDecoderApi {
     init {
-        System.loadLibrary("humla_opus")
+        HumlaNativeLibrary.load()
     }
 
     external override fun create(sampleRate: Int, channels: Int, error: IntArray): Long

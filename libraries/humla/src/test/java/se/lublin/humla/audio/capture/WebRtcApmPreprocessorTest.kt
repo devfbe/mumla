@@ -278,8 +278,9 @@ class WebRtcApmPreprocessorTest {
     }
 
     /**
-     * `HandleTable::get()` does not validate the handle type, so handing another stage's handle to
-     * the APM bridge would segfault; this stage has two audio threads that could leak it.
+     * `HandleTable::get()` cannot tell whose handle it is given, so another stage's handle could make
+     * the APM bridge process someone else's instance; this stage has two audio threads that could
+     * leak it.
      */
     @Test
     fun `the native handle never escapes the stage`() {

@@ -1,6 +1,7 @@
 /*
- * A stand-in JNIEnv, enough of one to call the hand-written JNI entry points in
- * ../jni_*.cpp from a host test without a JVM.
+ * A stand-in JNIEnv (and JavaVM), enough of one to register and call the JNI bridges in
+ * ../jni_*.cpp from a host test without a JVM. RegisterNatives records every binding; native()
+ * looks one up by class and name.
  *
  * Two properties make memory errors in the bridges observable:
  *
@@ -21,9 +22,70 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
+#include <string>
 #include <type_traits>
+#include <vector>
+
+#include "jni_common.h"
 
 namespace jnistub {
+
+/* ---------------------------------------------------------------- classes and RegisterNatives */
+
+/* One RegisterNatives entry, with the class it was registered on. */
+struct Registration {
+    std::string cls, name, signature;
+    void* fn;
+};
+
+inline std::vector<Registration>& registrations() {
+    static std::vector<Registration> r;
+    return r;
+}
+
+/* FindClass hands out a pointer to the class name, interned so that it stays valid. */
+inline jclass find_class(JNIEnv*, const char* name) {
+    static std::deque<std::string> names;
+    for (auto& n : names)
+        if (n == name) return reinterpret_cast<jclass>(&n);
+    names.emplace_back(name);
+    return reinterpret_cast<jclass>(&names.back());
+}
+
+inline jint register_natives(JNIEnv*, jclass cls, const JNINativeMethod* methods, jint n) {
+    const std::string& name = *reinterpret_cast<const std::string*>(cls);
+    for (jint i = 0; i < n; i++)
+        registrations().push_back({name, methods[i].name, methods[i].signature, methods[i].fnPtr});
+    return JNI_OK;
+}
+
+/* The function registered as cls.name, called as type F. Aborts unless exactly one registration
+ * matches and its signature is the one F implies, so a test cannot call a bridge through the
+ * wrong type. */
+template <typename F>
+F native(const char* cls, const char* name) {
+    const Registration* found = nullptr;
+    for (const auto& r : registrations()) {
+        if (r.cls != cls || r.name != name) continue;
+        if (found != nullptr) {
+            std::fprintf(stderr, "stub: %s.%s registered twice\n", cls, name);
+            std::abort();
+        }
+        found = &r;
+    }
+    if (found == nullptr) {
+        std::fprintf(stderr, "stub: %s.%s was never registered\n", cls, name);
+        std::abort();
+    }
+    const char* expected = humla::NativeFunction<F>::descriptor();
+    if (found->signature != expected) {
+        std::fprintf(stderr, "stub: %s.%s registered as %s, called as %s\n", cls, name,
+                     found->signature.c_str(), expected);
+        std::abort();
+    }
+    return reinterpret_cast<F>(found->fn);
+}
 
 /* Backing store of one fake Java array. `length` is in elements, `bytes` per element. */
 struct FakeArray {
@@ -156,14 +218,33 @@ class Env {
         table_.GetIntArrayRegion = get_int_region;
         table_.SetIntArrayRegion = set_int_region;
         table_.SetFloatArrayRegion = set_float_region;
+        table_.FindClass = find_class;
+        table_.RegisterNatives = register_natives;
+        table_.DeleteLocalRef = [](JNIEnv*, jobject) {};
         env_.functions = &table_;
+
+        std::memset(&vm_table_, 0, sizeof(vm_table_));
+        vm_table_.GetEnv = [](JavaVM* vm, void** out, jint) {
+            *out = static_cast<Env*>(vm->functions->reserved0)->get();
+            return jint(JNI_OK);
+        };
+        vm_table_.reserved0 = this;
+        vm_.functions = &vm_table_;
     }
+    Env(const Env&) = delete;
+    Env& operator=(const Env&) = delete;
 
     JNIEnv* get() { return &env_; }
+    JavaVM* vm() { return &vm_; }
 
   private:
+    using InvokeInterface =
+        std::remove_const<std::remove_pointer<decltype(JavaVM::functions)>::type>::type;
+
     NativeInterface table_;
     JNIEnv env_;
+    InvokeInterface vm_table_;
+    JavaVM vm_;
 };
 
 /* A fake Java array that owns its storage. The storage is an exact-size heap block. */

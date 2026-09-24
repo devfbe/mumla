@@ -213,13 +213,13 @@ class CapturePreprocessorFactoryTest {
     /**
      * The native objects load their library in the object initialiser, so a missing `.so` surfaces
      * as `ExceptionInInitializerError` first and `NoClassDefFoundError` afterwards, never as an
-     * `Exception`. One failed library must not take down the rest of the pipeline.
+     * `Exception`. One failed stage must not take down the rest of the pipeline.
      */
     @Test
     fun `a stage whose native library fails to load is skipped and logged`() {
         val broken = CapturePreprocessorFactory(
             { speex },
-            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumlarnnoise.so not found")) },
+            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_native.so not found")) },
             { apm },
         ) { logs += it }
 
@@ -251,11 +251,11 @@ class CapturePreprocessorFactoryTest {
         assertThat(logs.single()).contains("WebRTC APM")
     }
 
-    /** A missing `libhumla_speexdsp.so` must cost the noise suppression and nothing else. */
+    /** A speex stage that fails to load must cost the noise suppression and nothing else. */
     @Test
     fun `a speex stage whose native library fails to load is skipped and logged`() {
         val broken = CapturePreprocessorFactory(
-            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_speexdsp.so not found")) },
+            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_native.so not found")) },
             { rnnoise },
             { apm },
         ) { logs += it }

@@ -10,19 +10,18 @@ set(THIRD_PARTY "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 # -z,max-page-size=16384: Android 15+ requires 16 KB aligned segments. Recent NDKs already default
 # to it for 64-bit ABIs; the flag keeps it independent of the NDK default.
 #
-# --exclude-libs,ALL hides everything from static archives (vendored codecs, libc++_static.a).
-# Without it each library re-exports its static C++ runtime and the dynamic linker may bind one
-# library's copy to another's, the duplicated-libc++-state hazard of ANDROID_STL=c++_static.
+# --exclude-libs,ALL hides everything from static archives (vendored codecs, libc++_static.a), so
+# the library does not re-export its static C++ runtime.
 #
 # check_library.cmake asserts both properties after every link.
 set(HUMLA_LINK_OPTIONS "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL")
 
-# Symbols of the JNI translation unit itself are not reached by --exclude-libs; JNIEXPORT entry
-# points keep default visibility explicitly.
+# Symbols of the JNI translation units themselves are not reached by --exclude-libs; JNI_OnLoad
+# keeps default visibility explicitly.
 set(HUMLA_JNI_C_OPTIONS -fvisibility=hidden)
 
-# Fails the build when a library exports anything but its JNI entry points, or has a segment that
-# is not 16 KB aligned (see check_library.cmake).
+# Fails the build when the library exports anything but JNI_OnLoad, or has a segment that is not
+# 16 KB aligned (see check_library.cmake).
 #
 # POST_BUILD commands take no DEPENDS, so the script is a link dependency instead: changing it
 # relinks the library, which reruns the check.
@@ -60,12 +59,6 @@ if(ANDROID_ABI STREQUAL "arm64-v8a" OR ANDROID_ABI STREQUAL "armeabi-v7a")
     set_target_properties(opus PROPERTIES COMPILE_DEFINITIONS "${OPUS_DEFINITIONS}")
 endif()
 
-add_library(humla_opus SHARED jni_opus.cpp)
-target_link_libraries(humla_opus PRIVATE opus log)
-target_link_options(humla_opus PRIVATE ${HUMLA_LINK_OPTIONS})
-target_compile_options(humla_opus PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_library(humla_opus)
-
 # ---------------------------------------------------------------- speexdsp 1.2.1 (resampler, jitter, preprocess)
 set(SPEEXDSP_DIR "${THIRD_PARTY}/speexdsp/libspeexdsp")
 add_library(speexdsp STATIC
@@ -76,25 +69,16 @@ add_library(speexdsp STATIC
 target_include_directories(speexdsp PUBLIC "${THIRD_PARTY}/speexdsp/include" PRIVATE "${SPEEXDSP_DIR}")
 target_compile_definitions(speexdsp PUBLIC __EMX__ PRIVATE FIXED_POINT USE_KISS_FFT EXPORT=)
 
-add_library(humla_speexdsp SHARED jni_speexdsp.cpp)
-target_link_libraries(humla_speexdsp PRIVATE speexdsp log)
-target_link_options(humla_speexdsp PRIVATE ${HUMLA_LINK_OPTIONS})
-target_compile_options(humla_speexdsp PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_library(humla_speexdsp)
-
 # ---------------------------------------------------------------- rnnoise 0.2 + webrtc apm 2.1
 # Noise suppression (RNNoise) and echo cancellation (WebRTC APM).
 add_subdirectory(rnnoise)
 add_subdirectory(webrtc_apm)
 
-add_library(humlarnnoise SHARED jni_rnnoise.cpp)
-target_link_libraries(humlarnnoise PRIVATE humla_rnnoise log)
-target_link_options(humlarnnoise PRIVATE ${HUMLA_LINK_OPTIONS})
-target_compile_options(humlarnnoise PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_library(humlarnnoise)
-
-add_library(humlaapm SHARED jni_webrtc_apm.cpp)
-target_link_libraries(humlaapm PRIVATE humla_apm log)
-target_link_options(humlaapm PRIVATE ${HUMLA_LINK_OPTIONS})
-target_compile_options(humlaapm PRIVATE ${HUMLA_JNI_C_OPTIONS})
-humla_check_library(humlaapm)
+# ---------------------------------------------------------------- libhumla_native.so
+# One library, one System.loadLibrary: JNI_OnLoad registers every bridge's methods.
+add_library(humla_native SHARED
+    jni_onload.cpp jni_opus.cpp jni_speexdsp.cpp jni_rnnoise.cpp jni_webrtc_apm.cpp)
+target_link_libraries(humla_native PRIVATE opus speexdsp humla_rnnoise humla_apm log)
+target_link_options(humla_native PRIVATE ${HUMLA_LINK_OPTIONS})
+target_compile_options(humla_native PRIVATE ${HUMLA_JNI_C_OPTIONS})
+humla_check_library(humla_native)

@@ -79,7 +79,7 @@
     <ID>MaxLineLength:AudioOutputTest.kt$AudioOutputTest.NoOpusDecoder$override</ID>
     <ID>MaxLineLength:CapturePipelineTest.kt$CapturePipelineTest$assertWithMessage("0.55409 would be the padding dragging the level down, 0.91097 the previous frame's tail holding it up")</ID>
     <ID>MaxLineLength:CapturePipelineTest.kt$CapturePipelineTest$val pipeline = CapturePipeline(FakeResampler(1), FakePreprocessor(), ContinuousInputMode(), log = { logs += it })</ID>
-    <ID>MaxLineLength:CapturePreprocessorFactoryTest.kt$CapturePreprocessorFactoryTest${ throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_speexdsp.so not found")) }</ID>
+    <ID>MaxLineLength:CapturePreprocessorFactoryTest.kt$CapturePreprocessorFactoryTest${ throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_native.so not found")) }</ID>
     <ID>MaxLineLength:CaptureWiringTest.kt$CaptureWiringTest$EchoCancellationMode.NONE</ID>
     <ID>MaxLineLength:FakeTransports.kt$FakeTcpTransport$fun simulateMessage(type: HumlaTCPMessageType, data: ByteArray)</ID>
     <ID>MaxLineLength:FakeTransports.kt$FakeTransports$override</ID>

@@ -9,10 +9,9 @@
 #include <jni.h>
 #include <new>
 #include <opus.h>
-#include "jni_handle.h"
-
-#define ENC(name) Java_se_lublin_humla_audio_native_OpusEncoderNative_##name
-#define DEC(name) Java_se_lublin_humla_audio_native_OpusDecoderNative_##name
+#include "jni_bridges.h"
+#include "jni_common.h"
+#include "jni_native_handle.h"
 
 namespace {
 
@@ -26,9 +25,10 @@ struct DecoderHandle {
     int channels;
 };
 
-void writeError(JNIEnv* env, jintArray error, jint value) {
-    if (error != nullptr && env->GetArrayLength(error) >= 1) writeInt(env, error, value);
-}
+humla::HandleTable& encoders() { return humla::handleTable<EncoderHandle>(); }
+humla::HandleTable& decoders() { return humla::handleTable<DecoderHandle>(); }
+
+using humla::writeInt;
 
 /* Requests whose single variadic argument is an opus_int32 passed by value. */
 bool setIntRequestAllowed(jint request) {
@@ -74,26 +74,24 @@ jint clampFrameSize(JNIEnv* env, jarray out, jint frameSize, int channels) {
     return frameSize > capacity ? capacity : frameSize;
 }
 
-}  // namespace
 
-extern "C" {
-
-JNIEXPORT jlong JNICALL ENC(create)(JNIEnv* env, jobject, jint sampleRate, jint channels, jint application, jintArray error) {
+jlong encoderCreate(JNIEnv* env, jobject, jint sampleRate, jint channels, jint application, jintArray error) noexcept {
     int err = 0;
     OpusEncoder* st = opus_encoder_create(sampleRate, channels, application, &err);
-    writeError(env, error, err);
+    writeInt(env, error, err);
     if (st == nullptr) return 0;
     auto* h = new (std::nothrow) EncoderHandle{st, channels};
-    if (h == nullptr) {
+    jlong handle = h != nullptr ? encoders().add(h) : 0;
+    if (handle == 0) {
+        delete h;
         opus_encoder_destroy(st);
-        writeError(env, error, OPUS_ALLOC_FAIL);
-        return 0;
+        writeInt(env, error, OPUS_ALLOC_FAIL);
     }
-    return toHandle(h);
+    return handle;
 }
 
-JNIEXPORT jint JNICALL ENC(encode)(JNIEnv* env, jobject, jlong state, jshortArray pcm, jint frameSize, jbyteArray out, jint maxBytes) {
-    auto* h = fromHandle<EncoderHandle>(state);
+jint encoderEncode(JNIEnv* env, jobject, jlong state, jshortArray pcm, jint frameSize, jbyteArray out, jint maxBytes) noexcept {
+    auto* h = static_cast<EncoderHandle*>(encoders().get(state));
     if (h == nullptr || pcm == nullptr || out == nullptr || frameSize <= 0 || maxBytes <= 0)
         return OPUS_BAD_ARG;
     // opus_encode reads frameSize * channels samples; refusing a short array beats clamping it,
@@ -116,14 +114,14 @@ JNIEXPORT jint JNICALL ENC(encode)(JNIEnv* env, jobject, jlong state, jshortArra
     return result;
 }
 
-JNIEXPORT jint JNICALL ENC(ctlSetInt)(JNIEnv*, jobject, jlong state, jint request, jint value) {
-    auto* h = fromHandle<EncoderHandle>(state);
+jint encoderCtlSetInt(JNIEnv*, jobject, jlong state, jint request, jint value) noexcept {
+    auto* h = static_cast<EncoderHandle*>(encoders().get(state));
     if (h == nullptr || !setIntRequestAllowed(request)) return OPUS_BAD_ARG;
     return opus_encoder_ctl(h->state, request, static_cast<opus_int32>(value));
 }
 
-JNIEXPORT jint JNICALL ENC(ctlGetInt)(JNIEnv* env, jobject, jlong state, jint request, jintArray value) {
-    auto* h = fromHandle<EncoderHandle>(state);
+jint encoderCtlGetInt(JNIEnv* env, jobject, jlong state, jint request, jintArray value) noexcept {
+    auto* h = static_cast<EncoderHandle*>(encoders().get(state));
     if (h == nullptr || value == nullptr || env->GetArrayLength(value) < 1) return OPUS_BAD_ARG;
     if (!getIntRequestAllowed(request)) return OPUS_BAD_ARG;
     opus_int32 v = 0;
@@ -132,29 +130,30 @@ JNIEXPORT jint JNICALL ENC(ctlGetInt)(JNIEnv* env, jobject, jlong state, jint re
     return result;
 }
 
-JNIEXPORT void JNICALL ENC(destroy)(JNIEnv*, jobject, jlong state) {
-    auto* h = fromHandle<EncoderHandle>(state);
+void encoderDestroy(JNIEnv*, jobject, jlong state) noexcept {
+    auto* h = static_cast<EncoderHandle*>(encoders().release(state));
     if (h == nullptr) return;
     opus_encoder_destroy(h->state);
     delete h;
 }
 
-JNIEXPORT jlong JNICALL DEC(create)(JNIEnv* env, jobject, jint sampleRate, jint channels, jintArray error) {
+jlong decoderCreate(JNIEnv* env, jobject, jint sampleRate, jint channels, jintArray error) noexcept {
     int err = 0;
     OpusDecoder* st = opus_decoder_create(sampleRate, channels, &err);
-    writeError(env, error, err);
+    writeInt(env, error, err);
     if (st == nullptr) return 0;
     auto* h = new (std::nothrow) DecoderHandle{st, channels};
-    if (h == nullptr) {
+    jlong handle = h != nullptr ? decoders().add(h) : 0;
+    if (handle == 0) {
+        delete h;
         opus_decoder_destroy(st);
-        writeError(env, error, OPUS_ALLOC_FAIL);
-        return 0;
+        writeInt(env, error, OPUS_ALLOC_FAIL);
     }
-    return toHandle(h);
+    return handle;
 }
 
-JNIEXPORT jint JNICALL DEC(decodeFloat)(JNIEnv* env, jobject, jlong state, jbyteArray data, jint len, jfloatArray out, jint frameSize, jint decodeFec) {
-    auto* h = fromHandle<DecoderHandle>(state);
+jint decoderDecodeFloat(JNIEnv* env, jobject, jlong state, jbyteArray data, jint len, jfloatArray out, jint frameSize, jint decodeFec) noexcept {
+    auto* h = static_cast<DecoderHandle*>(decoders().get(state));
     if (h == nullptr || out == nullptr || frameSize <= 0 || !packetFits(env, data, len)) return OPUS_BAD_ARG;
     frameSize = clampFrameSize(env, out, frameSize, h->channels);
     if (frameSize <= 0) return OPUS_BUFFER_TOO_SMALL;
@@ -176,14 +175,14 @@ JNIEXPORT jint JNICALL DEC(decodeFloat)(JNIEnv* env, jobject, jlong state, jbyte
     return result;
 }
 
-JNIEXPORT void JNICALL DEC(destroy)(JNIEnv*, jobject, jlong state) {
-    auto* h = fromHandle<DecoderHandle>(state);
+void decoderDestroy(JNIEnv*, jobject, jlong state) noexcept {
+    auto* h = static_cast<DecoderHandle*>(decoders().release(state));
     if (h == nullptr) return;
     opus_decoder_destroy(h->state);
     delete h;
 }
 
-JNIEXPORT jint JNICALL DEC(packetGetNbFrames)(JNIEnv* env, jobject, jbyteArray packet, jint len) {
+jint packetGetNbFrames(JNIEnv* env, jobject, jbyteArray packet, jint len) noexcept {
     if (packet == nullptr || len <= 0 || len > env->GetArrayLength(packet)) return OPUS_BAD_ARG;
     jbyte* ptr = env->GetByteArrayElements(packet, nullptr);
     if (ptr == nullptr) return OPUS_ALLOC_FAIL;
@@ -192,7 +191,7 @@ JNIEXPORT jint JNICALL DEC(packetGetNbFrames)(JNIEnv* env, jobject, jbyteArray p
     return result;
 }
 
-JNIEXPORT jint JNICALL DEC(packetGetSamplesPerFrame)(JNIEnv* env, jobject, jbyteArray packet, jint sampleRate) {
+jint packetGetSamplesPerFrame(JNIEnv* env, jobject, jbyteArray packet, jint sampleRate) noexcept {
     if (packet == nullptr || env->GetArrayLength(packet) < 1) return OPUS_BAD_ARG;
     jbyte* ptr = env->GetByteArrayElements(packet, nullptr);
     if (ptr == nullptr) return OPUS_ALLOC_FAIL;
@@ -201,4 +200,23 @@ JNIEXPORT jint JNICALL DEC(packetGetSamplesPerFrame)(JNIEnv* env, jobject, jbyte
     return result;
 }
 
-} // extern "C"
+}  // namespace
+
+bool humla::registerOpusNatives(JNIEnv* env) {
+    const std::array<JNINativeMethod, 5> encoder = {
+        humla::nativeMethod("create", encoderCreate),
+        humla::nativeMethod("encode", encoderEncode),
+        humla::nativeMethod("ctlSetInt", encoderCtlSetInt),
+        humla::nativeMethod("ctlGetInt", encoderCtlGetInt),
+        humla::nativeMethod("destroy", encoderDestroy),
+    };
+    const std::array<JNINativeMethod, 5> decoder = {
+        humla::nativeMethod("create", decoderCreate),
+        humla::nativeMethod("decodeFloat", decoderDecodeFloat),
+        humla::nativeMethod("destroy", decoderDestroy),
+        humla::nativeMethod("packetGetNbFrames", packetGetNbFrames),
+        humla::nativeMethod("packetGetSamplesPerFrame", packetGetSamplesPerFrame),
+    };
+    return humla::registerNatives(env, "se/lublin/humla/audio/native/OpusEncoderNative", encoder) &&
+           humla::registerNatives(env, "se/lublin/humla/audio/native/OpusDecoderNative", decoder);
+}

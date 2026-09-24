@@ -1,5 +1,5 @@
 /*
- * JNI bridge for libhumlaapm; the Kotlin side is WebRtcApmNative.kt and must change with it.
+ * JNI bridge for the WebRTC audio processing module; the Kotlin side is WebRtcApmNative.kt.
  *
  * humla_apm writes exactly humla_apm_frame_size() samples into the buffer it is given, so the
  * frame size is read from the instance and shorter arrays are refused. Swapping processRender and
@@ -17,6 +17,8 @@
 
 #include <cstdint>
 
+#include "jni_bridges.h"
+#include "jni_common.h"
 #include "jni_native_handle.h"
 #include "webrtc_apm/humla_apm.h"
 
@@ -27,9 +29,11 @@ namespace {
 constexpr jint kNullPointerError = -5;
 constexpr jint kBadDataLengthError = -8;
 
+humla::HandleTable& processors() { return humla::handleTable<humla_apm>(); }
+
 jint process(JNIEnv* env, jlong handle, jshortArray frame,
              int (*fn)(humla_apm*, int16_t*)) noexcept {
-    auto* apm = static_cast<humla_apm*>(humla::handleTable<humla_apm>().get(handle));
+    auto* apm = static_cast<humla_apm*>(processors().get(handle));
     if (apm == nullptr || frame == nullptr) return kNullPointerError;
     if (env->GetArrayLength(frame) < humla_apm_frame_size(apm)) return kBadDataLengthError;
     jshort* data = env->GetShortArrayElements(frame, nullptr);
@@ -40,52 +44,49 @@ jint process(JNIEnv* env, jlong handle, jshortArray frame,
     return err;
 }
 
-}  // namespace
-
-extern "C" {
-
-JNIEXPORT jlong JNICALL
-Java_se_lublin_humla_audio_native_WebRtcApmNative_create(JNIEnv*, jobject, jint sampleRate,
-                                                         jboolean aec, jboolean ns, jint nsLevel,
-                                                         jboolean agc, jboolean highPass) noexcept {
+jlong create(JNIEnv*, jobject, jint sampleRate, jboolean aec, jboolean ns, jint nsLevel, jboolean agc,
+             jboolean highPass) noexcept {
     humla_apm_config cfg{aec ? 1 : 0, ns ? 1 : 0, nsLevel, agc ? 1 : 0, highPass ? 1 : 0};
     humla_apm* apm = humla_apm_create(sampleRate, &cfg);
     if (apm == nullptr) return 0;
-    jlong handle = humla::handleTable<humla_apm>().add(apm);
+    jlong handle = processors().add(apm);
     if (handle == 0) humla_apm_destroy(apm);  // the table could not take ownership
     return handle;
 }
 
-JNIEXPORT jint JNICALL
-Java_se_lublin_humla_audio_native_WebRtcApmNative_frameSize(JNIEnv*, jobject,
-                                                            jlong handle) noexcept {
-    return humla_apm_frame_size(static_cast<humla_apm*>(humla::handleTable<humla_apm>().get(handle)));
+jint frameSize(JNIEnv*, jobject, jlong handle) noexcept {
+    return humla_apm_frame_size(static_cast<humla_apm*>(processors().get(handle)));
 }
 
-JNIEXPORT jint JNICALL
-Java_se_lublin_humla_audio_native_WebRtcApmNative_processCapture(JNIEnv* env, jobject, jlong handle,
-                                                                 jshortArray frame) noexcept {
+jint processCapture(JNIEnv* env, jobject, jlong handle, jshortArray frame) noexcept {
     return process(env, handle, frame, humla_apm_process_capture);
 }
 
-JNIEXPORT jint JNICALL
-Java_se_lublin_humla_audio_native_WebRtcApmNative_processRender(JNIEnv* env, jobject, jlong handle,
-                                                                jshortArray frame) noexcept {
+jint processRender(JNIEnv* env, jobject, jlong handle, jshortArray frame) noexcept {
     return process(env, handle, frame, humla_apm_process_render);
 }
 
 // humla_apm_set_stream_delay_ms is intentionally not bridged: AEC3 estimates the delay itself.
 
-JNIEXPORT jfloat JNICALL
-Java_se_lublin_humla_audio_native_WebRtcApmNative_lastCaptureLevelDbfs(JNIEnv*, jobject,
-                                                                       jlong handle) noexcept {
-    return humla_apm_last_capture_level_dbfs(static_cast<humla_apm*>(humla::handleTable<humla_apm>().get(handle)));
+jfloat lastCaptureLevelDbfs(JNIEnv*, jobject, jlong handle) noexcept {
+    return humla_apm_last_capture_level_dbfs(static_cast<humla_apm*>(processors().get(handle)));
 }
 
-JNIEXPORT void JNICALL
-Java_se_lublin_humla_audio_native_WebRtcApmNative_destroy(JNIEnv*, jobject, jlong handle) noexcept {
+void destroy(JNIEnv*, jobject, jlong handle) noexcept {
     // release() hands the instance to exactly one caller, so destroying twice frees once.
-    humla_apm_destroy(static_cast<humla_apm*>(humla::handleTable<humla_apm>().release(handle)));
+    humla_apm_destroy(static_cast<humla_apm*>(processors().release(handle)));
 }
 
-}  // extern "C"
+}  // namespace
+
+bool humla::registerWebRtcApmNatives(JNIEnv* env) {
+    const std::array<JNINativeMethod, 6> methods = {
+        humla::nativeMethod("create", create),
+        humla::nativeMethod("frameSize", frameSize),
+        humla::nativeMethod("processCapture", processCapture),
+        humla::nativeMethod("processRender", processRender),
+        humla::nativeMethod("lastCaptureLevelDbfs", lastCaptureLevelDbfs),
+        humla::nativeMethod("destroy", destroy),
+    };
+    return humla::registerNatives(env, "se/lublin/humla/audio/native/WebRtcApmNative", methods);
+}

@@ -10,11 +10,9 @@
 #include <speex/speex_jitter.h>
 #include <speex/speex_preprocess.h>
 #include <speex/speex_resampler.h>
-#include "jni_handle.h"
-
-#define RS(name) Java_se_lublin_humla_audio_native_SpeexResamplerNative_##name
-#define JB(name) Java_se_lublin_humla_audio_native_SpeexJitterNative_##name
-#define PP(name) Java_se_lublin_humla_audio_native_SpeexPreprocessNative_##name
+#include "jni_bridges.h"
+#include "jni_common.h"
+#include "jni_native_handle.h"
 
 namespace {
 
@@ -39,11 +37,11 @@ jint clampToArray(JNIEnv* env, jint count, jarray array) {
     return count > capacity ? static_cast<jint>(capacity) : count;
 }
 
-/* The error array is optional and may be empty; writing slot 0 of an empty array would leave a
- * pending ArrayIndexOutOfBoundsException. */
-void writeError(JNIEnv* env, jintArray error, jint value) {
-    if (error != nullptr && env->GetArrayLength(error) >= 1) writeInt(env, error, value);
-}
+humla::HandleTable& resamplers() { return humla::handleTable<ResamplerHandle>(); }
+humla::HandleTable& jitterBuffers() { return humla::handleTable<JitterBuffer>(); }
+humla::HandleTable& preprocessors() { return humla::handleTable<PreprocessHandle>(); }
+
+using humla::writeInt;
 
 /* The ctl entry points pass jitter_buffer_ctl / speex_preprocess_ctl the address of a four-byte
  * spx_int32_t on the stack, and the request number comes from Kotlin. For several requests the
@@ -64,8 +62,8 @@ void writeError(JNIEnv* env, jintArray error, jint value) {
  * only if the library treats ptr as exactly one spx_int32_t (read or written once) and touches
  * nothing outside the state's own allocation.
  *
- * Refusals: JB(ctl) returns JITTER_BUFFER_BAD_ARGUMENT (-2), distinct from the library's -1 for an
- * unknown request. PP(ctlInt) returns -1 like speex_preprocess_ctl, because its status has no
+ * Refusals: jitterCtl returns JITTER_BUFFER_BAD_ARGUMENT (-2), distinct from the library's -1 for an
+ * unknown request. preprocessCtlInt returns -1 like speex_preprocess_ctl, because its status has no
  * spare value.
  */
 bool jitterRequestAllowed(jint request) {
@@ -96,34 +94,32 @@ bool preprocessRequestAllowed(jint request) {
     }
 }
 
-}  // namespace
-
-extern "C" {
 
 // ---- resampler ----
 
-JNIEXPORT jlong JNICALL RS(init)(JNIEnv* env, jobject, jint channels, jint inRate, jint outRate, jint quality, jintArray error) {
+jlong resamplerInit(JNIEnv* env, jobject, jint channels, jint inRate, jint outRate, jint quality, jintArray error) noexcept {
     // speex_resampler_init accepts it, but then every processInt would be out of range.
     if (channels <= 0) {
-        writeError(env, error, RESAMPLER_ERR_INVALID_ARG);
+        writeInt(env, error, RESAMPLER_ERR_INVALID_ARG);
         return 0;
     }
     int err = 0;
     SpeexResamplerState* st = speex_resampler_init(channels, inRate, outRate, quality, &err);
-    writeError(env, error, err);
+    writeInt(env, error, err);
     if (st == nullptr) return 0;
     // Otherwise we would leak st and report success (err == 0).
     auto* h = new (std::nothrow) ResamplerHandle{st, channels};
-    if (h == nullptr) {
+    jlong handle = h != nullptr ? resamplers().add(h) : 0;
+    if (handle == 0) {
+        delete h;
         speex_resampler_destroy(st);
-        writeError(env, error, RESAMPLER_ERR_ALLOC_FAILED);
-        return 0;
+        writeInt(env, error, RESAMPLER_ERR_ALLOC_FAILED);
     }
-    return toHandle(h);
+    return handle;
 }
 
-JNIEXPORT jint JNICALL RS(processInt)(JNIEnv* env, jobject, jlong state, jint channelIndex, jshortArray input, jintArray inLen, jshortArray out, jintArray outLen) {
-    auto* h = fromHandle<ResamplerHandle>(state);
+jint resamplerProcessInt(JNIEnv* env, jobject, jlong state, jint channelIndex, jshortArray input, jintArray inLen, jshortArray out, jintArray outLen) noexcept {
+    auto* h = static_cast<ResamplerHandle*>(resamplers().get(state));
     if (h == nullptr || input == nullptr || out == nullptr || inLen == nullptr || outLen == nullptr)
         return RESAMPLER_ERR_INVALID_ARG;
     if (env->GetArrayLength(inLen) < 1 || env->GetArrayLength(outLen) < 1)
@@ -154,8 +150,8 @@ JNIEXPORT jint JNICALL RS(processInt)(JNIEnv* env, jobject, jlong state, jint ch
     return result;
 }
 
-JNIEXPORT void JNICALL RS(destroy)(JNIEnv*, jobject, jlong state) {
-    auto* h = fromHandle<ResamplerHandle>(state);
+void resamplerDestroy(JNIEnv*, jobject, jlong state) noexcept {
+    auto* h = static_cast<ResamplerHandle*>(resamplers().release(state));
     if (h == nullptr) return;
     speex_resampler_destroy(h->state);
     delete h;
@@ -163,17 +159,21 @@ JNIEXPORT void JNICALL RS(destroy)(JNIEnv*, jobject, jlong state) {
 
 // ---- jitter buffer ----
 
-JNIEXPORT jlong JNICALL JB(init)(JNIEnv*, jobject, jint stepSize) {
-    return toHandle(jitter_buffer_init(stepSize));
+jlong jitterInit(JNIEnv*, jobject, jint stepSize) noexcept {
+    JitterBuffer* jb = jitter_buffer_init(stepSize);
+    if (jb == nullptr) return 0;
+    jlong handle = jitterBuffers().add(jb);
+    if (handle == 0) jitter_buffer_destroy(jb);
+    return handle;
 }
 
-JNIEXPORT void JNICALL JB(destroy)(JNIEnv*, jobject, jlong handle) {
-    auto* jb = fromHandle<JitterBuffer>(handle);
+void jitterDestroy(JNIEnv*, jobject, jlong handle) noexcept {
+    auto* jb = static_cast<JitterBuffer*>(jitterBuffers().release(handle));
     if (jb != nullptr) jitter_buffer_destroy(jb);
 }
 
-JNIEXPORT void JNICALL JB(put)(JNIEnv* env, jobject, jlong handle, jbyteArray data, jint len, jint timestamp, jint span, jint sequence, jint userData) {
-    auto* jb = fromHandle<JitterBuffer>(handle);
+void jitterPut(JNIEnv* env, jobject, jlong handle, jbyteArray data, jint len, jint timestamp, jint span, jint sequence, jint userData) noexcept {
+    auto* jb = static_cast<JitterBuffer*>(jitterBuffers().get(handle));
     if (jb == nullptr || data == nullptr) return;
     // jitter_buffer_put copies len bytes, and len is the caller's number, not the array's.
     len = clampToArray(env, len, data);
@@ -190,8 +190,8 @@ JNIEXPORT void JNICALL JB(put)(JNIEnv* env, jobject, jlong handle, jbyteArray da
     env->ReleaseByteArrayElements(data, dataPtr, JNI_ABORT);
 }
 
-JNIEXPORT jint JNICALL JB(get)(JNIEnv* env, jobject, jlong handle, jbyteArray out, jint desiredSpan, jintArray meta) {
-    auto* jb = fromHandle<JitterBuffer>(handle);
+jint jitterGet(JNIEnv* env, jobject, jlong handle, jbyteArray out, jint desiredSpan, jintArray meta) noexcept {
+    auto* jb = static_cast<JitterBuffer*>(jitterBuffers().get(handle));
     // meta receives five values below; a shorter array would be written past its end.
     if (jb == nullptr || out == nullptr || meta == nullptr || env->GetArrayLength(meta) < 5)
         return JITTER_BUFFER_BAD_ARGUMENT;
@@ -214,18 +214,18 @@ JNIEXPORT jint JNICALL JB(get)(JNIEnv* env, jobject, jlong handle, jbyteArray ou
     return status;
 }
 
-JNIEXPORT jint JNICALL JB(pointerTimestamp)(JNIEnv*, jobject, jlong handle) {
-    auto* jb = fromHandle<JitterBuffer>(handle);
+jint jitterPointerTimestamp(JNIEnv*, jobject, jlong handle) noexcept {
+    auto* jb = static_cast<JitterBuffer*>(jitterBuffers().get(handle));
     return jb != nullptr ? jitter_buffer_get_pointer_timestamp(jb) : 0;
 }
 
-JNIEXPORT void JNICALL JB(tick)(JNIEnv*, jobject, jlong handle) {
-    auto* jb = fromHandle<JitterBuffer>(handle);
+void jitterTick(JNIEnv*, jobject, jlong handle) noexcept {
+    auto* jb = static_cast<JitterBuffer*>(jitterBuffers().get(handle));
     if (jb != nullptr) jitter_buffer_tick(jb);
 }
 
-JNIEXPORT jint JNICALL JB(ctl)(JNIEnv* env, jobject, jlong handle, jint request, jintArray value) {
-    auto* jb = fromHandle<JitterBuffer>(handle);
+jint jitterCtl(JNIEnv* env, jobject, jlong handle, jint request, jintArray value) noexcept {
+    auto* jb = static_cast<JitterBuffer*>(jitterBuffers().get(handle));
     if (jb == nullptr || value == nullptr || env->GetArrayLength(value) < 1)
         return JITTER_BUFFER_BAD_ARGUMENT;
     // &v is a stack address, see jitterRequestAllowed.
@@ -238,8 +238,8 @@ JNIEXPORT jint JNICALL JB(ctl)(JNIEnv* env, jobject, jlong handle, jint request,
     return result;
 }
 
-JNIEXPORT jint JNICALL JB(updateDelay)(JNIEnv*, jobject, jlong handle) {
-    auto* jb = fromHandle<JitterBuffer>(handle);
+jint jitterUpdateDelay(JNIEnv*, jobject, jlong handle) noexcept {
+    auto* jb = static_cast<JitterBuffer*>(jitterBuffers().get(handle));
     if (jb == nullptr) return JITTER_BUFFER_BAD_ARGUMENT;
     // The packet and start_offset arguments are unused by libspeexdsp's implementation.
     return jitter_buffer_update_delay(jb, nullptr, nullptr);
@@ -248,25 +248,26 @@ JNIEXPORT jint JNICALL JB(updateDelay)(JNIEnv*, jobject, jlong handle) {
 // ---- preprocessor ----
 
 // Returns 0 on failure (the Kotlin wrapper then disables the preprocessor). A non-positive frame
-// size would be accepted by speex but could never satisfy PP(run).
-JNIEXPORT jlong JNICALL PP(init)(JNIEnv*, jobject, jint frameSize, jint sampleRate) {
+// size would be accepted by speex but could never satisfy preprocessRun.
+jlong preprocessInit(JNIEnv*, jobject, jint frameSize, jint sampleRate) noexcept {
     if (frameSize <= 0) return 0;
     SpeexPreprocessState* state = speex_preprocess_state_init(frameSize, sampleRate);
     // speex_preprocess_state_init never returns nullptr in this version, but its signature allows
     // it.
     if (state == nullptr) return 0;
     auto* h = new (std::nothrow) PreprocessHandle{state, frameSize};
-    if (h == nullptr) {
+    jlong handle = h != nullptr ? preprocessors().add(h) : 0;
+    if (handle == 0) {
+        delete h;
         speex_preprocess_state_destroy(state);
-        return 0;
     }
-    return toHandle(h);
+    return handle;
 }
 
 // Returns the speex VAD decision (1 = speech, 0 = not), or -1 when the frame cannot be processed.
 // speex_preprocess_run writes frameSize samples, so a shorter array must be refused.
-JNIEXPORT jint JNICALL PP(run)(JNIEnv* env, jobject, jlong state, jshortArray frame) {
-    auto* h = fromHandle<PreprocessHandle>(state);
+jint preprocessRun(JNIEnv* env, jobject, jlong state, jshortArray frame) noexcept {
+    auto* h = static_cast<PreprocessHandle*>(preprocessors().get(state));
     if (h == nullptr || frame == nullptr) return -1;
     if (env->GetArrayLength(frame) < h->frameSize) return -1;
     jshort* ptr = env->GetShortArrayElements(frame, nullptr);
@@ -276,8 +277,8 @@ JNIEXPORT jint JNICALL PP(run)(JNIEnv* env, jobject, jlong state, jshortArray fr
     return result;
 }
 
-JNIEXPORT jint JNICALL PP(ctlInt)(JNIEnv* env, jobject, jlong state, jint request, jintArray value) {
-    auto* h = fromHandle<PreprocessHandle>(state);
+jint preprocessCtlInt(JNIEnv* env, jobject, jlong state, jint request, jintArray value) noexcept {
+    auto* h = static_cast<PreprocessHandle*>(preprocessors().get(state));
     if (h == nullptr || value == nullptr || env->GetArrayLength(value) < 1) return -1;
     // &v is a stack address, see preprocessRequestAllowed. -1 matches speex's own "unknown".
     if (!preprocessRequestAllowed(request)) return -1;
@@ -289,11 +290,38 @@ JNIEXPORT jint JNICALL PP(ctlInt)(JNIEnv* env, jobject, jlong state, jint reques
     return result;
 }
 
-JNIEXPORT void JNICALL PP(destroy)(JNIEnv*, jobject, jlong state) {
-    auto* h = fromHandle<PreprocessHandle>(state);
+void preprocessDestroy(JNIEnv*, jobject, jlong state) noexcept {
+    auto* h = static_cast<PreprocessHandle*>(preprocessors().release(state));
     if (h == nullptr) return;
     speex_preprocess_state_destroy(h->state);
     delete h;
 }
 
-} // extern "C"
+}  // namespace
+
+bool humla::registerSpeexdspNatives(JNIEnv* env) {
+    const std::array<JNINativeMethod, 3> resampler = {
+        humla::nativeMethod("init", resamplerInit),
+        humla::nativeMethod("processInt", resamplerProcessInt),
+        humla::nativeMethod("destroy", resamplerDestroy),
+    };
+    const std::array<JNINativeMethod, 8> jitter = {
+        humla::nativeMethod("init", jitterInit),
+        humla::nativeMethod("destroy", jitterDestroy),
+        humla::nativeMethod("put", jitterPut),
+        humla::nativeMethod("get", jitterGet),
+        humla::nativeMethod("pointerTimestamp", jitterPointerTimestamp),
+        humla::nativeMethod("tick", jitterTick),
+        humla::nativeMethod("ctl", jitterCtl),
+        humla::nativeMethod("updateDelay", jitterUpdateDelay),
+    };
+    const std::array<JNINativeMethod, 4> preprocess = {
+        humla::nativeMethod("init", preprocessInit),
+        humla::nativeMethod("run", preprocessRun),
+        humla::nativeMethod("ctlInt", preprocessCtlInt),
+        humla::nativeMethod("destroy", preprocessDestroy),
+    };
+    return humla::registerNatives(env, "se/lublin/humla/audio/native/SpeexResamplerNative", resampler) &&
+           humla::registerNatives(env, "se/lublin/humla/audio/native/SpeexJitterNative", jitter) &&
+           humla::registerNatives(env, "se/lublin/humla/audio/native/SpeexPreprocessNative", preprocess);
+}
