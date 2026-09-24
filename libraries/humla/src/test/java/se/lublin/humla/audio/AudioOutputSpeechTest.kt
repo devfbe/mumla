@@ -81,8 +81,8 @@ class AudioOutputSpeechTest {
         val result = speech.call()
 
         assertThat(states).containsExactly(42 to TalkState.SHOUTING)
-        assertThat(result.isAlive()).isTrue()
-        assertThat(result.getNumSamples()).isEqualTo(AudioHandler.FRAME_SIZE)
+        assertThat(result.isAlive).isTrue()
+        assertThat(result.numSamples).isEqualTo(AudioHandler.FRAME_SIZE)
         assertThat(jitter.ticks).isEqualTo(1)
     }
 

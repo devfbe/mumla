@@ -254,14 +254,9 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
 
     /** The outcome of a decoding pass. */
     class Result internal constructor(
-        private val speechOutput: AudioOutputSpeech,
-        private val alive: Boolean,
-        private val samples: FloatArray,
-        private val numSamples: Int,
-    ) : IAudioMixerSource<FloatArray> {
-        fun getSpeechOutput(): AudioOutputSpeech = speechOutput
-        fun isAlive(): Boolean = alive
-        override fun getSamples(): FloatArray = samples
-        override fun getNumSamples(): Int = numSamples
-    }
+        val speechOutput: AudioOutputSpeech,
+        val isAlive: Boolean,
+        override val samples: FloatArray,
+        override val numSamples: Int,
+    ) : IAudioMixerSource<FloatArray>
 }

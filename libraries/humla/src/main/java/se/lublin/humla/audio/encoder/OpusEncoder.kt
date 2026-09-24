@@ -38,7 +38,8 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
     private val audioBuffer = ShortArray(framesPerPacket * frameSize)
 
     // Stateful
-    private var bufferedFrames = 0
+    override var bufferedFrames = 0
+        private set
     private var encodedLength = 0
     private var terminated = false
 
@@ -81,13 +82,12 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
         return result
     }
 
-    override fun getBufferedFrames(): Int = bufferedFrames
-
-    override fun isReady(): Boolean = encodedLength > 0
+    override val isReady: Boolean
+        get() = encodedLength > 0
 
     @Throws(BufferUnderflowException::class)
     override fun getEncodedData(packetBuffer: PacketBuffer) {
-        if (!isReady()) throw BufferUnderflowException()
+        if (!isReady) throw BufferUnderflowException()
         var size = encodedLength
         if (terminated) size = size or (1 shl 13)
         packetBuffer.writeLong(size.toLong())
@@ -100,7 +100,7 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
     @Throws(NativeAudioException::class)
     override fun terminate() {
         terminated = true
-        if (bufferedFrames > 0 && !isReady()) {
+        if (bufferedFrames > 0 && !isReady) {
             // Perform encode operation on remaining audio if available.
             encodePacket()
         }

@@ -231,10 +231,10 @@ class AudioOutput @JvmOverloads constructor(
                 val futureResults = decodeExecutorService.invokeAll(audioOutputs.values)
                 for (future in futureResults) {
                     val result = future.get()
-                    if (result.isAlive()) {
+                    if (result.isAlive) {
                         sources.add(result)
                     } else {
-                        val speech = result.getSpeechOutput()
+                        val speech = result.speechOutput
                         Log.v(TAG, "Deleted audio user " + speech.getUser().getName())
                         audioOutputs.remove(speech.getSession())
                         speech.destroy()

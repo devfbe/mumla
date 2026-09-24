@@ -40,9 +40,9 @@ class OpusEncoderTest {
         val encoder = OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
 
         assertThat(encoder.encode(ShortArray(480), 480)).isEqualTo(0)
-        assertThat(encoder.isReady()).isFalse()
+        assertThat(encoder.isReady).isFalse()
         assertThat(encoder.encode(ShortArray(480), 480)).isEqualTo(3)
-        assertThat(encoder.isReady()).isTrue()
+        assertThat(encoder.isReady).isTrue()
         assertThat(fake.encodedFrameSizes).containsExactly(960)
 
         val pb = PacketBuffer.allocate(16)
@@ -50,7 +50,7 @@ class OpusEncoderTest {
         assertThat(pb.size()).isEqualTo(4)
         pb.rewind()
         assertThat(pb.dataBlock(4)).isEqualTo(byteArrayOf(0x03, 0x11, 0x22, 0x33))
-        assertThat(encoder.isReady()).isFalse()
+        assertThat(encoder.isReady).isFalse()
     }
 
     @Test
