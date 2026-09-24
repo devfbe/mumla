@@ -22,6 +22,7 @@ import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubEvents
 
@@ -189,17 +190,26 @@ class ChannelListFragmentTest {
     /** Its argument decides whether it shows the whole tree or the pinned channels. */
     @Test
     fun thePinnedArgumentDecidesWhereTheTreeIsRooted() {
-        verify(exactly = 0) { controller.get().database.getPinnedChannels(any()) }
+        // A fresh repository, so the pins are read again with the stub below.
+        installDatabase(controller.get().database)
+        every { controller.get().database.getPinnedChannels(any()) } returns listOf(2)
 
-        val pinnedParent = ChatTargetParentFragment()
+        val whole = ChatTargetParentFragment()
+        val pinned = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
-            .add(pinnedParent, "pinned-parent").commitNow()
-        val pinned = ChannelListFragment().apply {
-            arguments = Bundle().apply { putBoolean("pinned", true) }
-        }
-        pinnedParent.childFragmentManager.beginTransaction().add(pinned, "pinned-list").commitNow()
+            .add(whole, "whole-parent").add(pinned, "pinned-parent").commitNow()
+        val wholeList = ChannelListFragment().apply { arguments = Bundle().apply { putBoolean("pinned", false) } }
+        val pinnedList = ChannelListFragment().apply { arguments = Bundle().apply { putBoolean("pinned", true) } }
+        whole.childFragmentManager.beginTransaction().add(wholeList, "whole-list").commitNow()
+        pinned.childFragmentManager.beginTransaction().add(pinnedList, "pinned-list").commitNow()
+        idleMainLooper()
 
-        verify(exactly = 1) { controller.get().database.getPinnedChannels(any()) }
+        fun firstRow(list: ChannelListFragment): Long {
+            val view = list.requireView().findViewById<RecyclerView>(R.id.channelUsers)
+            return (view.adapter as ChannelListAdapter).getItemId(0)
+        }
+        assertThat(firstRow(wholeList)).isEqualTo(ChannelListAdapter.CHANNEL_ID_MASK or 0L)
+        assertThat(firstRow(pinnedList)).isEqualTo(ChannelListAdapter.CHANNEL_ID_MASK or 2L)
     }
 
     /**

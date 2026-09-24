@@ -2,8 +2,8 @@ package se.lublin.mumla.channel
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.util.TypedValue
 import android.view.View
 import androidx.core.content.res.ResourcesCompat
@@ -14,6 +14,7 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,12 +30,12 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
+import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.drawable.CircleDrawable
 import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 
 /**
@@ -65,8 +66,6 @@ class ChannelListAdapterRebuildTest {
         pinnedChannels: List<Int>? = null,
         showUserCount: Boolean = true,
         connected: Boolean = true,
-        // Inline, so the background write is deterministic in tests.
-        databaseExecutor: Executor = Executor { it.run() },
     ): ChannelListAdapter {
         byId = ids.toMutableMap()
         session = mockk(relaxed = true)
@@ -85,11 +84,11 @@ class ChannelListAdapterRebuildTest {
         return ChannelListAdapter(
             context,
             service,
-            database,
+            // Inline, so the database work is deterministic in tests.
+            MumlaRepository(database, Dispatchers.Unconfined),
             mockk<FragmentManager>(relaxed = true),
             pinnedChannels != null,
             showUserCount,
-            databaseExecutor,
         ).also { root.counters.reset() }
     }
 
@@ -792,11 +791,11 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * The default executor must write off the calling (main) thread. Deterministic because the
+     * The repository's default dispatcher writes off the calling (main) thread. Deterministic because the
      * write itself releases the latch.
      */
     @Test
-    fun theDefaultDatabaseExecutorWritesOffTheCallingThread() {
+    fun theLocalStateIsWrittenOffTheCallingThread() {
         val (root, ids) = smallTree()
         val database = mockk<MumlaDatabase>(relaxed = true)
         val server = mockk<Server>(relaxed = true)
@@ -805,7 +804,7 @@ class ChannelListAdapterRebuildTest {
         val service = mockk<IHumlaService>(relaxed = true).stubConnected(mockk(relaxed = true))
         every { service.targetServer } returns server
         val adapter = ChannelListAdapter(
-            context, service, database, mockk<FragmentManager>(relaxed = true), false, true,
+            context, service, MumlaRepository(database), mockk<FragmentManager>(relaxed = true), false, true,
         )
         val done = CountDownLatch(1)
         val writer = arrayOfNulls<String>(1)

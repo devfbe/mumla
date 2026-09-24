@@ -340,8 +340,11 @@ class ChannelListFragment : Fragment(), ServiceClient, SharedPreferences.OnShare
     }
 
     private fun setupChannelList(service: IMumlaService) {
+        val repository = MumlaRepository.get(requireContext())
+        // Read now, off the main thread, for the channel menus' pin toggle.
+        service.targetServer?.let { repository.pinnedChannels.of(it.id) }
         val adapter = ChannelListAdapter(
-            requireActivity(), service, MumlaRepository.get(requireContext()).database, childFragmentManager,
+            requireActivity(), service, repository, childFragmentManager,
             isShowingPinnedChannels(), settings.shouldShowUserCount,
         )
         adapter.onChannelClick = ::onChannelClick

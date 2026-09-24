@@ -34,7 +34,6 @@ import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.RecyclerView
-import java.util.concurrent.Executor
 import se.lublin.humla.HumlaService
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.model.IChannel
@@ -42,9 +41,8 @@ import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
-import se.lublin.mumla.db.MumlaDatabase
+import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.drawable.CircleDrawable
-import se.lublin.mumla.service.MumlaService
 
 /**
  * Flattens the channel tree into rows. Main thread only, like every `RecyclerView.Adapter`.
@@ -57,20 +55,21 @@ import se.lublin.mumla.service.MumlaService
  *
  * The recursion needs no depth check: `ModelHandler` refuses parent cycles and trees deeper than
  * 256 below the root.
+ *
+ * With [showPinnedOnly], the tree is rooted at the channels pinned when the adapter was created,
+ * which it shows once they are read.
  */
 class ChannelListAdapter(
     private val context: Context,
     service: IHumlaService,
-    private val database: MumlaDatabase,
+    private val repository: MumlaRepository,
     private val fragmentManager: FragmentManager,
     showPinnedOnly: Boolean,
     showUserCount: Boolean,
-    /** Where the local mute/ignore rows are written; injectable so tests can run it inline. */
-    private val databaseExecutor: Executor = Executor { Thread(it).start() },
-) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), UserMenu.IUserLocalStateListener {
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private var humlaService: IHumlaService = service
-    private val rootChannels: List<Int>
+    private var rootChannels: List<Int> = if (showPinnedOnly) emptyList() else listOf(0)
     private val nodes: MutableList<Node> = ArrayList()
 
     /**
@@ -96,12 +95,16 @@ class ChannelListAdapter(
 
     init {
         setHasStableIds(true)
-        rootChannels = if (showPinnedOnly) {
-            humlaService.targetServer?.let { database.getPinnedChannels(it.id) }.orEmpty()
-        } else {
-            listOf(0)
+        var constructed = false
+        val server = humlaService.targetServer
+        if (showPinnedOnly && server != null) {
+            repository.pinnedChannels.whenLoaded(server.id) { pinned ->
+                rootChannels = pinned.toList()
+                if (constructed) updateChannels()
+            }
         }
         rebuildNodes()
+        constructed = true
     }
 
     override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -202,7 +205,7 @@ class ChannelListAdapter(
             }
 
             cvh.moreButton.setOnClickListener { v ->
-                ChannelMenu(context, channel, humlaService, database, fragmentManager).showPopup(v)
+                ChannelMenu(context, channel, humlaService, repository.pinnedChannels, fragmentManager).showPopup(v)
             }
 
             cvh.itemView.setOnLongClickListener {
@@ -250,9 +253,7 @@ class ChannelListAdapter(
             )
 
             uvh.moreButton.setOnClickListener { v ->
-                UserMenu(
-                    context, user, humlaService as MumlaService, fragmentManager, this
-                ).showPopup(v)
+                UserMenu(context, user, humlaService, fragmentManager, ::onLocalUserStateUpdated).showPopup(v)
             }
 
             uvh.itemView.setOnLongClickListener {
@@ -436,23 +437,24 @@ class ChannelListAdapter(
         }
     }
 
-    override fun onLocalUserStateUpdated(user: IUser) {
+    /** Redraws [user]'s local mute and ignore, and stores them for a registered user of a saved server. */
+    fun onLocalUserStateUpdated(user: IUser) {
         notifyDataSetChanged()
 
         // Add or remove registered user from local mute history
         val server = humlaService.targetServer
 
         if (server != null && user.userId >= 0 && server.isSaved) {
-            databaseExecutor.execute {
+            repository.launchIo {
                 if (user.isLocalMuted) {
-                    database.addLocalMutedUser(server.id, user.userId)
+                    addLocalMutedUser(server.id, user.userId)
                 } else {
-                    database.removeLocalMutedUser(server.id, user.userId)
+                    removeLocalMutedUser(server.id, user.userId)
                 }
                 if (user.isLocalIgnored) {
-                    database.addLocalIgnoredUser(server.id, user.userId)
+                    addLocalIgnoredUser(server.id, user.userId)
                 } else {
-                    database.removeLocalIgnoredUser(server.id, user.userId)
+                    removeLocalIgnoredUser(server.id, user.userId)
                 }
             }
         }

@@ -4,13 +4,15 @@ import androidx.fragment.app.FragmentManager
 import androidx.test.core.app.ApplicationProvider
 import io.mockk.every
 import io.mockk.mockk
-import se.lublin.mumla.db.MumlaDatabase
+import kotlinx.coroutines.Dispatchers
 import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
+import se.lublin.mumla.db.MumlaDatabase
+import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.testing.stubConnected
 
 /**
@@ -34,7 +36,7 @@ class AdapterRebuildBenchmarkTest {
         val adapter = ChannelListAdapter(
             ApplicationProvider.getApplicationContext(),
             service,
-            mockk<MumlaDatabase>(relaxed = true),
+            MumlaRepository(mockk<MumlaDatabase>(relaxed = true), Dispatchers.Unconfined),
             mockk<FragmentManager>(relaxed = true),
             false,
             true,

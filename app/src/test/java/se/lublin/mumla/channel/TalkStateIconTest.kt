@@ -7,6 +7,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
@@ -16,6 +17,7 @@ import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.TalkState
 import se.lublin.mumla.R
+import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.stubConnected
 
@@ -37,8 +39,9 @@ class TalkStateIconTest(
         every { session.getChannel(0) } returns root
         val service = mockk<IHumlaService>(relaxed = true).stubConnected(session)
         val adapter = ChannelListAdapter(
-            context, service, mockk(relaxed = true), mockk<FragmentManager>(relaxed = true), false, true,
-        ) { it.run() }
+            context, service, MumlaRepository(mockk(relaxed = true), Dispatchers.Unconfined),
+            mockk<FragmentManager>(relaxed = true), false, true,
+        )
         val position = adapter.getUserPosition(SESSION)
         val parent = RecyclerView(context).apply { layoutManager = LinearLayoutManager(context) }
         val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(position))
