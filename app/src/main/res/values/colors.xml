@@ -12,7 +12,6 @@
     <color name="hot_corner_highlight">#ff2079ab</color>
 
     <color name="ripple_talk_state_on">#ffcc0000</color>
-    <color name="ripple_talk_state_off">#ffffffff</color>
     <color name="ripple_talk_state_disabled">#ff666666</color>
     <color name="ripple_talk_state_suppressed">#ff669900</color>
     <color name="ripple_talk_state_server_muted">#ff0099cc</color>

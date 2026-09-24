@@ -144,7 +144,7 @@ class ZoomImageViewTest {
     fun aNewResourceResetsTheStateToo() {
         val view = viewWith()
         view.zoomBy(3f, 0f, 0f)
-        view.setImageResource(se.lublin.mumla.R.drawable.ic_mumla)
+        view.setImageResource(se.lublin.mumla.R.drawable.ic_stat_notify)
         assertThat(view.state).isEqualTo(ZoomState())
     }
 

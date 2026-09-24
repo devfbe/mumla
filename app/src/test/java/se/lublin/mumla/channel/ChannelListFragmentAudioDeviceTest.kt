@@ -324,6 +324,6 @@ class ChannelListFragmentAudioDeviceTest {
         val menu = prepared()
         val titles = (0 until menu.size()).map { menu.getItem(it).title.toString() }
 
-        assertThat(titles).doesNotContain(app.getString(R.string.bluetooth))
+        assertThat(titles).doesNotContain("Bluetooth")
     }
 }
