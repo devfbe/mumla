@@ -21,7 +21,15 @@ class AudioOutputSpeechTest {
             error[0] = 0
             return 1L
         }
-        override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int =
+        override fun decodeFloat(
+            state: Long,
+            data: ByteArray?,
+            offset: Int,
+            len: Int,
+            out: FloatArray,
+            frameSize: Int,
+            decodeFec: Int,
+        ): Int =
             AudioHandler.FRAME_SIZE
         override fun destroy(state: Long) {
             destroys++
@@ -78,11 +86,11 @@ class AudioOutputSpeechTest {
             jitter,
         )
 
-        val result = speech.call()
+        val alive = speech.decode()
 
         assertThat(states).containsExactly(42 to TalkState.SHOUTING)
-        assertThat(result.isAlive).isTrue()
-        assertThat(result.numSamples).isEqualTo(AudioHandler.FRAME_SIZE)
+        assertThat(alive).isTrue()
+        assertThat(speech.numSamples).isEqualTo(AudioHandler.FRAME_SIZE)
         assertThat(jitter.ticks).isEqualTo(1)
     }
 

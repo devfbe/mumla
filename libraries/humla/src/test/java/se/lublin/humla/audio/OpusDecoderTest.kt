@@ -12,7 +12,15 @@ class OpusDecoderTest {
             error[0] = 0
             return 11L
         }
-        override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int = frameSize
+        override fun decodeFloat(
+            state: Long,
+            data: ByteArray?,
+            offset: Int,
+            len: Int,
+            out: FloatArray,
+            frameSize: Int,
+            decodeFec: Int,
+        ): Int = frameSize
         override fun destroy(state: Long) {
             destroys++
         }

@@ -199,7 +199,15 @@ class AudioOutputTest {
             error[0] = 0
             return 1L
         }
-        override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int =
+        override fun decodeFloat(
+            state: Long,
+            data: ByteArray?,
+            offset: Int,
+            len: Int,
+            out: FloatArray,
+            frameSize: Int,
+            decodeFec: Int,
+        ): Int =
             AudioHandler.FRAME_SIZE
         override fun destroy(state: Long) = Unit
         override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = 1

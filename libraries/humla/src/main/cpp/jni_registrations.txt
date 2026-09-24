@@ -2,7 +2,7 @@
 # Checked against the C++ bridges by tests/test_jni_registration.cpp and against the Kotlin
 # declarations by JniRegistrationsTest.kt; change all three together.
 se/lublin/humla/audio/native/OpusDecoderNative create (II[I)J
-se/lublin/humla/audio/native/OpusDecoderNative decodeFloat (J[BI[FII)I
+se/lublin/humla/audio/native/OpusDecoderNative decodeFloat (J[BII[FII)I
 se/lublin/humla/audio/native/OpusDecoderNative destroy (J)V
 se/lublin/humla/audio/native/OpusDecoderNative packetGetNbFrames ([BI)I
 se/lublin/humla/audio/native/OpusDecoderNative packetGetSamplesPerFrame ([BI)I

@@ -17,17 +17,16 @@
 package se.lublin.humla.audio
 
 import se.lublin.humla.exception.NativeAudioException
-import java.nio.ByteBuffer
 
 /** A native voice decoder producing float PCM. */
 interface IDecoder {
     /**
-     * Decodes [inputSize] bytes of [input] into [output], which holds at least [frameSize] samples.
-     * A null [input] asks for loss concealment.
+     * Decodes [length] bytes of [input] from [offset] into [output], which holds at least
+     * [frameSize] samples. A null [input] asks for loss concealment.
      * @return the number of decoded samples.
      * @throws NativeAudioException if decoding failed.
      */
-    fun decodeFloat(input: ByteBuffer?, inputSize: Int, output: FloatArray, frameSize: Int): Int
+    fun decodeFloat(input: ByteArray?, offset: Int, length: Int, output: FloatArray, frameSize: Int): Int
 
     /** Frees native resources. The decoder must not be called afterwards. */
     fun destroy()

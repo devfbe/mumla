@@ -13,11 +13,12 @@ class SpeexJitterBufferTest {
         // [length, timestamp, span, sequence, userData] - length is slot 0, userData slot 4
         fake.nextMeta = intArrayOf(37, 1440, 960, 9, 1)
 
-        val packet = SpeexJitterBuffer(480, fake).get(ByteArray(4096), 480)
+        val buffer = SpeexJitterBuffer(480, fake)
+        val status = buffer.get(ByteArray(4096), 480)
 
-        assertThat(packet.status).isEqualTo(SpeexJitterNative.JITTER_BUFFER_OK)
-        assertThat(packet.length).isEqualTo(37)
-        assertThat(packet.userData).isEqualTo(1)
+        assertThat(status).isEqualTo(SpeexJitterNative.JITTER_BUFFER_OK)
+        assertThat(buffer.packetLength).isEqualTo(37)
+        assertThat(buffer.packetUserData).isEqualTo(1)
     }
 
     @Test

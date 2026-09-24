@@ -102,6 +102,12 @@ class PacketBuffer(private val buffer: ByteBuffer) {
         buffer.rewind()
     }
 
+    /** Rewinds and makes the first [limit] bytes of the underlying storage readable. */
+    fun reset(limit: Int) {
+        buffer.clear()
+        buffer.limit(limit)
+    }
+
     /** Writes [value] as a varint. */
     fun writeLong(value: Long) {
         var i = value

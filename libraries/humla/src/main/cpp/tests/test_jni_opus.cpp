@@ -36,7 +36,7 @@ static int failures = 0;
 #define ENC_DESTROY ENC("destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
 #define DEC_CREATE DEC("create", jlong (*)(JNIEnv*, jobject, jint, jint, jintArray) noexcept)
 #define DEC_DECODE_FLOAT \
-    DEC("decodeFloat", jint (*)(JNIEnv*, jobject, jlong, jbyteArray, jint, jfloatArray, jint, jint) noexcept)
+    DEC("decodeFloat", jint (*)(JNIEnv*, jobject, jlong, jbyteArray, jint, jint, jfloatArray, jint, jint) noexcept)
 #define DEC_DESTROY DEC("destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
 #define DEC_NB_FRAMES DEC("packetGetNbFrames", jint (*)(JNIEnv*, jobject, jbyteArray, jint) noexcept)
 #define DEC_SAMPLES_PER_FRAME DEC("packetGetSamplesPerFrame", jint (*)(JNIEnv*, jobject, jbyteArray, jint) noexcept)
@@ -115,14 +115,32 @@ static void test_decoder(Env& env) {
 
     {
         Array<jfloat> out(kFrame);
-        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), len, out.as<jfloatArray>(), kFrame, 0)
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), 0, len, out.as<jfloatArray>(), kFrame, 0)
                   == kFrame, "float decode of an honest packet");
+    }
+    {
+        /* The same packet three bytes into a larger array decodes from its offset. */
+        Array<jbyte> framed(len + 5);
+        for (int i = 0; i < len; i++) framed[3 + i] = packet[i];
+        Array<jfloat> direct(kFrame), offset(kFrame);
+        /* Two fresh decoders, so both start from the same state. */
+        jlong first = DEC_CREATE(e, nullptr, kRate, 1, err.as<jintArray>());
+        jlong second = DEC_CREATE(e, nullptr, kRate, 1, err.as<jintArray>());
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, first, packet.as<jbyteArray>(), 0, len, direct.as<jfloatArray>(), kFrame, 0)
+                  == kFrame, "decode at offset 0");
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, second, framed.as<jbyteArray>(), 3, len, offset.as<jfloatArray>(), kFrame, 0)
+                  == kFrame, "decode at offset 3");
+        bool same = true;
+        for (int i = 0; i < kFrame; i++) same = same && direct[i] == offset[i];
+        CHECK(same, "a packet decodes the same from an offset");
+        DEC_DESTROY(e, nullptr, first);
+        DEC_DESTROY(e, nullptr, second);
     }
     {
         /* Room for two frames, one decoded: only the decoded samples are written back. */
         Array<jfloat> out(2 * kFrame);
         for (jsize i = kFrame; i < out.length(); i++) out[i] = 42.0f;
-        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), len, out.as<jfloatArray>(),
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), 0, len, out.as<jfloatArray>(),
                                2 * kFrame, 0) == kFrame, "float decode into a larger array");
         bool tail_intact = true;
         for (jsize i = kFrame; i < out.length(); i++)
@@ -133,19 +151,25 @@ static void test_decoder(Env& env) {
         /* The frame size claims more room than the array has: clamped, so opus reports the
          * buffer as too small instead of writing past the array. */
         Array<jfloat> out(kFrame / 2);
-        int result = DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), len,
+        int result = DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), 0, len,
                                       out.as<jfloatArray>(), 5760, 0);
         CHECK(result == OPUS_BUFFER_TOO_SMALL, "an oversized frame size is clamped to the float array");
     }
     {
         Array<jfloat> out(kFrame);
-        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), packet.length() + 1,
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), 0, packet.length() + 1,
                                out.as<jfloatArray>(), kFrame, 0) == OPUS_BAD_ARG,
               "a packet length beyond the array is refused");
-        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), -1,
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), 0, -1,
                                out.as<jfloatArray>(), kFrame, 0) == OPUS_BAD_ARG,
               "a negative packet length is refused");
-        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, nullptr, 0, out.as<jfloatArray>(), kFrame, 0) == kFrame,
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), -1, len,
+                               out.as<jfloatArray>(), kFrame, 0) == OPUS_BAD_ARG,
+              "a negative offset is refused");
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), packet.length() - len + 1, len,
+                               out.as<jfloatArray>(), kFrame, 0) == OPUS_BAD_ARG,
+              "an offset that pushes the packet past the array is refused");
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, nullptr, 0, 0, out.as<jfloatArray>(), kFrame, 0) == kFrame,
               "a null packet is concealment");
     }
     {
@@ -199,7 +223,7 @@ static void test_inband_fec(Env& env) {
     CHECK(withLbrr > 0, "packets carry lbrr data once fec is on");
 
     Array<jfloat> out(kFrame);
-    CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), len, out.as<jfloatArray>(), kFrame, 1)
+    CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), 0, len, out.as<jfloatArray>(), kFrame, 1)
               == kFrame, "a lost frame decodes from the next packet's fec data");
 
     DEC_DESTROY(e, nullptr, dec);

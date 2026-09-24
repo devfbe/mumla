@@ -4,7 +4,6 @@
   <CurrentIssues>
     <ID>ComplexCondition:HumlaConnection.kt$HumlaConnection$!force &amp;&amp; (shouldForceTCP() || !usingUdp) &amp;&amp; tcpTransport != null</ID>
     <ID>ComplexCondition:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$wasOn &amp;&amp; expectedOn &amp;&amp; detected &amp;&amp; score &lt; config.startThreshold</ID>
-    <ID>CyclomaticComplexMethod:AudioOutputSpeech.kt$AudioOutputSpeech$@Throws(Exception::class) override fun call(): Result</ID>
     <ID>CyclomaticComplexMethod:HumlaTCP.kt$HumlaTCP$private fun readLoop()</ID>
     <ID>CyclomaticComplexMethod:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
     <ID>CyclomaticComplexMethod:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
@@ -14,14 +13,13 @@
     <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @param buffer The buffer to mix output data into. * @param bufferOffset The offset into the buffer. * @param bufferSize The size of the buffer. * @return true if the buffer contains audio data.</ID>
     <ID>ForbiddenComment:Channel.kt$Channel$* Recursively fetches the subchannel user count, holding one channel's lock at a time: the * subchannels are copied under the lock and the recursion happens outside it, so no thread ever * holds two channel locks at once (no lock-order inversion possible). * * FIXME: is it necessary to cache this? * @return The sum of users in this channel and its subchannels.</ID>
     <ID>ForbiddenComment:HumlaConnection.kt$HumlaConnection.Companion$// FIXME: assumes worst-case using TCP</ID>
-    <ID>LongMethod:AudioOutputSpeech.kt$AudioOutputSpeech$@Throws(Exception::class) override fun call(): Result</ID>
     <ID>LongMethod:HumlaTCP.kt$HumlaTCP$private fun readLoop()</ID>
     <ID>LongMethod:ModelRaceTest.kt$ModelRaceTest$@Test fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread()</ID>
     <ID>LongParameterList:AudioController.kt$AudioController$( private val context: Context, private val logger: HumlaLogger, private val factory: () -&gt; AudioHandlerFactory, private val encodeListener: AudioHandler.AudioEncodeListener, private val outputListener: AudioOutput.AudioOutputListener, private val listener: Listener, private val mainHandler: Handler = Handler(Looper.getMainLooper()), )</ID>
     <ID>LongParameterList:CaptureWiring.kt$CaptureWiring$( inputSampleRate: Int, inputMode: IInputMode, amplitudeBoost: Float, noise: NoiseSuppressionMode, echo: EchoCancellationMode, speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB, logger: HumlaLogger? = null, factory: CapturePreprocessorFactory? = null, newResampler: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
     <ID>LongParameterList:ManagedAudio.kt$AudioHandlerFactory$( context: Context, logger: HumlaLogger, config: AudioConfig, params: AudioSessionParams, encodeListener: AudioHandler.AudioEncodeListener, outputListener: AudioOutput.AudioOutputListener, )</ID>
     <ID>LongParameterList:ManagedAudio.kt$DefaultAudioHandlerFactory$( context: Context, logger: HumlaLogger, config: AudioConfig, params: AudioSessionParams, encodeListener: AudioHandler.AudioEncodeListener, outputListener: AudioOutput.AudioOutputListener, )</ID>
-    <ID>LongParameterList:OpusDecoderNative.kt$OpusDecoderApi$(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int)</ID>
+    <ID>LongParameterList:OpusDecoderNative.kt$OpusDecoderApi$( state: Long, data: ByteArray?, offset: Int, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int, )</ID>
     <ID>LongParameterList:OpusEncoder.kt$OpusEncoder$( sampleRate: Int, channels: Int, private val frameSize: Int, private val framesPerPacket: Int, bitrate: Int, maxBufferSize: Int, private val api: OpusEncoderApi = OpusEncoderNative, )</ID>
     <ID>LongParameterList:SpeexJitterBuffer.kt$SpeexJitterBuffer$(data: ByteArray, length: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
     <ID>LongParameterList:SpeexJitterNative.kt$SpeexJitterApi$(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
@@ -41,7 +39,6 @@
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$12</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$13</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$20</ID>
-    <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$4096</ID>
     <ID>MagicNumber:FakeAudio.kt$FakeAudio$12_345</ID>
     <ID>MagicNumber:FakeSpeexPreprocessApi.kt$FakeSpeexPreprocessApi$50</ID>
     <ID>MagicNumber:FakeWebRtcApmApi.kt$FakeWebRtcApmApi$100</ID>
@@ -107,9 +104,6 @@
     <ID>MaxLineLength:HumlaServiceBluetoothTest.kt$HumlaServiceBluetoothTest$awaitUntil(description = "audio rebuilt for the earpiece") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }</ID>
     <ID>MaxLineLength:HumlaUDPTest.kt$HumlaUDPTest$udp = HumlaUDP(CryptState().apply { setKeys(key, clientNonce, serverNonce) }, listener, Handler(callbackThread.looper))</ID>
     <ID>MaxLineLength:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$((v and 0x0F) shl 24) or ((at(1) ?: return null) shl 16) or ((at(2) ?: return null) shl 8) or (at(3) ?: return null)</ID>
-    <ID>MaxLineLength:OpusDecoderNative.kt$OpusDecoderApi$/** libopus decoder and packet inspection. State handles are opaque; 0 means creation failed. `data == null` requests PLC. */</ID>
-    <ID>MaxLineLength:OpusDecoderNative.kt$OpusDecoderNative$external override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int</ID>
-    <ID>MaxLineLength:OpusDecoderTest.kt$OpusDecoderTest.FakeOpusDecoder$override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int</ID>
     <ID>MaxLineLength:SessionState.kt$SessionState.ConnectionLost$data</ID>
     <ID>MaxLineLength:SessionStateMachineTest.kt$SessionStateMachineTest$assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))</ID>
     <ID>MaxLineLength:SessionStateMachineTest.kt$SessionStateMachineTest$assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(4_000L, 2, error))</ID>
@@ -124,13 +118,11 @@
     <ID>MaxLineLength:UdpHealthMonitorTest.kt$UdpHealthMonitorTest$assertThat(monitor.onTcpPing(seconds(17), 34, 0, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)</ID>
     <ID>MaxLineLength:VadConfig.kt$VadConfig$require(stopThreshold in 0f..startThreshold) { "stopThreshold must be within [0, startThreshold]: $stopThreshold" }</ID>
     <ID>MaxLineLength:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$assertThat(detector(VadConfig.probability(start = 0.85f, stop = 0.5f)).isVoice(constant(3277), 480, null)).isFalse()</ID>
-    <ID>NestedBlockDepth:AudioOutputSpeech.kt$AudioOutputSpeech$@Throws(Exception::class) override fun call(): Result</ID>
     <ID>NestedBlockDepth:FakeCaptureSource.kt$FakeCaptureSource$override fun read(buffer: ShortArray, length: Int): Int</ID>
     <ID>NestedBlockDepth:HumlaTCP.kt$HumlaTCP$private fun readLoop()</ID>
     <ID>NestedBlockDepth:HumlaUDP.kt$HumlaUDP$private fun receiveLoop()</ID>
     <ID>PrintStackTrace:AudioOutput.kt$AudioOutput$e</ID>
     <ID>PrintStackTrace:AudioOutputSpeech.kt$AudioOutputSpeech$e</ID>
-    <ID>ReturnCount:AudioOutput.kt$AudioOutput$private fun fetchAudio(buffer: ShortArray, bufferOffset: Int, bufferSize: Int): Boolean</ID>
     <ID>ReturnCount:AudioOutputSpeech.kt$AudioOutputSpeech$fun addFrameToBuffer(pb: PacketBuffer, flags: Byte, seq: Int)</ID>
     <ID>ReturnCount:AudioRouter.kt$AudioRouter$private fun automatic(available: List&lt;CommunicationDevice&gt;): CommunicationDevice?</ID>
     <ID>ReturnCount:FakeCaptureSource.kt$FakeCaptureSource$override fun read(buffer: ShortArray, length: Int): Int</ID>

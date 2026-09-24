@@ -67,10 +67,11 @@ bool getIntRequestAllowed(jint request) {
     }
 }
 
-/* Validates an optional input packet: null means packet loss, otherwise len must fit the array. */
-bool packetFits(JNIEnv* env, jbyteArray data, jint len) {
+/* Validates an optional input packet: null means packet loss, otherwise offset + len must fit the
+ * array. */
+bool packetFits(JNIEnv* env, jbyteArray data, jint offset, jint len) {
     if (data == nullptr) return true;
-    return len >= 0 && len <= env->GetArrayLength(data);
+    return offset >= 0 && len >= 0 && static_cast<jlong>(offset) + len <= env->GetArrayLength(data);
 }
 
 /* The largest per-channel frame size the output array can hold, capped by the caller's request. */
@@ -154,9 +155,10 @@ jlong decoderCreate(JNIEnv* env, jobject, jint sampleRate, jint channels, jintAr
     return handle;
 }
 
-jint decoderDecodeFloat(JNIEnv* env, jobject, jlong state, jbyteArray data, jint len, jfloatArray out, jint frameSize, jint decodeFec) noexcept {
+jint decoderDecodeFloat(JNIEnv* env, jobject, jlong state, jbyteArray data, jint offset, jint len,
+                        jfloatArray out, jint frameSize, jint decodeFec) noexcept {
     auto* h = static_cast<DecoderHandle*>(decoders().get(state));
-    if (h == nullptr || out == nullptr || frameSize <= 0 || !packetFits(env, data, len)) return OPUS_BAD_ARG;
+    if (h == nullptr || out == nullptr || frameSize <= 0 || !packetFits(env, data, offset, len)) return OPUS_BAD_ARG;
     frameSize = clampFrameSize(env, out, frameSize, h->channels);
     if (frameSize <= 0) return OPUS_BUFFER_TOO_SMALL;
     jsize packetBytes = data != nullptr ? len : 0;
@@ -164,7 +166,7 @@ jint decoderDecodeFloat(JNIEnv* env, jobject, jlong state, jbyteArray data, jint
     humla::RegionBuffer<jbyte, kInlinePacket> packet(packetBytes);
     humla::RegionBuffer<jfloat, kInlinePcm> pcm(samples);
     if (packet.data() == nullptr || pcm.data() == nullptr) return OPUS_ALLOC_FAIL;
-    if (data != nullptr) packet.read(env, data, 0, packetBytes);
+    if (data != nullptr) packet.read(env, data, offset, packetBytes);
     int result = opus_decode_float(h->state,
                                    data != nullptr ? reinterpret_cast<const unsigned char*>(packet.data()) : nullptr,
                                    packetBytes, pcm.data(), frameSize, decodeFec);

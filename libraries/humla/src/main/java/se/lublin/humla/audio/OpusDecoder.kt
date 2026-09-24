@@ -17,7 +17,6 @@
 
 package se.lublin.humla.audio
 
-import java.nio.ByteBuffer
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.OpusDecoderNative
 import se.lublin.humla.exception.NativeAudioException
@@ -37,8 +36,8 @@ class OpusDecoder @JvmOverloads @Throws(NativeAudioException::class) constructor
     }
 
     @Throws(NativeAudioException::class)
-    override fun decodeFloat(input: ByteBuffer?, inputSize: Int, output: FloatArray, frameSize: Int): Int {
-        val result = api.decodeFloat(state, PacketBytes.copy(input, inputSize), inputSize, output, frameSize, 0)
+    override fun decodeFloat(input: ByteArray?, offset: Int, length: Int, output: FloatArray, frameSize: Int): Int {
+        val result = api.decodeFloat(state, input, offset, length, output, frameSize, 0)
         if (result < 0) throw NativeAudioException("Opus decoding failed with error: $result")
         return result
     }

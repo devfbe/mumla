@@ -25,9 +25,6 @@ class SpeexJitterBuffer @JvmOverloads constructor(
     stepSize: Int,
     private val api: SpeexJitterApi = SpeexJitterNative,
 ) {
-    /** Result of [get]: [status] is a `JITTER_BUFFER_*` code; [length] and [userData] come from the packet. */
-    class Packet(val status: Int, val length: Int, val userData: Int)
-
     private var handle: Long = api.init(stepSize)
     private var destroyed = false
     private val meta = IntArray(5)
@@ -36,10 +33,14 @@ class SpeexJitterBuffer @JvmOverloads constructor(
     fun put(data: ByteArray, length: Int, timestamp: Int, span: Int, sequence: Int, userData: Int) =
         api.put(handle, data, length, timestamp, span, sequence, userData)
 
-    fun get(out: ByteArray, desiredSpan: Int): Packet {
-        val status = api.get(handle, out, desiredSpan, meta)
-        return Packet(status, meta[0], meta[4])
-    }
+    /** Takes the next packet into [out]; returns a `JITTER_BUFFER_*` status. */
+    fun get(out: ByteArray, desiredSpan: Int): Int = api.get(handle, out, desiredSpan, meta)
+
+    /** The length of the packet the last [get] delivered. */
+    val packetLength: Int get() = meta[0]
+
+    /** The user data of the packet the last [get] delivered. */
+    val packetUserData: Int get() = meta[4]
 
     val pointerTimestamp: Int
         get() = api.pointerTimestamp(handle)
