@@ -5,10 +5,9 @@ import com.google.protobuf.ByteString
 import org.junit.Test
 
 /**
- * Pins the wire format produced by the protobuf Gradle plugin (protoc/protobuf-java 4.36.2)
- * against hand-verified proto2 bytes, so a future protobuf bump that silently changes encoding
- * (varint layout, field ordering, enum representation, unknown-field handling, proto2 explicit
- * presence semantics) is caught here rather than against a live Mumble server.
+ * Pins the wire format of the generated protobuf code against hand-verified proto2 bytes, so a
+ * protobuf bump that changes encoding (varints, field order, enums, unknown fields, explicit
+ * presence) is caught here rather than against a live server.
  */
 class MumbleProtoTest {
 
