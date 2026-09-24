@@ -18,6 +18,7 @@ package se.lublin.mumla.preference
 
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import se.lublin.mumla.R
 import se.lublin.mumla.util.MumlaTrustStore
@@ -26,6 +27,7 @@ import se.lublin.mumla.util.MumlaTrustStore
 class ServerCertificateClearActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         MumlaTrustStore.clearTrustStore(this)
         Toast.makeText(this, R.string.trust_cleared, Toast.LENGTH_LONG).show()
         finish()

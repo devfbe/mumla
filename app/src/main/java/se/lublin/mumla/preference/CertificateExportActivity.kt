@@ -26,6 +26,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
@@ -63,6 +64,7 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         lifecycleScope.launch {
             certificates = repository.io { getCertificates() }
             val labels = certificates.map { it.name as CharSequence }.toTypedArray()

@@ -31,6 +31,7 @@
         android:visibility="gone" />
 
     <LinearLayout
+        android:id="@+id/image_viewer_actions"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"

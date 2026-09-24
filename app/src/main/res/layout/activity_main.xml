@@ -19,8 +19,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/drawer_layout"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fitsSystemWindows="true">
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -29,6 +28,7 @@
 
         <!-- Using TweakedAppBarLayout to always have dark themed appbar -->
         <com.google.android.material.appbar.AppBarLayout
+            android:id="@+id/app_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             style="@style/TweakedAppBarLayout">
@@ -58,7 +58,7 @@
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:background="?attr/colorSurfaceContainerLow"
-        android:fitsSystemWindows="true"
+        android:clipToPadding="false"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
 </androidx.drawerlayout.widget.DrawerLayout>

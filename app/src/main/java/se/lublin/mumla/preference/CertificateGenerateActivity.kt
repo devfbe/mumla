@@ -18,6 +18,7 @@
 package se.lublin.mumla.preference
 
 import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -29,6 +30,7 @@ class CertificateGenerateActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         lifecycleScope.launch {
             val certificate = generateDefaultCertificate()
             if (certificate == null) {

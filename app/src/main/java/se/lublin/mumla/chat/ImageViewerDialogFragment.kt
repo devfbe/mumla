@@ -9,6 +9,9 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.VisibleForTesting
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineDispatcher
@@ -17,6 +20,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.DialogImageViewerBinding
+import se.lublin.mumla.util.Edge
+import se.lublin.mumla.util.padForSystemBars
 import java.io.IOException
 
 /**
@@ -43,6 +48,17 @@ class ImageViewerDialogFragment : DialogFragment() {
         setStyle(STYLE_NO_FRAME, R.style.Theme_Mumla_ImageViewer)
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Behind the bars; the status bar hides as with a fullscreen window, until swiped in.
+        val window = dialog?.window ?: return
+        WindowCompat.enableEdgeToEdge(window)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.statusBars())
+        }
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         DialogImageViewerBinding.inflate(inflater, container, false).root
 
@@ -54,6 +70,7 @@ class ImageViewerDialogFragment : DialogFragment() {
         val status: TextView = binding.imageViewerStatus
         val share: View = binding.imageViewerShare
         binding.imageViewerClose.setOnClickListener { dismiss() }
+        binding.imageViewerActions.padForSystemBars(Edge.TOP, Edge.END)
         share.isEnabled = false
 
         /**

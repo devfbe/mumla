@@ -1,11 +1,14 @@
 package se.lublin.mumla.preference
 
 import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ActivitySettingsBinding
+import se.lublin.mumla.util.Edge
+import se.lublin.mumla.util.padForSystemBars
 
 /** The settings: an index of screens, each opened on top of it with the back stack. */
 class SettingsActivity :
@@ -14,8 +17,11 @@ class SettingsActivity :
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         val binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.appBar.padForSystemBars(Edge.START, Edge.TOP, Edge.END)
+        binding.settingsContainer.padForSystemBars(Edge.START, Edge.END)
         setSupportActionBar(binding.toolbar)
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)

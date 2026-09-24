@@ -12,6 +12,9 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.testing.FragmentScenario
 import androidx.fragment.app.testing.launchFragment
 import androidx.test.core.app.ApplicationProvider
@@ -173,6 +176,23 @@ class ImageViewerDialogFragmentTest {
      */
     private fun launched(source: String? = this.source, block: (ImageViewerDialogFragment) -> Unit) {
         launch(source).use { it.onFragment(block) }
+    }
+
+    @Test
+    fun theButtonsStayClearOfTheStatusBarAndCutout() {
+        installLoader { TestImages.png(100, 50) }
+        launched { fragment ->
+            val actions = fragment.requireView().findViewById<View>(R.id.image_viewer_actions)
+            val insets = WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 60, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.of(0, 0, 90, 0))
+                .build()
+
+            ViewCompat.dispatchApplyWindowInsets(fragment.requireView(), insets)
+
+            assertThat(actions.paddingTop).isEqualTo(60)
+            assertThat(actions.paddingRight).isEqualTo(90)
+        }
     }
 
     @Test

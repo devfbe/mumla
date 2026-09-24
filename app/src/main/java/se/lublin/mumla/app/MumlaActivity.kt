@@ -22,6 +22,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.SharedPreferences
 import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
@@ -31,6 +32,8 @@ import android.view.MenuItem
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -59,6 +62,8 @@ import se.lublin.mumla.servers.PublicServerListFragment
 import se.lublin.mumla.servers.ServerEditFragment
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.service.MumlaService
+import se.lublin.mumla.util.Edge
+import se.lublin.mumla.util.padForSystemBars
 import java.net.MalformedURLException
 import java.security.cert.X509Certificate
 
@@ -102,8 +107,13 @@ class MumlaActivity :
         settings = Settings.getInstance(this)
         themedWithDynamicColors = settings.isDynamicColorEnabled
         super.onCreate(savedInstanceState)
+        // The app bar is dark in both themes.
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         val binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.appBar.padForSystemBars(Edge.START, Edge.TOP, Edge.END)
+        binding.contentFrame.padForSystemBars(Edge.START, Edge.END, Edge.BOTTOM, ime = true)
+        binding.leftDrawer.padForSystemBars(Edge.START, Edge.TOP, Edge.BOTTOM)
         setSupportActionBar(binding.toolbar)
         onBackPressedDispatcher.addCallback(this, backCallback)
 

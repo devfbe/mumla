@@ -24,6 +24,7 @@ import android.view.View
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.view.WindowCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.RecyclerView
 import se.lublin.mumla.BuildConfig
@@ -46,6 +47,22 @@ class MainDrawer(
         ActionBarDrawerToggle(activity, layout, toolbar, R.string.drawer_open, R.string.drawer_close) {
         override fun onDrawerClosed(drawerView: View) = activity.invalidateOptionsMenu()
         override fun onDrawerOpened(drawerView: View) = activity.invalidateOptionsMenu()
+
+        override fun onDrawerSlide(drawerView: View, slideOffset: Float) {
+            super.onDrawerSlide(drawerView, slideOffset)
+            setStatusBarOverDrawer(slideOffset > HALF_OPEN)
+        }
+    }
+
+    /**
+     * The status bar's icons suit the dark app bar, or once the drawer is over it, the drawer's
+     * surface, which is light in the light theme.
+     */
+    private fun setStatusBarOverDrawer(overDrawer: Boolean) {
+        val night = activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+            Configuration.UI_MODE_NIGHT_YES
+        WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+            .isAppearanceLightStatusBars = overDrawer && !night
     }
 
     /** The donation row, if this flavor's resources define one. */
@@ -110,4 +127,8 @@ class MainDrawer(
     fun onConfigurationChanged(newConfig: Configuration) = toggle.onConfigurationChanged(newConfig)
 
     fun onOptionsItemSelected(item: MenuItem): Boolean = toggle.onOptionsItemSelected(item)
+
+    private companion object {
+        const val HALF_OPEN = 0.5f
+    }
 }

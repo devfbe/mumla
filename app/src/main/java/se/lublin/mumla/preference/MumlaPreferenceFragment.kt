@@ -1,11 +1,14 @@
 package se.lublin.mumla.preference
 
 import android.os.Bundle
+import android.view.View
 import androidx.annotation.XmlRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import se.lublin.mumla.R
+import se.lublin.mumla.util.Edge
+import se.lublin.mumla.util.padForSystemBars
 
 /**
  * A screen of [SettingsActivity] built from [preferencesXml]. Titles the action bar with the
@@ -15,6 +18,13 @@ abstract class MumlaPreferenceFragment(@param:XmlRes private val preferencesXml:
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(preferencesXml, rootKey)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // The list scrolls behind the navigation bar and ends above it.
+        listView.clipToPadding = false
+        listView.padForSystemBars(Edge.BOTTOM, ime = true)
     }
 
     override fun onDisplayPreferenceDialog(preference: Preference) {
