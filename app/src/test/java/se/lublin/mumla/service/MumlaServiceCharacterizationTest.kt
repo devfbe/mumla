@@ -158,7 +158,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun startsDisconnectedWithAnEmptyChatLogAndNoForegroundNotification() {
         assertThat(service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
-        assertThat(service.getMessageLog()).isEmpty()
+        assertThat(service.getMessageLog().value).isEmpty()
         assertThat(shadowOf(service).lastForegroundNotification).isNull()
     }
 
@@ -169,7 +169,7 @@ class MumlaServiceCharacterizationTest {
         service.logError("broken")
         idleMainLooper()
 
-        assertThat(service.getMessageLog().map { (it as IChatMessage.InfoMessage).type to it.body }).containsExactly(
+        assertThat(service.getMessageLog().value.map { (it as IChatMessage.InfoMessage).type to it.body }).containsExactly(
             IChatMessage.InfoMessage.Type.WARNING to "careful",
             IChatMessage.InfoMessage.Type.ERROR to "broken",
         ).inOrder()
@@ -182,7 +182,7 @@ class MumlaServiceCharacterizationTest {
         service.logInfo("hello")
         idleMainLooper()
 
-        val entry = service.getMessageLog().single() as IChatMessage.InfoMessage
+        val entry = service.getMessageLog().value.single() as IChatMessage.InfoMessage
         assertThat(entry.type).isEqualTo(IChatMessage.InfoMessage.Type.INFO)
         assertThat(entry.body).isEqualTo("hello")
     }
@@ -195,7 +195,7 @@ class MumlaServiceCharacterizationTest {
         callbacks().onMessageLogged(message)
         idleMainLooper()
 
-        assertThat((service.getMessageLog().single() as IChatMessage.TextMessage).message).isSameInstanceAs(message)
+        assertThat((service.getMessageLog().value.single() as IChatMessage.TextMessage).message).isSameInstanceAs(message)
     }
 
     @Test
@@ -205,7 +205,7 @@ class MumlaServiceCharacterizationTest {
         val toUser = service.sendUserTextMessage(SELF, "to a user")
         val toChannel = service.sendChannelTextMessage(3, "to a channel", false)
 
-        assertThat(service.getMessageLog().map { (it as IChatMessage.TextMessage).message })
+        assertThat(service.getMessageLog().value.map { (it as IChatMessage.TextMessage).message })
             .containsExactly(toUser, toChannel).inOrder()
     }
 
@@ -215,7 +215,7 @@ class MumlaServiceCharacterizationTest {
         idleMainLooper()
 
         @Suppress("UNCHECKED_CAST")
-        val log = service.getMessageLog() as MutableList<IChatMessage>
+        val log = service.getMessageLog().value as MutableList<IChatMessage>
         assertThrows(UnsupportedOperationException::class.java) {
             log.add(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, "sneaked in"))
         }
@@ -228,7 +228,7 @@ class MumlaServiceCharacterizationTest {
 
         service.clearMessageLog()
 
-        assertThat(service.getMessageLog()).isEmpty()
+        assertThat(service.getMessageLog().value).isEmpty()
     }
 
     // ---- chat notifications and text to speech --------------------------------------------------
@@ -692,7 +692,7 @@ class MumlaServiceCharacterizationTest {
         verify { hotCorner.setShown(false) }
         assertThat(service.mProximityLock).isNull()
         // The chat log and the chat notification survive a loss; only Disconnected clears them.
-        assertThat(service.getMessageLog()).isNotEmpty()
+        assertThat(service.getMessageLog().value).isNotEmpty()
     }
 
     @Test
@@ -706,7 +706,7 @@ class MumlaServiceCharacterizationTest {
 
         service.renderSessionState(SessionState.Disconnected(null))
 
-        assertThat(service.getMessageLog()).isEmpty()
+        assertThat(service.getMessageLog().value).isEmpty()
         assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
     }
 

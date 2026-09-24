@@ -46,11 +46,11 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.util.HtmlUtils
-import java.util.Collections
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /** [HumlaService] plus Mumla's notifications, overlay, hot corner, TTS and media session. */
@@ -550,7 +550,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    override fun getMessageLog(): List<IChatMessage> = Collections.unmodifiableList(mMessageLog.snapshot())
+    override fun getMessageLog(): StateFlow<List<IChatMessage>> = mMessageLog.messages
 
     override fun clearMessageLog() {
         mMessageLog.clear()

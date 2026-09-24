@@ -16,32 +16,47 @@
  */
 package se.lublin.mumla.service
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.util.Collections
+
 /**
  * The service's in-memory chat history, bounded at [capacity] entries (oldest dropped).
  * [snapshot] copies the list, never the messages: ChatAdapter's diff compares by identity.
  *
- * Main thread only, without a lock: observer callbacks arrive on the main looper and the send
- * calls are UI calls. Add a lock together with any writer on another thread.
+ * Main thread only, without a lock: events arrive on the main thread and the send calls are UI
+ * calls. Add a lock together with any writer on another thread.
  */
 class ChatMessageLog(private val capacity: Int = MAX_ENTRIES) {
     private val entries = ArrayDeque<IChatMessage>()
+    private val published = MutableStateFlow<List<IChatMessage>>(emptyList())
 
     init {
         require(capacity > 0) { "capacity must be positive, was $capacity" }
     }
+
+    /** The current history as a read-only snapshot per change. */
+    val messages: StateFlow<List<IChatMessage>> = published.asStateFlow()
 
     val size: Int get() = entries.size
 
     fun add(message: IChatMessage) {
         if (entries.size == capacity) entries.removeFirst()
         entries.addLast(message)
+        publish()
     }
 
-    /** A copy of the list; later additions do not change it. */
-    fun snapshot(): List<IChatMessage> = ArrayList(entries)
+    /** A read-only copy of the list; later additions do not change it. */
+    fun snapshot(): List<IChatMessage> = published.value
 
     fun clear() {
         entries.clear()
+        publish()
+    }
+
+    private fun publish() {
+        published.value = Collections.unmodifiableList(ArrayList(entries))
     }
 
     companion object {

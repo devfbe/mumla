@@ -63,7 +63,7 @@ class MumlaServiceBluetoothTest {
     private fun preferences() = PreferenceManager.getDefaultSharedPreferences(app)
 
     private fun warnings(): List<String> =
-        service.messageLog.filterIsInstance<IChatMessage.InfoMessage>()
+        service.messageLog.value.filterIsInstance<IChatMessage.InfoMessage>()
             .filter { it.type == IChatMessage.InfoMessage.Type.WARNING }
             .map { it.body }
 

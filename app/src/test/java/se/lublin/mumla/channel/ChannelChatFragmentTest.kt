@@ -26,6 +26,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -75,7 +76,7 @@ class ChannelChatFragmentTest {
 
     private val service: IMumlaService = mockk(relaxed = true)
     private val session: IHumlaSession = mockk(relaxed = true)
-    private val log = mutableListOf<IChatMessage>()
+    private val log = MutableStateFlow<List<IChatMessage>>(emptyList())
 
     private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var activity: ServiceHostActivity
@@ -86,6 +87,7 @@ class ChannelChatFragmentTest {
     fun setUp() {
         service.stubConnected(session)
         every { service.messageLog } returns log
+        every { service.clearMessageLog() } answers { log.value = emptyList() }
         every { session.sessionId } returns 7
         every { session.sessionChannel } returns channel("Root")
         every { session.sessionUser } returns null
@@ -134,8 +136,8 @@ class ChannelChatFragmentTest {
 
     @Test
     fun theBoundMessageLogIsWhatTheListShows() {
-        log += info("older")
-        log += info("newer")
+        log.value += info("older")
+        log.value += info("newer")
         launch()
         drainMainUntil { itemCount() == 2 }
         assertThat(itemCount()).isEqualTo(2)
@@ -144,14 +146,14 @@ class ChannelChatFragmentTest {
     @Test
     fun anArrivingLogLineIsAppended() {
         launch()
-        observer.onLogInfo("hello")
+        log.value += info("hello")
         drainMainUntil { itemCount() == 1 }
         assertThat(itemCount()).isEqualTo(1)
     }
 
     @Test
     fun clearEmptiesTheListAndTheServiceLog() {
-        log += info("older")
+        log.value += info("older")
         launch()
         fragment.clear()
         drainMainUntil { itemCount() == 0 }
@@ -159,17 +161,13 @@ class ChannelChatFragmentTest {
         verify { service.clearMessageLog() }
     }
 
-    /**
-     * The observer outlives the view (it is unregistered in `onDestroy`), and `viewLifecycleOwner`
-     * throws in that window.
-     */
     @Test
     fun aMessageArrivingAfterTheViewIsGoneIsNotACrash() {
         launch()
-        val observerBeforeTeardown = observer
         activity.supportFragmentManager.beginTransaction().remove(parent).commitNow()
         idleMainLooper()
-        observerBeforeTeardown.onLogInfo("late")
+        log.value += info("late")
+        idleMainLooper()
     }
 
     // ---- the compose hint -------------------------------------------------------------------
@@ -481,7 +479,7 @@ class ChannelChatFragmentTest {
 
     @Test
     fun theClearMenuItemClearsTheLog() {
-        log += info("older")
+        log.value += info("older")
         launch()
         val item: MenuItem = mockk(relaxed = true) { every { itemId } returns R.id.menu_clear_chat }
         assertThat(fragment.onOptionsItemSelected(item)).isTrue()
@@ -595,7 +593,9 @@ class ChannelChatFragmentTest {
      */
     @Test
     fun aSentMessageAppearsInTheListImmediately() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("hi there")
+        every { session.sendChannelTextMessage(any(), any(), any()) } answers {
+            Message("hi there").also { log.value += IChatMessage.TextMessage(it) }
+        }
         launch()
         editor.setText("hi there")
         sendButton.performClick()
@@ -603,18 +603,18 @@ class ChannelChatFragmentTest {
         assertThat(itemCount()).isEqualTo(1)
     }
 
-    /** Rebinding (every reconnect) replaces the log rather than appending to it. */
+    /** Rebinding (every reconnect) shows the log as it is rather than appending it again. */
     @Test
-    fun rebindingReplacesTheLogRatherThanAppendingIt() {
-        log += info("a")
-        log += info("b")
+    fun rebindingShowsTheLogWithoutDuplicatingIt() {
+        log.value += info("a")
+        log.value += info("b")
         launch()
-        observer.onLogInfo("live")
+        log.value += info("live")
         drainMainUntil { itemCount() == 3 }
         fragment.setServiceBound(false)
         fragment.setServiceBound(true)
-        drainMainUntil { itemCount() == 2 }
-        assertThat(itemCount()).isEqualTo(2)
+        idleMainLooper()
+        assertThat(itemCount()).isEqualTo(3)
     }
 
     @Test
@@ -681,7 +681,7 @@ class ChannelChatFragmentTest {
         coEvery { loader.loadThumbnail(any(), any(), any()) } returns ImageResult.Ready(bitmap)
         ChatImageLoaders.setForTests(loader)
         try {
-            log += info("<img src=\"data:image/png;base64,AAAA\"/>")
+            log.value += info("<img src=\"data:image/png;base64,AAAA\"/>")
             launch()
             drainMainUntil { itemCount() == 1 }
             val adapter = list.adapter as ChatAdapter
@@ -752,7 +752,7 @@ class ChannelChatFragmentTest {
     fun tappingAPictureInTheLogOpensTheViewerOnIt() {
         installThumbnailLoader()
         try {
-            log += imageMessage("data:image/png;base64,TAPPED")
+            log.value += imageMessage("data:image/png;base64,TAPPED")
             launch()
             drainMainUntil { itemCount() == 1 }
             layOutHost()
@@ -780,8 +780,8 @@ class ChannelChatFragmentTest {
     @Test
     fun yourOwnMessagesAreAlignedToYourSideAndOtherPeoplesAreNot() {
         every { session.sessionId } returns 7
-        log += IChatMessage.TextMessage(Message(7, "Me", emptyList(), emptyList(), emptyList(), "mine"))
-        log += IChatMessage.TextMessage(Message(9, "Ann", emptyList(), emptyList(), emptyList(), "theirs"))
+        log.value += IChatMessage.TextMessage(Message(7, "Me", emptyList(), emptyList(), emptyList(), "mine"))
+        log.value += IChatMessage.TextMessage(Message(9, "Ann", emptyList(), emptyList(), emptyList(), "theirs"))
         launch()
         drainMainUntil { itemCount() == 2 }
         layOutHost()
@@ -801,7 +801,7 @@ class ChannelChatFragmentTest {
     fun theThumbnailIsAskedForAtTheDimensionResourcesBound() {
         val (_, asked) = installThumbnailLoader()
         try {
-            log += imageMessage()
+            log.value += imageMessage()
             launch()
             drainMainUntil { itemCount() == 1 }
             layOutHost()
@@ -820,7 +820,7 @@ class ChannelChatFragmentTest {
     fun aSecondPictureInOneMessageIsWrittenOutAsThePlaceholder() {
         installThumbnailLoader()
         try {
-            log += info("<img src=\"data:image/png;base64,AAAA\"/>tail<img src=\"data:image/png;base64,BBBB\"/>")
+            log.value += info("<img src=\"data:image/png;base64,AAAA\"/>tail<img src=\"data:image/png;base64,BBBB\"/>")
             launch()
             drainMainUntil { itemCount() == 1 }
             layOutHost()
@@ -959,7 +959,7 @@ class ChannelChatFragmentTest {
 
     @Test
     fun theListIsScrolledToTheNewestMessage() {
-        repeat(40) { log += info("m$it") }
+        repeat(40) { log.value += info("m$it") }
         launch()
         drainMainUntil { itemCount() == 40 }
         layOutHost()

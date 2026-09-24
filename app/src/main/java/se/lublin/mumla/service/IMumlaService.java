@@ -2,6 +2,8 @@ package se.lublin.mumla.service;
 
 import java.util.List;
 
+import kotlinx.coroutines.flow.StateFlow;
+
 import se.lublin.humla.IHumlaService;
 
 /** Mumla's additions to {@link IHumlaService}. */
@@ -18,7 +20,8 @@ public interface IMumlaService extends IHumlaService {
 
     void onTalkKeyUp();
 
-    List<IChatMessage> getMessageLog();
+    /** The chat history, newest last; a new list per change. */
+    StateFlow<List<IChatMessage>> getMessageLog();
 
     void clearMessageLog();
 

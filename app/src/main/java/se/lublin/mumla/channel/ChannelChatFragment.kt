@@ -43,16 +43,19 @@ import androidx.activity.result.contract.ActivityResultContracts.GetContent
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.HumlaObserver
@@ -65,6 +68,7 @@ import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImageEncoder
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.service.IChatMessage
+import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.util.HtmlUtils
 import se.lublin.mumla.util.HumlaServiceFragment
 
@@ -81,8 +85,9 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     private lateinit var chatTextEdit: EditText
     private lateinit var sendButton: ImageButton
     private lateinit var imageProgress: View
-    private var chatAdapter: ChatAdapter? = null
-    private val messages = mutableListOf<IChatMessage>()
+
+    /** The bound service, or null between an unbind and the next bind (the list then stays as it is). */
+    private val boundService = MutableStateFlow<IMumlaService?>(null)
 
     private val imagePicker = registerForActivityResult(GetContent(), ::onImagePickResult)
 
@@ -107,22 +112,6 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     }
 
     private val chatObserver: IHumlaObserver = object : HumlaObserver() {
-        override fun onMessageLogged(message: IMessage) {
-            addChatMessage(IChatMessage.TextMessage(message), true)
-        }
-
-        override fun onLogInfo(message: String) {
-            addChatMessage(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, message), true)
-        }
-
-        override fun onLogWarning(message: String) {
-            addChatMessage(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.WARNING, message), true)
-        }
-
-        override fun onLogError(message: String) {
-            addChatMessage(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.ERROR, message), true)
-        }
-
         override fun onUserJoinedChannel(user: IUser?, newChannel: IChannel?, oldChannel: IChannel?) {
             val service = getService() ?: return
             if (!service.isConnected) return
@@ -169,14 +158,15 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         sendButton = view.findViewById(R.id.chatTextSend)
 
         chatList.layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = true }
-        chatAdapter = ChatAdapter(
+        val adapter = ChatAdapter(
             parser = ChatContentParser(getString(R.string.chat_image_placeholder)),
             loader = ChatImageLoaders.get(requireContext()),
             thumbnailPx = resources.getDimensionPixelSize(R.dimen.chat_thumbnail_max),
             selfSessionId = ::sessionId,
             onImageClicked = ::openImageViewer,
             scope = viewLifecycleOwner.lifecycleScope,
-        ).also { chatList.adapter = it }
+        )
+        chatList.adapter = adapter
 
         view.findViewById<ImageButton>(R.id.chatImageSend).setOnClickListener { pickImage() }
         sendButton.setOnClickListener { sendMessageFromEditor() }
@@ -200,12 +190,17 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         sendButton.isEnabled = chatTextEdit.text.isNotEmpty()
 
         updateChatTargetText(targetProvider.chatTarget)
-        submit(scrollToBottom = true)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                boundService.collectLatest { service ->
+                    service?.messageLog?.collect { submit(adapter, it) }
+                }
+            }
+        }
     }
 
     override fun onDestroyView() {
         chatList.adapter = null
-        chatAdapter = null
         super.onDestroyView()
     }
 
@@ -223,25 +218,19 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         return super.onOptionsItemSelected(item)
     }
 
-    /** Appends [message] to the list, optionally scrolling to the bottom afterwards. */
-    fun addChatMessage(message: IChatMessage, scroll: Boolean) {
-        messages += message
-        submit(scrollToBottom = scroll)
-    }
-
+    /** Empties the service's chat log, and with it the list. */
     fun clear() {
-        messages.clear()
-        submit(scrollToBottom = false)
         getService()?.clearMessageLog()
     }
 
     override fun onServiceBound(service: IHumlaService) {
-        val mumlaService = getService() ?: return
-        messages.clear()
-        messages += mumlaService.messageLog
-        submit(scrollToBottom = true)
+        boundService.value = getService() ?: return
         // onCreateView may have run before the service was bound, so set the hint here too.
         updateChatTargetText(targetProvider.chatTarget)
+    }
+
+    override fun onServiceUnbound() {
+        boundService.value = null
     }
 
     override fun getServiceObserver(): IHumlaObserver = chatObserver
@@ -285,16 +274,10 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         ImageViewerDialogFragment.newInstance(source).showNow(fm, ImageViewerDialogFragment.TAG)
     }
 
-    private fun submit(scrollToBottom: Boolean) {
-        // Also the view-lifecycle guard: null from onDestroyView on, while the service observer
-        // stays registered until onDestroy; viewLifecycleOwner would throw in that window.
-        val adapter = chatAdapter ?: return
-        viewLifecycleOwner.lifecycleScope.launch {
-            adapter.submitMessages(messages)
-            if (scrollToBottom) {
-                chatList.post { if (adapter.itemCount > 0) chatList.scrollToPosition(adapter.itemCount - 1) }
-            }
-        }
+    /** Shows [messages] and scrolls to the newest one. */
+    private suspend fun submit(adapter: ChatAdapter, messages: List<IChatMessage>) {
+        adapter.submitMessages(messages)
+        chatList.post { if (adapter.itemCount > 0) chatList.scrollToPosition(adapter.itemCount - 1) }
     }
 
     /**
@@ -408,12 +391,12 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         val target = targetProvider.chatTarget
         val targetUser = target?.user
         val targetChannel = target?.channel
-        val response: IMessage = when {
+        // The service adds the sent message to its log, which the list shows.
+        when {
             targetUser != null -> session.sendUserTextMessage(targetUser.session, formatted)
             targetChannel != null -> session.sendChannelTextMessage(targetChannel.id, formatted, false)
             else -> session.sendChannelTextMessage(session.sessionChannel.id, formatted, false)
         }
-        addChatMessage(IChatMessage.TextMessage(response), true)
     }
 
     private companion object {
