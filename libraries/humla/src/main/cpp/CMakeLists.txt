@@ -39,14 +39,14 @@ set(HUMLA_JNI_C_OPTIONS -fvisibility=hidden)
 # neither is visible to anything else here: the first goes wrong only once two libraries start
 # sharing a C++ runtime by accident, the second only on a 16 KB device.
 #
-# check_library.cmake is a DEPENDS and not just a -P argument: without that, sharpening the script
-# leaves every already-linked library unchecked until something else forces a relink.
+# POST_BUILD commands take no DEPENDS, so the script is a link dependency instead: changing it
+# relinks the library, which reruns the check.
 function(humla_check_library target)
+  set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/check_library.cmake)
   add_custom_command(TARGET ${target} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DREADELF=${CMAKE_READELF}
                                -DLIBRARY=$<TARGET_FILE:${target}>
                                -P ${CMAKE_CURRENT_SOURCE_DIR}/check_library.cmake
-      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/check_library.cmake
       VERBATIM)
 endfunction()
 # celt 0.7/0.11 predate C99-strict clang: keep implicit declarations as warnings, as ndk-build did.
