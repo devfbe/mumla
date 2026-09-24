@@ -37,9 +37,8 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * Spec B7 and B8. `AudioInput` owns the one bare thread the audio path is allowed and does nothing
- * else: it pumps 10 ms frames out of a [se.lublin.humla.audio.capture.PcmCaptureSource] and it
- * shuts that thread down without hanging the caller.
+ * `AudioInput` owns the capture thread: it pumps 10 ms frames out of a
+ * [se.lublin.humla.audio.capture.PcmCaptureSource] and shuts down without hanging the caller.
  */
 @RunWith(RobolectricTestRunner::class)
 class AudioInputTest {
@@ -47,7 +46,7 @@ class AudioInputTest {
         const val FRAME = 480
         const val SETTLE_MS = 2000L
 
-        /** Spec B5's default start threshold for the amplitude detector. */
+        /** Default start threshold of the amplitude detector. */
         const val START_THRESHOLD = 0.6f
     }
 
@@ -112,10 +111,7 @@ class AudioInputTest {
         assertThat(AudioInput({ _, _ -> }, FakeCaptureSource(rate = 16000)).sampleRate).isEqualTo(16000)
     }
 
-    /**
-     * By identity, never by name: `kotlinx.coroutines` renames threads while they run a coroutine,
-     * and a name assertion passes against the very thread it means to exclude (spec 4.05).
-     */
+    /** By identity, not name: coroutines rename the threads they run on. */
     @Test
     fun `the listener runs on the capture thread and not on the caller's`() {
         val caller = Thread.currentThread()
@@ -130,7 +126,6 @@ class AudioInputTest {
         assertThat(source.readingThreads).containsExactly(listenerThreads.first())
     }
 
-    /** Spec section 2 gives the capture thread urgent audio priority; nothing else reads it back. */
     @Test
     fun `the capture thread runs at urgent audio priority`() {
         val latch = CountDownLatch(1)
@@ -141,10 +136,7 @@ class AudioInputTest {
         assertThat(priorities.first()).isEqualTo(Process.THREAD_PRIORITY_URGENT_AUDIO)
     }
 
-    /**
-     * The same array every frame, like `CaptureFrame.samples` one stage further on. Task 11 reads
-     * it and may not keep it.
-     */
+    /** Listeners may read the buffer but must not keep it. */
     @Test
     fun `the listener is handed the same buffer instance every frame`() {
         val latch = CountDownLatch(3)
@@ -156,14 +148,8 @@ class AudioInputTest {
     }
 
     /**
-     * **The reused buffer, and the reason this file pads.** The capture buffer is allocated once
-     * outside the loop, so after a short read the tail still holds the previous frame -- audio the
-     * microphone already sent, going out a second time, and measured by the detector a second time.
-     *
-     * Measured here through the consumer rather than asserted as a shape: 100 quiet samples (300)
-     * behind a full frame of 20 000 score **0.9448** over the stale tail and **0.5044** once the
-     * tail is zeroed, against spec B5's default start threshold of 0.6. Same 10 ms of microphone,
-     * transmitting or not depending on one `fill`.
+     * The capture buffer is reused, so after a short read the tail would still hold the previous
+     * frame; that stale audio would be resent and could push the detector over its threshold.
      */
     @Test
     fun `a short read is padded instead of resending the previous frame's tail`() {
@@ -175,9 +161,7 @@ class AudioInputTest {
 
         val short = received[1]
         assertThat(short.size).isEqualTo(FRAME)
-        // The padding is the point: the count handed over is the whole frame, not the read count,
-        // because the encoder one stage further on needs a complete one (`CaptureFrame.length`
-        // makes the same choice and says so).
+        // The whole frame is reported, since the encoder needs a complete one.
         assertThat(reportedLengths).containsExactly(FRAME, FRAME)
         assertThat(short.take(100)).containsExactlyElementsIn(List(100) { 300.toShort() })
         assertThat(short.drop(100).toSet()).containsExactly(0.toShort())
@@ -190,11 +174,7 @@ class AudioInputTest {
         assertThat(stale).isGreaterThan(START_THRESHOLD)
     }
 
-    /**
-     * A blocking read answers 0 when it has nothing, which for `AudioRecord` means the recorder is
-     * no longer running. Delivering it would hand the encoder and the detector 10 ms of silence
-     * that the microphone never produced, once per turn of the loop.
-     */
+    /** A read of 0 means the recorder is no longer running; delivering it would invent silence. */
     @Test
     fun `a read of zero samples delivers nothing`() {
         val latch = CountDownLatch(1)
@@ -208,7 +188,7 @@ class AudioInputTest {
         assertThat(source.reads.get()).isAtLeast(3)
     }
 
-    // ------------------------------------------------------------------ spec B8, stopping
+    // ------------------------------------------------------------------ stopping
 
     @Test
     fun `isRecording follows the intent to record`() {
@@ -223,10 +203,7 @@ class AudioInputTest {
         assertThat(audioInput.isRecording()).isFalse()
     }
 
-    /**
-     * The source is stopped **before** the join, which is what makes the blocked read return. Join
-     * first and this test times out instead of passing.
-     */
+    /** The source is stopped before the join, which is what makes the blocked read return. */
     @Test
     fun `stopRecording stops the source and the capture thread really exits`() {
         val source = FakeCaptureSource()
@@ -243,11 +220,8 @@ class AudioInputTest {
     }
 
     /**
-     * **The capture thread has to reach the source's own `stop()`, not merely die.** This is the
-     * property `ToggleInputMode.waitForInput` catches its `InterruptedException` for: a listener
-     * blocked waiting for push-to-talk must be woken so the loop can unwind, or the thread stays
-     * parked, `AudioRecord.stop()` is never called, the microphone keeps running and the recording
-     * icon stays lit. The listener here blocks exactly the way that one does.
+     * A listener blocked waiting for push-to-talk must be woken so the loop reaches the source's
+     * `stop()`; otherwise the microphone keeps running.
      */
     @Test
     fun `a listener blocked waiting for input is woken so the loop reaches the source's stop`() {
@@ -273,11 +247,7 @@ class AudioInputTest {
         assertThat(source.events.last()).isEqualTo("stop")
     }
 
-    /**
-     * Spec B8: a join timeout logs and gives up rather than hanging the caller. The answer is the
-     * one `AudioHandler` needs -- `false` means a capture thread is still alive on a source that is
-     * about to be released.
-     */
+    /** `false` means a capture thread is still alive on a source that is about to be released. */
     @Test
     fun `stopRecording gives up after the join timeout instead of hanging`() {
         val source = FakeCaptureSource(hangAfterStopMs = 1500)
@@ -288,13 +258,10 @@ class AudioInputTest {
 
         assertThat(exited).isFalse()
         assertThat(audioInput.isRecording()).isFalse()
-        // It came back while the capture thread was still inside the read, which is the whole
-        // claim. A wall-clock bound would say it too and is the flake spec 4.05 warns about: at
-        // five times the join timeout it still fired once, under the load of a mutation sweep.
+        // Returned while the capture thread was still inside the read; a wall-clock bound would be flaky.
         assertThat(source.events.count { it == "stop" }).isEqualTo(1)
     }
 
-    /** Nothing to join is not a failure to join. */
     @Test
     fun `stopping something that never started reports that nothing is running`() {
         val audioInput = AudioInput({ _, _ -> }, FakeCaptureSource())
@@ -304,12 +271,7 @@ class AudioInputTest {
         assertThat(audioInput.stopRecording()).isTrue()
     }
 
-    /**
-     * Once the thread is joined the field is cleared, so a second stop is the same no-op as
-     * stopping something that never ran. Keeping the dead thread would make every later
-     * `stopRecording` stop the source again -- harmless on a fake, a second `AudioRecord.stop()`
-     * on a device.
-     */
+    /** A second stop must not call `AudioRecord.stop()` again. */
     @Test
     fun `stopping twice does not touch the source a second time`() {
         val source = FakeCaptureSource()
@@ -323,11 +285,6 @@ class AudioInputTest {
         assertThat(source.events).containsExactlyElementsIn(afterFirst).inOrder()
     }
 
-    /**
-     * The Java original called `e.printStackTrace()` and swallowed the interrupt, which loses the
-     * flag for every caller above it -- a shutdown path that is itself being cancelled then looks
-     * to its own caller as if it had not been.
-     */
     @Test
     fun `an interrupted caller keeps its interrupt flag`() {
         val source = FakeCaptureSource(hangAfterStopMs = 1500)
@@ -341,7 +298,7 @@ class AudioInputTest {
         assertThat(exited).isFalse()
     }
 
-    // ------------------------------------------------------------------ spec B7, silencing
+    // ------------------------------------------------------------------ silencing
 
     @Test
     fun `platform silencing is reported as capture states`() {
@@ -355,7 +312,6 @@ class AudioInputTest {
         assertThat(states).containsExactly(CaptureState.Silenced, CaptureState.Active).inOrder()
     }
 
-    /** A listener left on a stopped source outlives the thread that gave it a meaning. */
     @Test
     fun `the silence listener is unregistered when recording stops`() {
         val source = FakeCaptureSource()
@@ -382,15 +338,9 @@ class AudioInputTest {
     }
 
     /**
-     * A read that was already in flight when we stopped answers a negative code, because the
-     * recorder was taken away underneath it. That is not news: `AudioHandler` forwards every
-     * [CaptureState.Error] to the chat log (stream A8), so reporting it means a warning on every
+     * A read in flight while stopping fails because the recorder was taken away. `AudioHandler`
+     * forwards every [CaptureState.Error] to the chat log, so reporting it would warn on every
      * normal disconnect.
-     *
-     * The fixture is the whole test. Until [FakeCaptureSource] could answer a **negative** code
-     * after [FakeCaptureSource.stop] -- it answered 0, like a recorder that was stopped politely --
-     * this corner did not exist in any fixture, and the guard survived its mutation with all 296
-     * tests green (spec 4.04: a sweep inherits the blind spots of the fixture set).
      */
     @Test
     fun `a read that fails while we are stopping is not reported`() {
@@ -428,11 +378,7 @@ class AudioInputTest {
         assertThat(source.events.indexOf("stop")).isLessThan(source.events.indexOf("release"))
     }
 
-    /**
-     * The rate is read once, at construction. The Java original's getter dereferenced the
-     * `AudioRecord` field that `shutdown()` had just set to null; reading it off a released
-     * recorder is the same bug with a native crash instead of a `NullPointerException`.
-     */
+    /** The rate is read once at construction; the source must not be touched after release. */
     @Test
     fun `the rate and the frame size still answer after shutdown`() {
         val source = FakeCaptureSource(rate = 16000)
@@ -450,10 +396,8 @@ class AudioInputTest {
     // ------------------------------------------------------------------ starting twice
 
     /**
-     * Two capture threads on one source read the same recorder in alternation and hand the encoder
-     * interleaved halves of the conversation. `AudioHandler` guards its own call with
-     * `isRecording()`, but that flag is about intent and answers `false` the moment a join has
-     * timed out -- which is exactly when a second thread is the most dangerous.
+     * Two capture threads on one source would interleave the recorder's frames. `isRecording()`
+     * alone is not enough: it is already false once a join has timed out.
      */
     @Test
     fun `starting again while the capture thread is alive is refused`() {
@@ -466,7 +410,6 @@ class AudioInputTest {
         assertThat(source.events.count { it == "start" }).isEqualTo(1)
     }
 
-    /** Once the thread that outlived the timeout is gone, the object is usable again. */
     @Test
     fun `starting again is allowed once the timed-out thread has finished`() {
         val source = FakeCaptureSource(hangAfterStopMs = 300)
@@ -480,11 +423,7 @@ class AudioInputTest {
         waitUntil("the second capture thread started") { source.events.count { it == "start" } == 2 }
     }
 
-    /**
-     * The dangerous half of the same rule. `stopRecording` has just answered `false`, `isRecording`
-     * is already false, and the thread it gave up on is still inside a read -- so a caller that
-     * trusts either of those two answers gets the second capture thread this refuses.
-     */
+    /** `stopRecording` answered false and `isRecording` is false, yet the old thread is alive. */
     @Test
     fun `starting again while a timed-out capture thread is still alive is refused`() {
         val source = FakeCaptureSource(hangAfterStopMs = 1500)
@@ -498,10 +437,7 @@ class AudioInputTest {
         assertThat(source.events.count { it == "start" }).isEqualTo(1)
     }
 
-    /**
-     * What `AudioHandler` reads to decide whether freeing the native capture chain is safe: the
-     * recorder is released either way (spec B8), the rest of the pipeline is not.
-     */
+    /** `AudioHandler` uses this to decide whether freeing the native capture chain is safe. */
     @Test
     fun `shutdown reports that the capture thread did not exit`() {
         val source = FakeCaptureSource(hangAfterStopMs = 1500)
