@@ -20,13 +20,11 @@
     <ID>EmptyFunctionBlock:CELT7EncoderTest.kt$CELT7EncoderTest.FakeCelt7${}</ID>
     <ID>EmptyFunctionBlock:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:HumlaUDPTest.kt$HumlaUDPTest.RecordingListener${}</ID>
-    <ID>EmptyFunctionBlock:RecordingEncoder.kt$RecordingEncoder${}</ID>
     <ID>EmptyWhileBlock:HumlaCallbacksTest.kt$HumlaCallbacksTest.&lt;no name provided&gt;${ }</ID>
-    <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @param buffer The buffer to mix output data into. * @param bufferOffset The offset of the * @param bufferSize The size of the buffer. * @return true if the buffer contains audio data.</ID>
-    <ID>ForbiddenComment:Channel.kt$Channel$* Recursively fetches the subchannel user count, holding one channel's lock at a time: the * subchannels are copied under the lock and the recursion happens outside it, so no thread ever * holds two channel locks at once. * * Two decisions, and only one of them is pinned. **The lock is load-bearing**: without it the * copy can include a slot `fastRemove` has already nulled (`es[size = newSize] = null`) and the * recursion throws a NullPointerException on the main thread - `ChannelTest`'s * `countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts` goes red in every * run when it is taken away - 341 to 756 of its 20 000 observations throw, over 11 runs. * **Releasing it before recursing** is the part no test can tell from a plain `@Synchronized`, * and that is measured rather than asserted: written as a plain `@Synchronized` method over * `mUsers.size` and a loop across `mSubchannels`, `ChannelTest` stays 12 of 12 green in three * runs out of three. Nothing else in this class nests two locks today, so there is nothing to * observe; it is written this way so that a later member which does take a second lock cannot * turn this into a lock-order inversion. * * FIXME: is it necessary to cache this? * @return The sum of users in this channel and its subchannels.</ID>
+    <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @param buffer The buffer to mix output data into. * @param bufferOffset The offset into the buffer. * @param bufferSize The size of the buffer. * @return true if the buffer contains audio data.</ID>
+    <ID>ForbiddenComment:Channel.kt$Channel$* Recursively fetches the subchannel user count, holding one channel's lock at a time: the * subchannels are copied under the lock and the recursion happens outside it, so no thread ever * holds two channel locks at once (no lock-order inversion possible). * * FIXME: is it necessary to cache this? * @return The sum of users in this channel and its subchannels.</ID>
     <ID>ForbiddenComment:HumlaConnection.kt$HumlaConnection.Companion$// FIXME: assumes worst-case using TCP</ID>
     <ID>ForbiddenComment:HumlaService.kt$HumlaService$// FIXME: reasonable default</ID>
-    <ID>ForbiddenComment:HumlaService.kt$HumlaService$// FIXME: resolve issues with CELT 11 robot voices.</ID>
     <ID>LargeClass:HumlaService.kt$HumlaService : ServiceIHumlaServiceIHumlaSessionHumlaConnectionListenerHumlaLogger</ID>
     <ID>LongMethod:AudioOutputSpeech.kt$AudioOutputSpeech$@Throws(Exception::class) override fun call(): Result</ID>
     <ID>LongMethod:HumlaService.kt$HumlaService$fun configureExtras(extras: Bundle): Boolean</ID>
@@ -38,7 +36,6 @@
     <ID>LongParameterList:ManagedAudio.kt$AudioHandlerFactory$( context: Context, logger: HumlaLogger, config: AudioConfig, params: AudioSessionParams, encodeListener: AudioHandler.AudioEncodeListener, outputListener: AudioOutput.AudioOutputListener, )</ID>
     <ID>LongParameterList:ManagedAudio.kt$DefaultAudioHandlerFactory$( context: Context, logger: HumlaLogger, config: AudioConfig, params: AudioSessionParams, encodeListener: AudioHandler.AudioEncodeListener, outputListener: AudioOutput.AudioOutputListener, )</ID>
     <ID>LongParameterList:OpusDecoderNative.kt$OpusDecoderApi$(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int)</ID>
-    <ID>LongParameterList:OpusDecoderNative.kt$OpusDecoderApi$(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int)</ID>
     <ID>LongParameterList:OpusEncoder.kt$OpusEncoder$( sampleRate: Int, channels: Int, private val frameSize: Int, private val framesPerPacket: Int, bitrate: Int, maxBufferSize: Int, private val api: OpusEncoderApi = OpusEncoderNative, )</ID>
     <ID>LongParameterList:SpeexJitterBuffer.kt$SpeexJitterBuffer$(data: ByteArray, length: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
     <ID>LongParameterList:SpeexJitterNative.kt$SpeexJitterApi$(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
@@ -81,8 +78,6 @@
     <ID>MagicNumber:HumlaUDP.kt$HumlaUDP$5</ID>
     <ID>MagicNumber:HumlaUDP.kt$HumlaUDP$5000000</ID>
     <ID>MagicNumber:OpusEncoder.kt$OpusEncoder$13</ID>
-    <ID>MagicNumber:PreprocessingEncoder.kt$PreprocessingEncoder$30000</ID>
-    <ID>MagicNumber:PreprocessingEncoder.kt$PreprocessingEncoder$99</ID>
     <ID>MagicNumber:ReconnectPolicy.kt$ReconnectPolicy$30</ID>
     <ID>MagicNumber:ServerTrust.kt$CertificatePins$0xFF</ID>
     <ID>MagicNumber:SpeexJitterBuffer.kt$SpeexJitterBuffer$4</ID>
@@ -104,10 +99,8 @@
     <ID>MaxLineLength:AudioOutputTest.kt$AudioOutputTest.TrackingJitter$override fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
     <ID>MaxLineLength:CELT11Decoder.kt$CELT11Decoder$if (error[0] &lt; 0) throw NativeAudioException("CELT 0.11.0 decoder initialization failed with error: ${error[0]}")</ID>
     <ID>MaxLineLength:CELT11DecoderTest.kt$CELT11DecoderTest.FakeCelt11$override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int): Int</ID>
-    <ID>MaxLineLength:CELT11DecoderTest.kt$CELT11DecoderTest.FakeCelt11$override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int): Int</ID>
     <ID>MaxLineLength:CELT11Encoder.kt$CELT11Encoder$if (error[0] &lt; 0) throw NativeAudioException("CELT 0.11.0 encoder initialization failed with error: ${error[0]}")</ID>
     <ID>MaxLineLength:CELT11EncoderTest.kt$CELT11EncoderTest.FakeCelt11$override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int): Int</ID>
-    <ID>MaxLineLength:CELT11EncoderTest.kt$CELT11EncoderTest.FakeCelt11$override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int): Int</ID>
     <ID>MaxLineLength:CapturePipelineTest.kt$CapturePipelineTest$assertWithMessage("0.55409 would be the padding dragging the level down, 0.91097 the previous frame's tail holding it up")</ID>
     <ID>MaxLineLength:CapturePipelineTest.kt$CapturePipelineTest$val pipeline = CapturePipeline(FakeResampler(1), FakePreprocessor(), ContinuousInputMode(), log = { logs += it })</ID>
     <ID>MaxLineLength:CapturePreprocessorFactoryTest.kt$CapturePreprocessorFactoryTest${ throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_speexdsp.so not found")) }</ID>
@@ -117,7 +110,6 @@
     <ID>MaxLineLength:FakeTransports.kt$RecordingConnectionListener$override fun onConnectionCertificateChanged(chain: Array&lt;X509Certificate&gt;)</ID>
     <ID>MaxLineLength:FakeTransports.kt$RecordingConnectionListener$override fun onConnectionHandshakeFailed(chain: Array&lt;X509Certificate&gt;)</ID>
     <ID>MaxLineLength:FakeTransports.kt$RecordingConnectionListener$val allOnMainLooper: Boolean get() = callbackLoopers.isNotEmpty() &amp;&amp; callbackLoopers.all { it == Looper.getMainLooper() }</ID>
-    <ID>MaxLineLength:HumlaCallbacks.kt$HumlaCallbacks$*</ID>
     <ID>MaxLineLength:HumlaConnection.kt$HumlaConnection$throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)</ID>
     <ID>MaxLineLength:HumlaConnection.kt$HumlaConnection.&lt;no name provided&gt;$// Protocol says we're supposed to send a dummy UDPTunnel packet here to let the server know we don't like UDP.</ID>
     <ID>MaxLineLength:HumlaConnection.kt$HumlaConnection.Companion$private</ID>
@@ -131,7 +123,6 @@
     <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())</ID>
     <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$val reject = Mumble.Reject.newBuilder().setType(Mumble.Reject.RejectType.WrongServerPW).setReason("wrong password").build()</ID>
     <ID>MaxLineLength:HumlaConnectionSrvTest.kt$HumlaConnectionSrvTest$awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() &amp;&amp; transports.tcps[0].connectThread != null }</ID>
-    <ID>MaxLineLength:HumlaConnectionUdpRecoveryTest.kt$HumlaConnectionUdpRecoveryTest$*</ID>
     <ID>MaxLineLength:HumlaConnectionUdpRecoveryTest.kt$HumlaConnectionUdpRecoveryTest$awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() &amp;&amp; transports.tcps[0].connectThread != null }</ID>
     <ID>MaxLineLength:HumlaConnectionUdpRecoveryTest.kt$HumlaConnectionUdpRecoveryTest$awaitUntil(description = "udp restarted") { transports.udps.size == 2 &amp;&amp; transports.udps[1].connectCalls.get() == 1 }</ID>
     <ID>MaxLineLength:HumlaConnectionUdpRecoveryTest.kt$HumlaConnectionUdpRecoveryTest$awaitUntil(description = "udp started") { transports.udps.isNotEmpty() &amp;&amp; transports.udps[0].connectCalls.get() == 1 }</ID>
@@ -145,15 +136,11 @@
     <ID>MaxLineLength:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$((v and 0x0F) shl 24) or ((at(1) ?: return null) shl 16) or ((at(2) ?: return null) shl 8) or (at(3) ?: return null)</ID>
     <ID>MaxLineLength:OpusDecoderNative.kt$OpusDecoderApi$/** libopus decoder and packet inspection. State handles are opaque; 0 means creation failed. `data == null` requests PLC. */</ID>
     <ID>MaxLineLength:OpusDecoderNative.kt$OpusDecoderNative$external override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int</ID>
-    <ID>MaxLineLength:OpusDecoderNative.kt$OpusDecoderNative$external override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int): Int</ID>
     <ID>MaxLineLength:OpusDecoderTest.kt$OpusDecoderTest.FakeOpusDecoder$override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int</ID>
-    <ID>MaxLineLength:OpusDecoderTest.kt$OpusDecoderTest.FakeOpusDecoder$override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int): Int</ID>
-    <ID>MaxLineLength:ResamplingEncoderTest.kt$ResamplingEncoderTest.FakeResampler$override</ID>
     <ID>MaxLineLength:SessionState.kt$SessionState.ConnectionLost$data</ID>
     <ID>MaxLineLength:SessionStateMachineTest.kt$SessionStateMachineTest$assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))</ID>
     <ID>MaxLineLength:SessionStateMachineTest.kt$SessionStateMachineTest$assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(4_000L, 2, error))</ID>
     <ID>MaxLineLength:SpeexJitterNative.kt$SpeexJitterNative$external override fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
-    <ID>MaxLineLength:SpeexPreprocessor.kt$SpeexPreprocessor$*</ID>
     <ID>MaxLineLength:SpeexResamplerNative.kt$SpeexResamplerApi$fun</ID>
     <ID>MaxLineLength:SpeexResamplerNative.kt$SpeexResamplerNative$external override fun processInt(state: Long, channelIndex: Int, input: ShortArray, inLen: IntArray, out: ShortArray, outLen: IntArray): Int</ID>
     <ID>MaxLineLength:TcpFrameReaderTest.kt$TcpFrameReaderTest$private fun stream(vararg frames: ByteArray)</ID>
@@ -164,7 +151,6 @@
     <ID>MaxLineLength:UdpHealthMonitorTest.kt$UdpHealthMonitorTest$assertThat(monitor.onTcpPing(seconds(17), 34, 0, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)</ID>
     <ID>MaxLineLength:VadConfig.kt$VadConfig$require(stopThreshold in 0f..startThreshold) { "stopThreshold must be within [0, startThreshold]: $stopThreshold" }</ID>
     <ID>MaxLineLength:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$assertThat(detector(VadConfig.probability(start = 0.85f, stop = 0.5f)).isVoice(constant(3277), 480, null)).isFalse()</ID>
-    <ID>MaxLineLength:WebRtcApmPreprocessorTest.kt$WebRtcApmPreprocessorTest$*</ID>
     <ID>NestedBlockDepth:AudioOutputSpeech.kt$AudioOutputSpeech$@Throws(Exception::class) override fun call(): Result</ID>
     <ID>NestedBlockDepth:FakeCaptureSource.kt$FakeCaptureSource$override fun read(buffer: ShortArray, length: Int): Int</ID>
     <ID>NestedBlockDepth:HumlaTCP.kt$HumlaTCP$private fun readLoop()</ID>
@@ -181,7 +167,6 @@
     <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$fun decodeAsServer(packet: ByteArray): Long?</ID>
     <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
     <ID>ReturnCount:PcmCaptureSource.kt$AndroidAudioRecordSource.Factory$@SuppressLint("MissingPermission") private fun tryOpen(source: Int, rate: Int): AudioRecord?</ID>
-    <ID>ReturnCount:ScoSampleRatePolicy.kt$ScoSampleRatePolicy$fun choose(supportedRates: IntArray): Int</ID>
     <ID>ReturnCount:ServerTrust.kt$HostnameMatcher$@JvmStatic fun matches(host: String, certificate: X509Certificate): Boolean</ID>
     <ID>ReturnCount:ServerTrust.kt$HostnameMatcher$private fun matchesDnsName(host: String, pattern: String?): Boolean</ID>
     <ID>ReturnCount:SpeexPreprocessor.kt$SpeexPreprocessor$override fun onCaptureFrame(handle: Long, frame: ShortArray): Float?</ID>
@@ -215,8 +200,6 @@
     <ID>TooGenericExceptionThrown:HumlaService.kt$HumlaService$throw RuntimeException("$ACTION_CONNECT requires a server provided in extras.")</ID>
     <ID>TooGenericExceptionThrown:HumlaService.kt$HumlaService$throw RuntimeException("Model handler should always be instantiated while connected!")</ID>
     <ID>TooManyFunctions:AudioRouter.kt$AudioRouter</ID>
-    <ID>TooManyFunctions:Celt7Native.kt$Celt7Api</ID>
-    <ID>TooManyFunctions:Celt7Native.kt$Celt7Native : Celt7Api</ID>
     <ID>TooManyFunctions:Channel.kt$Channel : IChannelComparable</ID>
     <ID>TooManyFunctions:CommunicationDevices.kt$AndroidCommunicationDevices : CommunicationDevices</ID>
     <ID>TooManyFunctions:HumlaCallbacks.kt$HumlaCallbacks : IHumlaObserver</ID>
