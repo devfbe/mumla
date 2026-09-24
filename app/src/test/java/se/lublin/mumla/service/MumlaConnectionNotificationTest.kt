@@ -111,18 +111,40 @@ class MumlaConnectionNotificationTest {
         assertThat(n.flags and Notification.FLAG_ONGOING_EVENT).isNotEqualTo(0)
         assertThat(n.extras.getBoolean(Notification.EXTRA_SHOW_WHEN, true)).isFalse()
         @Suppress("DEPRECATION")
-        assertThat(n.priority).isEqualTo(NotificationCompat.PRIORITY_DEFAULT)
+        assertThat(n.priority).isEqualTo(NotificationCompat.PRIORITY_LOW)
         assertThat(n.channelId).isEqualTo(CHANNEL_ID)
     }
 
     @Test
-    fun theChannelIsCreatedWithTheConnectedLabelAtDefaultImportance() {
+    fun aTextChangeDoesNotAlertAgain() {
+        val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
+        notification.show()
+        notification.customContentText = "Connected"
+        notification.show()
+
+        assertThat(posted().flags and Notification.FLAG_ONLY_ALERT_ONCE).isNotEqualTo(0)
+        assertThat(posted().extras.getString(Notification.EXTRA_TEXT)).isEqualTo("Connected")
+    }
+
+    @Test
+    fun theChannelOfEarlierVersionsIsDeleted() {
+        notificationManager.createNotificationChannel(
+            android.app.NotificationChannel("connected_channel", "old", NotificationManager.IMPORTANCE_DEFAULT),
+        )
+
+        MumlaConnectionNotification.create(service, "Connecting", listener).show()
+
+        assertThat(notificationManager.getNotificationChannel("connected_channel")).isNull()
+    }
+
+    @Test
+    fun theChannelIsCreatedWithTheConnectedLabelAtLowImportance() {
         MumlaConnectionNotification.create(service, "Connecting", listener).show()
 
         val channel = notificationManager.getNotificationChannel(CHANNEL_ID)
         assertThat(channel).isNotNull()
         assertThat(channel.name.toString()).isEqualTo(service.getString(R.string.connected))
-        assertThat(channel.importance).isEqualTo(NotificationManager.IMPORTANCE_DEFAULT)
+        assertThat(channel.importance).isEqualTo(NotificationManager.IMPORTANCE_LOW)
     }
 
     @Test
@@ -403,6 +425,6 @@ class MumlaConnectionNotificationTest {
 
     private companion object {
         const val NOTIFICATION_ID = 1
-        const val CHANNEL_ID = "connected_channel"
+        const val CHANNEL_ID = "connection_status"
     }
 }

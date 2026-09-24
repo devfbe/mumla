@@ -75,6 +75,8 @@ class MumlaConnectionNotification private constructor(
      */
     var cancelReconnectShown: Boolean = false
 
+    private var channelCreated = false
+
     /** True from a successful [show] until [hide]. */
     var isForeground: Boolean = false
         private set
@@ -135,21 +137,17 @@ class MumlaConnectionNotification private constructor(
     }
 
     private fun buildNotification(): Notification {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            service.getString(R.string.connected),
-            NotificationManager.IMPORTANCE_DEFAULT,
-        )
-        service.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        ensureChannel()
 
         // The app name is always displayed in the notification, so no content title is set here.
         val builder = NotificationCompat.Builder(service, CHANNEL_ID)
             .setContentText(customContentText)
             .setSmallIcon(R.drawable.ic_stat_notify)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setShowWhen(false)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
 
         if (actionsShown) {
             builder.addAction(R.drawable.ic_action_microphone, service.getString(R.string.mute), broadcast(BROADCAST_MUTE))
@@ -175,6 +173,17 @@ class MumlaConnectionNotification private constructor(
         return builder.build()
     }
 
+    private fun ensureChannel() {
+        if (channelCreated) return
+        val manager = service.getSystemService(NotificationManager::class.java)
+        // Importance cannot be lowered on an existing channel, so it moved to a new id.
+        manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, service.getString(R.string.connected), NotificationManager.IMPORTANCE_LOW),
+        )
+        channelCreated = true
+    }
+
     /**
      * The buttons' intents differ in their action, which is what tells PendingIntents apart,
      * and carry no extras that could go stale -- so neither a per-button request code nor
@@ -196,7 +205,8 @@ class MumlaConnectionNotification private constructor(
     companion object {
         private val TAG = MumlaConnectionNotification::class.java.name
         private const val NOTIFICATION_ID = 1
-        private const val CHANNEL_ID = "connected_channel"
+        private const val CHANNEL_ID = "connection_status"
+        private const val LEGACY_CHANNEL_ID = "connected_channel"
         private const val BROADCAST_MUTE = "b_mute"
         private const val BROADCAST_DEAFEN = "b_deafen"
         private const val BROADCAST_OVERLAY = "b_overlay"
