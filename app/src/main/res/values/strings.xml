@@ -196,6 +196,11 @@
     <string name="certificate_import_success">Imported certificate %s.</string>
     <string name="error_writing_to_storage">Could not write to external storage.</string>
     <string name="export_success">Certificate exported to %s.</string>
+    <string name="export_password_title">Protect the exported certificate</string>
+    <string name="export_password_message">The file contains your private key. Choose a password; you will need it to import the certificate elsewhere.</string>
+    <string name="export_password_confirm">Confirm password</string>
+    <string name="export_password_empty">Enter a password.</string>
+    <string name="export_password_mismatch">The passwords do not match.</string>
     <string name="context_channel_link">Link</string>
     <string name="context_channel_unlink_all">Unlink All</string>
     <string name="context_channel_shout">Set Voice Target</string>
