@@ -32,7 +32,6 @@ interface IEncoder {
      * @return the number of bytes encoded.
      * @throws NativeAudioException if encoding failed.
      */
-    @Throws(NativeAudioException::class)
     fun encode(input: ShortArray, inputSize: Int): Int
 
     /**
@@ -45,7 +44,6 @@ interface IEncoder {
      * Ends the transmission: pending frames are encoded, which may make the encoder [isReady].
      * @throws NativeAudioException if encoding failed.
      */
-    @Throws(NativeAudioException::class)
     fun terminate()
 
     /** Frees native resources. */

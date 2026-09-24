@@ -60,8 +60,8 @@ class DefaultAudioHandlerFactoryTest {
 
         private fun rec(name: String, value: Any?): AudioHandler.Builder = apply { values[name] = value }
 
-        override fun setContext(context: Context?) = rec("setContext", context).also { super.setContext(context) }
-        override fun setLogger(logger: HumlaLogger?) = rec("setLogger", logger).also { super.setLogger(logger) }
+        override fun setContext(context: Context) = rec("setContext", context).also { super.setContext(context) }
+        override fun setLogger(logger: HumlaLogger) = rec("setLogger", logger).also { super.setLogger(logger) }
         override fun setAudioStream(v: Int) = rec("setAudioStream", v).also { super.setAudioStream(v) }
         override fun setAudioSource(v: Int) = rec("setAudioSource", v).also { super.setAudioSource(v) }
         override fun setTargetBitrate(v: Int) = rec("setTargetBitrate", v).also { super.setTargetBitrate(v) }
@@ -83,11 +83,11 @@ class DefaultAudioHandlerFactoryTest {
             rec("setAndroidNoiseSuppressor", v).also { super.setAndroidNoiseSuppressor(v) }
         override fun setAndroidAutomaticGainControl(v: Boolean) =
             rec("setAndroidAutomaticGainControl", v).also { super.setAndroidAutomaticGainControl(v) }
-        override fun setEncodeListener(v: AudioHandler.AudioEncodeListener?) =
+        override fun setEncodeListener(v: AudioHandler.AudioEncodeListener) =
             rec("setEncodeListener", v).also { super.setEncodeListener(v) }
-        override fun setTalkingListener(v: AudioOutput.AudioOutputListener?) =
+        override fun setTalkingListener(v: AudioOutput.AudioOutputListener) =
             rec("setTalkingListener", v).also { super.setTalkingListener(v) }
-        override fun setInputMode(v: IInputMode?) = rec("setInputMode", v).also { super.setInputMode(v) }
+        override fun setInputMode(v: IInputMode) = rec("setInputMode", v).also { super.setInputMode(v) }
     }
 
     @Test
