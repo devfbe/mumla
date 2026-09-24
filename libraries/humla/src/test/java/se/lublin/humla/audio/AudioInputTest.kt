@@ -19,7 +19,6 @@ package se.lublin.humla.audio
 
 import android.os.Process
 import com.google.common.truth.Truth.assertThat
-import com.google.common.truth.Truth.assertWithMessage
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -30,6 +29,7 @@ import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.capture.fakes.FakeCaptureSource
 import se.lublin.humla.audio.capture.fakes.FakeCaptureSource.Read
+import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -58,8 +58,12 @@ class AudioInputTest {
     private val states = CopyOnWriteArrayList<CaptureState>()
     private var input: AudioInput? = null
 
+    /** Opened in [tearDown], so no read hangs past its test. */
+    private val hung = CountDownLatch(1)
+
     @After
     fun tearDown() {
+        hung.countDown()
         input?.shutdown()
     }
 
@@ -84,11 +88,7 @@ class AudioInputTest {
         it.startRecording()
     }
 
-    private fun waitUntil(what: String, condition: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + SETTLE_MS
-        while (!condition() && System.currentTimeMillis() < deadline) Thread.sleep(2)
-        assertWithMessage("waited %s ms for: %s", SETTLE_MS, what).that(condition()).isTrue()
-    }
+    private fun waitUntil(what: String, condition: () -> Boolean) = awaitUntil(SETTLE_MS, what, condition)
 
     // ------------------------------------------------------------------ the frame path
 
@@ -250,9 +250,9 @@ class AudioInputTest {
     /** `false` means a capture thread is still alive on a source that is about to be released. */
     @Test
     fun `stopRecording gives up after the join timeout instead of hanging`() {
-        val source = FakeCaptureSource(hangAfterStopMs = 1500)
+        val source = FakeCaptureSource(hangAfterStop = hung)
         val audioInput = start(source, joinTimeoutMs = 200)
-        waitUntil("the capture thread started") { "start" in source.events }
+        waitUntil("the capture thread is inside a read") { source.reads.get() > 0 }
 
         val exited = audioInput.stopRecording()
 
@@ -287,9 +287,9 @@ class AudioInputTest {
 
     @Test
     fun `an interrupted caller keeps its interrupt flag`() {
-        val source = FakeCaptureSource(hangAfterStopMs = 1500)
+        val source = FakeCaptureSource(hangAfterStop = hung)
         val audioInput = start(source, joinTimeoutMs = 2000)
-        waitUntil("the capture thread started") { "start" in source.events }
+        waitUntil("the capture thread is inside a read") { source.reads.get() > 0 }
 
         Thread.currentThread().interrupt()
         val exited = audioInput.stopRecording()
@@ -412,10 +412,11 @@ class AudioInputTest {
 
     @Test
     fun `starting again is allowed once the timed-out thread has finished`() {
-        val source = FakeCaptureSource(hangAfterStopMs = 300)
+        val source = FakeCaptureSource(hangAfterStop = hung)
         val audioInput = start(source, joinTimeoutMs = 50)
-        waitUntil("the capture thread started") { "start" in source.events }
+        waitUntil("the capture thread is inside a read") { source.reads.get() > 0 }
         assertThat(audioInput.stopRecording()).isFalse()
+        hung.countDown()
 
         waitUntil("the stale capture thread finished") { source.events.count { it == "stop" } >= 2 }
         audioInput.startRecording()
@@ -426,9 +427,9 @@ class AudioInputTest {
     /** `stopRecording` answered false and `isRecording` is false, yet the old thread is alive. */
     @Test
     fun `starting again while a timed-out capture thread is still alive is refused`() {
-        val source = FakeCaptureSource(hangAfterStopMs = 1500)
+        val source = FakeCaptureSource(hangAfterStop = hung)
         val audioInput = start(source, joinTimeoutMs = 50)
-        waitUntil("the capture thread started") { "start" in source.events }
+        waitUntil("the capture thread is inside a read") { source.reads.get() > 0 }
         assertThat(audioInput.stopRecording()).isFalse()
         assertThat(audioInput.isRecording()).isFalse()
 
@@ -440,9 +441,9 @@ class AudioInputTest {
     /** `AudioHandler` uses this to decide whether freeing the native capture chain is safe. */
     @Test
     fun `shutdown reports that the capture thread did not exit`() {
-        val source = FakeCaptureSource(hangAfterStopMs = 1500)
+        val source = FakeCaptureSource(hangAfterStop = hung)
         val audioInput = start(source, joinTimeoutMs = 50)
-        waitUntil("the capture thread started") { "start" in source.events }
+        waitUntil("the capture thread is inside a read") { source.reads.get() > 0 }
 
         assertThat(audioInput.shutdown()).isFalse()
 

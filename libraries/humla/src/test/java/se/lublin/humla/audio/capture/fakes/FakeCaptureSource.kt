@@ -20,6 +20,7 @@ package se.lublin.humla.audio.capture.fakes
 import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.PcmCaptureSource
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -39,7 +40,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class FakeCaptureSource(
     private val rate: Int = 48000,
     script: List<Read> = emptyList(),
-    private val hangAfterStopMs: Long = 0,
+    /** Held shut, a read in flight at [stop] does not return until it opens: a hung native read. */
+    private val hangAfterStop: CountDownLatch? = null,
     private val failStart: Boolean = false,
     private val codeAfterStop: Int = 0,
 ) : PcmCaptureSource {
@@ -107,14 +109,12 @@ class FakeCaptureSource(
         }
     }
 
-    /** A recorder whose `stop()` does not make the in-flight read return, for the join timeout. */
     private fun hangIgnoringInterrupts() {
-        val deadline = System.currentTimeMillis() + hangAfterStopMs
+        val gate = hangAfterStop ?: return
         while (true) {
-            val left = deadline - System.currentTimeMillis()
-            if (left <= 0) return
             try {
-                Thread.sleep(left)
+                gate.await()
+                return
             } catch (e: InterruptedException) {
                 // A native read does not return on interrupt either.
             }
