@@ -39,8 +39,6 @@ import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
-import se.lublin.humla.exception.NotConnectedException
-import se.lublin.humla.exception.NotSynchronizedException
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
@@ -226,25 +224,16 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
             override fun onTalkingStateChanged(talking: Boolean) {
                 mHandler.post {
-                    try {
-                        // If the server session is inactive, ignore this message.
-                        // It's likely that this is leftover from a terminated connection.
-                        if (!isSynchronized()) return@post
+                    // A leftover from a terminated connection when the session is inactive.
+                    if (!isSynchronized()) return@post
+                    val modelHandler = mModelHandler ?: return@post
+                    val connection = mConnection ?: return@post
+                    val currentUser = modelHandler.getUser(connection.getSession()) ?: return@post
 
-                        val modelHandler = mModelHandler
-                        val connection = mConnection
-                        if (modelHandler == null || connection == null) return@post
-
-                        val currentUser = modelHandler.getUser(connection.getSession())
-                            ?: return@post
-
-                        currentUser.setTalkState(
-                            if (talking) TalkState.TALKING else TalkState.PASSIVE
-                        )
-                        mCallbacks.onUserTalkStateUpdated(currentUser)
-                    } catch (e: NotSynchronizedException) {
-                        e.printStackTrace()
-                    }
+                    currentUser.setTalkState(
+                        if (talking) TalkState.TALKING else TalkState.PASSIVE
+                    )
+                    mCallbacks.onUserTalkStateUpdated(currentUser)
                 }
             }
         }
@@ -414,13 +403,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         auth.setOpus(true)
         auth.addAllTokens(mAccessTokens)
 
-        val connection = mConnection!!
+        val connection = conn()
         connection.sendTCPMessage(version.build(), HumlaTCPMessageType.Version)
         connection.sendTCPMessage(auth.build(), HumlaTCPMessageType.Authenticate)
     }
 
     override fun onConnectionSynchronized() {
-        val connection = mConnection!!
+        val connection = conn()
         // early disconned?
         if (!connection.isConnected) {
             return
@@ -453,26 +442,20 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * thread. A pipeline that cannot start arrives as [AudioController.Listener.onAudioFailed].
      */
     private fun startAudio(connection: HumlaConnection, modelHandler: ModelHandler) {
-        val params = try {
-            val self = modelHandler.getUser(connection.getSession())
-            if (self == null) {
-                // ServerSync named no known user: keep the session up without a microphone.
-                Log.e(TAG, "No session user after ServerSync; audio not started")
-                logWarning(getString(R.string.no_session_user))
-                return
-            }
-            AudioSessionParams(
-                self = self,
-                maxBandwidth = connection.getMaxBandwidth(),
-                codec = connection.getCodec(),
-                targetId = mVoiceTargetId,
-                inputMode = mInputMode,
-            )
-        } catch (e: NotSynchronizedException) {
-            throw RuntimeException(
-                "Connection should be synchronized in callback for synchronization!", e
-            )
+        val self = modelHandler.getUser(connection.getSession())
+        if (self == null) {
+            // ServerSync named no known user: keep the session up without a microphone.
+            Log.e(TAG, "No session user after ServerSync; audio not started")
+            logWarning(getString(R.string.no_session_user))
+            return
         }
+        val params = AudioSessionParams(
+            self = self,
+            maxBandwidth = connection.getMaxBandwidth(),
+            codec = connection.getCodec(),
+            targetId = mVoiceTargetId,
+            inputMode = mInputMode,
+        )
         mAudioController.start(mAudioConfig, params, connection)
     }
 
@@ -792,18 +775,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      */
     fun getConnection(): HumlaConnection? = mConnection
 
-    /**
-     * Returns the current [ModelHandler], containing the channel tree. A model handler is
-     * valid for the lifetime of a connection.
-     * @return the active ModelHandler, or null if there is no active connection.
-     */
-    @Throws(NotSynchronizedException::class)
-    private fun getModelHandler(): ModelHandler? {
-        if (!isSynchronized()) throw NotSynchronizedException()
-        if (mModelHandler == null && isConnected()) {
-            throw RuntimeException("Model handler should always be instantiated while connected!")
-        }
-        return mModelHandler
+    /** The live connection; [IllegalStateException] when no attempt was ever started. */
+    private fun conn(): HumlaConnection = checkNotNull(mConnection) { "Not connected" }
+
+    /** The synchronized session's model; [IllegalStateException] outside of one. */
+    private fun model(): ModelHandler {
+        check(isSynchronized()) { "Not synchronized with the server" }
+        return checkNotNull(mModelHandler) { "No model for the synchronized session" }
     }
 
     override fun getConnectionState(): ConnectionState = when (val state = mStateMachine.current) {
@@ -855,23 +833,11 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         return this
     }
 
-    override fun getTCPLatency(): Long = try {
-        getConnection()!!.getTCPLatency()
-    } catch (e: NotConnectedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getTCPLatency(): Long = conn().getTCPLatency()
 
-    override fun getUDPLatency(): Long = try {
-        getConnection()!!.getUDPLatency()
-    } catch (e: NotConnectedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getUDPLatency(): Long = conn().getUDPLatency()
 
-    override fun getMaxBandwidth(): Int = try {
-        getConnection()!!.getMaxBandwidth()
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getMaxBandwidth(): Int = conn().getMaxBandwidth()
 
     /**
      * The running pipeline's bandwidth in bps, or -1 while none runs. The pipeline starts and
@@ -879,41 +845,17 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      */
     override fun getCurrentBandwidth(): Int = mAudioController.currentBandwidth
 
-    override fun getServerVersion(): Int = try {
-        getConnection()!!.getServerVersion()
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getServerVersion(): Int = conn().getServerVersion()
 
-    override fun getServerRelease(): String? = try {
-        getConnection()!!.getServerRelease()
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getServerRelease(): String? = conn().getServerRelease()
 
-    override fun getServerOSName(): String? = try {
-        getConnection()!!.getServerOSName()
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getServerOSName(): String? = conn().getServerOSName()
 
-    override fun getServerOSVersion(): String? = try {
-        getConnection()!!.getServerOSVersion()
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getServerOSVersion(): String? = conn().getServerOSVersion()
 
-    override fun getSessionId(): Int = try {
-        getConnection()!!.getSession()
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getSessionId(): Int = conn().getSession()
 
-    override fun getSessionUser(): IUser? = try {
-        getModelHandler()!!.getUser(getSessionId())
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getSessionUser(): IUser? = model().getUser(getSessionId())
 
     override fun getSessionChannel(): IChannel {
         val user = getSessionUser()
@@ -921,33 +863,17 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         throw IllegalStateException("Session user should be set post-synchronization!")
     }
 
-    override fun getUser(session: Int): IUser? = try {
-        getModelHandler()!!.getUser(session)
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getUser(session: Int): IUser? = model().getUser(session)
 
-    override fun getChannel(id: Int): IChannel? = try {
-        getModelHandler()!!.getChannel(id)
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getChannel(id: Int): IChannel? = model().getChannel(id)
 
     override fun getRootChannel(): IChannel? = getChannel(0)
 
-    override fun getPermissions(): Int = try {
-        getModelHandler()!!.permissions
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getPermissions(): Int = model().permissions
 
     override fun getTransmitMode(): Int = mTransmitMode
 
-    override fun getCodec(): HumlaUDPMessageType? = try {
-        getConnection()!!.getCodec()
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getCodec(): HumlaUDPMessageType? = conn().getCodec()
 
     /**
      * What the user asked for, independent of the current route. Survives a lost connection, a
@@ -990,7 +916,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         val usb = Mumble.UserState.newBuilder()
         usb.setSession(session)
         usb.setChannelId(channel)
-        getConnection()!!.sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
+        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
     }
 
     override fun createChannel(
@@ -1006,42 +932,42 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         csb.setDescription(description)
         csb.setPosition(position)
         csb.setTemporary(temporary)
-        getConnection()!!.sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
+        conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
     }
 
     override fun sendAccessTokens(tokens: List<String>) {
-        getConnection()!!.sendAccessTokens(tokens)
+        conn().sendAccessTokens(tokens)
     }
 
     override fun requestPermissions(channel: Int) {
         val pqb = Mumble.PermissionQuery.newBuilder()
         pqb.setChannelId(channel)
-        getConnection()!!.sendTCPMessage(pqb.build(), HumlaTCPMessageType.PermissionQuery)
+        conn().sendTCPMessage(pqb.build(), HumlaTCPMessageType.PermissionQuery)
     }
 
     override fun requestComment(session: Int) {
         val rbb = Mumble.RequestBlob.newBuilder()
         rbb.addSessionComment(session)
-        getConnection()!!.sendTCPMessage(rbb.build(), HumlaTCPMessageType.RequestBlob)
+        conn().sendTCPMessage(rbb.build(), HumlaTCPMessageType.RequestBlob)
     }
 
     override fun requestAvatar(session: Int) {
         val rbb = Mumble.RequestBlob.newBuilder()
         rbb.addSessionTexture(session)
-        getConnection()!!.sendTCPMessage(rbb.build(), HumlaTCPMessageType.RequestBlob)
+        conn().sendTCPMessage(rbb.build(), HumlaTCPMessageType.RequestBlob)
     }
 
     override fun requestChannelDescription(channel: Int) {
         val rbb = Mumble.RequestBlob.newBuilder()
         rbb.addChannelDescription(channel)
-        getConnection()!!.sendTCPMessage(rbb.build(), HumlaTCPMessageType.RequestBlob)
+        conn().sendTCPMessage(rbb.build(), HumlaTCPMessageType.RequestBlob)
     }
 
     override fun registerUser(session: Int) {
         val usb = Mumble.UserState.newBuilder()
         usb.setSession(session)
         usb.setUserId(0)
-        getConnection()!!.sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
+        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
     }
 
     override fun kickBanUser(session: Int, reason: String?, ban: Boolean) {
@@ -1049,66 +975,59 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         urb.setSession(session)
         urb.setReason(reason)
         urb.setBan(ban)
-        getConnection()!!.sendTCPMessage(urb.build(), HumlaTCPMessageType.UserRemove)
+        conn().sendTCPMessage(urb.build(), HumlaTCPMessageType.UserRemove)
     }
 
-    override fun sendUserTextMessage(session: Int, message: String?): Message = try {
-        if (!isSynchronized()) throw NotSynchronizedException()
-
+    override fun sendUserTextMessage(session: Int, message: String?): Message {
+        val model = model()
         val tmb = Mumble.TextMessage.newBuilder()
         tmb.addSession(session)
         tmb.setMessage(message)
-        getConnection()!!.sendTCPMessage(tmb.build(), HumlaTCPMessageType.TextMessage)
+        conn().sendTCPMessage(tmb.build(), HumlaTCPMessageType.TextMessage)
 
-        val self = getModelHandler()!!.getUser(getSessionId())
-        val user = getModelHandler()!!.getUser(session)
         // A message to an unknown session carries a null user.
         val users = ArrayList<User?>(1)
-        users.add(user)
-        Message(getSessionId(), self!!.getName(), ArrayList<Channel?>(0), ArrayList<Channel?>(0), users, message)
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
+        users.add(model.getUser(session))
+        return Message(getSessionId(), selfName(model), ArrayList<Channel?>(0), ArrayList<Channel?>(0), users, message)
     }
 
-    override fun sendChannelTextMessage(channel: Int, message: String?, tree: Boolean): Message = try {
-        if (!isSynchronized()) throw NotSynchronizedException()
-
+    override fun sendChannelTextMessage(channel: Int, message: String?, tree: Boolean): Message {
+        val model = model()
         val tmb = Mumble.TextMessage.newBuilder()
         if (tree) tmb.addTreeId(channel) else tmb.addChannelId(channel)
         tmb.setMessage(message)
-        getConnection()!!.sendTCPMessage(tmb.build(), HumlaTCPMessageType.TextMessage)
+        conn().sendTCPMessage(tmb.build(), HumlaTCPMessageType.TextMessage)
 
-        val self = getModelHandler()!!.getUser(getSessionId())
-        val targetChannel = getModelHandler()!!.getChannel(channel)
         // An unknown channel is added as null, as above.
         val targetChannels = ArrayList<Channel?>()
-        targetChannels.add(targetChannel)
-        Message(
-            getSessionId(), self!!.getName(), targetChannels,
+        targetChannels.add(model.getChannel(channel))
+        return Message(
+            getSessionId(), selfName(model), targetChannels,
             if (tree) targetChannels else ArrayList<Channel?>(0), ArrayList<User?>(0), message
         )
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
     }
+
+    private fun selfName(model: ModelHandler): String? =
+        checkNotNull(model.getUser(getSessionId())) { "No user for our own session" }.getName()
 
     override fun setUserComment(session: Int, comment: String?) {
         val usb = Mumble.UserState.newBuilder()
         usb.setSession(session)
         usb.setComment(comment)
-        getConnection()!!.sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
+        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
     }
 
     override fun setPrioritySpeaker(session: Int, priority: Boolean) {
         val usb = Mumble.UserState.newBuilder()
         usb.setSession(session)
         usb.setPrioritySpeaker(priority)
-        getConnection()!!.sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
+        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
     }
 
     override fun removeChannel(channel: Int) {
         val crb = Mumble.ChannelRemove.newBuilder()
         crb.setChannelId(channel)
-        getConnection()!!.sendTCPMessage(crb.build(), HumlaTCPMessageType.ChannelRemove)
+        conn().sendTCPMessage(crb.build(), HumlaTCPMessageType.ChannelRemove)
     }
 
     override fun setMuteDeafState(session: Int, mute: Boolean, deaf: Boolean) {
@@ -1117,14 +1036,14 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         usb.setMute(mute)
         usb.setDeaf(deaf)
         if (!mute) usb.setSuppress(false)
-        getConnection()!!.sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
+        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
     }
 
     override fun setSelfMuteDeafState(mute: Boolean, deaf: Boolean) {
         val usb = Mumble.UserState.newBuilder()
         usb.setSelfMute(mute)
         usb.setSelfDeaf(deaf)
-        getConnection()!!.sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
+        conn().sendTCPMessage(usb.build(), HumlaTCPMessageType.UserState)
     }
 
     override fun registerObserver(observer: IHumlaObserver) {
@@ -1141,14 +1060,14 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         val csb = Mumble.ChannelState.newBuilder()
         csb.setChannelId(channelA.getId())
         csb.addLinksAdd(channelB.getId())
-        getConnection()!!.sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
+        conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
     }
 
     override fun unlinkChannels(channelA: IChannel, channelB: IChannel) {
         val csb = Mumble.ChannelState.newBuilder()
         csb.setChannelId(channelA.getId())
         csb.addLinksRemove(channelB.getId())
-        getConnection()!!.sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
+        conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
     }
 
     override fun unlinkAllChannels(channel: IChannel) {
@@ -1157,7 +1076,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         for (linked in channel.getLinks()) {
             csb.addLinksRemove(linked.getId())
         }
-        getConnection()!!.sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
+        conn().sendTCPMessage(csb.build(), HumlaTCPMessageType.ChannelState)
     }
 
     override fun registerWhisperTarget(target: WhisperTarget): Byte {
@@ -1170,7 +1089,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         val vtb = Mumble.VoiceTarget.newBuilder()
         vtb.setId(id.toInt())
         vtb.addTargets(voiceTarget)
-        getConnection()!!.sendTCPMessage(vtb.build(), HumlaTCPMessageType.VoiceTarget)
+        conn().sendTCPMessage(vtb.build(), HumlaTCPMessageType.VoiceTarget)
         return id
     }
 
@@ -1203,11 +1122,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         return null
     }
 
-    override fun getServerSettings(): ServerSettings? = try {
-        getModelHandler()!!.serverSettings
-    } catch (e: NotSynchronizedException) {
-        throw IllegalStateException(e)
-    }
+    override fun getServerSettings(): ServerSettings? = model().serverSettings
 
     /** A coarse view of [getSessionState] for clients that only tell these four apart. */
     enum class ConnectionState {

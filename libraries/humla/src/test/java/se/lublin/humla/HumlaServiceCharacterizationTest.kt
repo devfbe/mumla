@@ -491,67 +491,58 @@ class HumlaServiceCharacterizationTest {
 
     // ---------------------------------------------------------------- the session API, disconnected
 
-    /**
-     * Which exception each session call throws while disconnected. It is not one answer: calls
-     * via `getConnection()` throw NullPointerException, calls via the model handler throw
-     * IllegalStateException.
-     */
+    /** Every session call fails with the same, explicit error while disconnected. */
     @Test
-    fun everySessionCallThrowsItsOwnExceptionWhileDisconnected() {
+    fun everySessionCallThrowsIllegalStateWhileDisconnected() {
         val service = service()
-        val npe: Class<out Throwable> = NullPointerException::class.java
-        val ise: Class<out Throwable> = IllegalStateException::class.java
 
-        val calls = listOf<Triple<String, Class<out Throwable>, () -> Unit>>(
-            // via getConnection(): a null dereference.
-            Triple("getTCPLatency", npe) { service.getTCPLatency() },
-            Triple("getUDPLatency", npe) { service.getUDPLatency() },
-            Triple("getMaxBandwidth", npe) { service.getMaxBandwidth() },
-            Triple("getServerVersion", npe) { service.getServerVersion() },
-            Triple("getServerRelease", npe) { service.getServerRelease() },
-            Triple("getServerOSName", npe) { service.getServerOSName() },
-            Triple("getServerOSVersion", npe) { service.getServerOSVersion() },
-            Triple("getSessionId", npe) { service.getSessionId() },
-            Triple("getCodec", npe) { service.getCodec() },
-            Triple("moveUserToChannel", npe) { service.moveUserToChannel(1, 2) },
-            Triple("joinChannel", npe) { service.joinChannel(2) },
-            Triple("createChannel", npe) { service.createChannel(0, "n", "d", 0, false) },
-            Triple("sendAccessTokens", npe) { service.sendAccessTokens(listOf("t")) },
-            Triple("requestPermissions", npe) { service.requestPermissions(0) },
-            Triple("requestComment", npe) { service.requestComment(1) },
-            Triple("requestAvatar", npe) { service.requestAvatar(1) },
-            Triple("requestChannelDescription", npe) { service.requestChannelDescription(0) },
-            Triple("registerUser", npe) { service.registerUser(1) },
-            Triple("kickBanUser", npe) { service.kickBanUser(1, "r", false) },
-            Triple("setUserComment", npe) { service.setUserComment(1, "c") },
-            Triple("setPrioritySpeaker", npe) { service.setPrioritySpeaker(1, true) },
-            Triple("removeChannel", npe) { service.removeChannel(1) },
-            Triple("setMuteDeafState", npe) { service.setMuteDeafState(1, true, false) },
-            Triple("setSelfMuteDeafState", npe) { service.setSelfMuteDeafState(true, false) },
-            // via getModelHandler(): NotSynchronized, rewrapped.
-            Triple("getSessionUser", ise) { service.getSessionUser() },
-            Triple("getSessionChannel", ise) { service.getSessionChannel() },
-            Triple("getUser", ise) { service.getUser(1) },
-            Triple("getChannel", ise) { service.getChannel(1) },
-            Triple("getRootChannel", ise) { service.getRootChannel() },
-            Triple("getPermissions", ise) { service.getPermissions() },
-            Triple("getServerSettings", ise) { service.getServerSettings() },
-            Triple("sendUserTextMessage", ise) { service.sendUserTextMessage(1, "m") },
-            Triple("sendChannelTextMessage", ise) { service.sendChannelTextMessage(1, "m", false) },
+        val calls = listOf<Pair<String, () -> Unit>>(
+            "getTCPLatency" to { service.getTCPLatency() },
+            "getUDPLatency" to { service.getUDPLatency() },
+            "getMaxBandwidth" to { service.getMaxBandwidth() },
+            "getServerVersion" to { service.getServerVersion() },
+            "getServerRelease" to { service.getServerRelease() },
+            "getServerOSName" to { service.getServerOSName() },
+            "getServerOSVersion" to { service.getServerOSVersion() },
+            "getSessionId" to { service.getSessionId() },
+            "getCodec" to { service.getCodec() },
+            "moveUserToChannel" to { service.moveUserToChannel(1, 2) },
+            "joinChannel" to { service.joinChannel(2) },
+            "createChannel" to { service.createChannel(0, "n", "d", 0, false) },
+            "sendAccessTokens" to { service.sendAccessTokens(listOf("t")) },
+            "requestPermissions" to { service.requestPermissions(0) },
+            "requestComment" to { service.requestComment(1) },
+            "requestAvatar" to { service.requestAvatar(1) },
+            "requestChannelDescription" to { service.requestChannelDescription(0) },
+            "registerUser" to { service.registerUser(1) },
+            "kickBanUser" to { service.kickBanUser(1, "r", false) },
+            "setUserComment" to { service.setUserComment(1, "c") },
+            "setPrioritySpeaker" to { service.setPrioritySpeaker(1, true) },
+            "removeChannel" to { service.removeChannel(1) },
+            "setMuteDeafState" to { service.setMuteDeafState(1, true, false) },
+            "setSelfMuteDeafState" to { service.setSelfMuteDeafState(true, false) },
+            "getSessionUser" to { service.getSessionUser() },
+            "getSessionChannel" to { service.getSessionChannel() },
+            "getUser" to { service.getUser(1) },
+            "getChannel" to { service.getChannel(1) },
+            "getRootChannel" to { service.getRootChannel() },
+            "getPermissions" to { service.getPermissions() },
+            "getServerSettings" to { service.getServerSettings() },
+            "sendUserTextMessage" to { service.sendUserTextMessage(1, "m") },
+            "sendChannelTextMessage" to { service.sendChannelTextMessage(1, "m", false) },
         )
 
-        val wrong = calls.mapNotNull { (name, expected, call) ->
+        val wrong = calls.mapNotNull { (name, call) ->
             val thrown = try {
                 call()
                 null
             } catch (t: Throwable) {
                 t
             }
-            when {
-                thrown == null -> "$name threw nothing, expected ${expected.simpleName}"
-                !expected.isInstance(thrown) ->
-                    "$name threw ${thrown.javaClass.simpleName}, expected ${expected.simpleName}"
-                else -> null
+            when (thrown) {
+                null -> "$name threw nothing"
+                is IllegalStateException -> null
+                else -> "$name threw ${thrown.javaClass.simpleName}"
             }
         }
 

@@ -346,9 +346,9 @@ class MumlaService : HumlaService(),
     }
 
     override fun onConnectionSynchronized() {
-        // TODO? The superclass sometimes throws NotSynchronizedException (rethrown as
-        //  RuntimeException) here, presumably because connect()/disconnect() ran again between
-        //  messageServerSync() and this posted callback.
+        // TODO? The superclass sometimes throws IllegalStateException (not synchronized) here,
+        //  presumably because connect()/disconnect() ran again between messageServerSync() and
+        //  this posted callback.
         try {
             super.onConnectionSynchronized()
         } catch (e: RuntimeException) {

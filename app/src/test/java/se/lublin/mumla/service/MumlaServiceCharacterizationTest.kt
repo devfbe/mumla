@@ -25,7 +25,6 @@ import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.HumlaService
-import se.lublin.humla.exception.NotSynchronizedException
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.TalkState
@@ -464,7 +463,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aUserStateBeforeOurSessionIsKnownChangesNothing() {
         connect()
-        every { connection.getSession() } throws NotSynchronizedException()
+        every { connection.getSession() } throws IllegalStateException("Not synchronized with the server")
         service.renderSessionState(SessionState.Connecting)
         idleMainLooper()
 
@@ -1077,7 +1076,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun noClickBeforeOurSessionIsKnown() {
         val u = clickReady()
-        every { connection.getSession() } throws NotSynchronizedException()
+        every { connection.getSession() } throws IllegalStateException("Not synchronized with the server")
         talk(u)
         assertThat(clicks).isEqualTo(0)
     }
@@ -1196,7 +1195,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aSynchronizationTheSuperclassRejectsGoesNoFurther() {
         preferences().edit().putBoolean(Settings.PREF_MUTED, true).commit()
-        service.testConnection = null // super dereferences it: NullPointerException
+        service.testConnection = null // super refuses it: IllegalStateException
 
         service.onConnectionSynchronized()
 

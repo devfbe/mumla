@@ -25,8 +25,6 @@ import androidx.annotation.VisibleForTesting
 import com.google.protobuf.ByteString
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.MessageLite
-import se.lublin.humla.exception.NotConnectedException
-import se.lublin.humla.exception.NotSynchronizedException
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.TcpMessageHandler
@@ -419,59 +417,27 @@ class HumlaConnection @JvmOverloads constructor(
         trustStoreFormat = format
     }
 
-    @Throws(NotSynchronizedException::class)
-    fun getServerVersion(): Int {
-        if (!isSynchronized) throw NotSynchronizedException()
-        return remoteVersion
-    }
-
-    @Throws(NotSynchronizedException::class)
-    fun getServerRelease(): String? {
-        if (!isSynchronized) throw NotSynchronizedException()
-        return remoteRelease
-    }
-
-    @Throws(NotSynchronizedException::class)
-    fun getServerOSName(): String? {
-        if (!isSynchronized) throw NotSynchronizedException()
-        return remoteOsName
-    }
-
-    @Throws(NotSynchronizedException::class)
-    fun getServerOSVersion(): String? {
-        if (!isSynchronized) throw NotSynchronizedException()
-        return remoteOsVersion
-    }
-
-    @Throws(NotConnectedException::class)
-    fun getTCPLatency(): Long {
-        if (!isConnected) throw NotConnectedException()
-        return tcpLatency
-    }
-
-    @Throws(NotConnectedException::class)
-    fun getUDPLatency(): Long {
-        if (!isConnected) throw NotConnectedException()
-        return udpLatency
-    }
-
-    @Throws(NotSynchronizedException::class)
-    fun getSession(): Int {
-        if (!isSynchronized) throw NotSynchronizedException("Session is set during synchronization")
-        return sessionId
-    }
+    fun getServerVersion(): Int = whenSynchronized(remoteVersion)
+    fun getServerRelease(): String? = whenSynchronized(remoteRelease)
+    fun getServerOSName(): String? = whenSynchronized(remoteOsName)
+    fun getServerOSVersion(): String? = whenSynchronized(remoteOsVersion)
+    fun getTCPLatency(): Long = whenConnected(tcpLatency)
+    fun getUDPLatency(): Long = whenConnected(udpLatency)
+    fun getSession(): Int = whenSynchronized(sessionId)
 
     /** Server-reported maximum input bandwidth in bps, or -1 if not set. */
-    @Throws(NotSynchronizedException::class)
-    fun getMaxBandwidth(): Int {
-        if (!isSynchronized) throw NotSynchronizedException()
-        return serverMaxBandwidth
+    fun getMaxBandwidth(): Int = whenSynchronized(serverMaxBandwidth)
+    fun getCodec(): HumlaUDPMessageType? = whenSynchronized(serverCodec)
+
+    /** [value], or [IllegalStateException] before ServerSync, which is what sets it. */
+    private fun <T> whenSynchronized(value: T): T {
+        check(isSynchronized) { "Not synchronized with the server" }
+        return value
     }
 
-    @Throws(NotSynchronizedException::class)
-    fun getCodec(): HumlaUDPMessageType? {
-        if (!isSynchronized) throw NotSynchronizedException()
-        return serverCodec
+    private fun <T> whenConnected(value: T): T {
+        check(isConnected) { "Not connected" }
+        return value
     }
 
     /** True if TCP is manually forced or Tor is enabled. */

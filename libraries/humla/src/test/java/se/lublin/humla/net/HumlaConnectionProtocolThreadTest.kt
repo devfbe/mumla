@@ -10,7 +10,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.exception.NotSynchronizedException
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
@@ -115,7 +114,7 @@ class HumlaConnectionProtocolThreadTest {
         awaitUntil { handlerThreads.isNotEmpty() }
         assertThat(handlerThreads).containsExactly(PROTOCOL_THREAD)
         // The parsed version is only readable once the connection is synchronized.
-        assertThrows(NotSynchronizedException::class.java) { connection.getServerRelease() }
+        assertThrows(IllegalStateException::class.java) { connection.getServerRelease() }
     }
 
     @Test
@@ -419,7 +418,7 @@ class HumlaConnectionProtocolThreadTest {
 
         assertThat(insideTheWindow.get()).isFalse()
         assertThat(connection.isSynchronized).isFalse()
-        assertThrows(NotSynchronizedException::class.java) { connection.getSession() }
+        assertThrows(IllegalStateException::class.java) { connection.getSession() }
     }
 
     /**
