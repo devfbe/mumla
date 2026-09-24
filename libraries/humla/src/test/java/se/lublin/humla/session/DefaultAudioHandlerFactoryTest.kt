@@ -23,11 +23,8 @@ import se.lublin.humla.Constants
 import java.lang.reflect.Modifier
 
 /**
- * The real factory needs a microphone, so what a JVM test can reach is the part of
- * AudioHandler's constructor that runs before the RECORD_AUDIO check: the legacy echo-cancellation
- * method, which puts the AudioManager into communication mode when it is "system". That is enough
- * to pin *which* of [AudioConfig]'s two echo-cancellation fields the legacy builder is handed - the
- * one thing about this class that a later reader is most likely to get wrong.
+ * The real factory needs a microphone, so what a JVM test can reach is the config-to-builder
+ * mapping and the part of AudioHandler's constructor that runs before the RECORD_AUDIO check.
  */
 @RunWith(RobolectricTestRunner::class)
 class DefaultAudioHandlerFactoryTest {
@@ -55,25 +52,23 @@ class DefaultAudioHandlerFactoryTest {
         assertThat(e).hasMessageThat().contains("RECORD_AUDIO")
     }
 
-    @Test
-    fun theLegacyEchoCancellationMethodIsTheOneTheBuilderIsHanded() {
-        assertThrows(AudioException::class.java) {
-            create(AudioConfig(legacyEchoCancellationMethod = "system", echoCancellationMode = "none"))
-        }
-        assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_IN_COMMUNICATION)
-    }
-
     /**
-     * The other half of the same input: [AudioConfig.echoCancellationMode] is the spec 4 value
-     * stream B will read, and it must not reach the legacy builder setter. With the two swapped,
-     * this test sees communication mode and fails.
+     * The canceller the route decided on reaches the builder as the value `AudioHandler` knows:
+     * on is WebRTC's AEC3, and `AudioHandler` puts the manager into communication mode for it
+     * before the permission check - the one effect a JVM test can read.
      */
     @Test
-    fun theNewEchoCancellationModeDoesNotReachTheLegacyBuilder() {
-        assertThrows(AudioException::class.java) {
-            create(AudioConfig(legacyEchoCancellationMethod = "none", echoCancellationMode = "system"))
-        }
-        assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
+    fun echoCancellationReachesTheBuilderAsTheWebRtcCanceller() {
+        fun method(config: AudioConfig) =
+            AudioHandler.Builder::class.java.getDeclaredField("mEchoCancellationMethod")
+                .apply { isAccessible = true }
+                .get(factory.builder(context, SilentLogger, config, params, encodeListener, outputListener))
+
+        assertThat(method(AudioConfig(echoCancellation = true))).isEqualTo("webrtc")
+        assertThat(method(AudioConfig(echoCancellation = false))).isEqualTo("none")
+
+        assertThrows(AudioException::class.java) { create(AudioConfig(echoCancellation = true)) }
+        assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_IN_COMMUNICATION)
     }
 
     /**
@@ -95,7 +90,7 @@ class DefaultAudioHandlerFactoryTest {
             transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
             halfDuplexRequested = true,
             preprocessorEnabled = true,
-            legacyEchoCancellationMethod = "speex",
+            echoCancellation = true,
             routedDeviceType = AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
             noiseSuppression = "rnnoise",
             speexNoiseSuppressDb = -35,
@@ -122,7 +117,7 @@ class DefaultAudioHandlerFactoryTest {
             "mBluetoothEnabled" to true,
             "mHalfDuplexEnabled" to true,
             "mPreprocessorEnabled" to true,
-            "mEchoCancellationMethod" to "speex",
+            "mEchoCancellationMethod" to "webrtc",
             "mNoiseSuppressionMethod" to "rnnoise",
             "mSpeexNoiseSuppressDb" to -35,
             "mAndroidNoiseSuppressor" to true,

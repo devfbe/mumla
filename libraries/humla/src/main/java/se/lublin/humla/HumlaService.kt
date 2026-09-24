@@ -61,6 +61,7 @@ import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.session.AndroidCommunicationDevices
 import se.lublin.humla.session.AudioConfig
+import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.session.AudioRouter
 import se.lublin.humla.session.AudioController
 import se.lublin.humla.session.AudioHandlerFactory
@@ -125,6 +126,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /** Current audio settings; rebuilt wholesale by [configureExtras] (spec section 4). */
     private var mAudioConfig = AudioConfig()
+
+    /** The user's echo-cancellation choices per kind of device; see EXTRAS_ECHO_CANCELLATION_BY_DEVICE. */
+    private var mEchoOverrides: Map<AudioDeviceCategory, Boolean> = emptyMap()
 
     /**
      * The input mode in force. Held by identity rather than derived from [mTransmitMode] at every
@@ -843,10 +847,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
                 noiseSuppression = extras.getString(EXTRAS_NOISE_SUPPRESSION_METHOD) ?: "none"
             )
         }
-        if (extras.containsKey(EXTRAS_ECHO_CANCELLATION_METHOD)) {
-            config = config.copy(
-                legacyEchoCancellationMethod = extras.getString(EXTRAS_ECHO_CANCELLATION_METHOD) ?: "none"
-            )
+        if (extras.containsKey(EXTRAS_ECHO_CANCELLATION_BY_DEVICE)) {
+            val overrides = extras.getBundle(EXTRAS_ECHO_CANCELLATION_BY_DEVICE) ?: Bundle()
+            mEchoOverrides = AudioDeviceCategory.entries
+                .filter { overrides.containsKey(it.name) }
+                .associateWith { overrides.getBoolean(it.name) }
+            config = config.copy(echoCancellation = echoCancellationFor(config.routedDeviceType))
         }
         if (extras.containsKey(EXTRAS_SPEEX_NOISE_SUPPRESS_DB)) {
             config = config.copy(speexNoiseSuppressDb = extras.getInt(EXTRAS_SPEEX_NOISE_SUPPRESS_DB))
@@ -896,10 +902,30 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * doubled event is otherwise an audible gap.
      */
     private fun setRoutedDevice(type: Int?) {
-        mAudioConfig = mAudioConfig.copy(routedDeviceType = type)
+        mAudioConfig = mAudioConfig.copy(
+            routedDeviceType = type,
+            echoCancellation = echoCancellationFor(type),
+        )
         // Posts to humla-audio-control; never joins on the main thread (spec A2).
         mAudioController.reconfigure(mAudioConfig, mInputMode)
+        onAudioRouteChanged(type)
     }
+
+    /**
+     * The echo canceller for a routed device of [type]: the user's override for its kind of
+     * device, else the kind's default. No route, no canceller - nothing plays that could echo.
+     */
+    private fun echoCancellationFor(type: Int?): Boolean {
+        val category = AudioDeviceCategory.of(type ?: return false)
+        return mEchoOverrides[category] ?: category.echoCancellationByDefault
+    }
+
+    /**
+     * The routed device changed: its `AudioDeviceInfo` type, or null when nothing is routed. For
+     * subclasses that couple something else to the route - the proximity sensor to the earpiece.
+     * Main thread.
+     */
+    protected open fun onAudioRouteChanged(type: Int?) = Unit
 
     /**
      * Exposes the current connection. The current connection is set once an attempt to connect to
@@ -1085,6 +1111,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override fun getAudioDevices(): List<CommunicationDevice> = mRouter.availableDevices()
+
+    override fun isEchoCancellationEnabled(): Boolean = mAudioConfig.echoCancellation
 
     override fun getActiveAudioDevice(): CommunicationDevice? = mRouter.activeDevice()
 
@@ -1417,7 +1445,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         const val EXTRAS_LOCAL_IGNORE_HISTORY = "local_ignore_history"
         const val EXTRAS_ENABLE_PREPROCESSOR = "enable_preprocessor"
         const val EXTRAS_NOISE_SUPPRESSION_METHOD = "noise_suppression_method"
-        const val EXTRAS_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
+        /**
+         * Bundle: the user's echo-cancellation overrides, one boolean per [AudioDeviceCategory]
+         * name. A category without an entry keeps its default (on for the speaker and the
+         * earpiece, off on a headset). Applied live to the routed device.
+         */
+        const val EXTRAS_ECHO_CANCELLATION_BY_DEVICE = "echo_cancellation_by_device"
 
         /**
          * A [Bundle] carrying a whole [se.lublin.humla.audio.capture.VadConfig], see

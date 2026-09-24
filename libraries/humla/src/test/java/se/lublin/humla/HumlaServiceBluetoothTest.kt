@@ -27,6 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import se.lublin.humla.session.AndroidCommunicationDevicesTest
+import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
@@ -402,6 +403,63 @@ class HumlaServiceBluetoothTest {
         val withPlatform = HumlaServiceHarness(devices = null).also { harnesses += it }
         assertThat(withPlatform.service.communicationDevices)
             .isInstanceOf(se.lublin.humla.session.AndroidCommunicationDevices::class.java)
+    }
+
+    // ---------------------------------------------------------------- echo cancellation
+
+    /** The canceller follows the routed device: on for the phone's own speakers, off on a headset. */
+    @Test
+    fun echoCancellationFollowsTheRoutedDevice() {
+        val h = start()
+        h.phone()
+        h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+        h.connectAndSynchronize()
+        assertThat(h.service.getAudioConfigForTest().echoCancellation).isTrue() // speaker
+
+        h.service.enableBluetoothSco()
+        assertThat(h.service.getAudioConfigForTest().echoCancellation).isFalse()
+        assertThat(h.service.isEchoCancellationEnabled).isFalse()
+
+        h.service.selectAudioDevice(1)
+        assertThat(h.service.getAudioConfigForTest().echoCancellation).isTrue() // earpiece
+        assertThat(h.service.isEchoCancellationEnabled).isTrue()
+    }
+
+    /**
+     * The user's override is kept per kind of device and applied whenever that kind is routed
+     * again; a kind without one keeps its default. Live, through the ordinary reconfigure.
+     */
+    @Test
+    fun anOverrideAppliesToItsKindOfDeviceOnly() {
+        val h = start()
+        h.phone()
+        h.connectAndSynchronize()
+        awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
+        assertThat(h.audioFactory.configs[0].echoCancellation).isTrue()
+
+        h.configure {
+            putBundle(
+                HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE,
+                Bundle().apply { putBoolean(AudioDeviceCategory.SPEAKER.name, false) },
+            )
+        }
+
+        awaitUntil(description = "audio rebuilt without echo") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
+        assertThat(h.audioFactory.configs[1].echoCancellation).isFalse()
+
+        h.service.selectAudioDevice(1)
+        assertThat(h.service.getAudioConfigForTest().echoCancellation).isTrue() // earpiece: default
+
+        h.service.selectAudioDevice(2)
+        assertThat(h.service.getAudioConfigForTest().echoCancellation).isFalse() // speaker: override
+    }
+
+    @Test
+    fun withoutARouteThereIsNoEchoCancellation() {
+        val h = start()
+        h.phone()
+
+        assertThat(h.service.isEchoCancellationEnabled).isFalse()
     }
 
     // ---------------------------------------------------------------- the platform refusing

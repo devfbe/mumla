@@ -25,7 +25,6 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
-import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import android.os.Bundle
@@ -39,9 +38,11 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.exception.AudioInitializationException
+import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.AudioTestSession
@@ -72,13 +73,6 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
             "${rate}Hz" + if (supported) "" else " (unsupported)"
         }.toTypedArray()
 
-        findPreference<ListPreference>(Settings.PREF_ECHO_CANCELLATION_METHOD)?.let { echoPref ->
-            val values = AudioSettingsPolicy.echoCancellationValues(AcousticEchoCanceler.isAvailable())
-            val keep = echoPref.entryValues.indices.filter { echoPref.entryValues[it].toString() in values }
-            echoPref.entries = keep.map { echoPref.entries[it] }.toTypedArray()
-            echoPref.entryValues = keep.map { echoPref.entryValues[it] }.toTypedArray()
-            echoPref.value = AudioSettingsPolicy.fallbackEchoValue(echoPref.value, values)
-        }
         findPreference<CheckBoxPreference>(Settings.PREF_ANDROID_NOISE_SUPPRESSOR)
             ?.let { markAvailability(it, NoiseSuppressor.isAvailable()) }
         findPreference<CheckBoxPreference>(Settings.PREF_ANDROID_AGC)
@@ -174,7 +168,10 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
             vad,
             settings.getNoiseSuppressionMode(),
             settings.getSpeexNoiseSuppressDb(),
-            settings.getEchoCancellationMode(),
+            // The meter plays its loopback out loud, so it measures what a call on the speaker
+            // would: with the speaker's canceller, as the user has it.
+            if (settings.isEchoCancellationEnabled(AudioDeviceCategory.SPEAKER)) EchoCancellationMode.WEBRTC
+            else EchoCancellationMode.NONE,
             settings.getAndroidAudioEffects(),
             loopback,
             onReading = { reading -> mainHandler.post { meter.setReading(reading) } },

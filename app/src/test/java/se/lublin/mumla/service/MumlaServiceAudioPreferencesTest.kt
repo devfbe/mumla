@@ -31,6 +31,7 @@ import org.xmlpull.v1.XmlPullParser
 import se.lublin.humla.HumlaService
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.inputmode.ActivityInputMode
+import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.session.AudioRouter
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
@@ -154,11 +155,21 @@ class MumlaServiceAudioPreferencesTest {
         assertThat(router.earpieceByDefault).isFalse()
     }
 
+    /**
+     * The chooser's echo switch writes a per-device override; the service has to hold all of them,
+     * so the next device of that kind gets it too. Read off the map the route decision uses.
+     */
     @Test
-    fun `the echo cancellation method reaches the audio config`() {
-        prefs.edit().putString(Settings.PREF_ECHO_CANCELLATION_METHOD, "webrtc").commit()
-        change(Settings.PREF_ECHO_CANCELLATION_METHOD)
-        assertThat(audioConfig().legacyEchoCancellationMethod).isEqualTo("webrtc")
+    fun `an echo cancellation override reaches the service`() {
+        Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
+        change(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
+        assertThat(field(service, "mEchoOverrides")).isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
+
+        Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.EARPIECE, false)
+        change(Settings.echoCancellationKey(AudioDeviceCategory.EARPIECE))
+        assertThat(field(service, "mEchoOverrides")).isEqualTo(
+            mapOf(AudioDeviceCategory.SPEAKER to false, AudioDeviceCategory.EARPIECE to false),
+        )
     }
 
     /** Four corners over two booleans: one `||` between them would pass three of the four. */

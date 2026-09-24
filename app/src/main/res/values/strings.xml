@@ -118,6 +118,7 @@
     <string name="audio_device_usb">USB headset</string>
     <string name="audio_device_bluetooth">Bluetooth headset</string>
     <string name="audio_device_other">Audio device</string>
+    <string name="echo_cancellation">Echo cancellation</string>
     <string name="quickConnect">Quick Connect</string>
     <string name="connect">Connect</string>
     <string name="connectToServer">Connect to Server</string>

@@ -38,8 +38,10 @@ import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import se.lublin.humla.IHumlaService
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
+import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.HumlaObserver
@@ -186,19 +188,13 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
         fillAudioDevices(menu.findItem(R.id.menu_audio_device))
 
-        // Echo cancellation, live: writing the preference reaches
+        // Noise suppression, live: writing the preference reaches
         // MumlaService.onSharedPreferenceChanged -> configureExtras, which reloads the
         // audio subsystem when it is initialized. Same three values as the settings screen.
         when (settings.getNoiseSuppressionMethod()) {
             "speex" -> menu.findItem(R.id.menu_noise_speex)
             "none" -> menu.findItem(R.id.menu_noise_none)
             else -> menu.findItem(R.id.menu_noise_rnnoise)
-        }?.isChecked = true
-
-        when (settings.getEchoCancellationMethod()) {
-            "system" -> menu.findItem(R.id.menu_echo_system)
-            "webrtc" -> menu.findItem(R.id.menu_echo_webrtc)
-            else -> menu.findItem(R.id.menu_echo_none)
         }?.isChecked = true
 
         val muteItem = menu.findItem(R.id.menu_mute_button)
@@ -284,18 +280,27 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     private fun fillAudioDevices(chooser: MenuItem) {
         val sub = chooser.subMenu ?: return
         sub.removeGroup(R.id.menu_audio_device_group)
-        val service = service
-        val session = if (service != null && service.isConnected) service.HumlaSession() else null
+        val session = connectedSession()
         val devices = session?.audioDevices.orEmpty()
         chooser.isVisible = devices.isNotEmpty()
-        val active = session?.activeAudioDevice?.id
+        val active = session?.activeAudioDevice
         for (device in devices) {
             sub.add(R.id.menu_audio_device_group, device.id, Menu.NONE,
                 AudioDeviceLabels.label(resources, device))
-                .setChecked(device.id == active)
+                .setChecked(device.id == active?.id)
         }
         sub.setGroupCheckable(R.id.menu_audio_device_group, true, true)
+        // The echo canceller for the device voice goes to: its kind's default or the user's
+        // override for that kind, as the session runs it. Its own item, outside the group.
+        sub.findItem(R.id.menu_audio_echo)?.let { echo ->
+            echo.isVisible = active != null
+            echo.isChecked = session?.isEchoCancellationEnabled == true
+        }
     }
+
+    /** The session, while there is a connection to have one; the chooser acts on nothing else. */
+    private fun connectedSession(): IHumlaSession? =
+        service?.takeIf { it.isConnected }?.HumlaSession()
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == R.id.menu_audio_device) {
@@ -303,10 +308,22 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
             // Not consumed, so the platform goes on to open the submenu just refilled.
             return false
         }
+        if (item.itemId == R.id.menu_audio_echo) {
+            val session = connectedSession()
+            val active = session?.activeAudioDevice
+            if (session != null && active != null) {
+                // Remembered for this kind of device; MumlaService hands the overrides to the
+                // service, which applies them live and again whenever such a device is routed.
+                settings.setEchoCancellationOverride(
+                    AudioDeviceCategory.of(active.type), !session.isEchoCancellationEnabled,
+                )
+                requireActivity().invalidateOptionsMenu()
+            }
+            return true
+        }
         if (item.groupId == R.id.menu_audio_device_group) {
-            val service = service
-            if (service != null && service.isConnected) {
-                service.HumlaSession().selectAudioDevice(item.itemId)
+            connectedSession()?.let {
+                it.selectAudioDevice(item.itemId)
                 requireActivity().invalidateOptionsMenu()
             }
             return true
@@ -319,17 +336,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         }
         if (noise != null) {
             settings.setNoiseSuppressionMethod(noise)
-            item.isChecked = true
-            return true
-        }
-        val echo = when (item.itemId) {
-            R.id.menu_echo_none -> "none"
-            R.id.menu_echo_system -> "system"
-            R.id.menu_echo_webrtc -> "webrtc"
-            else -> null
-        }
-        if (echo != null) {
-            settings.setEchoCancellationMethod(echo)
             item.isChecked = true
             return true
         }

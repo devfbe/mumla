@@ -50,11 +50,7 @@
     <string name="defaultUsernameDefault">Mumla_User</string>
     <string name="certificateGenerateSum">產生新的 Mumla 自簽憑證。推薦新手使用。</string>
     <string name="pttSettings">按鍵發話設定</string>
-    <string name="echoCancellationDisabled">停用</string>
-    <string name="echoCancellationMethodSum">降低使用裝置上的喇叭進行通話時的迴音。品質視裝置而定。</string>
-    <string name="echoCancellationMethod">降低迴音</string>
     <string name="hidePttSum">只有在使用按鍵發話熱點或實體鍵時有用處。</string>
-    <string name="echoCancellationSystem">系統</string>
     <string name="hidePtt">隱藏發話按鍵</string>
     <string name="useTtsSum">使用合成語音朗讀新進訊息。</string>
     <string name="shortTtsMessages">縮減文字轉語音訊息</string>

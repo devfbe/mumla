@@ -32,6 +32,7 @@ import se.lublin.mumla.BuildConfig;
 import se.lublin.mumla.R;
 import se.lublin.mumla.Settings;
 import se.lublin.mumla.db.MumlaDatabase;
+import se.lublin.mumla.service.AudioPreferenceExtras;
 import se.lublin.mumla.service.MumlaService;
 import se.lublin.mumla.util.MumlaTrustStore;
 
@@ -59,7 +60,7 @@ public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
 
         int audioSource = mSettings.isHandsetMode() ?
                 MediaRecorder.AudioSource.DEFAULT : MediaRecorder.AudioSource.MIC;
-        int audioStream = mSettings.getPlaybackStream();
+        int audioStream = Settings.PLAYBACK_STREAM;
 
         Intent connectIntent = new Intent(mContext, MumlaService.class);
         connectIntent.putExtra(HumlaService.EXTRAS_SERVER, server);
@@ -88,7 +89,8 @@ public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
         connectIntent.putExtra(HumlaService.EXTRAS_TRUST_STORE_FORMAT, MumlaTrustStore.getTrustStoreFormat());
         connectIntent.putExtra(HumlaService.EXTRAS_HALF_DUPLEX, mSettings.isHalfDuplex());
         connectIntent.putExtra(HumlaService.EXTRAS_ENABLE_PREPROCESSOR, mSettings.isPreprocessorEnabled());
-        connectIntent.putExtra(HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD, mSettings.getEchoCancellationMethod());
+        connectIntent.putExtra(HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE,
+                AudioPreferenceExtras.echoCancellationOverrides(mSettings));
         connectIntent.putExtra(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD, mSettings.getNoiseSuppressionMethod());
         connectIntent.putExtra(HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB, mSettings.getSpeexNoiseSuppressDb());
         connectIntent.putExtra(HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR,

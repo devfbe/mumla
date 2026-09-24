@@ -256,15 +256,6 @@
             android:summary="@string/speexNoiseSuppressSum"
             app:iconSpaceReserved="false"/>
 
-        <ListPreference
-            android:defaultValue="none"
-            android:entries="@array/echoCancellationNames"
-            android:entryValues="@array/echoCancellationValues"
-            android:key="echo_cancellation_method"
-            android:summary="@string/echoCancellationMethodSum"
-            android:title="@string/echoCancellationMethod"
-            app:iconSpaceReserved="false" />
-
         <CheckBoxPreference
             android:key="android_noise_suppressor"
             android:defaultValue="false"

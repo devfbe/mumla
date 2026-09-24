@@ -38,8 +38,10 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.session.CommunicationDevice
 import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.db.DatabaseProvider
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.service.IMumlaService
@@ -108,6 +110,7 @@ class ChannelListFragmentAudioDeviceTest {
         every { service.HumlaSession() } returns session
         every { session.audioDevices } returns listOf(earpiece, speaker, headset)
         every { session.activeAudioDevice } returns headset
+        every { session.isEchoCancellationEnabled } returns false
 
         controller = Robolectric.buildActivity(RecordingHostActivity::class.java).setup()
         controller.get().bind(service)
@@ -135,7 +138,10 @@ class ChannelListFragmentAudioDeviceTest {
     private fun Menu.choices(): List<MenuItem> {
         val sub = chooser().subMenu!!
         return (0 until sub.size()).map { sub.getItem(it) }
+            .filter { it.groupId == R.id.menu_audio_device_group }
     }
+
+    private fun Menu.echo(): MenuItem = chooser().subMenu!!.findItem(R.id.menu_audio_echo)
 
     @Test
     fun theChooserHasATitleAndAnIcon() {
@@ -245,6 +251,71 @@ class ChannelListFragmentAudioDeviceTest {
         fragment.onOptionsItemSelected(speakerItem)
 
         verify(exactly = 0) { session.selectAudioDevice(any()) }
+    }
+
+    // --- echo cancellation, below the devices ------------------------------------------------
+
+    /**
+     * One switch under the devices, showing what runs for the device voice goes to - its kind's
+     * default or the user's override, as the session reports it. Checkable in its own right, and
+     * not part of the single-choice group, or ticking it would untick the device.
+     */
+    @Test
+    fun theEchoSwitchShowsWhatRunsForTheActiveDevice() {
+        val echo = prepared().echo()
+        assertThat(echo.title.toString()).isEqualTo(app.getString(R.string.echo_cancellation))
+        assertThat(echo.isCheckable).isTrue()
+        assertThat(echo.isChecked).isFalse()
+        assertThat(echo.groupId).isNotEqualTo(R.id.menu_audio_device_group)
+
+        every { session.isEchoCancellationEnabled } returns true
+
+        assertThat(prepared().echo().isChecked).isTrue()
+    }
+
+    /**
+     * Tapping it is a choice about this kind of device, remembered for the next time one is
+     * routed: it is written as that kind's override, and the service picks it up from there.
+     */
+    @Test
+    fun tappingTheEchoSwitchRemembersTheChoiceForThisKindOfDevice() {
+        val settings = Settings.getInstance(app)
+        val before = activity.invalidationCount()
+
+        @Suppress("DEPRECATION")
+        val consumed = fragment.onOptionsItemSelected(prepared().echo())
+
+        assertThat(consumed).isTrue()
+        assertThat(settings.getEchoCancellationOverrides())
+            .containsExactly(AudioDeviceCategory.BLUETOOTH, true)
+        assertThat(activity.invalidationCount()).isGreaterThan(before)
+
+        every { session.isEchoCancellationEnabled } returns true
+        every { session.activeAudioDevice } returns speaker
+        @Suppress("DEPRECATION")
+        fragment.onOptionsItemSelected(prepared().echo())
+
+        assertThat(settings.getEchoCancellationOverrides()).containsExactly(
+            AudioDeviceCategory.BLUETOOTH, true,
+            AudioDeviceCategory.SPEAKER, false,
+        )
+    }
+
+    @Test
+    fun withoutAnActiveDeviceTheEchoSwitchIsHidden() {
+        every { session.activeAudioDevice } returns null
+
+        assertThat(prepared().echo().isVisible).isFalse()
+    }
+
+    /** The echo menu and the settings' echo method are gone; this is the one place left. */
+    @Test
+    fun thereIsNoSeparateEchoMenuAnyMore() {
+        val menu = prepared()
+        val titles = (0 until menu.size()).map { menu.getItem(it).title.toString() }
+
+        assertThat(titles).doesNotContain(app.getString(R.string.echo_cancellation))
+        assertThat(menu.chooser().subMenu!!.size()).isEqualTo(4) // three devices and the switch
     }
 
     /** The chooser replaces the old checkable "Bluetooth" item; there is no second way in. */

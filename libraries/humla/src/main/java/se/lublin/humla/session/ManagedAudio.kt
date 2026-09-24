@@ -19,6 +19,7 @@ package se.lublin.humla.session
 
 import android.content.Context
 import se.lublin.humla.audio.AudioOutput
+import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.model.User
@@ -69,10 +70,8 @@ interface AudioHandlerFactory {
 /**
  * Builds the real [AudioHandler]. Stream B extends the builder chain here (spec 4).
  *
- * Only [AudioConfig.legacyEchoCancellationMethod] reaches the legacy
- * `Builder.setEchoCancellationMethod`; [AudioConfig.echoCancellationMode] is the spec 4 value and
- * belongs to the new pipeline. DefaultAudioHandlerFactoryTest pins which of the two arrives, by
- * way of the AudioManager mode the legacy "system" method sets.
+ * [AudioConfig.echoCancellation] reaches `Builder.setEchoCancellationMethod` as the WebRTC
+ * canceller or none; the platform canceller ("system") is no longer offered.
  */
 class DefaultAudioHandlerFactory : AudioHandlerFactory {
     @Throws(AudioException::class)
@@ -126,7 +125,10 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
             .setBluetoothEnabled(config.bluetoothActive)
             .setHalfDuplexEnabled(config.halfDuplex)
             .setPreprocessorEnabled(config.preprocessorEnabled)
-            .setEchoCancellationMethod(config.legacyEchoCancellationMethod)
+            .setEchoCancellationMethod(
+                if (config.echoCancellation) EchoCancellationMode.WEBRTC.preferenceValue
+                else EchoCancellationMode.NONE.preferenceValue,
+            )
             .setInputMode(params.inputMode)
             .setEncodeListener(encodeListener)
             .setTalkingListener(outputListener)

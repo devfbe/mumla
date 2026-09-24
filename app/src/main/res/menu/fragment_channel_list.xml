@@ -21,27 +21,20 @@
     <item android:id="@+id/menu_deafen_button" android:title="@string/deafen" mumla:showAsAction="ifRoom" android:icon="@drawable/ic_action_audio"></item>
     <item android:id="@+id/menu_search" android:title="@string/search" mumla:actionViewClass="androidx.appcompat.widget.SearchView" mumla:showAsAction="ifRoom|collapseActionView" android:icon="@drawable/ic_action_search"></item>
     <!-- The audio chooser: filled with the devices the session offers when the menu is prepared
-         and again when it is opened (ChannelListFragment.fillAudioDevices). -->
+         and again when it is opened (ChannelListFragment.fillAudioDevices), with the echo
+         canceller's switch for the active device below them. -->
     <item android:id="@+id/menu_audio_device" android:title="@string/audio_device" android:icon="@drawable/ic_action_audio_device" mumla:showAsAction="ifRoom">
         <menu>
             <group android:id="@+id/menu_audio_device_group" android:checkableBehavior="single"/>
+            <item android:id="@+id/menu_audio_echo" android:title="@string/echo_cancellation" android:checkable="true" android:orderInCategory="1000"/>
         </menu>
     </item>
     <item android:id="@+id/menu_noise" android:title="@string/noiseSuppression" mumla:showAsAction="never">
         <menu>
             <group android:checkableBehavior="single">
-                <item android:id="@+id/menu_noise_none" android:title="@string/echoCancellationDisabled"/>
+                <item android:id="@+id/menu_noise_none" android:title="@string/noiseSuppressionNone"/>
                 <item android:id="@+id/menu_noise_speex" android:title="Speex"/>
                 <item android:id="@+id/menu_noise_rnnoise" android:title="RNNoise"/>
-            </group>
-        </menu>
-    </item>
-    <item android:id="@+id/menu_echo" android:title="@string/echoCancellationMethod" mumla:showAsAction="never">
-        <menu>
-            <group android:checkableBehavior="single">
-                <item android:id="@+id/menu_echo_none" android:title="@string/echoCancellationDisabled"/>
-                <item android:id="@+id/menu_echo_system" android:title="@string/echoCancellationSystem"/>
-                <item android:id="@+id/menu_echo_webrtc" android:title="WebRTC (AEC3)"/>
             </group>
         </menu>
     </item>

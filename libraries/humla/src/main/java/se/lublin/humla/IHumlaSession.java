@@ -149,6 +149,12 @@ public interface IHumlaSession {
      */
     void selectAudioDevice(int id);
 
+    /**
+     * @return whether the echo canceller runs for the device voice goes to right now - its kind's
+     *         default or the user's override for that kind.
+     */
+    boolean isEchoCancellationEnabled();
+
     boolean isTalking();
 
     void setTalkingState(boolean talking);

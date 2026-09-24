@@ -23,10 +23,10 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
+import se.lublin.humla.session.AudioDeviceCategory
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.AdaptiveVadTracker
-import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
@@ -94,12 +94,40 @@ class SettingsAudioTest {
     }
 
     @Test
-    fun `echo cancellation mode parses the stored method`() {
-        assertThat(settings.getEchoCancellationMode()).isEqualTo(EchoCancellationMode.NONE)
-        prefs.edit().putString(Settings.PREF_ECHO_CANCELLATION_METHOD, "system").commit()
-        assertThat(settings.getEchoCancellationMode()).isEqualTo(EchoCancellationMode.ANDROID)
-        prefs.edit().putString(Settings.PREF_ECHO_CANCELLATION_METHOD, "webrtc").commit()
-        assertThat(settings.getEchoCancellationMode()).isEqualTo(EchoCancellationMode.WEBRTC)
+    fun `echo cancellation follows the kind of device until the user overrides it`() {
+        assertThat(settings.isEchoCancellationEnabled(AudioDeviceCategory.SPEAKER)).isTrue()
+        assertThat(settings.isEchoCancellationEnabled(AudioDeviceCategory.EARPIECE)).isTrue()
+        assertThat(settings.isEchoCancellationEnabled(AudioDeviceCategory.BLUETOOTH)).isFalse()
+        assertThat(settings.isEchoCancellationEnabled(AudioDeviceCategory.WIRED)).isFalse()
+        assertThat(settings.getEchoCancellationOverrides()).isEmpty()
+    }
+
+    /** One override per kind of device, remembered, and none of the others touched. */
+    @Test
+    fun `an echo cancellation override is kept for its kind of device only`() {
+        settings.setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
+        settings.setEchoCancellationOverride(AudioDeviceCategory.BLUETOOTH, true)
+
+        val reread = Settings.getInstance(ApplicationProvider.getApplicationContext())
+        assertThat(reread.isEchoCancellationEnabled(AudioDeviceCategory.SPEAKER)).isFalse()
+        assertThat(reread.isEchoCancellationEnabled(AudioDeviceCategory.BLUETOOTH)).isTrue()
+        assertThat(reread.isEchoCancellationEnabled(AudioDeviceCategory.EARPIECE)).isTrue()
+        assertThat(reread.getEchoCancellationOverrides()).containsExactly(
+            AudioDeviceCategory.SPEAKER, false,
+            AudioDeviceCategory.BLUETOOTH, true,
+        )
+        assertThat(Settings.ECHO_CANCELLATION_KEYS)
+            .contains(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
+    }
+
+    /** The global method is gone; the value it left on disk goes with it, once. */
+    @Test
+    fun `the old echo cancellation method is removed from the preferences`() {
+        prefs.edit().putString("echo_cancellation_method", "system").commit()
+
+        Settings.getInstance(ApplicationProvider.getApplicationContext())
+
+        assertThat(prefs.contains("echo_cancellation_method")).isFalse()
     }
 
     // --- the voice gate ----------------------------------------------------------------------

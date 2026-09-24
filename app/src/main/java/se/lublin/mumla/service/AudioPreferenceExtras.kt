@@ -58,14 +58,13 @@ object AudioPreferenceExtras {
 
     /** Every preference key this mapper turns into an extra. */
     @JvmField
-    val KEYS: Set<String> = VAD_KEYS + setOf(
+    val KEYS: Set<String> = VAD_KEYS + Settings.ECHO_CANCELLATION_KEYS + setOf(
         Settings.PREF_INPUT_METHOD,
         Settings.PREF_HANDSET_MODE,
         Settings.PREF_AMPLITUDE_BOOST,
         Settings.PREF_HALF_DUPLEX,
         Settings.PREF_NOISE_SUPPRESSION_METHOD,
         Settings.PREF_SPEEX_NOISE_SUPPRESS_DB,
-        Settings.PREF_ECHO_CANCELLATION_METHOD,
         Settings.PREF_ANDROID_NOISE_SUPPRESSOR,
         Settings.PREF_ANDROID_AGC,
         Settings.PREF_INPUT_QUALITY,
@@ -80,13 +79,16 @@ object AudioPreferenceExtras {
             extras.putBundle(HumlaService.EXTRAS_VAD_CONFIG, VadConfigBundle.toBundle(settings.getVadConfig()))
             return extras
         }
+        if (key in Settings.ECHO_CANCELLATION_KEYS) {
+            // All of them, not the one that changed: the service replaces its overrides whole.
+            extras.putBundle(HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE, echoCancellationOverrides(settings))
+            return extras
+        }
         when (key) {
             Settings.PREF_INPUT_METHOD ->
                 extras.putInt(HumlaService.EXTRAS_TRANSMIT_MODE, settings.getHumlaInputMethod())
-            Settings.PREF_HANDSET_MODE -> {
-                extras.putInt(HumlaService.EXTRAS_AUDIO_STREAM, settings.getPlaybackStream())
+            Settings.PREF_HANDSET_MODE ->
                 extras.putBoolean(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, settings.isHandsetMode())
-            }
             Settings.PREF_AMPLITUDE_BOOST ->
                 extras.putFloat(HumlaService.EXTRAS_AMPLITUDE_BOOST, settings.getAmplitudeBoostMultiplier())
             Settings.PREF_HALF_DUPLEX ->
@@ -95,13 +97,6 @@ object AudioPreferenceExtras {
                 extras.putString(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD, settings.getNoiseSuppressionMethod())
             Settings.PREF_SPEEX_NOISE_SUPPRESS_DB ->
                 extras.putInt(HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB, settings.getSpeexNoiseSuppressDb())
-            Settings.PREF_ECHO_CANCELLATION_METHOD -> {
-                extras.putString(HumlaService.EXTRAS_ECHO_CANCELLATION_METHOD, settings.getEchoCancellationMethod())
-                // The canceller decides the audio mode, and the mode decides which stream the
-                // platform routes and the volume rocker adjusts. Both go in one branch on
-                // purpose: two branches for one key in a `when` means the second is dead code.
-                extras.putInt(HumlaService.EXTRAS_AUDIO_STREAM, settings.getPlaybackStream())
-            }
             Settings.PREF_ANDROID_NOISE_SUPPRESSOR -> extras.putBoolean(
                 HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR,
                 settings.getAndroidAudioEffects().noiseSuppressor,
@@ -118,5 +113,11 @@ object AudioPreferenceExtras {
                 extras.putInt(HumlaService.EXTRAS_FRAMES_PER_PACKET, settings.getFramesPerPacket())
         }
         return extras
+    }
+
+    /** The user's echo-cancellation overrides as `HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE`. */
+    @JvmStatic
+    fun echoCancellationOverrides(settings: Settings): Bundle = Bundle().apply {
+        for ((category, enabled) in settings.getEchoCancellationOverrides()) putBoolean(category.name, enabled)
     }
 }

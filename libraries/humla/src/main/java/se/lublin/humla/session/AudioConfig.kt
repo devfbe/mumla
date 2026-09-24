@@ -43,12 +43,10 @@ data class AudioConfig(
     val halfDuplexRequested: Boolean = false,
     val preprocessorEnabled: Boolean = false,
     /**
-     * Legacy `EXTRAS_ECHO_CANCELLATION_METHOD` value, passed to the existing
-     * `AudioHandler.Builder.setEchoCancellationMethod`. Stream B must not read this one for the new
-     * pipeline - read [echoCancellationMode]. Never null: `AudioHandler`'s constructor calls
-     * `equals("system")` on it, where the builder's own Java default of null threw.
+     * Whether WebRTC's AEC3 runs. Not a setting any more: `HumlaService` derives it from the
+     * routed device's [AudioDeviceCategory] and the user's override for that kind of device.
      */
-    val legacyEchoCancellationMethod: String = "none",
+    val echoCancellation: Boolean = false,
     /**
      * The `AudioDeviceInfo` type of the communication device [AudioRouter] routes voice to, or null
      * while the route is the platform's own. More than a bool on purpose (contract 9b, point 15):
@@ -59,8 +57,6 @@ data class AudioConfig(
     val noiseSuppression: String = "none",
     /** Spec B9: how deep the Speex denoiser may cut. One of the three supported steps. */
     val speexNoiseSuppressDb: Int = -25,
-    /** Spec 4 `EXTRAS_ECHO_CANCELLATION` value ("none"/"android"/"webrtc"); the one stream B reads. */
-    val echoCancellationMode: String = "none",
     val vadMode: String = "amplitude",
     val vadStart: Float = 0.6f,
     val vadStop: Float = 0.3f,
@@ -85,11 +81,11 @@ data class AudioConfig(
     val bluetoothActive: Boolean get() = routedDeviceType == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
 
     /**
-     * The stream the playback track is opened on. [audioStream] is the settings' rule
-     * (`Settings.getPlaybackStream()`), and it holds while nothing is routed; a routed device moves
-     * playback to the voice-call stream, because a media-stream track does not follow the
-     * communication device - the earpiece or a speaker chosen over a plugged-in headset would
-     * otherwise stay silent. This generalizes what `AudioHandler` did for Bluetooth alone.
+     * The stream the playback track is opened on. [audioStream] is what the client asked for and
+     * holds while nothing is routed; a routed device moves playback to the voice-call stream,
+     * because a media-stream track does not follow the communication device - the earpiece or a
+     * speaker chosen over a plugged-in headset would otherwise stay silent. This generalizes what
+     * `AudioHandler` did for Bluetooth alone. (Mumla itself always asks for the voice-call stream.)
      */
     val playbackStream: Int
         get() = if (routedDeviceType != null) AudioManager.STREAM_VOICE_CALL else audioStream

@@ -91,6 +91,7 @@
     <string name="audio_device_usb">USB-Headset</string>
     <string name="audio_device_bluetooth">Bluetooth-Headset</string>
     <string name="audio_device_other">Audiogerät</string>
+    <string name="echo_cancellation">Echounterdrückung</string>
     <string name="quickConnect">Schnell verbinden</string>
     <string name="connect">Verbinden</string>
     <string name="connectToServer">Verbinde zum Server</string>
