@@ -110,6 +110,10 @@
     <string name="search">Search</string>
     <string name="searchHint">Search channels and users</string>
     <string name="audio_device">Audio device</string>
+    <!-- Chooser entry that lets the app pick the device: a headset if there is one, else the speaker. -->
+    <string name="audio_device_automatic">Automatic</string>
+    <!-- The same entry while connected, naming the device it picked. -->
+    <string name="audio_device_automatic_current">Automatic (%1$s)</string>
     <string name="audio_device_earpiece">Earpiece</string>
     <string name="audio_device_speaker">Speaker</string>
     <string name="audio_device_wired">Wired headset</string>
