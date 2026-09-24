@@ -16,6 +16,7 @@ import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.testutil.SilentLogger
 import android.content.Context
@@ -88,6 +89,7 @@ class DefaultAudioHandlerFactoryTest {
         override fun setTalkingListener(v: AudioOutput.AudioOutputListener) =
             rec("setTalkingListener", v).also { super.setTalkingListener(v) }
         override fun setInputMode(v: IInputMode) = rec("setInputMode", v).also { super.setInputMode(v) }
+        override fun setUdpProtocol(v: UdpProtocol) = rec("setUdpProtocol", v).also { super.setUdpProtocol(v) }
     }
 
     @Test
@@ -156,12 +158,14 @@ class DefaultAudioHandlerFactoryTest {
             "setAndroidNoiseSuppressor" to true,
             "setAndroidAutomaticGainControl" to false,
             "setInputMode" to inputMode,
+            "setUdpProtocol" to UdpProtocol.PROTOBUF,
             "setEncodeListener" to encodeListener,
             "setTalkingListener" to outputListener,
         )
         val setters = AudioHandler.Builder::class.java.methods.map { it.name }.filter { it.startsWith("set") }
         assertThat(setters).containsExactlyElementsIn(expected.keys)
-        assertThat(built(config, params.copy(inputMode = inputMode))).containsExactlyEntriesIn(expected)
+        val session = params.copy(inputMode = inputMode, udpProtocol = UdpProtocol.PROTOBUF)
+        assertThat(built(config, session)).containsExactlyEntriesIn(expected)
     }
 
     /** The two boolean fields must not be cross-wired. */

@@ -41,6 +41,8 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.UdpProtocol
+import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.util.HumlaLogger
 
@@ -123,6 +125,7 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
             }
         }
         transmitter.targetId = targetId
+        transmitter.udpProtocol = builder.udpProtocol
         output = AudioOutput(builder.talkingListener, wiring.farEnd)
     }
 
@@ -215,8 +218,8 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         }
     }
 
-    override fun onVoicePacket(data: ByteArray, messageType: HumlaUDPMessageType) {
-        synchronized(output) { output.queueVoiceData(data, messageType) }
+    override fun onVoicePacket(packet: VoicePacket) {
+        synchronized(output) { output.queueVoiceData(packet) }
     }
 
     fun setVoiceTargetId(id: Byte) {
@@ -264,6 +267,8 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
             private set
         internal lateinit var inputMode: IInputMode
             private set
+        internal var udpProtocol = UdpProtocol.LEGACY
+            private set
         internal lateinit var encodeListener: AudioEncodeListener
             private set
         internal lateinit var talkingListener: AudioOutput.AudioOutputListener
@@ -290,6 +295,7 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         open fun setTalkingListener(listener: AudioOutput.AudioOutputListener): Builder =
             apply { talkingListener = listener }
         open fun setInputMode(mode: IInputMode): Builder = apply { inputMode = mode }
+        open fun setUdpProtocol(protocol: UdpProtocol): Builder = apply { udpProtocol = protocol }
 
         /**
          * Creates an AudioHandler for the given session and starts playback and recording.

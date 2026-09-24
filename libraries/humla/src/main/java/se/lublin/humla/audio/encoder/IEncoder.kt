@@ -27,6 +27,12 @@ interface IEncoder {
     /** True once enough audio is encoded to send a packet. */
     val isReady: Boolean
 
+    /** The size of the ready Opus packet in bytes; valid while [isReady]. */
+    val encodedLength: Int
+
+    /** Whether the ready packet ends the transmission; valid while [isReady]. */
+    val isTerminator: Boolean
+
     /**
      * Encodes [inputSize] samples of [input].
      * @return the number of bytes encoded.
@@ -35,7 +41,8 @@ interface IEncoder {
     fun encode(input: ShortArray, inputSize: Int): Int
 
     /**
-     * Writes the encoded packet into [packetBuffer]; call only while [isReady].
+     * Appends the ready Opus packet, [encodedLength] bytes, to [packetBuffer] and starts the next
+     * one; call only while [isReady].
      * @throws java.nio.BufferUnderflowException if not enough audio is encoded.
      */
     fun getEncodedData(packetBuffer: PacketBuffer)

@@ -29,6 +29,7 @@ import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.net.UdpProtocol
 
 class VoiceTransmitterTest {
     /** One frame per packet; the payload is the frame's first sample. Allocation-free. */
@@ -37,6 +38,8 @@ class VoiceTransmitterTest {
         override var bufferedFrames = 0
             private set
         override val isReady: Boolean get() = bufferedFrames > 0
+        override val encodedLength = 2
+        override val isTerminator = false
 
         override fun encode(input: ShortArray, inputSize: Int): Int {
             sample = input[0]
@@ -45,7 +48,6 @@ class VoiceTransmitterTest {
         }
 
         override fun getEncodedData(packetBuffer: PacketBuffer) {
-            packetBuffer.writeLong(2)
             packetBuffer.append(sample.toLong() shr 8)
             packetBuffer.append(sample.toLong())
             bufferedFrames = 0
@@ -94,6 +96,23 @@ class VoiceTransmitterTest {
     }
 
     @Test
+    fun `in the protobuf format a packet is an Audio message with target, frame number and opus data`() {
+        val listener = RecordingListener()
+        val transmitter = transmitter(listener)
+        transmitter.targetId = 3
+        transmitter.udpProtocol = UdpProtocol.PROTOBUF
+
+        transmitter.onAudioInputReceived(frame(0x0102), FRAME)
+        transmitter.onAudioInputReceived(frame(0x0304), FRAME)
+
+        // Header 0; target (1) 3; frame_number (4) left out while 0; opus_data (5), 2 bytes.
+        assertThat(listener.packets.map { it.toList() }).containsExactly(
+            listOf<Byte>(0, 0x08, 3, 0x2A, 2, 1, 2),
+            listOf<Byte>(0, 0x08, 3, 0x20, 1, 0x2A, 2, 3, 4),
+        ).inOrder()
+    }
+
+    @Test
     fun `every packet is handed over in the same reused buffer`() {
         val listener = RecordingListener()
         val transmitter = transmitter(listener)
@@ -133,6 +152,10 @@ class VoiceTransmitterTest {
 
     @Test
     fun `encoding and sending a frame allocates under half an object`() {
+        for (protocol in UdpProtocol.entries) assertSendPathDoesNotAllocate(protocol)
+    }
+
+    private fun assertSendPathDoesNotAllocate(protocol: UdpProtocol) {
         val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
         assertThat(threads.isThreadAllocatedMemoryEnabled).isTrue()
         val silent = object : AudioHandler.AudioEncodeListener {
@@ -143,6 +166,7 @@ class VoiceTransmitterTest {
             override fun onTalkingStateChanged(talking: Boolean) = Unit
         }
         val transmitter = transmitter(silent)
+        transmitter.udpProtocol = protocol
         val input = frame(7)
         val self = Thread.currentThread().threadId()
         val bytesPerFrame = { warmups: Int, iterations: Int ->
@@ -156,7 +180,7 @@ class VoiceTransmitterTest {
         val hot = bytesPerFrame(100_000, 100_000)
 
         println(
-            "allocation per 10 ms frame (cold / hot): " +
+            "allocation per 10 ms frame, $protocol (cold / hot): " +
                 "VoiceTransmitter ${"%.3f".format(cold)} / ${"%.3f".format(hot)} B",
         )
 

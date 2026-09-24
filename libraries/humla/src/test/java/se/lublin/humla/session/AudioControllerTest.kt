@@ -56,7 +56,7 @@ class AudioControllerTest {
         val warningListener: ((String) -> Unit)? get() = warning
         val targetIds = CopyOnWriteArrayList<Byte>()
         override val tcpHandler = TcpMessageHandler {}
-        override val voiceHandler = VoicePacketHandler { _, _ -> }
+        override val voiceHandler = VoicePacketHandler { }
         override val currentBandwidth: Int = 12_345
         override fun setVoiceTargetId(id: Byte) { targetIds += id }
         override fun setWarningListener(listener: ((String) -> Unit)?) { warning = listener }

@@ -35,9 +35,9 @@ import se.lublin.humla.protocol.AudioHandler
 class PlaybackAllocationTest {
     private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
 
-    /** Always has a packet: one opus frame behind its 13-bit size header. */
+    /** Always has a packet: one opus frame, then a volume adjustment of 1 and no terminator. */
     private class SilentJitter : SpeexJitterApi {
-        private val packet = byteArrayOf(3, 0x41, 0x42, 0x43)
+        private val packet = byteArrayOf(0x41, 0x42, 0x43, 0x3F, 0x80.toByte(), 0, 0, 0)
         override fun init(stepSize: Int): Long = 1L
         override fun destroy(handle: Long) = Unit
         override fun put(

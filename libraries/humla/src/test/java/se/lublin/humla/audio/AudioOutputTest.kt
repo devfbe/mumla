@@ -16,7 +16,7 @@ import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
-import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.testutil.awaitUntil
 
@@ -142,7 +142,7 @@ class AudioOutputTest {
 
         // Building the speech throws inside the critical section. On a thread of its own, because
         // the lock is reentrant -- the test thread would get it back no matter what was leaked.
-        val producer = Thread { o.queueVoiceData(voicePacket(), HumlaUDPMessageType.UDPVoiceOpus) }
+        val producer = Thread { o.queueVoiceData(voicePacket()) }
         producer.start()
         producer.join(TimeUnit.SECONDS.toMillis(5))
         assertThat(producer.isAlive).isFalse()
@@ -169,7 +169,7 @@ class AudioOutputTest {
             HumlaUDPMessageType.UDPVoiceCELTBeta,
             HumlaUDPMessageType.UDPVoiceCELTAlpha,
         )) {
-            o.queueVoiceData(voicePacket(), type)
+            o.queueVoiceData(voicePacket(type))
         }
 
         assertThat(built).isEqualTo(0)
@@ -177,24 +177,21 @@ class AudioOutputTest {
             .hasSize(1)
 
         // The same talker's Opus stream still plays.
-        o.queueVoiceData(voicePacket(), HumlaUDPMessageType.UDPVoiceOpus)
+        o.queueVoiceData(voicePacket())
         assertThat(built).isEqualTo(1)
     }
 
     // --- helpers --------------------------------------------------------------------------------
 
-    /** Header byte, session, sequence, then one opus frame: a 13-bit size and its payload. */
-    private fun voicePacket(session: Int = SESSION): ByteArray {
-        val pb = PacketBuffer.allocate(16)
-        pb.append(0) // header byte: type and target
-        pb.writeLong(session.toLong())
-        pb.writeLong(0) // sequence
-        pb.writeLong(2) // opus size header
-        pb.append(byteArrayOf(0x01, 0x02), 2)
-        val length = pb.size()
-        pb.rewind()
-        return pb.dataBlock(length)
-    }
+    /** One decoded packet of [codec] from [session] with a two-byte opus frame. */
+    private fun voicePacket(codec: HumlaUDPMessageType = HumlaUDPMessageType.UDPVoiceOpus, session: Int = SESSION) =
+        VoicePacket().apply {
+            this.codec = codec
+            this.session = session
+            data = byteArrayOf(0x01, 0x02)
+            opusOffset = 0
+            opusLength = 2
+        }
 
     private fun runBounded(what: String, block: () -> Unit) {
         var failure: Throwable? = null

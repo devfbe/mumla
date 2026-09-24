@@ -381,7 +381,7 @@ class HumlaConnectionProtocolThreadTest {
     fun aDatagramArrivingBehindADisconnectIsNotDispatched() {
         val tcp = connectAndEstablish()
         val seen = AtomicInteger()
-        connection.addVoiceHandler { _, _ -> seen.incrementAndGet() }
+        connection.addVoiceHandler { _ -> seen.incrementAndGet() }
 
         inTheTeardownWindow(tcp) { connection.onUDPDataReceived(voiceDatagram) }
 
@@ -472,7 +472,7 @@ class HumlaConnectionProtocolThreadTest {
         val frames = AtomicInteger()
         connection.addTcpHandler { if (it is Mumble.Version) { frames.incrementAndGet() } }
         val datagrams = AtomicInteger()
-        connection.addVoiceHandler { _, _ -> datagrams.incrementAndGet() }
+        connection.addVoiceHandler { _ -> datagrams.incrementAndGet() }
         val sentBefore = tcp.sent.toList()
         val invoked = CopyOnWriteArrayList<String>()
 

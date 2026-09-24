@@ -18,7 +18,7 @@
 package se.lublin.humla.protocol
 
 import com.google.protobuf.MessageLite
-import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.VoicePacket
 
 /** Receives every parsed TCP message from the server; handlers pick types with `is` checks. */
 fun interface TcpMessageHandler {
@@ -27,5 +27,6 @@ fun interface TcpMessageHandler {
 
 /** Receives voice packets, whether they arrived over UDP or tunnelled through TCP. */
 fun interface VoicePacketHandler {
-    fun onVoicePacket(data: ByteArray, type: HumlaUDPMessageType)
+    /** [packet] is reused for the next packet: valid only until this call returns. */
+    fun onVoicePacket(packet: VoicePacket)
 }

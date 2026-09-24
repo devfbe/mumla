@@ -427,6 +427,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             codec = connection.getCodec(),
             targetId = mVoiceTargetId,
             inputMode = mInputMode,
+            udpProtocol = connection.udpProtocol,
         )
         mAudioController.start(mAudioConfig, params, connection)
     }

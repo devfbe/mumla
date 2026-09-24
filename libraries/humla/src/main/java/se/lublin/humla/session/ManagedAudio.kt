@@ -24,6 +24,7 @@ import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.protocol.TcpMessageHandler
 import se.lublin.humla.protocol.VoicePacketHandler
@@ -53,6 +54,8 @@ data class AudioSessionParams(
     val codec: HumlaUDPMessageType?,
     val targetId: Byte,
     val inputMode: IInputMode,
+    /** The connection's voice packet format. */
+    val udpProtocol: UdpProtocol = UdpProtocol.LEGACY,
 )
 
 interface AudioHandlerFactory {
@@ -120,6 +123,7 @@ class DefaultAudioHandlerFactory(
                 else EchoCancellationMode.NONE.preferenceValue,
             )
             .setInputMode(params.inputMode)
+            .setUdpProtocol(params.udpProtocol)
             .setEncodeListener(encodeListener)
             .setTalkingListener(outputListener)
             .setNoiseSuppressionMethod(config.noiseSuppression)

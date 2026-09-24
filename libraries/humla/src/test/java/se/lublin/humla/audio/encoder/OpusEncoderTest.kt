@@ -35,7 +35,7 @@ class OpusEncoderTest {
     }
 
     @Test
-    fun `a full packet is written as varint length followed by the opus payload`() {
+    fun `a full packet is handed over as the bare opus payload`() {
         val fake = FakeOpus()
         val encoder = OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
 
@@ -45,16 +45,18 @@ class OpusEncoderTest {
         assertThat(encoder.isReady).isTrue()
         assertThat(fake.encodedFrameSizes).containsExactly(960)
 
+        assertThat(encoder.encodedLength).isEqualTo(3)
+        assertThat(encoder.isTerminator).isFalse()
         val pb = PacketBuffer.allocate(16)
         encoder.getEncodedData(pb)
-        assertThat(pb.size()).isEqualTo(4)
+        assertThat(pb.size()).isEqualTo(3)
         pb.rewind()
-        assertThat(pb.dataBlock(4)).isEqualTo(byteArrayOf(0x03, 0x11, 0x22, 0x33))
+        assertThat(pb.dataBlock(3)).isEqualTo(byteArrayOf(0x11, 0x22, 0x33))
         assertThat(encoder.isReady).isFalse()
     }
 
     @Test
-    fun `terminate flushes a partial packet and sets the terminator bit in the header`() {
+    fun `terminate flushes a partial packet and marks it as the terminator`() {
         val fake = FakeOpus()
         val encoder = OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
         encoder.encode(ShortArray(480), 480)
@@ -62,11 +64,12 @@ class OpusEncoderTest {
         encoder.terminate()
 
         assertThat(fake.encodedFrameSizes).containsExactly(960) // zero-padded to a whole packet
+        assertThat(encoder.isTerminator).isTrue()
         val pb = PacketBuffer.allocate(16)
         encoder.getEncodedData(pb)
         pb.rewind()
-        assertThat(pb.readLong()).isEqualTo(3L or (1L shl 13)) // 8195: two-byte varint 0xA0 0x03
         assertThat(pb.dataBlock(3)).isEqualTo(byteArrayOf(0x11, 0x22, 0x33))
+        assertThat(encoder.isTerminator).isFalse()
     }
 
     @Test

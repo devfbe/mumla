@@ -27,9 +27,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.exception.AudioInitializationException
+import se.lublin.humla.net.HumlaTCPMessageType
+import se.lublin.humla.net.UdpProtocol
+import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.AudioController
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
+import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
@@ -68,6 +72,22 @@ class HumlaServiceAudioTest {
         assertThat(h.audioFactory.sessionParams[0].self.name).isEqualTo("me")
         assertThat(h.audioFactory.sessionParams[0].maxBandwidth).isEqualTo(72_000)
         assertThat(h.service.currentBandwidth).isEqualTo(12_345)
+    }
+
+    /** The voice format the server's Version picked reaches the pipeline, before any voice is sent. */
+    @Test
+    fun thePipelineSendsInTheFormatTheConnectionNegotiated() {
+        val h = start()
+        h.service.connect()
+        val tcp = h.openSocket(0)
+        val version = Mumble.Version.newBuilder().setVersionV2(MumbleVersion.v2(1, 5, 0)).build()
+        tcp.simulateMessage(HumlaTCPMessageType.Version, version.toByteArray())
+        h.synchronize(tcp)
+
+        audioUp(h)
+        val negotiated = UdpProtocol.negotiate(MumbleVersion.CLIENT_V2, MumbleVersion.v2(1, 5, 0))
+        assertThat(h.service.getConnection()!!.udpProtocol).isEqualTo(negotiated)
+        assertThat(h.audioFactory.sessionParams[0].udpProtocol).isEqualTo(negotiated)
     }
 
     /**

@@ -154,6 +154,22 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var remoteRelease: String? = null
     @Volatile private var remoteOsName: String? = null
     @Volatile private var remoteOsVersion: String? = null
+
+    /** The version this client announces, in the v2 format; with the server's it picks [udpProtocol]. */
+    @VisibleForTesting
+    internal var clientVersion: Long = MumbleVersion.CLIENT_V2
+
+    /**
+     * The format of voice packets and UDP pings, fixed by the server's Version message, which
+     * precedes ServerSync and so any voice. Legacy until then.
+     */
+    @Volatile var udpProtocol = UdpProtocol.LEGACY
+        private set
+
+    /** Decodes received voice into [voicePacket]; protocol thread only. */
+    private val udpDecoder = UdpPacketDecoder()
+    private val voicePacket = VoicePacket()
+
     @Volatile private var serverMaxBandwidth = 0
     @Volatile private var serverCodec: HumlaUDPMessageType? = null
     /** The server-lacks-Opus warning is shown once per connection; protocol thread only. */
@@ -211,6 +227,7 @@ class HumlaConnection @JvmOverloads constructor(
             is Mumble.CryptSetup -> onCryptSetup(msg)
             is Mumble.Version -> {
                 remoteVersion = MumbleVersion.legacyOf(msg)
+                udpProtocol = UdpProtocol.negotiate(clientVersion, MumbleVersion.v2Of(msg))
                 remoteRelease = msg.release
                 remoteOsName = msg.os
                 remoteOsVersion = msg.osVersion
@@ -305,7 +322,7 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     private fun onUdpPing(data: ByteArray) {
-        val timestamp = UdpPing.decodeTimestamp(UdpProtocol.LEGACY, data) ?: return
+        val timestamp = UdpPing.decodeTimestamp(udpProtocol, data) ?: return
         val now = elapsed
         udpLatency = now - timestamp
         udpPingStats.add(udpLatency / MICROS_PER_MILLI)
@@ -316,7 +333,7 @@ class HumlaConnection @JvmOverloads constructor(
         // In microseconds
         val t = elapsed
         if (!shouldForceTCP()) {
-            val ping = UdpPing.encode(UdpProtocol.LEGACY, t)
+            val ping = UdpPing.encode(udpProtocol, t)
             sendUDPMessage(ping, ping.size, true)
             udpHealth.onUdpPingSent(t)
         }
@@ -656,20 +673,33 @@ class HumlaConnection @JvmOverloads constructor(
     // ---- UDPConnectionListener (protocol thread) ----
 
     override fun onUDPDataReceived(data: ByteArray) {
-        if (disconnectRequested) return
-        val dataType = (data[0].toInt() shr 5) and 0x7
-        val types = HumlaUDPMessageType.values()
-        if (dataType < 0 || dataType >= types.size) return // Discard invalid data types
-        val udpDataType = types[dataType]
+        if (disconnectRequested || data.isEmpty()) return
         try {
-            if (udpDataType == HumlaUDPMessageType.UDPPing) {
-                onUdpPing(data)
-            } else {
-                for (handler in voiceHandlers) handler.onVoicePacket(data, udpDataType)
-            }
+            if (udpProtocol == UdpProtocol.PROTOBUF) onProtobufUdp(data) else onLegacyUdp(data)
         } catch (e: RuntimeException) {
-            Log.e(TAG, "UDP handler failed for $udpDataType", e)
+            Log.e(TAG, "UDP handler failed", e)
         }
+    }
+
+    private fun onProtobufUdp(data: ByteArray) {
+        when (data[0].toInt() and BYTE_MASK) {
+            UdpAudioEncoder.PROTOBUF_PING -> onUdpPing(data)
+            UdpAudioEncoder.PROTOBUF_AUDIO ->
+                if (udpDecoder.decodeProtobuf(data, 1, data.size - 1, voicePacket)) dispatchVoice()
+            // Unknown message types are dropped.
+        }
+    }
+
+    private fun onLegacyUdp(data: ByteArray) {
+        if ((data[0].toInt() and BYTE_MASK) ushr LEGACY_TYPE_SHIFT == HumlaUDPMessageType.UDPPing.ordinal) {
+            onUdpPing(data)
+        } else if (udpDecoder.decodeLegacy(data, data.size, voicePacket)) {
+            dispatchVoice()
+        }
+    }
+
+    private fun dispatchVoice() {
+        for (handler in voiceHandlers) handler.onVoicePacket(voicePacket)
     }
 
     override fun onUDPConnectionError(e: Exception) {
@@ -712,6 +742,8 @@ class HumlaConnection @JvmOverloads constructor(
         private const val PROTOCOL_THREAD_NAME = "humla-protocol"
         private const val PING_INTERVAL_MILLIS = 5_000L
         private const val MICROS_PER_MILLI = 1_000.0
+        private const val BYTE_MASK = 0xFF
+        private const val LEGACY_TYPE_SHIFT = 5
 
         /** How long a repeat of the last delivered [ConnectionWarning] stays suppressed. */
         private const val WARNING_REPEAT_MICROS = 60_000_000L

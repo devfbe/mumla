@@ -24,6 +24,8 @@ import se.lublin.humla.audio.encoder.IEncoder
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.net.UdpAudioEncoder
+import se.lublin.humla.net.UdpProtocol
 
 /**
  * Turns captured frames into voice packets: runs [pipeline] on every frame, tracks the talking
@@ -46,12 +48,12 @@ internal class VoiceTransmitter(
     /** Stamped on every packet. */
     @Volatile var targetId: Byte = 0
 
+    /** The wire format of the packets. */
+    @Volatile var udpProtocol = UdpProtocol.LEGACY
+
     /** Written under [encoderLock], read without it. */
     @Volatile var codec: HumlaUDPMessageType? = null
         private set
-
-    /** [codec]'s type bits of the packet header; written under [encoderLock]. */
-    private var codecBits = 0
 
     private val encoderLock = Any()
     private var encoder: IEncoder? = null
@@ -73,7 +75,6 @@ internal class VoiceTransmitter(
     fun setCodec(codec: HumlaUDPMessageType?, create: (HumlaUDPMessageType) -> IEncoder?) {
         synchronized(encoderLock) {
             this.codec = codec
-            codecBits = (codec?.ordinal ?: 0) shl CODEC_SHIFT
             encoder?.destroy()
             encoder = null
             if (codec != null) encoder = create(codec) else Log.w(TAG, "No codec, input disabled.")
@@ -128,20 +129,19 @@ internal class VoiceTransmitter(
 
     /** Sends the buffered audio of [encoder] to [listener]. Called under [encoderLock]. */
     private fun send(encoder: IEncoder) {
-        val frames = encoder.bufferedFrames
-        val flags = codecBits or (targetId.toInt() and TARGET_MASK)
+        val protocol = udpProtocol
+        val terminator = encoder.isTerminator
+        val frameNumber = (frameCounter - encoder.bufferedFrames).toLong()
 
         packet.reset(PACKET_SIZE)
-        packet.append(flags.toLong())
-        packet.writeLong((frameCounter - frames).toLong())
+        UdpAudioEncoder.writeHeader(protocol, packet, targetId.toInt(), frameNumber, encoder.encodedLength, terminator)
         encoder.getEncodedData(packet)
+        UdpAudioEncoder.writeTrailer(protocol, packet, terminator)
         listener.onAudioEncoded(packetBytes, packet.size())
     }
 
     private companion object {
         const val TAG = "VoiceTransmitter"
         const val PACKET_SIZE = 1024
-        const val CODEC_SHIFT = 5
-        const val TARGET_MASK = 0x1F
     }
 }

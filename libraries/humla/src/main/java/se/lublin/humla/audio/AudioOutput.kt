@@ -36,7 +36,7 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
-import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.protocol.AudioHandler
 
 /**
@@ -250,18 +250,13 @@ class AudioOutput @JvmOverloads constructor(
         return false
     }
 
-    fun queueVoiceData(data: ByteArray, messageType: HumlaUDPMessageType) {
-        if (!running || !isDecodable(messageType)) return
+    /** Queues [packet] for its talker; [packet] is not kept. */
+    fun queueVoiceData(packet: VoicePacket) {
+        if (!running || !isDecodable(packet.codec)) return
 
-        val msgFlags = (data[0].toInt() and 0x1f).toByte()
-        val pds = PacketBuffer(data, data.size)
-        pds.skip(1)
-        val session = pds.readLong().toInt()
+        val session = packet.session
         val user = listener.getUser(session)
         if (user != null && !user.isLocalMuted) {
-            // TODO check for whispers here
-            val seq = pds.readLong().toInt()
-
             val aop = packetLock.withLock {
                 audioOutputs[session] ?: try {
                     speechFactory.create(user, bufferSize, this).also {
@@ -276,8 +271,7 @@ class AudioOutput @JvmOverloads constructor(
                 }
             } ?: return
 
-            val dataBuffer = PacketBuffer(pds.bufferBlock(pds.left()))
-            aop.addFrameToBuffer(dataBuffer, msgFlags, seq)
+            aop.addFrameToBuffer(packet)
 
             synchronized(inactiveLock) {
                 woken = true
