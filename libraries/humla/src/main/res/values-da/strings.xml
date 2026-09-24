@@ -3,4 +3,15 @@
     <string name="perm_denied">Tilladelse nægtet.</string>
     <string name="server">Server</string>
     <string name="chat_notify_connected">%s forbundet.</string>
+    <string name="udp_warning_unavailable">UDP-pakker kan ikke sendes til eller modtages fra serveren. Skifter til TCP-tilstand.</string>
+    <string name="udp_warning_send_failed">UDP-pakker kan ikke sendes til serveren. Skifter til TCP-tilstand.</string>
+    <string name="udp_warning_receive_failed">UDP-pakker kan ikke modtages fra serveren. Skifter til TCP-tilstand.</string>
+    <string name="udp_warning_ping_timeout">Intet UDP-ping-svar fra serveren i 15 sekunder. Skifter til TCP-tilstand.</string>
+    <string name="udp_warning_restored">UDP-pakker kan sendes til og modtages fra serveren igen. Skifter tilbage til UDP-tilstand.</string>
+    <string name="reconnect_gave_up">Kunne ikke genoprette forbindelsen til serveren. Giver op.</string>
+    <string name="sco_unavailable">Intet Bluetooth-headset tilgængeligt. Lyden bliver på telefonen.</string>
+    <string name="bluetooth_sco_denied">Denne enhed nægtede at sende lyd til et Bluetooth-headset. Giv tilladelsen \"Enheder i nærheden\" i systemindstillingerne.</string>
+    <string name="no_session_user">Serveren sendte ikke denne sessions egen bruger; mikrofonen forbliver slået fra.</string>
+    <string name="no_target_server">Der er ikke angivet nogen server for denne forbindelse.</string>
+    <string name="udp_warning_thread_failed">UDP-forbindelsen mislykkedes. Tale tunneles over TCP, mens UDP forsøges igen.</string>
 </resources>

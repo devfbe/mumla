@@ -199,4 +199,16 @@
         <item quantity="other">%d νέα μηνύματα</item>
     </plurals>
     <string name="chat_message_to">%1$s → %2$s</string>
+    <string name="connection_lost_reconnecting">Η σύνδεση χάθηκε – επανασύνδεση…</string>
+    <string name="foreground_start_failed">Δεν ήταν δυνατή η διατήρηση του Mumla στο παρασκήνιο. Η φωνή μπορεί να σταματήσει όταν σβήσει η οθόνη.</string>
+    <string name="bluetooth_perm_denied">Τα ακουστικά Bluetooth παραμένουν ενεργά. Χωρίς την άδεια «Συσκευές σε κοντινή απόσταση», ορισμένες συσκευές θα αρνηθούν να δρομολογήσουν ήχο σε αυτά.</string>
+    <string name="chat_image_share">Κοινοποίηση εικόνας</string>
+    <string name="chat_image_close">Κλείσιμο</string>
+    <string name="chat_image_load_failed">Δεν ήταν δυνατή η φόρτωση της εικόνας</string>
+    <string name="chat_image_viewer_image">Εικόνα</string>
+    <string name="chat_image_open">Άνοιγμα εικόνας</string>
+    <string name="chat_image_placeholder">[εικόνα]</string>
+    <string name="permission_denied_storage">Δεν επιτρέπεται η ανάγνωση του αποθηκευτικού χώρου</string>
+    <string name="image_decode_failed">Δεν ήταν δυνατή η ανάγνωση αυτής της εικόνας</string>
+    <string name="image_too_large">Η εικόνα είναι πολύ μεγάλη για αυτόν τον διακομιστή</string>
 </resources>

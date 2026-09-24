@@ -181,4 +181,16 @@
     <string name="mumble_url_parse_failed">رابط مامبل غير صالح.</string>
     <string name="trust_added">أُضيفت شهادة لقاعدة بيانات الاستيثاق</string>
     <string name="certificate_import_success">أُستوردت الشهادة %s.</string>
+    <string name="connection_lost_reconnecting">انقطع الاتصال – تجري إعادة الاتصال…</string>
+    <string name="foreground_start_failed">تعذّر إبقاء موملا قيد التشغيل في الخلفية. قد يتوقف الصوت عند انطفاء الشاشة.</string>
+    <string name="bluetooth_perm_denied">تبقى سماعة رأس بلوتوث مفعّلة. من دون إذن «الأجهزة المجاورة» سترفض بعض الأجهزة توجيه الصوت إليها.</string>
+    <string name="chat_image_share">شارك الصورة</string>
+    <string name="chat_image_close">أغلق</string>
+    <string name="chat_image_load_failed">تعذّر تحميل الصورة</string>
+    <string name="chat_image_viewer_image">صورة</string>
+    <string name="chat_image_open">افتح الصورة</string>
+    <string name="chat_image_placeholder">[صورة]</string>
+    <string name="permission_denied_storage">رُفض إذن قراءة وحدة التخزين</string>
+    <string name="image_decode_failed">تعذّرت قراءة تلك الصورة</string>
+    <string name="image_too_large">الصورة كبيرة جدًا على هذا الخادم</string>
 </resources>

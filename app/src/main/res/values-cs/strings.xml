@@ -201,4 +201,16 @@
     <string name="chat_message_to">%1$s → %2$s</string>
     <string name="drawer_public">Veřejné servery</string>
     <string name="image_confirm_send">Poslat obrázek\?</string>
+    <string name="connection_lost_reconnecting">Spojení ztraceno – znovu se připojuje…</string>
+    <string name="foreground_start_failed">Mumla nemohla zůstat spuštěná na pozadí. Hlas se může po vypnutí obrazovky zastavit.</string>
+    <string name="bluetooth_perm_denied">Bluetooth headset zůstává zapnutý. Bez oprávnění „Zařízení v okolí“ některá zařízení odmítnou do něj přesměrovat zvuk.</string>
+    <string name="chat_image_share">Sdílet obrázek</string>
+    <string name="chat_image_close">Zavřít</string>
+    <string name="chat_image_load_failed">Obrázek se nepodařilo načíst</string>
+    <string name="chat_image_viewer_image">Obrázek</string>
+    <string name="chat_image_open">Otevřít obrázek</string>
+    <string name="chat_image_placeholder">[obrázek]</string>
+    <string name="permission_denied_storage">Oprávnění ke čtení úložiště bylo zamítnuto</string>
+    <string name="image_decode_failed">Tento obrázek nelze přečíst</string>
+    <string name="image_too_large">Obrázek je pro tento server příliš velký</string>
 </resources>

@@ -32,4 +32,15 @@
     <string name="perm_denied">Zugriff verweigert.</string>
     <string name="server">Server</string>
     <string name="the_server">der Server</string>
+    <string name="udp_warning_unavailable">UDP-Pakete können nicht an den Server gesendet oder von ihm empfangen werden. Wechsel in den TCP-Modus.</string>
+    <string name="udp_warning_send_failed">UDP-Pakete können nicht an den Server gesendet werden. Wechsel in den TCP-Modus.</string>
+    <string name="udp_warning_receive_failed">UDP-Pakete können nicht vom Server empfangen werden. Wechsel in den TCP-Modus.</string>
+    <string name="udp_warning_ping_timeout">Seit 15 Sekunden keine UDP-Ping-Antwort vom Server. Wechsel in den TCP-Modus.</string>
+    <string name="udp_warning_restored">UDP-Pakete können wieder an den Server gesendet und von ihm empfangen werden. Wechsel zurück in den UDP-Modus.</string>
+    <string name="reconnect_gave_up">Erneute Verbindung zum Server fehlgeschlagen. Keine weiteren Versuche.</string>
+    <string name="sco_unavailable">Kein Bluetooth-Headset verfügbar. Der Ton bleibt auf dem Telefon.</string>
+    <string name="bluetooth_sco_denied">Dieses Gerät hat verweigert, Ton an ein Bluetooth-Headset zu leiten. Erteilen Sie in den Systemeinstellungen die Berechtigung „Geräte in der Nähe“.</string>
+    <string name="no_session_user">Der Server hat den eigenen Benutzer dieser Sitzung nicht gesendet; das Mikrofon bleibt aus.</string>
+    <string name="no_target_server">Für diese Verbindung wurde kein Server festgelegt.</string>
+    <string name="udp_warning_thread_failed">Die UDP-Verbindung ist fehlgeschlagen. Sprache wird über TCP getunnelt, während UDP erneut versucht wird.</string>
 </resources>

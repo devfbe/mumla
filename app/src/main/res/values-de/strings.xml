@@ -190,4 +190,16 @@
     <string name="context_channel_shout">Sprachziel festlegen</string>
     <string name="image_confirm_send">Dieses Bild senden\?</string>
     <string name="grant_perm_notifications">Bitte setze die Berechtigung zum Senden von Benachrichtigungen.</string>
+    <string name="connection_lost_reconnecting">Verbindung verloren – verbinde erneut…</string>
+    <string name="foreground_start_failed">Mumla konnte nicht im Hintergrund weiterlaufen. Die Sprachübertragung kann stoppen, wenn sich der Bildschirm ausschaltet.</string>
+    <string name="bluetooth_perm_denied">Das Bluetooth-Headset bleibt eingeschaltet. Ohne die Berechtigung „Geräte in der Nähe“ verweigern manche Geräte, Ton dorthin zu leiten.</string>
+    <string name="chat_image_share">Bild teilen</string>
+    <string name="chat_image_close">Schließen</string>
+    <string name="chat_image_load_failed">Bild konnte nicht geladen werden</string>
+    <string name="chat_image_viewer_image">Bild</string>
+    <string name="chat_image_open">Bild öffnen</string>
+    <string name="chat_image_placeholder">[Bild]</string>
+    <string name="permission_denied_storage">Keine Berechtigung zum Lesen des Speichers</string>
+    <string name="image_decode_failed">Dieses Bild konnte nicht gelesen werden</string>
+    <string name="image_too_large">Bild ist zu groß für diesen Server</string>
 </resources>

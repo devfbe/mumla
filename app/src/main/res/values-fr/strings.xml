@@ -211,4 +211,16 @@
     <string name="image_confirm_send">Envoyer cette image \?</string>
     <string name="grant_perm_notifications">Veuillez accorder l\'autorisation d\'envoyer des notifications.</string>
     <string name="no_ptt_key">Aucun bouton</string>
+    <string name="connection_lost_reconnecting">Connexion perdue – reconnexion…</string>
+    <string name="foreground_start_failed">Impossible de maintenir Mumla en arrière-plan. La voix peut s\'interrompre lorsque l\'écran s\'éteint.</string>
+    <string name="bluetooth_perm_denied">Le casque Bluetooth reste activé. Sans l\'autorisation « Appareils à proximité », certains appareils refuseront d\'y acheminer le son.</string>
+    <string name="chat_image_share">Partager l\'image</string>
+    <string name="chat_image_close">Fermer</string>
+    <string name="chat_image_load_failed">Impossible de charger l\'image</string>
+    <string name="chat_image_viewer_image">Image</string>
+    <string name="chat_image_open">Ouvrir l\'image</string>
+    <string name="chat_image_placeholder">[image]</string>
+    <string name="permission_denied_storage">Autorisation de lecture du stockage refusée</string>
+    <string name="image_decode_failed">Impossible de lire cette image</string>
+    <string name="image_too_large">Image trop volumineuse pour ce serveur</string>
 </resources>

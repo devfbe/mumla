@@ -201,4 +201,16 @@
     <string name="image_confirm_send">Enviar aquesta imatge\?</string>
     <string name="grant_perm_notifications">Doneu permís per enviar les notificacions, si us plau.</string>
     <string name="no_ptt_key">Cap Clau</string>
+    <string name="connection_lost_reconnecting">S\'ha perdut la connexió – s\'està reconnectant…</string>
+    <string name="foreground_start_failed">No s\'ha pogut mantenir Mumla en segon pla. La veu es pot aturar quan s\'apagui la pantalla.</string>
+    <string name="bluetooth_perm_denied">Els auriculars Bluetooth continuen activats. Sense el permís «Dispositius propers», alguns dispositius es negaran a enviar-hi l\'àudio.</string>
+    <string name="chat_image_share">Comparteix la imatge</string>
+    <string name="chat_image_close">Tanca</string>
+    <string name="chat_image_load_failed">No s\'ha pogut carregar la imatge</string>
+    <string name="chat_image_viewer_image">Imatge</string>
+    <string name="chat_image_open">Obre la imatge</string>
+    <string name="chat_image_placeholder">[imatge]</string>
+    <string name="permission_denied_storage">S\'ha denegat el permís per llegir l\'emmagatzematge</string>
+    <string name="image_decode_failed">No s\'ha pogut llegir aquesta imatge</string>
+    <string name="image_too_large">La imatge és massa gran per a aquest servidor</string>
 </resources>

@@ -19,4 +19,15 @@
     <string name="chat_notify_disconnected">%s szétkapcsolt.</string>
     <string name="chat_notify_kick_self">Ki lettél rúgva a szerverről %1$s: %2$s.</string>
     <string name="chat_notify_user_left_channel">%1$s átmozgatva ide %2$s.</string>
+    <string name="udp_warning_unavailable">UDP-csomagokat nem lehet küldeni a szervernek, sem fogadni tőle. Átváltás TCP módra.</string>
+    <string name="udp_warning_send_failed">UDP-csomagokat nem lehet küldeni a szervernek. Átváltás TCP módra.</string>
+    <string name="udp_warning_receive_failed">UDP-csomagokat nem lehet fogadni a szervertől. Átváltás TCP módra.</string>
+    <string name="udp_warning_ping_timeout">15 másodperce nem érkezett UDP ping-válasz a szervertől. Átváltás TCP módra.</string>
+    <string name="udp_warning_restored">UDP-csomagok ismét küldhetők a szervernek és fogadhatók tőle. Visszaváltás UDP módra.</string>
+    <string name="reconnect_gave_up">Nem sikerült újracsatlakozni a szerverhez. A próbálkozás leállt.</string>
+    <string name="sco_unavailable">Nincs elérhető Bluetooth headset. A hang a telefonon marad.</string>
+    <string name="bluetooth_sco_denied">Ez az eszköz megtagadta a hang Bluetooth headsetre irányítását. Add meg a „Közeli eszközök” engedélyt a rendszerbeállításokban.</string>
+    <string name="no_session_user">A szerver nem küldte el ennek a munkamenetnek a saját felhasználóját; a mikrofon kikapcsolva marad.</string>
+    <string name="no_target_server">Ehhez a kapcsolathoz nincs szerver beállítva.</string>
+    <string name="udp_warning_thread_failed">Az UDP-kapcsolat megszakadt. A hang TCP-n keresztül halad, amíg az UDP újrapróbálása folyik.</string>
 </resources>
