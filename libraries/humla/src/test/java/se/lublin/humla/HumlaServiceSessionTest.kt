@@ -37,15 +37,9 @@ import se.lublin.humla.util.HumlaException
 import java.util.concurrent.TimeUnit
 
 /**
- * Spec A3: the session lifecycle is a state machine with an exponential backoff, and everything
- * that must survive a dropped connection - the wake lock, the attempt counter, the user's wish to
- * reconnect - is decided here rather than by a boolean.
- *
- * These tests drive a **real** [se.lublin.humla.net.HumlaConnection] over fake transports, so what
- * they exercise is the service's own wiring: the state it is in, the timer it posts and the
- * resources it holds. Task A9a's characterization suite covered the same ground through
- * `setReconnecting(boolean)`, which no longer exists; the corners it enumerated are re-homed here
- * against the mechanism that replaced it, one test per corner.
+ * The session lifecycle: a state machine with exponential backoff that decides the wake lock, the
+ * attempt counter and the user's wish to reconnect. Drives a real
+ * [se.lublin.humla.net.HumlaConnection] over fake transports.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceSessionTest {
@@ -105,18 +99,16 @@ class HumlaServiceSessionTest {
         h.service.connect()
         h.mainLooper.idle()
 
-        // `getConnection()` and not `transports.tcps.size`: startSession sets mConnection on this
-        // thread, while a transport appears on the protocol thread a moment later -- so a size
-        // check here passes whether or not a second session was started (measured, G1).
+        // `getConnection()` rather than `transports.tcps.size`: a transport appears on the
+        // protocol thread only later, so a size check would pass either way.
         assertThat(h.service.getConnection()).isSameInstanceAs(connection)
         assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Connected)
         assertThat(h.transports.tcps).hasSize(1)
     }
 
     /**
-     * The handshake announces the CELT bitstream version the seam provides. Without this the seam
-     * had no reader at all: `FakeTcpTransport` records the message *type*, not its content, so
-     * replacing the loop with a constant left the whole suite green (measured, S8).
+     * The handshake announces the CELT bitstream version the seam provides. `FakeTcpTransport`
+     * records only message types, so the content is checked here.
      */
     @Test
     fun theHandshakeAnnouncesTheCeltVersionsFromTheSeam() {
@@ -131,18 +123,15 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * Effect pass (spec 4.04): four settings the service writes into a `HumlaConnection` it does
-     * not own. Three of them have no reader at all on the JVM -- the certificate and the trust
-     * store only matter once a TLS socket is opened -- so the connection's own fields are the only
-     * place they can be read back, and without this all four survived their mutations (E1-E4).
+     * Four settings the service writes into a `HumlaConnection` it does not own. The certificate
+     * and trust store matter only once a TLS socket opens, so the connection's fields are read back.
      */
     @Test
     fun everyConnectionSettingReachesTheConnection() {
         val h = start()
         h.configure {
-            // FORCE_TCP without TOR, so the two fields differ: Tor sets `mForceTcp` too
-            // (`mForceTcp or mUseTor`), and with both true a deleted `setForceTCP` is masked by
-            // `setUseTor` through `shouldForceTCP()`.
+            // FORCE_TCP without TOR, so the two fields differ: with both true, Tor masks a missing
+            // `setForceTCP` through `shouldForceTCP()`.
             putBoolean(HumlaService.EXTRAS_FORCE_TCP, true)
             putBoolean(HumlaService.EXTRAS_USE_TOR, false)
             putByteArray(HumlaService.EXTRAS_CERTIFICATE, byteArrayOf(1, 2, 3))
@@ -203,17 +192,12 @@ class HumlaServiceSessionTest {
         assertThat(state.reconnectInMillis).isEqualTo(10L)
         assertThat(h.service.isReconnecting()).isTrue()
         assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
-        // Spec A3: only Disconnected releases it. This is the line the screen-off complaint rests on.
+        // Only Disconnected releases it.
         assertThat(h.service.isWakeLockHeldForTest()).isTrue()
         assertThat(h.service.getConnectionError()).isNotNull()
     }
 
-    /**
-     * The four corners of `onConnectionDisconnected`'s input: the disconnect reason and
-     * `EXTRAS_AUTO_RECONNECT`. Re-homed from the characterization suite, which could drive them
-     * without a session because `setReconnecting` was a plain field write; the state machine
-     * refuses a loss that had nothing to lose, so each corner now runs over a real session.
-     */
+    /** The four corners of `onConnectionDisconnected`: disconnect reason x `EXTRAS_AUTO_RECONNECT`. */
     @Test
     fun onlyAConnectionErrorWithAutoReconnectOnStartsReconnecting() {
         val corners = listOf(
@@ -305,9 +289,8 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * The wake lock is taken **once per session**, not once per synchronization: it is reference
-     * counted, so an unconditional `acquire()` across a reconnect leaves a count that the single
-     * release on Disconnected does not balance, and the CPU never sleeps again (measured, G5).
+     * The wake lock is taken once per session, not per synchronization: it is reference counted,
+     * so acquiring on every reconnect would leave a count the single release does not balance.
      */
     @Test
     fun aReconnectDoesNotLeaveASecondWakeLockCountBehind() {
@@ -325,10 +308,8 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * A user disconnect that races the socket dying must not reconnect. `disconnect()` tells the
-     * state machine **before** the report arrives, so `lost()` finds a session that is already
-     * over and returns Disconnected instead of scheduling a retry (measured, S23: without that
-     * line an error arriving after disconnect() starts an auto-reconnect the user cancelled).
+     * A user disconnect that races the socket dying must not reconnect: `disconnect()` tells the
+     * state machine before the report arrives, so `lost()` finds the session already over.
      */
     @Test
     fun aDisconnectThatRacesTheSocketDyingDoesNotReconnect() {
@@ -337,8 +318,7 @@ class HumlaServiceSessionTest {
 
         h.service.disconnect()
         // The report the socket had already queued when the user pressed disconnect. Delivered
-        // straight, because disconnect() quits the protocol looper and a fake transport can no
-        // longer post through it -- the interleaving is the point, not the route it takes.
+        // directly, because disconnect() quits the protocol looper.
         h.service.onConnectionDisconnected(connectionError())
         h.mainLooper.idle()
 
@@ -369,9 +349,8 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * The one mechanism that decides whether a scheduled retry may run. Nothing removes the
-     * pending post, so it really does arrive here after the user has cancelled -- and the state
-     * machine refuses it (measured, G14: without the check the cancelled session reconnects).
+     * Nothing removes a pending retry post, so it arrives after the user has cancelled, and the
+     * state machine must refuse it.
      */
     @Test
     fun aRetryThatFiresAfterTheUserCancelledIsRefused() {
@@ -390,10 +369,8 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * Cancelling while a retry is in flight (Reconnecting) must stop that attempt too. Before the
-     * fix the state machine went to Disconnected but the connection kept going: had it succeeded,
-     * onConnectionSynchronized would have set CONNECTED, taken the wake lock and started the
-     * microphone for a session the user had given up on -- with the service out of the foreground.
+     * Cancelling while a retry is in flight must stop that attempt too; otherwise a successful
+     * attempt would take the wake lock and start the microphone for a session the user gave up on.
      */
     @Test
     fun cancelReconnectDuringAnAttemptInFlightDisconnectsThatAttempt() {
@@ -423,9 +400,8 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * The attempt in flight can also end on its own error at the moment the user cancels. Its
-     * report then arrives in Disconnected with a CONNECTION_ERROR -- which is not the reconnect
-     * giving up, the user ended it, so no "Giving up." line.
+     * The attempt in flight can end on its own error as the user cancels. That report arrives in
+     * Disconnected with a CONNECTION_ERROR, but the user ended it, so no "Giving up." line.
      */
     @Test
     fun aLateErrorReportAfterACancelDoesNotClaimTheReconnectGaveUp() {
@@ -442,10 +418,8 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * A disconnect while the reconnect waits out its backoff ends the session for good, so it has
-     * to give back what only Disconnected releases. The connection already reported its end when
-     * it was lost and reports nothing a second time, so nothing on the disconnect-report path runs:
-     * the wake lock stayed held and the network callback registered until the next session.
+     * A disconnect during the backoff ends the session for good and must release what only
+     * Disconnected releases. The connection already reported its end, so no report path runs.
      */
     @Test
     fun aDisconnectWhileWaitingToReconnectReleasesTheWakeLockAndTheNetworkCallback() {
@@ -494,11 +468,7 @@ class HumlaServiceSessionTest {
         assertThat(h.service.isWakeLockHeldForTest()).isFalse()
     }
 
-    /**
-     * `cancelReconnect` on a live session is a no-op, both halves. Without the state machine's
-     * answer it would release the wake lock and put the service into CONNECTION_LOST while the
-     * connection is up (measured, G15).
-     */
+    /** `cancelReconnect` on a live session is a no-op: no wake lock release, no CONNECTION_LOST. */
     @Test
     fun cancelReconnectDuringALiveSessionChangesNothing() {
         val h = start(autoReconnect = true)
@@ -526,9 +496,8 @@ class HumlaServiceSessionTest {
         WhisperTargetChannel(h.service.getRootChannel(), false, false, null)
 
     /**
-     * The thirty whisper slots are the session's, not the service's. Without the clear on the
-     * disconnect path a long-lived service runs out of them after thirty whispers spread over any
-     * number of connections, and `registerWhisperTarget` starts answering -1 for good (E10).
+     * The thirty whisper slots are the session's, not the service's; without the clear on
+     * disconnect, a long-lived service runs out of them across connections.
      */
     @Test
     fun aNewSessionGetsItsWhisperSlotsBack() {
@@ -584,7 +553,7 @@ class HumlaServiceSessionTest {
         h.mainLooper.idleFor(1, TimeUnit.MILLISECONDS)
         assertThat(h.service.getSessionState().value)
             .isInstanceOf(SessionState.Reconnecting::class.java)
-        // Reconnecting is still "reconnecting" to the UI, and it still knows why (G16, G18).
+        // Reconnecting is still "reconnecting" to the UI, and it still knows why.
         assertThat(h.service.isReconnecting()).isTrue()
         assertThat(h.service.getConnectionError()).isNotNull()
         // The socket is opened on the protocol thread, so the transport appears after the post.
@@ -608,10 +577,8 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * The callback's first guard: once the session has ended, a late callback unregisters it
-     * instead of reconnecting. `cancelReconnect` already unregisters it, so this arm is only
-     * reachable when the callback beats the unregistration - which is why the guard cannot
-     * be dropped as redundant.
+     * Once the session has ended, a late callback unregisters itself instead of reconnecting.
+     * Reachable only when the callback beats `cancelReconnect`'s unregistration.
      */
     @Test
     fun aCallbackThatArrivesAfterTheSessionEndedDoesNotReconnect() {
@@ -629,12 +596,7 @@ class HumlaServiceSessionTest {
         assertThat(networkCallbacks()).isEmpty()
     }
 
-    /**
-     * `cancelReconnect` takes the callback off by itself, with no callback to help it. The test
-     * above delivers one, and the callback's own first arm unregisters too -- two guards over one
-     * observable, and the mutation that deletes the one in `releaseSessionResources` survived it
-     * (measured, S29).
-     */
+    /** `cancelReconnect` unregisters the callback on its own, without a callback to help it. */
     @Test
     fun cancellingWhileWaitingForTheNetworkUnregistersTheNetworkCallback() {
         val h = start(autoReconnect = true)
@@ -649,9 +611,8 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * And `onDestroy` takes it off on the one path where nothing else can: the connection is
-     * already dead, so destroying the service produces no second disconnect report and
-     * `releaseSessionResources` is never reached (measured, S30).
+     * `onDestroy` unregisters it when the connection is already dead: no second disconnect report
+     * arrives, so `releaseSessionResources` is never reached.
      */
     @Test
     fun destroyingTheServiceWhileWaitingForTheNetworkUnregistersTheNetworkCallback() {
@@ -668,12 +629,9 @@ class HumlaServiceSessionTest {
     }
 
     /**
-     * The callback's own first arm, on the one path that reaches it: a manual `connect()` while
-     * the service is waiting for the network leaves the callback registered -- `startSession` has
-     * no business unregistering it -- so the next callback finds a session that is no longer
-     * lost. Without the arm the callback would ask the state machine to restore connectivity in a
-     * state that has nothing to restore (measured, S26 and G12). The network deliberately stays
-     * down, so the arm that has to fire is the state one.
+     * A manual `connect()` while waiting for the network leaves the callback registered, so the
+     * next callback finds a session that is no longer lost and must not restore connectivity. The
+     * network stays down so that the state check is what fires.
      */
     @Test
     fun aCallbackAfterAManualConnectUnregistersItInsteadOfRetrying() {
@@ -696,11 +654,8 @@ class HumlaServiceSessionTest {
     // ---------------------------------------------------------------- the missing server
 
     /**
-     * Repair of a pre-existing crash that A9a characterized and handed on: `connect()` passed
-     * `mServer` straight to `HumlaConnection.connect(Server)`, which is non-null in Kotlin, so a
-     * connect without a configured server died on a parameter check on the main looper instead of
-     * reporting a failed attempt. `IHumlaService.reconnect()` is public API, so a bound client can
-     * reach it. One guard, in the one place both entry points pass through.
+     * A connect without a configured server is reported as a failed attempt instead of crashing on
+     * the main looper. `IHumlaService.reconnect()` is public API, so a bound client can reach it.
      */
     @Test
     fun aConnectWithoutATargetServerReportsAFailureInsteadOfCrashing() {

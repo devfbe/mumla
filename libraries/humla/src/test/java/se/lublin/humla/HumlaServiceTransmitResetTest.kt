@@ -7,19 +7,12 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.util.HumlaException
-
 /**
- * Spec §4.1: the push-to-talk toggle must not survive a lost connection.
+ * The push-to-talk toggle must not survive a lost connection: [ToggleInputMode] lives as long as
+ * the service, so otherwise an auto-reconnect would resume sending without a key press.
  *
- * [ToggleInputMode] is created once in onCreate and lives as long as the service, and nothing ever
- * cleared its flag. With a headset media key a user can turn transmission on with the screen off,
- * lose the network, and the auto-reconnect then resumes sending from the first second - no key
- * press, no visible indication. That is the inverse of the complaint this work started from.
- *
- * The reset has to be in the code of onConnectionDisconnected rather than in an observer:
- * mConnectionState is set to DISCONNECTED before mCallbacks.onDisconnected fires, and both
- * isConnected() and HumlaSession() read that field, so an observer that went through the session
- * would find the service already disconnected and do nothing.
+ * The reset is in onConnectionDisconnected rather than in an observer: the state is already
+ * DISCONNECTED when observers run, so an observer going through the session would do nothing.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceTransmitResetTest {
@@ -52,8 +45,8 @@ class HumlaServiceTransmitResetTest {
     }
 
     /**
-     * Closes the last link of the chain: the flag the service clears is the one the audio input
-     * thread consults for every frame, so "isTalking() is false" really does mean "nothing is sent".
+     * The flag the service clears is the one the audio input thread consults for every frame, so
+     * "isTalking() is false" really means "nothing is sent".
      */
     @Test
     fun theFlagIsTalkingReadsIsTheOneThatDecidesWhetherAFrameIsTransmitted() {

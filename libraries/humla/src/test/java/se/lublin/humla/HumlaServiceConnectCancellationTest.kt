@@ -13,17 +13,11 @@ import se.lublin.humla.util.HumlaObserver
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Spec §4.1: a connection attempt that fails reports the failure; it does not throw at its caller.
+ * A connection attempt that fails reports the failure; it does not throw at its caller.
  *
- * HumlaService.connect() lost its try/catch when host resolution moved onto the protocol thread,
- * and HumlaConnection.connect() gained an unchecked throw at the same time. The two meet in one
- * interleaving that costs a crash instead of a reported failure: onConnecting() is raised on the
- * handler thread with an empty queue, so it is delivered inline, and an observer that calls
- * disconnect() from it marks the connection that connect() is about to start as already
- * disconnected. connect() then throws out of onStartCommand, or out of the reconnect runnable.
- *
- * Neither observer in the tree does this today, which is why it is worth a test rather than a note:
- * the next one will not be checked against a comment.
+ * `onConnecting()` is delivered inline on the handler thread, and an observer that calls
+ * disconnect() from it marks the connection that connect() is about to start as disconnected.
+ * That must end as a reported failure, not a throw out of onStartCommand or the reconnect runnable.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceConnectCancellationTest {

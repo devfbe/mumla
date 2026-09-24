@@ -35,13 +35,9 @@ import se.lublin.humla.util.HumlaException
 import java.util.concurrent.TimeUnit
 
 /**
- * Spec A4: the user's wish for a Bluetooth headset and the route the platform actually holds are
- * two different questions, and the first survives everything the second does not.
- *
- * `BluetoothScoReceiver` and the deprecated `startBluetoothSco()` are gone; the route goes through
- * [se.lublin.humla.session.AudioRouter] over [se.lublin.humla.session.CommunicationDevices], which is
- * the API this module's minSdk of 31 has. No permission is consulted before routing and none can
- * be - see the spec 4.1 ruling quoted on `AndroidCommunicationDevices`.
+ * The user's wish for a Bluetooth headset and the route the platform actually holds are separate:
+ * the wish survives everything the route does not. Routing goes through
+ * [se.lublin.humla.session.AudioRouter] over [se.lublin.humla.session.CommunicationDevices].
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceBluetoothTest {
@@ -83,10 +79,8 @@ class HumlaServiceBluetoothTest {
     }
 
     /**
-     * A platform that refuses the route is one chat line, not one per attempt. The router raises
-     * `onRouteRefused` per `apply()` on purpose - it has no clock and no chat log - so the
-     * de-duplication is this service's, against the last line it delivered, the way
-     * `HumlaConnection.warn` does it.
+     * A platform that refuses the route is one chat line, not one per attempt. The router reports
+     * every refusal; this service de-duplicates against the last line it delivered.
      */
     @Test
     fun aRefusedRouteIsOneChatLine() {
@@ -101,14 +95,13 @@ class HumlaServiceBluetoothTest {
         val line = h.service.getString(R.string.audio_route_refused)
         assertThat(h.warnings.filter { it == line }).hasSize(1)
 
-        // A different line in between ends the suppression: the rule is about repetition, not
-        // about the message ever appearing twice in a session.
+        // A different line in between ends the suppression: the rule is about repetition.
         h.service.logWarning("something else")
         h.service.enableBluetoothSco()
         assertThat(h.warnings.filter { it == line }).hasSize(2)
     }
 
-    /** No headset is not a failure any more: the default without one is the phone itself. */
+    /** Without a headset the default route is the phone itself, not a failure. */
     @Test
     fun wantingAHeadsetThatIsNotThereSaysNothing() {
         val h = start()
@@ -122,10 +115,8 @@ class HumlaServiceBluetoothTest {
     // ---------------------------------------------------------------- the route across a session
 
     /**
-     * Spec section 6 regression test: "Bluetooth after reconnect". The route is dropped with every
-     * connection, the *wish* is not, and a synchronized session restores it. This is the half of
-     * the screen-off complaint that is audible: the headset went silent after a reconnect and only
-     * a manual toggle brought it back.
+     * The route is dropped with every connection, the wish is not, and a synchronized session
+     * restores the route.
      */
     @Test
     fun bluetoothScoIsRestartedAfterAReconnect() {
@@ -183,10 +174,8 @@ class HumlaServiceBluetoothTest {
     }
 
     /**
-     * Routing voice with no voice to route holds an SCO link open for nothing. This test used to pin
-     * the opposite - a route taken and held without a session, which `onDestroy` then had to give
-     * back - and the release it pinned is now the router's: nothing is taken before a session is
-     * synchronized, so there is nothing for the destroy to find.
+     * Nothing is routed before a session is synchronized: routing voice with no voice holds an SCO
+     * link open for nothing.
      */
     @Test
     fun noRouteIsTakenWithoutASession() {
@@ -388,13 +377,7 @@ class HumlaServiceBluetoothTest {
         assertThat(h.devices!!.clearCalls).isEqualTo(1)
     }
 
-    /**
-     * The device seam is reachable after `onCreate`, whether a test set it or the service wrapped
-     * the platform itself. The next task on this line - "take the Bluetooth headphones, or the
-     * speaker, and if headphones are plugged in take those by themselves" - is a chooser over
-     * `available`/`select`, and this is the handle it docks onto. Without this line the
-     * only reference lived inside the router's constructor call.
-     */
+    /** The device seam is reachable after `onCreate`, whether a test set it or the service built it. */
     @Test
     fun theDeviceSeamIsReachableAfterOnCreate() {
         val withFake = start()
@@ -465,11 +448,9 @@ class HumlaServiceBluetoothTest {
     // ---------------------------------------------------------------- the platform refusing
 
     /**
-     * Spec 4.1, second half: "absent from the annotation database" is not "throws nowhere", so an
-     * OEM that enforces `BLUETOOTH_CONNECT` on `android.media` gets a caught `SecurityException`,
-     * an answer that reads as "no headset", and **one** chat line per service life. This runs
-     * against the real `AndroidCommunicationDevices` the service builds when no seam is set - the
-     * `onSecurityDenial` callback has no default precisely so that it cannot be forgotten here.
+     * An OEM that enforces `BLUETOOTH_CONNECT` on `android.media` gets a caught `SecurityException`,
+     * an answer that reads as "no headset", and one chat line per service life. Runs against the
+     * real `AndroidCommunicationDevices`.
      */
     @Test
     @Config(shadows = [AndroidCommunicationDevicesTest.DenyingAudioManagerShadow::class])

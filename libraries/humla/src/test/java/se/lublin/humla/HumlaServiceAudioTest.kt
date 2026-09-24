@@ -37,12 +37,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Spec A2 and A8: the audio pipeline is built and torn down on `humla-audio-control`, never on the
- * main thread, and everything it cannot do reaches the chat log instead of a log file nobody reads.
- *
- * The teardown is the reason this matters on a phone: `AudioHandler.shutdown()` joins the capture
- * and playback threads, and the capture thread can be a full frame away from noticing. On the main
- * looper that is an ANR; the same call on the control thread is invisible.
+ * The audio pipeline is built and torn down on `humla-audio-control`, never on the main thread,
+ * and its failures reach the chat log. `AudioHandler.shutdown()` joins the capture and playback
+ * threads, which on the main looper would be an ANR.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceAudioTest {
@@ -76,10 +73,8 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * The first pipeline is built from the settings and the input mode **in force**, not from
-     * defaults and not from the activity mode the service happens to start with. Each of those was
-     * a surviving mutation of its own: the config argument (E12), the input mode (S35) and the
-     * half-duplex flag, which only resolves against the transmit mode the config carries (G23).
+     * The first pipeline is built from the settings and the input mode in force, not from defaults.
+     * Half duplex resolves against the transmit mode the config carries.
      */
     @Test
     fun theFirstPipelineIsBuiltFromTheSettingsInForce() {
@@ -115,10 +110,8 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * A voice target set while the socket is up but the session is not yet synchronized reaches
-     * the pipeline that is built for that session. This is the only window in which
-     * `mVoiceTargetId` can be non-zero at build time -- `startSession` clears it -- so without it
-     * the argument could be a constant zero and no test would know (measured, S34).
+     * A voice target set while the socket is up but before synchronization reaches the pipeline
+     * built for that session; this is the only window where it is non-zero at build time.
      */
     @Test
     fun aVoiceTargetSetWhileConnectingReachesTheFirstPipeline() {
@@ -133,7 +126,7 @@ class HumlaServiceAudioTest {
         assertThat(h.audioFactory.sessionParams[0].targetId).isEqualTo(5.toByte())
     }
 
-    /** And the next session starts clean: the slots the old one held are not carried over (E6/E7). */
+    /** And the next session starts clean: the slots the old one held are not carried over. */
     @Test
     fun aNewSessionStartsWithoutThePreviousVoiceTarget() {
         val h = start()
@@ -145,9 +138,8 @@ class HumlaServiceAudioTest {
 
         h.service.disconnect()
         h.mainLooper.idle()
-        // Set *after* the disconnect cleared it, so what has to clear it again is startSession's
-        // own reset and not the one on the disconnect path (measured, E6: with only the disconnect
-        // path the target survives into the next session).
+        // Set after the disconnect cleared it, so what must clear it again is startSession's own
+        // reset.
         h.service.setVoiceTargetId(9)
         h.service.connect()
         h.synchronize(h.openSocket(1))
@@ -158,8 +150,8 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * Spec A8's other half: a ServerSync whose session id names no user leaves the session up and
-     * says so, rather than building a pipeline with nothing to stamp packets with (G32).
+     * A ServerSync whose session id names no user leaves the session up and says so, rather than
+     * building a pipeline with nothing to stamp packets with.
      */
     @Test
     fun aServerSyncWithoutASessionUserSaysSoAndBuildsNoPipeline() {
@@ -182,7 +174,7 @@ class HumlaServiceAudioTest {
         assertThat(h.audioFactory.created).isEmpty()
     }
 
-    /** Spec section 6 regression test: "no main-thread join in disconnect". */
+    /** No main-thread join in disconnect. */
     @Test
     fun disconnectDoesNotBlockTheMainThreadWhileAudioTearsDown() {
         val h = start()
@@ -231,10 +223,8 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * `onDestroy` must stop the control thread, or `humla-audio-control` outlives the service for
-     * the rest of the process. Reached by reflection and asserted on the thread **object** rather
-     * than on a name filter over `Thread.getAllStackTraces` (task 7 contract): a library that
-     * renames threads turns a name filter into a leak test that passes by finding nothing.
+     * `onDestroy` must stop the control thread. Asserted on the thread object rather than by name,
+     * because a name filter over all threads passes if the thread is renamed.
      */
     @Test
     fun destroyingTheServiceStopsTheAudioControlThread() {
@@ -257,10 +247,8 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * A disconnect that lands between the server's sync and its delivery on the main looper: the
-     * session is synchronized as far as the protocol thread is concerned, and dead by the time
-     * `onConnectionSynchronized` runs. No pipeline is built for it -- a microphone opened for a
-     * connection that is already gone is the one thing worse than none (G3).
+     * A disconnect between the server's sync and its delivery on the main looper: no pipeline is
+     * built, since a microphone opened for a dead connection is worse than none.
      */
     @Test
     fun aDisconnectThatBeatsTheSyncCallbackBuildsNoPipeline() {
@@ -277,7 +265,7 @@ class HumlaServiceAudioTest {
             .isNotEqualTo(HumlaService.ConnectionState.CONNECTED)
     }
 
-    // ---------------------------------------------------------------- spec A8: problems are visible
+    // ---------------------------------------------------------------- problems are visible
 
     @Test
     fun audioCreationFailureIsLoggedAsAWarning() {
@@ -343,10 +331,8 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * The rebuild is decided by the *value*, not by the key: re-writing a setting the pipeline
-     * already has costs a measured 110 ms with the microphone dead in the middle of it. This
-     * replaces `HumlaService.requiresAudioRebuild`, which answered by key and so rebuilt for a
-     * write that changed nothing.
+     * The rebuild is decided by the value, not the key: re-writing an unchanged setting must not
+     * cost a rebuild with the microphone dead in the middle.
      */
     @Test
     fun anExtraWrittenWithTheSameValueDoesNotRebuildThePipeline() {
@@ -364,9 +350,8 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * The two extras that write into objects a rebuild keeps - the detection threshold and the
-     * whole VAD configuration - reach a live [se.lublin.humla.audio.inputmode.ActivityInputMode]
-     * and must not tear the capture chain down. Dragging a slider used to rebuild per step.
+     * The detection threshold and the VAD configuration reach the live
+     * [se.lublin.humla.audio.inputmode.ActivityInputMode] without tearing down the capture chain.
      */
     @Test
     fun aLiveExtraDoesNotRebuildThePipeline() {
@@ -390,12 +375,7 @@ class HumlaServiceAudioTest {
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
     }
 
-    /**
-     * Spec A7, and the repair of an old defect A9a pinned: `EXTRAS_HALF_DUPLEX` used to read
-     * `EXTRAS_TRANSMIT_MODE` out of **its own bundle**, which answers 0 (voice activity) when the
-     * bundle does not carry it - so a settings write that changed only half duplex always resolved
-     * to false. The rule now reads the mode that is in force.
-     */
+    /** Half duplex is resolved against the transmit mode in force, not the one in the same bundle. */
     @Test
     fun halfDuplexOnlyAppliesToPushToTalk() {
         val h = start()
@@ -418,7 +398,7 @@ class HumlaServiceAudioTest {
         h.service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true) })
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isTrue()
 
-        // Both directions: the flag is what the caller wrote, not a constant (G23).
+        // Both directions: the flag is what the caller wrote, not a constant.
         h.service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, false) })
         assertThat(h.service.getAudioConfigForTest().halfDuplexRequested).isFalse()
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
@@ -427,10 +407,8 @@ class HumlaServiceAudioTest {
     // ---------------------------------------------------------------- voice targets
 
     /**
-     * The target reaches the running pipeline **and** the session behind it, so the next rebuild
-     * starts out targeting it instead of transmitting to the channel until something repeats the
-     * call. Setting one while disconnected used to be a NullPointerException (A9a pinned it); it
-     * is now a no-op, and a connect clears the target anyway - the whisper slots go with it.
+     * The target reaches the running pipeline and the session behind it, so the next rebuild keeps
+     * targeting it. A connect clears the target, and the whisper slots with it.
      */
     @Test
     fun theVoiceTargetReachesTheRunningPipelineAndSurvivesARebuild() {
@@ -467,7 +445,7 @@ class HumlaServiceAudioTest {
             .isEqualTo(se.lublin.humla.util.VoiceTargetMode.WHISPER)
     }
 
-    /** The five-bit guard, repaired: `> 0` let a negative byte through, `!= 0` does not. */
+    /** A negative byte does not pass the five-bit guard. */
     @Test
     fun aVoiceTargetIdThatDoesNotFitInFiveBitsIsRefused() {
         val h = start()

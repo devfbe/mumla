@@ -46,36 +46,11 @@ import se.lublin.humla.util.HumlaObserver
 import java.util.concurrent.TimeUnit
 
 /**
- * Characterization of [HumlaService] as it behaves **before** the Kotlin conversion (task A9a).
+ * Characterization of [HumlaService] without a live connection: lifecycle, extras, and the
+ * disconnected arm of the session API.
  *
- * This file exists for one purpose and has one rule: **it is written against the Java service,
- * run green against it, and then run again, unchanged, against the Kotlin one.** A test written
- * after the conversion describes what the conversion produced, not what was there before, and
- * characterizes nothing. Every statement below was therefore committed before `HumlaService.kt`
- * existed.
- *
- * Two consequences for how it is written:
- *
- * - **Every accessor is called as a function, never as a Kotlin synthetic property.**
- *   `service.getConnectionState()`, not `service.connectionState`; `service.isTalking()`, not
- *   `service.isTalking`. A Java getter can be reached either way, a getter *declared in Kotlin*
- *   only as a property, and a Kotlin function only as a call — so the call form is the only form
- *   that compiles against both, and it is what forces the conversion to keep these members
- *   functions rather than turning them into `val`s. (Turning one into a `val` is also how spec
- *   §4.05's `var`/`setX` platform clash gets in: `IHumlaSession` declares `isTalking()` and
- *   `setTalkingState(boolean)` as methods.)
- * - **Assertions are about observable results, not about the shape of the code.** Where the
- *   observable is a value written into an object the service does not own — the fifteen
- *   `AudioHandler.Builder` setters, the threshold on [ActivityInputMode] — it is read back by
- *   reflection over that object's fields, because those objects have no getters. Spec §4.04's
- *   effect pass: for every call into a foreign object, name the test that reads the result back.
- *   Fifteen one-line delegations are exactly what a diff-derived mutation list omits.
- *
- * What this file deliberately does **not** cover: everything that needs a live connection
- * (`onConnectionEstablished`, `onConnectionSynchronized`, `createAudioHandler`, the SCO reload
- * paths, and every `IHumlaSession` call in its *connected* arm). Reaching `CONNECTED` from a
- * Robolectric service means opening a socket to a real server. Those paths are characterized here
- * only in their disconnected arm, which is the arm the conversion can break silently.
+ * Accessors are called as functions (`getConnectionState()`), not as properties, so that they
+ * stay functions. Values written into objects without getters are read back by reflection.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceCharacterizationTest {
@@ -104,7 +79,7 @@ class HumlaServiceCharacterizationTest {
         throw AssertionError("no field $name on ${target.javaClass}")
     }
 
-    /** The input mode in force. Task A9b replaced `mAudioBuilder.mInputMode` with this field. */
+    /** The input mode in force. */
     private fun inputMode(service: HumlaService): Any = field(service, "mInputMode")!!
 
     /** Writes a private field by name. Used only to reach a state the public API cannot produce. */
@@ -122,11 +97,8 @@ class HumlaServiceCharacterizationTest {
     }
 
     /**
-     * A service whose only observer cancels every connection attempt from inside `onConnecting`.
-     * `onConnecting` is delivered inline on the handler's own thread, so the cancellation lands
-     * before `HumlaConnection.connect` opens anything - the trick
-     * [HumlaServiceConnectCancellationTest] uses, and the only way to drive `connect()` in a unit
-     * test without a socket.
+     * A service whose observer cancels every connection attempt from inside `onConnecting`, which
+     * is delivered inline, so `connect()` can be driven without opening a socket.
      */
     private fun cancellingService(): HumlaService = service().also { service ->
         service.registerObserver(object : HumlaObserver() {
@@ -137,13 +109,9 @@ class HumlaServiceCharacterizationTest {
     private fun connectivityManager() = RuntimeEnvironment.getApplication()
         .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-
     // ---------------------------------------------------------------- lifecycle and initial state
 
-    /**
-     * The brief's first characterization: a freshly created service is disconnected and has no
-     * session. `HumlaSession()` is the gate the whole binder API sits behind.
-     */
+    /** A fresh service is disconnected and has no session; `HumlaSession()` gates the binder API. */
     @Test
     fun startsDisconnectedWithoutSession() {
         val service = service()
@@ -171,15 +139,7 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.isTalking()).isFalse()
     }
 
-    /**
-     * **Gone with `BluetoothScoReceiver` (task A9b).** The service no longer registers a broadcast
-     * receiver for `ACTION_SCO_AUDIO_STATE_UPDATED`; the route goes through `AudioRouter` over
-     * `CommunicationDevices`, which is the API this module's minSdk of 31 has, and the listener is
-     * registered on the platform's `AudioManager` instead of on the broadcast registry. The
-     * lifetime property is pinned by
-     * `HumlaServiceBluetoothTest.destroyingTheServiceReleasesTheRouteAndTheListener`, and this test
-     * asserts what is left of it here: that nothing registers that broadcast any more.
-     */
+    /** SCO state comes from `AudioRouter`, not from an `ACTION_SCO_AUDIO_STATE_UPDATED` receiver. */
     @Test
     fun noScoBroadcastReceiverIsRegisteredAnyMore() {
         val controller = Robolectric.buildService(HumlaService::class.java).create()
@@ -192,10 +152,7 @@ class HumlaServiceCharacterizationTest {
         assertThat(scoReceivers).isEmpty()
     }
 
-    /**
-     * Effect pass: the wake lock is built in `onCreate` with a fixed tag and is *not* taken until
-     * synchronization. A conversion that acquires it earlier keeps the CPU awake forever.
-     */
+    /** The wake lock is built in `onCreate` but not taken until synchronization. */
     @Test
     fun theWakeLockIsCreatedUnheldWithTheHumlaTag() {
         service()
@@ -218,11 +175,7 @@ class HumlaServiceCharacterizationTest {
 
     // ---------------------------------------------------------------- onStartCommand input space
 
-    /**
-     * The four corners of `onStartCommand`'s input: intent present or not, extras present or not,
-     * action CONNECT or not, and — under CONNECT — EXTRAS_SERVER present or not. Spec §4.04: for a
-     * compound condition over k inputs the requirement is 2^k inputs, not k mutations.
-     */
+    /** The four corners of `onStartCommand`: intent, extras, action CONNECT, EXTRAS_SERVER. */
     @Test
     fun aStartCommandWithoutAnIntentDoesNothingAndIsNotSticky() {
         val service = service()
@@ -271,11 +224,8 @@ class HumlaServiceCharacterizationTest {
     }
 
     /**
-     * The ordering inside `onStartCommand`: the extras are applied *before* `connect()` reads them,
-     * which is the only reason CONNECT-with-a-server works at all. The observer cancels the attempt
-     * from inside `onConnecting` so that nothing opens a socket — the same trick
-     * `HumlaServiceConnectCancellationTest` uses, and it doubles as the characterization that
-     * `mConnectionState` is already CONNECTING when that callback runs.
+     * Extras are applied before `connect()` reads them, and `mConnectionState` is already
+     * CONNECTING when `onConnecting` runs.
      */
     @Test
     fun aConnectActionAppliesTheExtrasBeforeItConnects() {
@@ -302,9 +252,8 @@ class HumlaServiceCharacterizationTest {
     // ---------------------------------------------------------------- configureExtras
 
     /**
-     * Which extras demand a reconnect, as a table over **every** EXTRAS_ constant the class
-     * declares — enumerated by reflection, not written out. Spec §4.04 handle 2, "pin the set, not
-     * the member": an extra added later fails this test until someone decides which half it is in.
+     * Which extras demand a reconnect, over every `EXTRAS_*` constant found by reflection: a new
+     * extra fails this test until it is classified.
      */
     @Test
     fun exactlyTheseExtrasRequireAReconnect() {
@@ -387,13 +336,7 @@ class HumlaServiceCharacterizationTest {
         }
     }
 
-    /**
-     * Effect pass over every extra that configures audio. Task A9b replaced the
-     * `AudioHandler.Builder` the service used to hold with an immutable [AudioConfig]; the setters
-     * this test used to read back by reflection are now `DefaultAudioHandlerFactory.builder`'s and
-     * are pinned there, so what is left here is the mapping this file owns - bundle key to config
-     * field, fourteen of them, plus the two that write into live objects instead.
-     */
+    /** Every audio extra lands in its [AudioConfig] field; two write into live objects instead. */
     @Test
     fun everyAudioExtraLandsInTheAudioConfig() {
         val service = service()
@@ -437,10 +380,7 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.getAudioConfigForTest().echoCancellation).isFalse()
     }
 
-    /**
-     * The transmit mode picks one of the three input modes the service owns, by identity, and a
-     * fourth value is refused. Four arms, one test each side of the `switch`.
-     */
+    /** The transmit mode picks one of the three input modes by identity; a fourth value is refused. */
     @Test
     fun theTransmitModeSelectsTheInputModeByIdentity() {
         val expected = mapOf(
@@ -467,10 +407,7 @@ class HumlaServiceCharacterizationTest {
         }
     }
 
-    /**
-     * The chosen input mode is the *same instance* the service answers `isTalking()` from, not a
-     * fresh one: the toggle the audio thread consults is the toggle a key press writes.
-     */
+    /** The chosen input mode is the instance `isTalking()` reads, not a fresh copy. */
     @Test
     fun thePushToTalkModeHandedToTheAudioPipelineIsTheOneIsTalkingReads() {
         val service = service()
@@ -485,7 +422,7 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.isTalking()).isTrue()
     }
 
-    /** Effect pass: the detection threshold is written into the service's own ActivityInputMode. */
+    /** The detection threshold is written into the service's own ActivityInputMode. */
     @Test
     fun theDetectionThresholdReachesTheActivityInputMode() {
         val service = service()
@@ -523,14 +460,7 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.isTcpForced).isFalse()
     }
 
-    /**
-     * **Repaired in task A9b; the test that pinned the defect is now
-     * `HumlaServiceAudioTest.halfDuplexOnlyAppliesToPushToTalk`.** Half duplex used to read
-     * `EXTRAS_TRANSMIT_MODE` out of **the same bundle**, which answers 0 - voice activity - when
-     * the bundle does not carry it, so a settings write that changed only the half-duplex flag
-     * always resolved to false. `AudioConfig.halfDuplex` reads the mode in force instead.
-     */
-    /** The brief's third characterization: a transmit mode change is visible without a reconnect. */
+    /** A transmit mode change is visible without a reconnect. */
     @Test
     fun transmitModeExtraIsReflectedImmediately() {
         val service = service()
@@ -542,7 +472,7 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.getTransmitMode()).isEqualTo(Constants.TRANSMIT_PUSH_TO_TALK)
     }
 
-    /** The brief's second characterization: the server extra lands and demands a reconnect. */
+    /** The server extra lands and demands a reconnect. */
     @Test
     fun serverExtraRequiresAReconnect() {
         val service = service()
@@ -591,13 +521,6 @@ class HumlaServiceCharacterizationTest {
         }
     }
 
-    /**
-     * **Moved to `HumlaServiceSessionTest` (task A9b), same four corners.** It used to reach the
-     * reconnecting state on a service that had never connected, because `setReconnecting` was a
-     * field write. `SessionStateMachine.lost()` returns the current state when there was no
-     * session, so a disconnect report with nothing to report no longer starts a reconnect - the
-     * corner is now driven over a real session, which is also the only shape the app produces.
-     */
     /** The error object reaches the observer unchanged, and the state is already set when it does. */
     @Test
     fun theDisconnectReportCarriesTheSameErrorAndAStateThatIsAlreadySet() {
@@ -628,48 +551,9 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.getWhisperTarget()).isNull()
     }
 
-    /**
-     * **Deleted (task A9b), and it was worth nothing before that.** `aDisconnectHaltsBluetoothSco`
-     * called `AudioManager.startBluetoothSco()` and then asserted `isBluetoothScoOn` was false
-     * after a disconnect - but Robolectric's `ShadowAudioManager` never sets that flag from
-     * `startBluetoothSco()`, so the assertion was true whatever the service did. Measured in A9a's
-     * sweep: deleting the `stopBluetoothSco()` call from the service left it green. Spec 4.04's
-     * fake case, a dimension closed by the double rather than by the code.
-     *
-     * What replaced it, against a seam that can express the dimension:
-     * `HumlaServiceBluetoothTest.aUserDisconnectReleasesTheRouteAndKeepsTheWish` and
-     * `bluetoothScoIsRestartedAfterAReconnect`.
-     */
-
-    // ---------------------------------------------------------------- reconnect and connectivity
-
-    /**
-     * **Eight tests lived here and are now in `HumlaServiceSessionTest` (task A9b).** They drove
-     * `setReconnecting(boolean)` - the field write A9b replaced with `SessionStateMachine` - and
-     * they reached it on a service that had never connected, which the state machine refuses:
-     * a loss with nothing to lose is not a loss. Every corner they enumerated is still enumerated,
-     * one test per corner, over a real session on fake transports:
-     *
-     * - the four corners of (disconnect reason x EXTRAS_AUTO_RECONNECT) ->
-     *   `onlyAConnectionErrorWithAutoReconnectOnStartsReconnecting`
-     * - polling with connectivity -> `aReconnectWithConnectivityPollsAfterTheBackoffDelay`
-     * - waiting for the network without it -> `aReconnectWithoutConnectivityWaitsForTheNetworkInstead`
-     * - the network callback's guards -> `theNetworkCallbackReconnectsAsSoonAsTheNetworkIsBack`
-     *   and `aCallbackThatArrivesAfterTheSessionEndedDoesNotReconnect`
-     * - `cancelReconnect`, both arms -> `cancelReconnectStopsTheTimerAndEndsTheSession` and
-     *   `cancellingAReconnectThatNeverStartedIsHarmless`
-     * - the idempotence of `setReconnecting(true)` -> gone with the method. The transition table
-     *   that replaced it is pinned by `SessionStateMachineTest`.
-     * - a retry without a target server, which used to crash on the looper, is now a reported
-     *   failure -> `aConnectWithoutATargetServerReportsAFailureInsteadOfCrashing`.
-     */
-
     // ---------------------------------------------------------------- logging
 
-    /**
-     * `logInfo` is dropped before synchronization; `logWarning` and `logError` are not. Three
-     * methods of one interface, one guard, and the guard is on exactly one of them.
-     */
+    /** `logInfo` is dropped before synchronization; `logWarning` and `logError` are not. */
     @Test
     fun onlyInfoLoggingIsSuppressedBeforeSynchronization() {
         val service = service()
@@ -691,11 +575,7 @@ class HumlaServiceCharacterizationTest {
         assertThat(errors).containsExactly("error")
     }
 
-    /**
-     * Effect pass: a connection warning is resolved to a string *here*, through this service's
-     * resources, and delivered as a warning. The connection raises the enum precisely because it
-     * has no Context (see [ConnectionWarning]); this is the other end of that split.
-     */
+    /** A [ConnectionWarning] is resolved to a string through this service's resources. */
     @Test
     fun aConnectionWarningIsResolvedAgainstTheServicesResources() {
         val service = service()
@@ -730,7 +610,7 @@ class HumlaServiceCharacterizationTest {
 
     // ---------------------------------------------------------------- voice targets
 
-    /** The brief's fourth characterization: a voice target id must fit in five bits. */
+    /** A voice target id must fit in five bits. */
     @Test
     fun voiceTargetIdMustFitInFiveBits() {
         val service = service()
@@ -738,18 +618,6 @@ class HumlaServiceCharacterizationTest {
         assertThrows(IllegalArgumentException::class.java) { service.setVoiceTargetId(0x20) }
     }
 
-    /**
-     * **Both defects this pinned are repaired in task A9b.**
-     *
-     * 1. The guard was `(targetId & ~0x1F) > 0`, not `!= 0`: for a *negative* byte the masked
-     *    value is negative too, so `0x80` passed a check that says "at most 5 bits". It is `!= 0`
-     *    now, and `HumlaServiceAudioTest.aVoiceTargetIdThatDoesNotFitInFiveBitsIsRefused` walks
-     *    0x20, 0x80 and 0xFF through it.
-     * 2. `mAudioHandler` was dereferenced unconditionally, so setting a voice target while
-     *    disconnected threw NullPointerException. It goes to [se.lublin.humla.session.AudioController]
-     *    now, which posts and drops it when no pipeline is up -
-     *    `HumlaServiceAudioTest.aVoiceTargetSetWhileDisconnectedIsHarmless`.
-     */
     /** Freeing a slot that was never taken is harmless, and whispering is off while disconnected. */
     @Test
     fun unregisteringAWhisperTargetThatWasNeverRegisteredIsHarmless() {
@@ -765,18 +633,9 @@ class HumlaServiceCharacterizationTest {
     // ---------------------------------------------------------------- the session API, disconnected
 
     /**
-     * Which exception each session call throws while the service is disconnected — and it is **not**
-     * one answer. The calls that go through `getConnection()` dereference a null field and throw
-     * **NullPointerException**; the calls that go through `getModelHandler()`, `getAudioHandler()`
-     * or `getBluetoothReceiver()` get a `NotSynchronizedException`, which those methods catch and
-     * rethrow as **IllegalStateException**; and two are not implemented at all.
-     *
-     * This is the single most conversion-fragile thing in the file. Replacing `getConnection()` with
-     * a `requireConnection()` that throws `IllegalStateException` — the obvious Kotlin tidy-up, and
-     * what the task brief's own listing does — changes eleven of these answers at once, silently,
-     * and `IHumlaService`'s own documentation ("any call that depends on connection state will throw
-     * IllegalStateException if disconnected") makes the change look like a fix rather than a change.
-     * It is a change: it is behaviour A9b may take, with a reason, and A9a may not.
+     * Which exception each session call throws while disconnected. It is not one answer: calls
+     * via `getConnection()` throw NullPointerException, calls via the model handler throw
+     * IllegalStateException.
      */
     @Test
     fun everySessionCallThrowsItsOwnExceptionWhileDisconnected() {
@@ -853,12 +712,9 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.getWhisperTarget()).isNull()
         service.setTalkingState(true)
         assertThat(service.isTalking()).isTrue()
-        // Task A9b: the pipeline is asynchronous, so "connected" and "a pipeline is up" are no
-        // longer the same statement. This answers -1 where it used to throw IllegalStateException.
+        // The pipeline is asynchronous: -1 while none is up.
         assertThat(service.getCurrentBandwidth()).isEqualTo(-1)
-        // Task A9b: the Bluetooth wish outlives every session, so asking for it outside one is a
-        // question with an answer. All three threw IllegalStateException while disconnected before,
-        // by way of a getBluetoothReceiver() that demanded synchronization.
+        // The Bluetooth wish outlives every session, so these answer while disconnected.
         assertThat(service.usingBluetoothSco()).isFalse()
         assertThat(service.isBluetoothScoActive()).isFalse()
         service.enableBluetoothSco()

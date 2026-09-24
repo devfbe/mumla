@@ -29,11 +29,7 @@ import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.session.AudioConfig
 
-/**
- * The settings screen writes preferences; this is where they stop being preferences and become the
- * behaviour of the running microphone. A key that does not arrive here is a switch that lies, which
- * is the failure class this whole project exists to remove.
- */
+/** The VAD-related extras reach the running microphone configuration. */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceVadExtrasTest {
     private fun service(): HumlaService =
@@ -93,19 +89,6 @@ class HumlaServiceVadExtrasTest {
         assertThat(inputMode(service).vadConfig).isEqualTo(before)
     }
 
-    /**
-     * **The two `requiresAudioRebuild` tests that lived here are gone with the method (task A9b).**
-     * It answered by *key*: a bundle carrying only the detection threshold or the VAD config did
-     * not rebuild, anything else did - including a write that set a value the pipeline already had,
-     * which is 110 ms with the microphone dead for no change at all. `AudioController.reconfigure`
-     * now answers by *value*, which is strictly finer: the live extras never change [AudioConfig],
-     * so they still never rebuild, and a no-op write no longer does either.
-     *
-     * What replaced them, and why they are not in this file: the property is now about the running
-     * pipeline rather than about a pure function, so it needs a session -
-     * `HumlaServiceAudioTest.aLiveExtraDoesNotRebuildThePipeline` and
-     * `anExtraWrittenWithTheSameValueDoesNotRebuildThePipeline`.
-     */
     @Test
     fun `the detection threshold and the vad config are the two extras that reach a live object`() {
         val service = service()
