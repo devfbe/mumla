@@ -11,4 +11,5 @@ class ServerSettings(msg: Mumble.ServerConfig) : IServerSettings {
     override val maxBandwidth: Int = msg.maxBandwidth
     override val maxUsers: Int = msg.maxUsers
     override val welcomeText: String = msg.welcomeText
+    override val recordingAllowed: Boolean = !msg.hasRecordingAllowed() || msg.recordingAllowed
 }

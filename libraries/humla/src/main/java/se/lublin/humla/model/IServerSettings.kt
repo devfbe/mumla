@@ -8,4 +8,10 @@ interface IServerSettings {
     val maxBandwidth: Int
     val maxUsers: Int
     val welcomeText: String
+
+    /**
+     * Whether the server allows clients to record. Servers that don't say so allow it. This client
+     * has no recorder, so it only reports this.
+     */
+    val recordingAllowed: Boolean
 }
