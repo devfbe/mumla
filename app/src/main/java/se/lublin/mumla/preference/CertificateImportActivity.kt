@@ -92,31 +92,19 @@ class CertificateImportActivity : AppCompatActivity() {
     private fun storeKeystore(password: CharArray, fileName: String, pkcs12: ByteArray) {
         val keyStore: KeyStore = try {
             Pkcs12Certificates.load(ByteArrayInputStream(pkcs12), password)
-        } catch (e: CertificateException) {
-            // A problem occurred when reading the stream; interpret this as a password being
-            // required. Request a password from the user and reattempt decryption.
-            // FIXME(acomminos): examine p12 file's SafeBags to determine the presence of a password
-            val passwordField = EditText(this)
-            passwordField.setHint(R.string.password)
-            passwordField.inputType = InputType.TYPE_TEXT_VARIATION_PASSWORD
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.decrypt_certificate)
-                .setView(passwordField)
-                .setOnCancelListener { finish() }
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    storeKeystore(passwordField.text.toString().toCharArray(), fileName, pkcs12)
+        } catch (e: Exception) {
+            when (e) {
+                is CertificateException, is KeyStoreException, is IOException, is NoSuchAlgorithmException -> {
+                    // A well-formed PKCS#12 file that does not open is taken to need a (different) password.
+                    if (Pkcs12Certificates.isPkcs12(pkcs12)) {
+                        askForPassword(fileName, pkcs12)
+                    } else {
+                        invalidCertificate(e)
+                    }
+                    return
                 }
-                .show()
-            return
-        } catch (e: KeyStoreException) {
-            invalidCertificate(e)
-            return
-        } catch (e: IOException) {
-            invalidCertificate(e)
-            return
-        } catch (e: NoSuchAlgorithmException) {
-            invalidCertificate(e)
-            return
+                else -> throw e
+            }
         }
 
         val output = ByteArrayOutputStream()
@@ -143,6 +131,21 @@ class CertificateImportActivity : AppCompatActivity() {
 
         Toast.makeText(this, getString(R.string.certificate_import_success, fileName), Toast.LENGTH_LONG).show()
         finish()
+    }
+
+    private fun askForPassword(fileName: String, pkcs12: ByteArray) {
+        val passwordField = EditText(this)
+        passwordField.setHint(R.string.password)
+        passwordField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.decrypt_certificate)
+            .setView(passwordField)
+            .setOnCancelListener { finish() }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> finish() }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                storeKeystore(passwordField.text.toString().toCharArray(), fileName, pkcs12)
+            }
+            .show()
     }
 
     private fun invalidCertificate(e: Exception) {

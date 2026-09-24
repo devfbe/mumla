@@ -17,6 +17,8 @@
 
 package se.lublin.humla.net
 
+import org.bouncycastle.asn1.ASN1Primitive
+import org.bouncycastle.asn1.pkcs.Pfx
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.io.ByteArrayInputStream
 import java.io.IOException
@@ -54,5 +56,14 @@ object Pkcs12Certificates {
         val store = KeyStore.getInstance("PKCS12", PROVIDER)
         store.load(input, password)
         return store
+    }
+
+    /** True if [bytes] parse as a PKCS#12 PFX structure, whether or not its password is known. */
+    @JvmStatic
+    fun isPkcs12(bytes: ByteArray): Boolean = try {
+        Pfx.getInstance(ASN1Primitive.fromByteArray(bytes))
+        true
+    } catch (e: Exception) {
+        false
     }
 }
