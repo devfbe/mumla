@@ -12,33 +12,27 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * A TCP transport that never opens a socket; tests push frames through it as the read thread would.
  *
- * It promises exactly what [TcpTransport] promises and nothing more. In particular [disconnect]
- * posts the terminal callback through [callbackHandler], because that is what HumlaTCP.disconnect
- * does - it reports the disconnect itself rather than waiting for the read loop, which may be stuck
- * in a connect that has no timeout. A fake that called the listener inline instead would hide
- * whether the connection's own looper is still accepting work at that moment.
+ * Like HumlaTCP, [disconnect] posts the terminal callback through [callbackHandler] rather than
+ * calling the listener inline, so a test can see whether the connection's looper still accepts work.
  */
 class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
     @Volatile var listener: HumlaTCP.TCPConnectionListener? = null
     @Volatile var connectThread: String? = null
     @Volatile var connectHost: String? = null
     @Volatile var connectPort: Int = 0
-    /** Recorded because nothing read it back: the connection passes it and no test looked. */
     @Volatile var connectUseTor: Boolean = false
     @Volatile var disconnectCalls = 0
     val sent = CopyOnWriteArrayList<HumlaTCPMessageType>()
 
     /**
-     * Called from [sendMessage], on whichever thread sends. A test uses it to park the protocol
-     * thread in the middle of a message handler, which is the only way to make the interleaving
-     * "the user disconnected while a handler was still running" a fact rather than a race.
+     * Called from [sendMessage], on whichever thread sends. Lets a test park the protocol thread in
+     * the middle of a message handler.
      */
     @Volatile var onSend: ((HumlaTCPMessageType) -> Unit)? = null
 
     /**
      * Whether the terminal callback [disconnect] posts was accepted by the callback handler. False
-     * means the looper had already quit and the real transport would have handed its token back,
-     * with no second route to report the disconnect from.
+     * means the looper had already quit.
      */
     val terminalPostAccepted = AtomicBoolean(false)
 
@@ -48,8 +42,7 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
         connectHost = host
         connectPort = port
         connectUseTor = useTor
-        // Published last, like disconnectCalls below: tests wait on this field, so everything the
-        // call recorded has to be in place before a waiter can see it.
+        // Published last: tests wait on this field, so everything else must be in place first.
         connectThread = Thread.currentThread().name
     }
     override fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType) { record(messageType) }
@@ -69,10 +62,7 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
         if (l != null && callbackHandler.post { l.onTCPConnectionDisconnect() }) {
             terminalPostAccepted.set(true)
         }
-        // Published last, on purpose: tests wait on this counter, so a counter they can see has to
-        // imply everything this call already did. Written the other way round, the test that pins
-        // the terminal post passes whenever the waiter happens to be slower than one field write --
-        // measured, 200 ms between the two lines is enough to fail it.
+        // Published last: tests wait on this counter, so it must imply everything this call did.
         disconnectCalls = 1
     }
 
@@ -84,9 +74,7 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
 
     /**
      * The read loop's finally block reporting the closed socket. Called **directly**, not through
-     * [callbackHandler]: in production this runs on the socket thread after [disconnect], by which
-     * time the protocol looper may already have been quit, so posting it would silently drop the
-     * call and the de-duplication it is meant to exercise would never be reached.
+     * [callbackHandler]: in production the protocol looper may already have quit by then.
      */
     fun simulateSocketClosed() {
         checkNotNull(listener) { "connect() was not called" }.onTCPConnectionDisconnect()
@@ -101,13 +89,9 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
 /**
  * A UDP transport that never opens a socket.
  *
- * It holds the [CryptState] the factory handed it, which is not decoration: `mUiGood` grows in
- * exactly one place, `CryptState.decrypt()`, reachable only from HumlaUDP's receive loop. A fake
- * that dropped the crypt state left `localGood` constant zero in every connection test, and with
- * it three of the six decisions in [UdpHealthMonitor] unreachable end-to-end - SWITCH_TO_TCP_SEND
- * outright, and RESTORE_UDP at any threshold a caller would actually use, which is why the one
- * restore test had to construct restoreThreshold = -1. [simulateDatagram] counts the packet the
- * way a successful decrypt would, so the production threshold is drivable.
+ * It keeps the [CryptState] the factory handed it: `mUiGood` only grows in `CryptState.decrypt()`,
+ * so [simulateDatagram] counts the packet the way a successful decrypt would, which makes the
+ * [UdpHealthMonitor] decisions that depend on `localGood` reachable.
  */
 class FakeUdpTransport(
     private val callbackHandler: Handler,
@@ -118,10 +102,8 @@ class FakeUdpTransport(
     val disconnectCalls = AtomicInteger()
     @Volatile var connectThread: String? = null
     /**
-     * Recorded for the same reason [FakeTcpTransport.connectUseTor] is: this fake counted the call
-     * and dropped both arguments, so `transport.connect("", 0)` in startUdp() survived the whole
-     * suite. InetAddress.getByName("") resolves to loopback instead of failing, so the production
-     * consequence of that line going wrong is a call that is silently sent to 127.0.0.1.
+     * Recorded so tests can check where UDP is pointed; InetAddress.getByName("") would silently
+     * resolve to loopback.
      */
     @Volatile var connectHost: String? = null
     @Volatile var connectPort: Int = 0
@@ -132,8 +114,7 @@ class FakeUdpTransport(
         connectHost = host
         connectPort = port
         connectThread = Thread.currentThread().name
-        // Published last: tests wait on this counter, so everything the call recorded has to be in
-        // place before a waiter can see it.
+        // Published last: tests wait on this counter.
         connectCalls.incrementAndGet()
     }
     override fun sendMessage(data: ByteArray, length: Int) { sent += data.copyOf(length) }
@@ -141,11 +122,7 @@ class FakeUdpTransport(
 
     fun simulateError(e: Exception) = callbackHandler.post { listener.onUDPConnectionError(e) }
 
-    /**
-     * A datagram that decrypted. The counter is raised here rather than in the test, because in
-     * production it is raised by the same call that produces the buffer - a test that had to
-     * remember to bump it separately would be free to forget, which is the state this fake was in.
-     */
+    /** A datagram that decrypted; raises the crypt state's good counter like a real decrypt. */
     fun simulateDatagram(data: ByteArray) = callbackHandler.post {
         cryptState.mUiGood++
         listener.onUDPDataReceived(data)
@@ -165,10 +142,8 @@ class FakeTransports : HumlaConnection.TransportFactory {
 
 class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
     /**
-     * One entry per callback, in delivery order. The listener contract calls
-     * onConnectionDisconnected terminal, and "terminal" is a statement about order that a set of
-     * per-callback counters cannot express - which is how a synchronized and a warning delivered
-     * behind the disconnect report both went unnoticed.
+     * One entry per callback, in delivery order, so tests can check that onConnectionDisconnected
+     * is terminal.
      */
     val events = CopyOnWriteArrayList<String>()
 
@@ -179,11 +154,7 @@ class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
     val handshakeFailures = CopyOnWriteArrayList<Array<X509Certificate>>()
     val certificateChanges = CopyOnWriteArrayList<Array<X509Certificate>>()
 
-    /**
-     * One entry per callback. The looper is recorded, not the thread name: "the callback ran on the
-     * main looper" is the property the listener contract states, and it holds no matter what the
-     * test runner happens to have named its thread.
-     */
+    /** One entry per callback: the looper it ran on. */
     val callbackLoopers = CopyOnWriteArrayList<Looper?>()
 
     val allOnMainLooper: Boolean get() = callbackLoopers.isNotEmpty() && callbackLoopers.all { it == Looper.getMainLooper() }

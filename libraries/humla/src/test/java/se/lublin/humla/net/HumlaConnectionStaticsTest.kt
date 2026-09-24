@@ -6,10 +6,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import se.lublin.humla.protobuf.Mumble
 
-/**
- * Pins the pure helpers of [HumlaConnection] so the Java-to-Kotlin conversion cannot change them.
- * These pass before and after the conversion; they are not the TDD cycle for the threading change.
- */
+/** The pure helpers of [HumlaConnection]. */
 class HumlaConnectionStaticsTest {
     @Test
     fun audioBandwidthIncludesPerPacketOverhead() {
@@ -30,13 +27,8 @@ class HumlaConnectionStaticsTest {
     }
 
     /**
-     * The whole decision-to-warning mapping in one assertion, iterated from the enum rather than
-     * written out case by case. Three of the four switch reasons cannot be produced through the
-     * fake transports at all - they need `CryptState.mUiGood` itself to move - so as five branches
-     * inside the ping handler they would have been five arms with two of them pinned, which 4.04
-     * calls a function that only looks covered. Written this way, a decision added later is an
-     * extra entry here as well as a compile error in the `when`, and a swapped pair of warnings is
-     * a mismatched value rather than a still-distinct set.
+     * The whole decision-to-warning mapping, iterated from the enum, so a new decision needs an
+     * entry here and a swapped pair of warnings shows up as a mismatched value.
      */
     @Test
     fun everyUdpSwitchDecisionCarriesItsOwnWarning() {

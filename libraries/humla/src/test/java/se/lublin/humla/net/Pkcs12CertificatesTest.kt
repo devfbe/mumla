@@ -103,13 +103,9 @@ class Pkcs12CertificatesTest {
     }
 
     /**
-     * BouncyCastle 1.86 raised its PKCS#12 defaults to NIST levels: a MAC at 1,200,000 iterations
-     * and an encrypted certificate bag at 600,000. Deriving those costs the better part of a
-     * second per store and per load on a desktop, and several seconds on a phone -- once on every
-     * connection, on the thread that calls connect(). The key is kept with an empty password in
-     * the app's private database, so the iterations buy nothing against any realistic attacker.
-     *
-     * This pins the counts so a future BouncyCastle bump cannot quietly put them back.
+     * BouncyCastle's NIST-level PKCS#12 defaults (1.2M MAC iterations, 600k for encrypted bags)
+     * cost seconds per load on a phone, on every connection. The key is stored with an empty
+     * password in the app's private database, so the iterations buy nothing; pin the low counts.
      */
     @Test
     fun `a generated certificate uses a cheap iteration count`() {

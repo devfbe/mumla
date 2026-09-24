@@ -62,10 +62,8 @@ class HumlaTCPTest {
     }
 
     /**
-     * The threads that were already running when this test started. Thread.getAllStackTraces() is
-     * JVM-global, so a humla-tcp-* thread leaked by an earlier test would otherwise show up in this
-     * one's checks and fail it as pure collateral damage; [tearDown] pins a leak on the test that
-     * caused it instead.
+     * Threads already running when this test started. Thread.getAllStackTraces() is JVM-global, so
+     * this keeps a thread leaked by an earlier test from failing this one.
      */
     private val preexistingThreads = Thread.getAllStackTraces().keys.toSet()
 
@@ -86,7 +84,7 @@ class HumlaTCPTest {
         (if (handler == null) HumlaTCP(socketFactory) else HumlaTCP(socketFactory, handler))
             .also { it.setTCPConnectionListener(listener); tcp = it }
 
-    /** Only threads this test started: see [preexistingThreads] for why the filter is needed. */
+    /** Only threads this test started; see [preexistingThreads]. */
     private fun liveThreadNames(prefix: String) = Thread.getAllStackTraces().keys
         .filter { it.isAlive && it.name.startsWith(prefix) && it !in preexistingThreads }
         .map { it.name }
@@ -105,10 +103,9 @@ class HumlaTCPTest {
     }
 
     /**
-     * Delivers for real, but runs [beforeQueueing] with the running post count first - at the one
-     * instruction post() has between capturing the epoch and handing the callback to the handler.
-     * Handler.post is final, so the hook sits on the funnel every post goes through. [posts] is the
-     * same count afterwards, so a test can pin how many callbacks the transport handed over.
+     * Delivers for real, but runs [beforeQueueing] with the running post count first - between
+     * post() capturing the epoch and handing the callback to the handler (Handler.post is final, so
+     * the hook sits on the funnel every post goes through). [posts] is the same count afterwards.
      */
     private class HookedHandler(looper: Looper, private val beforeQueueing: (Int) -> Unit) : Handler(looper) {
         val posts = AtomicInteger()
@@ -138,10 +135,7 @@ class HumlaTCPTest {
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
 
-    /**
-     * The default handler must stay the main looper: HumlaConnection is still a main-thread
-     * consumer until Task 4 moves it, and a different delivery thread would reorder its callbacks.
-     */
+    /** Makes the TLS handshake fail with [failure] as the trust verdict. */
     private fun failHandshakeWith(failure: TrustFailure) {
         val socket = mockk<SSLSocket>(relaxed = true)
         every { socket.startHandshake() } throws SSLHandshakeException("rejected")
@@ -177,9 +171,8 @@ class HumlaTCPTest {
             !shadowOf(Looper.getMainLooper()).isIdle
         }
         assertThat(listener.events).isEmpty() // nothing was delivered on the read thread
-        // Wait for the event, not for isRunning: the read loop clears that flag one statement
-        // before it posts the disconnect, so a single idle() keyed on it can run while only the
-        // failure is queued and leave the disconnect sitting in the paused queue for good.
+        // Wait for the event, not for isRunning: the read loop clears that flag just before it
+        // posts the disconnect.
         awaitUntil(description = "the disconnect reached the main looper") {
             shadowOf(Looper.getMainLooper()).idle()
             listener.disconnects.get() == 1
@@ -236,9 +229,8 @@ class HumlaTCPTest {
     /**
      * HumlaSSLSocketFactory.createSocket() connects with no timeout, so a blackholed server keeps
      * the read thread blocked with no socket for disconnect() to close. The caller must still be
-     * told it is disconnected - HumlaService only releases its wake lock and shuts audio down when
-     * that callback arrives - and it must still be told exactly once when the read loop finally
-     * unwinds.
+     * told it is disconnected (HumlaService releases its wake lock on that callback), and exactly
+     * once when the read loop finally unwinds.
      */
     @Test
     fun aDisconnectIsReportedEvenWhileTheConnectAttemptIsStillBlocked() {
@@ -261,7 +253,7 @@ class HumlaTCPTest {
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
 
-    /** A disconnect before connect() must stay a no-op, exactly as the Java original was. */
+    /** A disconnect before connect() is a no-op. */
     @Test
     fun aDisconnectBeforeConnectIsSilent() {
         val transport = newTransport(Handler(callbackThread.looper))
@@ -284,12 +276,9 @@ class HumlaTCPTest {
     }
 
     /**
-     * The read loop parks inside readFrame with no idea that a disconnect has happened: disconnect()
-     * reports at once and closes the socket only from the send thread, behind everything queued
-     * there. A frame that completes in that window used to be delivered after
-     * onTCPConnectionDisconnect - by which time HumlaService has released its wake lock, shut the
-     * audio handler down and nulled its handlers, so the late packet walks into a torn-down
-     * consumer. The disconnect callback is terminal: nothing follows it.
+     * The read loop parks inside readFrame unaware of a disconnect; disconnect() reports at once and
+     * closes the socket only later from the send thread. A frame completing in that window must not
+     * be delivered after onTCPConnectionDisconnect, which is terminal.
      */
     @Test
     fun aFrameCompletingAfterTheDisconnectIsNotDelivered() {
@@ -318,12 +307,9 @@ class HumlaTCPTest {
     }
 
     /**
-     * disconnect() clears "running" while the read thread is still unwinding: it may still be stuck
-     * in a connect with no timeout, and its finally still has to report the disconnect and shut the
-     * executors down. A connect() slipping into that window would hand the old finally the new
-     * connection's disconnect token and let it shut down the new connection's executors, after
-     * which sendMessage is a silent no-op and nobody ever reports a disconnect. The Java original
-     * refused this with "Threads already initialized."; the transport is busy until its read loop
+     * disconnect() clears "running" while the read thread may still be unwinding (e.g. stuck in a
+     * connect with no timeout). A connect() in that window would hand the old finally the new
+     * connection's disconnect token and executors, so the transport stays busy until its read loop
      * is done.
      */
     @Test
@@ -350,17 +336,9 @@ class HumlaTCPTest {
     }
 
     /**
-     * Where inUse is released inside the finally is the whole point of holding it: everything from
-     * postDisconnectOnce() down still belongs to the connection that is ending. A connect() let
-     * through any earlier would have its disconnect token consumed and its brand-new executors
-     * shut down by the outgoing finally, leaving sendMessage a silent no-op with nobody ever
-     * reporting a disconnect.
-     *
-     * aConnectIsRefusedUntilTheReadLoopHasFinishedUnwinding cannot see this: it takes the token
-     * while the read thread still hangs in createSocket, long before the finally is entered, so it
-     * holds for a release anywhere inside the finally. Here the read thread is parked *inside* the
-     * finally - in the disconnect post, its first interceptable statement - which makes the
-     * position of the release observable rather than just its existence.
+     * inUse is released only after everything from postDisconnectOnce() down, which still belongs
+     * to the ending connection. The read thread is parked *inside* the finally here, which makes the
+     * position of the release observable, not just its existence.
      */
     @Test
     fun aConnectIsRefusedWhileTheReadLoopIsStillInsideItsFinally() {
@@ -411,16 +389,11 @@ class HumlaTCPTest {
     }
 
     /**
-     * Handler.post returns false once its looper has quit - which Task 4's protocol thread can do.
-     * The token that makes the disconnect exactly-once must only be consumed by a callback that was
-     * actually queued, otherwise the one report is dropped on the floor and the read loop, which
-     * would have reported it a moment later, stays suppressed: nobody ever reports.
+     * Handler.post returns false once its looper has quit. The exactly-once disconnect token must
+     * only be consumed by a callback that was actually queued, or nobody ever reports.
      *
-     * The fake leaves the runnable unrun, because that is what a quit looper does: post() returning
-     * false means the message was never queued, so the listener hears nothing and the epoch the
-     * runnable would have marked stays untouched. Running it inline instead - and on the calling
-     * thread at that - would have this one test on this path assert a delivery the device never
-     * makes. What it pins is the second attempt; the rest is the transport's real chain.
+     * The fake leaves the runnable unrun, as a quit looper does; running it inline would assert a
+     * delivery the device never makes.
      */
     @Test
     fun aDisconnectThePostRejectsIsReportedAgainByTheReadLoop() {
@@ -447,15 +420,12 @@ class HumlaTCPTest {
     }
 
     /**
-     * "Terminal" has to be decided when the callback is delivered, not when it is queued: post()
-     * reads disconnectReported and hands the callback to the handler as two separate steps, and a
-     * consumer calling disconnect() in between gets its terminal callback queued first, with the
-     * frame landing behind it. That is the same walk into a torn-down consumer as
-     * aFrameCompletingAfterTheDisconnectIsNotDelivered, only through a window two instructions
-     * wide - reproduced here exactly, by disconnecting from inside the frame's own post.
+     * "Terminal" is decided at delivery, not when queued: post() reads disconnectReported and
+     * queues the callback as two steps, and a disconnect() in between would queue the terminal
+     * callback ahead of the frame. Reproduced by disconnecting from inside the frame's own post.
      *
-     * Robolectric's main looper is paused, so nothing runs until the test idles it: the delivery
-     * order below is exactly the order the transport handed the callbacks over in.
+     * Robolectric's main looper is paused, so the delivery order below is exactly the order the
+     * transport handed the callbacks over in.
      */
     @Test
     fun aFrameQueuedWhileTheDisconnectRunsIsStillNotDelivered() {
@@ -491,20 +461,14 @@ class HumlaTCPTest {
         assertThat(listener.next()).isEqualTo("disconnect" to main)
         assertThat(listener.events).isEmpty() // the frame was queued behind the disconnect, not delivered
         assertThat(listener.disconnects.get()).isEqualTo(1)
-        // Pins the numbering the hook keys on: an extra post anywhere before the frame would
-        // otherwise shift it silently and leave this test green for the wrong reason.
+        // Pins the numbering the hook keys on.
         assertThat(handler.posts.get()).isEqualTo(3)
     }
 
     /**
-     * A reconnect on the same transport must not write into the previous connection's streams. The
-     * read loop closes them but used to leave the fields pointing at them, so between connect() and
-     * the new handshake - the new send executor is already running - sendMessage still found the old
-     * output. On a real socket that is an IOException swallowed by the send thread, so the message
-     * would simply vanish; the fake here keeps the bytes instead, which is what makes it visible.
-     * What the fix buys is therefore not a delivered message - it is lost either way - but that no
-     * send reaches into a dead stream and that a live transport holds no reference to the streams
-     * of the connection it has finished with.
+     * A reconnect on the same transport must not write into the previous connection's streams:
+     * between connect() and the new handshake, sendMessage must not find the old output. (On a real
+     * socket such a write would just vanish; the fake keeps the bytes, which makes it visible.)
      */
     @Test
     fun aSendBetweenTwoConnectionsDoesNotReachThePreviousConnectionsStream() {
@@ -544,13 +508,9 @@ class HumlaTCPTest {
     }
 
     /**
-     * The terminal flag belongs to the connection, not to the transport. Its closing edge is the
-     * only one of the transport's flags that runs on the callback handler, so it is the only one
-     * [inUse] does not fence in: a disconnect queued for connection A can still be delivered after
-     * A's read loop released the transport and B is already up. Resetting in connect() cannot help,
-     * because A's setter arrives after that. B would then be silenced for good - no established, no
-     * frame, and a later failure arriving as a bare disconnect with no exception, which
-     * HumlaService's reconnect logic does not retry from.
+     * The terminal flag belongs to the connection, not to the transport. A disconnect queued for
+     * connection A can still be delivered after A released the transport and B is up; it must not
+     * silence B (a later failure would arrive as a bare disconnect, which is not retried).
      */
     @Test
     fun aDisconnectDeliveredAfterTheNextConnectDoesNotSilenceIt() {

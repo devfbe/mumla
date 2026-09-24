@@ -118,14 +118,9 @@ class HumlaUDPTest {
     }
 
     /**
-     * The premise HumlaConnection leans on when it does *not* clear its reference to a transport
-     * whose thread has died: a send after the death is dropped before encrypt(), so no OCB2
-     * sequence number is burned on a packet the server's replay window will never see used.
-     *
-     * The encrypt IV is the sequence number, and CryptState.encrypt() increments it before it does
-     * anything else, so an unchanged IV is exactly "encrypt() was not reached". Written because a
-     * comment in HumlaConnection asserted this window was open and closed it from the wrong side;
-     * a claim about another class's ordering belongs in a test of that class.
+     * A send after the transport's thread has died is dropped before encrypt(), so no OCB2 sequence
+     * number is burned. encrypt() increments the IV first, so an unchanged IV means it was not
+     * reached.
      */
     @Test
     fun aSendAfterTheThreadDiedDoesNotBurnASequenceNumber() {
@@ -172,9 +167,8 @@ class HumlaUDPTest {
     }
 
     /**
-     * Pins the default delivery thread. HumlaConnection hands the transport an explicit main-looper
-     * handler today, and the default must match it, because a change of delivery thread here would
-     * silently reorder every UDP callback the service sees.
+     * Pins the default delivery thread to the main looper, matching the handler HumlaConnection
+     * passes explicitly.
      */
     @Test
     fun theDefaultHandlerDeliversOnTheMainLooper() {
@@ -198,8 +192,8 @@ class HumlaUDPTest {
     }
 
     /**
-     * disconnect() before the receive loop has a socket must still stop it. The Java original set
-     * its connected flag at the top of run(), overwriting the disconnect and looping forever.
+     * disconnect() before the receive loop has a socket must still stop it, not be overwritten by
+     * the loop's start-up.
      */
     @Test
     fun aDisconnectBeforeTheSocketExistsStillStopsTheReceiveLoop() {
