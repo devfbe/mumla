@@ -81,13 +81,10 @@ android {
 
     packaging {
         resources {
-            // protobuf-javalite ships the well-known-type .proto sources and a descriptor set
-            // for protoc as Java resources; the lite runtime never reads either. The leading
-            // slash anchors the pattern to the archive root, which is what AGP matches.
+            // protoc inputs shipped by protobuf-javalite; the lite runtime never reads them.
             excludes += "/google/protobuf/**"
             excludes += "/core/java_features_proto-descriptor-set.proto.bin"
-            // bcprov, bcpkix and bcutil each ship a META-INF/LICENSE.md; merged so that no
-            // jar's notice is dropped if they ever differ.
+            // bcprov, bcpkix and bcutil each ship one; merged so no notice is dropped.
             merges += "META-INF/LICENSE.md"
         }
     }
