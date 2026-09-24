@@ -160,4 +160,65 @@ class CryptStateTest {
         }
         assertThat(cs.accepts(encrypted)).isTrue()
     }
+
+    @Test
+    fun `is invalid until keyed`() {
+        val cs = CryptState()
+        assertThat(cs.isValid).isFalse()
+        cs.setKeys(rawKey, nonce, nonce)
+        assertThat(cs.isValid).isTrue()
+    }
+
+    @Test
+    fun `rejects packets shorter than the header`() {
+        val cs = CryptState().apply { setKeys(rawKey, nonce, nonce) }
+        assertThat(cs.decrypt(ByteArray(3), 3)).isNull()
+    }
+
+    @Test
+    fun `copies keys and IVs in and out`() {
+        val key = rawKey.clone()
+        val eiv = nonce.clone()
+        val div = nonce.clone()
+        val cs = CryptState().apply { setKeys(key, eiv, div) }
+        eiv.fill(0)
+        div.fill(0)
+        assertThat(cs.encryptIV).isEqualTo(nonce)
+        assertThat(cs.decryptIV).isEqualTo(nonce)
+
+        cs.encryptIV.fill(0)
+        cs.decryptIV.fill(0)
+        assertThat(cs.encryptIV).isEqualTo(nonce)
+        assertThat(cs.decryptIV).isEqualTo(nonce)
+
+        val newIv = ByteArray(16) { 7 }
+        cs.setDecryptIV(newIv)
+        newIv.fill(0)
+        assertThat(cs.decryptIV).isEqualTo(ByteArray(16) { 7 })
+    }
+
+    @Test
+    fun `accepts a late packet from before the low IV byte wrapped`() {
+        val (enc, dec) = pair()
+        var beforeWrap: ByteArray
+        while (true) {
+            val packet = enc.encrypt(secret, 10)
+            if (packet[0] == 0xff.toByte()) {
+                beforeWrap = packet
+                break
+            }
+            assertThat(dec.accepts(packet)).isTrue()
+        }
+        repeat(3) { assertThat(dec.accepts(enc.encrypt(secret, 10))).isTrue() }
+        val goodBefore = dec.mUiGood
+        val lostBefore = dec.mUiLost
+
+        assertWithMessage("late across the wrap").that(dec.decrypt(beforeWrap, beforeWrap.size)).isEqualTo(secret)
+        assertThat(dec.mUiGood).isEqualTo(goodBefore + 1)
+        assertThat(dec.mUiLate).isEqualTo(1)
+        assertThat(dec.mUiLost).isEqualTo(lostBefore - 1)
+        assertWithMessage("IV restored after the late packet").that(dec.decryptIV).isEqualTo(enc.encryptIV)
+        assertWithMessage("replayed").that(dec.accepts(beforeWrap)).isFalse()
+        assertThat(dec.accepts(enc.encrypt(secret, 10))).isTrue()
+    }
 }
