@@ -1,6 +1,5 @@
 package se.lublin.humla.net
 
-import android.os.Handler
 import android.os.Looper
 import com.google.protobuf.MessageLite
 import kotlinx.coroutines.CoroutineScope
@@ -103,7 +102,7 @@ class FakeTcpTransport(private val scope: CoroutineScope) : TcpTransport {
  * [UdpHealthMonitor] decisions that depend on `localGood` reachable.
  */
 class FakeUdpTransport(
-    private val callbackHandler: Handler,
+    private val scope: CoroutineScope,
     private val listener: HumlaUDP.UDPConnectionListener,
     private val cryptState: CryptState = CryptState(),
 ) : UdpTransport {
@@ -129,10 +128,10 @@ class FakeUdpTransport(
     override fun sendMessage(data: ByteArray, length: Int) { sent += data.copyOf(length) }
     override fun disconnect() { disconnectCalls.incrementAndGet() }
 
-    fun simulateError(e: Exception) = callbackHandler.post { listener.onUDPConnectionError(e) }
+    fun simulateError(e: Exception) = scope.launch { listener.onUDPConnectionError(e) }
 
     /** A datagram that decrypted; raises the crypt state's good counter like a real decrypt. */
-    fun simulateDatagram(data: ByteArray) = callbackHandler.post {
+    fun simulateDatagram(data: ByteArray) = scope.launch {
         cryptState.good++
         listener.onUDPDataReceived(data)
     }
@@ -145,8 +144,8 @@ class FakeTransports : HumlaConnection.TransportFactory {
     override fun createTcp(socketFactory: HumlaSSLSocketFactory, scope: CoroutineScope): TcpTransport =
         FakeTcpTransport(scope).also { tcps += it }
 
-    override fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, callbackHandler: Handler): UdpTransport =
-        FakeUdpTransport(callbackHandler, listener, cryptState).also { udps += it }
+    override fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, scope: CoroutineScope): UdpTransport =
+        FakeUdpTransport(scope, listener, cryptState).also { udps += it }
 }
 
 class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {

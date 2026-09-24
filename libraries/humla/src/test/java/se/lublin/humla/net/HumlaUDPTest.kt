@@ -2,14 +2,16 @@ package se.lublin.humla.net
 
 import android.os.Handler
 import android.os.HandlerThread
-import android.os.Looper
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.testutil.awaitUntil
 import java.io.IOException
 import java.net.DatagramPacket
@@ -26,6 +28,9 @@ class HumlaUDPTest {
     private val clientNonce = ByteArray(16) { (0x10 + it).toByte() }
     private val serverNonce = ByteArray(16) { (0x20 + it).toByte() }
     private val callbackThread = HandlerThread("test-udp-callbacks").apply { start() }
+
+    /** Like the connection's scope, dispatching the callbacks on [callbackThread]. */
+    private val scope = CoroutineScope(SupervisorJob() + Handler(callbackThread.looper).asCoroutineDispatcher())
     private val server = DatagramSocket(0, InetAddress.getLoopbackAddress()).apply { soTimeout = 200 }
     private val serverCrypt = CryptState().apply { setKeys(key, serverNonce, clientNonce) }
     private val listener = RecordingListener()
@@ -40,7 +45,7 @@ class HumlaUDPTest {
     }
 
     private fun startClient(): HumlaUDP {
-        udp = HumlaUDP(CryptState().apply { setKeys(key, clientNonce, serverNonce) }, listener, Handler(callbackThread.looper))
+        udp = HumlaUDP(CryptState().apply { setKeys(key, clientNonce, serverNonce) }, listener, scope)
         udp.connect("127.0.0.1", server.localPort)
         return udp
     }
@@ -69,8 +74,12 @@ class HumlaUDPTest {
 
     @After
     fun tearDown() {
-        if (::udp.isInitialized) udp.disconnect()
+        if (::udp.isInitialized) {
+            udp.disconnect()
+            awaitFinished(udp)
+        }
         server.close()
+        scope.cancel()
         callbackThread.quitSafely()
     }
 
@@ -105,7 +114,7 @@ class HumlaUDPTest {
         udp = HumlaUDP(
             CryptState().apply { setKeys(key, clientNonce, serverNonce) },
             listener,
-            Handler(callbackThread.looper),
+            scope,
         ) { DatagramSocket().also { sockets.add(it) } }
 
         udp.connect("127.0.0.1", server.localPort)
@@ -126,7 +135,7 @@ class HumlaUDPTest {
     fun aSendAfterTheThreadDiedDoesNotBurnASequenceNumber() {
         val crypt = CryptState().apply { setKeys(key, clientNonce, serverNonce) }
         val sockets = LinkedBlockingQueue<DatagramSocket>()
-        udp = HumlaUDP(crypt, listener, Handler(callbackThread.looper)) {
+        udp = HumlaUDP(crypt, listener, scope) {
             DatagramSocket().also { sockets.add(it) }
         }
         udp.connect("127.0.0.1", server.localPort)
@@ -167,31 +176,6 @@ class HumlaUDPTest {
     }
 
     /**
-     * Pins the default delivery thread to the main looper, matching the handler HumlaConnection
-     * passes explicitly.
-     */
-    @Test
-    fun theDefaultHandlerDeliversOnTheMainLooper() {
-        udp = HumlaUDP(CryptState().apply { setKeys(key, clientNonce, serverNonce) }, listener)
-        udp.connect("127.0.0.1", server.localPort)
-        val (hello, _) = sendUntilReceived(udp, byteArrayOf(0x20))
-        val payload = byteArrayOf(0x20, 4, 5)
-        val encrypted = serverCrypt.encrypt(payload, payload.size)
-
-        server.send(DatagramPacket(encrypted, encrypted.size, hello.socketAddress))
-
-        // Delivery waits for the main looper: nothing is handed over on the receive thread.
-        awaitUntil(description = "the callback reached the main looper queue") {
-            !shadowOf(Looper.getMainLooper()).isIdle
-        }
-        assertThat(listener.received).isEmpty()
-        shadowOf(Looper.getMainLooper()).idle()
-        val (thread, data) = listener.received.poll(5, TimeUnit.SECONDS) ?: throw AssertionError("nothing received")
-        assertThat(data).isEqualTo(payload)
-        assertThat(thread).isEqualTo(Looper.getMainLooper().thread.name)
-    }
-
-    /**
      * disconnect() before the receive loop has a socket must still stop it, not be overwritten by
      * the loop's start-up.
      */
@@ -202,7 +186,7 @@ class HumlaUDPTest {
         udp = HumlaUDP(
             CryptState().apply { setKeys(key, clientNonce, serverNonce) },
             listener,
-            Handler(callbackThread.looper),
+            scope,
         ) { gate.await(); DatagramSocket().also { sockets.add(it) } }
 
         udp.connect("127.0.0.1", server.localPort)
@@ -213,25 +197,39 @@ class HumlaUDPTest {
         awaitUntil(description = "the receive loop closed its socket and exited") { socket.isClosed }
         assertThat(udp.isRunning).isFalse()
         assertThat(listener.errors).isEmpty()
-        awaitNoLiveThread("humla-udp-")
+        awaitFinished(udp)
     }
 
     /** Neither socket loop may outlive a disconnect. */
     @Test
-    fun bothUdpThreadsExitOnDisconnect() {
+    fun bothUdpLoopsEndOnDisconnect() {
         val client = startClient()
         awaitUntil(description = "udp running") { client.isRunning }
-        sendUntilReceived(client, byteArrayOf(0x20, 1)) // makes sure the send thread is up
-        awaitUntil(description = "the send thread started") { liveThreadNames("humla-udp-send").isNotEmpty() }
+        sendUntilReceived(client, byteArrayOf(0x20, 1)) // makes sure the sender is up
 
         client.disconnect()
 
-        awaitNoLiveThread("humla-udp-")
+        awaitFinished(client)
     }
 
-    private fun liveThreadNames(prefix: String) =
-        Thread.getAllStackTraces().keys.filter { it.isAlive && it.name.startsWith(prefix) }.map { it.name }
+    /** Cancelling the scope - what the connection's disconnect does - closes the socket as well. */
+    @Test
+    fun cancellingTheScopeClosesTheSocketAndReportsNothing() {
+        val sockets = LinkedBlockingQueue<DatagramSocket>()
+        udp = HumlaUDP(CryptState().apply { setKeys(key, clientNonce, serverNonce) }, listener, scope) {
+            DatagramSocket().also { sockets.add(it) }
+        }
+        udp.connect("127.0.0.1", server.localPort)
+        awaitUntil(description = "udp running") { udp.isRunning }
 
-    private fun awaitNoLiveThread(prefix: String) =
-        awaitUntil(description = "no live thread named $prefix*") { liveThreadNames(prefix).isEmpty() }
+        scope.cancel()
+
+        val socket = sockets.poll(5, TimeUnit.SECONDS)!!
+        awaitUntil(description = "the socket closed") { socket.isClosed }
+        awaitFinished(udp)
+        assertThat(listener.errors.poll(200, TimeUnit.MILLISECONDS)).isNull()
+    }
+
+    private fun awaitFinished(transport: HumlaUDP) =
+        awaitUntil(description = "every coroutine of the transport finished") { transport.isFinished }
 }

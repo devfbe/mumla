@@ -79,18 +79,25 @@ class HumlaConnection @JvmOverloads constructor(
 ) : HumlaTCP.TCPConnectionListener, HumlaUDP.UDPConnectionListener, MessageHandlerRegistry {
 
     /** Builds the transports, so tests can supply fakes that never open a socket. */
+    /** Each transport gets the connection's scope: cancelled on disconnect, dispatching on the protocol thread. */
     interface TransportFactory {
-        /** [scope] is the connection's: cancelled on disconnect, dispatching on the protocol thread. */
         fun createTcp(socketFactory: HumlaSSLSocketFactory, scope: CoroutineScope): TcpTransport
-        fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, callbackHandler: Handler): UdpTransport
+        fun createUdp(
+            cryptState: CryptState,
+            listener: HumlaUDP.UDPConnectionListener,
+            scope: CoroutineScope,
+        ): UdpTransport
     }
 
     class DefaultTransportFactory : TransportFactory {
         override fun createTcp(socketFactory: HumlaSSLSocketFactory, scope: CoroutineScope): TcpTransport =
             HumlaTCP(socketFactory, scope)
 
-        override fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, callbackHandler: Handler): UdpTransport =
-            HumlaUDP(cryptState, listener, callbackHandler)
+        override fun createUdp(
+            cryptState: CryptState,
+            listener: HumlaUDP.UDPConnectionListener,
+            scope: CoroutineScope,
+        ): UdpTransport = HumlaUDP(cryptState, listener, scope)
     }
 
     /** The thread behind the protocol dispatcher; not started by reading this. */
@@ -638,7 +645,7 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     private fun startUdp() {
-        val transport = transports.createUdp(cryptState, this, protocolHandler)
+        val transport = transports.createUdp(cryptState, this, scope)
         udp = transport
         transport.connect(host, port)
     }
