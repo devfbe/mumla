@@ -31,7 +31,7 @@ import kotlin.concurrent.thread
 /**
  * The model race between the protocol thread and the main thread.
  *
- * The protocol thread feeds 5 000 frames through [ModelHandler] (channels building a tree, users
+ * The protocol thread feeds at least 5 000 frames through [ModelHandler] (channels building a tree, users
  * joining and moving), while the main thread walks the tree the way the app's channel list does:
  * `getChannel(rootId)`, then `getSubchannelUserCount()`, `getUsers()` and `getSubchannels()`
  * recursively. On an unguarded model this fails in two ways, each asserted below:
@@ -50,6 +50,14 @@ class ModelRaceTest {
     private val channelFrames = 500
     private val userFrames = 1_500
     private val churnFrames = 3_000
+
+    private companion object {
+        /** Walks that must overlap a frame for the race to count as exercised. */
+        const val MIN_CONCURRENT_WALKS = 100
+
+        /** Where the churn gives up waiting for [MIN_CONCURRENT_WALKS]. */
+        const val MAX_CHURN_FRAMES = 1_000_000
+    }
 
     @Test
     fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread() {
@@ -82,9 +90,11 @@ class ModelRaceTest {
                 frames.incrementAndGet()
             }
             // The churn a synchronised server keeps producing: users move, and channels are
-            // re-announced, which re-sorts them into their parent's subchannel list.
+            // re-announced, which re-sorts them into their parent's subchannel list. It goes on
+            // until enough walks overlapped a frame, so a fast writer cannot close the window.
             val random = Random(7)
-            repeat(churnFrames) { i ->
+            var i = 0
+            while (i < churnFrames || (concurrentWalks.get() < MIN_CONCURRENT_WALKS && i < MAX_CHURN_FRAMES)) {
                 if (i % 3 == 0) {
                     val id = random.nextInt(channelFrames) + 1
                     handler.onMessage(channel(id, parent = id / 4, name = "channel $id"))
@@ -94,6 +104,7 @@ class ModelRaceTest {
                     )
                 }
                 frames.incrementAndGet()
+                i++
             }
             done.set(true)
         }
@@ -131,10 +142,9 @@ class ModelRaceTest {
         assertWithMessage("walk failed at frame %s of %s", failedAtFrame.get(), frames.get())
             .that(walkFailure.get()).isNull()
         assertThat(nullReadsForPresentKeys.get()).isEqualTo(0)
-        // A walk counts as concurrent when the frame counter advanced during it. The bound sits an
-        // order of magnitude below observed overlap, so it fails only when the window closes.
+        // A walk counts as concurrent when the frame counter advanced during it.
         assertWithMessage("only %s of %s walks overlapped a frame", concurrentWalks.get(), walks.get())
-            .that(concurrentWalks.get()).isAtLeast(100)
+            .that(concurrentWalks.get()).isAtLeast(MIN_CONCURRENT_WALKS)
     }
 
     /**
