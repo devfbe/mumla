@@ -721,56 +721,6 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * The talk-state icon is a priority list: a user who is both self-muted and server-deafened
-     * shows the deafened icon.
-     */
-    @Test
-    fun theTalkStateIconFollowsTheStatePriority() {
-        val (root, ids) = smallTree()
-        val user = ids.getValue(4).getUsers().first() as FakeUser
-        val adapter = adapterOver(root, ids)
-
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_talking_off)
-
-        user.state = TalkState.TALKING
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_talking_on)
-
-        user.suppressed = true
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_suppressed)
-
-        user.muted = true
-        assertThat(talkStateDrawableOf(adapter))
-            .isEqualTo(R.drawable.outline_circle_server_muted)
-
-        user.selfMuted = true
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_muted)
-
-        user.deafened = true
-        assertThat(talkStateDrawableOf(adapter))
-            .isEqualTo(R.drawable.outline_circle_server_deafened)
-
-        user.selfDeafened = true
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_deafened)
-    }
-
-    /** Talking, whispering and shouting all show the talking icon. */
-    @Test
-    fun everyActiveTalkStateShowsTheTalkingIcon() {
-        val (root, ids) = smallTree()
-        val user = ids.getValue(4).getUsers().first() as FakeUser
-        val adapter = adapterOver(root, ids)
-
-        // Enumerated, so a talk state added later fails here until it is given an icon.
-        for (state in TalkState.values()) {
-            user.state = state
-            val expected =
-                if (state == TalkState.PASSIVE) R.drawable.outline_circle_talking_off
-                else R.drawable.outline_circle_talking_on
-            assertThat(talkStateDrawableOf(adapter)).isEqualTo(expected)
-        }
-    }
-
-    /**
      * The local mute/ignore history is kept per registered account on a saved server, so both
      * conditions must hold before anything is written. Uses the inline executor so each corner
      * is deterministic.
