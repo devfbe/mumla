@@ -29,18 +29,12 @@ import se.lublin.humla.testutil.NoopObserver
 import se.lublin.humla.testutil.SilentLogger
 
 /**
- * What [ModelHandler] does with a frame that names a channel it has never heard of.
+ * What [ModelHandler] does with a frame that names a channel it has never heard of. The server
+ * decides those ids, and an exception on the protocol thread kills the process.
  *
- * Every id in a `ChannelState` is looked up in `mChannels` and the result used without a check, so
- * a parent, a link, a link to add or a link to remove that we have no `ChannelState` for was a
- * `NullPointerException`. Since task 4 that runs on the `humla-protocol` [android.os.HandlerThread],
- * which installs no uncaught-exception handler - so the default one takes it, and the process dies.
- * The server decides those ids, so this is reachable from outside.
- *
- * The remedy for an unknown parent is the one this file already uses for an unknown channel on the
- * user path: a stub channel, which the real `ChannelState` fills in when it arrives, because it
- * lands on the same object. Unknown links are skipped instead - a link is an attribute of a channel
- * we already have, not a place in the tree that has to exist for the rest to hang off.
+ * An unknown parent gets a stub channel, which the real `ChannelState` later fills in because it
+ * lands on the same object. Unknown links are skipped: a link is an attribute of a channel we
+ * already have, not a place in the tree.
  */
 @RunWith(RobolectricTestRunner::class)
 class ModelHandlerFrameTest {
@@ -103,31 +97,24 @@ class ModelHandlerFrameTest {
     }
 
     /**
-     * The parent id is read out of the map *before* the channel is created, so for a frame whose
-     * channel id is its own parent id the lookup necessarily misses - and the stub created for
-     * that miss then overwrites the freshly named channel in the map. What `onChannelAdded` handed
-     * the observers is no longer what `getChannel` returns.
+     * The parent id is looked up before the channel is created, so for a channel that names itself
+     * as parent the stub created for the miss would overwrite the freshly named channel in the map.
      */
     @Test
     fun aFrameThatNamesItselfAsItsOwnParentDoesNotReplaceTheChannelItJustNamed() {
         handler.messageChannelState(channelState(3, parent = 3, name = "self"))
 
         assertThat(handler.getChannel(3)!!.getName()).isEqualTo("self")
-        // And the frame is refused rather than believed: a channel that is its own parent is a
-        // one-frame cycle, and the walk over it never returns. It lands under the root instead of
-        // nowhere, so it is still in the list - see
-        // aRefusedParentLeavesTheChannelAndItsUsersWhereTheListCanReachThem.
+        // And the frame is refused: a channel that is its own parent is a one-frame cycle. It lands
+        // under the root, so it is still in the list.
         assertThat(handler.getChannel(3)!!.getParent()).isEqualTo(handler.getChannel(0))
         assertThat(handler.getChannel(3)!!.getSubchannelUserCount()).isEqualTo(0)
     }
 
     /**
-     * A channel is never its own ancestor, and a server that says otherwise is refused rather than
-     * believed. Two frames are enough to tie the knot, and the result is not a wrong tree but a
-     * `StackOverflowError` out of `getSubchannelUserCount` - on the main thread, from
-     * `ChannelListAdapter` (`:438`, `:181`), where `updateChannels()` catches `IllegalStateException`
-     * and nothing else (`:326`). The parent id comes from the server, so this is reachable from
-     * outside.
+     * A channel is never its own ancestor; a server that says otherwise is refused. Two frames tie
+     * the knot, and the result is a `StackOverflowError` out of `getSubchannelUserCount` on the main
+     * thread.
      */
     @Test
     fun aParentCycleIsRefusedInsteadOfKillingTheMainThread() {
@@ -139,11 +126,9 @@ class ModelHandlerFrameTest {
     }
 
     /**
-     * The same crash without a cycle: a chain deep enough to exhaust the stack in the recursion,
-     * which takes one frame per channel. The tree is cut off at [ModelHandler.MAX_CHANNEL_DEPTH]
-     * instead - a channel below it keeps its name, its place in the map and its users, and is hung
-     * under the root, so no *path* is ever longer than the limit while the channel itself is still
-     * in the list.
+     * The same crash without a cycle: a chain deep enough to exhaust the stack. A channel below
+     * [ModelHandler.MAX_CHANNEL_DEPTH] keeps its name, map entry and users, and is hung under the
+     * root.
      */
     @Test
     fun aChainDeeperThanTheTreeMayBeIsCutOffInsteadOfKillingTheMainThread() {
@@ -163,21 +148,9 @@ class ModelHandlerFrameTest {
     }
 
     /**
-     * A refused parent must not take the channel out of the list.
-     *
-     * `ChannelListAdapter.updateChannels()` (`:311-328`) walks *down* from its root channels through
-     * `getSubchannels()`, and nothing in `app/` iterates `getChannels()` - so a channel with no
-     * parent is not in the list at all, and neither is any user standing in it, because
-     * `constructNodes` (`:450`) never reaches its `getUsers()`. A `Log.w` is the only trace.
-     *
-     * That is what separates a refused parent from one that has not arrived yet, which is how this
-     * file used to describe it: the not-yet-arrived state heals itself on the next frame, the
-     * refused one never does. The server does not resend a `ChannelState` it has already sent and
-     * nothing here retries, so the channel and its users are gone for the rest of the connection.
-     *
-     * Ruling (spec 4.1): hang a refused channel under the root instead of leaving it parentless.
-     * The tree stays finite and acyclic, and the channel is visible in the wrong place rather than
-     * invisibly absent.
+     * A refused parent must not take the channel out of the list. The app walks down from the root
+     * through `getSubchannels()`, so a parentless channel and its users would be invisible, and the
+     * server never resends the frame. A refused channel is hung under the root instead.
      */
     @Test
     fun aRefusedParentLeavesTheChannelAndItsUsersWhereTheListCanReachThem() {
@@ -204,15 +177,10 @@ class ModelHandlerFrameTest {
     }
 
     /**
-     * The three tests below are the inside of the fallback. Before them only its call site was
-     * covered: swapping the whole fallback back for "leave it parentless" killed three tests, while
-     * every single branch within it could be deleted with the suite staying green - a function that
-     * reads as tested from one step up, with nothing in it tested at all.
+     * The next three tests cover the branches of the fallback.
      *
-     * First branch: a channel the server has already placed keeps its place. The refusal is about
-     * the frame, not about the channel, and moving a channel out of a subtree the user is looking
-     * at - for a frame we are refusing precisely because we do not believe it - is worse than
-     * ignoring that frame.
+     * A channel the server has already placed keeps its place: the refusal is about the frame, not
+     * the channel.
      */
     @Test
     fun aRefusedFrameLeavesAChannelWhereTheServerAlreadyPutIt() {
@@ -226,10 +194,8 @@ class ModelHandlerFrameTest {
     }
 
     /**
-     * Second branch: the root's own frame need not have arrived before the refused one. Nothing in
-     * the protocol promises that order, and without the stub the fallback hands back the null it
-     * exists to avoid - the channel and its users vanish from the list exactly as they did before
-     * the fallback was written.
+     * The root's own frame need not arrive before the refused one; the fallback stubs the root
+     * instead of handing back null.
      */
     @Test
     fun aFrameRefusedBeforeTheRootFrameArrivedStillLandsUnderTheRoot() {
@@ -242,13 +208,8 @@ class ModelHandlerFrameTest {
     }
 
     /**
-     * Third branch: the fallback is a hang like any other and is asked the same question. A frame
-     * naming the root as its own parent is refused, and handing the root back unchecked would make
-     * the root its own parent - the fallback building the very cycle the guard refused.
-     *
-     * Timed out rather than left to run: a cycle here does not fail an assertion, it makes every
-     * walk over the tree stop returning, and a mutation sweep with no per-test deadline reports
-     * nothing at all for it.
+     * A frame naming the root as its own parent is refused, and the fallback must not make the root
+     * its own parent. Timed out because a cycle makes tree walks hang rather than fail.
      */
     @Test(timeout = 30_000)
     fun aRootThatNamesItselfAsItsParentIsNotHungUnderItself() {
