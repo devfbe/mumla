@@ -50,8 +50,7 @@ class MumlaSQLiteDatabaseTest {
         val b = server("b").also { db.addServer(it) }
         assertThat(a.id).isNotEqualTo(b.id)
 
-        a.name = "renamed"
-        db.updateServer(a)
+        db.updateServer(Server(a.id, "renamed", a.host, a.port, a.username, a.password))
 
         val read = db.getServers().associateBy { it.id }
         assertThat(read.keys).containsExactly(a.id, b.id)
