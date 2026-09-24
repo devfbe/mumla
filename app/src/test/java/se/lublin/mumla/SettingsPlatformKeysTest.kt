@@ -23,21 +23,21 @@ class SettingsPlatformKeysTest {
     /** A connected Bluetooth headset is used without being asked for, as in the phone app. */
     @Test
     fun bluetoothScoIsOnByDefault() {
-        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(settings.isBluetoothScoEnabled).isTrue()
     }
 
     @Test
     fun bluetoothScoIsPersistedUnderTheSpecKey() {
-        settings.setBluetoothScoEnabled(false)
+        settings.isBluetoothScoEnabled = false
 
         val raw = PreferenceManager.getDefaultSharedPreferences(context)
         assertThat(raw.getBoolean("pref_bluetooth_sco", true)).isFalse()
-        assertThat(Settings.getInstance(context).isBluetoothScoEnabled()).isFalse()
+        assertThat(Settings.getInstance(context).isBluetoothScoEnabled).isFalse()
     }
 
     @Test
     fun mediaButtonActionDefaultsToAuto() {
-        assertThat(settings.getMediaButtonAction()).isEqualTo(MediaButtonAction.AUTO)
+        assertThat(settings.mediaButtonAction).isEqualTo(MediaButtonAction.AUTO)
     }
 
     @Test
@@ -45,7 +45,7 @@ class SettingsPlatformKeysTest {
         PreferenceManager.getDefaultSharedPreferences(context)
             .edit().putString("media_button_action", "mute").commit()
 
-        assertThat(settings.getMediaButtonAction()).isEqualTo(MediaButtonAction.MUTE)
+        assertThat(settings.mediaButtonAction).isEqualTo(MediaButtonAction.MUTE)
     }
 
     @Test
@@ -53,15 +53,15 @@ class SettingsPlatformKeysTest {
         PreferenceManager.getDefaultSharedPreferences(context)
             .edit().putString("media_button_action", "bogus").commit()
 
-        assertThat(settings.getMediaButtonAction()).isEqualTo(MediaButtonAction.AUTO)
+        assertThat(settings.mediaButtonAction).isEqualTo(MediaButtonAction.AUTO)
     }
 
     @Test
     fun batteryOptimizationAskedDefaultsToFalseAndPersists() {
-        assertThat(settings.isBatteryOptimizationAsked()).isFalse()
+        assertThat(settings.isBatteryOptimizationAsked).isFalse()
 
-        settings.setBatteryOptimizationAsked(true)
+        settings.isBatteryOptimizationAsked = true
 
-        assertThat(Settings.getInstance(context).isBatteryOptimizationAsked()).isTrue()
+        assertThat(Settings.getInstance(context).isBatteryOptimizationAsked).isTrue()
     }
 }

@@ -241,7 +241,7 @@ class ChannelListFragmentAudioDeviceTest {
         val consumed = fragment.onOptionsItemSelected(prepared().echo())
 
         assertThat(consumed).isTrue()
-        assertThat(settings.getEchoCancellationOverrides())
+        assertThat(settings.echoCancellationOverrides)
             .containsExactly(AudioDeviceCategory.BLUETOOTH, true)
         assertThat(activity.menuInvalidations).isGreaterThan(before)
 
@@ -250,7 +250,7 @@ class ChannelListFragmentAudioDeviceTest {
         @Suppress("DEPRECATION")
         fragment.onOptionsItemSelected(prepared().echo())
 
-        assertThat(settings.getEchoCancellationOverrides()).containsExactly(
+        assertThat(settings.echoCancellationOverrides).containsExactly(
             AudioDeviceCategory.BLUETOOTH, true,
             AudioDeviceCategory.SPEAKER, false,
         )

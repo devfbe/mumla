@@ -43,12 +43,12 @@ class CertificateSelectActivity : AppCompatActivity() {
         val settings = Settings.getInstance(this)
         lifecycleScope.launch {
             val certificates = MumlaRepository.get(this@CertificateSelectActivity).io { getCertificates() }
-            val none = Choice(getString(R.string.no_certificate), !settings.isUsingCertificate()) {
+            val none = Choice(getString(R.string.no_certificate), !settings.isUsingCertificate) {
                 settings.disableCertificate()
             }
             val choices = listOf(none) + certificates.map { certificate ->
-                Choice(certificate.name, settings.getDefaultCertificate() == certificate.id) {
-                    settings.setDefaultCertificateId(certificate.id)
+                Choice(certificate.name, settings.defaultCertificateId == certificate.id) {
+                    settings.defaultCertificateId = certificate.id
                 }
             }
             showSelectionDialog(choices)

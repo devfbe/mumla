@@ -49,7 +49,7 @@ class BluetoothScoToggle(
     }
 
     val isEnabled: Boolean
-        get() = settings.isBluetoothScoEnabled()
+        get() = settings.isBluetoothScoEnabled
 
     /**
      * Move the preference to [enabled]. Turning it off always succeeds; turning it on persists
@@ -57,24 +57,24 @@ class BluetoothScoToggle(
      */
     fun request(enabled: Boolean): Result {
         if (!enabled) {
-            settings.setBluetoothScoEnabled(false)
+            settings.isBluetoothScoEnabled = false
             return Result.Disabled
         }
         if (!hasPermission(context)) {
             return Result.PermissionNeeded
         }
-        settings.setBluetoothScoEnabled(true)
+        settings.isBluetoothScoEnabled = true
         return Result.Enabled
     }
 
-    fun toggle(): Result = request(!settings.isBluetoothScoEnabled())
+    fun toggle(): Result = request(!settings.isBluetoothScoEnabled)
 
     /**
      * The permission dialog has been answered, so store the wish that raised it. Deliberately takes
      * no answer: the wish does not depend on it.
      */
     fun onPermissionAnswered() {
-        settings.setBluetoothScoEnabled(true)
+        settings.isBluetoothScoEnabled = true
     }
 
     companion object {

@@ -124,7 +124,7 @@ class MediaButtonActionResourcesTest {
         // gets. A mismatch is invisible at runtime because fromPrefValue() falls back to AUTO.
         assertThat(preference.value).isEqualTo(Settings.DEFAULT_MEDIA_BUTTON_ACTION)
         assertThat(stringArrayByName("mediaButtonActionValues")).contains(preference.value)
-        assertThat(Settings.getInstance(context).getMediaButtonAction())
+        assertThat(Settings.getInstance(context).mediaButtonAction)
             .isEqualTo(MediaButtonAction.fromPrefValue(preference.value))
     }
 

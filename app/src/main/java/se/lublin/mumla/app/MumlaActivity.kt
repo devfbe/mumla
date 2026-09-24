@@ -105,7 +105,7 @@ class MumlaActivity :
         setSupportActionBar(toolbar)
         onBackPressedDispatcher.addCallback(this, backCallback)
 
-        setStayAwake(settings.shouldStayAwake())
+        setStayAwake(settings.shouldStayAwake)
         PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener(this)
 
         drawer = MainDrawer(this, toolbar, ::connectedServerName, ::showDrawerFragment)
@@ -134,7 +134,7 @@ class MumlaActivity :
 
         // Only on a real start, not when the activity is recreated, e.g. on rotation.
         if (savedInstanceState == null) {
-            if (settings.isFirstRun()) showFirstRunGuide() else StartupAction().execute(this)
+            if (settings.isFirstRun) showFirstRunGuide() else StartupAction().execute(this)
         }
     }
 
@@ -196,7 +196,7 @@ class MumlaActivity :
         val service = service ?: return
         when (event) {
             HumlaEvent.Connected -> {
-                val pinned = settings.shouldStartUpInPinnedMode()
+                val pinned = settings.shouldStartUpInPinnedMode
                 showDrawerFragment(if (pinned) DrawerAdapter.ITEM_PINNED_CHANNELS else DrawerAdapter.ITEM_SERVER)
                 onConnectionChanged(service)
             }
@@ -286,7 +286,7 @@ class MumlaActivity :
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val service = service
-        if (service != null && keyCode == settings.getPushToTalkKey()) {
+        if (service != null && keyCode == settings.pushToTalkKey) {
             service.onTalkKeyDown()
             return true
         }
@@ -295,7 +295,7 @@ class MumlaActivity :
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         val service = service
-        if (service != null && keyCode == settings.getPushToTalkKey()) {
+        if (service != null && keyCode == settings.pushToTalkKey) {
             service.onTalkKeyUp()
             return true
         }
@@ -304,8 +304,8 @@ class MumlaActivity :
 
     /** Offers to generate a client certificate, unless one is set up already. */
     private fun showFirstRunGuide() {
-        if (settings.isUsingCertificate()) {
-            settings.setFirstRun(false)
+        if (settings.isUsingCertificate) {
+            settings.isFirstRun = false
             return
         }
         var message = getString(R.string.first_run_generate_certificate)
@@ -315,7 +315,7 @@ class MumlaActivity :
             .setMessage(message)
             .setPositiveButton(R.string.generate) { _, _ ->
                 lifecycleScope.launch { generateDefaultCertificate() }
-                settings.setFirstRun(false)
+                settings.isFirstRun = false
             }
             .show()
     }
@@ -354,7 +354,7 @@ class MumlaActivity :
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
-        if (key == Settings.PREF_STAY_AWAKE) setStayAwake(settings.shouldStayAwake())
+        if (key == Settings.PREF_STAY_AWAKE) setStayAwake(settings.shouldStayAwake)
     }
 
     override fun reconnect(server: Server) = connectFlow.connect(server)

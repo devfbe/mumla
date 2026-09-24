@@ -150,17 +150,17 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
             return
         }
         val settings = Settings.getInstance(context)
-        val vad = settings.getVadConfig()
+        val vad = settings.vadConfig
         meter.setHysteresisDb(vad.hysteresisDb)
         val started = AudioTestSession(
             context.getSystemService(Context.AUDIO_SERVICE) as AudioManager,
             vad,
-            settings.getNoiseSuppressionMode(),
-            settings.getSpeexNoiseSuppressDb(),
+            settings.noiseSuppressionMode,
+            settings.speexNoiseSuppressDb,
             // The loopback plays out loud, so apply the speaker's canceller as the user has it.
             if (settings.isEchoCancellationEnabled(AudioDeviceCategory.SPEAKER)) EchoCancellationMode.WEBRTC
             else EchoCancellationMode.NONE,
-            settings.getAndroidAudioEffects(),
+            settings.androidAudioEffects,
             loopback,
             onReading = { reading -> mainHandler.post { meter.setReading(reading) } },
         )

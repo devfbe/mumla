@@ -56,7 +56,7 @@ class ConnectionDialogs(
     private var connectingDialog: AlertDialog? = null
     private var errorDialog: AlertDialog? = null
 
-    private val torSuffix get() = if (settings.isTorEnabled()) " (Tor)" else ""
+    private val torSuffix get() = if (settings.isTorEnabled) " (Tor)" else ""
 
     fun dismiss() {
         connectingDialog?.dismiss()

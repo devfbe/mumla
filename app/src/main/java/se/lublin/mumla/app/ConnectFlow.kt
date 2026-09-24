@@ -71,7 +71,7 @@ class ConnectFlow(
 
     /** Asks for the username to use on the public [server], then connects. */
     fun connectToPublic(server: PublicServer) {
-        val usernameField = EditText(activity).apply { hint = settings.getDefaultUsername() }
+        val usernameField = EditText(activity).apply { hint = settings.defaultUsername }
         val padding = activity.resources.getDimension(R.dimen.padding_medium).toInt()
         val layout = FrameLayout(activity).apply {
             addView(usernameField)
@@ -81,7 +81,7 @@ class ConnectFlow(
             .setView(layout)
             .setTitle(R.string.connectToServer)
             .setPositiveButton(R.string.connect) { _, _ ->
-                server.username = usernameField.text.toString().ifEmpty { settings.getDefaultUsername() }
+                server.username = usernameField.text.toString().ifEmpty { settings.defaultUsername }
                 connect(server)
             }
             .show()
@@ -91,12 +91,16 @@ class ConnectFlow(
         override val sdkInt: Int get() = Build.VERSION.SDK_INT
 
         override var microphoneAsked: Boolean
-            get() = settings.isMicrophonePermissionAsked()
-            set(value) = settings.setMicrophonePermissionAsked(value)
+            get() = settings.isMicrophonePermissionAsked
+            set(value) {
+                settings.isMicrophonePermissionAsked = value
+            }
 
         override var notificationsAsked: Boolean
-            get() = settings.isNotificationPermissionAsked()
-            set(value) = settings.setNotificationPermissionAsked(value)
+            get() = settings.isNotificationPermissionAsked
+            set(value) {
+                settings.isNotificationPermissionAsked = value
+            }
 
         override fun isGranted(permission: String) =
             ContextCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED
@@ -154,9 +158,9 @@ class ConnectFlow(
             return
         }
         when {
-            !settings.isTorEnabled() -> start(server)
+            !settings.isTorEnabled -> start(server)
             !Orbot.isInstalled(activity) -> {
-                settings.disableTor()
+                settings.isTorEnabled = false
                 showMessage(activity.getString(R.string.orbot_not_installed))
             }
             else -> startOverTor(server)

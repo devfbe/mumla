@@ -89,6 +89,6 @@ internal suspend fun createDefaultCertificate(
         Log.w(TAG, "Could not store the certificate", e)
         null
     }
-    certificate?.let { Settings.getInstance(context).setDefaultCertificateId(it.id) }
+    certificate?.let { Settings.getInstance(context).defaultCertificateId = it.id }
     return certificate
 }

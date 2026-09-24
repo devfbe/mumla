@@ -294,7 +294,7 @@ object ChatImageLoaders {
         val app = context.applicationContext
         return synchronized(this) {
             instance ?: ChatImageLoader(
-                externalImagesAllowed = { Settings.getInstance(app).shouldLoadExternalImages() },
+                externalImagesAllowed = { Settings.getInstance(app).shouldLoadExternalImages },
             ).also { instance = it }
         }
     }

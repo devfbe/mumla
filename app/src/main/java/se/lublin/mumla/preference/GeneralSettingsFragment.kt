@@ -33,7 +33,7 @@ class GeneralSettingsFragment : MumlaPreferenceFragment() {
         setPreferencesFromResource(R.xml.settings_general, rootKey)
 
         val useOrbotPreference: Preference =
-            requireNotNull(preferenceScreen.findPreference(USE_TOR_KEY))
+            requireNotNull(preferenceScreen.findPreference(Settings.PREF_USE_TOR))
         useOrbotPreference.isEnabled = Orbot.isInstalled(requireContext())
 
         bluetoothToggle = BluetoothScoToggle(
@@ -52,9 +52,5 @@ class GeneralSettingsFragment : MumlaPreferenceFragment() {
                 }
             }
         }
-    }
-
-    private companion object {
-        const val USE_TOR_KEY = "useTor"
     }
 }

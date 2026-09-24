@@ -168,7 +168,7 @@ class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, O
         fillAudioDevices(menu.findItem(R.id.menu_audio_device))
 
             // Writing the preference makes MumlaService reconfigure the audio subsystem live.
-        when (settings.getNoiseSuppressionMethod()) {
+        when (settings.noiseSuppressionMethod) {
             "speex" -> menu.findItem(R.id.menu_noise_speex)
             "none" -> menu.findItem(R.id.menu_noise_none)
             else -> menu.findItem(R.id.menu_noise_rnnoise)
@@ -309,7 +309,7 @@ class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, O
             else -> null
         }
         if (noise != null) {
-            settings.setNoiseSuppressionMethod(noise)
+            settings.noiseSuppressionMethod = noise
             item.isChecked = true
             return true
         }
@@ -345,7 +345,7 @@ class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, O
     private fun setupChannelList(service: IMumlaService) {
         val adapter = ChannelListAdapter(
             requireActivity(), service, MumlaRepository.get(requireContext()).database, childFragmentManager,
-            isShowingPinnedChannels(), settings.shouldShowUserCount(),
+            isShowingPinnedChannels(), settings.shouldShowUserCount,
         )
         adapter.setOnChannelClickListener(this)
         adapter.setOnUserClickListener(this)
@@ -405,7 +405,7 @@ class ChannelListFragment : Fragment(), ServiceClient, OnChannelClickListener, O
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
         when (key) {
             Settings.PREF_SHOW_USER_COUNT ->
-                channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount())
+                channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount)
         }
     }
 

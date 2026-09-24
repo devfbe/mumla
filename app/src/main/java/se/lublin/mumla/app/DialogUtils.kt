@@ -26,7 +26,7 @@ private val RELEVANT_VERSIONS: List<String> by lazy {
 
 /** Shows the news of releases the user has not seen yet; returns whether there were any. */
 fun maybeShowNewsDialog(context: Context): Boolean {
-    val shown = Settings.getInstance(context).getNewsShownVersions()
+    val shown = Settings.getInstance(context).newsShownVersions
     val toShow = RELEVANT_VERSIONS.filter { it !in shown }
     if (toShow.isEmpty()) return false
     showNewsDialog(context, toShow, markShown = true)

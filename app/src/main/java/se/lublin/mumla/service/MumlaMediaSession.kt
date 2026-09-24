@@ -105,7 +105,7 @@ class MumlaMediaSession @JvmOverloads constructor(
     }
 
     private fun applyState() {
-        val wanted = connected && settings.getMediaButtonAction() != MediaButtonAction.NONE
+        val wanted = connected && settings.mediaButtonAction != MediaButtonAction.NONE
         if (wanted) ensureSession() else releaseSession()
     }
 

@@ -79,7 +79,7 @@ class MumlaServiceBluetoothTest {
     /** The router is engaged by the superclass before this class's hook runs. */
     @Test
     fun aStoredNoIsHonouredFromTheStart() {
-        settings.setBluetoothScoEnabled(false)
+        settings.isBluetoothScoEnabled = false
         service = create()
 
         assertThat(service.usingBluetoothSco()).isFalse()
@@ -110,11 +110,11 @@ class MumlaServiceBluetoothTest {
 
     @Test
     fun turningThePreferenceOnWhileConnectedStartsTheHeadset() {
-        settings.setBluetoothScoEnabled(false)
+        settings.isBluetoothScoEnabled = false
         connect()
         assertThat(receiver.selectCalls.size).isEqualTo(0)
 
-        settings.setBluetoothScoEnabled(true)
+        settings.isBluetoothScoEnabled = true
 
         assertThat(receiver.selectCalls.size).isEqualTo(1)
         assertThat(receiver.clearCalls).isEqualTo(0)
@@ -126,7 +126,7 @@ class MumlaServiceBluetoothTest {
         connect()
         assertThat(receiver.selectCalls.size).isEqualTo(1)
 
-        settings.setBluetoothScoEnabled(false)
+        settings.isBluetoothScoEnabled = false
 
         assertThat(receiver.clearCalls).isEqualTo(1)
     }
@@ -136,7 +136,7 @@ class MumlaServiceBluetoothTest {
         receiver.available.clear()
         connect()
 
-        settings.setBluetoothScoEnabled(false)
+        settings.isBluetoothScoEnabled = false
 
         assertThat(receiver.clearCalls).isEqualTo(0)
         assertThat(receiver.selectCalls.size).isEqualTo(0)
@@ -145,9 +145,9 @@ class MumlaServiceBluetoothTest {
     /** The router only routes while engaged, so the wish follows the preference at any time. */
     @Test
     fun thePreferenceMovesTheWishButTouchesNothingWhileDisconnected() {
-        settings.setBluetoothScoEnabled(false)
+        settings.isBluetoothScoEnabled = false
         assertThat(service.usingBluetoothSco()).isFalse()
-        settings.setBluetoothScoEnabled(true)
+        settings.isBluetoothScoEnabled = true
         assertThat(service.usingBluetoothSco()).isTrue()
 
         assertThat(receiver.selectCalls.size).isEqualTo(0)
@@ -156,7 +156,7 @@ class MumlaServiceBluetoothTest {
 
     @Test
     fun anotherPreferenceDoesNotTouchTheHeadset() {
-        settings.setBluetoothScoEnabled(false)
+        settings.isBluetoothScoEnabled = false
         connect()
 
         preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()

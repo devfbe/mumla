@@ -99,7 +99,7 @@ class PublicServerListFragment :
 
     override fun onPrepareMenu(menu: Menu) {
         // Matching pings servers directly over UDP, which Tor cannot carry.
-        menu.findItem(R.id.menu_match_server)?.isVisible = !Settings.getInstance(requireContext()).isTorEnabled()
+        menu.findItem(R.id.menu_match_server)?.isVisible = !Settings.getInstance(requireContext()).isTorEnabled
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
@@ -116,7 +116,7 @@ class PublicServerListFragment :
     override fun favouriteServer(server: Server) {
         val context = requireActivity()
         val settings = Settings.getInstance(context)
-        val usernameField = EditText(context).apply { hint = settings.getDefaultUsername() }
+        val usernameField = EditText(context).apply { hint = settings.defaultUsername }
         val horizontalPadding = resources.getDimension(R.dimen.padding_medium).toInt()
         val layout = FrameLayout(context).apply {
             addView(usernameField)
@@ -126,7 +126,7 @@ class PublicServerListFragment :
             .setTitle(R.string.addFavorite)
             .setView(layout)
             .setPositiveButton(R.string.add) { _, _ ->
-                server.username = usernameField.text.toString().ifEmpty { settings.getDefaultUsername() }
+                server.username = usernameField.text.toString().ifEmpty { settings.defaultUsername }
                 val repository = MumlaRepository.get(context)
                 lifecycleScope.launch { repository.io { addServer(server) } }
             }
@@ -143,7 +143,7 @@ class PublicServerListFragment :
     }
 
     private fun fillPublicList() {
-        if (Settings.getInstance(requireContext()).isTorEnabled()) {
+        if (Settings.getInstance(requireContext()).isTorEnabled) {
             // The download would bypass Tor.
             serverProgress?.visibility = View.GONE
             requireView().findViewById<View>(R.id.server_list_tor_notice).visibility = View.VISIBLE

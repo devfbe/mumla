@@ -117,7 +117,7 @@ class MumlaServiceAudioRouteTest {
             .putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_EARPIECE).commit()
         create()
         // What ServerConnectTask sends at connect; the preference listener only sees changes.
-        router().earpieceByDefault = Settings.getInstance(app).isEarpieceDefaultOutput()
+        router().earpieceByDefault = Settings.getInstance(app).isEarpieceDefaultOutput
 
         router().engage()
 

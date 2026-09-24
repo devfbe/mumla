@@ -73,7 +73,7 @@ class MumlaServiceAudioPreferencesTest {
         for ((key, write) in writes) {
             prefs.edit().apply(write).commit()
             change(key)
-            assertThat(vadConfig()).isEqualTo(Settings.getInstance(service).getVadConfig())
+            assertThat(vadConfig()).isEqualTo(Settings.getInstance(service).vadConfig)
         }
         // Read back the values themselves: an accessor returning a constant would pass the above.
         val config = vadConfig()

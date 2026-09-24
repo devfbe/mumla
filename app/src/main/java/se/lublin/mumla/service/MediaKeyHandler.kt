@@ -22,7 +22,7 @@ class MediaKeyHandler(
     fun onKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode !in HANDLED_KEYS) return false
         if (!target.isConnected) return false
-        val action = settings.getMediaButtonAction()
+        val action = settings.mediaButtonAction
         if (action == MediaButtonAction.NONE) return false
         if (event.action != KeyEvent.ACTION_DOWN) return true
         if (event.repeatCount != 0) return true

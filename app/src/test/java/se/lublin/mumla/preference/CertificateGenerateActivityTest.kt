@@ -51,7 +51,7 @@ class CertificateGenerateActivityTest {
 
         val stored = database.getCertificates().single()
         assertThat(latestMessage()).isEqualTo(context.getString(R.string.generateCertSuccess, stored.name))
-        assertThat(Settings.getInstance(context).getDefaultCertificate()).isEqualTo(stored.id)
+        assertThat(Settings.getInstance(context).defaultCertificateId).isEqualTo(stored.id)
         assertThat(database.getCertificateData(stored.id)).isNotEmpty()
     }
 

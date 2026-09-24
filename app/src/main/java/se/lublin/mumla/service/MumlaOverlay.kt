@@ -56,7 +56,7 @@ class MumlaOverlay(private val service: MumlaService) {
         overlayView.findViewById<ImageView>(R.id.overlay_drag).setOnTouchListener(ResizeListener())
         talkButton.setOnTouchListener(TalkListener())
         overlayView.findViewById<ImageView>(R.id.overlay_close).setOnClickListener { hide() }
-        setPushToTalkShown(Settings.getInstance(service).getInputMethod() == Settings.ARRAY_INPUT_METHOD_PTT)
+        setPushToTalkShown(Settings.getInstance(service).inputMethod == Settings.ARRAY_INPUT_METHOD_PTT)
 
         val density = service.resources.displayMetrics.density
         overlayParams = WindowManager.LayoutParams(

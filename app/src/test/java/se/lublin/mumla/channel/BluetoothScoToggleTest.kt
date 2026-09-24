@@ -45,7 +45,7 @@ class BluetoothScoToggleTest {
         val result = toggle.request(enabled = true)
 
         assertThat(result).isEqualTo(BluetoothScoToggle.Result.Enabled)
-        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(settings.isBluetoothScoEnabled).isTrue()
     }
 
     @Test
@@ -55,29 +55,29 @@ class BluetoothScoToggleTest {
         val result = toggle.request(enabled = true)
 
         assertThat(result).isEqualTo(BluetoothScoToggle.Result.PermissionNeeded)
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(settings.isBluetoothScoEnabled).isFalse()
     }
 
     @Test
     fun requestingOffWithPermissionPersistsFalse() {
-        settings.setBluetoothScoEnabled(true)
+        settings.isBluetoothScoEnabled = true
         grant()
 
         val result = toggle.request(enabled = false)
 
         assertThat(result).isEqualTo(BluetoothScoToggle.Result.Disabled)
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(settings.isBluetoothScoEnabled).isFalse()
     }
 
     @Test
     fun requestingOffWithoutPermissionPersistsFalse() {
-        settings.setBluetoothScoEnabled(true)
+        settings.isBluetoothScoEnabled = true
         deny()
 
         val result = toggle.request(enabled = false)
 
         assertThat(result).isEqualTo(BluetoothScoToggle.Result.Disabled)
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(settings.isBluetoothScoEnabled).isFalse()
     }
 
     // --- toggle(): reads the stored value and asks for its opposite ---
@@ -89,7 +89,7 @@ class BluetoothScoToggleTest {
         val result = toggle.toggle()
 
         assertThat(result).isEqualTo(BluetoothScoToggle.Result.Enabled)
-        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(settings.isBluetoothScoEnabled).isTrue()
     }
 
     @Test
@@ -99,18 +99,18 @@ class BluetoothScoToggleTest {
         val result = toggle.toggle()
 
         assertThat(result).isEqualTo(BluetoothScoToggle.Result.PermissionNeeded)
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(settings.isBluetoothScoEnabled).isFalse()
     }
 
     @Test
     fun togglingFromOnNeverNeedsPermission() {
-        settings.setBluetoothScoEnabled(true)
+        settings.isBluetoothScoEnabled = true
         deny()
 
         val result = toggle.toggle()
 
         assertThat(result).isEqualTo(BluetoothScoToggle.Result.Disabled)
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(settings.isBluetoothScoEnabled).isFalse()
     }
 
     // --- onPermissionAnswered() ---
@@ -119,11 +119,11 @@ class BluetoothScoToggleTest {
     fun answeringTheDialogStoresTheWishThatRaisedIt() {
         deny()
         toggle.toggle()
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(settings.isBluetoothScoEnabled).isFalse()
 
         toggle.onPermissionAnswered()
 
-        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(settings.isBluetoothScoEnabled).isTrue()
     }
 
     @Test
@@ -132,7 +132,7 @@ class BluetoothScoToggleTest {
         toggle.onPermissionAnswered()
         toggle.onPermissionAnswered()
 
-        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(settings.isBluetoothScoEnabled).isTrue()
     }
 
     // --- isEnabled / hasPermission ---
@@ -141,7 +141,7 @@ class BluetoothScoToggleTest {
     fun isEnabledReadsThePreferenceBothWays() {
         assertThat(toggle.isEnabled).isFalse()
 
-        settings.setBluetoothScoEnabled(true)
+        settings.isBluetoothScoEnabled = true
 
         assertThat(toggle.isEnabled).isTrue()
     }

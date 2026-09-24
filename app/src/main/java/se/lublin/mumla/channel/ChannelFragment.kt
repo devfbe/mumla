@@ -165,7 +165,7 @@ class ChannelFragment :
             // gesture must not perform it, just as a Button does not click on cancel.
             MotionEvent.ACTION_CANCEL -> {
                 talkButtonHeld = false
-                if (!settings.isPushToTalkToggle()) service?.onTalkKeyUp()
+                if (!settings.isPushToTalkToggle) service?.onTalkKeyUp()
             }
         }
         return true
@@ -218,7 +218,7 @@ class ChannelFragment :
                 return super.onOptionsItemSelected(item)
             }
         }
-        settings.setInputMethod(method)
+        settings.inputMethod = method
         return true
     }
 
@@ -227,7 +227,7 @@ class ChannelFragment :
         // Release only what this fragment's button holds, so a pause cannot leave it transmitting.
         // A talk state set elsewhere (e.g. a headset key with the screen off) is not ours to clear.
         val service = service?.takeIf { it.isConnected }
-        if (talkButtonHeld && service != null && !settings.isPushToTalkToggle()) {
+        if (talkButtonHeld && service != null && !settings.isPushToTalkToggle) {
             service.session.setTalkingState(false)
         }
         talkButtonHeld = false
@@ -253,7 +253,7 @@ class ChannelFragment :
     private fun configureInput() {
         val settings = settings
         val params = talkView.layoutParams
-        params.height = settings.getPTTButtonHeight()
+        params.height = settings.pttButtonHeight
         talkButton.layoutParams = params
 
         val service = service
@@ -272,8 +272,8 @@ class ChannelFragment :
             false
         }
         val showPttButton = !muted &&
-            settings.isPushToTalkButtonShown() &&
-            settings.getInputMethod() == Settings.ARRAY_INPUT_METHOD_PTT
+            settings.isPushToTalkButtonShown &&
+            settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT
         talkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
     }
 

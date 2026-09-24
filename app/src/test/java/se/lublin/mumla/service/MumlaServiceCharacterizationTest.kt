@@ -469,18 +469,18 @@ class MumlaServiceCharacterizationTest {
         service.testEmit(HumlaEvent.UserStateUpdated(user(SELF, muted = true, deafened = false)))
         idleMainLooper()
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.status_notify_muted))
-        assertThat(Settings.getInstance(app).isMuted()).isTrue()
-        assertThat(Settings.getInstance(app).isDeafened()).isFalse()
+        assertThat(Settings.getInstance(app).isMuted).isTrue()
+        assertThat(Settings.getInstance(app).isDeafened).isFalse()
 
         service.testEmit(HumlaEvent.UserStateUpdated(user(SELF, muted = true, deafened = true)))
         idleMainLooper()
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.status_notify_muted_and_deafened))
-        assertThat(Settings.getInstance(app).isDeafened()).isTrue()
+        assertThat(Settings.getInstance(app).isDeafened).isTrue()
 
         service.testEmit(HumlaEvent.UserStateUpdated(user(SELF)))
         idleMainLooper()
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
-        assertThat(Settings.getInstance(app).isMuted()).isFalse()
+        assertThat(Settings.getInstance(app).isMuted).isFalse()
     }
 
     @Test
@@ -493,7 +493,7 @@ class MumlaServiceCharacterizationTest {
         idleMainLooper()
 
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.mumlaConnecting))
-        assertThat(Settings.getInstance(app).isMuted()).isFalse()
+        assertThat(Settings.getInstance(app).isMuted).isFalse()
     }
 
     @Test
@@ -507,7 +507,7 @@ class MumlaServiceCharacterizationTest {
         idleMainLooper()
 
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.mumlaConnecting))
-        assertThat(Settings.getInstance(app).isMuted()).isFalse()
+        assertThat(Settings.getInstance(app).isMuted).isFalse()
     }
 
     @Test
@@ -942,7 +942,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun theHotCornerPreferenceMovesItAndShowsItOnlyWhileConnected() {
         preferences().edit().putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_TOP_LEFT).commit()
-        verify { hotCorner.gravity = Settings.getInstance(app).getHotCornerGravity() }
+        verify { hotCorner.gravity = Settings.getInstance(app).hotCornerGravity }
         verify(exactly = 1) { hotCorner.isShown = false }
 
         connect()

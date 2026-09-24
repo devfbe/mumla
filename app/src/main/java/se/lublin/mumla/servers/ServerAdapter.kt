@@ -48,7 +48,7 @@ abstract class ServerAdapter<E : Server>(
     private val scope: CoroutineScope,
     private val pinger: ServerPinger = ServerPinger(),
     private val pingDispatcher: CoroutineDispatcher = PING_DISPATCHER,
-    private val pingsAllowed: () -> Boolean = { !Settings.getInstance(context).isTorEnabled() },
+    private val pingsAllowed: () -> Boolean = { !Settings.getInstance(context).isTorEnabled },
 ) : ArrayAdapter<E>(context, 0, servers) {
 
     private val responses = HashMap<Server, ServerInfoResponse>()

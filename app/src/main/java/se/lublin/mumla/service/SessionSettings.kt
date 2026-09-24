@@ -61,31 +61,31 @@ object SessionSettings {
     /** [base] with every audio setting replaced by the user's current choice. */
     @JvmStatic
     fun withAudioSettings(base: SessionConfig, settings: Settings): SessionConfig {
-        val effects = settings.getAndroidAudioEffects()
+        val effects = settings.androidAudioEffects
         return base.copy(
-            transmitMode = settings.getHumlaInputMethod(),
-            vadConfig = settings.getVadConfig(),
-            amplitudeBoost = settings.getAmplitudeBoostMultiplier(),
-            inputSampleRate = settings.getInputSampleRate(),
-            inputQuality = settings.getInputQuality(),
-            framesPerPacket = settings.getFramesPerPacket(),
-            halfDuplex = settings.isHalfDuplex(),
-            preprocessorEnabled = settings.isPreprocessorEnabled(),
-            noiseSuppressionMethod = settings.getNoiseSuppressionMethod(),
-            speexNoiseSuppressDb = settings.getSpeexNoiseSuppressDb(),
+            transmitMode = settings.humlaInputMethod,
+            vadConfig = settings.vadConfig,
+            amplitudeBoost = settings.amplitudeBoostMultiplier,
+            inputSampleRate = settings.inputSampleRate,
+            inputQuality = settings.inputQuality,
+            framesPerPacket = settings.framesPerPacket,
+            halfDuplex = settings.isHalfDuplex,
+            preprocessorEnabled = settings.isPreprocessorEnabled,
+            noiseSuppressionMethod = settings.noiseSuppressionMethod,
+            speexNoiseSuppressDb = settings.speexNoiseSuppressDb,
             androidNoiseSuppressor = effects.noiseSuppressor,
             androidAgc = effects.automaticGainControl,
-            echoCancellationOverrides = settings.getEchoCancellationOverrides(),
-            earpieceByDefault = settings.isEarpieceDefaultOutput(),
+            echoCancellationOverrides = settings.echoCancellationOverrides,
+            earpieceByDefault = settings.isEarpieceDefaultOutput,
         )
     }
 
     /** Everything to connect to [server] with. Reads the database, so not on the main thread. */
     @JvmStatic
     fun forServer(context: Context, settings: Settings, database: MumlaDatabase, server: Server): SessionConfig {
-        val certificate = if (settings.isUsingCertificate()) {
+        val certificate = if (settings.isUsingCertificate) {
             // TODO(acomminos): handle the case where a certificate's data is unavailable.
-            database.getCertificateData(settings.getDefaultCertificate())?.let { ClientCertificate(it) }
+            database.getCertificateData(settings.defaultCertificateId)?.let { ClientCertificate(it) }
         } else {
             null
         }
@@ -96,11 +96,11 @@ object SessionSettings {
             trustStorePath = MumlaTrustStore.getTrustStorePath(context),
             trustStorePassword = MumlaTrustStore.STORE_PASSWORD,
             trustStoreFormat = MumlaTrustStore.STORE_FORMAT,
-            forceTcp = settings.isTcpForced(),
-            useTor = settings.isTorEnabled(),
+            forceTcp = settings.isTcpForced,
+            useTor = settings.isTorEnabled,
             localMuteHistory = if (server.isSaved) database.getLocalMutedUsers(server.id) else emptyList(),
             localIgnoreHistory = if (server.isSaved) database.getLocalIgnoredUsers(server.id) else emptyList(),
-            autoReconnect = settings.isAutoReconnectEnabled(),
+            autoReconnect = settings.isAutoReconnectEnabled,
             accessTokens = database.getAccessTokens(server.id),
             audioStream = Settings.PLAYBACK_STREAM,
         )

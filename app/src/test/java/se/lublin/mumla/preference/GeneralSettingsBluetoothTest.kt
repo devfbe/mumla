@@ -52,7 +52,7 @@ class GeneralSettingsBluetoothTest {
 
     /** The default is on; ticking the box is the gesture that asks for the permission. */
     private fun openSwitchedOff() {
-        settings.setBluetoothScoEnabled(false)
+        settings.isBluetoothScoEnabled = false
         open()
     }
 
@@ -100,7 +100,7 @@ class GeneralSettingsBluetoothTest {
         // Two sources for one default: android:defaultValue on this screen, and
         // Settings.DEFAULT_BLUETOOTH_SCO, which every other reader gets.
         assertThat(checkBox().isChecked).isEqualTo(Settings.DEFAULT_BLUETOOTH_SCO)
-        assertThat(settings.isBluetoothScoEnabled()).isEqualTo(Settings.DEFAULT_BLUETOOTH_SCO)
+        assertThat(settings.isBluetoothScoEnabled).isEqualTo(Settings.DEFAULT_BLUETOOTH_SCO)
     }
 
     @Test
@@ -122,7 +122,7 @@ class GeneralSettingsBluetoothTest {
 
         assertThat(lastRequestedPermissions()).contains(Manifest.permission.BLUETOOTH_CONNECT)
         assertThat(checkBox().isChecked).isFalse()
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(settings.isBluetoothScoEnabled).isFalse()
     }
 
     @Test
@@ -133,7 +133,7 @@ class GeneralSettingsBluetoothTest {
         checkBox().performClick()
 
         assertThat(checkBox().isChecked).isTrue()
-        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(settings.isBluetoothScoEnabled).isTrue()
         assertThat(lastRequestedPermissions()).isEmpty()
     }
 
@@ -147,7 +147,7 @@ class GeneralSettingsBluetoothTest {
         checkBox().performClick()
 
         assertThat(checkBox().isChecked).isFalse()
-        assertThat(settings.isBluetoothScoEnabled()).isFalse()
+        assertThat(settings.isBluetoothScoEnabled).isFalse()
         assertThat(lastRequestedPermissions()).isEmpty()
     }
 
@@ -159,7 +159,7 @@ class GeneralSettingsBluetoothTest {
 
         answerThePermissionDialog(granted = true)
 
-        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(settings.isBluetoothScoEnabled).isTrue()
         assertThat(checkBox().isChecked).isTrue()
         assertThat(ShadowToast.getTextOfLatestToast()).isNull()
     }
@@ -173,7 +173,7 @@ class GeneralSettingsBluetoothTest {
 
         answerThePermissionDialog(granted = false)
 
-        assertThat(settings.isBluetoothScoEnabled()).isTrue()
+        assertThat(settings.isBluetoothScoEnabled).isTrue()
         assertThat(checkBox().isChecked).isTrue()
         assertThat(ShadowToast.getTextOfLatestToast())
             .isEqualTo(app.getString(R.string.bluetooth_perm_denied))

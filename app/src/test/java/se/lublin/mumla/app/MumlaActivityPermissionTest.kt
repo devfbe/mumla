@@ -101,7 +101,7 @@ class MumlaActivityPermissionTest {
 
     @Test
     fun theReasonIsExplainedBeforeAskingAgain() {
-        settings.setMicrophonePermissionAsked(true)
+        settings.isMicrophonePermissionAsked = true
         rationale(Manifest.permission.RECORD_AUDIO, true)
         val activity = launch()
 
@@ -117,7 +117,7 @@ class MumlaActivityPermissionTest {
 
     @Test
     fun aPermanentlyDeniedMicrophoneLeadsToTheAppSettings() {
-        settings.setMicrophonePermissionAsked(true)
+        settings.isMicrophonePermissionAsked = true
         val activity = launch()
 
         activity.requestConnect()
@@ -138,7 +138,7 @@ class MumlaActivityPermissionTest {
 
         activity.answer(granted = false)
 
-        assertThat(settings.isMicrophonePermissionAsked()).isTrue()
+        assertThat(settings.isMicrophonePermissionAsked).isTrue()
     }
 
     @Test
@@ -152,7 +152,7 @@ class MumlaActivityPermissionTest {
         // Connected elsewhere, so the flow ends in a confirmation instead of a connection.
         activity.serviceModel().attach(connectedService())
         activity.answer(granted = false)
-        assertThat(settings.isNotificationPermissionAsked()).isTrue()
+        assertThat(settings.isNotificationPermissionAsked).isTrue()
         assertThat(latestDialog().message()).isEqualTo(app.getString(R.string.reconnect_dialog_message))
 
         val relaunched = launch()

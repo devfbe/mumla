@@ -194,7 +194,7 @@ class MumlaService : HumlaService(),
         }
 
         // Every message notifies while enabled; there is no per-sender filter yet.
-        if (mSettings.isChatNotifyEnabled()) {
+        if (mSettings.isChatNotifyEnabled) {
             mMessageNotification.show(sender, strippedMessage)
         }
 
@@ -221,8 +221,8 @@ class MumlaService : HumlaService(),
         collectEvents(mServiceScope, this, ::onEvent)
 
         mSettings = Settings.getInstance(this)
-        mPTTSoundEnabled = mSettings.isPttSoundEnabled()
-        mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled()
+        mPTTSoundEnabled = mSettings.isPttSoundEnabled
+        mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         preferences.registerOnSharedPreferenceChangeListener(this)
         applyBluetoothPreference()
@@ -234,11 +234,11 @@ class MumlaService : HumlaService(),
         mMessageNotification = MumlaMessageNotification(this@MumlaService)
 
         mChannelOverlay = MumlaOverlay(this)
-        mHotCorner = MumlaHotCorner(this, mSettings.getHotCornerGravity(), mHotCornerListener)
+        mHotCorner = MumlaHotCorner(this, mSettings.hotCornerGravity, mHotCornerListener)
 
-        if (mSettings.isTextToSpeechEnabled()) mTTS = TextToSpeech(this, mTTSInitListener)
+        if (mSettings.isTextToSpeechEnabled) mTTS = TextToSpeech(this, mTTSInitListener)
 
-        mTalkReceiver = TalkBroadcastReceiver(this) { mSettings.isExternalPushToTalkAllowed() }
+        mTalkReceiver = TalkBroadcastReceiver(this) { mSettings.isExternalPushToTalkAllowed }
 
         mMediaSession = MumlaMediaSession(this, HumlaMediaKeyTarget(this), mSettings).also { it.attach(this) }
 
@@ -280,7 +280,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    private fun torSuffix(): String = if (mSettings.isTorEnabled()) " (Tor)" else ""
+    private fun torSuffix(): String = if (mSettings.isTorEnabled) " (Tor)" else ""
 
     private fun showConnectionNotification(
         contentText: String,
@@ -340,8 +340,8 @@ class MumlaService : HumlaService(),
             return
         }
 
-        if (mSettings.isMuted() || mSettings.isDeafened()) {
-            setSelfMuteDeafState(mSettings.isMuted(), mSettings.isDeafened())
+        if (mSettings.isMuted || mSettings.isDeafened) {
+            setSelfMuteDeafState(mSettings.isMuted, mSettings.isDeafened)
         }
 
         // Bluetooth is not restored here: applyBluetoothPreference hands the wish to the router.
@@ -350,7 +350,7 @@ class MumlaService : HumlaService(),
             IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK), ContextCompat.RECEIVER_EXPORTED,
         )
 
-        if (mSettings.isHotCornerEnabled()) {
+        if (mSettings.isHotCornerEnabled) {
             mHotCorner.isShown = true
         }
         // The proximity sensor follows the earpiece route (onAudioRouteChanged), not this hook.
@@ -374,24 +374,24 @@ class MumlaService : HumlaService(),
         var requiresReconnect = false
         when (key) {
             Settings.PREF_INPUT_METHOD ->
-                mChannelOverlay.setPushToTalkShown(mSettings.getHumlaInputMethod() == Constants.TRANSMIT_PUSH_TO_TALK)
+                mChannelOverlay.setPushToTalkShown(mSettings.humlaInputMethod == Constants.TRANSMIT_PUSH_TO_TALK)
             Settings.PREF_HOT_CORNER_KEY -> {
-                mHotCorner.gravity = mSettings.getHotCornerGravity()
-                mHotCorner.isShown = isConnectionEstablished() && mSettings.isHotCornerEnabled()
+                mHotCorner.gravity = mSettings.hotCornerGravity
+                mHotCorner.isShown = isConnectionEstablished() && mSettings.isHotCornerEnabled
             }
             Settings.PREF_USE_TTS -> {
                 val tts = mTTS
-                if (tts == null && mSettings.isTextToSpeechEnabled()) {
+                if (tts == null && mSettings.isTextToSpeechEnabled) {
                     mTTS = TextToSpeech(this, mTTSInitListener)
-                } else if (tts != null && !mSettings.isTextToSpeechEnabled()) {
+                } else if (tts != null && !mSettings.isTextToSpeechEnabled) {
                     tts.shutdown()
                     mTTS = null
                 }
             }
             Settings.PREF_SHORT_TTS_MESSAGES ->
-                mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled()
+                mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled
             Settings.PREF_PTT_SOUND ->
-                mPTTSoundEnabled = mSettings.isPttSoundEnabled()
+                mPTTSoundEnabled = mSettings.isPttSoundEnabled
             Settings.PREF_BLUETOOTH_SCO -> applyBluetoothPreference()
             Settings.PREF_CERT_ID,
             Settings.PREF_FORCE_TCP,
@@ -414,7 +414,7 @@ class MumlaService : HumlaService(),
      * routes while a session is synchronized.
      */
     private fun applyBluetoothPreference() {
-        if (mSettings.isBluetoothScoEnabled()) enableBluetoothSco() else disableBluetoothSco()
+        if (mSettings.isBluetoothScoEnabled) enableBluetoothSco() else disableBluetoothSco()
     }
 
     /** Earpiece route (chosen or default) turns the proximity sensor on; anything else turns it off. */
@@ -516,8 +516,8 @@ class MumlaService : HumlaService(),
 
     /** Talk key pressed; a no-op in toggle PTT mode, which acts on key up. */
     override fun onTalkKeyDown() {
-        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == mSettings.getInputMethod()) {
-            if (!mSettings.isPushToTalkToggle()) {
+        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == mSettings.inputMethod) {
+            if (!mSettings.isPushToTalkToggle) {
                 setTalkingState(true) // Start talking
             }
         }
@@ -525,8 +525,8 @@ class MumlaService : HumlaService(),
 
     /** Talk key released; toggles talking in toggle PTT mode, otherwise stops talking. */
     override fun onTalkKeyUp() {
-        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == mSettings.getInputMethod()) {
-            if (mSettings.isPushToTalkToggle()) {
+        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == mSettings.inputMethod) {
+            if (mSettings.isPushToTalkToggle) {
                 setTalkingState(!isTalking) // Toggle talk state
             } else {
                 setTalkingState(false) // Stop talking (idempotent)
