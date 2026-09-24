@@ -20,10 +20,7 @@ package se.lublin.humla.model;
 import android.os.Parcel;
 import android.os.Parcelable;
 
-/**
- * User talk state.
- * Created by andrew on 19/04/15.
- */
+/** User talk state. */
 public enum TalkState implements Parcelable {
     TALKING,
     SHOUTING,

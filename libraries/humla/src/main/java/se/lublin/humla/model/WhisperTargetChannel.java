@@ -19,10 +19,7 @@ package se.lublin.humla.model;
 
 import se.lublin.humla.protobuf.Mumble;
 
-/**
- * An abstraction around a channel whisper target.
- * Created by andrew on 28/04/16.
- */
+/** An abstraction around a channel whisper target. */
 public class WhisperTargetChannel implements WhisperTarget {
     private final IChannel mChannel;
     private final boolean mIncludeLinked;

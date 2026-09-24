@@ -19,9 +19,6 @@ package se.lublin.humla.model;
 
 import se.lublin.humla.protobuf.Mumble;
 
-/**
- * Created by andrew on 28/04/16.
- */
 public interface WhisperTarget {
     Mumble.VoiceTarget.Target createTarget();
 

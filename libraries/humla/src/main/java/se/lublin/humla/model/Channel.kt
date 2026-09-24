@@ -19,27 +19,16 @@ package se.lublin.humla.model
 import java.util.Collections
 
 /**
- * A channel of the server tree. Mutated on the protocol thread and read from the main thread (and
- * from the binder thread `ChannelSearchProvider` runs on), so scalar fields are volatile, list
- * mutations are synchronized and list reads return snapshots (spec A1, "guarded model").
+ * A channel of the server tree. Mutated on the protocol thread and read from the main and binder
+ * threads, so scalar fields are volatile, list mutations are synchronized and list reads return
+ * unmodifiable snapshot copies.
  *
- * A read hands back an unmodifiable *copy*. The Java original handed back an unmodifiable *view*,
- * so callers outside this library already treat the result as read-only; dropping that half of the
- * contract while adding the copy would turn a caller's mistaken write from an exception into a
- * change that silently goes nowhere.
+ * The id is immutable: it is the [hashCode], and `HumlaCallbacks` keys queued refreshes on the
+ * channel object.
  *
- * The id is the one thing that never changes. It had a setter with no callers, and the setter was
- * not harmless: [hashCode] is the id, and `HumlaCallbacks` keys its folded state refreshes on the
- * channel object. Changing the id under a queued refresh would strand that entry in the fold map -
- * it would never be found again, so the refresh would leak and folding would quietly stop working
- * for that channel. Deleting the setter is what makes that unrepresentable; `ModelHandler` creates
- * a channel with its id and never renumbers one.
- *
- * What a reader gets is a snapshot of one list, not of the tree: a channel can exist while its
- * subchannels are still arriving, and that is deliberate. The alternative - a tree-wide lock held
- * across a `ChannelState` frame - would make the protocol thread wait on every list read the UI
- * takes, which is the cost task 4 exists to avoid. The UI already redraws on the next
- * `onChannelAdded`, so a half-built subtree is a frame late, not wrong.
+ * A read snapshots one list, not the tree: a channel can exist while its subchannels are still
+ * arriving. The UI redraws on the next `onChannelAdded`, so a half-built subtree is only a frame
+ * late.
  */
 class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false) : IChannel, Comparable<Channel> {
     private val mId = id
@@ -160,17 +149,8 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     }
 
     /**
-     * Replaces the whole link set in one step, ignoring channels we have no `ChannelState` for yet.
-     *
-     * This exists instead of a `clearLinks()` the caller follows with N `addLink` calls, because
-     * that sequence made the emptied list visible to the main thread: `ChannelListAdapter`
-     * italicises a channel that is linked to ours (`:167`, `:172`), so a re-announced link set made
-     * the italics blink off and on. It is also the only shape of the operation a test can hold to
-     * account - the window in a `clear()` that another thread can observe is a few nanoseconds
-     * wide, while a half-rebuilt list lasts as long as the rebuild.
-     *
-     * The nested [addLink] calls re-enter this object's monitor, which is what keeps the rebuild
-     * atomic for every reader.
+     * Replaces the whole link set atomically, ignoring channels we have no `ChannelState` for yet.
+     * Readers never see an emptied intermediate list (the UI would blink the linked-channel style).
      */
     @Synchronized
     fun setLinks(links: Collection<Channel?>) {
@@ -181,19 +161,7 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     /**
      * Recursively fetches the subchannel user count, holding one channel's lock at a time: the
      * subchannels are copied under the lock and the recursion happens outside it, so no thread ever
-     * holds two channel locks at once.
-     *
-     * Two decisions, and only one of them is pinned. **The lock is load-bearing**: without it the
-     * copy can include a slot `fastRemove` has already nulled (`es[size = newSize] = null`) and the
-     * recursion throws a NullPointerException on the main thread - `ChannelTest`'s
-     * `countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts` goes red in every
-     * run when it is taken away - 341 to 756 of its 20 000 observations throw, over 11 runs.
-     * **Releasing it before recursing** is the part no test can tell from a plain `@Synchronized`,
-     * and that is measured rather than asserted: written as a plain `@Synchronized` method over
-     * `mUsers.size` and a loop across `mSubchannels`, `ChannelTest` stays 12 of 12 green in three
-     * runs out of three. Nothing else in this class nests two locks today, so there is nothing to
-     * observe; it is written this way so that a later member which does take a second lock cannot
-     * turn this into a lock-order inversion.
+     * holds two channel locks at once (no lock-order inversion possible).
      *
      * FIXME: is it necessary to cache this?
      * @return The sum of users in this channel and its subchannels.
@@ -222,11 +190,7 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
 
     override fun hashCode(): Int = mId
 
-    /**
-     * Orders by position, then case-sensitively by name, with nameless channels first. The Java
-     * original dereferenced both names and threw for a channel that has none - reachable through
-     * [addSubchannel] and [addLink] for the stub channel `ModelHandler.createStubChannel` creates.
-     */
+    /** Orders by position, then case-sensitively by name, with nameless (stub) channels first. */
     override fun compareTo(other: Channel): Int {
         if (mPosition != other.getPosition()) return mPosition.compareTo(other.getPosition())
         return (mName ?: "").compareTo(other.getName() ?: "")

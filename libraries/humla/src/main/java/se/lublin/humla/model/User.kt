@@ -20,8 +20,7 @@ import com.google.protobuf.ByteString
 
 /**
  * A user of the server tree. Mutated on the protocol and audio threads and read from the main
- * thread, so every field is volatile (spec A1, "guarded model"). A user owns no list; the list it
- * appears in belongs to its [Channel].
+ * thread, so every field is volatile. The list a user appears in belongs to its [Channel].
  */
 class User @JvmOverloads constructor(session: Int = 0, name: String? = null) : IUser, Comparable<User> {
     @Volatile private var mSession = session
@@ -51,11 +50,7 @@ class User @JvmOverloads constructor(session: Int = 0, name: String? = null) : I
     @Volatile private var mLocalMuted = false
     @Volatile private var mLocalIgnored = false
 
-    /**
-     * The number of samples normally available from the user. A Kotlin property rather than a
-     * getter/setter pair because `AudioOutputSpeech` (Kotlin) reads and writes it as one; the
-     * Java-visible names are unchanged.
-     */
+    /** The number of samples normally available from the user. */
     @Volatile var averageAvailable = 0f
 
     override fun getSession(): Int = mSession
@@ -183,11 +178,7 @@ class User @JvmOverloads constructor(session: Int = 0, name: String? = null) : I
     /** The session, consistent with [equals]. The user id is -1 until the server assigns one. */
     override fun hashCode(): Int = mSession
 
-    /**
-     * Orders case-insensitively by name, with nameless users first. The Java original dereferenced
-     * both names and threw for a user whose `UserState` carried none - reachable through
-     * [Channel.addUser].
-     */
+    /** Orders case-insensitively by name, with nameless users first. */
     override fun compareTo(other: User): Int =
         (mName ?: "").lowercase().compareTo((other.getName() ?: "").lowercase())
 }

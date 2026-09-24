@@ -23,15 +23,12 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * A class encapsulating a text message from a Mumble server.
- * NOTE: Always prefer using getActorName(). You CANNOT rely on getActor() to provide this info,
- * as the actor may no longer be on the server.
- * Created by andrew on 03/12/13.
+ * A text message from a Mumble server.
+ * NOTE: Always prefer getActorName(). getActor() cannot be relied on, as the actor may no longer be
+ * on the server.
  */
 public class Message implements IMessage {
-    // Final rather than volatile: a message is built once and read from whichever thread picks it
-    // up, so the constructor's own publication guarantee is the whole of what it needs.
-    // GuardedModelVisibilityTest demands one or the other of every field in this package.
+    // Final: built once, then read from any thread; the constructor publishes it safely.
     private final int mActor;
     private final String mActorName;
     private final List<Channel> mChannels;
@@ -45,8 +42,6 @@ public class Message implements IMessage {
                 message);
     }
 
-    // The delegation used to run the other way, with this constructor overwriting five of the
-    // fields the other had just set. Same values, in one place, which is what lets them be final.
     public Message(int actor, String actorName, List<Channel> channels, List<Channel> trees, List<User> users, String message) {
         mActor = actor;
         mActorName = actorName;

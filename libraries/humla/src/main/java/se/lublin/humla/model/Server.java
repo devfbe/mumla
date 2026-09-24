@@ -76,16 +76,10 @@ public class Server implements Parcelable {
         }
     }
 
-    // Volatile, not final: the setters below are called from the UI while srvResolve() writes
-    // mResolvedHost and mResolvedPort from the connecting thread and HumlaService reads them back.
-    // Visibility is all volatile can give, and all it is here for; it is not a claim that the
-    // fields are independent. mResolvedHost and mResolvedPort are not: srvResolve() writes them as
-    // a pair, but getSrvHost() and getSrvPort() call it one at a time, and setHost()/setPort()
-    // clear mResolvedHost, so a UI edit landing between two such calls hands the caller a host
-    // from one resolution and a port from another (ServerInfoTask:50 and ServerInfoFragment:90-91
-    // both read them as two calls). Pre-existing and out of this task's scope - written down so
-    // the volatile is not read as covering more than it does.
-    // GuardedModelVisibilityTest demands the modifier of every field in this package.
+    // Volatile, not final: the setters run on the UI thread while srvResolve() writes
+    // mResolvedHost/mResolvedPort on the connecting thread. Volatile only gives visibility: the
+    // pair is written together but read one at a time, so a concurrent edit can yield a host and
+    // port from different resolutions.
     private volatile long mId;
     private volatile String mName;
     private volatile String mHost;
