@@ -133,4 +133,16 @@
     <string name="cancel_reconnect">Ḥbes allus n tuqqna</string>
     <string name="invalid_port_range">Tawwurt tarameɣtut (1-65535)</string>
     <string name="server_match_not_found">Ur nufi ara aqeddac-nni</string>
+    <string name="connection_lost_reconnecting">Tuqqna tṛuḥ – allus n tuqqna…</string>
+    <string name="foreground_start_failed">Ulamek ad yeqqim Mumla yetteddu deg ugilal. Taɣect tezmer ad teḥbes mi ara yensi ugdil.</string>
+    <string name="bluetooth_perm_denied">Akask n Bluetooth yeqqim yermed. War tasiregt n yibenkan iqerben, kra n yibenkan ad agin ad d-aznen imesli ɣur-s.</string>
+    <string name="chat_image_share">Bḍu tugna</string>
+    <string name="chat_image_close">Mdel</string>
+    <string name="chat_image_load_failed">Ulamek asali n tugna</string>
+    <string name="chat_image_viewer_image">Tugna</string>
+    <string name="chat_image_open">Ldi tugna</string>
+    <string name="chat_image_placeholder">[tugna]</string>
+    <string name="permission_denied_storage">Tettwagi tsiregt n tɣuri n usekles</string>
+    <string name="image_decode_failed">Ulamek taɣuri n tugna-a</string>
+    <string name="image_too_large">Tugna meqqret aṭas i uqeddac-a</string>
 </resources>

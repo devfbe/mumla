@@ -32,4 +32,15 @@
     <string name="chat_notify_unmuted">Forstummelse opphevet.</string>
     <string name="chat_notify_muted">Forstummet.</string>
     <string name="chat_notify_muted_deafened">Forstummet og gjort døv.</string>
+    <string name="udp_warning_unavailable">UDP-pakker kan ikke sendes til eller mottas fra tjeneren. Bytter til TCP-modus.</string>
+    <string name="udp_warning_send_failed">UDP-pakker kan ikke sendes til tjeneren. Bytter til TCP-modus.</string>
+    <string name="udp_warning_receive_failed">UDP-pakker kan ikke mottas fra tjeneren. Bytter til TCP-modus.</string>
+    <string name="udp_warning_ping_timeout">Ingen UDP-ping-svar fra tjeneren på 15 sekunder. Bytter til TCP-modus.</string>
+    <string name="udp_warning_restored">UDP-pakker kan sendes til og mottas fra tjeneren. Bytter tilbake til UDP-modus.</string>
+    <string name="reconnect_gave_up">Kunne ikke koble til tjeneren igjen. Gir opp.</string>
+    <string name="sco_unavailable">Ingen Bluetooth-hodesett tilgjengelig. Lyden blir på telefonen.</string>
+    <string name="bluetooth_sco_denied">Denne enheten nektet å sende lyd til et Bluetooth-hodesett. Gi tilgangen Enheter i nærheten i systeminnstillingene.</string>
+    <string name="no_session_user">Tjeneren sendte ikke denne øktens egen bruker; mikrofonen forblir av.</string>
+    <string name="no_target_server">Ingen tjener er satt opp for denne tilkoblingen.</string>
+    <string name="udp_warning_thread_failed">UDP-tilkoblingen mislyktes. Tale tunneleres over TCP mens UDP forsøkes på nytt.</string>
 </resources>

@@ -32,4 +32,15 @@
     <string name="chat_notify_kick_self">Anda telah dikeluarkan dari server oleh %1$s: %2$s.</string>
     <string name="chat_notify_self_recording_stopped">Rekaman dihentikan</string>
     <string name="chat_notify_user_left_channel">%1$s telah dipindah ke %2$s.</string>
+    <string name="udp_warning_unavailable">Paket UDP tidak dapat dikirim ke atau diterima dari server. Beralih ke mode TCP.</string>
+    <string name="udp_warning_send_failed">Paket UDP tidak dapat dikirim ke server. Beralih ke mode TCP.</string>
+    <string name="udp_warning_receive_failed">Paket UDP tidak dapat diterima dari server. Beralih ke mode TCP.</string>
+    <string name="udp_warning_ping_timeout">Tidak ada balasan ping UDP dari server selama 15 detik. Beralih ke mode TCP.</string>
+    <string name="udp_warning_restored">Paket UDP dapat dikirim ke dan diterima dari server. Kembali ke mode UDP.</string>
+    <string name="reconnect_gave_up">Tidak dapat menyambung ulang ke server. Upaya dihentikan.</string>
+    <string name="sco_unavailable">Tidak ada headset Bluetooth yang tersedia. Audio tetap di ponsel.</string>
+    <string name="bluetooth_sco_denied">Perangkat ini menolak mengalihkan audio ke headset Bluetooth. Berikan izin Perangkat di sekitar di pengaturan sistem.</string>
+    <string name="no_session_user">Server tidak mengirimkan user milik sesi ini; mikrofon tetap mati.</string>
+    <string name="no_target_server">Tidak ada server yang dikonfigurasi untuk koneksi ini.</string>
+    <string name="udp_warning_thread_failed">Koneksi UDP gagal. Suara disalurkan melalui TCP sementara UDP dicoba ulang.</string>
 </resources>

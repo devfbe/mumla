@@ -32,4 +32,15 @@
     <string name="perm_denied">権限が拒否されました。</string>
     <string name="server">サーバー</string>
     <string name="the_server">サーバー</string>
+    <string name="udp_warning_unavailable">サーバーとの間で UDP パケットを送受信できません。TCP モードに切り替えます。</string>
+    <string name="udp_warning_send_failed">サーバーに UDP パケットを送信できません。TCP モードに切り替えます。</string>
+    <string name="udp_warning_receive_failed">サーバーから UDP パケットを受信できません。TCP モードに切り替えます。</string>
+    <string name="udp_warning_ping_timeout">サーバーから 15 秒間 UDP ping の応答がありません。TCP モードに切り替えます。</string>
+    <string name="udp_warning_restored">サーバーとの間で UDP パケットを送受信できるようになりました。UDP モードに戻します。</string>
+    <string name="reconnect_gave_up">サーバーに再接続できませんでした。再接続を中止します。</string>
+    <string name="sco_unavailable">利用できる Bluetooth ヘッドセットがありません。音声は端末から出力されます。</string>
+    <string name="bluetooth_sco_denied">このデバイスは Bluetooth ヘッドセットへの音声のルーティングを拒否しました。システム設定で「付近のデバイス」の権限を許可してください。</string>
+    <string name="no_session_user">サーバーがこのセッション自身のユーザーを送信しませんでした。マイクはオフのままです。</string>
+    <string name="no_target_server">この接続にはサーバーが設定されていません。</string>
+    <string name="udp_warning_thread_failed">UDP 接続に失敗しました。UDP を再試行している間、音声は TCP 経由でトンネリングされます。</string>
 </resources>

@@ -225,4 +225,16 @@
     <string name="donate_foss">Dona</string>
     <string name="app_news_items_v3_7_2">• Corrette potenziali interruzioni all\'avvio\n • Aggiunte alcune traduzioni, grazie a tutti i traduttori!\n</string>
     <string name="app_news_items_v3_7_3">• L\'angolo PTT è visibile su Android 12 e successivi, e su sfondo chiaro e scuro\n • Il pulsante Indietro ora chiede nuovamente conferma di disconnessione dal server su Android 16+\n</string>
+    <string name="connection_lost_reconnecting">Connessione persa – riconnessione in corso…</string>
+    <string name="foreground_start_failed">Impossibile mantenere Mumla attivo in background. La voce potrebbe interrompersi quando lo schermo si spegne.</string>
+    <string name="bluetooth_perm_denied">Le cuffie Bluetooth restano attive. Senza il permesso Dispositivi nelle vicinanze, alcuni dispositivi rifiutano di instradarvi l\'audio.</string>
+    <string name="chat_image_share">Condividi immagine</string>
+    <string name="chat_image_close">Chiudi</string>
+    <string name="chat_image_load_failed">Impossibile caricare l\'immagine</string>
+    <string name="chat_image_viewer_image">Immagine</string>
+    <string name="chat_image_open">Apri immagine</string>
+    <string name="chat_image_placeholder">[immagine]</string>
+    <string name="permission_denied_storage">Permesso di lettura della memoria negato</string>
+    <string name="image_decode_failed">Impossibile leggere l\'immagine</string>
+    <string name="image_too_large">Immagine troppo grande per questo server</string>
 </resources>

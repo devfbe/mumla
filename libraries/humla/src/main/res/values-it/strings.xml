@@ -32,4 +32,15 @@
     <string name="chat_notify_muted">Muto.</string>
     <string name="chat_notify_muted_deafened">Muto ed escluso.</string>
     <string name="audio_max_bandwidth">La larghezza massima di banda del server è %1$d kbit/s. Regolazione della qualità audio a %2$d kbit/s (%3$d ms).</string>
+    <string name="udp_warning_unavailable">Impossibile inviare o ricevere pacchetti UDP dal server. Passaggio alla modalità TCP.</string>
+    <string name="udp_warning_send_failed">Impossibile inviare pacchetti UDP al server. Passaggio alla modalità TCP.</string>
+    <string name="udp_warning_receive_failed">Impossibile ricevere pacchetti UDP dal server. Passaggio alla modalità TCP.</string>
+    <string name="udp_warning_ping_timeout">Nessuna risposta al ping UDP dal server da 15 secondi. Passaggio alla modalità TCP.</string>
+    <string name="udp_warning_restored">I pacchetti UDP possono di nuovo essere inviati e ricevuti dal server. Ritorno alla modalità UDP.</string>
+    <string name="reconnect_gave_up">Impossibile riconnettersi al server. Tentativi interrotti.</string>
+    <string name="sco_unavailable">Nessuna cuffia Bluetooth disponibile. L\'audio resta sul telefono.</string>
+    <string name="bluetooth_sco_denied">Questo dispositivo ha rifiutato di instradare l\'audio alle cuffie Bluetooth. Concedi il permesso Dispositivi nelle vicinanze nelle impostazioni di sistema.</string>
+    <string name="no_session_user">Il server non ha inviato l\'utente di questa sessione; il microfono resta disattivato.</string>
+    <string name="no_target_server">Nessun server configurato per questa connessione.</string>
+    <string name="udp_warning_thread_failed">La connessione UDP non è riuscita. La voce passa tramite TCP mentre si ritenta con UDP.</string>
 </resources>

@@ -211,4 +211,16 @@
     <string name="app_news_items_v3_7_1">• Drobne wydanie zawierające głównie aktualizacje tłumaczeń, dziękujemy wszystkim tłumaczom!\n</string>
     <string name="app_news_items_v3_7_2">• Naprawiono potencjalny błąd powodujący awarię podczas uruchamiania.\n• Dodano kilka tłumaczeń, dziękujemy wszystkim tłumaczom!\n</string>
     <string name="app_news_items_v3_7_3">• Uwidoczniono narożnik PTT na urządzeniach z systemem Android 12 i nowszych, a także na ciemnym i jasnym tle.\n• Sprawiono, aby przycisk Wstecz ponownie prosił o rozłączenie z serwerem w systemie Android 16+.\n</string>
+    <string name="connection_lost_reconnecting">Utracono połączenie – ponowne łączenie…</string>
+    <string name="foreground_start_failed">Nie udało się utrzymać Mumli w tle. Dźwięk może ustać po wyłączeniu ekranu.</string>
+    <string name="bluetooth_perm_denied">Zestaw słuchawkowy Bluetooth pozostaje włączony. Bez uprawnienia „Urządzenia w pobliżu” niektóre urządzenia odmówią przekierowania do niego dźwięku.</string>
+    <string name="chat_image_share">Udostępnij obraz</string>
+    <string name="chat_image_close">Zamknij</string>
+    <string name="chat_image_load_failed">Nie udało się wczytać obrazu</string>
+    <string name="chat_image_viewer_image">Obraz</string>
+    <string name="chat_image_open">Otwórz obraz</string>
+    <string name="chat_image_placeholder">[obraz]</string>
+    <string name="permission_denied_storage">Odmowa uprawnienia do odczytu pamięci</string>
+    <string name="image_decode_failed">Nie udało się odczytać tego obrazu</string>
+    <string name="image_too_large">Obraz jest za duży dla tego serwera</string>
 </resources>
