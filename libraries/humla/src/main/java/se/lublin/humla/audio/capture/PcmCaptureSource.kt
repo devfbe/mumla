@@ -23,7 +23,6 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioRecordingConfiguration
-import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
@@ -237,11 +236,6 @@ class AndroidAudioRecordSource internal constructor(
                 effect.enabled = true
                 attached += effect
                 Log.i(TAG, "$name enabled")
-            }
-            if (request.echo == EchoCancellationMode.ANDROID) {
-                attach("AcousticEchoCanceler", AcousticEchoCanceler.isAvailable()) {
-                    AcousticEchoCanceler.create(sessionId)
-                }
             }
             if (request.effects.noiseSuppressor) {
                 attach("NoiseSuppressor", NoiseSuppressor.isAvailable()) { NoiseSuppressor.create(sessionId) }

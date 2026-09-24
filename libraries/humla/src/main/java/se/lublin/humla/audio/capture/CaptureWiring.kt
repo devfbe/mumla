@@ -61,10 +61,7 @@ object CaptureWiring {
      *   exist, and since task 9 it is this one.
      * @param noise the suppressor to run. `NONE` is a chain with no stage at all, not a stage with
      *   neutral settings.
-     * @param echo which canceller runs. Only [EchoCancellationMode.WEBRTC] builds anything here;
-     *   [EchoCancellationMode.ANDROID] is the platform effect that `PcmCaptureSource` attaches to
-     *   the recorder, and the two are alternatives of one setting, so they can never both be on.
-     *   Cascading them would be worse than either.
+     * @param echo which canceller runs. Only [EchoCancellationMode.WEBRTC] builds anything here.
      * @param speexNoiseSuppressDb how deep the Speex denoiser may cut (spec B9). It sits in front
      *   of [logger] so that `AudioHandler`'s Java call site reaches it through a generated
      *   `@JvmOverloads` overload instead of having to pass a resampler lambda.
