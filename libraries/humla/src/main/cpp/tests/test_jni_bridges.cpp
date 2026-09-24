@@ -86,7 +86,6 @@ static void test_rnnoise(Env& env) {
         for (jsize i = 0; i < frame.length(); i++) frame[i] = noise();
         jfloat p = RN_PROCESS(e, nullptr, h, frame.as<jshortArray>());
         CHECK(p >= 0.0f && p <= 1.0f, "rnnoise processFrame returns a probability in [0,1]");
-        CHECK(jnistub::outstanding_copies() == 0, "rnnoise processFrame releases the array copy");
     }
 
     /* A longer frame is accepted; only the first FRAME_SIZE samples may be touched. The tail is
@@ -107,7 +106,6 @@ static void test_rnnoise(Env& env) {
         Array<jshort> frame(HUMLA_RNNOISE_FRAME_SIZE - 1);
         CHECK(RN_PROCESS(e, nullptr, h, frame.as<jshortArray>()) < 0.0f,
               "rnnoise refuses a frame shorter than FRAME_SIZE");
-        CHECK(jnistub::outstanding_copies() == 0, "a refused short frame is never pinned");
     }
 
     CHECK(RN_PROCESS(e, nullptr, 0, nullptr) < 0.0f, "rnnoise processFrame(0, null) reports an error");
@@ -117,13 +115,6 @@ static void test_rnnoise(Env& env) {
               "rnnoise processFrame with a null handle reports an error");
         CHECK(RN_PROCESS(e, nullptr, h, nullptr) < 0.0f,
               "rnnoise processFrame with a null array reports an error");
-
-        /* The JVM returns NULL from GetShortArrayElements when it cannot allocate the copy. */
-        jnistub::fail_get_after(0);
-        CHECK(RN_PROCESS(e, nullptr, h, frame.as<jshortArray>()) < 0.0f,
-              "rnnoise survives GetShortArrayElements returning NULL");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "no array copy is leaked on the failure path");
     }
 
     /* destroy() twice on purpose (explicit close plus a finaliser is an ordinary mistake):
@@ -160,7 +151,6 @@ static void test_apm_arguments(Env& env) {
         Array<jshort> frame(kFrame);
         CHECK(APM_CAPTURE(e, nullptr, h, frame.as<jshortArray>()) == 0, "apm capture of silence succeeds");
         CHECK(APM_RENDER(e, nullptr, h, frame.as<jshortArray>()) == 0, "apm render of silence succeeds");
-        CHECK(jnistub::outstanding_copies() == 0, "apm releases both array copies");
         CHECK(APM_LEVEL(e, nullptr, h) <= -99.0f, "apm reports -100 dBFS for silence");
     }
 
@@ -173,7 +163,6 @@ static void test_apm_arguments(Env& env) {
               "apm capture refuses a frame shorter than frameSize");
         CHECK(APM_RENDER(e, nullptr, h, frame.as<jshortArray>()) == kBadDataLengthError,
               "apm render refuses a frame shorter than frameSize");
-        CHECK(jnistub::outstanding_copies() == 0, "a refused short frame is never pinned");
     }
 
     /* An over-long frame is fine, but only the first frameSize samples may be touched. */
@@ -196,12 +185,6 @@ static void test_apm_arguments(Env& env) {
         CHECK(APM_RENDER(e, nullptr, 0, frame.as<jshortArray>()) == kNullPointerError,
               "apm render with a null handle reports an error");
         CHECK(APM_LEVEL(e, nullptr, 0) <= -99.0f, "apm level of a null handle is -100 dBFS");
-
-        jnistub::fail_get_after(0);
-        CHECK(APM_CAPTURE(e, nullptr, h, frame.as<jshortArray>()) != 0,
-              "apm survives GetShortArrayElements returning NULL");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "no array copy is leaked on the failure path");
     }
 
     APM_DESTROY(e, nullptr, h);
@@ -292,7 +275,6 @@ int main() {
     test_rnnoise(env);
     test_apm_arguments(env);
     test_apm_wiring(env);
-    CHECK(jnistub::outstanding_copies() == 0, "no array copy is outstanding at the end of the run");
     std::printf("%s\n", failures ? "FAILED" : "OK");
     return failures ? 1 : 0;
 }

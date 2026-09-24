@@ -34,10 +34,10 @@ jfloat processFrame(JNIEnv* env, jobject, jlong handle, jshortArray frame) noexc
     if (denoiser == nullptr || frame == nullptr) return -1.0f;
     // A short frame would be an out-of-bounds write inside rnnoise.
     if (env->GetArrayLength(frame) < HUMLA_RNNOISE_FRAME_SIZE) return -1.0f;
-    jshort* data = env->GetShortArrayElements(frame, nullptr);
-    if (data == nullptr) return -1.0f;  // OOM inside the JVM; an exception is already pending
+    jshort data[HUMLA_RNNOISE_FRAME_SIZE];
+    env->GetShortArrayRegion(frame, 0, HUMLA_RNNOISE_FRAME_SIZE, data);
     float probability = humla_rnnoise_process(denoiser, reinterpret_cast<int16_t*>(data));
-    env->ReleaseShortArrayElements(frame, data, 0);  // mode 0: copy back and free
+    env->SetShortArrayRegion(frame, 0, HUMLA_RNNOISE_FRAME_SIZE, data);
     return probability;
 }
 

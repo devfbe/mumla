@@ -80,13 +80,11 @@ static void test_preprocessor(Env& env) {
         Array<jshort> frame(kWideband);
         CHECK(PP_RUN(e, nullptr, state, frame.as<jshortArray>()) >= 0,
               "a frame of exactly the configured size is processed");
-        CHECK(jnistub::outstanding_copies() == 0, "the array copy is released");
     }
     {
         Array<jshort> frame(kNarrow);
         CHECK(PP_RUN(e, nullptr, state, frame.as<jshortArray>()) < 0,
               "a 480-sample frame is refused by a 640-sample preprocessor, not overrun");
-        CHECK(jnistub::outstanding_copies() == 0, "a refused frame is never pinned");
     }
     {
         /* Longer than configured is fine; speex only touches the first frameSize samples. */
@@ -129,7 +127,6 @@ static void test_resampler(Env& env) {
                          out.as<jshortArray>(), outLen.as<jintArray>()) == 0,
               "a correctly sized resample succeeds");
         CHECK(inLen[0] <= 480 && outLen[0] <= 160, "the counts written back stay within the arrays");
-        CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
     }
     {
         /* Lying caller: counts far beyond both arrays. Clamped, not obeyed. */
@@ -154,7 +151,6 @@ static void test_resampler(Env& env) {
         RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), inLen.as<jintArray>(),
                    out.as<jshortArray>(), outLen.as<jintArray>());
         CHECK(inLen[0] <= 480, "an input count is clamped even when the output array has room");
-        CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
     }
     {
         /* Only the output clamp carries: inLen is honest, outLen is 100x the output array. */
@@ -165,7 +161,6 @@ static void test_resampler(Env& env) {
         RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), inLen.as<jintArray>(),
                    out.as<jshortArray>(), outLen.as<jintArray>());
         CHECK(outLen[0] <= 160, "an output count is clamped even when the input count is honest");
-        CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
     }
     {
         /* inLen and outLen may be empty; GetIntArrayRegion on an empty array throws on a real JVM
@@ -181,7 +176,6 @@ static void test_resampler(Env& env) {
         CHECK(RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), inLen2.as<jintArray>(),
                          out.as<jshortArray>(), empty.as<jintArray>()) != RESAMPLER_ERR_SUCCESS,
               "an empty output-count array is refused, not read");
-        CHECK(jnistub::outstanding_copies() == 0, "neither refusal pins an array");
     }
     {
         Array<jshort> in(480), out(160);
@@ -228,7 +222,6 @@ static void test_resampler_channel_index(Env& env) {
               "a channel index far beyond the channel count is refused");
         CHECK(RS_PROCESS(e, nullptr, mono, -1, i, il, o, ol) == RESAMPLER_ERR_INVALID_ARG,
               "a negative channel index is refused");
-        CHECK(jnistub::outstanding_copies() == 0, "a refused channel index never pins an array");
     }
     RS_DESTROY(e, nullptr, mono);
 
@@ -307,7 +300,6 @@ static void test_jitter(Env& env) {
         for (jsize i = 0; i < payload.length(); i++) payload[i] = jbyte(i);
         /* A length far beyond the array: clamped to the array, not read past it. */
         JB_PUT(e, nullptr, jb, payload.as<jbyteArray>(), 4096, 0, 480, 0, 0);
-        CHECK(jnistub::outstanding_copies() == 0, "put releases the payload copy");
 
         Array<jbyte> out(4096);
         Array<jint> meta(5);
@@ -324,7 +316,6 @@ static void test_jitter(Env& env) {
         Array<jint> meta(2);
         JB_GET(e, nullptr, jb, out.as<jbyteArray>(), 480, meta.as<jintArray>());
         CHECK(true, "get with a short meta array does not write past it");
-        CHECK(jnistub::outstanding_copies() == 0, "get releases the output copy");
     }
 
     /* pointerTimestamp, tick and updateDelay all dereference the handle in libspeexdsp; 0 (a
@@ -448,67 +439,43 @@ static void test_preprocess_ctl(Env& env) {
     PP_DESTROY(e, nullptr, st);
 }
 
-/* Get*ArrayElements returns NULL when the JVM cannot allocate the copy. Every entry point must
- * return an error instead of dereferencing it, and release anything it already holds.
- * RS(processInt) is the only one holding two copies at once, so it has the only cleanup path. */
-static void test_allocation_failure(Env& env) {
+/* The bridges copy regions and write back only what libspeexdsp produced: the rest of an output
+ * array is left as the caller had it. */
+static void test_partial_write_back(Env& env) {
     JNIEnv* e = env.get();
     Array<jint> err(1);
     jlong rs = RS_INIT(e, nullptr, 1, 48000, 16000, 3, err.as<jintArray>());
-    jlong pp = PP_INIT(e, nullptr, 640, 48000);
     jlong jb = JB_INIT(e, nullptr, 480);
-    CHECK(rs != 0 && pp != 0 && jb != 0, "the three states for the allocation-failure run exist");
-    if (rs == 0 || pp == 0 || jb == 0) return;
+    CHECK(rs != 0 && jb != 0, "the states for the write-back run exist");
+    if (rs == 0 || jb == 0) return;
 
     {
-        Array<jshort> in(480), out(160);
+        Array<jshort> in(480), out(400);
+        for (jsize i = 0; i < out.length(); i++) out[i] = 0x5a5a;
         Array<jint> inLen(1), outLen(1);
         inLen[0] = 480;
-        outLen[0] = 160;
-        jshortArray i = in.as<jshortArray>(), o = out.as<jshortArray>();
-        jintArray il = inLen.as<jintArray>(), ol = outLen.as<jintArray>();
-
-        /* The input copy fails: nothing is held yet. */
-        jnistub::fail_get_after(0);
-        CHECK(RS_PROCESS(e, nullptr, rs, 0, i, il, o, ol) != RESAMPLER_ERR_SUCCESS,
-              "processInt survives the input array copy failing");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "no copy is outstanding after the input failure");
-
-        /* The OUTPUT copy fails, with the input copy already held. This is the leak path. */
-        jnistub::fail_get_after(1);
-        CHECK(RS_PROCESS(e, nullptr, rs, 0, i, il, o, ol) != RESAMPLER_ERR_SUCCESS,
-              "processInt survives the output array copy failing");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0,
-              "the input copy is released when the output copy fails");
+        outLen[0] = 400;
+        CHECK(RS_PROCESS(e, nullptr, rs, 0, in.as<jshortArray>(), inLen.as<jintArray>(),
+                         out.as<jshortArray>(), outLen.as<jintArray>()) == RESAMPLER_ERR_SUCCESS,
+              "a 48 kHz to 16 kHz frame resamples");
+        bool tail_intact = outLen[0] < 400;
+        for (jsize i = outLen[0]; i < out.length(); i++)
+            if (out[i] != jshort(0x5a5a)) tail_intact = false;
+        CHECK(tail_intact, "processInt leaves the output beyond the produced count untouched");
     }
     {
-        Array<jshort> frame(640);
-        jnistub::fail_get_after(0);
-        CHECK(PP_RUN(e, nullptr, pp, frame.as<jshortArray>()) < 0,
-              "run survives GetShortArrayElements returning NULL");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "no copy is leaked on the run failure path");
-    }
-    {
-        Array<jbyte> payload(16);
-        jnistub::fail_get_after(0);
-        JB_PUT(e, nullptr, jb, payload.as<jbyteArray>(), 16, 0, 480, 0, 0);
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "put survives GetByteArrayElements returning NULL");
-
         Array<jbyte> out(64);
+        for (jsize i = 0; i < out.length(); i++) out[i] = 0x5a;
         Array<jint> meta(5);
-        jnistub::fail_get_after(0);
         CHECK(JB_GET(e, nullptr, jb, out.as<jbyteArray>(), 480, meta.as<jintArray>()) != 0,
-              "get survives GetByteArrayElements returning NULL");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "no copy is leaked on the get failure path");
+              "an empty jitter buffer delivers no packet");
+        bool untouched = true;
+        for (jsize i = 0; i < out.length(); i++)
+            if (out[i] != jbyte(0x5a)) untouched = false;
+        CHECK(untouched, "get without a packet leaves the output array untouched");
     }
 
     RS_DESTROY(e, nullptr, rs);
-    PP_DESTROY(e, nullptr, pp);
     JB_DESTROY(e, nullptr, jb);
 }
 
@@ -522,8 +489,7 @@ int main() {
     test_jitter(env);
     test_jitter_ctl(env);
     test_preprocess_ctl(env);
-    test_allocation_failure(env);
-    CHECK(jnistub::outstanding_copies() == 0, "no array copy is outstanding at the end of the run");
+    test_partial_write_back(env);
     std::printf("%s\n", failures ? "FAILED" : "OK");
     return failures ? 1 : 0;
 }

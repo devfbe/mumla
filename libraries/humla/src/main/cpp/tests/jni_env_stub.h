@@ -3,12 +3,9 @@
  * ../jni_*.cpp from a host test without a JVM. RegisterNatives records every binding; native()
  * looks one up by class and name.
  *
- * Two properties make memory errors in the bridges observable:
- *
- *   - Arrays are exact-size heap blocks, so a write to element 480 of a short[480] is a
- *     heap-buffer-overflow that ASan reports.
- *   - Get*ArrayElements copies, like ART's non-critical accessors, and Release honours the mode
- *     argument, so a missing release leaks the copy and LeakSanitizer fails the test.
+ * Arrays are exact-size heap blocks, and the region accessors abort on an out-of-range region, so
+ * a bridge that reads or writes past a Java array fails the test. Get*ArrayElements is left out:
+ * the bridges copy regions into buffers of their own, where ASan sees an overrun.
  *
  * This is a test double, not an emulator: functions the bridges do not need are left out of the
  * table on purpose, so a bridge calling something new crashes on a null pointer instead of
@@ -94,25 +91,6 @@ struct FakeArray {
     void* data;
 };
 
-/* Number of Get*ArrayElements copies currently outstanding; a bridge that forgets to release
- * leaves this above zero and the test says so without needing a sanitizer. */
-inline int& outstanding_copies() {
-    static int n = 0;
-    return n;
-}
-
-/* Arms one Get*ArrayElements to return NULL, as a JVM does when it cannot allocate the copy.
- *
- * fail_get_after(0) fails the next call; fail_get_after(1) lets one succeed and fails the one after
- * it, which reaches the cleanup path of a bridge holding two arrays. Negative means disarmed, which
- * is also where a triggered failure leaves it. */
-inline int& gets_until_failure() {
-    static int n = -1;
-    return n;
-}
-inline void fail_get_after(int n) { gets_until_failure() = n; }
-inline void fail_get_never() { gets_until_failure() = -1; }
-
 inline FakeArray* as_array(jarray a) { return reinterpret_cast<FakeArray*>(a); }
 
 /* jshortArray, jbyteArray and jintArray are distinct C++ types but a FakeArray is one struct, so
@@ -129,61 +107,29 @@ inline void check_element_type(const FakeArray* fa, const char* who) {
 
 inline jsize get_array_length(JNIEnv*, jarray a) { return as_array(a)->length; }
 
+/* Get/Set<Type>ArrayRegion. An out-of-range region aborts: a JVM would throw, and for these tests
+ * reaching it is the bug. */
 template <typename T>
-inline T* get_elements(JNIEnv*, jarray a, jboolean* isCopy) {
-    if (gets_until_failure() >= 0 && gets_until_failure()-- == 0) return nullptr;
-    FakeArray* fa = as_array(a);
-    check_element_type<T>(fa, "Get*ArrayElements");
-    /* Exactly length*sizeof(T) bytes: ASan's redzone starts right after the last element. */
-    T* copy = static_cast<T*>(std::malloc(size_t(fa->length) * sizeof(T)));
-    std::memcpy(copy, fa->data, size_t(fa->length) * sizeof(T));
-    if (isCopy) *isCopy = JNI_TRUE;
-    outstanding_copies()++;
-    return copy;
+inline void check_region(const FakeArray* fa, jsize start, jsize len, const char* who) {
+    check_element_type<T>(fa, who);
+    if (start < 0 || len < 0 || start + len > fa->length) {
+        std::fprintf(stderr, "stub: %s out of range (%d+%d of %d)\n", who, start, len, fa->length);
+        std::abort();
+    }
 }
 
 template <typename T>
-inline void release_elements(JNIEnv*, jarray a, T* elems, jint mode) {
+inline void get_region(JNIEnv*, jarray a, jsize start, jsize len, T* buf) {
     FakeArray* fa = as_array(a);
-    check_element_type<T>(fa, "Release*ArrayElements");
-    if (mode != JNI_ABORT) std::memcpy(fa->data, elems, size_t(fa->length) * sizeof(T));
-    if (mode != JNI_COMMIT) {
-        std::free(elems);
-        outstanding_copies()--;
-    }
+    check_region<T>(fa, start, len, "Get*ArrayRegion");
+    std::memcpy(buf, static_cast<T*>(fa->data) + start, size_t(len) * sizeof(T));
 }
 
-inline void get_int_region(JNIEnv*, jintArray a, jsize start, jsize len, jint* buf) {
+template <typename T>
+inline void set_region(JNIEnv*, jarray a, jsize start, jsize len, const T* buf) {
     FakeArray* fa = as_array(a);
-    check_element_type<jint>(fa, "GetIntArrayRegion");
-    if (start < 0 || len < 0 || start + len > fa->length) {
-        std::fprintf(stderr, "stub: GetIntArrayRegion out of range (%d+%d of %d)\n", start, len,
-                     fa->length);
-        std::abort();  /* a real JVM throws; for these tests, reaching it is the bug */
-    }
-    std::memcpy(buf, static_cast<jint*>(fa->data) + start, size_t(len) * sizeof(jint));
-}
-
-inline void set_int_region(JNIEnv*, jintArray a, jsize start, jsize len, const jint* buf) {
-    FakeArray* fa = as_array(a);
-    check_element_type<jint>(fa, "SetIntArrayRegion");
-    if (start < 0 || len < 0 || start + len > fa->length) {
-        std::fprintf(stderr, "stub: SetIntArrayRegion out of range (%d+%d of %d)\n", start, len,
-                     fa->length);
-        std::abort();
-    }
-    std::memcpy(static_cast<jint*>(fa->data) + start, buf, size_t(len) * sizeof(jint));
-}
-
-inline void set_float_region(JNIEnv*, jfloatArray a, jsize start, jsize len, const jfloat* buf) {
-    FakeArray* fa = as_array(a);
-    check_element_type<jfloat>(fa, "SetFloatArrayRegion");
-    if (start < 0 || len < 0 || start + len > fa->length) {
-        std::fprintf(stderr, "stub: SetFloatArrayRegion out of range (%d+%d of %d)\n", start, len,
-                     fa->length);
-        std::abort();
-    }
-    std::memcpy(static_cast<jfloat*>(fa->data) + start, buf, size_t(len) * sizeof(jfloat));
+    check_region<T>(fa, start, len, "Set*ArrayRegion");
+    std::memcpy(static_cast<T*>(fa->data) + start, buf, size_t(len) * sizeof(T));
 }
 
 /* The JNI function table's struct is spelled JNINativeInterface by the NDK and
@@ -197,27 +143,30 @@ class Env {
     Env() {
         std::memset(&table_, 0, sizeof(table_));
         table_.GetArrayLength = get_array_length;
-        table_.GetShortArrayElements = [](JNIEnv* e, jshortArray a, jboolean* c) {
-            return get_elements<jshort>(e, a, c);
+        table_.GetByteArrayRegion = [](JNIEnv* e, jbyteArray a, jsize s, jsize n, jbyte* b) {
+            get_region<jbyte>(e, a, s, n, b);
         };
-        table_.ReleaseShortArrayElements = [](JNIEnv* e, jshortArray a, jshort* p, jint m) {
-            release_elements<jshort>(e, a, p, m);
+        table_.SetByteArrayRegion = [](JNIEnv* e, jbyteArray a, jsize s, jsize n, const jbyte* b) {
+            set_region<jbyte>(e, a, s, n, b);
         };
-        table_.GetByteArrayElements = [](JNIEnv* e, jbyteArray a, jboolean* c) {
-            return get_elements<jbyte>(e, a, c);
+        table_.GetShortArrayRegion = [](JNIEnv* e, jshortArray a, jsize s, jsize n, jshort* b) {
+            get_region<jshort>(e, a, s, n, b);
         };
-        table_.ReleaseByteArrayElements = [](JNIEnv* e, jbyteArray a, jbyte* p, jint m) {
-            release_elements<jbyte>(e, a, p, m);
+        table_.SetShortArrayRegion = [](JNIEnv* e, jshortArray a, jsize s, jsize n, const jshort* b) {
+            set_region<jshort>(e, a, s, n, b);
         };
-        table_.GetFloatArrayElements = [](JNIEnv* e, jfloatArray a, jboolean* c) {
-            return get_elements<jfloat>(e, a, c);
+        table_.GetIntArrayRegion = [](JNIEnv* e, jintArray a, jsize s, jsize n, jint* b) {
+            get_region<jint>(e, a, s, n, b);
         };
-        table_.ReleaseFloatArrayElements = [](JNIEnv* e, jfloatArray a, jfloat* p, jint m) {
-            release_elements<jfloat>(e, a, p, m);
+        table_.SetIntArrayRegion = [](JNIEnv* e, jintArray a, jsize s, jsize n, const jint* b) {
+            set_region<jint>(e, a, s, n, b);
         };
-        table_.GetIntArrayRegion = get_int_region;
-        table_.SetIntArrayRegion = set_int_region;
-        table_.SetFloatArrayRegion = set_float_region;
+        table_.GetFloatArrayRegion = [](JNIEnv* e, jfloatArray a, jsize s, jsize n, jfloat* b) {
+            get_region<jfloat>(e, a, s, n, b);
+        };
+        table_.SetFloatArrayRegion = [](JNIEnv* e, jfloatArray a, jsize s, jsize n, const jfloat* b) {
+            set_region<jfloat>(e, a, s, n, b);
+        };
         table_.FindClass = find_class;
         table_.RegisterNatives = register_natives;
         table_.DeleteLocalRef = [](JNIEnv*, jobject) {};

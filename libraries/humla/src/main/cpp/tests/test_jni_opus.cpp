@@ -61,7 +61,6 @@ static void test_encoder(Env& env) {
     {
         Array<jbyte> packet(512);
         CHECK(encode_frame(e, enc, packet) > 0, "an honest frame encodes");
-        CHECK(jnistub::outstanding_copies() == 0, "encode releases its copies");
     }
     {
         Array<jshort> pcm(kFrame - 1);
@@ -69,7 +68,6 @@ static void test_encoder(Env& env) {
         CHECK(ENC_ENCODE(e, nullptr, enc, pcm.as<jshortArray>(), kFrame, packet.as<jbyteArray>(), 512)
                   == OPUS_BAD_ARG,
               "a pcm array shorter than the frame is refused, not over-read");
-        CHECK(jnistub::outstanding_copies() == 0, "a refused frame is never pinned");
     }
     {
         Array<jshort> pcm(kFrame);
@@ -119,7 +117,17 @@ static void test_decoder(Env& env) {
         Array<jfloat> out(kFrame);
         CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), len, out.as<jfloatArray>(), kFrame, 0)
                   == kFrame, "float decode of an honest packet");
-        CHECK(jnistub::outstanding_copies() == 0, "float decode releases its copies");
+    }
+    {
+        /* Room for two frames, one decoded: only the decoded samples are written back. */
+        Array<jfloat> out(2 * kFrame);
+        for (jsize i = kFrame; i < out.length(); i++) out[i] = 42.0f;
+        CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, packet.as<jbyteArray>(), len, out.as<jfloatArray>(),
+                               2 * kFrame, 0) == kFrame, "float decode into a larger array");
+        bool tail_intact = true;
+        for (jsize i = kFrame; i < out.length(); i++)
+            if (out[i] != 42.0f) tail_intact = false;
+        CHECK(tail_intact, "decode leaves the output beyond the decoded samples untouched");
     }
     {
         /* The frame size claims more room than the array has: clamped, so opus reports the
@@ -139,7 +147,6 @@ static void test_decoder(Env& env) {
               "a negative packet length is refused");
         CHECK(DEC_DECODE_FLOAT(e, nullptr, dec, nullptr, 0, out.as<jfloatArray>(), kFrame, 0) == kFrame,
               "a null packet is concealment");
-        CHECK(jnistub::outstanding_copies() == 0, "refusals are never pinned");
     }
     {
         Array<jbyte> small(2);
@@ -205,7 +212,6 @@ int main() {
     test_encoder(env);
     test_decoder(env);
     test_inband_fec(env);
-    CHECK(jnistub::outstanding_copies() == 0, "no array copy outstanding at exit");
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

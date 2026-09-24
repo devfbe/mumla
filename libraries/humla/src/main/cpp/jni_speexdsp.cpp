@@ -43,6 +43,10 @@ humla::HandleTable& preprocessors() { return humla::handleTable<PreprocessHandle
 
 using humla::writeInt;
 
+/* Stack capacity of the per-call copies; larger requests fall back to the heap. */
+constexpr std::size_t kInlineSamples = 2048;
+constexpr std::size_t kInlinePacket = 4096;
+
 /* The ctl entry points pass jitter_buffer_ctl / speex_preprocess_ctl the address of a four-byte
  * spx_int32_t on the stack, and the request number comes from Kotlin. For several requests the
  * callee does something else with that address:
@@ -135,16 +139,12 @@ jint resamplerProcessInt(JNIEnv* env, jobject, jlong state, jint channelIndex, j
     outCount = clampToArray(env, outCount, out);
     spx_uint32_t in = static_cast<spx_uint32_t>(inCount);
     spx_uint32_t outN = static_cast<spx_uint32_t>(outCount);
-    jshort* inPtr = env->GetShortArrayElements(input, nullptr);
-    if (inPtr == nullptr) return RESAMPLER_ERR_ALLOC_FAILED;
-    jshort* outPtr = env->GetShortArrayElements(out, nullptr);
-    if (outPtr == nullptr) {
-        env->ReleaseShortArrayElements(input, inPtr, JNI_ABORT);
-        return RESAMPLER_ERR_ALLOC_FAILED;
-    }
-    int result = speex_resampler_process_int(h->state, channelIndex, inPtr, &in, outPtr, &outN);
-    env->ReleaseShortArrayElements(out, outPtr, 0);
-    env->ReleaseShortArrayElements(input, inPtr, JNI_ABORT);
+    humla::RegionBuffer<jshort, kInlineSamples> inBuf(inCount);
+    humla::RegionBuffer<jshort, kInlineSamples> outBuf(outCount);
+    if (inBuf.data() == nullptr || outBuf.data() == nullptr) return RESAMPLER_ERR_ALLOC_FAILED;
+    inBuf.read(env, input, 0, inCount);
+    int result = speex_resampler_process_int(h->state, channelIndex, inBuf.data(), &in, outBuf.data(), &outN);
+    outBuf.write(env, out, 0, static_cast<jsize>(outN));
     writeInt(env, inLen, static_cast<jint>(in));
     writeInt(env, outLen, static_cast<jint>(outN));
     return result;
@@ -177,17 +177,17 @@ void jitterPut(JNIEnv* env, jobject, jlong handle, jbyteArray data, jint len, ji
     if (jb == nullptr || data == nullptr) return;
     // jitter_buffer_put copies len bytes, and len is the caller's number, not the array's.
     len = clampToArray(env, len, data);
-    jbyte* dataPtr = env->GetByteArrayElements(data, nullptr);
-    if (dataPtr == nullptr) return;
+    humla::RegionBuffer<jbyte, kInlinePacket> bytes(len);
+    if (bytes.data() == nullptr) return;
+    bytes.read(env, data, 0, len);
     JitterBufferPacket packet;
-    packet.data = reinterpret_cast<char*>(dataPtr);
+    packet.data = reinterpret_cast<char*>(bytes.data());
     packet.len = static_cast<spx_uint32_t>(len);
     packet.timestamp = static_cast<spx_uint32_t>(timestamp);
     packet.span = static_cast<spx_uint32_t>(span);
     packet.sequence = static_cast<spx_uint16_t>(sequence);
     packet.user_data = static_cast<spx_uint32_t>(userData);
     jitter_buffer_put(jb, &packet); // copies the payload
-    env->ReleaseByteArrayElements(data, dataPtr, JNI_ABORT);
 }
 
 jint jitterGet(JNIEnv* env, jobject, jlong handle, jbyteArray out, jint desiredSpan, jintArray meta) noexcept {
@@ -195,17 +195,20 @@ jint jitterGet(JNIEnv* env, jobject, jlong handle, jbyteArray out, jint desiredS
     // meta receives five values below; a shorter array would be written past its end.
     if (jb == nullptr || out == nullptr || meta == nullptr || env->GetArrayLength(meta) < 5)
         return JITTER_BUFFER_BAD_ARGUMENT;
-    jbyte* outPtr = env->GetByteArrayElements(out, nullptr);
-    if (outPtr == nullptr) return JITTER_BUFFER_INTERNAL_ERROR;
+    jsize capacity = env->GetArrayLength(out);
+    humla::RegionBuffer<jbyte, kInlinePacket> bytes(capacity);
+    if (bytes.data() == nullptr) return JITTER_BUFFER_INTERNAL_ERROR;
     JitterBufferPacket packet;
-    packet.data = reinterpret_cast<char*>(outPtr);
-    packet.len = static_cast<spx_uint32_t>(env->GetArrayLength(out));
+    packet.data = reinterpret_cast<char*>(bytes.data());
+    packet.len = static_cast<spx_uint32_t>(capacity);
     packet.timestamp = 0;
     packet.span = 0;
     packet.sequence = 0;
     packet.user_data = 0;
     int status = jitter_buffer_get(jb, &packet, desiredSpan, nullptr);
-    env->ReleaseByteArrayElements(out, outPtr, 0);
+    // Only a delivered packet has payload; libspeexdsp never reports more than the capacity.
+    if (status == JITTER_BUFFER_OK && packet.len <= static_cast<spx_uint32_t>(capacity))
+        bytes.write(env, out, 0, static_cast<jsize>(packet.len));
     jint values[5] = {
         static_cast<jint>(packet.len), static_cast<jint>(packet.timestamp), static_cast<jint>(packet.span),
         static_cast<jint>(packet.sequence), static_cast<jint>(packet.user_data)
@@ -270,10 +273,11 @@ jint preprocessRun(JNIEnv* env, jobject, jlong state, jshortArray frame) noexcep
     auto* h = static_cast<PreprocessHandle*>(preprocessors().get(state));
     if (h == nullptr || frame == nullptr) return -1;
     if (env->GetArrayLength(frame) < h->frameSize) return -1;
-    jshort* ptr = env->GetShortArrayElements(frame, nullptr);
-    if (ptr == nullptr) return -1;
-    int result = speex_preprocess_run(h->state, ptr);
-    env->ReleaseShortArrayElements(frame, ptr, 0);
+    humla::RegionBuffer<jshort, kInlineSamples> samples(h->frameSize);
+    if (samples.data() == nullptr) return -1;
+    samples.read(env, frame, 0, h->frameSize);
+    int result = speex_preprocess_run(h->state, samples.data());
+    samples.write(env, frame, 0, h->frameSize);
     return result;
 }
 

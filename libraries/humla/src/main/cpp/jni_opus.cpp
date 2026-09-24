@@ -30,6 +30,11 @@ humla::HandleTable& decoders() { return humla::handleTable<DecoderHandle>(); }
 
 using humla::writeInt;
 
+/* Stack capacity of the per-call copies; larger requests fall back to the heap. 120 ms of mono
+ * 48 kHz audio, and libopus's recommended maximum packet size. */
+constexpr std::size_t kInlinePcm = 5760;
+constexpr std::size_t kInlinePacket = 4000;
+
 /* Requests whose single variadic argument is an opus_int32 passed by value. */
 bool setIntRequestAllowed(jint request) {
     switch (request) {
@@ -100,17 +105,14 @@ jint encoderEncode(JNIEnv* env, jobject, jlong state, jshortArray pcm, jint fram
     jsize outCapacity = env->GetArrayLength(out);
     if (maxBytes > outCapacity) maxBytes = static_cast<jint>(outCapacity);
     if (maxBytes <= 0) return OPUS_BUFFER_TOO_SMALL;
-    jshort* pcmPtr = env->GetShortArrayElements(pcm, nullptr);
-    if (pcmPtr == nullptr) return OPUS_ALLOC_FAIL;
-    jbyte* outPtr = env->GetByteArrayElements(out, nullptr);
-    if (outPtr == nullptr) {
-        env->ReleaseShortArrayElements(pcm, pcmPtr, JNI_ABORT);
-        return OPUS_ALLOC_FAIL;
-    }
-    int result = opus_encode(h->state, pcmPtr, frameSize,
-                             reinterpret_cast<unsigned char*>(outPtr), maxBytes);
-    env->ReleaseByteArrayElements(out, outPtr, 0);
-    env->ReleaseShortArrayElements(pcm, pcmPtr, JNI_ABORT);
+    jsize samples = frameSize * h->channels;
+    humla::RegionBuffer<jshort, kInlinePcm> input(samples);
+    humla::RegionBuffer<jbyte, kInlinePacket> packet(maxBytes);
+    if (input.data() == nullptr || packet.data() == nullptr) return OPUS_ALLOC_FAIL;
+    input.read(env, pcm, 0, samples);
+    int result = opus_encode(h->state, input.data(), frameSize,
+                             reinterpret_cast<unsigned char*>(packet.data()), maxBytes);
+    if (result > 0) packet.write(env, out, 0, result);
     return result;
 }
 
@@ -157,21 +159,16 @@ jint decoderDecodeFloat(JNIEnv* env, jobject, jlong state, jbyteArray data, jint
     if (h == nullptr || out == nullptr || frameSize <= 0 || !packetFits(env, data, len)) return OPUS_BAD_ARG;
     frameSize = clampFrameSize(env, out, frameSize, h->channels);
     if (frameSize <= 0) return OPUS_BUFFER_TOO_SMALL;
-    jbyte* dataPtr = nullptr;
-    if (data != nullptr) {
-        dataPtr = env->GetByteArrayElements(data, nullptr);
-        if (dataPtr == nullptr) return OPUS_ALLOC_FAIL;
-    }
-    jfloat* outPtr = env->GetFloatArrayElements(out, nullptr);
-    if (outPtr == nullptr) {
-        if (dataPtr != nullptr) env->ReleaseByteArrayElements(data, dataPtr, JNI_ABORT);
-        return OPUS_ALLOC_FAIL;
-    }
+    jsize packetBytes = data != nullptr ? len : 0;
+    jsize samples = frameSize * h->channels;
+    humla::RegionBuffer<jbyte, kInlinePacket> packet(packetBytes);
+    humla::RegionBuffer<jfloat, kInlinePcm> pcm(samples);
+    if (packet.data() == nullptr || pcm.data() == nullptr) return OPUS_ALLOC_FAIL;
+    if (data != nullptr) packet.read(env, data, 0, packetBytes);
     int result = opus_decode_float(h->state,
-                                   dataPtr != nullptr ? reinterpret_cast<const unsigned char*>(dataPtr) : nullptr,
-                                   dataPtr != nullptr ? len : 0, outPtr, frameSize, decodeFec);
-    env->ReleaseFloatArrayElements(out, outPtr, 0);
-    if (dataPtr != nullptr) env->ReleaseByteArrayElements(data, dataPtr, JNI_ABORT);
+                                   data != nullptr ? reinterpret_cast<const unsigned char*>(packet.data()) : nullptr,
+                                   packetBytes, pcm.data(), frameSize, decodeFec);
+    if (result > 0) pcm.write(env, out, 0, result * h->channels);
     return result;
 }
 
@@ -184,20 +181,18 @@ void decoderDestroy(JNIEnv*, jobject, jlong state) noexcept {
 
 jint packetGetNbFrames(JNIEnv* env, jobject, jbyteArray packet, jint len) noexcept {
     if (packet == nullptr || len <= 0 || len > env->GetArrayLength(packet)) return OPUS_BAD_ARG;
-    jbyte* ptr = env->GetByteArrayElements(packet, nullptr);
-    if (ptr == nullptr) return OPUS_ALLOC_FAIL;
-    int result = opus_packet_get_nb_frames(reinterpret_cast<const unsigned char*>(ptr), len);
-    env->ReleaseByteArrayElements(packet, ptr, JNI_ABORT);
-    return result;
+    humla::RegionBuffer<jbyte, kInlinePacket> bytes(len);
+    if (bytes.data() == nullptr) return OPUS_ALLOC_FAIL;
+    bytes.read(env, packet, 0, len);
+    return opus_packet_get_nb_frames(reinterpret_cast<const unsigned char*>(bytes.data()), len);
 }
 
 jint packetGetSamplesPerFrame(JNIEnv* env, jobject, jbyteArray packet, jint sampleRate) noexcept {
     if (packet == nullptr || env->GetArrayLength(packet) < 1) return OPUS_BAD_ARG;
-    jbyte* ptr = env->GetByteArrayElements(packet, nullptr);
-    if (ptr == nullptr) return OPUS_ALLOC_FAIL;
-    int result = opus_packet_get_samples_per_frame(reinterpret_cast<const unsigned char*>(ptr), sampleRate);
-    env->ReleaseByteArrayElements(packet, ptr, JNI_ABORT);
-    return result;
+    // Only the TOC byte is read.
+    jbyte toc = 0;
+    env->GetByteArrayRegion(packet, 0, 1, &toc);
+    return opus_packet_get_samples_per_frame(reinterpret_cast<const unsigned char*>(&toc), sampleRate);
 }
 
 }  // namespace

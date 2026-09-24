@@ -29,6 +29,9 @@ namespace {
 constexpr jint kNullPointerError = -5;
 constexpr jint kBadDataLengthError = -8;
 
+/* 10 ms at 48 kHz, the highest rate humla_apm accepts. */
+constexpr std::size_t kMaxFrame = 480;
+
 humla::HandleTable& processors() { return humla::handleTable<humla_apm>(); }
 
 jint process(JNIEnv* env, jlong handle, jshortArray frame,
@@ -36,11 +39,13 @@ jint process(JNIEnv* env, jlong handle, jshortArray frame,
     auto* apm = static_cast<humla_apm*>(processors().get(handle));
     if (apm == nullptr || frame == nullptr) return kNullPointerError;
     if (env->GetArrayLength(frame) < humla_apm_frame_size(apm)) return kBadDataLengthError;
-    jshort* data = env->GetShortArrayElements(frame, nullptr);
-    if (data == nullptr) return kNullPointerError;  // OOM in the JVM, exception already pending
-    jint err = fn(apm, reinterpret_cast<int16_t*>(data));
-    // Mode 0 for both streams: the APM may modify the render buffer too.
-    env->ReleaseShortArrayElements(frame, data, 0);
+    jsize samples = humla_apm_frame_size(apm);
+    humla::RegionBuffer<jshort, kMaxFrame> data(samples);
+    if (data.data() == nullptr) return kNullPointerError;
+    data.read(env, frame, 0, samples);
+    jint err = fn(apm, reinterpret_cast<int16_t*>(data.data()));
+    // Written back for both streams: the APM may modify the render buffer too.
+    data.write(env, frame, 0, samples);
     return err;
 }
 
