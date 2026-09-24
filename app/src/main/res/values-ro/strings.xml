@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="perm_denied">Interzis.</string>
+    <string name="connection_lost_reconnecting">Conexiune pierdută – se reconectează…</string>
+    <string name="foreground_start_failed">Mumla nu a putut fi menținută activă în fundal. Vocea se poate opri când ecranul se stinge.</string>
+    <string name="bluetooth_perm_denied">Căștile Bluetooth rămân activate. Fără permisiunea Dispozitive din apropiere, unele dispozitive vor refuza să direcționeze sunetul către ele.</string>
+    <string name="chat_image_share">Distribuie imaginea</string>
+    <string name="chat_image_close">Închide</string>
+    <string name="chat_image_load_failed">Imaginea nu a putut fi încărcată</string>
+    <string name="chat_image_viewer_image">Imagine</string>
+    <string name="chat_image_open">Deschide imaginea</string>
+    <string name="chat_image_placeholder">[imagine]</string>
+    <string name="permission_denied_storage">Permisiunea de citire a spațiului de stocare a fost refuzată</string>
+    <string name="image_decode_failed">Imaginea nu a putut fi citită</string>
+    <string name="image_too_large">Imaginea este prea mare pentru acest server</string>
 </resources>

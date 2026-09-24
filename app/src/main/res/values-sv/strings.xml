@@ -210,4 +210,16 @@
     <string name="donate_dialog_negativebutton_goog">Senare</string>
     <string name="donate_purchase_pending_goog">Din donation behandlas och kan vara klar vid en senare omstart. Tack!</string>
     <string name="donate_thanks_goog">Tack för ditt stöd!</string>
+    <string name="connection_lost_reconnecting">Anslutningen bröts – ansluter igen…</string>
+    <string name="foreground_start_failed">Det gick inte att hålla Mumla igång i bakgrunden. Ljudet kan sluta fungera när skärmen stängs av.</string>
+    <string name="bluetooth_perm_denied">Bluetooth-headsetet förblir påslaget. Utan behörigheten Enheter i närheten vägrar vissa enheter att skicka ljud till det.</string>
+    <string name="chat_image_share">Dela bild</string>
+    <string name="chat_image_close">Stäng</string>
+    <string name="chat_image_load_failed">Bilden kunde inte läsas in</string>
+    <string name="chat_image_viewer_image">Bild</string>
+    <string name="chat_image_open">Öppna bild</string>
+    <string name="chat_image_placeholder">[bild]</string>
+    <string name="permission_denied_storage">Behörighet att läsa lagringen nekades</string>
+    <string name="image_decode_failed">Det gick inte att läsa bilden</string>
+    <string name="image_too_large">Bilden är för stor för den här servern</string>
 </resources>

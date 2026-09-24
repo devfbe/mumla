@@ -32,4 +32,15 @@
     <string name="perm_denied">Доступ запрещён.</string>
     <string name="server">Сервер</string>
     <string name="the_server">сервер</string>
+    <string name="udp_warning_unavailable">Не удаётся отправлять UDP-пакеты на сервер и принимать их с него. Переключение в режим TCP.</string>
+    <string name="udp_warning_send_failed">Не удаётся отправлять UDP-пакеты на сервер. Переключение в режим TCP.</string>
+    <string name="udp_warning_receive_failed">Не удаётся принимать UDP-пакеты с сервера. Переключение в режим TCP.</string>
+    <string name="udp_warning_ping_timeout">Сервер не отвечает на UDP-пинг уже 15 секунд. Переключение в режим TCP.</string>
+    <string name="udp_warning_restored">UDP-пакеты снова отправляются и принимаются. Возврат в режим UDP.</string>
+    <string name="reconnect_gave_up">Не удалось переподключиться к серверу. Попытки прекращены.</string>
+    <string name="sco_unavailable">Нет доступной Bluetooth-гарнитуры. Звук остаётся на телефоне.</string>
+    <string name="bluetooth_sco_denied">Устройство отказалось направлять звук на Bluetooth-гарнитуру. Выдайте разрешение «Устройства поблизости» в настройках системы.</string>
+    <string name="no_session_user">Сервер не прислал данные пользователя этой сессии; микрофон остаётся выключенным.</string>
+    <string name="no_target_server">Для этого подключения не задан сервер.</string>
+    <string name="udp_warning_thread_failed">Сбой UDP-соединения. Голос передаётся через TCP, пока UDP переподключается.</string>
 </resources>

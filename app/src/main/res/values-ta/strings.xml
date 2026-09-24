@@ -178,4 +178,16 @@
     <string name="donation_thanks">நன்கொடைக்கு நன்றி.</string>
     <string name="drawer_open">அலமாரி திற</string>
     <string name="perm_denied">இசைவு மறுக்கப்பட்டது.</string>
+    <string name="connection_lost_reconnecting">இணைப்பு துண்டிக்கப்பட்டது – மீண்டும் இணைக்கிறது…</string>
+    <string name="foreground_start_failed">Mumla வைப் பின்னணியில் இயங்க வைக்க முடியவில்லை. திரை அணையும்போது குரல் நின்றுவிடக்கூடும்.</string>
+    <string name="bluetooth_perm_denied">Bluetooth தலையணி இயக்கத்திலேயே இருக்கும். அருகிலுள்ள சாதனங்கள் இசைவு இல்லாமல், சில சாதனங்கள் ஒலியை அதற்கு அனுப்ப மறுக்கும்.</string>
+    <string name="chat_image_share">படத்தைப் பகிர்</string>
+    <string name="chat_image_close">மூடு</string>
+    <string name="chat_image_load_failed">படத்தை ஏற்ற முடியவில்லை</string>
+    <string name="chat_image_viewer_image">படம்</string>
+    <string name="chat_image_open">படத்தைத் திற</string>
+    <string name="chat_image_placeholder">[படம்]</string>
+    <string name="permission_denied_storage">சேமிப்பகத்தைப் படிக்க இசைவு மறுக்கப்பட்டது</string>
+    <string name="image_decode_failed">அந்தப் படத்தைப் படிக்க முடியவில்லை</string>
+    <string name="image_too_large">இந்தச் சேவையகத்திற்குப் படம் மிகப் பெரியது</string>
 </resources>

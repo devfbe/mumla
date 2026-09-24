@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="perm_denied">Không có quyền.</string>
+    <string name="connection_lost_reconnecting">Mất kết nối – đang kết nối lại…</string>
+    <string name="foreground_start_failed">Không thể giữ Mumla chạy nền. Âm thanh có thể dừng khi màn hình tắt.</string>
+    <string name="bluetooth_perm_denied">Tai nghe Bluetooth vẫn bật. Nếu thiếu quyền Thiết bị ở gần, một số thiết bị sẽ từ chối chuyển âm thanh sang tai nghe.</string>
+    <string name="chat_image_share">Chia sẻ hình ảnh</string>
+    <string name="chat_image_close">Đóng</string>
+    <string name="chat_image_load_failed">Không tải được hình ảnh</string>
+    <string name="chat_image_viewer_image">Hình ảnh</string>
+    <string name="chat_image_open">Mở hình ảnh</string>
+    <string name="chat_image_placeholder">[hình ảnh]</string>
+    <string name="permission_denied_storage">Bị từ chối quyền đọc bộ nhớ</string>
+    <string name="image_decode_failed">Không đọc được hình ảnh đó</string>
+    <string name="image_too_large">Hình ảnh quá lớn đối với máy chủ này</string>
 </resources>

@@ -205,4 +205,16 @@
     <string name="status_notify_muted_and_deafened">Звук та мікрофон вимкнені.</string>
     <string name="status_notify_muted">Мікрофон вимкнено.</string>
     <string name="no_ptt_key">Кнопка не обрана</string>
+    <string name="connection_lost_reconnecting">З’єднання втрачено – повторне під’єднання…</string>
+    <string name="foreground_start_failed">Не вдалося залишити Mumla працювати у фоні. Звук може зникнути, коли екран вимкнеться.</string>
+    <string name="bluetooth_perm_denied">Bluetooth-гарнітура залишається ввімкненою. Без дозволу «Пристрої поблизу» деякі пристрої відмовлятимуться спрямовувати на неї звук.</string>
+    <string name="chat_image_share">Поділитися зображенням</string>
+    <string name="chat_image_close">Закрити</string>
+    <string name="chat_image_load_failed">Не вдалося завантажити зображення</string>
+    <string name="chat_image_viewer_image">Зображення</string>
+    <string name="chat_image_open">Відкрити зображення</string>
+    <string name="chat_image_placeholder">[зображення]</string>
+    <string name="permission_denied_storage">Немає дозволу на читання сховища</string>
+    <string name="image_decode_failed">Не вдалося прочитати це зображення</string>
+    <string name="image_too_large">Зображення завелике для цього сервера</string>
 </resources>

@@ -32,4 +32,15 @@
     <string name="chat_notify_now_muted_deafened">Sunetul și microfonul lui %s au fost dezactivate.</string>
     <string name="chat_notify_kick_ban">%3$s a fost dat afara și banat de pe server de %1$s: %2$s.</string>
     <string name="chat_notify_user_left_channel_by">%1$s a fost mutat în %2$s de %3$s.</string>
+    <string name="udp_warning_unavailable">Pachetele UDP nu pot fi trimise către server sau primite de la acesta. Se trece în modul TCP.</string>
+    <string name="udp_warning_send_failed">Pachetele UDP nu pot fi trimise către server. Se trece în modul TCP.</string>
+    <string name="udp_warning_receive_failed">Pachetele UDP nu pot fi primite de la server. Se trece în modul TCP.</string>
+    <string name="udp_warning_ping_timeout">Niciun răspuns la ping-ul UDP de la server timp de 15 secunde. Se trece în modul TCP.</string>
+    <string name="udp_warning_restored">Pachetele UDP pot fi trimise către server și primite de la acesta. Se revine în modul UDP.</string>
+    <string name="reconnect_gave_up">Reconectarea la server a eșuat. Se renunță.</string>
+    <string name="sco_unavailable">Nu sunt disponibile căști Bluetooth. Sunetul rămâne pe telefon.</string>
+    <string name="bluetooth_sco_denied">Acest dispozitiv a refuzat să direcționeze sunetul către căștile Bluetooth. Acordă permisiunea Dispozitive din apropiere în setările sistemului.</string>
+    <string name="no_session_user">Serverul nu a trimis utilizatorul propriu al acestei sesiuni; microfonul rămâne oprit.</string>
+    <string name="no_target_server">Nu a fost configurat niciun server pentru această conexiune.</string>
+    <string name="udp_warning_thread_failed">Conexiunea UDP a eșuat. Vocea trece prin TCP cât timp se reîncearcă UDP.</string>
 </resources>
