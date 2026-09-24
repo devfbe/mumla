@@ -2,8 +2,6 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ComplexCondition:MumlaService.kt$MumlaService.&lt;no name provided&gt;$isConnectionEstablished() &amp;&amp; user.getSession() == selfSession &amp;&amp; getTransmitMode() == Constants.TRANSMIT_PUSH_TO_TALK &amp;&amp; user.getTalkState() == TalkState.TALKING &amp;&amp; mPTTSoundEnabled</ID>
-    <ID>ComplexCondition:MumlaService.kt$MumlaService.&lt;no name provided&gt;$tts != null &amp;&amp; formattedTtsMessage.length &lt;= TTS_THRESHOLD &amp;&amp; getSessionUser() != null &amp;&amp; !getSessionUser()!!.isSelfDeafened()</ID>
     <ID>CyclomaticComplexMethod:ChannelListAdapter.kt$ChannelListAdapter$override fun onBindViewHolder(viewHolder: RecyclerView.ViewHolder, position: Int)</ID>
     <ID>CyclomaticComplexMethod:ChannelListFragment.kt$ChannelListFragment$override fun onOptionsItemSelected(item: MenuItem): Boolean</ID>
     <ID>CyclomaticComplexMethod:HttpImageFetcher.kt$HttpImageFetcher$private fun fetchHop(target: URL, deadline: Long, unopenable: ImageError): Hop</ID>
@@ -14,7 +12,6 @@
     <ID>EmptyFunctionBlock:NotificationPostingTest.kt$NotificationPostingTest.NoopActions${}</ID>
     <ID>ForbiddenComment:ChannelListAdapter.kt$ChannelListAdapter$// FIXME: cache bitmaps</ID>
     <ID>ForbiddenComment:ChannelListFragment.kt$ChannelListFragment$// Dismiss action mode if double pressed. FIXME: use list view selection instead?</ID>
-    <ID>ForbiddenComment:MumlaService.kt$MumlaService.&lt;no name provided&gt;$// TODO: create a customizable notification sieve</ID>
     <ID>ImplicitDefaultLocale:ChannelListAdapter.kt$ChannelListAdapter$String.format("%d", node.subtreeUserCount)</ID>
     <ID>LargeClass:ChannelChatFragmentTest.kt$ChannelChatFragmentTest</ID>
     <ID>LargeClass:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest</ID>
@@ -179,7 +176,6 @@
     <ID>ReturnCount:ChannelChatFragment.kt$ChannelChatFragment$fun updateChatTargetText(target: ChatTargetProvider.ChatTarget?)</ID>
     <ID>ReturnCount:ChannelChatFragmentTest.kt$ChannelChatFragmentTest$private fun View.firstImageView(): ImageView?</ID>
     <ID>ReturnCount:ChannelListFragment.kt$ChannelListFragment$override fun onOptionsItemSelected(item: MenuItem): Boolean</ID>
-    <ID>ReturnCount:ChannelListFragment.kt$ChannelListFragment.&lt;no name provided&gt;$override fun onUserJoinedChannel(user: IUser, newChannel: IChannel, oldChannel: IChannel?)</ID>
     <ID>ReturnCount:ChatAdapter.kt$ChatAdapter$private fun targetLabel(context: Context, message: IMessage): String</ID>
     <ID>ReturnCount:ChatImageLoader.kt$ChatImageLoader$private fun cached(key: String): ImageResult?</ID>
     <ID>ReturnCount:ChatImageLoader.kt$ChatImageLoader$suspend fun loadFull(source: String, maxWidth: Int, maxHeight: Int): ImageResult</ID>

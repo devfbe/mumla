@@ -10,9 +10,7 @@
     <ID>CyclomaticComplexMethod:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
     <ID>CyclomaticComplexMethod:VoiceActivityDetector.kt$VoiceActivityDetector$fun isVoice(pcm: ShortArray, length: Int, probability: Float?): Boolean</ID>
     <ID>CyclomaticComplexMethod:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$@Test fun `a long score sequence agrees with the state machine on every frame`()</ID>
-    <ID>EmptyFunctionBlock:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:HumlaUDPTest.kt$HumlaUDPTest.RecordingListener${}</ID>
-    <ID>EmptyWhileBlock:HumlaCallbacksTest.kt$HumlaCallbacksTest.&lt;no name provided&gt;${ }</ID>
     <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @param buffer The buffer to mix output data into. * @param bufferOffset The offset into the buffer. * @param bufferSize The size of the buffer. * @return true if the buffer contains audio data.</ID>
     <ID>ForbiddenComment:Channel.kt$Channel$* Recursively fetches the subchannel user count, holding one channel's lock at a time: the * subchannels are copied under the lock and the recursion happens outside it, so no thread ever * holds two channel locks at once (no lock-order inversion possible). * * FIXME: is it necessary to cache this? * @return The sum of users in this channel and its subchannels.</ID>
     <ID>ForbiddenComment:HumlaConnection.kt$HumlaConnection.Companion$// FIXME: assumes worst-case using TCP</ID>
@@ -32,7 +30,6 @@
     <ID>LongParameterList:VadConfig.kt$VadConfig.Companion$( snrFraction: Float = AdaptiveVadTracker.DEFAULT_FRACTION, holdTimeMs: Long = DEFAULT_HOLD_MS, onsetFrames: Int = DEFAULT_ONSET_FRAMES, hysteresisDb: Float = DEFAULT_HYSTERESIS_DB, adaptiveFloor: Boolean = true, manualFloorDbfs: Float = AdaptiveVadTracker.DEFAULT_FLOOR_DBFS, )</ID>
     <ID>LongParameterList:WebRtcApmNative.kt$WebRtcApmApi$( sampleRate: Int, echoCancellation: Boolean, noiseSuppression: Boolean, noiseSuppressionLevel: Int, gainControl: Boolean, highPass: Boolean, )</ID>
     <ID>LoopWithTooManyJumpStatements:AudioInput.kt$AudioInput$while</ID>
-    <ID>LoopWithTooManyJumpStatements:HumlaCallbacks.kt$HumlaCallbacks.&lt;no name provided&gt;$while</ID>
     <ID>LoopWithTooManyJumpStatements:HumlaUDP.kt$HumlaUDP$while</ID>
     <ID>MagicNumber:AdaptiveVadTracker.kt$AdaptiveVadTracker$1000f</ID>
     <ID>MagicNumber:AudioConfig.kt$AudioConfig$25</ID>
@@ -138,7 +135,6 @@
     <ID>ReturnCount:AudioRouter.kt$AudioRouter$private fun automatic(available: List&lt;CommunicationDevice&gt;): CommunicationDevice?</ID>
     <ID>ReturnCount:FakeCaptureSource.kt$FakeCaptureSource$override fun read(buffer: ShortArray, length: Int): Int</ID>
     <ID>ReturnCount:FakeSpeexResamplerApi.kt$FakeSpeexResamplerApi$override fun processInt( state: Long, channelIndex: Int, input: ShortArray, inLen: IntArray, out: ShortArray, outLen: IntArray, ): Int</ID>
-    <ID>ReturnCount:HumlaCallbacks.kt$HumlaCallbacks$private fun dropOldestDroppableExcept(newest: Event): Boolean</ID>
     <ID>ReturnCount:HumlaUDP.kt$HumlaUDP$override fun sendMessage(data: ByteArray, length: Int)</ID>
     <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$fun decodeAsServer(packet: ByteArray): Long?</ID>
     <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
@@ -170,8 +166,6 @@
     <ID>TooManyFunctions:AudioRouter.kt$AudioRouter</ID>
     <ID>TooManyFunctions:Channel.kt$Channel : IChannelComparable</ID>
     <ID>TooManyFunctions:CommunicationDevices.kt$AndroidCommunicationDevices : CommunicationDevices</ID>
-    <ID>TooManyFunctions:Doubles.kt$NoopObserver : IHumlaObserver</ID>
-    <ID>TooManyFunctions:HumlaCallbacks.kt$HumlaCallbacks : IHumlaObserver</ID>
     <ID>TooManyFunctions:HumlaConnection.kt$HumlaConnection : TCPConnectionListenerUDPConnectionListenerMessageHandlerRegistry</ID>
     <ID>TooManyFunctions:HumlaService.kt$HumlaService : ServiceIHumlaServiceIHumlaSessionHumlaConnectionListenerHumlaLogger</ID>
     <ID>TooManyFunctions:HumlaTCP.kt$HumlaTCP : TcpTransport</ID>
@@ -179,7 +173,6 @@
     <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun cancellingService(): HumlaService</ID>
     <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun connectivityManager()</ID>
     <ID>UseCheckOrError:FakeCaptureSource.kt$FakeCaptureSource$throw IllegalStateException("startRecording failed")</ID>
-    <ID>UseCheckOrError:HumlaCallbacksTest.kt$HumlaCallbacksTest.&lt;no name provided&gt;$throw IllegalStateException("observer failed")</ID>
     <ID>UseCheckOrError:HumlaService.kt$HumlaService$throw IllegalStateException("Session user should be set post-synchronization!")</ID>
     <ID>UseRequire:HumlaService.kt$HumlaService$throw IllegalArgumentException("Target ID must be at most 5 bits.")</ID>
     <ID>UseRequire:OpusEncoder.kt$OpusEncoder$throw IllegalArgumentException("This Opus encoder implementation requires a constant frame size.")</ID>
