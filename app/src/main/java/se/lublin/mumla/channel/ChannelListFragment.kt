@@ -17,7 +17,6 @@
 
 package se.lublin.mumla.channel
 
-import android.Manifest
 import android.app.Activity
 import android.app.SearchManager
 import android.content.Context
@@ -32,9 +31,6 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
@@ -133,26 +129,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     private lateinit var databaseProvider: DatabaseProvider
     private var actionMode: ActionMode? = null
     private lateinit var settings: Settings
-    private lateinit var bluetoothToggle: BluetoothScoToggle
-
-    // Registered from the constructor: a fragment may not register a launcher once it has been
-    // created.
-    private val bluetoothPermissionRequester: ActivityResultLauncher<String> =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            // Keep asking, stop gating (spec 4.1): the dialog was raised because P3 asks for it,
-            // but its answer is about the permission, not about what the user wants, so the wish
-            // is stored either way. The toast says what a denial may cost on a device that
-            // enforces more than the platform's own annotations declare.
-            bluetoothToggle.onPermissionAnswered()
-            if (!granted) {
-                Toast.makeText(
-                    requireContext(), R.string.bluetooth_perm_denied, Toast.LENGTH_LONG,
-                ).show()
-            }
-            // No invalidateOptionsMenu() here. The wish is written above, and that arrives at
-            // onSharedPreferenceChanged below and redraws the item. Deleting the call alone kept
-            // the whole suite green -- it was a second guard over the observable the first holds.
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -167,7 +143,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         databaseProvider = activity as? DatabaseProvider
             ?: throw ClassCastException("$activity must implement DatabaseProvider")
         settings = Settings.getInstance(activity)
-        bluetoothToggle = BluetoothScoToggle(activity.applicationContext, settings)
         PreferenceManager.getDefaultSharedPreferences(activity)
             .registerOnSharedPreferenceChangeListener(this)
     }
@@ -209,10 +184,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     override fun onPrepareOptionsMenu(menu: Menu) {
         super.onPrepareOptionsMenu(menu)
 
-        // The stored wish, not the live SCO state: the link is torn down on every dropped
-        // connection and the item has to keep showing what the user asked for -- including
-        // while the connection is down, which is when they are most likely to look at it.
-        menu.findItem(R.id.menu_bluetooth).isChecked = bluetoothToggle.isEnabled
+        fillAudioDevices(menu.findItem(R.id.menu_audio_device))
 
         // Echo cancellation, live: writing the preference reaches
         // MumlaService.onSharedPreferenceChanged -> configureExtras, which reloads the
@@ -303,10 +275,42 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         })
     }
 
+    /**
+     * The audio chooser: the devices the session offers right now, with the one voice goes to
+     * ticked, or nothing at all without a connection - the choice belongs to a session. Called
+     * when the menu is prepared and again when the chooser is opened, because a headset switched
+     * on in between has to be there when the user looks.
+     */
+    private fun fillAudioDevices(chooser: MenuItem) {
+        val sub = chooser.subMenu ?: return
+        sub.removeGroup(R.id.menu_audio_device_group)
+        val service = service
+        val session = if (service != null && service.isConnected) service.HumlaSession() else null
+        val devices = session?.audioDevices.orEmpty()
+        chooser.isVisible = devices.isNotEmpty()
+        val active = session?.activeAudioDevice?.id
+        for (device in devices) {
+            sub.add(R.id.menu_audio_device_group, device.id, Menu.NONE,
+                AudioDeviceLabels.label(resources, device))
+                .setChecked(device.id == active)
+        }
+        sub.setGroupCheckable(R.id.menu_audio_device_group, true, true)
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        // Ahead of the connection guard: the headset is a preference, not a session operation,
-        // and the moment it is worth switching on is the one where auto-reconnect is still
-        // working -- where every branch below this would silently do nothing.
+        if (item.itemId == R.id.menu_audio_device) {
+            fillAudioDevices(item)
+            // Not consumed, so the platform goes on to open the submenu just refilled.
+            return false
+        }
+        if (item.groupId == R.id.menu_audio_device_group) {
+            val service = service
+            if (service != null && service.isConnected) {
+                service.HumlaSession().selectAudioDevice(item.itemId)
+                requireActivity().invalidateOptionsMenu()
+            }
+            return true
+        }
         val noise = when (item.itemId) {
             R.id.menu_noise_none -> "none"
             R.id.menu_noise_speex -> "speex"
@@ -329,16 +333,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
             item.isChecked = true
             return true
         }
-        if (item.itemId == R.id.menu_bluetooth) {
-            when (bluetoothToggle.toggle()) {
-                BluetoothScoToggle.Result.Enabled -> item.isChecked = true
-                BluetoothScoToggle.Result.Disabled -> item.isChecked = false
-                BluetoothScoToggle.Result.PermissionNeeded ->
-                    bluetoothPermissionRequester.launch(Manifest.permission.BLUETOOTH_CONNECT)
-            }
-            return true
-        }
-
         val service = service
         if (service == null || !service.isConnected) {
             return super.onOptionsItemSelected(item)
@@ -432,8 +426,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         when (key) {
             Settings.PREF_SHOW_USER_COUNT ->
                 channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount())
-            // The settings screen writes the same preference from another activity.
-            Settings.PREF_BLUETOOTH_SCO -> activity?.invalidateOptionsMenu()
         }
     }
 

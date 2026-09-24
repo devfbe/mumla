@@ -9,6 +9,7 @@ following third-party components. Every entry is GPLv3-compatible.
 | kotlinx-coroutines | 1.11.0 | Apache-2.0 | https://github.com/Kotlin/kotlinx.coroutines |
 | AndroidX (appcompat, activity, core, fragment, preference, recyclerview, cardview, documentfile, exifinterface) | see `gradle/libs.versions.toml` | Apache-2.0 | https://developer.android.com/jetpack |
 | Material Components for Android | 1.14.0 | Apache-2.0 | https://github.com/material-components/material-components-android |
+| Material Design icons (`headset_mic`, as the vector `app/src/main/res/drawable/ic_action_audio_device.xml`) | path data as published | Apache-2.0 | https://github.com/google/material-design-icons |
 | jsoup | 1.23.2 | MIT | https://jsoup.org |
 | MiniDNS | 1.0.5 | LGPL-2.1-or-later / Apache-2.0 / WTFPL (tri-licensed) | https://github.com/MiniDNS/minidns |
 | NetCipher | 2.1.0 | Apache-2.0 | https://github.com/guardianproject/NetCipher — upstream has had no release since 2.1.0 (2021) and no commits since 2020-12; kept because no maintained replacement provides `OrbotHelper`. Re-evaluate when Tor integration is next touched. |

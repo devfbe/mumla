@@ -84,6 +84,13 @@
     <string name="search">Suche</string>
     <string name="searchHint">Suche nach Kanälen und Benutzern</string>
     <string name="bluetooth">Bluetooth</string>
+    <string name="audio_device">Audiogerät</string>
+    <string name="audio_device_earpiece">Hörmuschel</string>
+    <string name="audio_device_speaker">Lautsprecher</string>
+    <string name="audio_device_wired">Kabelgebundenes Headset</string>
+    <string name="audio_device_usb">USB-Headset</string>
+    <string name="audio_device_bluetooth">Bluetooth-Headset</string>
+    <string name="audio_device_other">Audiogerät</string>
     <string name="quickConnect">Schnell verbinden</string>
     <string name="connect">Verbinden</string>
     <string name="connectToServer">Verbinde zum Server</string>

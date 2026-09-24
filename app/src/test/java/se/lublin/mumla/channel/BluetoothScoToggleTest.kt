@@ -14,7 +14,7 @@ import se.lublin.mumla.Settings
 
 /**
  * The decision behind "Bluetooth headset": what the user *wants* (a persisted preference) as
- * opposed to what is *active* (an SCO link, which stream A's ScoRouter owns). Only the first
+ * opposed to what is *active* (an SCO link, which stream A's AudioRouter owns). Only the first
  * survives a disconnect -- `HumlaService.onConnectionDisconnected` stops SCO on every drop,
  * including the ones auto-reconnect recovers from, and nothing ever started it again. That is
  * the user's original complaint, and this class holds the half of the fix that is a setting.
