@@ -14,17 +14,29 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+package se.lublin.humla.net
 
-package se.lublin.humla.net;
+/** Mumble ACL permission bits, as `PermissionQuery` reports them. */
+object Permissions {
+    const val NONE = 0x0
+    const val WRITE = 0x1
+    const val TRAVERSE = 0x2
+    const val ENTER = 0x4
+    const val SPEAK = 0x8
+    const val MUTE_DEAFEN = 0x10
+    const val MOVE = 0x20
+    const val MAKE_CHANNEL = 0x40
+    const val LINK_CHANNEL = 0x80
+    const val WHISPER = 0x100
+    const val TEXT_MESSAGE = 0x200
+    const val MAKE_TEMP_CHANNEL = 0x400
 
-/**
- * UDP packet types. The ordinals are the wire IDs, so the CELT and Speex entries stay although
- * only Opus is decoded.
- */
-public enum HumlaUDPMessageType {
-    UDPVoiceCELTAlpha,
-    UDPPing,
-    UDPVoiceSpeex,
-    UDPVoiceCELTBeta,
-    UDPVoiceOpus
+    // Root channel only
+    const val KICK = 0x10000
+    const val BAN = 0x20000
+    const val REGISTER = 0x40000
+    const val SELF_REGISTER = 0x80000
+
+    const val CACHED = 0x8000000
+    const val ALL = 0xf07ff
 }

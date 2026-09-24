@@ -485,13 +485,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         logWarning(getString(warning.messageRes))
     }
 
-    override fun logInfo(message: String?) {
-        emit(HumlaEvent.LogMessage(HumlaEvent.Level.INFO, message.orEmpty()))
+    override fun logInfo(message: String) {
+        emit(HumlaEvent.LogMessage(HumlaEvent.Level.INFO, message))
     }
 
-    override fun logWarning(message: String?) {
+    override fun logWarning(message: String) {
         mLastWarning = message
-        emit(HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, message.orEmpty()))
+        emit(HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, message))
     }
 
     /**
@@ -503,8 +503,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         logWarning(message)
     }
 
-    override fun logError(message: String?) {
-        emit(HumlaEvent.LogMessage(HumlaEvent.Level.ERROR, message.orEmpty()))
+    override fun logError(message: String) {
+        emit(HumlaEvent.LogMessage(HumlaEvent.Level.ERROR, message))
     }
 
     /** Publishes [event]; info notices only once synchronized. Any thread. */

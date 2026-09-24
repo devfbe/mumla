@@ -14,38 +14,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-package se.lublin.humla.model;
-
-import android.os.Parcel;
-import android.os.Parcelable;
+package se.lublin.humla.model
 
 /** User talk state. */
-public enum TalkState implements Parcelable {
+enum class TalkState {
     TALKING,
     SHOUTING,
     PASSIVE,
-    WHISPERING;
-
-    public static Creator<TalkState> CREATOR = new Creator<TalkState>() {
-        @Override
-        public TalkState createFromParcel(Parcel source) {
-            return TalkState.values()[source.readInt()];
-        }
-
-        @Override
-        public TalkState[] newArray(int size) {
-            return new TalkState[size];
-        }
-    };
-
-    @Override
-    public int describeContents() {
-        return 0;
-    }
-
-    @Override
-    public void writeToParcel(Parcel dest, int flags) {
-        dest.writeInt(ordinal());
-    }
+    WHISPERING,
 }

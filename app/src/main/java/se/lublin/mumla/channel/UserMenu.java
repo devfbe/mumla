@@ -78,35 +78,35 @@ public class UserMenu implements PermissionsPopupMenu.IOnMenuPrepareListener, Po
         int channelPerms = channel.getId() != 0 ? channel.getPermissions() : perms;
 
         menu.findItem(R.id.context_kick).setVisible(
-                !self && (perms & (Permissions.Kick | Permissions.Ban | Permissions.Write)) > 0);
+                !self && (perms & (Permissions.KICK | Permissions.BAN | Permissions.WRITE)) > 0);
         menu.findItem(R.id.context_ban).setVisible(
-                !self && (perms & (Permissions.Ban | Permissions.Write)) > 0);
+                !self && (perms & (Permissions.BAN | Permissions.WRITE)) > 0);
         menu.findItem(R.id.context_mute).setVisible(
-                ((channelPerms & (Permissions.Write | Permissions.MuteDeafen)) > 0 &&
+                ((channelPerms & (Permissions.WRITE | Permissions.MUTE_DEAFEN)) > 0 &&
                         (!self || mUser.isMuted() || mUser.isSuppressed())));
         menu.findItem(R.id.context_deafen).setVisible(
-                ((channelPerms & (Permissions.Write | Permissions.MuteDeafen)) > 0 &&
+                ((channelPerms & (Permissions.WRITE | Permissions.MUTE_DEAFEN)) > 0 &&
                         (!self || mUser.isDeafened())));
         menu.findItem(R.id.context_priority).setVisible(
-                ((channelPerms & (Permissions.Write | Permissions.MuteDeafen)) > 0));
+                ((channelPerms & (Permissions.WRITE | Permissions.MUTE_DEAFEN)) > 0));
         menu.findItem(R.id.context_move).setVisible(
-                !self && (perms & Permissions.Move) > 0);
+                !self && (perms & Permissions.MOVE) > 0);
         menu.findItem(R.id.context_change_comment).setVisible(self);
         menu.findItem(R.id.context_reset_comment).setVisible(
                 !self && ((mUser.getComment() != null && !mUser.getComment().isEmpty()) ||
                         (mUser.getCommentHash() != null)) &&
-                        (perms & (Permissions.Move | Permissions.Write)) > 0);
+                        (perms & (Permissions.MOVE | Permissions.WRITE)) > 0);
         menu.findItem(R.id.context_view_comment).setVisible(
                 (mUser.getComment() != null && !mUser.getComment().isEmpty()) ||
                         (mUser.getCommentHash() != null));
         menu.findItem(R.id.context_register).setVisible(mUser.getUserId() < 0 &&
                 (mUser.getHash() != null && !mUser.getHash().isEmpty()) &&
-                (perms & ((self ? Permissions.SelfRegister : Permissions.Register) | Permissions.Write)) > 0);
+                (perms & ((self ? Permissions.SELF_REGISTER : Permissions.REGISTER) | Permissions.WRITE)) > 0);
         menu.findItem(R.id.context_local_mute).setVisible(!self);
         menu.findItem(R.id.context_ignore_messages).setVisible(!self);
 
         // TODO info
-//            informationItem.enabled = (((perms & (Permissions.Write | Permissions.Register))) > 0 || (channelPermissions & (Permissions.Write | Permissions.Enter)) > 0 || (mUser.getSessionId() == mService.getSessionId()));
+//            informationItem.enabled = (((perms & (Permissions.WRITE | Permissions.REGISTER))) > 0 || (channelPermissions & (Permissions.WRITE | Permissions.Enter)) > 0 || (mUser.getSessionId() == mService.getSessionId()));
 
         // Highlight toggles
         menu.findItem(R.id.context_mute).setChecked(mUser.isMuted() || mUser.isSuppressed());

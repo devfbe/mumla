@@ -14,16 +14,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+package se.lublin.humla.util
 
-package se.lublin.humla.audio;
-
-@SuppressWarnings("serial")
- public class InvalidSampleRateException extends Exception {
-    public InvalidSampleRateException(Exception e) {
-        super(e);
-    }
-
-    public InvalidSampleRateException(String message) {
-        super(message);
-    }
+/** Reports user-readable information. */
+interface HumlaLogger {
+    fun logInfo(message: String)
+    fun logWarning(message: String)
+    fun logError(message: String)
 }

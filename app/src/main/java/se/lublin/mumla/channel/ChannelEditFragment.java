@@ -69,8 +69,8 @@ public class ChannelEditFragment extends DialogFragment {
             IHumlaSession session = mServiceProvider.getService().HumlaSession();
             IChannel parentChannel = session.getChannel(getParent());
             int combinedPermissions = session.getPermissions() | parentChannel.getPermissions();
-            boolean canMakeChannel = (combinedPermissions & Permissions.MakeChannel) > 0;
-            boolean canMakeTempChannel = (combinedPermissions & Permissions.MakeTempChannel) > 0;
+            boolean canMakeChannel = (combinedPermissions & Permissions.MAKE_CHANNEL) > 0;
+            boolean canMakeTempChannel = (combinedPermissions & Permissions.MAKE_TEMP_CHANNEL) > 0;
             boolean onlyTemp = canMakeTempChannel && !canMakeChannel;
             mTemporaryBox.setChecked(onlyTemp);
             mTemporaryBox.setEnabled(!onlyTemp);

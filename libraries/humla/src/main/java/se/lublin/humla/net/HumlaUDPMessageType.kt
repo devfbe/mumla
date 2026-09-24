@@ -14,14 +14,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-package se.lublin.humla.util;
+package se.lublin.humla.net
 
 /**
- * An interface for reporting user-readable information.
+ * UDP packet types. The ordinals are the wire IDs, so the CELT and Speex entries stay although
+ * only Opus is decoded.
  */
-public interface HumlaLogger {
-    void logInfo(String message);
-    void logWarning(String message);
-    void logError(String message);
+enum class HumlaUDPMessageType {
+    UDPVoiceCELTAlpha,
+    UDPPing,
+    UDPVoiceSpeex,
+    UDPVoiceCELTBeta,
+    UDPVoiceOpus,
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Andrew Comminos
+ * Copyright (C) 2016 Andrew Comminos <andrew@comminos.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,20 +14,22 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+package se.lublin.humla.util
 
-package se.lublin.humla.exception;
+enum class VoiceTargetMode {
+    NORMAL,
+    WHISPER,
+    SERVER_LOOPBACK;
 
-@SuppressWarnings("serial")
-public class AudioInitializationException extends AudioException {
-    public AudioInitializationException(String message) {
-        super(message);
-    }
+    companion object {
+        private const val LOOPBACK_ID: Byte = 31
 
-    public AudioInitializationException(Throwable throwable) {
-        super(throwable);
-    }
-
-    public AudioInitializationException(String message, Throwable throwable) {
-        super(message, throwable);
+        /** @throws IllegalArgumentException for an id outside 0..31. */
+        fun fromId(targetId: Byte): VoiceTargetMode = when (targetId) {
+            0.toByte() -> NORMAL
+            in 1 until LOOPBACK_ID -> WHISPER
+            LOOPBACK_ID -> SERVER_LOOPBACK
+            else -> throw IllegalArgumentException("Voice target id out of range: $targetId")
+        }
     }
 }
