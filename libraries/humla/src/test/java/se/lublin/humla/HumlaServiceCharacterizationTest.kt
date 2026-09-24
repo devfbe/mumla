@@ -40,6 +40,7 @@ import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ConnectionWarning
 import se.lublin.humla.session.AudioConfig
+import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.HumlaObserver
@@ -387,7 +388,9 @@ class HumlaServiceCharacterizationTest {
     /** The error object reaches the observer unchanged, and the state is already set when it does. */
     @Test
     fun theDisconnectReportCarriesTheSameErrorAndAStateThatIsAlreadySet() {
-        val service = service()
+        val h = HumlaServiceHarness()
+        h.connectAndSynchronize()
+        val service = h.service
         val error = HumlaException("gone", HumlaException.HumlaDisconnectReason.REJECT)
         val seen = mutableListOf<Pair<HumlaException?, HumlaService.ConnectionState>>()
         service.registerObserver(object : HumlaObserver() {
@@ -401,6 +404,7 @@ class HumlaServiceCharacterizationTest {
         assertThat(seen).hasSize(1)
         assertThat(seen[0].first).isSameInstanceAs(error)
         assertThat(seen[0].second).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
+        h.destroy()
     }
 
     /** A disconnect drops the voice target and empties the whisper slots. */

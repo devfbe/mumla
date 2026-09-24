@@ -136,8 +136,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     @Volatile
     @VisibleForTesting
     internal var mConnection: HumlaConnection? = null
-    @VisibleForTesting
-    internal var mConnectionState: ConnectionState = ConnectionState.DISCONNECTED
 
     @Volatile
     @VisibleForTesting
@@ -285,7 +283,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mHandler = Handler(mainLooper)
         mCallbacks = HumlaCallbacks()
         mStateMachine = SessionStateMachine(reconnectPolicy)
-        mConnectionState = ConnectionState.DISCONNECTED
         // One instance per service life, so a platform refusal is reported once rather than on
         // every route decision.
         val devices = communicationDevices ?: AndroidCommunicationDevices(
@@ -336,7 +333,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /** Builds and starts one connection attempt; called from [connect] and [mReconnectRunnable]. */
     private fun startSession() {
-        mConnectionState = ConnectionState.CONNECTING
         // Whisper slots are cleared when a session ends. The voice target can be set while
         // disconnected, so it is reset here.
         mVoiceTargetId = 0
@@ -347,7 +343,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         if (server == null) {
             Log.e(TAG, "connect() without a target server")
             mStateMachine.disconnectRequested()
-            mConnectionState = ConnectionState.DISCONNECTED
             mCallbacks.onDisconnected(
                 HumlaException(
                     getString(R.string.no_target_server),
@@ -380,7 +375,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             // disconnected this single-use connection and connect() refuses. Report a failed
             // attempt instead of throwing out of onStartCommand or the reconnect runnable.
             Log.w(TAG, "Connection was cancelled before it could start", e)
-            mConnectionState = ConnectionState.DISCONNECTED
+            mStateMachine.disconnectRequested()
             mCallbacks.onDisconnected(
                 HumlaException(e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
             )
@@ -394,10 +389,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     override fun disconnect() {
         val waiting = mStateMachine.current is SessionState.ConnectionLost
         mStateMachine.disconnectRequested()
-        if (waiting) {
-            mConnectionState = ConnectionState.DISCONNECTED
-            releaseSessionResources()
-        }
+        if (waiting) releaseSessionResources()
         mConnection?.disconnect()
     }
 
@@ -442,7 +434,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
 
         mStateMachine.synchronized()
-        mConnectionState = ConnectionState.CONNECTED
 
         Log.v(TAG, "Connected")
         // The lock is reference counted and taken once per session, but released only when the
@@ -523,18 +514,11 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         if (next is SessionState.ConnectionLost) {
             // The wake lock, the Bluetooth wish, the mute/deafen state and the app's foreground
             // notification survive this transition.
-            mConnectionState = ConnectionState.CONNECTION_LOST
             scheduleReconnect(next.reconnectInMillis)
         } else {
-            // Disconnected. The state's error counts as well as `e`: a late, error-free report
-            // after cancelReconnect must not turn CONNECTION_LOST into DISCONNECTED or claim to
-            // have given up.
+            // A late, error-free report after cancelReconnect keeps the cancelled session's error
+            // and must not claim to have given up.
             val ended = next as SessionState.Disconnected
-            mConnectionState = if (e != null || ended.error != null) {
-                ConnectionState.CONNECTION_LOST
-            } else {
-                ConnectionState.DISCONNECTED
-            }
             if (autoReconnect && ended.error === e) logWarning(getString(R.string.reconnect_gave_up))
             releaseSessionResources()
         }
@@ -816,13 +800,19 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     @Throws(NotSynchronizedException::class)
     private fun getModelHandler(): ModelHandler? {
         if (!isSynchronized()) throw NotSynchronizedException()
-        if (mModelHandler == null && mConnectionState == ConnectionState.CONNECTED) {
+        if (mModelHandler == null && isConnected()) {
             throw RuntimeException("Model handler should always be instantiated while connected!")
         }
         return mModelHandler
     }
 
-    override fun getConnectionState(): ConnectionState = mConnectionState
+    override fun getConnectionState(): ConnectionState = when (val state = mStateMachine.current) {
+        SessionState.Connecting, is SessionState.Reconnecting -> ConnectionState.CONNECTING
+        SessionState.Connected -> ConnectionState.CONNECTED
+        is SessionState.ConnectionLost -> ConnectionState.CONNECTION_LOST
+        is SessionState.Disconnected ->
+            if (state.error != null) ConnectionState.CONNECTION_LOST else ConnectionState.DISCONNECTED
+    }
 
     /** The session lifecycle as a flow. */
     override fun getSessionState(): StateFlow<SessionState> = mStateMachine.state
@@ -849,7 +839,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      */
     override fun cancelReconnect() {
         if (mStateMachine.cancelReconnect()) {
-            mConnectionState = ConnectionState.CONNECTION_LOST
             releaseSessionResources()
             mConnection?.disconnect()
         }
@@ -862,9 +851,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     @Throws(HumlaDisconnectedException::class)
     override fun HumlaSession(): IHumlaSession {
-        if (mConnectionState != ConnectionState.CONNECTED) {
-            throw HumlaDisconnectedException()
-        }
+        if (!isConnected()) throw HumlaDisconnectedException()
         return this
     }
 
@@ -1148,7 +1135,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         mCallbacks.unregisterObserver(observer)
     }
 
-    override fun isConnected(): Boolean = mConnectionState == ConnectionState.CONNECTED
+    override fun isConnected(): Boolean = mStateMachine.current == SessionState.Connected
 
     override fun linkChannels(channelA: IChannel, channelB: IChannel) {
         val csb = Mumble.ChannelState.newBuilder()
@@ -1222,7 +1209,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         throw IllegalStateException(e)
     }
 
-    /** The current connection state of the service. */
+    /** A coarse view of [getSessionState] for clients that only tell these four apart. */
     enum class ConnectionState {
         /**
          * The default state of Humla, before connection to a server and after graceful/expected

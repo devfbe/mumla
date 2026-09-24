@@ -37,7 +37,6 @@ import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.testCallbacks
 import se.lublin.humla.testutil.testConnection
-import se.lublin.humla.testutil.testConnectionState
 import se.lublin.humla.testutil.testModelHandler
 import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
@@ -115,7 +114,6 @@ class MumlaServiceCharacterizationTest {
         every { model.getUser(SELF) } returns self
         service.testConnection = connection
         service.testModelHandler = model
-        service.testConnectionState = HumlaService.ConnectionState.CONNECTED
     }
 
     private fun user(session: Int, muted: Boolean = false, deafened: Boolean = false): User {

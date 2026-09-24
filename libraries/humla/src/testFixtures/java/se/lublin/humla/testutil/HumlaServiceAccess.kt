@@ -48,9 +48,3 @@ var HumlaService.testModelHandler: ModelHandler?
     set(value) {
         mModelHandler = value
     }
-
-var HumlaService.testConnectionState: HumlaService.ConnectionState
-    get() = mConnectionState
-    set(value) {
-        mConnectionState = value
-    }

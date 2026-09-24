@@ -216,6 +216,8 @@ class HumlaServiceSessionTest {
             h.connectAndSynchronize()
 
             h.service.disconnect()
+            // Derived from the session state, so already over before the connection reports back.
+            assertThat(h.service.isConnected()).isFalse()
             h.mainLooper.idle()
 
             assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
