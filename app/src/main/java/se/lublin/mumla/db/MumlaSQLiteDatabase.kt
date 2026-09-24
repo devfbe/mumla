@@ -26,14 +26,20 @@ import android.util.Log
 import se.lublin.humla.model.Server
 
 /**
+ * Server passwords, access tokens and certificate blobs are stored encrypted, see [SecretCodec].
+ *
  * @param cursorFactory test seam: builds every cursor a query returns, so a test can check that
  * each one was closed.
+ * @param cipher test seam: the Android Keystore is not available under Robolectric.
  */
 class MumlaSQLiteDatabase @JvmOverloads constructor(
     context: Context,
     name: String = DATABASE_NAME,
     cursorFactory: SQLiteDatabase.CursorFactory? = null,
+    cipher: SecretCipher = KeystoreSecretCipher,
 ) : SQLiteOpenHelper(context, name, cursorFactory, CURRENT_DB_VERSION), MumlaDatabase {
+
+    private val secrets = SecretCodec(cipher)
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(TABLE_SERVER_CREATE_SQL)
@@ -53,6 +59,37 @@ class MumlaSQLiteDatabase @JvmOverloads constructor(
         if (oldVersion <= PRE_LOCAL_MUTE_DB_VERSION) db.execSQL(TABLE_LOCAL_MUTE_CREATE_SQL)
         if (oldVersion <= PRE_LOCAL_IGNORE_DB_VERSION) db.execSQL(TABLE_LOCAL_IGNORE_CREATE_SQL)
         if (oldVersion <= PRE_CERTIFICATES_DB_VERSION) db.execSQL(TABLE_CERTIFICATES_CREATE_SQL)
+        if (oldVersion <= PRE_ENCRYPTED_SECRETS_DB_VERSION) sealPlainSecrets(db)
+    }
+
+    /** Encrypts every secret still stored in plain text. Values that cannot be sealed stay as they are. */
+    private fun sealPlainSecrets(db: SQLiteDatabase) {
+        db.query(TABLE_SERVER, arrayOf(SERVER_ID, SERVER_PASSWORD), "$SERVER_PASSWORD IS NOT NULL", null, null, null, null)
+            .use { c ->
+                while (c.moveToNext()) {
+                    val plain = c.getString(1)
+                    if (SecretCodec.isSealed(plain)) continue
+                    val values = ContentValues().apply { put(SERVER_PASSWORD, secrets.sealString(plain)) }
+                    db.update(TABLE_SERVER, values, "$SERVER_ID=?", arrayOf(c.getLong(0).toString()))
+                }
+            }
+        db.query(TABLE_TOKENS, arrayOf(TOKENS_ID, TOKENS_VALUE), null, null, null, null, null).use { c ->
+            while (c.moveToNext()) {
+                val plain = c.getString(1)
+                if (SecretCodec.isSealed(plain)) continue
+                val values = ContentValues().apply { put(TOKENS_VALUE, secrets.sealString(plain)) }
+                db.update(TABLE_TOKENS, values, "$TOKENS_ID=?", arrayOf(c.getLong(0).toString()))
+            }
+        }
+        db.query(TABLE_CERTIFICATES, arrayOf(COLUMN_CERTIFICATES_ID, COLUMN_CERTIFICATES_DATA), null, null, null, null, null)
+            .use { c ->
+                while (c.moveToNext()) {
+                    val plain = c.getBlob(1)
+                    if (SecretCodec.isSealed(plain)) continue
+                    val values = ContentValues().apply { put(COLUMN_CERTIFICATES_DATA, secrets.sealBlob(plain)) }
+                    db.update(TABLE_CERTIFICATES, values, "$COLUMN_CERTIFICATES_ID=?", arrayOf(c.getLong(0).toString()))
+                }
+            }
     }
 
     override fun open() {
@@ -72,7 +109,7 @@ class MumlaSQLiteDatabase @JvmOverloads constructor(
                     c.getString(c.getColumnIndexOrThrow(SERVER_HOST)),
                     c.getInt(c.getColumnIndexOrThrow(SERVER_PORT)),
                     c.getString(c.getColumnIndexOrThrow(SERVER_USERNAME)),
-                    c.getString(c.getColumnIndexOrThrow(SERVER_PASSWORD)),
+                    secrets.openString(c.getString(c.getColumnIndexOrThrow(SERVER_PASSWORD))),
                 )
             }
         }
@@ -90,7 +127,7 @@ class MumlaSQLiteDatabase @JvmOverloads constructor(
         put(SERVER_HOST, server.host)
         put(SERVER_PORT, server.port)
         put(SERVER_USERNAME, server.username)
-        put(SERVER_PASSWORD, server.password)
+        put(SERVER_PASSWORD, secrets.sealString(server.password))
     }
 
     override fun removeServer(server: Server) {
@@ -131,20 +168,28 @@ class MumlaSQLiteDatabase @JvmOverloads constructor(
     }
 
     override fun getAccessTokens(serverId: Long): List<String> =
+        storedTokens(serverId).mapNotNull { it.second }
+
+    /** (row id, token) for [serverId]; the token is null where it cannot be decrypted. */
+    private fun storedTokens(serverId: Long): List<Pair<Long, String?>> =
         readableDatabase.query(
-            TABLE_TOKENS, arrayOf(TOKENS_VALUE), "$TOKENS_SERVER=?", arrayOf(serverId.toString()), null, null, null,
-        ).use { c -> c.readAll { c.getString(0) } }
+            TABLE_TOKENS, arrayOf(TOKENS_ID, TOKENS_VALUE), "$TOKENS_SERVER=?", arrayOf(serverId.toString()),
+            null, null, null,
+        ).use { c -> c.readAll { c.getLong(0) to secrets.openString(c.getString(1)) } }
 
     override fun addAccessToken(serverId: Long, token: String) {
         val values = ContentValues().apply {
             put(TOKENS_SERVER, serverId)
-            put(TOKENS_VALUE, token)
+            put(TOKENS_VALUE, secrets.sealString(token))
         }
         writableDatabase.insert(TABLE_TOKENS, null, values)
     }
 
     override fun removeAccessToken(serverId: Long, token: String) {
-        writableDatabase.delete(TABLE_TOKENS, "$TOKENS_SERVER=? AND $TOKENS_VALUE=?", arrayOf(serverId.toString(), token))
+        // Sealed values are randomized, so rows are matched after decryption rather than in SQL.
+        for ((id, value) in storedTokens(serverId)) {
+            if (value == token) writableDatabase.delete(TABLE_TOKENS, "$TOKENS_ID=?", arrayOf(id.toString()))
+        }
     }
 
     override fun getLocalMutedUsers(serverId: Long): List<Int> =
@@ -192,7 +237,7 @@ class MumlaSQLiteDatabase @JvmOverloads constructor(
     override fun addCertificate(name: String, certificate: ByteArray): DatabaseCertificate {
         val values = ContentValues().apply {
             put(COLUMN_CERTIFICATES_NAME, name)
-            put(COLUMN_CERTIFICATES_DATA, certificate)
+            put(COLUMN_CERTIFICATES_DATA, secrets.sealBlob(certificate))
         }
         val id = writableDatabase.insert(TABLE_CERTIFICATES, null, values)
         return DatabaseCertificate(id, name)
@@ -208,7 +253,7 @@ class MumlaSQLiteDatabase @JvmOverloads constructor(
         readableDatabase.query(
             TABLE_CERTIFICATES, arrayOf(COLUMN_CERTIFICATES_DATA),
             "$COLUMN_CERTIFICATES_ID=?", arrayOf(id.toString()), null, null, null,
-        ).use { if (it.moveToFirst()) it.getBlob(0) else null }
+        ).use { if (it.moveToFirst()) secrets.openBlob(it.getBlob(0)) else null }
 
     override fun removeCertificate(id: Long) {
         writableDatabase.delete(TABLE_CERTIFICATES, "$COLUMN_CERTIFICATES_ID=?", arrayOf(id.toString()))
@@ -322,6 +367,7 @@ class MumlaSQLiteDatabase @JvmOverloads constructor(
         const val PRE_LOCAL_MUTE_DB_VERSION = 5
         const val PRE_LOCAL_IGNORE_DB_VERSION = 6
         const val PRE_CERTIFICATES_DB_VERSION = 7
-        const val CURRENT_DB_VERSION = 8
+        const val PRE_ENCRYPTED_SECRETS_DB_VERSION = 8
+        const val CURRENT_DB_VERSION = 9
     }
 }

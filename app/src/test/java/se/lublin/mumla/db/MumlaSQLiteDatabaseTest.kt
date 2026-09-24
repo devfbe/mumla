@@ -167,14 +167,17 @@ class MumlaSQLiteDatabaseTest {
     @Test
     fun anUpgradeCreatesTheTablesNewerThanTheOldVersion() {
         val w = db.writableDatabase
-        val added = listOf("favourites", "tokens", "comments", "local_mute", "local_ignore", "certificates")
+        val sinceV5 = listOf("local_mute", "local_ignore", "certificates")
+        for (t in sinceV5) w.execSQL("DROP TABLE $t")
+
+        db.onUpgrade(w, 5, MumlaSQLiteDatabase.CURRENT_DB_VERSION)
+        assertThat(tables()).containsAtLeastElementsIn(sinceV5)
+
+        val added = listOf("favourites", "tokens", "comments") + sinceV5
         for (t in added) w.execSQL("DROP TABLE $t")
-
-        db.onUpgrade(w, 5, 8)
-        assertThat(tables()).containsAtLeast("local_mute", "local_ignore", "certificates")
-        assertThat(tables()).containsNoneOf("favourites", "tokens", "comments")
-
-        db.onUpgrade(w, 2, 8)
+        // A version 2 database has a server table and nothing else; the upgrade then also seals
+        // its passwords, so every table it touches has to exist by then.
+        db.onUpgrade(w, 2, MumlaSQLiteDatabase.CURRENT_DB_VERSION)
         assertThat(tables()).containsAtLeastElementsIn(added)
     }
 
