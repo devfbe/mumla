@@ -27,8 +27,11 @@ import org.minidns.hla.SrvResolverResult;
 import org.minidns.record.SRV;
 import org.minidns.util.SrvUtil;
 
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+
 import java.io.IOException;
-import java.util.List;
+import java.net.InetSocketAddress;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,6 +40,41 @@ import se.lublin.humla.Constants;
 
 public class Server implements Parcelable {
     private static final String TAG = Server.class.getName();
+
+    /** Resolves {@code _mumble._tcp.<host>} to its first target, or null when there is none. */
+    public interface SrvLookup {
+        @Nullable
+        InetSocketAddress lookup(String host);
+    }
+
+    @VisibleForTesting
+    public static volatile SrvLookup srvLookup = Server::lookupSrv;
+
+    @Nullable
+    private static InetSocketAddress lookupSrv(String host) {
+        final String lookup = "_mumble._tcp." + host;
+        try {
+            SrvResolverResult res = ResolverApi.INSTANCE.resolveSrv(lookup);
+            if (!res.wasSuccessful()) {
+                Log.d(TAG, "resolveSrv " + lookup + ": " + res.getResponseCode());
+                return null;
+            }
+            Set<SRV> answers = res.getAnswersOrEmptySet();
+            if (answers.isEmpty()) {
+                Log.d(TAG, "resolveSrv " + lookup + ": empty answer");
+                return null;
+            }
+            // TODO SRV just picking the first record.
+            SRV srv = SrvUtil.sortSrvRecords(answers).get(0);
+            Log.d(TAG, "resolved " + lookup + " SRV: " + srv);
+            return InetSocketAddress.createUnresolved(srv.target.toString(), srv.port);
+        } catch (IOException | IllegalArgumentException e) {
+            // java.net.IDN.toASCII down in resolveSrv() happens to throw IAE
+            // https://github.com/MiniDNS/minidns/issues/104
+            Log.d(TAG, "exception in srvResolve: " + e);
+            return null;
+        }
+    }
 
     // Volatile, not final: the setters below are called from the UI while srvResolve() writes
     // mResolvedHost and mResolvedPort from the connecting thread and HumlaService reads them back.
@@ -182,6 +220,15 @@ public class Server implements Parcelable {
         return mResolvedPort;
     }
 
+    /**
+     * Pins the endpoint to the entered host and port (or the default port) without an SRV
+     * lookup, so a proxy can resolve the host itself and no DNS query leaves the device.
+     */
+    public synchronized void resolveWithoutSrv() {
+        mResolvedHost = mHost;
+        mResolvedPort = mPort != 0 ? mPort : Constants.DEFAULT_PORT;
+    }
+
     private synchronized void srvResolve() {
         if (mResolvedHost != null) {
             return;
@@ -202,35 +249,13 @@ public class Server implements Parcelable {
         // set to our fallback values in case of no SRV or resolve fail
         final AtomicReference<String> srvHost = new AtomicReference<>(mHost);
         final AtomicInteger srvPort = new AtomicInteger(Constants.DEFAULT_PORT);
+        final String host = mHost;
         try {
-            Thread t = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        final String lookup = "_mumble._tcp." + srvHost.get();
-                        SrvResolverResult res = ResolverApi.INSTANCE.resolveSrv(lookup);
-                        if (!res.wasSuccessful()) {
-                            Log.d(TAG, "resolveSrv " + lookup + ": " + res.getResponseCode());
-                            return;
-                        }
-                        Set<SRV> answers = res.getAnswersOrEmptySet();
-                        if (answers.isEmpty()) {
-                            Log.d(TAG, "resolveSrv " + lookup + ": empty answer");
-                            return;
-                        }
-                        List<SRV> srvs = SrvUtil.sortSrvRecords(answers);
-                        for (SRV srv : srvs) {
-                            Log.d(TAG, "resolved " + lookup + " SRV: " + srv.toString());
-                            srvHost.set(srv.target.toString());
-                            srvPort.set(srv.port);
-                            // TODO SRV just picking the first record.
-                            return;
-                        }
-                    } catch (IOException | IllegalArgumentException e) {
-                        // java.net.IDN.toASCII down in resolveSrv() happens to throw IAE
-                        // https://github.com/MiniDNS/minidns/issues/104
-                        Log.d(TAG, "exception in srvResolve: " + e);
-                    }
+            Thread t = new Thread(() -> {
+                InetSocketAddress target = srvLookup.lookup(host);
+                if (target != null) {
+                    srvHost.set(target.getHostString());
+                    srvPort.set(target.getPort());
                 }
             });
             t.start();

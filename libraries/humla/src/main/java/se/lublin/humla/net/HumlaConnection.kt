@@ -444,7 +444,7 @@ class HumlaConnection @JvmOverloads constructor(
 
     /**
      * Starts connecting. Host resolution - including the blocking SRV lookup in
-     * [Server.getSrvHost] - key store loading and socket creation all happen on the protocol
+     * [Server.getSrvHost], skipped over Tor - key store loading and socket creation all happen on the protocol
      * thread; every outcome, certificate errors included, is reported through the listener rather
      * than thrown at the caller.
      */
@@ -472,6 +472,8 @@ class HumlaConnection @JvmOverloads constructor(
                 handleFatalException(e)
                 return@post
             }
+            // Over Tor the proxy resolves the host; an SRV query would leak it to the local resolver.
+            if (useTor) server.resolveWithoutSrv()
             val resolvedHost = server.srvHost
             val resolvedPort = server.srvPort
             // Before the transport exists, and that ordering is load-bearing: the transport is
