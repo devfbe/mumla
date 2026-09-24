@@ -83,13 +83,29 @@ internal object UserNotices {
         }
     }
 
-    /** Our own recording change, or that of a user in our channel; null for anyone else. */
+    /**
+     * Our own recording change, or that of a user in our channel or one linked to it, directly or
+     * through other links, as desktop Mumble reports them; null for anyone else.
+     */
     fun recording(user: User, self: User): HumlaEvent.Notice? {
-        if (user.session == self.session) return HumlaEvent.SelfRecordingChanged(user.isRecording)
         val selfChannel = self.channel
-        val nearby = selfChannel != null &&
-            (selfChannel.links.contains(selfChannel) || selfChannel == user.channel)
-        return if (nearby) HumlaEvent.UserRecordingChanged(user.name, user.isRecording) else null
+        val userChannel = user.channel
+        return when {
+            user.session == self.session -> HumlaEvent.SelfRecordingChanged(user.isRecording)
+            selfChannel != null && userChannel != null && selfChannel in linkedTree(userChannel) ->
+                HumlaEvent.UserRecordingChanged(user.name, user.isRecording)
+            else -> null
+        }
+    }
+
+    /** [channel] and every channel linked to it, directly or through others. */
+    private fun linkedTree(channel: Channel): Set<Channel> {
+        val seen = mutableSetOf(channel)
+        val pending = ArrayDeque(listOf(channel))
+        while (pending.isNotEmpty()) {
+            for (link in pending.removeFirst().links) if (seen.add(link)) pending.add(link)
+        }
+        return seen
     }
 
     /** Somebody else moved from [old] to [channel]: a notice if either is our channel. */

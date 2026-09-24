@@ -140,6 +140,29 @@ class ModelHandlerEventsTest {
         ).inOrder()
     }
 
+    /** As desktop Mumble: a recorder in a channel linked to ours, directly or through others, counts. */
+    @Test
+    fun recordingIsReportedForUsersInChannelsLinkedToOurs() {
+        handler.onMessage(channel(3, parent = 0, name = "Linked"))
+        handler.onMessage(channel(4, parent = 0, name = "Chained"))
+        handler.onMessage(links(1, 3))
+        handler.onMessage(links(3, 1, 4))
+        handler.onMessage(links(4, 3))
+        handler.onMessage(userState(3) { setName("Near").setChannelId(3) })
+        handler.onMessage(userState(4) { setName("Nearish").setChannelId(4) })
+        handler.onMessage(userState(5) { setName("Far").setChannelId(2) })
+        events.clear()
+
+        handler.onMessage(userState(3) { setRecording(true) })
+        handler.onMessage(userState(4) { setRecording(true) })
+        handler.onMessage(userState(5) { setRecording(true) })
+
+        assertThat(notices()).containsExactly(
+            HumlaEvent.UserRecordingChanged("Near", true),
+            HumlaEvent.UserRecordingChanged("Nearish", true),
+        ).inOrder()
+    }
+
     @Test
     fun leavingOurChannelNamesTheDestinationAndWhoMovedThem() {
         handler.onMessage(userState(3) { setName("Mod").setChannelId(1) })
@@ -266,6 +289,9 @@ class ModelHandlerEventsTest {
             .setName(name)
             .also { if (parent != null) it.setParent(parent) }
             .build()
+
+    private fun links(id: Int, vararg linked: Int): Mumble.ChannelState =
+        Mumble.ChannelState.newBuilder().setChannelId(id).addAllLinks(linked.toList()).build()
 
     private fun userRemove(session: Int, actor: Int, reason: String, ban: Boolean = false): Mumble.UserRemove =
         Mumble.UserRemove.newBuilder().setSession(session).setActor(actor).setReason(reason).setBan(ban).build()
