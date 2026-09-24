@@ -7,10 +7,10 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.preference.CheckBoxPreference
 import androidx.preference.Preference
-import info.guardianproject.netcipher.proxy.OrbotHelper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.BluetoothScoToggle
+import se.lublin.mumla.util.Orbot
 
 class GeneralSettingsFragment : MumlaPreferenceFragment() {
 
@@ -37,7 +37,7 @@ class GeneralSettingsFragment : MumlaPreferenceFragment() {
 
         val useOrbotPreference: Preference =
             requireNotNull(preferenceScreen.findPreference(USE_TOR_KEY))
-        useOrbotPreference.isEnabled = OrbotHelper.isOrbotInstalled(requireContext())
+        useOrbotPreference.isEnabled = Orbot.isInstalled(requireContext())
 
         bluetoothToggle = BluetoothScoToggle(
             requireContext().applicationContext,

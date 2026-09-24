@@ -204,7 +204,6 @@ dependencies {
     implementation libs.material
     implementation libs.androidx.preference
     implementation libs.jsoup
-    implementation libs.netcipher
 
     googImplementation libs.billing
 

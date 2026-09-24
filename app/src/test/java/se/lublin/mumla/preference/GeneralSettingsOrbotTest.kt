@@ -16,16 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.mumla.R
 
-/**
- * "Connect via Tor" is only usable with Orbot installed, and the screen greys it out when it is
- * not. The line predates this task and survived its mutation when the screen was converted to
- * Kotlin: nothing in the suite ever wrote the one input it reads, so `isEnabled = true` was
- * indistinguishable from the real call. Both sides of that input are written here.
- *
- * `OrbotHelper.isOrbotInstalled` asks the package manager for `org.torproject.android` and reads
- * a `NameNotFoundException` as "no" (verified against the disassembled netcipher 2.1.0), so an
- * installed package is the whole of the "yes" side.
- */
+/** "Connect via Tor" is greyed out unless the Orbot package is installed. */
 @RunWith(RobolectricTestRunner::class)
 class GeneralSettingsOrbotTest {
 

@@ -74,7 +74,6 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 
-import info.guardianproject.netcipher.proxy.OrbotHelper;
 import se.lublin.humla.IHumlaService;
 import se.lublin.humla.model.Server;
 import se.lublin.humla.net.HumlaConnection;
@@ -103,6 +102,7 @@ import se.lublin.mumla.service.MumlaService;
 import se.lublin.mumla.util.HumlaServiceFragment;
 import se.lublin.mumla.util.HumlaServiceProvider;
 import se.lublin.mumla.util.MumlaTrustStore;
+import se.lublin.mumla.util.Orbot;
 import se.lublin.mumla.util.PortProbeKt;
 
 public class MumlaActivity extends AppCompatActivity implements ListView.OnItemClickListener,
@@ -609,7 +609,7 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
         }
 
         if (mSettings.isTorEnabled()) {
-            if (!OrbotHelper.isOrbotInstalled(this)) {
+            if (!Orbot.isInstalled(this)) {
                 mSettings.disableTor();
                 new MaterialAlertDialogBuilder(MumlaActivity.this)
                         .setMessage(R.string.orbot_not_installed)
