@@ -8,12 +8,17 @@ import androidx.appcompat.app.AppCompatDelegate.setApplicationLocales
 import androidx.core.content.edit
 import androidx.core.os.LocaleListCompat
 import androidx.preference.PreferenceManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.MainScope
 import se.lublin.mumla.Settings.Companion.PREF_LANGUAGE
 import se.lublin.mumla.Settings.Companion.PREF_THEME
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.MumlaSQLiteDatabase
 
 class MumlaApplication : Application(), SharedPreferences.OnSharedPreferenceChangeListener {
+
+    /** For work that must outlive the screen that started it. */
+    val scope: CoroutineScope = MainScope()
 
     @Volatile
     private var installedRepository: MumlaRepository? = null

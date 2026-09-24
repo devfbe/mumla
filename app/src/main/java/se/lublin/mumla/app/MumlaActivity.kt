@@ -50,10 +50,9 @@ import se.lublin.mumla.channel.AccessTokenFragment
 import se.lublin.mumla.channel.ChannelFragment
 import se.lublin.mumla.channel.ServerInfoFragment
 import se.lublin.mumla.chat.NoticeFormatter
-import se.lublin.mumla.db.DatabaseCertificate
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.preference.MumlaCertificateGenerateTask
+import se.lublin.mumla.preference.generateDefaultCertificate
 import se.lublin.mumla.preference.SettingsActivity
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
@@ -315,14 +314,7 @@ class MumlaActivity :
             .setTitle(R.string.first_run_generate_certificate_title)
             .setMessage(message)
             .setPositiveButton(R.string.generate) { _, _ ->
-                @Suppress("DEPRECATION")
-                object : MumlaCertificateGenerateTask(this) {
-                    @Deprecated("Deprecated in Java")
-                    override fun onPostExecute(result: DatabaseCertificate?) {
-                        super.onPostExecute(result)
-                        if (result != null) settings.setDefaultCertificateId(result.id)
-                    }
-                }.execute()
+                lifecycleScope.launch { generateDefaultCertificate() }
                 settings.setFirstRun(false)
             }
             .show()

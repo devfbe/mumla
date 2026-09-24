@@ -41,7 +41,6 @@ import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.inMainThreadSlices
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.util.Orbot
@@ -185,8 +184,7 @@ class ConnectFlow(
     }
 
     private fun start(server: Server) {
-        @Suppress("DEPRECATION")
-        ServerConnectTask(activity, MumlaRepository.get(activity).database).execute(server)
+        startServerConnect(activity, server)
     }
 
     private fun showMessage(message: String) {
