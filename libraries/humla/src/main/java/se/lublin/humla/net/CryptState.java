@@ -85,12 +85,16 @@ public class CryptState {
         mLastRequestStart = System.nanoTime();
     }
 
-    public byte[] getEncryptIV() {
-        return mEncryptIV;
+    public synchronized byte[] getEncryptIV() {
+        return mEncryptIV.clone();
     }
 
-    public byte[] getDecryptIV() {
-        return mDecryptIV;
+    public synchronized byte[] getDecryptIV() {
+        return mDecryptIV.clone();
+    }
+
+    public synchronized void setDecryptIV(byte[] iv) {
+        mDecryptIV = iv.clone();
     }
 
     public synchronized void setKeys(final byte[] rkey, final byte[] eiv, final byte[] div) throws InvalidKeyException {
@@ -183,7 +187,7 @@ public class CryptState {
                 restore = true;
             } else if ((ivbyte > (mDecryptIV[0] & 0xFF)) && (diff > 0)) {
                 // Lost a few packets, but beyond that we're good.
-                lost = ivbyte - mDecryptIV[0] - 1;
+                lost = ivbyte - (mDecryptIV[0] & 0xFF) - 1;
                 mDecryptIV[0] = (byte) ivbyte;
             } else if ((ivbyte < (mDecryptIV[0] & 0xFF)) && (diff > 0)) {
                 // Lost a few packets, and wrapped around
@@ -198,7 +202,7 @@ public class CryptState {
                 return null;
             }
 
-            if (mDecryptHistory[mDecryptIV[0] & 0xFF] == mEncryptIV[0]) {
+            if (mDecryptHistory[mDecryptIV[0] & 0xFF] == mDecryptIV[1]) {
                 System.arraycopy(saveiv, 0, mDecryptIV, 0, AES_BLOCK_SIZE);
                 return null;
             }
@@ -207,9 +211,9 @@ public class CryptState {
         final byte[] tagShiftedDst = new byte[plainLength];
         System.arraycopy(source, 4, tagShiftedDst, 0, plainLength);
 
-        ocbDecrypt(tagShiftedDst, dst, mDecryptIV, tag);
+        final boolean ocbSuccess = ocbDecrypt(tagShiftedDst, dst, plainLength, mDecryptIV, tag);
 
-        if (tag[0] != source[1] || tag[1] != source[2] || tag[2] != source[3]) {
+        if (!ocbSuccess || tag[0] != source[1] || tag[1] != source[2] || tag[2] != source[3]) {
             System.arraycopy(saveiv, 0, mDecryptIV, 0, AES_BLOCK_SIZE);
             return null;
         }
@@ -226,14 +230,14 @@ public class CryptState {
         return dst;
     }
 
-    public void ocbDecrypt(byte[] encrypted, byte[] plain, byte[] nonce, byte[] tag) throws BadPaddingException, IllegalBlockSizeException, ShortBufferException {
+    public boolean ocbDecrypt(byte[] encrypted, byte[] plain, int length, byte[] nonce, byte[] tag) throws BadPaddingException, IllegalBlockSizeException, ShortBufferException {
         final byte[] checksum = new byte[AES_BLOCK_SIZE];
         final byte[] tmp = new byte[AES_BLOCK_SIZE];
 
         final byte[] delta = mEncryptCipher.doFinal(nonce);
 
         int offset = 0;
-        int len = encrypted.length;
+        int len = length;
         while (len > AES_BLOCK_SIZE) {
             final byte[] buffer = new byte[AES_BLOCK_SIZE];
             CryptSupport.S2(delta);
@@ -267,10 +271,21 @@ public class CryptState {
 
         System.arraycopy(tmp, 0, plain, offset, len);
 
+        // XEX* forgery (https://eprint.iacr.org/2019/311, section 9): the last block would have to
+        // decrypt to delta ^ len, and len only touches the last byte.
+        boolean success = false;
+        for (int i = 0; i < AES_BLOCK_SIZE - 1; i++) {
+            if (tmp[i] != delta[i]) {
+                success = true;
+                break;
+            }
+        }
+
         CryptSupport.S3(delta);
         CryptSupport.XOR(tmp, delta, checksum);
 
         mEncryptCipher.doFinal(tmp, 0, AES_BLOCK_SIZE, tag);
+        return success;
     }
 
     public synchronized byte[] encrypt(final byte[] source, final int length) throws BadPaddingException, IllegalBlockSizeException, ShortBufferException {
@@ -295,22 +310,51 @@ public class CryptState {
         return dst;
     }
 
-    public void ocbEncrypt(byte[] plain, byte[] encrypted, int plainLength, byte[] nonce, byte[] tag) throws BadPaddingException, IllegalBlockSizeException, ShortBufferException {
+    public boolean ocbEncrypt(byte[] plain, byte[] encrypted, int plainLength, byte[] nonce, byte[] tag) throws BadPaddingException, IllegalBlockSizeException, ShortBufferException {
+        return ocbEncrypt(plain, encrypted, plainLength, nonce, tag, true);
+    }
+
+    public boolean ocbEncrypt(byte[] plain, byte[] encrypted, int plainLength, byte[] nonce, byte[] tag, boolean modifyPlainOnXEXStarAttack) throws BadPaddingException, IllegalBlockSizeException, ShortBufferException {
         final byte[] checksum = new byte[AES_BLOCK_SIZE];
         final byte[] tmp = new byte[AES_BLOCK_SIZE];
 
         final byte[] delta = mEncryptCipher.doFinal(nonce);
 
+        boolean success = true;
         int offset = 0;
         int len = plainLength;
         while (len > AES_BLOCK_SIZE) {
+            // XEX* counter-measure (https://eprint.iacr.org/2019/311, section 9): an attack needs the
+            // second to last block to be all zero except its last byte. Digital silence produces
+            // such blocks, so by default one bit is flipped instead of refusing the packet.
+            boolean flipABit = false;
+            if (len - AES_BLOCK_SIZE <= AES_BLOCK_SIZE) {
+                int sum = 0;
+                for (int i = 0; i < AES_BLOCK_SIZE - 1; i++) {
+                    sum |= plain[offset + i];
+                }
+                if (sum == 0) {
+                    if (modifyPlainOnXEXStarAttack) {
+                        flipABit = true;
+                    } else {
+                        success = false;
+                    }
+                }
+            }
+
             final byte[] buffer = new byte[AES_BLOCK_SIZE];
             CryptSupport.S2(delta);
             System.arraycopy(plain, offset, buffer, 0, AES_BLOCK_SIZE);
-            CryptSupport.XOR(checksum, checksum, buffer);
             CryptSupport.XOR(tmp, delta, buffer);
+            if (flipABit) {
+                tmp[0] ^= 1;
+            }
 
             mEncryptCipher.doFinal(tmp, 0, AES_BLOCK_SIZE, tmp);
+            CryptSupport.XOR(checksum, checksum, buffer);
+            if (flipABit) {
+                checksum[0] ^= 1;
+            }
 
             CryptSupport.XOR(buffer, delta, tmp);
             System.arraycopy(buffer, 0, encrypted, offset, AES_BLOCK_SIZE);
@@ -336,6 +380,7 @@ public class CryptState {
         CryptSupport.S3(delta);
         CryptSupport.XOR(tmp, delta, checksum);
         mEncryptCipher.doFinal(tmp, 0, AES_BLOCK_SIZE, tag);
+        return success;
     }
 
     /**

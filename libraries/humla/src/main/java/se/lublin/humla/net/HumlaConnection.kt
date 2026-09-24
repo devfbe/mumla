@@ -359,11 +359,11 @@ class HumlaConnection @JvmOverloads constructor(
                     val serverNonce = msg.serverNonce
                     if (serverNonce.size() == CryptState.AES_BLOCK_SIZE) {
                         cryptState.mUiResync++
-                        cryptState.mDecryptIV = serverNonce.toByteArray()
+                        cryptState.setDecryptIV(serverNonce.toByteArray())
                     }
                 } else {
                     val csb = Mumble.CryptSetup.newBuilder()
-                    csb.clientNonce = ByteString.copyFrom(cryptState.mEncryptIV)
+                    csb.clientNonce = ByteString.copyFrom(cryptState.encryptIV)
                     sendTCPMessage(csb.build(), HumlaTCPMessageType.CryptSetup)
                 }
             } catch (e: InvalidKeyException) {
