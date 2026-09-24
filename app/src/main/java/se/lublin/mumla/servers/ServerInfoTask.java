@@ -18,73 +18,15 @@
 package se.lublin.mumla.servers;
 
 import android.os.AsyncTask;
-import android.util.Log;
-
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
-import java.nio.ByteBuffer;
 
 import se.lublin.humla.model.Server;
 
-/**
- * Pings the requested server and returns a ServerInfoResponse.
- * Will return a 'dummy' ServerInfoResponse in the case of failure.
- * @author morlunk
- *
- */
+/** Pings the requested server on a background thread; see {@link ServerPinger}. */
 public class ServerInfoTask extends AsyncTask<Server, Void, ServerInfoResponse> {
-    private static final String TAG = ServerInfoTask.class.getName();
-
-    private Server server;
-
-    /** Test seam: the socket the ping is sent from. */
-    protected DatagramSocket createSocket() throws SocketException {
-        return new DatagramSocket();
-    }
+    private final ServerPinger mPinger = new ServerPinger();
 
     @Override
     protected ServerInfoResponse doInBackground(Server... params) {
-        server = params[0];
-        try {
-            // Create ping message
-            ByteBuffer buffer = ByteBuffer.allocate(12);
-            buffer.putInt(0); // Request type
-            buffer.putLong(server.getId()); // Identifier
-            DatagramPacket requestPacket = new DatagramPacket(buffer.array(), 12,
-                    InetAddress.getByName(server.getSrvHost()), server.getSrvPort());
-
-            // Send packet and wait for response. Closed on every path: this runs once per row of
-            // the server list on every refresh, and an unclosed socket is only reclaimed by the
-            // finalizer ("A resource failed to call close").
-            try (DatagramSocket socket = createSocket()) {
-                socket.setSoTimeout(1000);
-                socket.setReceiveBufferSize(1024);
-
-                long startTime = System.nanoTime();
-
-                socket.send(requestPacket);
-
-                byte[] responseBuffer = new byte[24];
-                DatagramPacket responsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
-                socket.receive(responsePacket);
-
-                int latencyInMs = (int) ((System.nanoTime()-startTime)/1000000);
-
-                ServerInfoResponse response = new ServerInfoResponse(server, responseBuffer, latencyInMs);
-
-                Log.d(TAG, "Server version: " + response.getVersionString()
-                        + " Users: " + response.getCurrentUsers() + "/" + response.getMaximumUsers());
-
-                return response;
-            }
-
-        } catch (Exception e) {
-//            e.printStackTrace();
-        }
-
-        return new ServerInfoResponse(); // Return dummy in case of failure
+        return mPinger.ping(params[0]);
     }
-
 }

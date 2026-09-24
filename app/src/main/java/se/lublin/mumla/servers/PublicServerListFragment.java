@@ -42,6 +42,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LifecycleOwnerKt;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -172,7 +173,7 @@ public class PublicServerListFragment extends Fragment implements OnItemClickLis
     public void setServers(List<PublicServer> servers) {
         mServers = servers;
         mServerProgress.setVisibility(View.GONE);
-        mServerAdapter = new PublicServerAdapter(getActivity(), servers, this);
+        mServerAdapter = new PublicServerAdapter(getActivity(), servers, this, LifecycleOwnerKt.getLifecycleScope(this));
         mServerGrid.setAdapter(mServerAdapter);
     }
 

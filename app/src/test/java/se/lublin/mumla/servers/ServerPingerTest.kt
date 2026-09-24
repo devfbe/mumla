@@ -32,7 +32,7 @@ import java.net.DatagramSocket
  * call close").
  */
 @RunWith(RobolectricTestRunner::class)
-class ServerInfoTaskTest {
+class ServerPingerTest {
     /** A real socket, so close() has something to close, that records the call. */
     private class RecordingSocket(private val reply: ByteArray?) : DatagramSocket() {
         @Volatile var closeCalls = 0
@@ -51,9 +51,7 @@ class ServerInfoTaskTest {
         }
     }
 
-    private fun taskWith(socket: DatagramSocket) = object : ServerInfoTask() {
-        override fun createSocket(): DatagramSocket = socket
-    }
+    private fun pingerWith(socket: DatagramSocket) = ServerPinger { socket }
 
     private val server = Server(1, "s", "127.0.0.1", 64738, "me", "")
 
@@ -61,7 +59,7 @@ class ServerInfoTaskTest {
     fun aSuccessfulPingClosesItsSocket() {
         val socket = RecordingSocket(ByteArray(24))
 
-        val response = taskWith(socket).doInBackground(server)
+        val response = pingerWith(socket).ping(server)
 
         assertThat(response.isDummy).isFalse()
         assertThat(socket.closeCalls).isEqualTo(1)
@@ -71,7 +69,7 @@ class ServerInfoTaskTest {
     fun aFailedPingClosesItsSocket() {
         val socket = RecordingSocket(null)
 
-        val response = taskWith(socket).doInBackground(server)
+        val response = pingerWith(socket).ping(server)
 
         assertThat(response.isDummy).isTrue()
         assertThat(socket.closeCalls).isEqualTo(1)

@@ -31,6 +31,7 @@ import android.widget.AdapterView.OnItemClickListener;
 import android.widget.GridView;
 
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LifecycleOwnerKt;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -144,7 +145,7 @@ public class FavouriteServerListFragment extends Fragment implements OnItemClick
 
     public void updateServers() {
         List<Server> servers = getServers();
-        mServerAdapter = new FavouriteServerAdapter(getActivity(), servers, this);
+        mServerAdapter = new FavouriteServerAdapter(getActivity(), servers, this, LifecycleOwnerKt.getLifecycleScope(this));
         mServerGrid.setAdapter(mServerAdapter);
     }
 
