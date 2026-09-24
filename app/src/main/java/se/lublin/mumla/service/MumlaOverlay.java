@@ -29,12 +29,18 @@ import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.ListView;
 
+import java.util.concurrent.CancellationException;
+
+import kotlinx.coroutines.CoroutineScopeKt;
+import kotlinx.coroutines.Job;
+
 import se.lublin.humla.model.IChannel;
 import se.lublin.humla.model.IUser;
-import se.lublin.humla.util.HumlaObserver;
+import se.lublin.humla.session.HumlaEvent;
 import se.lublin.mumla.R;
 import se.lublin.mumla.Settings;
 import se.lublin.mumla.channel.ChannelAdapter;
+import se.lublin.mumla.util.HumlaEvents;
 
 /** An onscreen interactive overlay displaying the users in the current channel. */
 public class MumlaOverlay {
@@ -43,44 +49,42 @@ public class MumlaOverlay {
     public static final int DEFAULT_WIDTH = 200;
     public static final int DEFAULT_HEIGHT = 240;
 
-    private HumlaObserver mObserver = new HumlaObserver() {
-        @Override
-        public void onUserTalkStateUpdated(IUser user) {
+    private void onServiceEvent(HumlaEvent event) {
+        if (event instanceof HumlaEvent.UserTalkStateUpdated) {
             mChannelAdapter.notifyDataSetChanged();
-        }
-
-        @Override
-        public void onUserStateUpdated(IUser user) {
-            if(user.getChannel() != null &&
+        } else if (event instanceof HumlaEvent.UserStateUpdated e) {
+            IUser user = e.getUser();
+            if (user.getChannel() != null &&
                     user.getChannel().equals(mService.getSessionChannel()))
                 mChannelAdapter.notifyDataSetChanged();
-        }
-
-        @Override
-        public void onUserRemoved(IUser user, String reason) {
+        } else if (event instanceof HumlaEvent.UserRemoved) {
             // Unconditional: the model may no longer know which channel a removed user was in.
             mChannelAdapter.notifyDataSetChanged();
+        } else if (event instanceof HumlaEvent.UserJoinedChannel e) {
+            onUserJoinedChannel(e.getUser(), e.getNewChannel(), e.getOldChannel());
+        }
+    }
+
+    private void onUserJoinedChannel(IUser user, IChannel newChannel, IChannel oldChannel) {
+        int selfSession;
+        try {
+            selfSession = mService.getSessionId();
+        } catch (IllegalStateException e) {
+            Log.d(TAG, "exception in onUserJoinedChannel: " + e);
+            return;
         }
 
-        @Override
-        public void onUserJoinedChannel(IUser user, IChannel newChannel, IChannel oldChannel) {
-            int selfSession;
-            try {
-                selfSession = mService.getSessionId();
-            } catch (IllegalStateException e) {
-                Log.d(TAG, "exception in onUserJoinedChannel: " + e);
-                return;
-            }
-
-            if (user.getSession() == selfSession) {
-                // Session user has changed channels
-                mChannelAdapter.setChannel(mService.getSessionChannel());
-            } else if (newChannel.getId() == mService.getSessionChannel().getId() ||
-                    oldChannel.getId() == mService.getSessionChannel().getId()) {
-                mChannelAdapter.notifyDataSetChanged();
-            }
+        if (user.getSession() == selfSession) {
+            // Session user has changed channels
+            mChannelAdapter.setChannel(mService.getSessionChannel());
+        } else if (newChannel.getId() == mService.getSessionChannel().getId() ||
+                oldChannel.getId() == mService.getSessionChannel().getId()) {
+            mChannelAdapter.notifyDataSetChanged();
         }
-    };
+    }
+
+    /** Collects the service's events while the overlay is shown. */
+    private Job mEvents;
 
     private View mOverlayView;
     private ListView mOverlayList;
@@ -200,7 +204,7 @@ public class MumlaOverlay {
         mShown = true;
         mChannelAdapter = new ChannelAdapter(mService, mService.getSessionChannel());
         mOverlayList.setAdapter(mChannelAdapter);
-        mService.registerObserver(mObserver);
+        mEvents = HumlaEvents.collectEvents(CoroutineScopeKt.MainScope(), mService, this::onServiceEvent);
         WindowManager windowManager = (WindowManager) mService.getSystemService(Context.WINDOW_SERVICE);
         windowManager.addView(mOverlayView, mOverlayParams);
     }
@@ -209,7 +213,8 @@ public class MumlaOverlay {
         if(!mShown)
             return;
         mShown = false;
-        mService.unregisterObserver(mObserver);
+        mEvents.cancel((CancellationException) null);
+        mEvents = null;
         mOverlayList.setAdapter(null);
         try {
             WindowManager windowManager = (WindowManager) mService.getSystemService(Context.WINDOW_SERVICE);

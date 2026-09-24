@@ -23,7 +23,6 @@ import org.junit.Test
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.testutil.NoopObserver
 import se.lublin.humla.testutil.SilentLogger
 import java.util.Random
 import java.util.concurrent.atomic.AtomicBoolean
@@ -58,7 +57,7 @@ class ModelRaceTest {
     fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread() {
         val handler = ModelHandler(
             mockk(relaxed = true),
-            NoopObserver(),
+            {},
             SilentLogger,
             null,
             null,
@@ -155,7 +154,7 @@ class ModelRaceTest {
     fun aChannelLookupNeverMissesAChannelTheProtocolThreadAlreadyStored() {
         val handler = ModelHandler(
             mockk(relaxed = true),
-            NoopObserver(),
+            {},
             SilentLogger,
             null,
             null,

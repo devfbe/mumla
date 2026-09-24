@@ -22,9 +22,14 @@ import android.os.Bundle;
 
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LifecycleOwnerKt;
+
+import java.util.concurrent.CancellationException;
+
+import kotlinx.coroutines.Job;
 
 import se.lublin.humla.IHumlaService;
-import se.lublin.humla.util.IHumlaObserver;
+import se.lublin.humla.session.HumlaEvent;
 import se.lublin.mumla.service.IMumlaService;
 
 /** Fragment class intended to make binding the Humla service to fragments easier. */
@@ -34,6 +39,10 @@ public abstract class HumlaServiceFragment extends Fragment {
 
     /** State boolean to make sure we don't double initialize a fragment once a service has been bound. */
     private boolean mBound;
+
+    /** Collects the bound service's events into {@link #onServiceEvent}. */
+    @Nullable
+    private Job mEvents;
 
     @Override
     public void onAttach(Activity activity) {
@@ -67,24 +76,21 @@ public abstract class HumlaServiceFragment extends Fragment {
 
     public void onServiceUnbound() { }
 
-    /** If implemented, will register the returned observer to the service upon binding. */
-    public IHumlaObserver getServiceObserver() {
-        return null;
-    }
+    /** Called on the main thread for each session event while the service is bound. */
+    public void onServiceEvent(HumlaEvent event) { }
 
     private void onServiceAttached(IHumlaService service) {
         mBound = true;
-        if(getServiceObserver() != null)
-            service.registerObserver(getServiceObserver());
-
+        mEvents = HumlaEvents.collectEvents(LifecycleOwnerKt.getLifecycleScope(this), service, this::onServiceEvent);
         onServiceBound(service);
     }
 
     private void onServiceDetached(IHumlaService service) {
         mBound = false;
-        if(getServiceObserver() != null)
-            service.unregisterObserver(getServiceObserver());
-
+        if (mEvents != null) {
+            mEvents.cancel((CancellationException) null);
+            mEvents = null;
+        }
         onServiceUnbound();
     }
 

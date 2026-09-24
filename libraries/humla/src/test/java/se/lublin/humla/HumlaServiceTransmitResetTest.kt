@@ -11,8 +11,8 @@ import se.lublin.humla.util.HumlaException
  * The push-to-talk toggle must not survive a lost connection: [ToggleInputMode] lives as long as
  * the service, so otherwise an auto-reconnect would resume sending without a key press.
  *
- * The reset is in onConnectionDisconnected rather than in an observer: the state is already
- * DISCONNECTED when observers run, so an observer going through the session would do nothing.
+ * The reset is in onConnectionDisconnected rather than in an event collector: the state is already
+ * DISCONNECTED when collectors run, so a collector going through the session would do nothing.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceTransmitResetTest {

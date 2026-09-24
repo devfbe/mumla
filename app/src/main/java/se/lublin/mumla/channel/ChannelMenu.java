@@ -183,7 +183,7 @@ public class ChannelMenu implements PermissionsPopupMenu.IOnMenuPrepareListener,
 
     public void showPopup(View anchor) {
         PermissionsPopupMenu popupMenu = new PermissionsPopupMenu(mContext, anchor,
-                R.menu.context_channel, this, this, mChannel, mService);
+                R.menu.context_channel, this, mChannel, mService);
         popupMenu.show();
     }
 }

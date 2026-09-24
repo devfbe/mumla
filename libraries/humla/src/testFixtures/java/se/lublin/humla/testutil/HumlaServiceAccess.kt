@@ -22,12 +22,18 @@ import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.session.AudioRouter
-import se.lublin.humla.util.HumlaCallbacks
+import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionStateMachine
 
 // HumlaService's test seams are internal to the library; these re-export them to tests of
 // subclasses in other modules.
 
-val HumlaService.testCallbacks: HumlaCallbacks get() = mCallbacks
+/** Publishes [event] as the service would, bypassing the service's own filtering. */
+fun HumlaService.testEmit(event: HumlaEvent) {
+    check(mEvents.tryEmit(event)) { "event not accepted: $event" }
+}
+
+val HumlaService.testStateMachine: SessionStateMachine get() = mStateMachine
 
 val HumlaService.testRouter: AudioRouter get() = mRouter
 

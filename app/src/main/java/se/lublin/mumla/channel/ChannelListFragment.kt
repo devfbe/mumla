@@ -42,10 +42,8 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.HumlaDisconnectedException
-import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaObserver
-import se.lublin.humla.util.IHumlaObserver
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.DatabaseProvider
@@ -54,71 +52,51 @@ import se.lublin.mumla.util.HumlaServiceFragment
 class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUserClickListener,
     SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private val serviceObserver: IHumlaObserver = object : HumlaObserver() {
-        override fun onDisconnected(e: HumlaException?) {
-            channelView.adapter = null
-            // And forget it: a rebind after reconnection must build a fresh adapter (the pinned
-            // channels are per server), otherwise the setService branch leaves the list empty.
-            channelListAdapter = null
-        }
-
-        override fun onUserJoinedChannel(user: IUser, newChannel: IChannel, oldChannel: IChannel?) {
-            channelListAdapter?.updateChannels()
-
-            val service = service
-            if (service == null || !service.isConnected) {
-                return
+    override fun onServiceEvent(event: HumlaEvent) {
+        when (event) {
+            is HumlaEvent.Disconnected -> {
+                channelView.adapter = null
+                // And forget it: a rebind after reconnection must build a fresh adapter (the pinned
+                // channels are per server), otherwise the setService branch leaves the list empty.
+                channelListAdapter = null
             }
-
-            val selfSession = try {
-                service.HumlaSession().sessionId
-            } catch (e: HumlaDisconnectedException) {
-                Log.d(TAG, "exception in onUserJoinedChannel: $e")
-                return
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in onUserJoinedChannel: $e")
-                return
+            is HumlaEvent.UserJoinedChannel -> onUserJoinedChannel(event.user, event.newChannel)
+            is HumlaEvent.ChannelAdded,
+            is HumlaEvent.ChannelRemoved,
+            is HumlaEvent.ChannelStateUpdated,
+            is HumlaEvent.UserConnected,
+            -> channelListAdapter?.updateChannels()
+            is HumlaEvent.UserRemoved -> {
+                // If we are the user being removed, don't update the channel list.
+                // We won't be in a synchronized state.
+                val service = service
+                if (service != null && service.isConnected) channelListAdapter?.updateChannels()
             }
-
-            if (user.session == selfSession) {
-                scrollToChannel(newChannel.id)
+            is HumlaEvent.UserStateUpdated -> {
+                channelListAdapter?.updateUserStates(event.user, channelView)
+                requireActivity().invalidateOptionsMenu() // Update self mute/deafen state
             }
+            is HumlaEvent.UserTalkStateUpdated -> channelListAdapter?.updateUserStates(event.user, channelView)
+            else -> Unit
+        }
+    }
+
+    private fun onUserJoinedChannel(user: IUser, newChannel: IChannel) {
+        channelListAdapter?.updateChannels()
+
+        val service = service?.takeIf { it.isConnected } ?: return
+        val selfSession = try {
+            service.HumlaSession().sessionId
+        } catch (e: HumlaDisconnectedException) {
+            Log.d(TAG, "exception in onUserJoinedChannel: $e")
+            null
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "exception in onUserJoinedChannel: $e")
+            null
         }
 
-        override fun onChannelAdded(channel: IChannel) {
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onChannelRemoved(channel: IChannel) {
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onChannelStateUpdated(channel: IChannel) {
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onUserConnected(user: IUser) {
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onUserRemoved(user: IUser, reason: String?) {
-            // If we are the user being removed, don't update the channel list.
-            // We won't be in a synchronized state.
-            val service = service
-            if (service == null || !service.isConnected) {
-                return
-            }
-
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onUserStateUpdated(user: IUser) {
-            channelListAdapter?.updateUserStates(user, channelView)
-            requireActivity().invalidateOptionsMenu() // Update self mute/deafen state
-        }
-
-        override fun onUserTalkStateUpdated(user: IUser) {
-            channelListAdapter?.updateUserStates(user, channelView)
+        if (selfSession != null && user.session == selfSession) {
+            scrollToChannel(newChannel.id)
         }
     }
 
@@ -168,8 +146,6 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         PreferenceManager.getDefaultSharedPreferences(requireActivity())
             .unregisterOnSharedPreferenceChangeListener(this)
     }
-
-    override fun getServiceObserver(): IHumlaObserver = serviceObserver
 
     override fun onServiceBound(service: IHumlaService) {
         val adapter = channelListAdapter

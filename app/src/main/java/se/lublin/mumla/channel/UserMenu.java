@@ -189,7 +189,7 @@ public class UserMenu implements PermissionsPopupMenu.IOnMenuPrepareListener, Po
 
     public void showPopup(View anchor) {
         PermissionsPopupMenu popupMenu = new PermissionsPopupMenu(mContext, anchor,
-                R.menu.context_user, this, this, mUser.getChannel(), mService);
+                R.menu.context_user, this, mUser.getChannel(), mService);
         popupMenu.show();
     }
 

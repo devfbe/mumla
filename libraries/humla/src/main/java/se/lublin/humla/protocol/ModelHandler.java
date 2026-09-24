@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import com.google.protobuf.MessageLite;
 
@@ -37,8 +38,8 @@ import se.lublin.humla.model.Message;
 import se.lublin.humla.model.ServerSettings;
 import se.lublin.humla.model.User;
 import se.lublin.humla.protobuf.Mumble;
+import se.lublin.humla.session.HumlaEvent;
 import se.lublin.humla.util.HumlaLogger;
-import se.lublin.humla.util.IHumlaObserver;
 import se.lublin.humla.util.MessageFormatter;
 
 /**
@@ -69,7 +70,7 @@ public class ModelHandler implements TcpMessageHandler {
     private final Map<Integer, User> mUsers;
     private final List<Integer> mLocalMuteHistory;
     private final List<Integer> mLocalIgnoreHistory;
-    private final IHumlaObserver mObserver;
+    private final Consumer<HumlaEvent> mEvents;
     private final HumlaLogger mLogger;
     // Written on the protocol thread, read from the main thread through IHumlaSession; volatile
     // for safe publication.
@@ -77,7 +78,7 @@ public class ModelHandler implements TcpMessageHandler {
     private volatile int mPermissions;
     private volatile int mSession;
 
-    public ModelHandler(Context context, IHumlaObserver observer, HumlaLogger logger,
+    public ModelHandler(Context context, Consumer<HumlaEvent> events, HumlaLogger logger,
                         @Nullable List<Integer> localMuteHistory,
                         @Nullable List<Integer> localIgnoreHistory) {
         mContext = context;
@@ -87,7 +88,7 @@ public class ModelHandler implements TcpMessageHandler {
         mUsers = new ConcurrentHashMap<Integer, User>();
         mLocalMuteHistory = localMuteHistory;
         mLocalIgnoreHistory = localIgnoreHistory;
-        mObserver = observer;
+        mEvents = events;
         mLogger = logger;
     }
 
@@ -268,9 +269,9 @@ public class ModelHandler implements TcpMessageHandler {
         }
 
         if(newChannel)
-            mObserver.onChannelAdded(channel);
+            mEvents.accept(new HumlaEvent.ChannelAdded(channel));
         else
-            mObserver.onChannelStateUpdated(channel);
+            mEvents.accept(new HumlaEvent.ChannelStateUpdated(channel));
     }
 
     public void messageChannelRemove(Mumble.ChannelRemove msg) {
@@ -281,7 +282,7 @@ public class ModelHandler implements TcpMessageHandler {
             if(parent != null) {
                 parent.removeSubchannel(channel);
             }
-            mObserver.onChannelRemoved(channel);
+            mEvents.accept(new HumlaEvent.ChannelRemoved(channel));
         }
     }
 
@@ -295,7 +296,7 @@ public class ModelHandler implements TcpMessageHandler {
             channel.setPermissions(msg.getPermissions());
             if(msg.getChannelId() == 0) // If we're provided permissions for the root channel, we'll apply these as our server permissions.
                 mPermissions = channel.getPermissions();
-            mObserver.onChannelPermissionsUpdated(channel);
+            mEvents.accept(new HumlaEvent.ChannelPermissionsUpdated(channel));
         }
     }
 
@@ -416,7 +417,7 @@ public class ModelHandler implements TcpMessageHandler {
             user.setChannel(channel);
 
             if(!newUser) {
-                mObserver.onUserJoinedChannel(finalUser, channel, old);
+                mEvents.accept(new HumlaEvent.UserJoinedChannel(finalUser, channel, old));
             }
 
             Channel sessionChannel = self != null ? self.getChannel() : null;
@@ -465,9 +466,9 @@ public class ModelHandler implements TcpMessageHandler {
         }
 
         if (newUser)
-            mObserver.onUserConnected(user);
+            mEvents.accept(new HumlaEvent.UserConnected(user));
         else
-            mObserver.onUserStateUpdated(user);
+            mEvents.accept(new HumlaEvent.UserStateUpdated(user));
     }
 
     public void messageUserRemove(Mumble.UserRemove msg) {
@@ -488,7 +489,7 @@ public class ModelHandler implements TcpMessageHandler {
         if (user != null) {
             user.setChannel(null);
         }
-        mObserver.onUserRemoved(user, reason);
+        mEvents.accept(new HumlaEvent.UserRemoved(user, reason));
     }
 
     public void messagePermissionDenied(final Mumble.PermissionDenied msg) {
@@ -520,7 +521,7 @@ public class ModelHandler implements TcpMessageHandler {
                 else reason = mContext.getString(R.string.perm_denied);
 
         }
-        mObserver.onPermissionDenied(reason);
+        mEvents.accept(new HumlaEvent.PermissionDenied(reason));
     }
 
     public void messageTextMessage(Mumble.TextMessage msg) {
@@ -539,7 +540,7 @@ public class ModelHandler implements TcpMessageHandler {
         String actorName = sender != null ? sender.getName() : mContext.getString(R.string.server);
 
         Message message = new Message(msg.getActor(), actorName, channels, trees, users, msg.getMessage());
-        mObserver.onMessageLogged(message);
+        mEvents.accept(new HumlaEvent.TextMessage(message));
     }
 
     public void messageServerSync(Mumble.ServerSync msg) {

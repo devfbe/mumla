@@ -26,13 +26,20 @@ import android.webkit.WebView;
 import android.widget.EditText;
 import android.widget.TabHost;
 
+import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
+import androidx.lifecycle.LifecycleOwnerKt;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import java.util.concurrent.CancellationException;
+
+import kotlinx.coroutines.Job;
+
 import se.lublin.humla.IHumlaService;
-import se.lublin.humla.util.IHumlaObserver;
+import se.lublin.humla.session.HumlaEvent;
 import se.lublin.mumla.R;
+import se.lublin.mumla.util.HumlaEvents;
 import se.lublin.mumla.util.HumlaServiceProvider;
 import se.lublin.mumla.util.UntrustedHtmlWebViewKt;
 
@@ -46,8 +53,9 @@ public abstract class AbstractCommentFragment extends DialogFragment {
     private EditText mCommentEdit;
     private HumlaServiceProvider mProvider;
     private String mComment;
-    private IHumlaService mObservedService;
-    private IHumlaObserver mCommentObserver;
+    /** Waits for the requested comment; see {@link #observeComment}. */
+    @Nullable
+    private Job mCommentUpdates;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -132,21 +140,27 @@ public abstract class AbstractCommentFragment extends DialogFragment {
         super.onDestroy();
     }
 
-    /** Registers the observer waiting for the comment; it is unregistered at the latest in onDestroy. */
-    protected void observeComment(IHumlaService service, IHumlaObserver observer) {
+    /**
+     * Loads the first comment {@code extractor} finds in the service's events. Stops listening once
+     * it has one, and at the latest in onDestroy.
+     */
+    protected void observeComment(IHumlaService service, CommentExtractor extractor) {
         stopObservingComment();
-        mObservedService = service;
-        mCommentObserver = observer;
-        service.registerObserver(observer);
+        mCommentUpdates = HumlaEvents.collectEvents(LifecycleOwnerKt.getLifecycleScope(this), service, event -> {
+            String comment = extractor.extract(event);
+            if (comment != null) {
+                loadComment(comment);
+                stopObservingComment();
+            }
+        });
     }
 
-    /** Unregisters the observer registered by {@link #observeComment}, if any. */
+    /** Stops what {@link #observeComment} started, if anything. */
     protected void stopObservingComment() {
-        if (mObservedService != null && mCommentObserver != null) {
-            mObservedService.unregisterObserver(mCommentObserver);
+        if (mCommentUpdates != null) {
+            mCommentUpdates.cancel((CancellationException) null);
+            mCommentUpdates = null;
         }
-        mObservedService = null;
-        mCommentObserver = null;
     }
 
     protected void loadComment(String comment) {
@@ -172,4 +186,11 @@ public abstract class AbstractCommentFragment extends DialogFragment {
      * @param comment The comment the user has defined.
      */
     public abstract void editComment(IHumlaService service, String comment);
+
+    /** Finds the awaited comment in a session event. */
+    public interface CommentExtractor {
+        /** @return the comment {@code event} carries, or null if it is not the awaited one. */
+        @Nullable
+        String extract(HumlaEvent event);
+    }
 }

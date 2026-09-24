@@ -4,12 +4,12 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.testutil.testCallbacks
+import se.lublin.humla.testutil.testStateMachine
 import se.lublin.mumla.testing.createMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 
 /**
- * The media session wiring in onCreate/onDestroy, checked through the service's observer registry
+ * The media session wiring in onCreate/onDestroy, checked through the service's session state
  * rather than the field: after onDestroy the session must be detached, not merely inactive.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -22,7 +22,7 @@ class MumlaServiceMediaSessionWiringTest {
         val mediaSession = service.mMediaSession!!
         assertThat(mediaSession.isActive).isFalse()
 
-        service.testCallbacks.onConnected()
+        service.testStateMachine.apply { connectRequested(); synchronized() }
         idleMainLooper()
         assertThat(mediaSession.isActive).isTrue()
 
@@ -31,7 +31,7 @@ class MumlaServiceMediaSessionWiringTest {
         assertThat(mediaSession.isActive).isFalse()
 
         // and it is really detached, not merely inactive: a reconnect must not revive it
-        service.testCallbacks.onConnected()
+        service.testStateMachine.apply { connectRequested(); synchronized() }
         idleMainLooper()
         assertThat(mediaSession.isActive).isFalse()
     }

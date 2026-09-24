@@ -18,8 +18,10 @@
 package se.lublin.mumla.testing
 
 import io.mockk.every
+import kotlinx.coroutines.flow.MutableSharedFlow
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.HumlaDisconnectedException
 
 /** Stubs a service mock as connected, handing out [session]. */
@@ -33,3 +35,7 @@ fun <T : IHumlaService> T.stubDisconnected(): T = apply {
     every { isConnected } returns false
     every { HumlaSession() } throws HumlaDisconnectedException()
 }
+
+/** Stubs a service mock's event flow; emit into the returned flow to deliver events. */
+fun IHumlaService.stubEvents(): MutableSharedFlow<HumlaEvent> =
+    MutableSharedFlow<HumlaEvent>(extraBufferCapacity = 64).also { every { events } returns it }

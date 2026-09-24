@@ -86,7 +86,8 @@ dependencies {
     implementation(libs.bouncycastle.prov)
     implementation(libs.bouncycastle.pkix)
 
-    implementation(libs.kotlinx.coroutines.android)
+    // Flows are part of the public API.
+    api(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.annotation)
     implementation(libs.minidns.hla)
     implementation(libs.minidns.android23)

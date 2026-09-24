@@ -33,7 +33,7 @@ import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.ReconnectPolicy
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaObserver
+import se.lublin.humla.session.HumlaEvent
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -75,10 +75,13 @@ class HumlaServiceHarness(
         service.audioFactory = audioFactory
         service.communicationDevices = devices
         controller.create()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onLogWarning(message: String?) { warnings += message }
-            override fun onDisconnected(e: HumlaException?) { disconnects += e }
-        })
+        service.onEvents { event ->
+            when (event) {
+                is HumlaEvent.LogMessage -> if (event.level == HumlaEvent.Level.WARNING) warnings += event.text
+                is HumlaEvent.Disconnected -> disconnects += event.error
+                else -> Unit
+            }
+        }
         service.configure(SessionConfig(server = server, clientName = "harness", autoReconnect = autoReconnect))
         mainLooper.idle()
     }

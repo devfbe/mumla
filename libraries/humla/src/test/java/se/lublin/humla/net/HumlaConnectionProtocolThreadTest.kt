@@ -3,6 +3,8 @@ package se.lublin.humla.net
 import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -10,15 +12,17 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.model.IChannel
+import se.lublin.humla.HumlaService
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.ModelHandler
+import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.MAX_EVENTS_PER_SLICE
+import se.lublin.humla.session.inMainThreadSlices
+import se.lublin.humla.testutil.SilentLogger
+import se.lublin.humla.testutil.collectOnMain
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.HumlaCallbacks
 import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaLogger
-import se.lublin.humla.util.HumlaObserver
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.security.cert.X509Certificate
@@ -118,25 +122,24 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     @Test
-    fun fiveThousandChannelStatesDoNotStallAMainLooperTaskBeyond16ms() {
+    fun fiveThousandChannelStatesDoNotStallAMainLooperTask() {
         val tcp = connectAndEstablish()
-        val callbacks = HumlaCallbacks()
+        val events = MutableSharedFlow<HumlaEvent>(
+            extraBufferCapacity = HumlaService.EVENT_BUFFER,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
         val added = AtomicInteger()
         val lastAdded = AtomicInteger(-1)
         val addedOnMain = AtomicBoolean(true)
-        callbacks.registerObserver(object : HumlaObserver() {
-            override fun onChannelAdded(channel: IChannel) {
+        val collector = collectOnMain(events.inMainThreadSlices()) { event ->
+            if (event is HumlaEvent.ChannelAdded) {
                 added.incrementAndGet()
-                lastAdded.set(channel.id)
+                lastAdded.set(event.channel.id)
                 if (Looper.myLooper() != Looper.getMainLooper()) addedOnMain.set(false)
             }
-        })
-        val silentLogger = object : HumlaLogger {
-            override fun logInfo(message: String) {}
-            override fun logWarning(message: String) {}
-            override fun logError(message: String) {}
         }
-        connection.addTcpHandler(ModelHandler(RuntimeEnvironment.getApplication(), callbacks, silentLogger, null, null))
+        val model = ModelHandler(RuntimeEnvironment.getApplication(), { events.tryEmit(it) }, SilentLogger, null, null)
+        connection.addTcpHandler(model)
         val processed = AtomicInteger()
         connection.addTcpHandler { if (it is Mumble.ChannelState) { processed.incrementAndGet() } }
         val frames = (0 until 5_000).map { i ->
@@ -159,18 +162,16 @@ class HumlaConnectionProtocolThreadTest {
             }
         }
 
-        // What production bounds is the slice: at most MAX_EVENTS_PER_SLICE events (or
-        // SLICE_BUDGET_NANOS of self-measured work) per main-looper task. A wall-clock assertion
-        // would be flaky on CI.
+        // What production bounds is the slice: at most MAX_EVENTS_PER_SLICE events per main-looper
+        // task. A wall-clock assertion would be flaky on CI.
         assertThat(tasksBeforeProbe).isAtMost(1)
-        assertThat(eventsBeforeProbe).isAtMost(HumlaCallbacks.MAX_EVENTS_PER_SLICE)
+        assertThat(eventsBeforeProbe).isAtMost(MAX_EVENTS_PER_SLICE)
         mainLooper.idle()
-        // The observer queue is bounded: onChannelAdded is droppable, so not all 5 000 arrive. The
-        // newest one always does here because this test feeds only droppable events; mixed traffic
-        // is covered in HumlaCallbacksBoundTest.
-        assertThat(added.get()).isEqualTo(HumlaCallbacks.MAX_QUEUED_EVENTS)
+        // All of them fit into the buffer, and they arrive in order on the main thread.
+        assertThat(added.get()).isEqualTo(5_000)
         assertThat(lastAdded.get()).isEqualTo(4_999)
         assertThat(addedOnMain.get()).isTrue()
+        collector.cancel()
     }
 
     @Test

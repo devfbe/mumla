@@ -15,6 +15,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.spyk
+import kotlinx.coroutines.flow.MutableStateFlow
 import io.mockk.verify
 import org.junit.Before
 import org.junit.Test
@@ -22,7 +23,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.Constants
 import se.lublin.humla.IHumlaService
-import se.lublin.humla.util.IHumlaObserver
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.idleMainLooper
 
@@ -65,12 +66,10 @@ class MumlaMediaSessionTest {
             .edit().putString(Settings.PREF_MEDIA_BUTTON_ACTION, prefValue).commit()
     }
 
-    /** A service double that hands the registered observer back to the test. */
-    private fun serviceCapturing(observer: (IHumlaObserver) -> Unit): IHumlaService =
-        mockk {
-            every { registerObserver(any()) } answers { observer(firstArg()) }
-            every { unregisterObserver(any()) } returns Unit
-        }
+    private val state = MutableStateFlow<SessionState>(SessionState.Disconnected())
+
+    /** A service double whose session state the test drives through [state]. */
+    private val service: IHumlaService = mockk { every { sessionState } returns state }
 
     @Test
     fun inactiveUntilActivated() {
@@ -99,10 +98,9 @@ class MumlaMediaSessionTest {
     @Test
     fun noneSettingKeepsSessionInactiveOnConnect() {
         setAction("none")
-        var observer: IHumlaObserver? = null
-        mediaSession.attach(serviceCapturing { observer = it })
+        mediaSession.attach(service)
 
-        observer!!.onConnected()
+        state.value = SessionState.Connected
 
         assertThat(mediaSession.isActive).isFalse()
         assertThat(mediaSession.sessionToken).isNull()
@@ -110,9 +108,8 @@ class MumlaMediaSessionTest {
 
     @Test
     fun switchingToNoneWhileConnectedReleasesSessionAndBackRestoresIt() {
-        var observer: IHumlaObserver? = null
-        mediaSession.attach(serviceCapturing { observer = it })
-        observer!!.onConnected()
+        mediaSession.attach(service)
+        state.value = SessionState.Connected
         assertThat(mediaSession.isActive).isTrue()
 
         setAction("none")
@@ -187,32 +184,35 @@ class MumlaMediaSessionTest {
 
     @Test
     fun attachActivatesOnConnectedAndDeactivatesOnDisconnected() {
-        var observer: IHumlaObserver? = null
-
-        mediaSession.attach(serviceCapturing { observer = it })
-        assertThat(observer).isNotNull()
+        mediaSession.attach(service)
         assertThat(mediaSession.isActive).isFalse()
 
-        observer!!.onConnected()
+        state.value = SessionState.Connected
         assertThat(mediaSession.isActive).isTrue()
 
-        observer!!.onDisconnected(null)
+        state.value = SessionState.Disconnected()
         assertThat(mediaSession.isActive).isFalse()
     }
 
-    /**
-     * MediaSessionCompat must be driven from a looper thread, so a callback landing elsewhere is
-     * posted. `onDisconnected` is the one that really arrives off main (from HumlaConnection's
-     * socket thread).
-     */
+    /** A lost connection deactivates too, even though a reconnect may follow. */
     @Test
-    fun aDisconnectFromTheSocketThreadIsMovedToTheMainLooper() {
-        var observer: IHumlaObserver? = null
-        mediaSession.attach(serviceCapturing { observer = it })
-        observer!!.onConnected()
+    fun aLostConnectionDeactivates() {
+        mediaSession.attach(service)
+        state.value = SessionState.Connected
+
+        state.value = SessionState.ConnectionLost(1_000, 1, null)
+
+        assertThat(mediaSession.isActive).isFalse()
+    }
+
+    /** MediaSessionCompat must be driven from a looper thread, so a change elsewhere is posted. */
+    @Test
+    fun aStateChangeOffTheMainThreadIsAppliedOnTheMainLooper() {
+        mediaSession.attach(service)
+        state.value = SessionState.Connected
         assertThat(mediaSession.isActive).isTrue()
 
-        val socketThread = Thread { observer!!.onDisconnected(null) }
+        val socketThread = Thread { state.value = SessionState.Disconnected() }
         socketThread.start()
         socketThread.join()
 
@@ -222,15 +222,16 @@ class MumlaMediaSessionTest {
     }
 
     @Test
-    fun detachUnregistersAndDeactivates() {
-        var observer: IHumlaObserver? = null
-        val service = serviceCapturing { observer = it }
+    fun detachStopsFollowingTheStateAndDeactivates() {
         mediaSession.attach(service)
-        observer!!.onConnected()
+        state.value = SessionState.Connected
 
-        mediaSession.detach(service)
+        mediaSession.detach()
 
-        verify(exactly = 1) { service.unregisterObserver(observer!!) }
+        assertThat(state.subscriptionCount.value).isEqualTo(0)
+        assertThat(mediaSession.isActive).isFalse()
+        state.value = SessionState.Disconnected()
+        state.value = SessionState.Connected
         assertThat(mediaSession.isActive).isFalse()
     }
 
@@ -245,12 +246,11 @@ class MumlaMediaSessionTest {
             override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = prefs
         }
         val detached = MumlaMediaSession(prefContext, target, Settings.getInstance(context))
-        val service = serviceCapturing { }
         val registered = slot<SharedPreferences.OnSharedPreferenceChangeListener>()
         val unregistered = slot<SharedPreferences.OnSharedPreferenceChangeListener>()
 
         detached.attach(service)
-        detached.detach(service)
+        detached.detach()
 
         verify(exactly = 1) { prefs.registerOnSharedPreferenceChangeListener(capture(registered)) }
         verify(exactly = 1) {
@@ -276,9 +276,8 @@ class MumlaMediaSessionTest {
 
     @Test
     fun switchingToNoneStopsTalking() {
-        var observer: IHumlaObserver? = null
-        mediaSession.attach(serviceCapturing { observer = it })
-        observer!!.onConnected()
+        mediaSession.attach(service)
+        state.value = SessionState.Connected
         target.setTalking(true)
 
         setAction("none")
@@ -288,7 +287,7 @@ class MumlaMediaSessionTest {
     }
 
     /**
-     * Only a session we were holding is ours to unwind; a repeated deactivate (onDisconnected then
+     * Only a session we were holding is ours to unwind; a repeated deactivate (a disconnect then
      * onDestroy) or an unrelated setting change must not touch the talking state.
      */
     @Test
@@ -304,9 +303,8 @@ class MumlaMediaSessionTest {
     /** The preference listener does not filter by key; an unrelated change must change nothing. */
     @Test
     fun anUnrelatedPreferenceChangeLeavesTheSessionAndTalkingAlone() {
-        var observer: IHumlaObserver? = null
-        mediaSession.attach(serviceCapturing { observer = it })
-        observer!!.onConnected()
+        mediaSession.attach(service)
+        state.value = SessionState.Connected
         val token = mediaSession.sessionToken
         target.setTalking(true)
 
@@ -338,18 +336,17 @@ class MumlaMediaSessionTest {
 
     /**
      * `HumlaMediaKeyTarget.stopTalking` returns early while disconnected, and the connection state
-     * is already DISCONNECTED when `onDisconnected` fires, so the talking state is *not* cleared
+     * is already DISCONNECTED when the state flow reports it, so the talking state is *not* cleared
      * on that path. The fake carries the same early exit.
      */
     @Test
     fun onDisconnectedTheTalkingStateIsLeftToStreamA() {
-        var observer: IHumlaObserver? = null
-        mediaSession.attach(serviceCapturing { observer = it })
-        observer!!.onConnected()
+        mediaSession.attach(service)
+        state.value = SessionState.Connected
         target.setTalking(true)
 
-        target.isConnected = false // as HumlaService already has it when onDisconnected fires
-        observer!!.onDisconnected(null)
+        target.isConnected = false // as HumlaService already has it when the state changes
+        state.value = SessionState.Disconnected()
 
         assertThat(mediaSession.isActive).isFalse()
         assertThat(target.stopTalkingCalls).isEqualTo(1)
@@ -359,9 +356,8 @@ class MumlaMediaSessionTest {
     @Test
     fun switchingAwayFromNoneDoesNotStopTalking() {
         setAction("none")
-        var observer: IHumlaObserver? = null
-        mediaSession.attach(serviceCapturing { observer = it })
-        observer!!.onConnected()
+        mediaSession.attach(service)
+        state.value = SessionState.Connected
         target.setTalking(true)
 
         setAction("mute")

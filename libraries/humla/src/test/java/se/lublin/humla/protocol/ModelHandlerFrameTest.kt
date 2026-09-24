@@ -23,7 +23,6 @@ import org.junit.Test
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.User
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.testutil.NoopObserver
 import se.lublin.humla.testutil.SilentLogger
 
 /**
@@ -46,7 +45,7 @@ class ModelHandlerFrameTest {
 
     private fun newHandler() = ModelHandler(
         mockk(relaxed = true),
-        NoopObserver(),
+        {},
         SilentLogger,
         null,
         null,

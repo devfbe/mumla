@@ -23,11 +23,10 @@ import java.util.Collections
  * threads, so scalar fields are volatile, list mutations are synchronized and list reads return
  * unmodifiable snapshot copies.
  *
- * The id is immutable: it is the [hashCode], and `HumlaCallbacks` keys queued refreshes on the
- * channel object.
+ * The id is immutable: it is the [hashCode].
  *
  * A read snapshots one list, not the tree: a channel can exist while its subchannels are still
- * arriving. The UI redraws on the next `onChannelAdded`, so a half-built subtree is only a frame
+ * arriving. The UI redraws on the next `ChannelAdded` event, so a half-built subtree is only a frame
  * late.
  */
 class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false) : IChannel, Comparable<Channel> {

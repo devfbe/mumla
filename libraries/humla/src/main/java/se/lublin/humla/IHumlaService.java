@@ -17,14 +17,15 @@
 
 package se.lublin.humla;
 
+import kotlinx.coroutines.flow.SharedFlow;
 import kotlinx.coroutines.flow.StateFlow;
 
 import se.lublin.humla.model.Server;
+import se.lublin.humla.session.HumlaEvent;
 import se.lublin.humla.session.SessionConfig;
 import se.lublin.humla.session.SessionState;
 import se.lublin.humla.util.HumlaDisconnectedException;
 import se.lublin.humla.util.HumlaException;
-import se.lublin.humla.util.IHumlaObserver;
 
 /**
  * A public interface for clients to communicate with a {@link HumlaService}.
@@ -37,9 +38,13 @@ import se.lublin.humla.util.IHumlaObserver;
  * will throw IllegalStateException if disconnected or not synchronized.
  */
 public interface IHumlaService {
-    void registerObserver(IHumlaObserver observer);
-
-    void unregisterObserver(IHumlaObserver observer);
+    /**
+     * What happens in the session, emitted from any thread. There is no replay: collect before
+     * acting on a result. Collect on the main thread, through
+     * {@link se.lublin.humla.session.MainThreadSlicesKt#inMainThreadSlices}, to keep the UI
+     * responsive during bursts.
+     */
+    SharedFlow<HumlaEvent> getEvents();
 
     /**
      * @return true if handshaking with the server has completed.

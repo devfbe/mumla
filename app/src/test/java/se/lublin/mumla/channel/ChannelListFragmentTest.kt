@@ -17,6 +17,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.DatabaseProvider
@@ -26,6 +27,7 @@ import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.ServiceOnlyHostActivity
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubEvents
 
 /**
  * Covers the chat-target action mode, the list across disconnect and rebind, and the refusal of a
@@ -61,6 +63,7 @@ class ChannelListFragmentTest {
         tree = smallTree()
         every { session.getChannel(any()) } answers { tree[firstArg<Int>()] }
         service.stubConnected(session)
+        service.stubEvents()
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         controller.get().bind(service)
         parent = ChatTargetParentFragment()
@@ -153,7 +156,7 @@ class ChannelListFragmentTest {
     fun reconnectingAfterADisconnectPutsAnAdapterBackOnTheList() {
         assertThat(channelView.adapter).isNotNull()
 
-        fragment.serviceObserver.onDisconnected(null)
+        fragment.onServiceEvent(HumlaEvent.Disconnected(null))
 
         assertThat(channelView.adapter).isNull()
 
@@ -173,15 +176,15 @@ class ChannelListFragmentTest {
         every { session.sessionId } returns 100
         idleMainLooper()
 
-        fragment.serviceObserver.onUserJoinedChannel(
-            FakeUser(200), tree.getValue(2), tree.getValue(0)
+        fragment.onServiceEvent(
+            HumlaEvent.UserJoinedChannel(FakeUser(200), tree.getValue(2), tree.getValue(0))
         )
         idleMainLooper()
 
         assertThat(layout.scrolls).isEmpty()
 
-        fragment.serviceObserver.onUserJoinedChannel(
-            FakeUser(100), tree.getValue(2), tree.getValue(0)
+        fragment.onServiceEvent(
+            HumlaEvent.UserJoinedChannel(FakeUser(100), tree.getValue(2), tree.getValue(0))
         )
 
         assertThat(layout.scrolls).containsExactly(listAdapter.getChannelPosition(2))
@@ -196,8 +199,8 @@ class ChannelListFragmentTest {
         every { session.sessionId } returns 100
         every { service.isConnected } returns false
 
-        fragment.serviceObserver.onUserJoinedChannel(
-            FakeUser(100), tree.getValue(2), tree.getValue(0)
+        fragment.onServiceEvent(
+            HumlaEvent.UserJoinedChannel(FakeUser(100), tree.getValue(2), tree.getValue(0))
         )
         idleMainLooper()
 
@@ -244,13 +247,13 @@ class ChannelListFragmentTest {
         val changes = countChanges()
         every { service.isConnected } returns false
 
-        fragment.serviceObserver.onUserRemoved(FakeUser(200), "gone")
+        fragment.onServiceEvent(HumlaEvent.UserRemoved(FakeUser(200), "gone"))
         idleMainLooper()
 
         assertThat(changes()).isEqualTo(0)
 
         every { service.isConnected } returns true
-        fragment.serviceObserver.onUserRemoved(FakeUser(200), "gone")
+        fragment.onServiceEvent(HumlaEvent.UserRemoved(FakeUser(200), "gone"))
         idleMainLooper()
 
         assertThat(changes()).isEqualTo(1)

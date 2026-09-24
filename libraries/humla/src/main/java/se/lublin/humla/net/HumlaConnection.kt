@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Resolution, sockets, parsing, dispatch, voice routing, pings and transport callbacks run on the
  * "humla-protocol" [HandlerThread]; [HumlaConnectionListener] callbacks are posted to [mainHandler],
- * which must be the thread `HumlaCallbacks` delivers on. [sendTCPMessage] and [sendUDPMessage] may
+ * the service's main thread. [sendTCPMessage] and [sendUDPMessage] may
  * be called from any thread. State flags are only ever set, never cleared; [disconnect] closes
  * [isConnected]/[isSynchronized] via [disconnectRequested].
  */

@@ -55,11 +55,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.IHumlaService
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IUser
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.HumlaDisconnectedException
-import se.lublin.humla.util.HumlaObserver
-import se.lublin.humla.util.IHumlaObserver
 import se.lublin.mumla.R
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatContentParser
@@ -111,15 +108,12 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         }
     }
 
-    private val chatObserver: IHumlaObserver = object : HumlaObserver() {
-        override fun onUserJoinedChannel(user: IUser?, newChannel: IChannel?, oldChannel: IChannel?) {
-            val service = getService() ?: return
-            if (!service.isConnected) return
-            val session = service.HumlaSession()
-            if (user != null && user == session.sessionUser && targetProvider.chatTarget == null) {
-                // The user changed channels without a target: follow them.
-                updateChatTargetText(null)
-            }
+    override fun onServiceEvent(event: HumlaEvent) {
+        if (event !is HumlaEvent.UserJoinedChannel) return
+        val session = getService()?.takeIf { it.isConnected }?.HumlaSession() ?: return
+        if (event.user == session.sessionUser && targetProvider.chatTarget == null) {
+            // The user changed channels without a target: follow them.
+            updateChatTargetText(null)
         }
     }
 
@@ -232,8 +226,6 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     override fun onServiceUnbound() {
         boundService.value = null
     }
-
-    override fun getServiceObserver(): IHumlaObserver = chatObserver
 
     override fun onChatTargetSelected(target: ChatTargetProvider.ChatTarget?) {
         updateChatTargetText(target)

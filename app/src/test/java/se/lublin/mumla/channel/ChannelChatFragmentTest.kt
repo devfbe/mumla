@@ -47,8 +47,8 @@ import se.lublin.humla.model.IUser
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.User
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.HumlaDisconnectedException
-import se.lublin.humla.util.IHumlaObserver
 import se.lublin.mumla.R
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatImageLoader
@@ -65,6 +65,7 @@ import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
+import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.util.HumlaServiceProvider
 
 /**
@@ -86,6 +87,7 @@ class ChannelChatFragmentTest {
     @Before
     fun setUp() {
         service.stubConnected(session)
+        service.stubEvents()
         every { service.messageLog } returns log
         every { service.clearMessageLog() } answers { log.value = emptyList() }
         every { session.sessionId } returns 7
@@ -121,7 +123,6 @@ class ChannelChatFragmentTest {
     private val list: RecyclerView get() = fragment.requireView().findViewById(R.id.chat_list)
     private val editor: EditText get() = fragment.requireView().findViewById(R.id.chatTextEdit)
     private val sendButton: ImageButton get() = fragment.requireView().findViewById(R.id.chatTextSend)
-    private val observer: IHumlaObserver get() = fragment.serviceObserver
 
     private fun channel(name: String?, id: Int = 1): IChannel =
         Channel(id, false).also { it.name = name }
@@ -218,7 +219,7 @@ class ChannelChatFragmentTest {
         every { session.sessionUser } returns self
         launch()
         every { session.sessionChannel } returns channel("Lounge")
-        observer.onUserJoinedChannel(self, channel("Lounge"), channel("Root"))
+        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Lounge"))
     }
 
@@ -227,7 +228,7 @@ class ChannelChatFragmentTest {
         every { session.sessionUser } returns user("Me", session = 7)
         launch()
         every { session.sessionChannel } returns channel("Lounge")
-        observer.onUserJoinedChannel(user("Ann"), channel("Lounge"), channel("Root"))
+        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(user("Ann"), channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
     }
 
@@ -239,7 +240,7 @@ class ChannelChatFragmentTest {
         parent.target = ChatTargetProvider.ChatTarget(user("Ann"))
         fragment.onChatTargetSelected(parent.target)
         every { session.sessionChannel } returns channel("Lounge")
-        observer.onUserJoinedChannel(self, channel("Lounge"), channel("Root"))
+        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
     }
 
@@ -456,9 +457,9 @@ class ChannelChatFragmentTest {
     fun aChannelJoinArrivingAfterTheDisconnectIsIgnored() {
         every { session.sessionUser } returns user("Me", session = 7)
         launch()
-        val self = session.sessionUser
+        val self = session.sessionUser!!
         disconnect()
-        observer.onUserJoinedChannel(self, channel("Lounge"), channel("Root"))
+        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
     }
 
     /** `updateChatTargetText` is public, so it may be called before the view exists. */
@@ -635,17 +636,15 @@ class ChannelChatFragmentTest {
         assertThat(recycler.adapter).isNull()
     }
 
-    /**
-     * The session user is null until the server has named it, so `null == null` is reachable and
-     * must not move the hint.
-     */
+    /** The session user is null until the server has named it; a join then moves nothing. */
     @Test
-    fun aChannelJoinWithNoUserAndNoSessionUserIsIgnored() {
+    fun aChannelJoinBeforeTheSessionUserIsKnownIsIgnored() {
         every { session.sessionUser } returns null
         launch()
         val before = editor.hint.toString()
         every { session.sessionChannel } returns channel("Lounge")
-        observer.onUserJoinedChannel(null, channel("Lounge"), channel("Root"))
+        val self = user("Me", session = 7)
+        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(before)
     }
 

@@ -39,11 +39,13 @@ import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ConnectionWarning
 import se.lublin.humla.session.AudioConfig
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaServiceHarness
+import se.lublin.humla.testutil.onEvents
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaObserver
 import java.util.concurrent.TimeUnit
 
 /**
@@ -69,13 +71,11 @@ class HumlaServiceCharacterizationTest {
     private fun inputMode(service: HumlaService): Any = service.mInputMode
 
     /**
-     * A service whose observer cancels every connection attempt from inside `onConnecting`, which
-     * is delivered inline, so `connect()` can be driven without opening a socket.
+     * A service that cancels every connection attempt on `Connecting`, which a main-thread
+     * collector sees inline, so `connect()` can be driven without opening a socket.
      */
     private fun cancellingService(): HumlaService = service().also { service ->
-        service.registerObserver(object : HumlaObserver() {
-            override fun onConnecting() = service.disconnect()
-        })
+        service.onEvents { if (it == HumlaEvent.Connecting) service.disconnect() }
     }
 
     private fun connectivityManager() = RuntimeEnvironment.getApplication()
@@ -159,19 +159,19 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.getTargetServer()).isNull()
     }
 
-    /** The configured server is the one connected to, and the state is CONNECTING when `onConnecting` runs. */
+    /** The configured server is the one connected to, and the state is CONNECTING on `Connecting`. */
     @Test
     fun connectUsesTheConfiguredServer() {
         val service = service()
         val stateInsideOnConnecting = mutableListOf<HumlaService.ConnectionState>()
         val serverInsideOnConnecting = mutableListOf<String?>()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onConnecting() {
+        service.onEvents {
+            if (it == HumlaEvent.Connecting) {
                 stateInsideOnConnecting += service.getConnectionState()
                 serverInsideOnConnecting += service.getTargetServer()?.host
                 service.disconnect()
             }
-        })
+        }
 
         service.configure(SessionConfig(server = server))
         service.connect()
@@ -298,7 +298,7 @@ class HumlaServiceCharacterizationTest {
         }
     }
 
-    /** The error object reaches the observer unchanged, and the state is already set when it does. */
+    /** The error object reaches collectors unchanged, and the state is already set when it does. */
     @Test
     fun theDisconnectReportCarriesTheSameErrorAndAStateThatIsAlreadySet() {
         val h = HumlaServiceHarness()
@@ -306,11 +306,9 @@ class HumlaServiceCharacterizationTest {
         val service = h.service
         val error = HumlaException("gone", HumlaException.HumlaDisconnectReason.REJECT)
         val seen = mutableListOf<Pair<HumlaException?, HumlaService.ConnectionState>>()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onDisconnected(e: HumlaException?) {
-                seen += e to service.getConnectionState()
-            }
-        })
+        service.onEvents {
+            if (it is HumlaEvent.Disconnected) seen += it.error to service.getConnectionState()
+        }
 
         service.onConnectionDisconnected(error)
 
@@ -337,55 +335,43 @@ class HumlaServiceCharacterizationTest {
     @Test
     fun onlyInfoLoggingIsSuppressedBeforeSynchronization() {
         val service = service()
-        val infos = mutableListOf<String?>()
-        val warnings = mutableListOf<String?>()
-        val errors = mutableListOf<String?>()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onLogInfo(message: String?) { infos += message }
-            override fun onLogWarning(message: String?) { warnings += message }
-            override fun onLogError(message: String?) { errors += message }
-        })
+        val recorder = EventRecorder(service)
 
         service.logInfo("info")
         service.logWarning("warning")
         service.logError("error")
 
-        assertThat(infos).isEmpty()
-        assertThat(warnings).containsExactly("warning")
-        assertThat(errors).containsExactly("error")
+        assertThat(recorder.of<HumlaEvent.LogMessage>()).containsExactly(
+            HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, "warning"),
+            HumlaEvent.LogMessage(HumlaEvent.Level.ERROR, "error"),
+        ).inOrder()
     }
 
     /** A [ConnectionWarning] is resolved to a string through this service's resources. */
     @Test
     fun aConnectionWarningIsResolvedAgainstTheServicesResources() {
         val service = service()
-        val warnings = mutableListOf<String?>()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onLogWarning(message: String?) { warnings += message }
-        })
+        val recorder = EventRecorder(service)
 
         service.onConnectionWarning(ConnectionWarning.UDP_UNAVAILABLE)
 
+        val warnings = recorder.of<HumlaEvent.LogMessage>().map { it.text }
         assertThat(warnings)
             .containsExactly(service.getString(ConnectionWarning.UDP_UNAVAILABLE.messageRes))
         assertThat(warnings[0]).isNotEmpty()
     }
 
-    /** An unregistered observer hears nothing further. */
+    /** A cancelled collector hears nothing further. */
     @Test
-    fun anUnregisteredObserverStopsHearingWarnings() {
+    fun aCancelledCollectorStopsHearingWarnings() {
         val service = service()
-        val warnings = mutableListOf<String?>()
-        val observer = object : HumlaObserver() {
-            override fun onLogWarning(message: String?) { warnings += message }
-        }
-        service.registerObserver(observer)
+        val recorder = EventRecorder(service)
         service.logWarning("first")
 
-        service.unregisterObserver(observer)
+        recorder.job.cancel()
         service.logWarning("second")
 
-        assertThat(warnings).containsExactly("first")
+        assertThat(recorder.of<HumlaEvent.LogMessage>().map { it.text }).containsExactly("first")
     }
 
     // ---------------------------------------------------------------- voice targets

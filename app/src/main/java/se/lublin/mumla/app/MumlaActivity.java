@@ -59,6 +59,7 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.DialogFragment;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
+import androidx.lifecycle.LifecycleOwnerKt;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -70,13 +71,16 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+
+import kotlinx.coroutines.Job;
 
 import se.lublin.humla.IHumlaService;
 import se.lublin.humla.model.Server;
 import se.lublin.humla.net.HumlaConnection;
 import se.lublin.humla.protobuf.Mumble;
+import se.lublin.humla.session.HumlaEvent;
 import se.lublin.humla.util.HumlaException;
-import se.lublin.humla.util.HumlaObserver;
 import se.lublin.humla.util.MumbleURLParser;
 import se.lublin.mumla.BuildConfig;
 import se.lublin.mumla.R;
@@ -98,6 +102,7 @@ import se.lublin.mumla.service.IMumlaService;
 import se.lublin.mumla.service.MumlaService;
 import se.lublin.mumla.util.HumlaServiceFragment;
 import se.lublin.mumla.util.Hex;
+import se.lublin.mumla.util.HumlaEvents;
 import se.lublin.mumla.util.HumlaServiceProvider;
 import se.lublin.mumla.util.MumlaTrustStore;
 import se.lublin.mumla.util.Orbot;
@@ -127,6 +132,10 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
     private Server mServerPendingPerm = null;
     private boolean mPermPostNotificationsAsked = false;
 
+    /** Waits for a disconnect to connect elsewhere; see {@link #awaitDisconnectThenConnect}. */
+    @Nullable
+    private Job mPendingReconnect;
+
     private AlertDialog mConnectingDialog;
     private AlertDialog mErrorDialog;
 
@@ -140,7 +149,7 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
         public void onServiceConnected(ComponentName name, IBinder service) {
             mService = ((MumlaService.MumlaBinder) service).getService();
             mService.setSuppressNotifications(true);
-            mService.registerObserver(mObserver);
+            mServiceEvents = HumlaEvents.collectEvents(LifecycleOwnerKt.getLifecycleScope(MumlaActivity.this), mService, MumlaActivity.this::onServiceEvent);
             mService.clearChatNotifications(); // Clear chat notifications on resume.
             mDrawerAdapter.notifyDataSetChanged();
 
@@ -161,115 +170,126 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
         }
     };
 
-    private final HumlaObserver mObserver = new HumlaObserver() {
-        @Override
-        public void onConnected() {
-            if (mSettings.shouldStartUpInPinnedMode()) {
-                loadDrawerFragment(DrawerAdapter.ITEM_PINNED_CHANNELS);
-            } else {
-                loadDrawerFragment(DrawerAdapter.ITEM_SERVER);
-            }
+    /** Collects the bound service's events into {@link #onServiceEvent} while bound. */
+    @Nullable
+    private Job mServiceEvents;
 
-            mDrawerAdapter.notifyDataSetChanged();
-            supportInvalidateOptionsMenu();
+    private void onServiceEvent(HumlaEvent event) {
+        if (event instanceof HumlaEvent.Connected) {
+            onConnected();
+        } else if (event instanceof HumlaEvent.Connecting) {
+            onConnecting();
+        } else if (event instanceof HumlaEvent.Disconnected) {
+            onDisconnected();
+        } else if (event instanceof HumlaEvent.TlsHandshakeFailed e) {
+            onTLSHandshakeFailed(e.getChain());
+        } else if (event instanceof HumlaEvent.TlsCertificateChanged e) {
+            onTLSCertificateChanged(e.getChain());
+        } else if (event instanceof HumlaEvent.PermissionDenied e) {
+            onPermissionDenied(e.getReason());
+        }
+    }
 
-            updateConnectionState(getService());
+    private void onConnected() {
+        if (mSettings.shouldStartUpInPinnedMode()) {
+            loadDrawerFragment(DrawerAdapter.ITEM_PINNED_CHANNELS);
+        } else {
+            loadDrawerFragment(DrawerAdapter.ITEM_SERVER);
         }
 
-        @Override
-        public void onConnecting() {
-            updateConnectionState(getService());
+        mDrawerAdapter.notifyDataSetChanged();
+        supportInvalidateOptionsMenu();
+
+        updateConnectionState(getService());
+    }
+
+    private void onConnecting() {
+        updateConnectionState(getService());
+    }
+
+    private void onDisconnected() {
+        // Re-show server list if we're showing a fragment that depends on the service.
+        if (getSupportFragmentManager().findFragmentById(R.id.content_frame) instanceof HumlaServiceFragment) {
+            loadDrawerFragment(DrawerAdapter.ITEM_FAVOURITES);
         }
+        mDrawerAdapter.notifyDataSetChanged();
+        supportInvalidateOptionsMenu();
 
-        @Override
-        public void onDisconnected(HumlaException e) {
-            // Re-show server list if we're showing a fragment that depends on the service.
-            if (getSupportFragmentManager().findFragmentById(R.id.content_frame) instanceof HumlaServiceFragment) {
-                loadDrawerFragment(DrawerAdapter.ITEM_FAVOURITES);
-            }
-            mDrawerAdapter.notifyDataSetChanged();
-            supportInvalidateOptionsMenu();
+        updateConnectionState(getService());
+    }
 
-            updateConnectionState(getService());
+    private void onTLSHandshakeFailed(List<X509Certificate> chain) {
+        if (chain.isEmpty()) {
+            return;
         }
+        final Server lastServer = getService().getTargetServer();
+        final X509Certificate x509 = chain.get(0);
+        new MaterialAlertDialogBuilder(MumlaActivity.this)
+                .setTitle(R.string.untrusted_certificate)
+                .setView(certificateInfoView(x509))
+                .setPositiveButton(R.string.allow, (dialog, which) -> trustAndReconnect(lastServer, x509))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
 
-        @Override
-        public void onTLSHandshakeFailed(X509Certificate[] chain) {
-            if (chain.length == 0) {
-                return;
-            }
-            final Server lastServer = getService().getTargetServer();
-            final X509Certificate x509 = chain[0];
-            new MaterialAlertDialogBuilder(MumlaActivity.this)
-                    .setTitle(R.string.untrusted_certificate)
-                    .setView(certificateInfoView(x509))
-                    .setPositiveButton(R.string.allow, (dialog, which) -> trustAndReconnect(lastServer, x509))
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show();
+    private void onTLSCertificateChanged(List<X509Certificate> chain) {
+        if (chain.isEmpty()) {
+            return;
         }
+        final Server lastServer = getService().getTargetServer();
+        final X509Certificate x509 = chain.get(0);
+        // Cancel is the positive, default-looking choice: replacing the pin is what an attacker wants.
+        new MaterialAlertDialogBuilder(MumlaActivity.this)
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .setTitle(R.string.certificate_changed_title)
+                .setMessage(getString(R.string.certificate_changed_message, lastServer.getHost()))
+                .setView(certificateInfoView(x509))
+                .setPositiveButton(android.R.string.cancel, null)
+                .setNegativeButton(R.string.certificate_changed_accept, (dialog, which) -> trustAndReconnect(lastServer, x509))
+                .show();
+    }
 
-        @Override
-        public void onTLSCertificateChanged(X509Certificate[] chain) {
-            if (chain.length == 0) {
-                return;
-            }
-            final Server lastServer = getService().getTargetServer();
-            final X509Certificate x509 = chain[0];
-            // Cancel is the positive, default-looking choice: replacing the pin is what an attacker wants.
-            new MaterialAlertDialogBuilder(MumlaActivity.this)
-                    .setIcon(android.R.drawable.ic_dialog_alert)
-                    .setTitle(R.string.certificate_changed_title)
-                    .setMessage(getString(R.string.certificate_changed_message, lastServer.getHost()))
-                    .setView(certificateInfoView(x509))
-                    .setPositiveButton(android.R.string.cancel, null)
-                    .setNegativeButton(R.string.certificate_changed_accept, (dialog, which) -> trustAndReconnect(lastServer, x509))
-                    .show();
+    private View certificateInfoView(X509Certificate x509) {
+        View layout = getLayoutInflater().inflate(R.layout.certificate_info, null);
+        TextView textView = layout.findViewById(R.id.certificate_info_text);
+        try {
+            MessageDigest digest1 = MessageDigest.getInstance("SHA-1");
+            MessageDigest digest2 = MessageDigest.getInstance("SHA-256");
+            String hexDigest1 = Hex.toHex(digest1.digest(x509.getEncoded()))
+                    .replaceAll("(..)", "$1:");
+            String hexDigest2 = Hex.toHex(digest2.digest(x509.getEncoded()))
+                    .replaceAll("(..)", "$1:");
+
+            textView.setText(getString(R.string.certificate_info,
+                    x509.getSubjectDN().getName(),
+                    x509.getNotBefore().toString(),
+                    x509.getNotAfter().toString(),
+                    hexDigest1.substring(0, hexDigest1.length() - 1),
+                    hexDigest2.substring(0, hexDigest2.length() - 1)));
+        } catch (NoSuchAlgorithmException | CertificateException e) {
+            e.printStackTrace();
+            textView.setText(x509.toString());
         }
+        return layout;
+    }
 
-        private View certificateInfoView(X509Certificate x509) {
-            View layout = getLayoutInflater().inflate(R.layout.certificate_info, null);
-            TextView textView = layout.findViewById(R.id.certificate_info_text);
-            try {
-                MessageDigest digest1 = MessageDigest.getInstance("SHA-1");
-                MessageDigest digest2 = MessageDigest.getInstance("SHA-256");
-                String hexDigest1 = Hex.toHex(digest1.digest(x509.getEncoded()))
-                        .replaceAll("(..)", "$1:");
-                String hexDigest2 = Hex.toHex(digest2.digest(x509.getEncoded()))
-                        .replaceAll("(..)", "$1:");
-
-                textView.setText(getString(R.string.certificate_info,
-                        x509.getSubjectDN().getName(),
-                        x509.getNotBefore().toString(),
-                        x509.getNotAfter().toString(),
-                        hexDigest1.substring(0, hexDigest1.length() - 1),
-                        hexDigest2.substring(0, hexDigest2.length() - 1)));
-            } catch (NoSuchAlgorithmException | CertificateException e) {
-                e.printStackTrace();
-                textView.setText(x509.toString());
-            }
-            return layout;
+    private void trustAndReconnect(Server server, X509Certificate x509) {
+        try {
+            MumlaTrustStore.pinCertificate(MumlaActivity.this, server.getHost(), x509);
+            Toast.makeText(MumlaActivity.this, R.string.trust_added, Toast.LENGTH_LONG).show();
+            connectToServer(server);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(MumlaActivity.this, R.string.trust_add_failed, Toast.LENGTH_LONG).show();
         }
+    }
 
-        private void trustAndReconnect(Server server, X509Certificate x509) {
-            try {
-                MumlaTrustStore.pinCertificate(MumlaActivity.this, server.getHost(), x509);
-                Toast.makeText(MumlaActivity.this, R.string.trust_added, Toast.LENGTH_LONG).show();
-                connectToServer(server);
-            } catch (Exception e) {
-                e.printStackTrace();
-                Toast.makeText(MumlaActivity.this, R.string.trust_add_failed, Toast.LENGTH_LONG).show();
-            }
-        }
-
-        @Override
-        public void onPermissionDenied(String reason) {
-            new MaterialAlertDialogBuilder(MumlaActivity.this)
-                    .setTitle(R.string.perm_denied)
-                    .setMessage(reason)
-                    .show();
-        }
-    };
-
+    private void onPermissionDenied(String reason) {
+        new MaterialAlertDialogBuilder(MumlaActivity.this)
+                .setTitle(R.string.perm_denied)
+                .setMessage(reason)
+                .show();
+    }
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         mSettings = Settings.getInstance(this);
@@ -411,7 +431,10 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
             for (HumlaServiceFragment fragment : mServiceFragments) {
                 fragment.setServiceBound(false);
             }
-            mService.unregisterObserver(mObserver);
+            if (mServiceEvents != null) {
+                mServiceEvents.cancel((CancellationException) null);
+                mServiceEvents = null;
+            }
             mService.setSuppressNotifications(false);
         }
         unbindService(mConnection);
@@ -591,14 +614,8 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
             new MaterialAlertDialogBuilder(this)
                     .setMessage(R.string.reconnect_dialog_message)
                     .setPositiveButton(R.string.connect, (dialog, which) -> {
-                        // Register an observer to reconnect to the new server once disconnected.
-                        mService.registerObserver(new HumlaObserver() {
-                            @Override
-                            public void onDisconnected(HumlaException e) {
-                                connectToServer(server);
-                                mService.unregisterObserver(this);
-                            }
-                        });
+                        // Connect to the new server once disconnected from this one.
+                        awaitDisconnectThenConnect(server);
                         mService.disconnect();
                     })
                     .setNegativeButton(android.R.string.cancel, null)
@@ -629,6 +646,18 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
         }
 
         startServerConnect(server);
+    }
+
+    /** Connects to {@code server} once the service reports the current session disconnected. */
+    private void awaitDisconnectThenConnect(Server server) {
+        if (mPendingReconnect != null) mPendingReconnect.cancel((CancellationException) null);
+        mPendingReconnect = HumlaEvents.collectEvents(LifecycleOwnerKt.getLifecycleScope(this), mService, event -> {
+            if (event instanceof HumlaEvent.Disconnected) {
+                mPendingReconnect.cancel((CancellationException) null);
+                mPendingReconnect = null;
+                connectToServer(server);
+            }
+        });
     }
 
     private void startServerConnect(Server server) {

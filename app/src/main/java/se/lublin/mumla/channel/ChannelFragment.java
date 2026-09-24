@@ -48,9 +48,8 @@ import se.lublin.humla.IHumlaService;
 import se.lublin.humla.IHumlaSession;
 import se.lublin.humla.model.IUser;
 import se.lublin.humla.model.WhisperTarget;
+import se.lublin.humla.session.HumlaEvent;
 import se.lublin.humla.util.HumlaDisconnectedException;
-import se.lublin.humla.util.HumlaObserver;
-import se.lublin.humla.util.IHumlaObserver;
 import se.lublin.humla.util.VoiceTargetMode;
 import se.lublin.mumla.R;
 import se.lublin.mumla.Settings;
@@ -78,57 +77,59 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
     /** True while a touch is down on the talk button, i.e. while this fragment holds transmission. */
     private boolean mTalkButtonHeld;
 
-    private HumlaObserver mObserver = new HumlaObserver() {
-        @Override
-        public void onUserTalkStateUpdated(IUser user) {
-            if (getService() == null || !getService().isConnected()) {
-                return;
-            }
-            int selfSession;
-            try {
-                selfSession = getService().HumlaSession().getSessionId();
-            } catch (HumlaDisconnectedException|IllegalStateException e) {
-                Log.d(TAG, "exception in onUserTalkStateUpdated: " + e);
-                return;
-            }
-            if (user != null && user.getSession() == selfSession) {
-                // Manually set button selection colour when we receive a talk state update.
-                // This allows representation of talk state when using hot corners and PTT toggle.
-                switch (user.getTalkState()) {
-                case TALKING:
-                case SHOUTING:
-                case WHISPERING:
-                    mTalkButton.setPressed(true);
-                    break;
-                case PASSIVE:
-                    mTalkButton.setPressed(false);
-                    break;
-                }
-            }
-        }
-
-        @Override
-        public void onUserStateUpdated(IUser user) {
-            if (getService() == null || !getService().isConnected()) {
-                return;
-            }
-            int selfSession;
-            try {
-                selfSession = getService().HumlaSession().getSessionId();
-            } catch (IllegalStateException e) {
-                Log.d(TAG, "exception in onUserStateUpdated: " + e);
-                return;
-            }
-            if (user != null && user.getSession() == selfSession) {
-                configureInput();
-            }
-        }
-
-        @Override
-        public void onVoiceTargetChanged(VoiceTargetMode mode) {
+    @Override
+    public void onServiceEvent(HumlaEvent event) {
+        if (event instanceof HumlaEvent.UserTalkStateUpdated e) {
+            onUserTalkStateUpdated(e.getUser());
+        } else if (event instanceof HumlaEvent.UserStateUpdated e) {
+            onUserStateUpdated(e.getUser());
+        } else if (event instanceof HumlaEvent.VoiceTargetChanged) {
             configureTargetPanel();
         }
-    };
+    }
+
+    private void onUserTalkStateUpdated(IUser user) {
+        if (getService() == null || !getService().isConnected()) {
+            return;
+        }
+        int selfSession;
+        try {
+            selfSession = getService().HumlaSession().getSessionId();
+        } catch (HumlaDisconnectedException|IllegalStateException e) {
+            Log.d(TAG, "exception in onUserTalkStateUpdated: " + e);
+            return;
+        }
+        if (user.getSession() == selfSession) {
+            // Manually set button selection colour when we receive a talk state update.
+            // This allows representation of talk state when using hot corners and PTT toggle.
+            switch (user.getTalkState()) {
+            case TALKING:
+            case SHOUTING:
+            case WHISPERING:
+                mTalkButton.setPressed(true);
+                break;
+            case PASSIVE:
+                mTalkButton.setPressed(false);
+                break;
+            }
+        }
+    }
+
+    private void onUserStateUpdated(IUser user) {
+        if (getService() == null || !getService().isConnected()) {
+            return;
+        }
+        int selfSession;
+        try {
+            selfSession = getService().HumlaSession().getSessionId();
+        } catch (IllegalStateException e) {
+            Log.d(TAG, "exception in onUserStateUpdated: " + e);
+            return;
+        }
+        if (user.getSession() == selfSession) {
+            configureInput();
+        }
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -273,11 +274,6 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
         preferences.unregisterOnSharedPreferenceChangeListener(this);
         super.onDestroy();
-    }
-
-    @Override
-    public IHumlaObserver getServiceObserver() {
-        return mObserver;
     }
 
     @Override

@@ -5,15 +5,20 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.view.KeyEvent
 import androidx.core.content.IntentCompat
 import androidx.preference.PreferenceManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaService
-import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaObserver
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.MediaButtonAction
 import se.lublin.mumla.Settings
 
@@ -23,8 +28,7 @@ import se.lublin.mumla.Settings
  * reach [MediaKeyHandler] even with the screen off. With NONE no session is held, because an
  * active PLAYING session takes play/pause away from every other app.
  *
- * Call [attach] in the service's onCreate and [detach] in onDestroy. Main thread only; the Humla
- * observer posts to the main looper if needed.
+ * Call [attach] in the service's onCreate and [detach] in onDestroy. Main thread only.
  */
 class MumlaMediaSession @JvmOverloads constructor(
     private val context: Context,
@@ -38,8 +42,8 @@ class MumlaMediaSession @JvmOverloads constructor(
     private var session: MediaSessionCompat? = null
     private var connected = false
 
-    /** Identifies this instance's posts on [mainHandler] so [detach] can drop just those. */
-    private val observerPosts = Any()
+    /** Follows the service's session state between [attach] and [detach]. */
+    private var stateUpdates: Job? = null
 
     /** Public for tests; the framework calls it on [mainHandler]. */
     val callback: MediaSessionCompat.Callback = object : MediaSessionCompat.Callback() {
@@ -51,12 +55,6 @@ class MumlaMediaSession @JvmOverloads constructor(
             // runs the framework default itself.
             return handler.onKeyEvent(event)
         }
-    }
-
-    private val observer = object : HumlaObserver() {
-        override fun onConnected() = onMain { activate() }
-
-        override fun onDisconnected(e: HumlaException?) = onMain { deactivate() }
     }
 
     /** Strong reference: SharedPreferences keeps listeners weakly. Unfiltered; [applyState] is idempotent. */
@@ -75,19 +73,22 @@ class MumlaMediaSession @JvmOverloads constructor(
         get() = session?.controller?.playbackState
 
     fun attach(service: IHumlaService) {
-        service.registerObserver(observer)
+        stateUpdates?.cancel()
+        stateUpdates = CoroutineScope(Dispatchers.Main.immediate).launch(start = CoroutineStart.UNDISPATCHED) {
+            service.sessionState
+                .map { it == SessionState.Connected }
+                .distinctUntilChanged()
+                .collect { connected -> if (connected) activate() else deactivate() }
+        }
         PreferenceManager.getDefaultSharedPreferences(context)
             .registerOnSharedPreferenceChangeListener(preferenceListener)
     }
 
-    fun detach(service: IHumlaService) {
-        service.unregisterObserver(observer)
+    fun detach() {
+        stateUpdates?.cancel()
+        stateUpdates = null
         PreferenceManager.getDefaultSharedPreferences(context)
             .unregisterOnSharedPreferenceChangeListener(preferenceListener)
-        // onDisconnected can arrive from the socket thread, so [onMain] may have queued a
-        // callback; drop those by token (not everything: the framework dispatches media buttons on
-        // [mainHandler] too).
-        mainHandler.removeCallbacksAndMessages(observerPosts)
         deactivate()
     }
 
@@ -144,14 +145,6 @@ class MumlaMediaSession @JvmOverloads constructor(
         released.release()
         session = null
         target.stopTalking()
-    }
-
-    private fun onMain(block: () -> Unit) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            block()
-        } else {
-            mainHandler.postAtTime(block, observerPosts, SystemClock.uptimeMillis())
-        }
     }
 
     private companion object {

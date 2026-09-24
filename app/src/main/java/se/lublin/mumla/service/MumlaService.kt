@@ -39,13 +39,14 @@ import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaObserver
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.util.HtmlUtils
+import se.lublin.mumla.util.collectEvents
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -124,116 +125,96 @@ class MumlaService : HumlaService(),
      */
     private val mServiceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val mObserver = object : HumlaObserver() {
-        override fun onUserConnected(user: IUser) {
-            if (user.getTextureHash() != null && user.getTexture() == null) {
-                requestAvatar(user.getSession())
-            }
+    private fun onEvent(event: HumlaEvent) {
+        when (event) {
+            is HumlaEvent.UserConnected -> requestAvatarIfMissing(event.user)
+            is HumlaEvent.UserStateUpdated -> onUserStateUpdated(event.user)
+            is HumlaEvent.UserTalkStateUpdated -> onUserTalkStateUpdated(event.user)
+            is HumlaEvent.TextMessage -> onTextMessage(event.message)
+            is HumlaEvent.LogMessage -> mMessageLog.add(IChatMessage.InfoMessage(infoType(event.level), event.text))
+            is HumlaEvent.PermissionDenied ->
+                if (mNotification.isForeground && !mSuppressNotifications) mNotification.show()
+            else -> Unit
+        }
+    }
+
+    private fun requestAvatarIfMissing(user: IUser) {
+        if (user.getTextureHash() != null && user.getTexture() == null) {
+            requestAvatar(user.getSession())
+        }
+    }
+
+    private fun onUserStateUpdated(user: IUser) {
+        val selfSession = try {
+            getSessionId()
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "exception in onUserStateUpdated: $e")
+            return
         }
 
-        override fun onUserStateUpdated(user: IUser?) {
-            if (user == null) {
-                return
-            }
-
-            val selfSession = try {
-                getSessionId()
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in onUserStateUpdated: $e")
-                return
-            }
-
-            if (user.getSession() == selfSession) {
-                mSettings.setMutedAndDeafened(user.isSelfMuted(), user.isSelfDeafened())
-                if (mNotification.isForeground) {
-                    val contentText = if (user.isSelfMuted() && user.isSelfDeafened()) {
-                        getString(R.string.status_notify_muted_and_deafened)
-                    } else if (user.isSelfMuted()) {
-                        getString(R.string.status_notify_muted)
-                    } else {
-                        getString(R.string.connected)
-                    }
-                    mNotification.customContentText = contentText
-                    mNotification.show()
+        if (user.getSession() == selfSession) {
+            mSettings.setMutedAndDeafened(user.isSelfMuted(), user.isSelfDeafened())
+            if (mNotification.isForeground) {
+                val contentText = if (user.isSelfMuted() && user.isSelfDeafened()) {
+                    getString(R.string.status_notify_muted_and_deafened)
+                } else if (user.isSelfMuted()) {
+                    getString(R.string.status_notify_muted)
+                } else {
+                    getString(R.string.connected)
                 }
-            }
-
-            if (user.getTextureHash() != null && user.getTexture() == null) {
-                requestAvatar(user.getSession())
-            }
-        }
-
-        override fun onMessageLogged(message: IMessage) {
-            val strippedMessage = HtmlUtils.toPlainText(message.getMessage())
-            val ttsMessage = if (mShortTtsMessagesEnabled) {
-                HtmlUtils.toPlainTextWithShortLinks(message.getMessage()) { host ->
-                    getString(R.string.chat_message_tts_short_link, host)
-                }
-            } else {
-                strippedMessage
-            }
-
-            val formattedTtsMessage = getString(R.string.notification_message, message.getActorName(), ttsMessage)
-
-            // mTTS is non-null exactly while the setting is on (the preference listener owns it).
-            val tts = mTTS
-            if (tts != null &&
-                formattedTtsMessage.length <= TTS_THRESHOLD &&
-                getSessionUser() != null &&
-                !getSessionUser()!!.isSelfDeafened()
-            ) {
-                @Suppress("DEPRECATION")
-                tts.speak(formattedTtsMessage, TextToSpeech.QUEUE_ADD, null)
-            }
-
-            // TODO: create a customizable notification sieve
-            if (mSettings.isChatNotifyEnabled()) {
-                mMessageNotification.show(message.getActorName(), strippedMessage)
-            }
-
-            mMessageLog.add(IChatMessage.TextMessage(message))
-        }
-
-        override fun onLogInfo(message: String) {
-            mMessageLog.add(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, message))
-        }
-
-        override fun onLogWarning(message: String) {
-            mMessageLog.add(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.WARNING, message))
-        }
-
-        override fun onLogError(message: String) {
-            mMessageLog.add(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.ERROR, message))
-        }
-
-        override fun onPermissionDenied(reason: String?) {
-            if (mNotification.isForeground && !mSuppressNotifications) {
+                mNotification.customContentText = contentText
                 mNotification.show()
             }
         }
 
-        override fun onUserTalkStateUpdated(user: IUser) {
-            var selfSession = -1
-            try {
-                selfSession = getSessionId()
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in onUserTalkStateUpdated: $e")
-            }
+        requestAvatarIfMissing(user)
+    }
 
-            if (isConnectionEstablished() &&
-                user.getSession() == selfSession &&
-                getTransmitMode() == Constants.TRANSMIT_PUSH_TO_TALK &&
-                user.getTalkState() == TalkState.TALKING &&
-                mPTTSoundEnabled
-            ) {
-                keyClickSound()
+    private fun onTextMessage(message: IMessage) {
+        val strippedMessage = HtmlUtils.toPlainText(message.getMessage())
+        val ttsMessage = if (mShortTtsMessagesEnabled) {
+            HtmlUtils.toPlainTextWithShortLinks(message.getMessage()) { host ->
+                getString(R.string.chat_message_tts_short_link, host)
             }
+        } else {
+            strippedMessage
+        }
+
+        val formattedTtsMessage = getString(R.string.notification_message, message.getActorName(), ttsMessage)
+
+        // mTTS is non-null exactly while the setting is on (the preference listener owns it).
+        val tts = mTTS
+        if (tts != null && formattedTtsMessage.length <= TTS_THRESHOLD && getSessionUser()?.isSelfDeafened() == false) {
+            @Suppress("DEPRECATION")
+            tts.speak(formattedTtsMessage, TextToSpeech.QUEUE_ADD, null)
+        }
+
+        // Every message notifies while enabled; there is no per-sender filter yet.
+        if (mSettings.isChatNotifyEnabled()) {
+            mMessageNotification.show(message.getActorName(), strippedMessage)
+        }
+
+        mMessageLog.add(IChatMessage.TextMessage(message))
+    }
+
+    private fun onUserTalkStateUpdated(user: IUser) {
+        var selfSession = -1
+        try {
+            selfSession = getSessionId()
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "exception in onUserTalkStateUpdated: $e")
+        }
+
+        val selfStartedTalking = user.getSession() == selfSession && user.getTalkState() == TalkState.TALKING
+        val pttClick = mPTTSoundEnabled && getTransmitMode() == Constants.TRANSMIT_PUSH_TO_TALK
+        if (pttClick && selfStartedTalking && isConnectionEstablished()) {
+            keyClickSound()
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        registerObserver(mObserver)
+        collectEvents(mServiceScope, this, ::onEvent)
 
         mSettings = Settings.getInstance(this)
         mPTTSoundEnabled = mSettings.isPttSoundEnabled()
@@ -337,8 +318,7 @@ class MumlaService : HumlaService(),
         }
 
         // Null-checked: built last in onCreate, so an earlier throw leaves it null.
-        mMediaSession?.detach(this)
-        unregisterObserver(mObserver)
+        mMediaSession?.detach()
         mTTS?.shutdown()
         mMessageNotification.dismiss()
         setProximitySensorOn(false)
@@ -584,6 +564,12 @@ class MumlaService : HumlaService(),
 
     companion object {
         private val TAG = MumlaService::class.java.name
+
+        private fun infoType(level: HumlaEvent.Level) = when (level) {
+            HumlaEvent.Level.INFO -> IChatMessage.InfoMessage.Type.INFO
+            HumlaEvent.Level.WARNING -> IChatMessage.InfoMessage.Type.WARNING
+            HumlaEvent.Level.ERROR -> IChatMessage.InfoMessage.Type.ERROR
+        }
 
         const val TTS_THRESHOLD = 250 // Maximum number of characters to read
     }
