@@ -20,10 +20,6 @@ package se.lublin.mumla.audio
 import se.lublin.humla.audio.capture.CaptureRequest
 import se.lublin.humla.audio.capture.PcmCaptureSource
 import se.lublin.humla.audio.capture.PcmCaptureSourceFactory
-import se.lublin.humla.audio.native.RnnoiseApi
-import se.lublin.humla.audio.native.SpeexPreprocessApi
-import se.lublin.humla.audio.native.SpeexPreprocessNative
-import se.lublin.humla.audio.native.WebRtcApmApi
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -118,54 +114,4 @@ class TestPlaybackSink : PcmPlaybackSink {
             return sink
         }
     }
-}
-
-/**
- * Scales every sample by [gain] and reports a fixed speech probability, so that a test can tell
- * whether the meter measured the frame before or after the preprocessor ran.
- */
-class ScalingSpeexApi(
-    private val gain: Float,
-    private val probabilityPercent: Int = 0,
-) : SpeexPreprocessApi {
-    override fun init(frameSize: Int, sampleRate: Int): Long = 1L
-
-    override fun run(state: Long, frame: ShortArray): Int {
-        for (i in frame.indices) frame[i] = (frame[i] * gain).toInt().toShort()
-        return if (probabilityPercent >= 50) 1 else 0
-    }
-
-    override fun ctlInt(state: Long, request: Int, value: IntArray): Int {
-        if (request == SpeexPreprocessNative.SPEEX_PREPROCESS_GET_PROB) {
-            value[0] = probabilityPercent
-            return 0
-        }
-        return 0
-    }
-
-    override fun destroy(state: Long) = Unit
-}
-
-/** A chain that refuses to come up, so the factory falls back to no stage at all. */
-class AbsentRnnoiseApi : RnnoiseApi {
-    override fun create(): Long = 0L
-    override fun processFrame(handle: Long, frame: ShortArray): Float = 0f
-    override fun destroy(handle: Long) = Unit
-}
-
-class AbsentApmApi : WebRtcApmApi {
-    override fun create(
-        sampleRate: Int,
-        echoCancellation: Boolean,
-        noiseSuppression: Boolean,
-        noiseSuppressionLevel: Int,
-        gainControl: Boolean,
-        highPass: Boolean,
-    ): Long = 0L
-
-    override fun frameSize(handle: Long): Int = 0
-    override fun processCapture(handle: Long, frame: ShortArray): Int = -1
-    override fun processRender(handle: Long, frame: ShortArray): Int = -1
-    override fun lastCaptureLevelDbfs(handle: Long): Float = -100f
-    override fun destroy(handle: Long) = Unit
 }

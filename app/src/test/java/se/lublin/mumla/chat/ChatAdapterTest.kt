@@ -31,13 +31,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowBitmapFactory
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.User
 import se.lublin.mumla.R
 import se.lublin.mumla.service.IChatMessage
+import se.lublin.mumla.testing.idleMainLooper
 import java.util.Collections
 import kotlin.coroutines.CoroutineContext
 
@@ -86,7 +86,6 @@ class ChatAdapterTest {
             .build(),
     )
 
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     /**
      * Binds [position] into a fresh holder attached to a real window and laid out: an unattached
@@ -96,7 +95,7 @@ class ChatAdapterTest {
         val holder = createViewHolder(parent, viewType)
         parent.addView(holder.itemView)
         bindViewHolder(holder, position)
-        idle()
+        idleMainLooper()
         parent.measure(
             View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.AT_MOST),
@@ -126,7 +125,7 @@ class ChatAdapterTest {
         holder.itemView.dispatchTouchEvent(up)
         down.recycle()
         up.recycle()
-        idle()
+        idleMainLooper()
     }
 
     @Test
@@ -141,9 +140,9 @@ class ChatAdapterTest {
         val messages = listOf(info("hello"), info("<img src=\"$url\"/>"))
 
         adapter.submitMessages(messages)
-        idle()
+        idleMainLooper()
         adapter.submitMessages(messages)
-        idle()
+        idleMainLooper()
 
         // Parsed once per message: the second submit reads IChatMessage.content.
         assertThat(parseThreads).hasSize(2)
@@ -159,7 +158,7 @@ class ChatAdapterTest {
         val first = info("one")
         val second = info("two")
         adapter.submitMessages(listOf(first))
-        idle()
+        idleMainLooper()
 
         val events = mutableListOf<String>()
         adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
@@ -176,7 +175,7 @@ class ChatAdapterTest {
         })
 
         adapter.submitMessages(listOf(first, second))
-        idle()
+        idleMainLooper()
 
         assertThat(events).containsExactly("insert 1+1")
         assertThat(adapter.itemCount).isEqualTo(2)
@@ -189,7 +188,7 @@ class ChatAdapterTest {
             Message(7, "alice", emptyList(), emptyList(), emptyList(), "hi")
         )
         adapter.submitMessages(listOf(text, info("joined"), info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_TEXT)
         assertThat(adapter.getItemViewType(1)).isEqualTo(ChatAdapter.TYPE_INFO)
@@ -203,7 +202,7 @@ class ChatAdapterTest {
         val adapter = adapter()
         val sent = text(body = "look <img src=\"$url\"/>")
         adapter.submitMessages(listOf(sent))
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_IMAGE)
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
@@ -221,7 +220,7 @@ class ChatAdapterTest {
     fun anImageRowShowsABoundedThumbnailAndReportsTaps() = runTest {
         val adapter = adapter()
         adapter.submitMessages(listOf(info("before <img src=\"$url\"/> after")))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
 
@@ -245,7 +244,7 @@ class ChatAdapterTest {
         remoteBody = "not an image".toByteArray()
         val adapter = adapter()
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
 
@@ -277,7 +276,7 @@ class ChatAdapterTest {
         val adapter = adapter()
         val message = text(channels = listOf(channel("Root")), body = "see <a href=\"https://x.org\">this</a>")
         adapter.submitMessages(listOf(message))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.textHolderAt(0)
         assertThat(holder.target.visibility).isEqualTo(View.VISIBLE)
@@ -304,7 +303,7 @@ class ChatAdapterTest {
             text(actorName = null, users = listOf(User(3, null))),
         )
         adapter.submitMessages(messages)
-        idle()
+        idleMainLooper()
 
         val labels = messages.indices.map { adapter.textHolderAt(it).target.text.toString() }
         assertThat(labels).containsExactly(
@@ -346,7 +345,7 @@ class ChatAdapterTest {
     fun ownMessagesAreRightAlignedAndEveryoneElseIsLeftAligned() = runTest {
         val adapter = adapter(selfSessionId = { 7 })
         adapter.submitMessages(listOf(text(actor = 7), text(actor = 8), info("joined")))
-        idle()
+        idleMainLooper()
 
         val mine = adapter.textHolderAt(0)
         val theirs = adapter.textHolderAt(1)
@@ -371,7 +370,7 @@ class ChatAdapterTest {
                 text(actor = 8, body = "theirs <img src=\"$url\"/> here"),
             )
         )
-        idle()
+        idleMainLooper()
         val captions = intArrayOf(R.id.list_chat_item_text_before, R.id.list_chat_item_text_after)
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
@@ -382,7 +381,7 @@ class ChatAdapterTest {
         }
 
         adapter.bindViewHolder(holder, 1)
-        idle()
+        idleMainLooper()
         assertThat(holder.box.gravity and Gravity.HORIZONTAL_GRAVITY_MASK).isEqualTo(Gravity.LEFT)
         for (id in captions) {
             assertThat(holder.itemView.findViewById<TextView>(id).gravity and Gravity.HORIZONTAL_GRAVITY_MASK)
@@ -395,7 +394,7 @@ class ChatAdapterTest {
         // One holder, both orders: only reuse makes the resets observable.
         val adapter = adapter(selfSessionId = { 7 })
         adapter.submitMessages(listOf(text(actor = 7, channels = listOf(channel("Root"))), info("joined")))
-        idle()
+        idleMainLooper()
         val holder = adapter.createViewHolder(parent, ChatAdapter.TYPE_TEXT) as ChatAdapter.TextHolder
 
         adapter.bindViewHolder(holder, 0)
@@ -418,7 +417,7 @@ class ChatAdapterTest {
         val adapter = adapter()
         val message = info("not parsed")
         adapter.submitList(listOf(message))
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_INFO)
         assertThat(adapter.textHolderAt(0).text.text.toString()).isEqualTo("not parsed")
@@ -430,7 +429,7 @@ class ChatAdapterTest {
         adapter.submitMessages(
             listOf(info("<img src=\"$url\"/>"), info("a <img src=\"$url\"/> b"))
         )
-        idle()
+        idleMainLooper()
 
         val alone = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
         assertThat(alone.itemView.findViewById<TextView>(R.id.list_chat_item_text_before).visibility)
@@ -454,7 +453,7 @@ class ChatAdapterTest {
         val message = info("<img src=\"$url\"/>")
         message.content = ChatContent.Image(url, SpannableStringBuilder(""), SpannableStringBuilder(""))
         adapter.submitMessages(listOf(message))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
         assertThat(holder.itemView.findViewById<TextView>(R.id.list_chat_item_text_before).visibility)
@@ -469,7 +468,7 @@ class ChatAdapterTest {
         remoteBody = "not an image".toByteArray()
         val adapter = adapter()
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
         tapRow(holder, R.id.list_chat_item_image)
@@ -482,7 +481,7 @@ class ChatAdapterTest {
         // ChatImageLoader answers Skipped for these; a Failed(UNSUPPORTED) would be cached forever.
         val adapter = adapter(thumbnailPx = 0)
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
         assertThat(holder.itemView.findViewById<ImageView>(R.id.list_chat_item_image).visibility)
@@ -498,7 +497,7 @@ class ChatAdapterTest {
         val adapter = adapter()
         remoteBody = "not an image".toByteArray()
         adapter.submitMessages(listOf(info("<img src=\"https://x.org/broken.png\"/>")))
-        idle()
+        idleMainLooper()
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
         assertThat(holder.image.visibility).isEqualTo(View.GONE)
         assertThat(holder.status.visibility).isEqualTo(View.VISIBLE)
@@ -507,9 +506,9 @@ class ChatAdapterTest {
         remoteBody = TestImages.png(300, 300)
         val adapter2 = adapter()
         adapter2.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
         adapter2.bindViewHolder(holder, 0)
-        idle()
+        idleMainLooper()
 
         assertThat(holder.image.visibility).isEqualTo(View.VISIBLE)
         assertThat(holder.status.visibility).isEqualTo(View.GONE)
@@ -520,12 +519,12 @@ class ChatAdapterTest {
     fun rebindingAHolderDropsTheBitmapOfTheRowItWasShowing() = runTest {
         val adapter = adapter(thumbnailPx = 0)
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
         holder.image.setImageDrawable(ColorDrawable(0x112233))
 
         adapter.bindViewHolder(holder, 0)
-        idle()
+        idleMainLooper()
 
         assertThat(holder.image.drawable).isNull()
     }
@@ -536,7 +535,7 @@ class ChatAdapterTest {
         val decode = QueueingDispatcher()
         val adapter = adapter(decodeDispatcher = decode)
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
         holder.image.setImageDrawable(ColorDrawable(0x112233))
         val job = holder.job
@@ -544,7 +543,7 @@ class ChatAdapterTest {
 
         adapter.onViewRecycled(holder)
         decode.drain()
-        idle()
+        idleMainLooper()
 
         assertThat(job!!.isCancelled).isTrue()
         assertThat(holder.job).isNull()
@@ -557,7 +556,7 @@ class ChatAdapterTest {
     fun recyclingATextRowIsNotAnImageRowsBusiness() = runTest {
         val adapter = adapter()
         adapter.submitMessages(listOf(info("plain")))
-        idle()
+        idleMainLooper()
         val holder = adapter.textHolderAt(0)
 
         adapter.onViewRecycled(holder)
@@ -572,14 +571,14 @@ class ChatAdapterTest {
         adapter.submitMessages(
             listOf(info("<img src=\"https://x.org/slow.png\"/>"), info("<img src=\"$url\"/>"))
         )
-        idle()
+        idleMainLooper()
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
         val first = holder.job
 
         // The row scrolls on before its thumbnail arrives and the holder is reused for row 1.
         adapter.bindViewHolder(holder, 1)
         decode.drain()
-        idle()
+        idleMainLooper()
 
         assertThat(first!!.isCancelled).isTrue()
         assertThat(holder.job).isNotSameInstanceAs(first)
@@ -607,13 +606,13 @@ class ChatAdapterTest {
         val first = info("one")
         val second = info("two")
         adapter.submitMessages(listOf(first))
-        idle()
+        idleMainLooper()
         adapter.submitMessages(listOf(first, second))
-        idle()
+        idleMainLooper()
         // A fresh list holding the same instances: AsyncListDiffer short-circuits on the identical
         // List object.
         adapter.submitMessages(listOf(first, second))
-        idle()
+        idleMainLooper()
 
         assertThat(pairs).isNotEmpty()
         for ((oldItem, newItem) in pairs) {
@@ -623,7 +622,7 @@ class ChatAdapterTest {
         // Two messages that read the same are still two rows.
         val twin = adapter(diff = ChatAdapter.DIFF)
         twin.submitMessages(listOf(info("same"), info("same")))
-        idle()
+        idleMainLooper()
         assertThat(twin.itemCount).isEqualTo(2)
     }
 
@@ -633,7 +632,7 @@ class ChatAdapterTest {
         // appends today, so this pins what happens the day it does not.
         val adapter = adapter()
         adapter.submitMessages(listOf(info("one"), info("two")))
-        idle()
+        idleMainLooper()
 
         val events = mutableListOf<String>()
         adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
@@ -650,7 +649,7 @@ class ChatAdapterTest {
         })
 
         adapter.submitMessages(listOf(info("three"), info("four")))
-        idle()
+        idleMainLooper()
 
         assertThat(events).doesNotContain("change 0+2")
         assertThat(events).containsExactly("remove 0+2", "insert 0+2").inOrder()
@@ -662,10 +661,10 @@ class ChatAdapterTest {
         val adapter = adapter()
         val log = mutableListOf<IChatMessage>(info("one"))
         adapter.submitMessages(log)
-        idle()
+        idleMainLooper()
 
         log += info("two")
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.itemCount).isEqualTo(1)
     }
@@ -698,7 +697,7 @@ class ChatAdapterTest {
         outside.launch { adapter.submitMessages(listOf(one, two)) }
         // The newer one finishes parsing first, so the older submit lands last.
         parse.drainNewestFirst()
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.itemCount).isEqualTo(2)
         assertThat(adapter.currentList.map { it.body }).containsExactly("one", "two").inOrder()
@@ -803,7 +802,7 @@ class ChatAdapterTest {
             log += info("message $it")
             adapter.submitMessages(log)
         }
-        idle()
+        idleMainLooper()
 
         assertThat(parsed.get()).isEqualTo(400)
         assertThat(adapter.itemCount).isEqualTo(400)

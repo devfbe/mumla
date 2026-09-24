@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Looper
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import androidx.test.core.app.ApplicationProvider
@@ -22,6 +21,7 @@ import se.lublin.humla.net.HumlaCertificateGenerator
 import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaSQLiteDatabase
+import se.lublin.mumla.testing.idleMainLooper
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
@@ -53,7 +53,7 @@ class CertificateExportActivityTest {
         findViewById<EditText>(R.id.export_password)!!.setText(password)
         findViewById<EditText>(R.id.export_password_confirm)!!.setText(confirm)
         getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
     }
 
     @Test
@@ -102,7 +102,7 @@ class CertificateExportActivityTest {
         passwordDialog().enter("secret", "secret")
         val request = shadowOf(activity).nextStartedActivityForResult
         shadowOf(activity).receiveResult(request.intent, Activity.RESULT_OK, Intent().setData(uri))
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
 
         val exported = written.toByteArray()
         assertThat(exported).isNotEmpty()

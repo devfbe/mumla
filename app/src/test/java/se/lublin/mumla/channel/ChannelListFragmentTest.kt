@@ -1,7 +1,6 @@
 package se.lublin.mumla.channel
 
 import android.os.Bundle
-import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
@@ -17,7 +16,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
@@ -25,6 +23,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.db.DatabaseProvider
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.util.HumlaServiceFragment
 import se.lublin.mumla.util.HumlaServiceProvider
 
@@ -144,7 +143,6 @@ class ChannelListFragmentTest {
     private val listAdapter: ChannelListAdapter
         get() = channelView.adapter as ChannelListAdapter
 
-    private fun idleMainLooper() = shadowOf(Looper.getMainLooper()).idle()
 
     private fun countChanges(): () -> Int {
         var changes = 0

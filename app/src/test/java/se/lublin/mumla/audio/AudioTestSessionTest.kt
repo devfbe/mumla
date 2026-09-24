@@ -33,6 +33,10 @@ import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.Resampler
 import se.lublin.humla.audio.capture.VadConfig
+import se.lublin.humla.audio.capture.fakes.FakeRnnoiseApi
+import se.lublin.humla.audio.capture.fakes.FakeSpeexPreprocessApi
+import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
+import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -56,9 +60,14 @@ class AudioTestSessionTest {
 
     private fun preprocessors(speexGain: Float = 1f, speexProbability: Int = 0) =
         CapturePreprocessorFactory(
-            speexApi = { ScalingSpeexApi(speexGain, speexProbability) },
-            rnnoiseApi = { AbsentRnnoiseApi() },
-            apmApi = { AbsentApmApi() },
+            speexApi = {
+                FakeSpeexPreprocessApi(speexProbability) { frame ->
+                    for (i in frame.indices) frame[i] = (frame[i] * speexGain).toInt().toShort()
+                }
+            },
+            // Neither comes up, so the factory falls back to no stage for them.
+            rnnoiseApi = { FakeRnnoiseApi().apply { failCreate = true } },
+            apmApi = { FakeWebRtcApmApi().apply { failCreate = true } },
         )
 
     private fun session(
@@ -83,11 +92,7 @@ class AudioTestSessionTest {
         resamplerFactory = resamplerFactory,
     ).also { session = it }
 
-    private fun await(timeoutMs: Long = 4000, condition: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (!condition() && System.currentTimeMillis() < deadline) Thread.sleep(2)
-        assertThat(condition()).isTrue()
-    }
+    private fun await(condition: () -> Boolean) = awaitUntil(4_000L, condition = condition)
 
     // --- what the meter reports ----------------------------------------------------------------
 
@@ -216,8 +221,8 @@ class AudioTestSessionTest {
         ) { _, _ -> error("no resampler expected") }
         session = s
         s.start()
-        await { source.events.contains("start") }
-        Thread.sleep(200)
+        // 40 frames at one reading per 10: exactly four, and the source then runs dry.
+        await { readings.size >= 4 }
         s.stop()
         assertThat(readings.size).isEqualTo(4)
     }

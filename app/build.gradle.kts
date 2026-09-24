@@ -126,6 +126,7 @@ dependencies {
     "googImplementation"(libs.billing)
 
     testImplementation(libs.bundles.unit.test)
+    testImplementation(testFixtures(project(":libraries:humla")))
     testImplementation(libs.androidx.fragment.testing)
     // A manifest-only artifact: it must reach the merged debug manifest Robolectric reads.
     debugImplementation(libs.androidx.fragment.testing.manifest)

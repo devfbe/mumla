@@ -5,7 +5,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
-import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.MenuItem
@@ -61,6 +60,8 @@ import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.TestImages
 import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.testing.drainMainUntil
+import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.util.HumlaServiceFragment
 import se.lublin.mumla.util.HumlaServiceProvider
 
@@ -141,25 +142,9 @@ class ChannelChatFragmentTest {
         parent.childFragmentManager.beginTransaction()
             .add(HostParentFragment.CONTAINER_ID, fragment, "chat").commitNow()
         controller.start().resume().visible()
-        idle()
+        idleMainLooper()
     }
 
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
-
-    /**
-     * Drains the main looper until [condition] holds, failing on timeout. One `idle()` is not
-     * enough: the adapter's parse hops to `Dispatchers.Default` and back.
-     */
-    private fun drain(timeoutMs: Long = 10_000, condition: () -> Boolean) {
-        val deadline = System.nanoTime() + timeoutMs * 1_000_000
-        while (System.nanoTime() < deadline) {
-            idle()
-            if (condition()) return
-            Thread.sleep(1)
-        }
-        idle()
-        if (!condition()) throw AssertionError("condition still false after $timeoutMs ms")
-    }
 
     private fun itemCount(): Int = list.adapter!!.itemCount
 
@@ -184,7 +169,7 @@ class ChannelChatFragmentTest {
         log += info("older")
         log += info("newer")
         launch()
-        drain { itemCount() == 2 }
+        drainMainUntil { itemCount() == 2 }
         assertThat(itemCount()).isEqualTo(2)
     }
 
@@ -192,7 +177,7 @@ class ChannelChatFragmentTest {
     fun anArrivingLogLineIsAppended() {
         launch()
         observer.onLogInfo("hello")
-        drain { itemCount() == 1 }
+        drainMainUntil { itemCount() == 1 }
         assertThat(itemCount()).isEqualTo(1)
     }
 
@@ -201,7 +186,7 @@ class ChannelChatFragmentTest {
         log += info("older")
         launch()
         fragment.clear()
-        drain { itemCount() == 0 }
+        drainMainUntil { itemCount() == 0 }
         assertThat(itemCount()).isEqualTo(0)
         verify { service.clearMessageLog() }
     }
@@ -215,7 +200,7 @@ class ChannelChatFragmentTest {
         launch()
         val observerBeforeTeardown = observer
         activity.supportFragmentManager.beginTransaction().remove(parent).commitNow()
-        idle()
+        idleMainLooper()
         observerBeforeTeardown.onLogInfo("late")
     }
 
@@ -256,7 +241,7 @@ class ChannelChatFragmentTest {
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.send_message))
         activity.bound = service
         fragment.setServiceBound(true)
-        drain { editor.hint.toString() != activity.getString(R.string.send_message) }
+        drainMainUntil { editor.hint.toString() != activity.getString(R.string.send_message) }
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
     }
 
@@ -374,7 +359,7 @@ class ChannelChatFragmentTest {
         launch()
         fragment.openImageViewer("data:image/png;base64,AAAA")
         fragment.openImageViewer("data:image/png;base64,AAAA")
-        idle()
+        idleMainLooper()
         assertThat(openViewers()).isEqualTo(1)
     }
 
@@ -383,13 +368,13 @@ class ChannelChatFragmentTest {
     fun theViewerOpensAgainAfterItIsDismissed() {
         launch()
         fragment.openImageViewer("data:image/png;base64,AAAA")
-        idle()
+        idleMainLooper()
         (fragment.parentFragmentManager.findFragmentByTag(ImageViewerDialogFragment.TAG)
             as ImageViewerDialogFragment).dismissNow()
-        idle()
+        idleMainLooper()
         assertThat(openViewers()).isEqualTo(0)
         fragment.openImageViewer("data:image/png;base64,AAAA")
-        idle()
+        idleMainLooper()
         assertThat(openViewers()).isEqualTo(1)
     }
 
@@ -441,7 +426,7 @@ class ChannelChatFragmentTest {
         launch()
         fragment.sendImage(smallBitmap())
         val sent = slot<String>()
-        drain { runCatching { verify { session.sendChannelTextMessage(any(), capture(sent), any()) } }.isSuccess }
+        drainMainUntil { runCatching { verify { session.sendChannelTextMessage(any(), capture(sent), any()) } }.isSuccess }
         assertThat(sent.captured).startsWith("<img src=\"data:image/jpeg;base64,")
         assertThat(progress.visibility).isEqualTo(View.GONE)
     }
@@ -454,7 +439,7 @@ class ChannelChatFragmentTest {
         launch()
         activity.bound = null
         fragment.sendImage(smallBitmap())
-        idle()
+        idleMainLooper()
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
         assertThat(progress.visibility).isEqualTo(View.GONE)
     }
@@ -465,7 +450,7 @@ class ChannelChatFragmentTest {
         launch()
         every { service.HumlaSession() } throws HumlaDisconnectedException()
         fragment.sendImage(smallBitmap())
-        drain { progress.visibility == View.GONE }
+        drainMainUntil { progress.visibility == View.GONE }
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
     }
 
@@ -475,7 +460,7 @@ class ChannelChatFragmentTest {
         every { session.serverSettings } returns settings(10)
         launch()
         fragment.sendImage(smallBitmap())
-        drain { progress.visibility == View.GONE }
+        drainMainUntil { progress.visibility == View.GONE }
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
     }
 
@@ -531,7 +516,7 @@ class ChannelChatFragmentTest {
         launch()
         val item: MenuItem = mockk(relaxed = true) { every { itemId } returns R.id.menu_clear_chat }
         assertThat(fragment.onOptionsItemSelected(item)).isTrue()
-        drain { itemCount() == 0 }
+        drainMainUntil { itemCount() == 0 }
         verify { service.clearMessageLog() }
     }
 
@@ -542,7 +527,7 @@ class ChannelChatFragmentTest {
         assertThat(button.isEnabled).isTrue()
         assertThat(button.visibility).isEqualTo(View.VISIBLE)
         button.performClick()
-        idle()
+        idleMainLooper()
     }
 
     private fun startedAction(): String? =
@@ -584,7 +569,7 @@ class ChannelChatFragmentTest {
         launch()
         val bitmap = smallBitmap()
         fragment.confirmImage(bitmap)
-        idle()
+        idleMainLooper()
         val dialog = latestDialog()
         assertThat(dialog.isShowing).isTrue()
         val preview = dialog.window!!.decorView.firstImageView()
@@ -597,7 +582,7 @@ class ChannelChatFragmentTest {
         assertThat(preview.maxHeight).isEqualTo(activity.resources.displayMetrics.heightPixels / 3)
 
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
-        idle()
+        idleMainLooper()
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
     }
 
@@ -607,9 +592,9 @@ class ChannelChatFragmentTest {
         every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
         launch()
         fragment.confirmImage(smallBitmap())
-        idle()
+        idleMainLooper()
         latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        drain { runCatching { verify { session.sendChannelTextMessage(any(), any(), any()) } }.isSuccess }
+        drainMainUntil { runCatching { verify { session.sendChannelTextMessage(any(), any(), any()) } }.isSuccess }
     }
 
     private fun View.firstImageView(): ImageView? {
@@ -645,7 +630,7 @@ class ChannelChatFragmentTest {
         launch()
         editor.setText("hi there")
         sendButton.performClick()
-        drain { itemCount() == 1 }
+        drainMainUntil { itemCount() == 1 }
         assertThat(itemCount()).isEqualTo(1)
     }
 
@@ -656,10 +641,10 @@ class ChannelChatFragmentTest {
         log += info("b")
         launch()
         observer.onLogInfo("live")
-        drain { itemCount() == 3 }
+        drainMainUntil { itemCount() == 3 }
         fragment.setServiceBound(false)
         fragment.setServiceBound(true)
-        drain { itemCount() == 2 }
+        drainMainUntil { itemCount() == 2 }
         assertThat(itemCount()).isEqualTo(2)
     }
 
@@ -677,7 +662,7 @@ class ChannelChatFragmentTest {
         launch()
         val recycler = list
         activity.supportFragmentManager.beginTransaction().remove(parent).commitNow()
-        idle()
+        idleMainLooper()
         assertThat(recycler.adapter).isNull()
     }
 
@@ -709,7 +694,7 @@ class ChannelChatFragmentTest {
             launch()
             every { service.HumlaSession() } throws HumlaDisconnectedException()
             fragment.sendImage(smallBitmap())
-            drain { progress.visibility == View.GONE }
+            drainMainUntil { progress.visibility == View.GONE }
         } finally {
             Thread.setDefaultUncaughtExceptionHandler(previous)
         }
@@ -729,7 +714,7 @@ class ChannelChatFragmentTest {
         try {
             log += info("<img src=\"data:image/png;base64,AAAA\"/>")
             launch()
-            drain { itemCount() == 1 }
+            drainMainUntil { itemCount() == 1 }
             val adapter = list.adapter as ChatAdapter
             assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_IMAGE)
             val holder = adapter.createViewHolder(list, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
@@ -790,7 +775,7 @@ class ChannelChatFragmentTest {
         root.dispatchTouchEvent(up)
         down.recycle()
         up.recycle()
-        idle()
+        idleMainLooper()
     }
 
     /** Tapping an image row opens the viewer through the `onImageClicked` wire. */
@@ -800,7 +785,7 @@ class ChannelChatFragmentTest {
         try {
             log += imageMessage("data:image/png;base64,TAPPED")
             launch()
-            drain { itemCount() == 1 }
+            drainMainUntil { itemCount() == 1 }
             layOutHost()
             val row = list.getChildAt(0)
             assertThat(row).isNotNull()
@@ -829,7 +814,7 @@ class ChannelChatFragmentTest {
         log += IChatMessage.TextMessage(Message(7, "Me", emptyList(), emptyList(), emptyList(), "mine"))
         log += IChatMessage.TextMessage(Message(9, "Ann", emptyList(), emptyList(), emptyList(), "theirs"))
         launch()
-        drain { itemCount() == 2 }
+        drainMainUntil { itemCount() == 2 }
         layOutHost()
         val adapter = list.adapter as ChatAdapter
         val mine = adapter.createViewHolder(list, ChatAdapter.TYPE_TEXT)
@@ -849,7 +834,7 @@ class ChannelChatFragmentTest {
         try {
             log += imageMessage()
             launch()
-            drain { itemCount() == 1 }
+            drainMainUntil { itemCount() == 1 }
             layOutHost()
             val expected = activity.resources.getDimensionPixelSize(R.dimen.chat_thumbnail_max)
             assertThat(expected).isGreaterThan(0)
@@ -868,7 +853,7 @@ class ChannelChatFragmentTest {
         try {
             log += info("<img src=\"data:image/png;base64,AAAA\"/>tail<img src=\"data:image/png;base64,BBBB\"/>")
             launch()
-            drain { itemCount() == 1 }
+            drainMainUntil { itemCount() == 1 }
             layOutHost()
             val adapter = list.adapter as ChatAdapter
             val holder = adapter.createViewHolder(list, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
@@ -894,7 +879,7 @@ class ChannelChatFragmentTest {
     fun grantingTheStoragePermissionOpensThePicker() {
         launch()
         fragment.onReadPermissionResult(true)
-        idle()
+        idleMainLooper()
         assertThat(startedAction()).isEqualTo(Intent.ACTION_GET_CONTENT)
         assertThat(ShadowToast.getLatestToast()).isNull()
     }
@@ -904,7 +889,7 @@ class ChannelChatFragmentTest {
     fun refusingTheStoragePermissionSaysSoAndOpensNothing() {
         launch()
         fragment.onReadPermissionResult(false)
-        idle()
+        idleMainLooper()
         assertThat(ShadowToast.getTextOfLatestToast())
             .isEqualTo(activity.getString(R.string.permission_denied_storage))
         assertThat(startedAction()).isNull()
@@ -914,7 +899,7 @@ class ChannelChatFragmentTest {
     fun cancellingThePickerDoesNothing() {
         launch()
         fragment.onImagePickResult(null)
-        idle()
+        idleMainLooper()
         assertThat(progress.visibility).isEqualTo(View.GONE)
         assertThat(ShadowDialog.getLatestDialog()).isNull()
         assertThat(ShadowToast.getLatestToast()).isNull()
@@ -932,8 +917,8 @@ class ChannelChatFragmentTest {
         registerImage(uri, TestImages.jpeg(1200, 900))
         fragment.onImagePickResult(uri)
         assertThat(progress.visibility).isEqualTo(View.VISIBLE)
-        drain { ShadowDialog.getLatestDialog() != null }
-        idle()
+        drainMainUntil { ShadowDialog.getLatestDialog() != null }
+        idleMainLooper()
         assertThat(progress.visibility).isEqualTo(View.GONE)
 
         val preview = latestDialog().window!!.decorView.firstImageView()!!
@@ -951,7 +936,7 @@ class ChannelChatFragmentTest {
         val uri = Uri.parse("content://se.lublin.mumla.test/notes.txt")
         registerImage(uri, "definitely not an image".toByteArray())
         fragment.onImagePickResult(uri)
-        drain { ShadowToast.getLatestToast() != null }
+        drainMainUntil { ShadowToast.getLatestToast() != null }
         assertThat(ShadowToast.getTextOfLatestToast())
             .isEqualTo(activity.getString(R.string.image_decode_failed))
         assertThat(ShadowDialog.getLatestDialog()).isNull()
@@ -963,7 +948,7 @@ class ChannelChatFragmentTest {
         launch()
         activity.bound = null
         fragment.onImagePickResult(Uri.parse("content://se.lublin.mumla.test/x.jpg"))
-        idle()
+        idleMainLooper()
         assertThat(progress.visibility).isEqualTo(View.GONE)
         assertThat(ShadowDialog.getLatestDialog()).isNull()
     }
@@ -973,7 +958,7 @@ class ChannelChatFragmentTest {
         launch()
         disconnect()
         fragment.onImagePickResult(Uri.parse("content://se.lublin.mumla.test/x.jpg"))
-        idle()
+        idleMainLooper()
         assertThat(progress.visibility).isEqualTo(View.GONE)
         assertThat(ShadowDialog.getLatestDialog()).isNull()
     }
@@ -989,7 +974,7 @@ class ChannelChatFragmentTest {
         assertThat(progress.visibility).isEqualTo(View.GONE)
         fragment.sendImage(smallBitmap())
         assertThat(progress.visibility).isEqualTo(View.VISIBLE)
-        drain { progress.visibility == View.GONE }
+        drainMainUntil { progress.visibility == View.GONE }
     }
 
     /** An image no quality rung fits is reported. */
@@ -998,7 +983,7 @@ class ChannelChatFragmentTest {
         every { session.serverSettings } returns settings(10)
         launch()
         fragment.sendImage(smallBitmap())
-        drain { ShadowToast.getLatestToast() != null }
+        drainMainUntil { ShadowToast.getLatestToast() != null }
         assertThat(ShadowToast.getTextOfLatestToast())
             .isEqualTo(activity.getString(R.string.image_too_large))
     }
@@ -1007,9 +992,9 @@ class ChannelChatFragmentTest {
     fun theListIsScrolledToTheNewestMessage() {
         repeat(40) { log += info("m$it") }
         launch()
-        drain { itemCount() == 40 }
+        drainMainUntil { itemCount() == 40 }
         layOutHost()
-        idle()
+        idleMainLooper()
         val lm = list.layoutManager as LinearLayoutManager
         assertThat(lm.findLastVisibleItemPosition()).isEqualTo(39)
     }
@@ -1035,7 +1020,7 @@ class ChannelChatFragmentTest {
         editor.requestFocus()
         editor.setText("typed")
         editor.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-        idle()
+        idleMainLooper()
         verify { session.sendChannelTextMessage(any(), eq("typed"), any()) }
         assertThat(editor.text.toString()).isEmpty()
     }
@@ -1046,7 +1031,7 @@ class ChannelChatFragmentTest {
         launch()
         editor.setText("typed")
         editor.onEditorAction(EditorInfo.IME_ACTION_SEND)
-        idle()
+        idleMainLooper()
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
         assertThat(editor.text.toString()).isEqualTo("typed")
     }

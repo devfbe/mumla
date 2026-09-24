@@ -22,7 +22,6 @@ import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.net.Uri
-import android.os.Looper
 import android.text.InputType
 import android.text.method.PasswordTransformationMethod
 import android.view.View
@@ -41,6 +40,7 @@ import org.robolectric.shadows.ShadowDialog
 import se.lublin.humla.net.HumlaCertificateGenerator
 import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.db.MumlaSQLiteDatabase
+import se.lublin.mumla.testing.idleMainLooper
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
@@ -130,7 +130,7 @@ class CertificateImportActivityTest {
 
         field.setText("secret")
         (dialog as AlertDialog).getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(storedCertificates()).hasSize(1)
     }
 

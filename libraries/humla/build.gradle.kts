@@ -40,6 +40,10 @@ android {
         }
     }
 
+    testFixtures {
+        enable = true
+    }
+
     defaultConfig {
         testApplicationId = "se.lublin.humla.test"
         consumerProguardFiles("consumer-rules.pro")

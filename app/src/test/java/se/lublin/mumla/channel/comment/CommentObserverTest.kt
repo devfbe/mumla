@@ -1,7 +1,6 @@
 package se.lublin.mumla.channel.comment
 
 import android.os.Bundle
-import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.DialogFragment
 import com.google.common.truth.Truth.assertThat
@@ -13,12 +12,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IUser
 import se.lublin.humla.util.IHumlaObserver
 import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.util.HumlaServiceFragment
 import se.lublin.mumla.util.HumlaServiceProvider
 
@@ -50,12 +49,12 @@ class CommentObserverTest {
     private fun show(fragment: DialogFragment, args: Bundle) {
         fragment.arguments = args
         fragment.show(activity.supportFragmentManager, "comment")
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
     }
 
     private fun close(fragment: DialogFragment) {
         fragment.dismiss()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
     }
 
     @Test

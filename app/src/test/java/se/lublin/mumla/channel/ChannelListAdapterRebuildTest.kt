@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.graphics.Typeface
-import android.os.Looper
 import android.util.TypedValue
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -33,6 +32,7 @@ import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.drawable.CircleDrawable
+import se.lublin.mumla.testing.idleMainLooper
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
@@ -127,7 +127,6 @@ class ChannelListAdapterRebuildTest {
         return root to mapOf(0 to root, 1 to empty, 2 to populated, 3 to emptyChild, 4 to deep)
     }
 
-    private fun idleMainLooper() = shadowOf(Looper.getMainLooper()).idle()
 
     @Before
     fun setUp() {

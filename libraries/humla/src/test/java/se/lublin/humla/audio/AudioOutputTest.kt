@@ -17,6 +17,7 @@ import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.protocol.AudioHandler
+import se.lublin.humla.testutil.awaitUntil
 
 @RunWith(RobolectricTestRunner::class)
 class AudioOutputTest {
@@ -190,13 +191,7 @@ class AudioOutputTest {
         failure?.let { throw it }
     }
 
-    private fun awaitTrue(what: String, condition: () -> Boolean) {
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-        while (!condition()) {
-            assertWithMessage("timed out waiting for $what").that(System.nanoTime() < deadline).isTrue()
-            Thread.sleep(5)
-        }
-    }
+    private fun awaitTrue(what: String, condition: () -> Boolean) = awaitUntil(description = what, condition = condition)
 
     private class NoOpusDecoder : OpusDecoderApi {
         override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {

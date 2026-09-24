@@ -1,7 +1,6 @@
 package se.lublin.mumla.servers
 
 import android.os.Bundle
-import android.os.Looper
 import android.view.View
 import android.widget.PopupMenu
 import android.widget.TextView
@@ -14,12 +13,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 import se.lublin.mumla.db.DatabaseProvider
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.PublicServer
+import se.lublin.mumla.testing.drainMainUntil
+import se.lublin.mumla.testing.idleMainLooper
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -62,7 +62,7 @@ class PublicServerListFragmentTest {
             }
         }
         activity.supportFragmentManager.beginTransaction().add(android.R.id.content, fragment).commitNow()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         return fragment
     }
 
@@ -91,7 +91,7 @@ class PublicServerListFragmentTest {
     @Test
     fun withoutTorTheListIsDownloaded() {
         val fragment = showFragment()
-        awaitDownloadAttempt()
+        drainMainUntil(description = "a download attempt") { downloads.get() > 0 }
 
         assertThat(downloads.get()).isEqualTo(1)
         assertThat(fragment.requireView().findViewById<View>(R.id.server_list_tor_notice).visibility)
@@ -109,13 +109,5 @@ class PublicServerListFragmentTest {
         assertThat(notice.visibility).isEqualTo(View.VISIBLE)
         assertThat(notice.text.toString()).isEqualTo(activity.getString(R.string.public_server_list_tor_disabled))
         assertThat(view.findViewById<View>(R.id.serverProgress).visibility).isEqualTo(View.GONE)
-    }
-
-    private fun awaitDownloadAttempt() {
-        val deadline = System.nanoTime() + 5_000_000_000L
-        while (downloads.get() == 0 && System.nanoTime() < deadline) {
-            shadowOf(Looper.getMainLooper()).idle()
-            Thread.yield()
-        }
     }
 }

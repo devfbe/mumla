@@ -5,6 +5,6 @@ fun awaitUntil(timeoutMillis: Long = 5_000L, description: String = "condition", 
     val deadline = System.nanoTime() + timeoutMillis * 1_000_000L
     while (!condition()) {
         if (System.nanoTime() > deadline) throw AssertionError("$description not met within $timeoutMillis ms")
-        Thread.sleep(5)
+        Thread.sleep(2)
     }
 }

@@ -5,7 +5,6 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.SharedPreferences
 import android.media.session.MediaSession
-import android.os.Looper
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.view.KeyEvent
@@ -21,11 +20,11 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.Constants
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.util.IHumlaObserver
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.idleMainLooper
 
 @RunWith(RobolectricTestRunner::class)
 class MumlaMediaSessionTest {
@@ -219,7 +218,7 @@ class MumlaMediaSessionTest {
         socketThread.join()
 
         assertThat(mediaSession.isActive).isTrue()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(mediaSession.isActive).isFalse()
     }
 

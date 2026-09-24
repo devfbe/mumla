@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
-import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -25,6 +24,7 @@ import org.robolectric.annotation.Config
 import se.lublin.mumla.R
 import se.lublin.mumla.app.DrawerAdapter
 import se.lublin.mumla.app.MumlaActivity
+import se.lublin.mumla.testing.idleMainLooper
 
 /**
  * The foreground notification: what it shows, what its buttons reach, and when it holds the
@@ -81,7 +81,6 @@ class MumlaConnectionNotificationTest {
         it.intentFilter.hasAction("b_mute")
     }
 
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     // ---- what the notification shows -------------------------------------------------------
 
@@ -211,7 +210,7 @@ class MumlaConnectionNotificationTest {
         for ((index, expected) in listOf("mute", "deafen", "overlay").withIndex()) {
             listener.calls.clear()
             shadowOf(service).lastForegroundNotification.actions[index].actionIntent.send()
-            idle()
+            idleMainLooper()
             assertThat(listener.calls).containsExactly(expected)
         }
     }
@@ -254,7 +253,7 @@ class MumlaConnectionNotificationTest {
         notification.show()
 
         posted().actions.single().actionIntent.send()
-        idle()
+        idleMainLooper()
 
         assertThat(listener.calls).containsExactly("cancelReconnect")
         assertThat(ourReceivers()).hasSize(1)
@@ -283,7 +282,7 @@ class MumlaConnectionNotificationTest {
         assertThat(shadowOf(service).notificationShouldRemoved).isTrue()
         assertThat(ourReceivers()).isEmpty()
         mute.send()
-        idle()
+        idleMainLooper()
         assertThat(listener.calls).isEmpty()
     }
 
@@ -371,7 +370,7 @@ class MumlaConnectionNotificationTest {
 
         assertThat(ourReceivers()).hasSize(1)
         posted().actions[0].actionIntent.send()
-        idle()
+        idleMainLooper()
         assertThat(listener.calls).containsExactly("mute")
     }
 
