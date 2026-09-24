@@ -27,36 +27,17 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Fans [IHumlaObserver] events out to registered observers on [handler]'s thread (the main thread
- * in production).
+ * in production). May be called from any thread; callbacks run one at a time in acceptance order.
  *
- * Events raised on other threads are queued and drained in slices of at most
- * [MAX_EVENTS_PER_SLICE] events or [SLICE_BUDGET_NANOS], after which the drain re-posts itself, so
- * other main-looper work never waits more than one slice. Events raised on the handler's own thread
- * while nothing is queued are delivered inline (the service relies on this for its own state
- * changes); an event raised from an inline callback is itself delivered inline, nested.
+ * Events from other threads are queued and drained in slices of at most [MAX_EVENTS_PER_SLICE]
+ * events or [SLICE_BUDGET_NANOS]. Events raised on the handler's thread while nothing is queued are
+ * delivered inline (the service relies on this for its own state changes).
  *
- * Thread contract:
- * - All observer methods, [registerObserver] and [unregisterObserver] may be called from any thread.
- * - Callbacks run on [handler]'s thread, one at a time, in the order events were accepted - except
- *   that a folded refresh takes the queue position of the refresh it replaced.
- * - Fan-out iterates the live (weakly consistent) observer set; an observer unregistered on the
- *   handler thread receives nothing from any fan-out that starts afterwards.
- * - A slice that ends early (a callback threw, the looper refused the re-post) keeps the queue
- *   intact and re-arms the drain.
- *
- * Queue bounds:
- * - State refreshes for one subject ([onChannelStateUpdated], [onChannelPermissionsUpdated],
- *   [onUserStateUpdated], [onUserTalkStateUpdated]) are folded: a second one replaces the queued
- *   one, so a talk state that toggles while the thread is busy is delivered once.
- * - Above [maxQueuedEvents], the oldest tree-shape event ([onChannelAdded], [onChannelRemoved],
- *   [onUserRemoved]) is dropped - never the newest, and only a tree-shape event triggers a drop, so
- *   a list rebuild is always still queued. Observers rebuild the whole list from the model anyway.
- * - Above [absoluteCeiling], the oldest event of any kind is dropped (chat and log included),
- *   except the connection-lifecycle events. Those are raised only on [handler]'s thread, so none
- *   can arrive while it is stuck - the only time the queue grows. Recheck this if [handler] and the
- *   connection's handler ever stop being the same thread.
- *
- * Observers must treat a model event as "re-read this", never as a delta to accumulate.
+ * Queue bounds: per-subject state refreshes are folded (a later one replaces the queued one in
+ * place); above [maxQueuedEvents] the oldest tree-shape event is dropped, never the newest; above
+ * [absoluteCeiling] the oldest event of any kind except connection-lifecycle events is dropped.
+ * Lifecycle events are raised only on [handler]'s thread, so they cannot pile up while it is stuck.
+ * Observers must therefore treat a model event as "re-read this", never as a delta.
  */
 class HumlaCallbacks @JvmOverloads constructor(
     private val handler: Handler = Handler(Looper.getMainLooper()),
@@ -65,11 +46,9 @@ class HumlaCallbacks @JvmOverloads constructor(
 
     private val observers: MutableSet<IHumlaObserver> = Collections.newSetFromMap(ConcurrentHashMap())
     private val lock = Any()
-    // An identity set (Event has no equals) that keeps arrival order and removes from the middle
-    // in constant time, which the ceilings need.
+    // Identity set (Event has no equals): arrival order plus O(1) removal from the middle.
     private val queue = LinkedHashSet<Event>() // guarded by lock
-    // The droppable members of queue, in the same order, so the first ceiling need not scan past
-    // undroppable events. Every removal takes a head, which keeps the two in step: see forget().
+    // The droppable members of queue, in the same order.
     private val droppable = ArrayDeque<Event>() // guarded by lock
     private val folded = HashMap<Any, Event>() // guarded by lock
     private var drainScheduled = false // guarded by lock
@@ -89,29 +68,21 @@ class HumlaCallbacks @JvmOverloads constructor(
         if (maxQueuedEvents > Int.MAX_VALUE / CEILING_FACTOR) Int.MAX_VALUE
         else maxQueuedEvents * CEILING_FACTOR
 
-    /**
-     * What the queue may do with an event besides deliver it. A sealed type so that an event can't
-     * be both folded and droppable (a dropped event still indexed in [folded] would swallow the
-     * next refresh for its subject).
-     */
+    /** What the queue may do with an event besides deliver it; exclusive, so a folded event is never dropped. */
     private sealed interface Policy {
-        /** Delivered as raised: never folded, and dropped only by [absoluteCeiling]. */
+        /** Never folded; dropped only by [absoluteCeiling]. */
         data object Plain : Policy
 
-        /** A connection-lifecycle event, which no ceiling drops; see the class doc for why that is bounded. */
+        /** Connection lifecycle; never dropped. */
         data object Lifecycle : Policy
 
-        /** A state refresh for [key]; a later refresh for the same key replaces it in place. */
         class Fold(val key: Any) : Policy
 
-        /** A tree-shape event the first ceiling may throw away, oldest first. */
+        /** Tree-shape event the first ceiling may drop, oldest first. */
         data object Droppable : Policy
     }
 
-    /**
-     * One queued fan-out. [deliver] is written and dequeued under [lock], which orders the write
-     * before the read on the delivery thread.
-     */
+    /** One queued fan-out; [deliver] is written and dequeued under [lock]. */
     private class Event(var deliver: (IHumlaObserver) -> Unit, val policy: Policy)
 
     private val drain = object : Runnable {
@@ -119,8 +90,7 @@ class HumlaCallbacks @JvmOverloads constructor(
             val start = System.nanoTime()
             var delivered = 0
             try {
-                // The budget is checked only after a delivery, so every slice makes progress even
-                // after a descheduling longer than the budget.
+                // Budget checked after a delivery, so every slice makes progress.
                 while (true) {
                     val event = synchronized(lock) {
                         val head = queue.iterator()
@@ -136,8 +106,7 @@ class HumlaCallbacks @JvmOverloads constructor(
                     }
                 }
             } finally {
-                // Also runs when an observer threw. Clearing the flag when the post is refused (a
-                // quitting looper) lets a later event re-arm the drain.
+                // Also after a throwing observer; a refused post (quitting looper) clears the flag.
                 synchronized(lock) {
                     drainScheduled = queue.isNotEmpty() && handler.post(this)
                 }
@@ -180,23 +149,18 @@ class HumlaCallbacks @JvmOverloads constructor(
         }
         queue.add(event)
         if (policy is Policy.Droppable) droppable.addLast(event)
-        // Only a droppable event may push the first ceiling: an undroppable burst must not evict
-        // queued onChannelAdded events and leave nothing to rebuild the list from.
+        // Only a droppable event may trigger the first ceiling, so a list rebuild always stays queued.
         if (policy is Policy.Droppable) {
             while (queue.size > maxQueuedEvents && dropOldestDroppableExcept(event)) {
-                // A lowered ceiling or a drained undroppable run can leave more than one over.
+                // May be more than one over.
             }
         }
-        // The ceiling that bounds the queue, applied to every policy.
         while (queue.size > absoluteCeiling && dropOldestUnlessLifecycle()) {
             // Same reason as above.
         }
     }
 
-    /**
-     * Caller holds [lock]. Drops the oldest tree-shape event other than [newest] and returns false
-     * when there is none; the newest must survive because its delivery shows everything dropped.
-     */
+    /** Caller holds [lock]. Drops the oldest tree-shape event other than [newest]; false if none. */
     private fun dropOldestDroppableExcept(newest: Event): Boolean {
         val victim = droppable.firstOrNull() ?: return false
         if (victim === newest) return false // it is the only one, since newest was just appended
@@ -204,18 +168,14 @@ class HumlaCallbacks @JvmOverloads constructor(
         return true
     }
 
-    /**
-     * Caller holds [lock]. Drops the oldest event [Policy.Lifecycle] does not exempt, and returns
-     * false when there is none. Scans the lifecycle prefix, which stays short because lifecycle
-     * events are raised only on [handler]'s thread.
-     */
+    /** Caller holds [lock]. Drops the oldest non-lifecycle event; false if none. */
     private fun dropOldestUnlessLifecycle(): Boolean {
         val victim = queue.firstOrNull { it.policy !is Policy.Lifecycle } ?: return false
         discard(victim)
         return true
     }
 
-    /** Caller holds [lock]. Throws [victim] away unheard and counts it. */
+    /** Caller holds [lock]. */
     private fun discard(victim: Event) {
         queue.remove(victim)
         forget(victim)
@@ -223,9 +183,8 @@ class HumlaCallbacks @JvmOverloads constructor(
     }
 
     /**
-     * Caller holds [lock]. Drops the index entries of an event that has just left [queue]. A stale
-     * [folded] entry would swallow every later refresh for that subject. [droppable] is popped
-     * because every droppable event that leaves the queue is its head.
+     * Caller holds [lock]. Drops the index entries of an event that just left [queue]; a droppable
+     * event leaving the queue is always the head of [droppable].
      */
     private fun forget(event: Event) {
         when (val policy = event.policy) {
@@ -270,22 +229,17 @@ class HumlaCallbacks @JvmOverloads constructor(
     override fun onLogWarning(message: String?) = dispatch { it.onLogWarning(message) }
     override fun onLogError(message: String?) = dispatch { it.onLogError(message) }
 
-    /** The kinds of event that fold, paired with the model object to make a queue key. */
     private enum class Subject { CHANNEL_STATE, CHANNEL_PERMISSIONS, USER_STATE, USER_TALK_STATE }
 
     companion object {
-        /** Upper bound of observer events delivered per main-looper task. */
         const val MAX_EVENTS_PER_SLICE = 64
-        /** Wall-clock budget of one drain slice (8 ms, half a 60 Hz frame). */
+        /** 8 ms, half a 60 Hz frame. */
         const val SLICE_BUDGET_NANOS = 8_000_000L
 
-        /** Upper bound of queued events before tree-shape events are dropped (16 full slices). */
+        /** Queued events before tree-shape events are dropped (16 full slices). */
         const val MAX_QUEUED_EVENTS = 1_024
 
-        /**
-         * How far above [MAX_QUEUED_EVENTS] the absolute ceiling sits: 128 full slices, about a
-         * second of main-thread delivery work.
-         */
+        /** Absolute ceiling factor: 128 full slices, about a second of delivery work. */
         const val CEILING_FACTOR = 8
     }
 }
