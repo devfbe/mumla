@@ -25,6 +25,9 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.net.CertificatePins
+import se.lublin.humla.net.HumlaCertificateGenerator
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -87,5 +90,25 @@ class MumlaTrustStoreTest {
             .onSuccess { throw AssertionError("an uninitialized store must not save") }
 
         assertThat(openDescriptorsFor(file)).isEqualTo(0)
+    }
+
+    @Test
+    fun pinningReplacesTheHostsEarlierCertificateWhateverItsAliasCase() {
+        val old = HumlaCertificateGenerator.generateCertificate(ByteArrayOutputStream())
+        val new = HumlaCertificateGenerator.generateCertificate(ByteArrayOutputStream())
+        val other = HumlaCertificateGenerator.generateCertificate(ByteArrayOutputStream())
+        val legacy = MumlaTrustStore.getTrustStore(context).apply {
+            setCertificateEntry("Mumble.Example.org", old)
+            setCertificateEntry("other.example.org", other)
+        }
+        MumlaTrustStore.saveTrustStore(context, legacy)
+        assertThat(CertificatePins.forHost(MumlaTrustStore.getTrustStore(context), "mumble.example.org"))
+            .containsExactly(CertificatePins.fingerprint(old))
+
+        MumlaTrustStore.pinCertificate(context, "mumble.example.org", new)
+
+        val store = MumlaTrustStore.getTrustStore(context)
+        assertThat(CertificatePins.forHost(store, "Mumble.Example.org")).containsExactly(CertificatePins.fingerprint(new))
+        assertThat(CertificatePins.forHost(store, "other.example.org")).containsExactly(CertificatePins.fingerprint(other))
     }
 }

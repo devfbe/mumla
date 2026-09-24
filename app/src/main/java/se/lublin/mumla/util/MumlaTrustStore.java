@@ -28,9 +28,14 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.Collections;
+
+import se.lublin.humla.net.CertificatePins;
 
 /**
- * Created by andrew on 05/04/14.
+ * The certificates the user accepted, one per host, stored under the host as alias. Humla reads
+ * them as per-host pins.
  */
 public class MumlaTrustStore {
 
@@ -57,6 +62,22 @@ public class MumlaTrustStore {
         try (FileOutputStream fos = context.openFileOutput(STORE_FILE, Context.MODE_PRIVATE)) {
             store.store(fos, STORE_PASS.toCharArray());
         }
+    }
+
+    /**
+     * Makes {@code certificate} the only trusted certificate for {@code host}, replacing any
+     * earlier one whatever the case of its alias.
+     */
+    public static void pinCertificate(Context context, String host, X509Certificate certificate) throws IOException, CertificateException, NoSuchAlgorithmException, KeyStoreException {
+        KeyStore store = getTrustStore(context);
+        String alias = CertificatePins.aliasFor(host);
+        for (String existing : Collections.list(store.aliases())) {
+            if (CertificatePins.aliasFor(existing).equals(alias)) {
+                store.deleteEntry(existing);
+            }
+        }
+        store.setCertificateEntry(alias, certificate);
+        saveTrustStore(context, store);
     }
 
     public static void clearTrustStore(Context context) {

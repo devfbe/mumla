@@ -177,6 +177,9 @@
     <string name="allow">Allow</string>
     <string name="trust_added">Added certificate to trust store</string>
     <string name="trust_add_failed">Could not add certificate to trust store.</string>
+    <string name="certificate_changed_title">Server certificate changed</string>
+    <string name="certificate_changed_message">%1$s now presents a different certificate from the one you trusted before. Someone may be intercepting your connection. Only continue if the server administrator told you the certificate was replaced.</string>
+    <string name="certificate_changed_accept">Trust new certificate</string>
     <string name="trust_cleared">Trust database cleared</string>
     <string name="cancelled">Canceled</string>
     <string name="current_chat_target">Current chat target</string>

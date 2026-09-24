@@ -69,7 +69,6 @@ import org.bouncycastle.util.encoders.Hex;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
 import java.net.Socket;
-import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
@@ -204,49 +203,65 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
                 return;
             }
             final Server lastServer = getService().getTargetServer();
-            try {
-                final X509Certificate x509 = chain[0];
-                View layout = getLayoutInflater().inflate(R.layout.certificate_info, null);
-                TextView textView = layout.findViewById(R.id.certificate_info_text);
-                try {
-                    MessageDigest digest1 = MessageDigest.getInstance("SHA-1");
-                    MessageDigest digest2 = MessageDigest.getInstance("SHA-256");
-                    String hexDigest1 = new String(Hex.encode(digest1.digest(x509.getEncoded())))
-                            .replaceAll("(..)", "$1:");
-                    String hexDigest2 = new String(Hex.encode(digest2.digest(x509.getEncoded())))
-                            .replaceAll("(..)", "$1:");
+            final X509Certificate x509 = chain[0];
+            new MaterialAlertDialogBuilder(MumlaActivity.this)
+                    .setTitle(R.string.untrusted_certificate)
+                    .setView(certificateInfoView(x509))
+                    .setPositiveButton(R.string.allow, (dialog, which) -> trustAndReconnect(lastServer, x509))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+        }
 
-                    textView.setText(getString(R.string.certificate_info,
-                            x509.getSubjectDN().getName(),
-                            x509.getNotBefore().toString(),
-                            x509.getNotAfter().toString(),
-                            hexDigest1.substring(0, hexDigest1.length() - 1),
-                            hexDigest2.substring(0, hexDigest2.length() - 1)));
-                } catch (NoSuchAlgorithmException e) {
-                    e.printStackTrace();
-                    textView.setText(x509.toString());
-                }
-                new MaterialAlertDialogBuilder(MumlaActivity.this)
-                        .setTitle(R.string.untrusted_certificate)
-                        .setView(layout)
-                        .setPositiveButton(R.string.allow, (dialog, which) -> {
-                            // Try to add to trust store
-                            try {
-                                String alias = lastServer.getHost();
-                                KeyStore trustStore = MumlaTrustStore.getTrustStore(MumlaActivity.this);
-                                trustStore.setCertificateEntry(alias, x509);
-                                MumlaTrustStore.saveTrustStore(MumlaActivity.this, trustStore);
-                                Toast.makeText(MumlaActivity.this, R.string.trust_added, Toast.LENGTH_LONG).show();
-                                connectToServer(lastServer);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                                Toast.makeText(MumlaActivity.this, R.string.trust_add_failed, Toast.LENGTH_LONG).show();
-                            }
-                        })
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .show();
-            } catch (CertificateException e) {
+        @Override
+        public void onTLSCertificateChanged(X509Certificate[] chain) {
+            if (chain.length == 0) {
+                return;
+            }
+            final Server lastServer = getService().getTargetServer();
+            final X509Certificate x509 = chain[0];
+            // Cancel is the positive, default-looking choice: replacing the pin is what an attacker wants.
+            new MaterialAlertDialogBuilder(MumlaActivity.this)
+                    .setIcon(android.R.drawable.ic_dialog_alert)
+                    .setTitle(R.string.certificate_changed_title)
+                    .setMessage(getString(R.string.certificate_changed_message, lastServer.getHost()))
+                    .setView(certificateInfoView(x509))
+                    .setPositiveButton(android.R.string.cancel, null)
+                    .setNegativeButton(R.string.certificate_changed_accept, (dialog, which) -> trustAndReconnect(lastServer, x509))
+                    .show();
+        }
+
+        private View certificateInfoView(X509Certificate x509) {
+            View layout = getLayoutInflater().inflate(R.layout.certificate_info, null);
+            TextView textView = layout.findViewById(R.id.certificate_info_text);
+            try {
+                MessageDigest digest1 = MessageDigest.getInstance("SHA-1");
+                MessageDigest digest2 = MessageDigest.getInstance("SHA-256");
+                String hexDigest1 = new String(Hex.encode(digest1.digest(x509.getEncoded())))
+                        .replaceAll("(..)", "$1:");
+                String hexDigest2 = new String(Hex.encode(digest2.digest(x509.getEncoded())))
+                        .replaceAll("(..)", "$1:");
+
+                textView.setText(getString(R.string.certificate_info,
+                        x509.getSubjectDN().getName(),
+                        x509.getNotBefore().toString(),
+                        x509.getNotAfter().toString(),
+                        hexDigest1.substring(0, hexDigest1.length() - 1),
+                        hexDigest2.substring(0, hexDigest2.length() - 1)));
+            } catch (NoSuchAlgorithmException | CertificateException e) {
                 e.printStackTrace();
+                textView.setText(x509.toString());
+            }
+            return layout;
+        }
+
+        private void trustAndReconnect(Server server, X509Certificate x509) {
+            try {
+                MumlaTrustStore.pinCertificate(MumlaActivity.this, server.getHost(), x509);
+                Toast.makeText(MumlaActivity.this, R.string.trust_added, Toast.LENGTH_LONG).show();
+                connectToServer(server);
+            } catch (Exception e) {
+                e.printStackTrace();
+                Toast.makeText(MumlaActivity.this, R.string.trust_add_failed, Toast.LENGTH_LONG).show();
             }
         }
 
