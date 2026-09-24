@@ -1,13 +1,12 @@
 package se.lublin.humla
 
-import android.content.Intent
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import se.lublin.humla.model.Server
+import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.HumlaObserver
 import java.util.concurrent.CopyOnWriteArrayList
@@ -17,7 +16,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  *
  * `onConnecting()` is delivered inline on the handler thread, and an observer that calls
  * disconnect() from it marks the connection that connect() is about to start as disconnected.
- * That must end as a reported failure, not a throw out of onStartCommand or the reconnect runnable.
+ * That must end as a reported failure, not a throw out of connect() or the reconnect runnable.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceConnectCancellationTest {
@@ -26,18 +25,15 @@ class HumlaServiceConnectCancellationTest {
 
     @Test
     fun anObserverThatDisconnectsFromOnConnectingGetsAFailureReportInsteadOfACrash() {
-        val intent = Intent(RuntimeEnvironment.getApplication(), HumlaService::class.java)
-            .setAction(HumlaService.ACTION_CONNECT)
-            .putExtra(HumlaService.EXTRAS_SERVER, server)
-        val controller = Robolectric.buildService(HumlaService::class.java, intent).create()
-        val service = controller.get()
+        val service = Robolectric.buildService(HumlaService::class.java).create().get()
+        service.configure(SessionConfig(server = server))
         val disconnects = CopyOnWriteArrayList<HumlaException?>()
         service.registerObserver(object : HumlaObserver() {
             override fun onConnecting() = service.disconnect()
             override fun onDisconnected(e: HumlaException?) { disconnects += e }
         })
 
-        controller.startCommand(0, 0)
+        service.connect()
 
         assertThat(disconnects).hasSize(1)
         assertThat(disconnects[0]).isNotNull()

@@ -31,6 +31,7 @@ import org.robolectric.shadows.ShadowNetwork
 import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.model.WhisperTargetList
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.session.ClientCertificate
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
@@ -128,15 +129,16 @@ class HumlaServiceSessionTest {
     fun everyConnectionSettingReachesTheConnection() {
         val h = start()
         h.configure {
-            // FORCE_TCP without TOR, so the two fields differ: with both true, Tor masks a missing
+            // Force TCP without Tor, so the two fields differ: with both true, Tor masks a missing
             // `setForceTCP` through `shouldForceTCP()`.
-            putBoolean(HumlaService.EXTRAS_FORCE_TCP, true)
-            putBoolean(HumlaService.EXTRAS_USE_TOR, false)
-            putByteArray(HumlaService.EXTRAS_CERTIFICATE, byteArrayOf(1, 2, 3))
-            putString(HumlaService.EXTRAS_CERTIFICATE_PASSWORD, "cert-pw")
-            putString(HumlaService.EXTRAS_TRUST_STORE, "/store")
-            putString(HumlaService.EXTRAS_TRUST_STORE_PASSWORD, "store-pw")
-            putString(HumlaService.EXTRAS_TRUST_STORE_FORMAT, "BKS")
+            copy(
+                forceTcp = true,
+                useTor = false,
+                certificate = ClientCertificate(byteArrayOf(1, 2, 3), "cert-pw"),
+                trustStorePath = "/store",
+                trustStorePassword = "store-pw",
+                trustStoreFormat = "BKS",
+            )
         }
 
         h.service.connect()
@@ -156,7 +158,7 @@ class HumlaServiceSessionTest {
     @Test
     fun torReachesTheConnectionAsItsOwnFlag() {
         val h = start()
-        h.configure { putBoolean(HumlaService.EXTRAS_USE_TOR, true) }
+        h.configure { copy(useTor = true) }
 
         h.service.connect()
         h.mainLooper.idle()
@@ -183,7 +185,7 @@ class HumlaServiceSessionTest {
         assertThat(h.service.getConnectionError()).isNotNull()
     }
 
-    /** The four corners of `onConnectionDisconnected`: disconnect reason x `EXTRAS_AUTO_RECONNECT`. */
+    /** The four corners of `onConnectionDisconnected`: disconnect reason x `autoReconnect`. */
     @Test
     fun onlyAConnectionErrorWithAutoReconnectOnStartsReconnecting() {
         val corners = listOf(
@@ -208,7 +210,7 @@ class HumlaServiceSessionTest {
         }
     }
 
-    /** A clean disconnect never reconnects, whatever `EXTRAS_AUTO_RECONNECT` says. */
+    /** A clean disconnect never reconnects, whatever `autoReconnect` says. */
     @Test
     fun aCleanDisconnectGoesToDisconnectedAndNeverReconnects() {
         for (autoReconnect in listOf(false, true)) {

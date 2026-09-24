@@ -17,104 +17,60 @@
 
 package se.lublin.mumla.app;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.media.AudioManager;
-import android.media.MediaRecorder;
+import android.content.ServiceConnection;
 import android.os.AsyncTask;
+import android.os.IBinder;
 
-import java.util.ArrayList;
-
-import se.lublin.humla.HumlaService;
-import se.lublin.humla.audio.capture.VadConfigBundle;
 import se.lublin.humla.model.Server;
-import se.lublin.mumla.BuildConfig;
-import se.lublin.mumla.R;
+import se.lublin.humla.session.SessionConfig;
 import se.lublin.mumla.Settings;
 import se.lublin.mumla.db.MumlaDatabase;
-import se.lublin.mumla.service.AudioPreferenceExtras;
+import se.lublin.mumla.service.IMumlaService;
 import se.lublin.mumla.service.MumlaService;
-import se.lublin.mumla.util.MumlaTrustStore;
+import se.lublin.mumla.service.SessionSettings;
 
 /**
- * Constructs an intent for connection to a MumlaService and executes it.
+ * Builds the session configuration for a server off the main thread, then starts MumlaService
+ * and hands it the configuration through the binder.
  */
-public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
-    private Context mContext;
-    private MumlaDatabase mDatabase;
-    private Settings mSettings;
+public class ServerConnectTask extends AsyncTask<Server, Void, SessionConfig> {
+    private final Context mContext;
+    private final MumlaDatabase mDatabase;
+    private final Settings mSettings;
 
     public ServerConnectTask(Context context, MumlaDatabase database) {
-        mContext = context;
+        // The application context: the bind below may outlive the activity that started it.
+        mContext = context.getApplicationContext();
         mDatabase = database;
         mSettings = Settings.getInstance(context);
     }
 
     @Override
-    protected Intent doInBackground(Server... params) {
-        Server server = params[0];
-
-        /* Convert input method defined in settings to an integer format used by Humla. */
-        int inputMethod = mSettings.getHumlaInputMethod();
-
-        // DEFAULT and MIC are the same source.
-        int audioSource = MediaRecorder.AudioSource.MIC;
-        int audioStream = Settings.PLAYBACK_STREAM;
-
-        Intent connectIntent = new Intent(mContext, MumlaService.class);
-        connectIntent.putExtra(HumlaService.EXTRAS_SERVER, server);
-        connectIntent.putExtra(HumlaService.EXTRAS_CLIENT_NAME, mContext.getString(R.string.app_name)+" "+ BuildConfig.VERSION_NAME);
-        connectIntent.putExtra(HumlaService.EXTRAS_TRANSMIT_MODE, inputMethod);
-        // The full voice-gate config: EXTRAS_DETECTION_THRESHOLD cannot express mode, hold, onset
-        // or floor.
-        connectIntent.putExtra(HumlaService.EXTRAS_VAD_CONFIG,
-                VadConfigBundle.toBundle(mSettings.getVadConfig()));
-        connectIntent.putExtra(HumlaService.EXTRAS_AMPLITUDE_BOOST, mSettings.getAmplitudeBoostMultiplier());
-        connectIntent.putExtra(HumlaService.EXTRAS_AUTO_RECONNECT, mSettings.isAutoReconnectEnabled());
-        connectIntent.putExtra(HumlaService.EXTRAS_INPUT_RATE, mSettings.getInputSampleRate());
-        connectIntent.putExtra(HumlaService.EXTRAS_INPUT_QUALITY, mSettings.getInputQuality());
-        connectIntent.putExtra(HumlaService.EXTRAS_FORCE_TCP, mSettings.isTcpForced());
-        connectIntent.putExtra(HumlaService.EXTRAS_USE_TOR, mSettings.isTorEnabled());
-        connectIntent.putStringArrayListExtra(HumlaService.EXTRAS_ACCESS_TOKENS, (ArrayList<String>) mDatabase.getAccessTokens(server.getId()));
-        connectIntent.putExtra(HumlaService.EXTRAS_AUDIO_SOURCE, audioSource);
-        connectIntent.putExtra(HumlaService.EXTRAS_AUDIO_STREAM, audioStream);
-        connectIntent.putExtra(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, mSettings.isEarpieceDefaultOutput());
-        connectIntent.putExtra(HumlaService.EXTRAS_FRAMES_PER_PACKET, mSettings.getFramesPerPacket());
-        connectIntent.putExtra(HumlaService.EXTRAS_TRUST_STORE, MumlaTrustStore.getTrustStorePath(mContext));
-        connectIntent.putExtra(HumlaService.EXTRAS_TRUST_STORE_PASSWORD, MumlaTrustStore.getTrustStorePassword());
-        connectIntent.putExtra(HumlaService.EXTRAS_TRUST_STORE_FORMAT, MumlaTrustStore.getTrustStoreFormat());
-        connectIntent.putExtra(HumlaService.EXTRAS_HALF_DUPLEX, mSettings.isHalfDuplex());
-        connectIntent.putExtra(HumlaService.EXTRAS_ENABLE_PREPROCESSOR, mSettings.isPreprocessorEnabled());
-        connectIntent.putExtra(HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE,
-                AudioPreferenceExtras.echoCancellationOverrides(mSettings));
-        connectIntent.putExtra(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD, mSettings.getNoiseSuppressionMethod());
-        connectIntent.putExtra(HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB, mSettings.getSpeexNoiseSuppressDb());
-        connectIntent.putExtra(HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR,
-                mSettings.getAndroidAudioEffects().getNoiseSuppressor());
-        connectIntent.putExtra(HumlaService.EXTRAS_ANDROID_AGC,
-                mSettings.getAndroidAudioEffects().getAutomaticGainControl());
-        if (server.isSaved()) {
-            ArrayList<Integer> muteHistory = (ArrayList<Integer>) mDatabase.getLocalMutedUsers(server.getId());
-            ArrayList<Integer> ignoreHistory = (ArrayList<Integer>) mDatabase.getLocalIgnoredUsers(server.getId());
-            connectIntent.putExtra(HumlaService.EXTRAS_LOCAL_MUTE_HISTORY, muteHistory);
-            connectIntent.putExtra(HumlaService.EXTRAS_LOCAL_IGNORE_HISTORY, ignoreHistory);
-        }
-
-        if (mSettings.isUsingCertificate()) {
-            long certificateId = mSettings.getDefaultCertificate();
-            byte[] certificate = mDatabase.getCertificateData(certificateId);
-            if (certificate != null)
-                connectIntent.putExtra(HumlaService.EXTRAS_CERTIFICATE, certificate);
-            // TODO(acomminos): handle the case where a certificate's data is unavailable.
-        }
-
-        connectIntent.setAction(HumlaService.ACTION_CONNECT);
-        return connectIntent;
+    protected SessionConfig doInBackground(Server... params) {
+        return SessionSettings.forServer(mContext, mSettings, mDatabase, params[0]);
     }
 
     @Override
-    protected void onPostExecute(Intent intent) {
-        super.onPostExecute(intent);
+    protected void onPostExecute(SessionConfig config) {
+        super.onPostExecute(config);
+        Intent intent = new Intent(mContext, MumlaService.class);
+        // Started, not only bound, so the session outlives every client.
         mContext.startService(intent);
+        mContext.bindService(intent, new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder binder) {
+                IMumlaService service = ((MumlaService.MumlaBinder) binder).getService();
+                service.configure(config);
+                service.connect();
+                mContext.unbindService(this);
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+            }
+        }, Context.BIND_AUTO_CREATE);
     }
 }

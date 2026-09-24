@@ -18,7 +18,6 @@
 package se.lublin.humla
 
 import android.media.MediaRecorder
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
@@ -27,7 +26,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.VadConfig
-import se.lublin.humla.audio.capture.VadConfigBundle
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.session.AudioController
 import se.lublin.humla.testutil.HumlaServiceHarness
@@ -80,9 +78,7 @@ class HumlaServiceAudioTest {
     fun theFirstPipelineIsBuiltFromTheSettingsInForce() {
         val h = start()
         h.configure {
-            putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK)
-            putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true)
-            putInt(HumlaService.EXTRAS_INPUT_QUALITY, 24_000)
+            copy(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK, halfDuplex = true, inputQuality = 24_000)
         }
 
         h.connectAndSynchronize()
@@ -303,16 +299,12 @@ class HumlaServiceAudioTest {
     // ---------------------------------------------------------------- the settings that rebuild
 
     @Test
-    fun changingAnAudioExtraWhileConnectedRebuildsThePipeline() {
+    fun changingAnAudioSettingWhileConnectedRebuildsThePipeline() {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
 
-        h.service.configureExtras(
-            Bundle().apply {
-                putInt(HumlaService.EXTRAS_AUDIO_SOURCE, MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-            },
-        )
+        h.configure { copy(audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION) }
 
         audioUp(h, count = 2)
         assertThat(h.audioFactory.configs[1].audioSource)
@@ -323,18 +315,17 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * The rebuild is decided by the value, not the key: re-writing an unchanged setting must not
-     * cost a rebuild with the microphone dead in the middle.
+     * The rebuild is decided by the value: re-applying an unchanged setting must not cost a
+     * rebuild with the microphone dead in the middle.
      */
     @Test
-    fun anExtraWrittenWithTheSameValueDoesNotRebuildThePipeline() {
+    fun aSettingAppliedWithTheSameValueDoesNotRebuildThePipeline() {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
         val sourceInUse = h.audioFactory.configs[0].audioSource
 
-        h.service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_AUDIO_SOURCE, sourceInUse) })
-        h.mainLooper.idle()
+        h.configure { copy(audioSource = sourceInUse) }
         awaitUntil(description = "the reconfigure was processed") { h.service.getCurrentBandwidth() == 12_345 }
 
         assertThat(h.audioFactory.created).hasSize(1)
@@ -342,56 +333,35 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * The detection threshold and the VAD configuration reach the live
-     * [se.lublin.humla.audio.inputmode.ActivityInputMode] without tearing down the capture chain.
+     * The VAD configuration reaches the live [se.lublin.humla.audio.inputmode.ActivityInputMode]
+     * without tearing down the capture chain.
      */
     @Test
-    fun aLiveExtraDoesNotRebuildThePipeline() {
+    fun aLiveSettingDoesNotRebuildThePipeline() {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
 
-        h.service.configureExtras(Bundle().apply { putFloat(HumlaService.EXTRAS_DETECTION_THRESHOLD, 0.25f) })
-        h.service.configureExtras(
-            Bundle().apply {
-                putBundle(
-                    HumlaService.EXTRAS_VAD_CONFIG,
-                    VadConfigBundle.toBundle(VadConfig.amplitude(0.8f, 120L)),
-                )
-            },
-        )
-        h.mainLooper.idle()
+        h.configure { copy(vadConfig = VadConfig.amplitude(0.8f, 120L)) }
         awaitUntil(description = "the reconfigure was processed") { h.service.getCurrentBandwidth() == 12_345 }
 
         assertThat(h.audioFactory.created).hasSize(1)
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
     }
 
-    /** Half duplex is resolved against the transmit mode in force, not the one in the same bundle. */
+    /** Half duplex is resolved against the transmit mode in force. */
     @Test
     fun halfDuplexOnlyAppliesToPushToTalk() {
         val h = start()
 
-        h.service.configureExtras(
-            Bundle().apply {
-                putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true)
-                putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_VOICE_ACTIVITY)
-            },
-        )
+        h.configure { copy(halfDuplex = true, transmitMode = Constants.TRANSMIT_VOICE_ACTIVITY) }
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
 
-        // Switching the transmit mode alone re-evaluates it; the caller does not resend the flag.
-        h.service.configureExtras(
-            Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK) },
-        )
-        assertThat(h.service.getAudioConfigForTest().halfDuplex).isTrue()
-
-        // And a half-duplex write that carries no mode no longer resolves to false by accident.
-        h.service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true) })
+        h.configure { copy(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK) }
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isTrue()
 
         // Both directions: the flag is what the caller wrote, not a constant.
-        h.service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, false) })
+        h.configure { copy(halfDuplex = false) }
         assertThat(h.service.getAudioConfigForTest().halfDuplexRequested).isFalse()
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
     }
@@ -415,11 +385,7 @@ class HumlaServiceAudioTest {
             h.audioFactory.created[0].targetIds.contains(0x1F.toByte())
         }
 
-        h.service.configureExtras(
-            Bundle().apply {
-                putInt(HumlaService.EXTRAS_AUDIO_SOURCE, MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-            },
-        )
+        h.configure { copy(audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION) }
 
         audioUp(h, count = 2)
         assertThat(h.audioFactory.sessionParams[1].targetId).isEqualTo(0x1F.toByte())

@@ -27,11 +27,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
-import se.lublin.humla.HumlaService
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.testutil.testActivityInputMode
-import se.lublin.humla.testutil.testEchoOverrides
 import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
@@ -142,11 +140,12 @@ class MumlaServiceAudioPreferencesTest {
     fun `an echo cancellation override reaches the service`() {
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
-        assertThat(service.testEchoOverrides).isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
+        assertThat(service.getSessionConfig().echoCancellationOverrides)
+            .isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
 
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.EARPIECE, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.EARPIECE))
-        assertThat(service.testEchoOverrides).isEqualTo(
+        assertThat(service.getSessionConfig().echoCancellationOverrides).isEqualTo(
             mapOf(AudioDeviceCategory.SPEAKER to false, AudioDeviceCategory.EARPIECE to false),
         )
     }
@@ -172,7 +171,7 @@ class MumlaServiceAudioPreferencesTest {
 
     /**
      * Every `android:key` in the audio settings XML is either turned into an extra by
-     * [AudioPreferenceExtras] or exempted here with a reason, so a new switch that reaches nothing
+     * [SessionSettings] or exempted here with a reason, so a new switch that reaches nothing
      * fails this test.
      */
     @Test
@@ -198,36 +197,25 @@ class MumlaServiceAudioPreferencesTest {
             keys += parser.getAttributeValue(ANDROID_NS, "key") ?: continue
         }
 
-        assertThat(keys.filterNot { it in AudioPreferenceExtras.KEYS || it in exempt }).isEmpty()
+        assertThat(keys.filterNot { it in SessionSettings.AUDIO_KEYS || it in exempt }).isEmpty()
         // The exemptions cannot rot: each one has to be a key the screen really still has.
         assertThat(keys).containsAtLeastElementsIn(exempt.keys)
     }
 
-    /**
-     * The other direction: every key [AudioPreferenceExtras.KEYS] claims produces a non-empty
-     * bundle, and an unclaimed key an empty one.
-     */
+    /** An audio key reapplies every audio setting at once; any other key leaves the config alone. */
     @Test
-    fun `every key the mapper claims produces an extra and every other key produces none`() {
+    fun `only an audio key reconfigures the session`() {
         val settings = Settings.getInstance(service)
-        for (key in AudioPreferenceExtras.KEYS) {
-            assertThat(AudioPreferenceExtras.extrasFor(key, settings).isEmpty).isFalse()
-        }
-        for (key in listOf(Settings.PREF_USE_TTS, Settings.PREF_HOT_CORNER_KEY, Settings.PREF_PTT_SOUND, "nonsense")) {
-            assertThat(AudioPreferenceExtras.extrasFor(key, settings).isEmpty).isTrue()
-        }
-    }
+        prefs.edit().putBoolean(Settings.PREF_HALF_DUPLEX, true).commit()
+        val before = service.getSessionConfig()
 
-    /** Every voice-gate key produces the same one extra, so one drag is one reconfiguration. */
-    @Test
-    fun `the voice gate keys all produce exactly the vad config extra`() {
-        val settings = Settings.getInstance(service)
-        for (key in AudioPreferenceExtras.VAD_KEYS) {
-            val extras = AudioPreferenceExtras.extrasFor(key, settings)
-            assertThat(extras.keySet()).containsExactly(HumlaService.EXTRAS_VAD_CONFIG)
-            // The rebuild is decided by the AudioConfig value, and EXTRAS_VAD_CONFIG reaches a live
-            // object, so one drag costs no rebuild (see HumlaServiceAudioTest).
+        for (key in listOf(Settings.PREF_USE_TTS, Settings.PREF_HOT_CORNER_KEY, Settings.PREF_PTT_SOUND, "nonsense")) {
+            change(key)
+            assertThat(service.getSessionConfig()).isSameInstanceAs(before)
         }
+        change(Settings.PREF_HALF_DUPLEX)
+        assertThat(service.getSessionConfig()).isEqualTo(SessionSettings.withAudioSettings(before, settings))
+        assertThat(service.getSessionConfig().halfDuplex).isTrue()
     }
 
     private companion object {

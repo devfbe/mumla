@@ -171,7 +171,7 @@ class Settings private constructor(context: Context) {
 
     /**
      * Writes only this key, not the legacy [PREF_PREPROCESSOR_ENABLED]: every written key triggers
-     * its own `configureExtras`, and two would rebuild the audio chain twice with the mic dead in
+     * its own `configure`, and two would rebuild the audio chain twice with the mic dead in
      * between.
      */
     fun setNoiseSuppressionMethod(method: String) {
@@ -242,7 +242,7 @@ class Settings private constructor(context: Context) {
     fun isEchoCancellationEnabled(category: AudioDeviceCategory): Boolean =
         getEchoCancellationOverride(category) ?: category.echoCancellationByDefault
 
-    /** Every override the user has made, for `HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE`. */
+    /** Every override the user has made, for `SessionConfig.echoCancellationOverrides`. */
     fun getEchoCancellationOverrides(): Map<AudioDeviceCategory, Boolean> =
         AudioDeviceCategory.entries.mapNotNull { c -> getEchoCancellationOverride(c)?.let { c to it } }.toMap()
 

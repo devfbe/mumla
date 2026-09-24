@@ -21,7 +21,6 @@ import se.lublin.humla.HumlaService
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.protocol.ModelHandler
-import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.session.AudioRouter
 import se.lublin.humla.util.HumlaCallbacks
 
@@ -33,8 +32,6 @@ val HumlaService.testCallbacks: HumlaCallbacks get() = mCallbacks
 val HumlaService.testRouter: AudioRouter get() = mRouter
 
 val HumlaService.testActivityInputMode: ActivityInputMode get() = mActivityInputMode
-
-val HumlaService.testEchoOverrides: Map<AudioDeviceCategory, Boolean> get() = mEchoOverrides
 
 /** Replaces the live connection, e.g. with a mock, to reach a session state without a server. */
 var HumlaService.testConnection: HumlaConnection?

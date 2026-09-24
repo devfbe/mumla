@@ -33,6 +33,7 @@ import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.ModelHandler
+import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.testCallbacks
 import se.lublin.humla.testutil.testConnection
@@ -964,11 +965,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun reconnectAsksForAConnection() {
-        service.configureExtras(
-            android.os.Bundle().apply {
-                putParcelable(HumlaService.EXTRAS_SERVER, se.lublin.humla.model.Server(-1, "t", "127.0.0.1", 64738, "me", ""))
-            },
-        )
+        service.configure(SessionConfig(server = se.lublin.humla.model.Server(-1, "t", "127.0.0.1", 64738, "me", "")))
         service.connectionFactory = { mockk(relaxed = true) }
 
         service.reconnect()
@@ -1013,7 +1010,7 @@ class MumlaServiceCharacterizationTest {
     /** All five clauses true; each test below turns exactly one of them false. */
     private fun clickReady(): User {
         service.keyClickSound = { clicks++ }
-        service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })
+        service.configure(SessionConfig(transmitMode = se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK))
         preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()
         connect()
         val talking = user(SELF)
@@ -1052,7 +1049,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun noClickOutsidePushToTalk() {
         val u = clickReady()
-        service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_VOICE_ACTIVITY) })
+        service.configure(SessionConfig(transmitMode = se.lublin.humla.Constants.TRANSMIT_VOICE_ACTIVITY))
         talk(u)
         assertThat(clicks).isEqualTo(0)
     }

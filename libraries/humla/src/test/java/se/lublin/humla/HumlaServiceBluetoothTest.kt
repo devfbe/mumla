@@ -19,7 +19,6 @@ package se.lublin.humla
 
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.os.Bundle
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
 import org.junit.Test
@@ -231,15 +230,15 @@ class HumlaServiceBluetoothTest {
 
     /** What the handset mode was: the earpiece by the user's standing preference, live. */
     @Test
-    fun theEarpieceIsTheDefaultWhenTheExtraAsksForIt() {
+    fun theEarpieceIsTheDefaultWhenTheConfigAsksForIt() {
         val h = start()
         h.phone()
-        h.configure { putBoolean(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, true) }
+        h.configure { copy(earpieceByDefault = true) }
         h.connectAndSynchronize()
 
         assertThat(h.service.activeAudioDevice?.id).isEqualTo(1)
 
-        h.configure { putBoolean(HumlaService.EXTRAS_EARPIECE_BY_DEFAULT, false) }
+        h.configure { copy(earpieceByDefault = false) }
 
         assertThat(h.devices!!.selectedId).isEqualTo(2)
     }
@@ -352,31 +351,6 @@ class HumlaServiceBluetoothTest {
         assertThat(h.service.usingBluetoothSco()).isTrue() // still wanted; the headset is not there
     }
 
-    // ---------------------------------------------------------------- the extra
-
-    @Test
-    fun theBluetoothExtraDrivesTheWishAndNeedsNoReconnect() {
-        val h = start()
-        h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-        h.connectAndSynchronize()
-
-        assertThat(
-            h.service.configureExtras(
-                Bundle().apply { putBoolean(HumlaService.EXTRAS_BLUETOOTH_WANTED, true) },
-            )
-        ).isFalse()
-
-        assertThat(h.service.usingBluetoothSco()).isTrue()
-        assertThat(h.devices!!.selectCalls).containsExactly(7)
-
-        h.service.configureExtras(
-            Bundle().apply { putBoolean(HumlaService.EXTRAS_BLUETOOTH_WANTED, false) },
-        )
-
-        assertThat(h.service.usingBluetoothSco()).isFalse()
-        assertThat(h.devices!!.clearCalls).isEqualTo(1)
-    }
-
     /** The device seam is reachable after `onCreate`, whether a test set it or the service built it. */
     @Test
     fun theDeviceSeamIsReachableAfterOnCreate() {
@@ -420,12 +394,7 @@ class HumlaServiceBluetoothTest {
         awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
         assertThat(h.audioFactory.configs[0].echoCancellation).isTrue()
 
-        h.configure {
-            putBundle(
-                HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE,
-                Bundle().apply { putBoolean(AudioDeviceCategory.SPEAKER.name, false) },
-            )
-        }
+        h.configure { copy(echoCancellationOverrides = mapOf(AudioDeviceCategory.SPEAKER to false)) }
 
         awaitUntil(description = "audio rebuilt without echo") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
         assertThat(h.audioFactory.configs[1].echoCancellation).isFalse()

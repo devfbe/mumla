@@ -2,7 +2,6 @@ package se.lublin.mumla.service
 
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
-import android.os.Bundle
 import android.os.Looper
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
@@ -15,10 +14,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
-import se.lublin.humla.HumlaService
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.createMumlaService
@@ -44,11 +43,8 @@ class MumlaServiceForegroundTest {
             connectionFactory = { mockk<HumlaConnection>(relaxed = true).also { connections += it } }
         }
         service = controller.get()
-        service.configureExtras(
-            Bundle().apply {
-                putParcelable(HumlaService.EXTRAS_SERVER, Server(-1, "test", "127.0.0.1", 64738, "me", ""))
-                putBoolean(HumlaService.EXTRAS_AUTO_RECONNECT, true)
-            },
+        service.configure(
+            SessionConfig(server = Server(-1, "test", "127.0.0.1", 64738, "me", ""), autoReconnect = true),
         )
         mainLooper.idle()
     }
@@ -337,14 +333,13 @@ class MumlaServiceForegroundTest {
 
     // ---- half duplex ----------------------------------------------------------------------------
 
-    /**
-     * Half duplex follows the transmit mode the service is in, which the connect intent always
-     * carries (ServerConnectTask) -- a settings write that carries only half duplex is enough.
-     */
+    /** Half duplex follows the transmit mode in force, so a half-duplex write alone is enough. */
     @Test
     fun aHalfDuplexPreferenceChangeTakesEffectInPushToTalk() {
-        service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })
         val preferences = PreferenceManager.getDefaultSharedPreferences(service)
+        preferences.edit()
+            .putString(se.lublin.mumla.Settings.PREF_INPUT_METHOD, se.lublin.mumla.Settings.ARRAY_INPUT_METHOD_PTT)
+            .commit()
 
         preferences.edit().putBoolean(se.lublin.mumla.Settings.PREF_HALF_DUPLEX, true).commit()
         assertThat(service.getAudioConfigForTest().halfDuplex).isTrue()

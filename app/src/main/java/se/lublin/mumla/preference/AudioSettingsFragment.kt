@@ -112,10 +112,10 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
 
     /**
      * Restarts the preview whenever a setting it was built from changes; keyed on
-     * [AudioPreferenceExtras.KEYS] so it tracks the same settings as the service.
+     * [SessionSettings.AUDIO_KEYS] so it tracks the same settings as the service.
      */
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key != null && key in se.lublin.mumla.service.AudioPreferenceExtras.KEYS) restartSession()
+        if (key != null && key in se.lublin.mumla.service.SessionSettings.AUDIO_KEYS) restartSession()
     }
 
     override fun onResume() {

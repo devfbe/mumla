@@ -17,7 +17,6 @@
 
 package se.lublin.humla.testutil
 
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import org.robolectric.Robolectric
@@ -32,6 +31,7 @@ import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.HumlaObserver
 import java.util.concurrent.CopyOnWriteArrayList
@@ -79,16 +79,7 @@ class HumlaServiceHarness(
             override fun onLogWarning(message: String?) { warnings += message }
             override fun onDisconnected(e: HumlaException?) { disconnects += e }
         })
-        service.configureExtras(
-            Bundle().apply {
-                if (server != null) putParcelable(HumlaService.EXTRAS_SERVER, server)
-                putBoolean(HumlaService.EXTRAS_AUTO_RECONNECT, autoReconnect)
-                // Required by onConnectionEstablished: Version.setRelease(null) and
-                // Authenticate.addAllTokens(null) throw. ServerConnectTask always writes them.
-                putString(HumlaService.EXTRAS_CLIENT_NAME, "harness")
-                putStringArrayList(HumlaService.EXTRAS_ACCESS_TOKENS, arrayListOf())
-            },
-        )
+        service.configure(SessionConfig(server = server, clientName = "harness", autoReconnect = autoReconnect))
         mainLooper.idle()
     }
 
@@ -101,9 +92,9 @@ class HumlaServiceHarness(
         }
     }
 
-    /** Applies extras the way MumlaService does, before or during a session. */
-    fun configure(block: Bundle.() -> Unit) {
-        service.configureExtras(Bundle().apply(block))
+    /** Reconfigures the service the way MumlaService does, before or during a session. */
+    fun configure(change: SessionConfig.() -> SessionConfig) {
+        service.configure(service.getSessionConfig().change())
         mainLooper.idle()
     }
 

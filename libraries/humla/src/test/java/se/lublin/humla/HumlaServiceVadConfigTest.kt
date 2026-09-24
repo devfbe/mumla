@@ -17,21 +17,19 @@
 
 package se.lublin.humla
 
-import android.os.Bundle
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.VadConfig
-import se.lublin.humla.audio.capture.VadConfigBundle
 import se.lublin.humla.audio.capture.VadMode
-import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.session.AudioConfig
+import se.lublin.humla.session.SessionConfig
 
-/** The VAD-related extras reach the running microphone configuration. */
+/** The configured VAD settings reach the running microphone configuration. */
 @RunWith(RobolectricTestRunner::class)
-class HumlaServiceVadExtrasTest {
+class HumlaServiceVadConfigTest {
     private fun service(): HumlaService =
         Robolectric.buildService(HumlaService::class.java).create().get()
 
@@ -46,9 +44,7 @@ class HumlaServiceVadExtrasTest {
             hysteresisDb = 9f, adaptiveFloor = false, manualFloorDbfs = -52f,
         )
 
-        service.configureExtras(
-            Bundle().apply { putBundle(HumlaService.EXTRAS_VAD_CONFIG, VadConfigBundle.toBundle(config)) }
-        )
+        service.configure(SessionConfig(vadConfig = config))
 
         assertThat(inputMode(service).vadConfig).isEqualTo(config)
     }
@@ -57,45 +53,23 @@ class HumlaServiceVadExtrasTest {
     fun `every mode the settings screen can write arrives as that mode`() {
         for (mode in VadMode.entries) {
             val service = service()
-            service.configureExtras(
-                Bundle().apply {
-                    putBundle(
-                        HumlaService.EXTRAS_VAD_CONFIG,
-                        VadConfigBundle.toBundle(VadConfig(mode, 0.7f, 0.2f, 120L)),
-                    )
-                }
-            )
+            service.configure(SessionConfig(vadConfig = VadConfig(mode, 0.7f, 0.2f, 120L)))
             assertThat(inputMode(service).vadConfig.mode).isEqualTo(mode)
         }
     }
 
     @Test
-    fun `a bundle with no vad config leaves the detector alone`() {
-        val service = service()
-        val before = inputMode(service).vadConfig
-        service.configureExtras(Bundle().apply { putFloat(HumlaService.EXTRAS_AMPLITUDE_BOOST, 2f) })
-        assertThat(inputMode(service).vadConfig).isEqualTo(before)
+    fun `the detector starts with the default configuration`() {
+        assertThat(inputMode(service()).vadConfig).isEqualTo(SessionConfig().vadConfig)
     }
 
+    /** The VAD config reaches a live object, which is what makes a change free of a rebuild. */
     @Test
-    fun `the detection threshold and the vad config are the two extras that reach a live object`() {
+    fun `the vad config is not part of the audio config`() {
         val service = service()
-        val before = inputMode(service).vadConfig
 
-        service.configureExtras(Bundle().apply { putFloat(HumlaService.EXTRAS_DETECTION_THRESHOLD, 0.25f) })
-        assertThat(inputMode(service).vadConfig.startThreshold).isEqualTo(0.25f)
-        assertThat(service.getAudioConfigForTest()).isEqualTo(AudioConfig())
+        service.configure(SessionConfig(vadConfig = VadConfig.probability(0.8f, 0.2f, 120L)))
 
-        service.configureExtras(
-            Bundle().apply {
-                putBundle(
-                    HumlaService.EXTRAS_VAD_CONFIG,
-                    VadConfigBundle.toBundle(VadConfig.probability(0.8f, 0.2f, 120L)),
-                )
-            }
-        )
-        assertThat(inputMode(service).vadConfig).isNotEqualTo(before)
-        // Neither key is carried by AudioConfig, which is what makes them free of a rebuild.
         assertThat(service.getAudioConfigForTest()).isEqualTo(AudioConfig())
     }
 }

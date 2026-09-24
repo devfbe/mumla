@@ -26,13 +26,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
-      HumlaService is not declared as a component here: MumlaService (in the app module) is
-      the only concrete instance the app uses, targeted with an explicit intent, so a
-      standalone declaration of the base class exists only to be an exported attack surface.
-      Its ACTION_CONNECT/ACTION_DISCONNECT intent filters were never reachable from the app's
-      own connect flow, and the declared ACTION_CONNECT string did not even match the
-      constant HumlaService checks in onStartCommand, so no external caller could have
-      relied on them working.
+      HumlaService is not declared as a component here: the app declares its own subclass and
+      configures it through the in-process binder, so a declaration of the base class would only
+      be an exported attack surface.
     -->
     <!--
       No <application> element: backup posture (android:allowBackup, android:dataExtractionRules)

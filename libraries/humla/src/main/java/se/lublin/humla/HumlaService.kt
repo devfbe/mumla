@@ -25,7 +25,6 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Binder
 import android.os.Build
-import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.PowerManager
@@ -34,7 +33,7 @@ import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.flow.StateFlow
 import org.minidns.dnsserverlookup.android21.AndroidUsingLinkProperties
 import se.lublin.humla.audio.AudioOutput
-import se.lublin.humla.audio.capture.VadConfigBundle
+import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.IInputMode
@@ -67,6 +66,7 @@ import se.lublin.humla.session.CommunicationDevice
 import se.lublin.humla.session.CommunicationDevices
 import se.lublin.humla.session.DefaultAudioHandlerFactory
 import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.SessionStateMachine
 import se.lublin.humla.util.HumlaCallbacks
@@ -84,37 +84,11 @@ import java.security.cert.X509Certificate
 open class HumlaService : Service(), IHumlaService, IHumlaSession,
     HumlaConnection.HumlaConnectionListener, HumlaLogger {
 
-    // Service settings
-    private var mServer: Server? = null
-    private var mAutoReconnect = false
-    private var mCertificate: ByteArray? = null
-    private var mCertificatePassword: String? = null
-    private var mForceTcpSetting = false
+    /** What the client configured; see [configure]. */
+    private var mConfig = SessionConfig()
 
-    /** Voice goes over TCP when the user forces it or when Tor is on, which cannot carry UDP. */
-    private val mForceTcp: Boolean get() = mForceTcpSetting || mUseTor
-
-    @get:VisibleForTesting
-    internal val isTcpForced: Boolean get() = mForceTcp
-    private var mUseTor = false
-    private var mClientName: String? = null
-    @VisibleForTesting
-    internal var mAccessTokens: List<String>? = null
-        private set
-    private var mTrustStore: String? = null
-    private var mTrustStorePassword: String? = null
-    private var mTrustStoreFormat: String? = null
-    private var mLocalMuteHistory: List<Int>? = null
-    private var mLocalIgnoreHistory: List<Int>? = null
-    private var mTransmitMode = 0
-
-    /** Current audio settings; rebuilt wholesale by [configureExtras]. */
+    /** Current audio settings: [mConfig]'s audio half plus what the route decides. */
     private var mAudioConfig = AudioConfig()
-
-    /** The user's echo-cancellation choices per kind of device; see EXTRAS_ECHO_CANCELLATION_BY_DEVICE. */
-    @VisibleForTesting
-    internal var mEchoOverrides: Map<AudioDeviceCategory, Boolean> = emptyMap()
-        private set
 
     /** Held by identity: the audio thread and `isTalking()` must see the same toggle object. */
     @VisibleForTesting
@@ -247,23 +221,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             override fun getUser(session: Int): User? = mModelHandler?.getUser(session)
         }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent != null) {
-            val extras = intent.extras
-            if (extras != null) {
-                configureExtras(extras)
-            }
-
-            if (ACTION_CONNECT == intent.action) {
-                if (extras == null || !extras.containsKey(EXTRAS_SERVER)) {
-                    throw RuntimeException("$ACTION_CONNECT requires a server provided in extras.")
-                }
-                connect()
-            }
-        }
-
-        return START_NOT_STICKY
-    }
+    /** Only keeps the service started; connecting goes through [configure] and [connect]. */
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
 
     override fun onCreate() {
         super.onCreate()
@@ -281,7 +240,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         communicationDevices = devices
         mRouter = AudioRouter(devices, mRouterListener)
         mToggleInputMode = ToggleInputMode()
-        mActivityInputMode = ActivityInputMode(0f) // FIXME: reasonable default
+        mActivityInputMode = ActivityInputMode(VoiceActivityDetector(mConfig.vadConfig))
         mContinuousInputMode = ContinuousInputMode()
         mInputMode = mActivityInputMode
         mWhisperTargetList = WhisperTargetList()
@@ -315,7 +274,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * User-initiated connect. Ignored by the state machine while an attempt is in flight or a
      * session is up.
      */
-    open fun connect() {
+    override fun connect() {
         if (!mStateMachine.connectRequested()) return
         startSession()
     }
@@ -328,7 +287,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         // Checked before anything is built, so a misconfigured start allocates nothing and is
         // reported as a failed attempt.
-        val server = mServer
+        val config = mConfig
+        val server = config.server
         if (server == null) {
             Log.e(TAG, "connect() without a target server")
             mStateMachine.disconnectRequested()
@@ -343,13 +303,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         val connection = connectionFactory(this)
         mConnection = connection
-        connection.setForceTCP(mForceTcp)
-        connection.setUseTor(mUseTor)
-        connection.setKeys(mCertificate, mCertificatePassword)
-        connection.setTrustStore(mTrustStore, mTrustStorePassword, mTrustStoreFormat)
+        connection.setForceTCP(config.forceTcp)
+        connection.setUseTor(config.useTor)
+        connection.setKeys(config.certificate?.pkcs12, config.certificate?.password)
+        connection.setTrustStore(config.trustStorePath, config.trustStorePassword, config.trustStoreFormat)
 
         val modelHandler =
-            ModelHandler(this, mCallbacks, this, mLocalMuteHistory, mLocalIgnoreHistory)
+            ModelHandler(this, mCallbacks, this, config.localMuteHistory, config.localIgnoreHistory)
         mModelHandler = modelHandler
         connection.addTcpHandler(modelHandler)
 
@@ -392,16 +352,17 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun onConnectionEstablished() {
         val version = Mumble.Version.newBuilder()
-        version.setRelease(mClientName)
+        version.setRelease(mConfig.clientName)
         version.setVersion(Constants.PROTOCOL_VERSION)
         version.setOs("Android")
         version.setOsVersion(Build.VERSION.RELEASE)
 
         val auth = Mumble.Authenticate.newBuilder()
-        auth.setUsername(mServer!!.username)
-        auth.setPassword(mServer!!.password)
+        val server = checkNotNull(mConfig.server) { "Connected without a target server" }
+        auth.setUsername(server.username)
+        auth.setPassword(server.password)
         auth.setOpus(true)
-        auth.addAllTokens(mAccessTokens)
+        auth.addAllTokens(mConfig.accessTokens)
 
         val connection = conn()
         connection.sendTCPMessage(version.build(), HumlaTCPMessageType.Version)
@@ -479,7 +440,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             Log.v(TAG, "Disconnected")
         }
 
-        val autoReconnect = mAutoReconnect && e != null &&
+        val autoReconnect = mConfig.autoReconnect && e != null &&
             e.reason == HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
         val next = mStateMachine.lost(autoReconnect, e)
 
@@ -591,153 +552,56 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /**
-     * Loads all defined settings from the given bundle into the HumlaService.
-     * Some settings may only take effect after a reconnect.
-     * @param extras A bundle with settings.
-     * @return true if a reconnect is required for changes to take effect.
+     * Applies [config] as a whole. Audio, voice-activity and routing settings take effect live;
+     * the connection settings only on the next connection.
+     * @return true if a reconnect is required for the changes to take effect.
      */
-    fun configureExtras(extras: Bundle): Boolean {
-        var reconnectNeeded = false
-        var config = mAudioConfig
-        if (extras.containsKey(EXTRAS_SERVER)) {
-            @Suppress("DEPRECATION")
-            mServer = extras.getParcelable(EXTRAS_SERVER)
-            reconnectNeeded = true
+    override fun configure(config: SessionConfig): Boolean {
+        val inputMode = when (config.transmitMode) {
+            Constants.TRANSMIT_PUSH_TO_TALK -> mToggleInputMode
+            Constants.TRANSMIT_CONTINUOUS -> mContinuousInputMode
+            Constants.TRANSMIT_VOICE_ACTIVITY -> mActivityInputMode
+            else -> throw IllegalArgumentException("Unknown transmit mode ${config.transmitMode}")
         }
-        if (extras.containsKey(EXTRAS_AUTO_RECONNECT)) {
-            mAutoReconnect = extras.getBoolean(EXTRAS_AUTO_RECONNECT)
+        val previous = mConfig
+        mConfig = config
+        mInputMode = inputMode
+        // Applied live: the input mode outlives pipeline rebuilds.
+        mActivityInputMode.setVadConfig(config.vadConfig)
+
+        if (config.accessTokens != previous.accessTokens) {
+            mConnection?.takeIf { it.isConnected }?.sendAccessTokens(config.accessTokens)
         }
-        if (extras.containsKey(EXTRAS_CERTIFICATE)) {
-            mCertificate = extras.getByteArray(EXTRAS_CERTIFICATE)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_CERTIFICATE_PASSWORD)) {
-            mCertificatePassword = extras.getString(EXTRAS_CERTIFICATE_PASSWORD)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_DETECTION_THRESHOLD)) {
-            mActivityInputMode.setThreshold(extras.getFloat(EXTRAS_DETECTION_THRESHOLD))
-        }
-        if (extras.containsKey(EXTRAS_AMPLITUDE_BOOST)) {
-            config = config.copy(amplitudeBoost = extras.getFloat(EXTRAS_AMPLITUDE_BOOST))
-        }
-        if (extras.containsKey(EXTRAS_TRANSMIT_MODE)) {
-            mTransmitMode = extras.getInt(EXTRAS_TRANSMIT_MODE)
-            mInputMode = when (mTransmitMode) {
-                Constants.TRANSMIT_PUSH_TO_TALK -> mToggleInputMode
-                Constants.TRANSMIT_CONTINUOUS -> mContinuousInputMode
-                Constants.TRANSMIT_VOICE_ACTIVITY -> mActivityInputMode
-                else -> throw IllegalArgumentException()
-            }
-            // Into the config as well, because AudioConfig.halfDuplex is derived from it.
-            config = config.copy(transmitMode = mTransmitMode)
-        }
-        if (extras.containsKey(EXTRAS_INPUT_RATE)) {
-            config = config.copy(inputSampleRate = extras.getInt(EXTRAS_INPUT_RATE))
-        }
-        if (extras.containsKey(EXTRAS_INPUT_QUALITY)) {
-            config = config.copy(targetBitrate = extras.getInt(EXTRAS_INPUT_QUALITY))
-        }
-        if (extras.containsKey(EXTRAS_USE_TOR)) {
-            mUseTor = extras.getBoolean(EXTRAS_USE_TOR)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_FORCE_TCP)) {
-            mForceTcpSetting = extras.getBoolean(EXTRAS_FORCE_TCP)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_CLIENT_NAME)) {
-            mClientName = extras.getString(EXTRAS_CLIENT_NAME)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_ACCESS_TOKENS)) {
-            val tokens = extras.getStringArrayList(EXTRAS_ACCESS_TOKENS)
-            mAccessTokens = tokens
-            val connection = mConnection
-            if (connection != null && connection.isConnected) {
-                connection.sendAccessTokens(tokens!!)
-            }
-        }
-        if (extras.containsKey(EXTRAS_AUDIO_SOURCE)) {
-            config = config.copy(audioSource = extras.getInt(EXTRAS_AUDIO_SOURCE))
-        }
-        if (extras.containsKey(EXTRAS_AUDIO_STREAM)) {
-            config = config.copy(audioStream = extras.getInt(EXTRAS_AUDIO_STREAM))
-        }
-        if (extras.containsKey(EXTRAS_FRAMES_PER_PACKET)) {
-            config = config.copy(targetFramesPerPacket = extras.getInt(EXTRAS_FRAMES_PER_PACKET))
-        }
-        if (extras.containsKey(EXTRAS_TRUST_STORE)) {
-            mTrustStore = extras.getString(EXTRAS_TRUST_STORE)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_TRUST_STORE_PASSWORD)) {
-            mTrustStorePassword = extras.getString(EXTRAS_TRUST_STORE_PASSWORD)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_TRUST_STORE_FORMAT)) {
-            mTrustStoreFormat = extras.getString(EXTRAS_TRUST_STORE_FORMAT)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_HALF_DUPLEX)) {
-            // Stored as requested; AudioConfig.halfDuplex applies it against the mode in force.
-            config = config.copy(halfDuplexRequested = extras.getBoolean(EXTRAS_HALF_DUPLEX))
-        }
-        if (extras.containsKey(EXTRAS_LOCAL_MUTE_HISTORY)) {
-            mLocalMuteHistory = extras.getIntegerArrayList(EXTRAS_LOCAL_MUTE_HISTORY)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_LOCAL_IGNORE_HISTORY)) {
-            mLocalIgnoreHistory = extras.getIntegerArrayList(EXTRAS_LOCAL_IGNORE_HISTORY)
-            reconnectNeeded = true
-        }
-        if (extras.containsKey(EXTRAS_ENABLE_PREPROCESSOR)) {
-            config = config.copy(preprocessorEnabled = extras.getBoolean(EXTRAS_ENABLE_PREPROCESSOR))
-        }
-        if (extras.containsKey(EXTRAS_NOISE_SUPPRESSION_METHOD)) {
-            config = config.copy(
-                noiseSuppression = extras.getString(EXTRAS_NOISE_SUPPRESSION_METHOD) ?: "none"
-            )
-        }
-        if (extras.containsKey(EXTRAS_ECHO_CANCELLATION_BY_DEVICE)) {
-            val overrides = extras.getBundle(EXTRAS_ECHO_CANCELLATION_BY_DEVICE) ?: Bundle()
-            mEchoOverrides = AudioDeviceCategory.entries
-                .filter { overrides.containsKey(it.name) }
-                .associateWith { overrides.getBoolean(it.name) }
-            config = config.copy(echoCancellation = echoCancellationFor(config.routedDeviceType))
-        }
-        if (extras.containsKey(EXTRAS_SPEEX_NOISE_SUPPRESS_DB)) {
-            config = config.copy(speexNoiseSuppressDb = extras.getInt(EXTRAS_SPEEX_NOISE_SUPPRESS_DB))
-        }
-        if (extras.containsKey(EXTRAS_ANDROID_NOISE_SUPPRESSOR)) {
-            config = config.copy(androidNoiseSuppressor = extras.getBoolean(EXTRAS_ANDROID_NOISE_SUPPRESSOR))
-        }
-        if (extras.containsKey(EXTRAS_ANDROID_AGC)) {
-            config = config.copy(androidAgc = extras.getBoolean(EXTRAS_ANDROID_AGC))
-        }
-        if (extras.containsKey(EXTRAS_BLUETOOTH_WANTED)) {
-            // The persisted preference is the only carrier of the Bluetooth wish.
-            mRouter.bluetoothAutomatic = extras.getBoolean(EXTRAS_BLUETOOTH_WANTED)
-            mRouter.apply()
-        }
-        if (extras.containsKey(EXTRAS_EARPIECE_BY_DEFAULT)) {
+        if (config.earpieceByDefault != previous.earpieceByDefault) {
             // Live: the next apply routes it, and a user's explicit choice is left standing.
-            mRouter.earpieceByDefault = extras.getBoolean(EXTRAS_EARPIECE_BY_DEFAULT)
+            mRouter.earpieceByDefault = config.earpieceByDefault
             mRouter.apply()
-        }
-        if (extras.containsKey(EXTRAS_VAD_CONFIG)) {
-            // Applied live: the input mode outlives pipeline rebuilds.
-            mActivityInputMode.setVadConfig(
-                VadConfigBundle.fromBundle(extras.getBundle(EXTRAS_VAD_CONFIG) ?: Bundle())
-            )
         }
 
-        mAudioConfig = config
+        mAudioConfig = mAudioConfig.copy(
+            amplitudeBoost = config.amplitudeBoost,
+            transmitMode = config.transmitMode,
+            inputSampleRate = config.inputSampleRate,
+            targetBitrate = config.inputQuality,
+            audioSource = config.audioSource,
+            audioStream = config.audioStream,
+            targetFramesPerPacket = config.framesPerPacket,
+            // Stored as requested; AudioConfig.halfDuplex applies it against the mode in force.
+            halfDuplexRequested = config.halfDuplex,
+            preprocessorEnabled = config.preprocessorEnabled,
+            noiseSuppression = config.noiseSuppressionMethod,
+            echoCancellation = echoCancellationFor(mAudioConfig.routedDeviceType),
+            speexNoiseSuppressDb = config.speexNoiseSuppressDb,
+            androidNoiseSuppressor = config.androidNoiseSuppressor,
+            androidAgc = config.androidAgc,
+        )
         // Unconditional: AudioController skips a config equal by value and an input mode equal
         // by identity.
         mAudioController.reconfigure(mAudioConfig, mInputMode)
-        return reconnectNeeded
+        return config.needsReconnectAfter(previous)
     }
+
+    override fun getSessionConfig(): SessionConfig = mConfig
 
     /**
      * The routed device changed, so the pipeline is rebuilt for its stream (and, for SCO, its
@@ -759,7 +623,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      */
     private fun echoCancellationFor(type: Int?): Boolean {
         val category = AudioDeviceCategory.of(type ?: return false)
-        return mEchoOverrides[category] ?: category.echoCancellationByDefault
+        return mConfig.echoCancellationOverrides[category] ?: category.echoCancellationByDefault
     }
 
     /**
@@ -825,7 +689,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     /** Test seam: whether the wake lock is held. */
     fun isWakeLockHeldForTest(): Boolean = mWakeLock.isHeld
 
-    override fun getTargetServer(): Server? = mServer
+    override fun getTargetServer(): Server? = mConfig.server
 
     @Throws(HumlaDisconnectedException::class)
     override fun HumlaSession(): IHumlaSession {
@@ -871,7 +735,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun getPermissions(): Int = model().permissions
 
-    override fun getTransmitMode(): Int = mTransmitMode
+    override fun getTransmitMode(): Int = mConfig.transmitMode
 
     override fun getCodec(): HumlaUDPMessageType? = conn().getCodec()
 
@@ -1153,84 +1017,5 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     companion object {
         private val TAG: String = HumlaService::class.java.name
-
-        /**
-         * An action to immediately connect to a given Mumble server.
-         * Requires that [EXTRAS_SERVER] is provided.
-         */
-        const val ACTION_CONNECT = "se.lublin.humla.CONNECT"
-
-        /** A [Server] specifying the server to connect to. */
-        const val EXTRAS_SERVER = "server"
-        const val EXTRAS_AUTO_RECONNECT = "auto_reconnect"
-        const val EXTRAS_CERTIFICATE = "certificate"
-        const val EXTRAS_CERTIFICATE_PASSWORD = "certificate_password"
-        const val EXTRAS_DETECTION_THRESHOLD = "detection_threshold"
-        const val EXTRAS_AMPLITUDE_BOOST = "amplitude_boost"
-        const val EXTRAS_TRANSMIT_MODE = "transmit_mode"
-        const val EXTRAS_INPUT_RATE = "input_frequency"
-        const val EXTRAS_INPUT_QUALITY = "input_quality"
-        const val EXTRAS_FORCE_TCP = "force_tcp"
-        const val EXTRAS_USE_TOR = "use_tor"
-        const val EXTRAS_CLIENT_NAME = "client_name"
-        const val EXTRAS_ACCESS_TOKENS = "access_tokens"
-        const val EXTRAS_AUDIO_SOURCE = "audio_source"
-        const val EXTRAS_AUDIO_STREAM = "audio_stream"
-        const val EXTRAS_FRAMES_PER_PACKET = "frames_per_packet"
-
-        /** An optional path to a trust store for CA certificates. */
-        const val EXTRAS_TRUST_STORE = "trust_store"
-
-        /** The trust store's password. */
-        const val EXTRAS_TRUST_STORE_PASSWORD = "trust_store_password"
-
-        /** The trust store's format. */
-        const val EXTRAS_TRUST_STORE_FORMAT = "trust_store_format"
-        const val EXTRAS_HALF_DUPLEX = "half_duplex"
-
-        /** A list of users that should be local muted upon connection. */
-        const val EXTRAS_LOCAL_MUTE_HISTORY = "local_mute_history"
-
-        /** A list of users that should be local ignored upon connection. */
-        const val EXTRAS_LOCAL_IGNORE_HISTORY = "local_ignore_history"
-        const val EXTRAS_ENABLE_PREPROCESSOR = "enable_preprocessor"
-        const val EXTRAS_NOISE_SUPPRESSION_METHOD = "noise_suppression_method"
-        /**
-         * Bundle: the user's echo-cancellation overrides, one boolean per [AudioDeviceCategory]
-         * name. A category without an entry keeps its default (on for the speaker and the
-         * earpiece, off on a headset). Applied live to the routed device.
-         */
-        const val EXTRAS_ECHO_CANCELLATION_BY_DEVICE = "echo_cancellation_by_device"
-
-        /**
-         * A [Bundle] carrying a whole [se.lublin.humla.audio.capture.VadConfig], see
-         * [se.lublin.humla.audio.capture.VadConfigBundle].
-         *
-         * Supersedes [EXTRAS_DETECTION_THRESHOLD], which can only express an amplitude threshold
-         * and is kept for compatibility.
-         */
-        const val EXTRAS_VAD_CONFIG = "vad_config"
-
-        /** One of `SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB`. */
-        const val EXTRAS_SPEEX_NOISE_SUPPRESS_DB = "speex_noise_suppress_db"
-
-        /** `android.media.audiofx.NoiseSuppressor` on the recorder's session. */
-        const val EXTRAS_ANDROID_NOISE_SUPPRESSOR = "android_noise_suppressor"
-
-        /** `android.media.audiofx.AutomaticGainControl` on the recorder's session. */
-        const val EXTRAS_ANDROID_AGC = "android_agc"
-
-        /**
-         * The persisted Bluetooth preference, i.e. the user's wish for a headset. Reconciled in
-         * place, never a reconnect.
-         */
-        const val EXTRAS_BLUETOOTH_WANTED = "bluetooth_wanted"
-
-        /**
-         * Boolean: without a headset, route voice to the earpiece rather than the speaker. The
-         * chooser overrides it per session.
-         */
-        const val EXTRAS_EARPIECE_BY_DEFAULT = "earpiece_by_default"
-
     }
 }

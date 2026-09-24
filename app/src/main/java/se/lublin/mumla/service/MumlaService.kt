@@ -387,8 +387,6 @@ class MumlaService : HumlaService(),
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        // Audio extras are derived in AudioPreferenceExtras; the cases below have other effects.
-        val changedExtras = AudioPreferenceExtras.extrasFor(key!!, mSettings)
         var requiresReconnect = false
         when (key) {
             Settings.PREF_INPUT_METHOD ->
@@ -417,9 +415,9 @@ class MumlaService : HumlaService(),
             ->
                 requiresReconnect = true
         }
-        if (changedExtras.size() > 0) {
-            // The result is ignored: audio extras never require a reconnect.
-            configureExtras(changedExtras)
+        if (key in SessionSettings.AUDIO_KEYS) {
+            // The result is ignored: audio settings never require a reconnect.
+            configure(SessionSettings.withAudioSettings(getSessionConfig(), mSettings))
         }
 
         if (requiresReconnect && isConnectionEstablished()) {

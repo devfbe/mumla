@@ -20,6 +20,7 @@ package se.lublin.humla;
 import kotlinx.coroutines.flow.StateFlow;
 
 import se.lublin.humla.model.Server;
+import se.lublin.humla.session.SessionConfig;
 import se.lublin.humla.session.SessionState;
 import se.lublin.humla.util.HumlaDisconnectedException;
 import se.lublin.humla.util.HumlaException;
@@ -44,6 +45,23 @@ public interface IHumlaService {
      * @return true if handshaking with the server has completed.
      */
     boolean isConnected();
+
+    /**
+     * Replaces the session configuration. Audio settings apply live, connection settings on the
+     * next connection.
+     * @return true if a reconnect is required for the changes to take effect.
+     */
+    boolean configure(SessionConfig config);
+
+    /**
+     * @return the configuration last passed to {@link #configure(SessionConfig)}.
+     */
+    SessionConfig getSessionConfig();
+
+    /**
+     * Connects to the configured server. Ignored while connecting or connected.
+     */
+    void connect();
 
     /**
      * Disconnects from the active connection, or does nothing if no connection is active.

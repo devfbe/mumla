@@ -22,7 +22,6 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.net.ConnectivityManager
-import android.os.Bundle
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
@@ -40,6 +39,7 @@ import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ConnectionWarning
 import se.lublin.humla.session.AudioConfig
+import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.HumlaException
@@ -47,7 +47,7 @@ import se.lublin.humla.util.HumlaObserver
 import java.util.concurrent.TimeUnit
 
 /**
- * Characterization of [HumlaService] without a live connection: lifecycle, extras, and the
+ * Characterization of [HumlaService] without a live connection: lifecycle, configuration, and the
  * disconnected arm of the session API.
  *
  * Accessors are called as functions (`getConnectionState()`), not as properties, so that they
@@ -145,62 +145,23 @@ class HumlaServiceCharacterizationTest {
         assertThat(binder.getService()).isSameInstanceAs(service)
     }
 
-    // ---------------------------------------------------------------- onStartCommand input space
+    // ---------------------------------------------------------------- start and configure
 
-    /** The four corners of `onStartCommand`: intent, extras, action CONNECT, EXTRAS_SERVER. */
+    /** A start command only keeps the service started; connecting goes through the binder. */
     @Test
-    fun aStartCommandWithoutAnIntentDoesNothingAndIsNotSticky() {
+    fun aStartCommandNeitherConfiguresNorConnectsAndIsNotSticky() {
         val service = service()
 
-        assertThat(service.onStartCommand(null, 0, 0)).isEqualTo(Service.START_NOT_STICKY)
+        for (intent in listOf(null, Intent(), Intent().setAction("se.lublin.humla.CONNECT"))) {
+            assertThat(service.onStartCommand(intent, 0, 0)).isEqualTo(Service.START_NOT_STICKY)
+        }
         assertThat(service.getConnection()).isNull()
         assertThat(service.getTargetServer()).isNull()
     }
 
+    /** The configured server is the one connected to, and the state is CONNECTING when `onConnecting` runs. */
     @Test
-    fun anIntentWithoutExtrasConfiguresNothingAndIsNotSticky() {
-        val service = service()
-
-        assertThat(service.onStartCommand(Intent(), 0, 0)).isEqualTo(Service.START_NOT_STICKY)
-        assertThat(service.getTargetServer()).isNull()
-    }
-
-    @Test
-    fun anIntentWithExtrasButNoConnectActionOnlyConfigures() {
-        val service = service()
-        val intent = Intent().putExtra(HumlaService.EXTRAS_SERVER, server)
-
-        assertThat(service.onStartCommand(intent, 0, 0)).isEqualTo(Service.START_NOT_STICKY)
-
-        assertThat(service.getTargetServer()!!.host).isEqualTo("127.0.0.1")
-        assertThat(service.getConnection()).isNull()
-    }
-
-    @Test
-    fun aConnectActionWithoutAServerExtraThrows() {
-        val service = service()
-        val intent = Intent().setAction(HumlaService.ACTION_CONNECT)
-
-        val e = assertThrows(RuntimeException::class.java) { service.onStartCommand(intent, 0, 0) }
-
-        assertThat(e).hasMessageThat().contains("requires a server provided in extras")
-    }
-
-    @Test
-    fun aConnectActionWithExtrasThatCarryNoServerThrowsToo() {
-        val service = service()
-        val intent = Intent().setAction(HumlaService.ACTION_CONNECT)
-            .putExtra(HumlaService.EXTRAS_AUTO_RECONNECT, true)
-
-        assertThrows(RuntimeException::class.java) { service.onStartCommand(intent, 0, 0) }
-    }
-
-    /**
-     * Extras are applied before `connect()` reads them, and `mConnectionState` is already
-     * CONNECTING when `onConnecting` runs.
-     */
-    @Test
-    fun aConnectActionAppliesTheExtrasBeforeItConnects() {
+    fun connectUsesTheConfiguredServer() {
         val service = service()
         val stateInsideOnConnecting = mutableListOf<HumlaService.ConnectionState>()
         val serverInsideOnConnecting = mutableListOf<String?>()
@@ -211,55 +172,43 @@ class HumlaServiceCharacterizationTest {
                 service.disconnect()
             }
         })
-        val intent = Intent().setAction(HumlaService.ACTION_CONNECT)
-            .putExtra(HumlaService.EXTRAS_SERVER, server)
 
-        service.onStartCommand(intent, 0, 0)
+        service.configure(SessionConfig(server = server))
+        service.connect()
 
         assertThat(stateInsideOnConnecting).containsExactly(HumlaService.ConnectionState.CONNECTING)
         assertThat(serverInsideOnConnecting).containsExactly("127.0.0.1")
         assertThat(service.getConnection()).isNotNull()
     }
 
-    // ---------------------------------------------------------------- configureExtras
-
-    /** Every `EXTRAS_*` constant, found by reflection, is classified in the reconnect table. */
+    /** Every audio setting lands in its [AudioConfig] field; the VAD config reaches a live object instead. */
     @Test
-    fun everyExtraIsClassifiedForReconnect() {
-        val declared = HumlaService::class.java.fields
-            .filter { it.name.startsWith("EXTRAS_") && it.type == String::class.java }
-            .map { it.get(null) as String }
-
-        assertThat(declared).containsExactlyElementsIn(HumlaServiceExtrasReconnectTest.RECONNECT_NEEDED.keys)
-    }
-
-    /** Every audio extra lands in its [AudioConfig] field; two write into live objects instead. */
-    @Test
-    fun everyAudioExtraLandsInTheAudioConfig() {
+    fun everyAudioSettingLandsInTheAudioConfig() {
         val service = service()
-        val extras = Bundle().apply {
-            putFloat(HumlaService.EXTRAS_AMPLITUDE_BOOST, 1.5f)
-            putInt(HumlaService.EXTRAS_INPUT_RATE, 48000)
-            putInt(HumlaService.EXTRAS_INPUT_QUALITY, 40000)
-            putInt(HumlaService.EXTRAS_AUDIO_SOURCE, 7)
-            putInt(HumlaService.EXTRAS_AUDIO_STREAM, 3)
-            putInt(HumlaService.EXTRAS_FRAMES_PER_PACKET, 4)
-            putBoolean(HumlaService.EXTRAS_ENABLE_PREPROCESSOR, true)
-            putString(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD, "rnnoise")
-            putInt(HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB, -40)
-            putBoolean(HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR, true)
-            putBoolean(HumlaService.EXTRAS_ANDROID_AGC, true)
-            putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK)
-            putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true)
-        }
 
-        service.configureExtras(extras)
+        service.configure(
+            SessionConfig(
+                amplitudeBoost = 1.5f,
+                inputSampleRate = 16_000,
+                inputQuality = 24_000,
+                audioSource = 7,
+                audioStream = 3,
+                framesPerPacket = 4,
+                preprocessorEnabled = true,
+                noiseSuppressionMethod = "rnnoise",
+                speexNoiseSuppressDb = -40,
+                androidNoiseSuppressor = true,
+                androidAgc = true,
+                transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+                halfDuplex = true,
+            )
+        )
 
         assertThat(service.getAudioConfigForTest()).isEqualTo(
             AudioConfig(
                 amplitudeBoost = 1.5f,
-                inputSampleRate = 48000,
-                targetBitrate = 40000,
+                inputSampleRate = 16_000,
+                targetBitrate = 24_000,
                 audioSource = 7,
                 audioStream = 3,
                 targetFramesPerPacket = 4,
@@ -272,7 +221,7 @@ class HumlaServiceCharacterizationTest {
                 halfDuplexRequested = true,
             )
         )
-        // The fields no extra writes: the route decides them, not a setting.
+        // The fields no setting writes: the route decides them.
         assertThat(service.getAudioConfigForTest().routedDeviceType).isNull()
         assertThat(service.getAudioConfigForTest().echoCancellation).isFalse()
     }
@@ -288,7 +237,7 @@ class HumlaServiceCharacterizationTest {
 
         for ((mode, type) in expected) {
             val service = service()
-            service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, mode) })
+            service.configure(SessionConfig(transmitMode = mode))
 
             assertThat(service.getTransmitMode()).isEqualTo(mode)
             assertThat(inputMode(service)).isInstanceOf(type)
@@ -296,21 +245,20 @@ class HumlaServiceCharacterizationTest {
     }
 
     @Test
-    fun anUnknownTransmitModeIsRefused() {
+    fun anUnknownTransmitModeIsRefusedAndChangesNothing() {
         val service = service()
 
         assertThrows(IllegalArgumentException::class.java) {
-            service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, 99) })
+            service.configure(SessionConfig(transmitMode = 99, server = server))
         }
+        assertThat(service.getSessionConfig()).isEqualTo(SessionConfig())
     }
 
     /** The chosen input mode is the instance `isTalking()` reads, not a fresh copy. */
     @Test
     fun thePushToTalkModeHandedToTheAudioPipelineIsTheOneIsTalkingReads() {
         val service = service()
-        service.configureExtras(
-            Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK) }
-        )
+        service.configure(SessionConfig(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK))
 
         service.setTalkingState(true)
 
@@ -319,53 +267,20 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.isTalking()).isTrue()
     }
 
-    /** TCP is forced by either extra, recomputed from the last value each of them was given. */
+    /** Access tokens are kept even with no connection to send them on; nothing throws. */
     @Test
-    fun tcpIsForcedWhileEitherForceTcpOrTorIsOn() {
-        val service = service()
-        fun configure(key: String, value: Boolean) =
-            service.configureExtras(Bundle().apply { putBoolean(key, value) })
-
-        configure(HumlaService.EXTRAS_FORCE_TCP, false)
-        assertThat(service.isTcpForced).isFalse()
-
-        configure(HumlaService.EXTRAS_USE_TOR, true)
-        assertThat(service.isTcpForced).isTrue()
-
-        configure(HumlaService.EXTRAS_FORCE_TCP, false)
-        assertThat(service.isTcpForced).isTrue()
-
-        configure(HumlaService.EXTRAS_USE_TOR, false)
-        assertThat(service.isTcpForced).isFalse()
-
-        configure(HumlaService.EXTRAS_FORCE_TCP, true)
-        configure(HumlaService.EXTRAS_USE_TOR, false)
-        assertThat(service.isTcpForced).isTrue()
-
-        configure(HumlaService.EXTRAS_FORCE_TCP, false)
-        assertThat(service.isTcpForced).isFalse()
-    }
-
-    /** Access tokens are stored even with no connection to send them on; nothing throws. */
-    @Test
-    fun accessTokensAreStoredWithoutAConnection()  {
+    fun accessTokensAreKeptWithoutAConnection() {
         val service = service()
 
-        assertThat(
-            service.configureExtras(
-                Bundle().apply {
-                    putStringArrayList(HumlaService.EXTRAS_ACCESS_TOKENS, arrayListOf("a", "b"))
-                }
-            )
-        ).isFalse()
+        assertThat(service.configure(SessionConfig(accessTokens = listOf("a", "b")))).isFalse()
 
-        assertThat(service.mAccessTokens).isEqualTo(listOf("a", "b"))
+        assertThat(service.getSessionConfig().accessTokens).isEqualTo(listOf("a", "b"))
     }
 
     // ---------------------------------------------------------------- disconnection
 
     /**
-     * `onConnectionDisconnected` over its input space: the error, its reason, and `mAutoReconnect`.
+     * `onConnectionDisconnected` over its input space: the error, its reason, and `autoReconnect`.
      * Four corners decide whether the service goes reconnecting; the state itself is decided by the
      * error alone.
      */
@@ -373,9 +288,7 @@ class HumlaServiceCharacterizationTest {
     fun aCleanDisconnectGoesToDisconnectedAndNeverReconnects() {
         for (autoReconnect in listOf(false, true)) {
             val service = service()
-            service.configureExtras(
-                Bundle().apply { putBoolean(HumlaService.EXTRAS_AUTO_RECONNECT, autoReconnect) }
-            )
+            service.configure(SessionConfig(autoReconnect = autoReconnect))
 
             service.onConnectionDisconnected(null)
 
