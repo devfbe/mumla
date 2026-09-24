@@ -1,5 +1,6 @@
 package se.lublin.humla.audio
 
+import android.media.AudioAttributes
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -93,6 +94,26 @@ class AudioOutputTest {
 
         assertThat(thrown).isInstanceOf(se.lublin.humla.exception.AudioInitializationException::class.java)
         assertThat(o.isPlaying()).isFalse()
+    }
+
+    // --- track attributes ------------------------------------------------------------------------
+
+    /** The voice-call stream becomes voice communication, which follows the communication device. */
+    @Test
+    fun `the voice call stream plays as voice communication speech`() {
+        val attributes = AudioOutput.playbackAttributes(AudioManager.STREAM_VOICE_CALL)
+
+        assertThat(attributes.usage).isEqualTo(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+        assertThat(attributes.contentType).isEqualTo(AudioAttributes.CONTENT_TYPE_SPEECH)
+        assertThat(attributes.volumeControlStream).isEqualTo(AudioManager.STREAM_VOICE_CALL)
+    }
+
+    @Test
+    fun `any other stream keeps its legacy stream type`() {
+        val attributes = AudioOutput.playbackAttributes(AudioManager.STREAM_MUSIC)
+
+        assertThat(attributes.usage).isEqualTo(AudioAttributes.USAGE_MEDIA)
+        assertThat(attributes.volumeControlStream).isEqualTo(AudioManager.STREAM_MUSIC)
     }
 
     // --- start and stop -------------------------------------------------------------------------

@@ -117,8 +117,10 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         )
         capturePipeline = wiring.pipeline
         transmitter = VoiceTransmitter(capturePipeline, encodeListener) { talking ->
-            @Suppress("DEPRECATION")
-            if (isHalfDuplex) audioManager.setStreamMute(audioStream, talking)
+            if (isHalfDuplex) {
+                val direction = if (talking) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE
+                audioManager.adjustStreamVolume(audioStream, direction, 0)
+            }
         }
         transmitter.targetId = targetId
         output = AudioOutput(builder.talkingListener, wiring.farEnd)

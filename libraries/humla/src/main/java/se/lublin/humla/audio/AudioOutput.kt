@@ -17,7 +17,9 @@
 
 package se.lublin.humla.audio
 
+import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Handler
 import android.os.Looper
@@ -111,25 +113,34 @@ class AudioOutput @JvmOverloads constructor(
                 "(system minimum $minBufferSize bytes)",
         )
 
-        audioTrack = try {
-            @Suppress("DEPRECATION")
-            AudioTrack(
-                audioStream,
-                AudioHandler.SAMPLE_RATE,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                sizes.trackBytes,
-                AudioTrack.MODE_STREAM,
-            )
-        } catch (e: IllegalArgumentException) {
-            throw AudioInitializationException(e)
-        }
+        audioTrack = buildTrack(audioStream, sizes.trackBytes)
 
         val t = Thread(this)
         thread = t
         running = true
         t.start()
         return t
+    }
+
+    @Throws(AudioInitializationException::class)
+    private fun buildTrack(audioStream: Int, bytes: Int): AudioTrack = try {
+        AudioTrack.Builder()
+            .setAudioAttributes(playbackAttributes(audioStream))
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setSampleRate(AudioHandler.SAMPLE_RATE)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .build(),
+            )
+            .setBufferSizeInBytes(bytes)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            .build()
+    } catch (e: IllegalArgumentException) {
+        throw AudioInitializationException(e)
+    } catch (e: UnsupportedOperationException) {
+        throw AudioInitializationException(e)
     }
 
     fun stopPlaying() {
@@ -315,6 +326,21 @@ class AudioOutput @JvmOverloads constructor(
          * full; a mix is at most what it holds and never more than twelve frames (120 ms), which
          * is what the far-end chunker and the decoders are sized for.
          */
+        /**
+         * The attributes a track on [stream] had with the legacy stream-type constructor. The
+         * voice-call stream is spelled out as voice communication, the usage that follows the
+         * communication device the router selects.
+         */
+        fun playbackAttributes(stream: Int): AudioAttributes =
+            if (stream == AudioManager.STREAM_VOICE_CALL) {
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            } else {
+                AudioAttributes.Builder().setLegacyStreamType(stream).build()
+            }
+
         fun playbackBuffer(minBufferBytes: Int): PlaybackBuffer {
             val mixSamples = minOf(minBufferBytes / BYTES_PER_SAMPLE, AudioHandler.FRAME_SIZE * 12)
             return PlaybackBuffer(mixSamples = mixSamples, trackBytes = minBufferBytes)

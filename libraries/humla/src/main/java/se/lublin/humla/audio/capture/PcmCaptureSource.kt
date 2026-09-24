@@ -154,10 +154,21 @@ class AndroidAudioRecordSource internal constructor(
                 AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             if (minBufferSize <= 0) return null
             val record = try {
-                AudioRecord(
-                    source, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBufferSize,
-                )
+                AudioRecord.Builder()
+                    .setAudioSource(source)
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setSampleRate(rate)
+                            .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .build(),
+                    )
+                    .setBufferSizeInBytes(minBufferSize)
+                    .build()
             } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "no AudioRecord at $rate Hz: ${e.message}")
+                return null
+            } catch (e: UnsupportedOperationException) {
                 Log.w(TAG, "no AudioRecord at $rate Hz: ${e.message}")
                 return null
             }
