@@ -108,10 +108,7 @@ class HumlaCallbacksTest {
         assertThat(observer.messages).containsExactly("first", "second").inOrder()
     }
 
-    /**
-     * Case 1: any thread may register or unregister while the delivery thread is fanning events
-     * out. The registration set must tolerate that without a concurrent-modification failure.
-     */
+    /** Registration may change on any thread while the delivery thread fans events out. */
     @Test
     fun observersMayRegisterAndUnregisterWhileEventsAreBeingDelivered() {
         val stable = RecordingObserver()
@@ -147,9 +144,8 @@ class HumlaCallbacksTest {
     }
 
     /**
-     * Case 1 and case 4: an observer that unregisters on the delivery thread receives none of the
-     * events still queued behind it, while every observer that stays registered receives all of
-     * them, including the ones accepted before the unregistration.
+     * An observer that unregisters on the delivery thread receives none of the events still queued
+     * behind it; observers that stay receive all of them.
      */
     @Test
     fun anObserverUnregisteredBetweenSlicesLosesThePendingEventsButOthersKeepThem() {
@@ -173,9 +169,8 @@ class HumlaCallbacksTest {
     }
 
     /**
-     * Case 2: the budget is only checked between events, so one slow callback runs to completion
-     * and the slice ends right after it. Slicing bounds the cadence, never the duration of a
-     * single observer callback.
+     * The budget is checked only between events, so one slow callback runs to completion and the
+     * slice ends right after it.
      */
     @Test
     fun aCallbackLongerThanTheSliceBudgetEndsTheSliceAfterItself() {
@@ -202,16 +197,8 @@ class HumlaCallbacksTest {
     }
 
     /**
-     * Case 2 and case 4: a queue that keeps refilling while the drain runs still yields the
-     * delivery thread after one slice, and everything raised is either delivered in order or
-     * counted.
-     *
-     * "Loses nothing" is what this test asserted before the absolute ceiling existed, and the
-     * producer here is the shape that ceiling is for: a background thread raising undroppable
-     * events faster than the main thread drains them, which is what a large server's synchronisation
-     * is. What is left to demand is a conservation law rather than no loss - every event is
-     * delivered or counted in [HumlaCallbacks.droppedEvents], none is reordered, and the drain
-     * still hands the looper back after one slice.
+     * A queue that keeps refilling during the drain still yields the delivery thread after one
+     * slice. Every event is delivered in order or counted in [HumlaCallbacks.droppedEvents].
      */
     @Test
     fun aRefillingQueueStillYieldsAfterOneSliceAndAccountsForEveryEvent() {
@@ -220,8 +207,7 @@ class HumlaCallbacksTest {
 
         val producing = AtomicBoolean(true)
         val produced = AtomicInteger()
-        // Bounded so that a drain which never yields still terminates and fails on the
-        // assertions below instead of hanging the suite.
+        // Bounded, so a drain that never yields fails the assertions instead of hanging.
         val producer = thread {
             while (producing.get() && produced.get() < 30_000) {
                 callbacks.onLogInfo("m${produced.getAndIncrement()}")
@@ -270,9 +256,8 @@ class HumlaCallbacksTest {
     }
 
     /**
-     * Case 3 and case 4, queued path: while a drain is running, an event raised from inside a
-     * callback goes to the back of the queue instead of recursing, so the batch already accepted
-     * is delivered first and the stack does not grow.
+     * Queued path: an event raised from inside a callback during a drain goes to the back of the
+     * queue instead of recursing, so the stack does not grow.
      */
     @Test
     fun anEventRaisedFromWithinAQueuedCallbackIsDeliveredAfterTheCurrentBatch() {
@@ -290,11 +275,9 @@ class HumlaCallbacksTest {
     }
 
     /**
-     * Pins the inline path's re-entrancy, which the queued path deliberately does not share: an
-     * event raised from inside an inline callback is delivered inline too, nested inside the outer
-     * fan-out, so the stack grows by one frame per level. This is the legacy Java behaviour that
-     * the service relies on for its own synchronous state changes, and the only path production
-     * uses today. A change to the fast path must fail here deliberately, not silently.
+     * The inline path is re-entrant, unlike the queued path: an event raised from inside an inline
+     * callback is delivered nested inside the outer fan-out. The service relies on this for its
+     * synchronous state changes.
      */
     @Test
     fun anEventRaisedFromWithinAnInlineCallbackRecursesInsteadOfQueueing() {
@@ -309,9 +292,8 @@ class HumlaCallbacksTest {
     }
 
     /**
-     * Case 1: an observer may unregister from inside its own callback, on the delivery thread. It
-     * then receives nothing from any later fan-out. Whether it sees the remainder of its own
-     * fan-out is unspecified, so this pins only the guarantee the contract actually makes.
+     * An observer may unregister from inside its own callback and then receives nothing from later
+     * fan-outs. Whether it sees the rest of its own fan-out is unspecified.
      */
     @Test
     fun anObserverMayUnregisterFromInsideItsOwnCallback() {
@@ -333,10 +315,7 @@ class HumlaCallbacksTest {
         assertThat(staying.messages).isEqualTo((0 until 5).map { "m$it" })
     }
 
-    /**
-     * Case 4: a callback that throws must not wedge the queue. The failure still surfaces on the
-     * delivery thread, but the events behind it keep their turn.
-     */
+    /** A callback that throws must not wedge the queue; the events behind it keep their turn. */
     @Test
     fun anObserverThatThrowsDoesNotWedgeTheQueue() {
         val recorder = RecordingObserver()
