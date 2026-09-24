@@ -88,7 +88,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private AudioEncodeListener mEncodeListener;
 
     private int mSession;
-    private HumlaUDPMessageType mCodec;
+    /** Written under mEncoderLock, read without it by getCodec(). */
+    private volatile HumlaUDPMessageType mCodec;
     private IEncoder mEncoder;
     private int mFrameCounter;
 
@@ -101,8 +102,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private final float mAmplitudeBoost;
 
     private boolean mInitialized;
-    /** True if the user is muted on the server. */
-    private boolean mMuted;
+    /** True if the user is muted on the server. Written by the protocol thread, read by capture. */
+    private volatile boolean mMuted;
     private boolean mBluetoothOn;
     private boolean mHalfDuplex;
     private boolean mPreprocessorEnabled;
@@ -115,7 +116,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     private boolean mTalking;
 
     private final Object mEncoderLock;
-    private byte mTargetId;
+    /** Set from the service, read by the capture thread for each packet. */
+    private volatile byte mTargetId;
 
     public AudioHandler(Context context, HumlaLogger logger, int audioStream, int audioSource,
                         int sampleRate, int targetBitrate, int targetFramesPerPacket,
@@ -287,10 +289,8 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
     }
 
     /**
-     * Replaces the encoder. Takes mEncoderLock itself, so that destroying the old encoder cannot
-     * race encode() or shutdown(), which hold the same lock. messageCodecVersion() already held it
-     * around its call; initialize() and recreateEncoder() did not. The lock is reentrant, so the
-     * existing nesting in messageCodecVersion() is unaffected.
+     * Replaces the encoder under mEncoderLock, so that destroying the old encoder cannot race
+     * encoding or shutdown(), which hold the same lock.
      */
     public void setCodec(HumlaUDPMessageType codec) throws NativeAudioException {
         synchronized (mEncoderLock) {
@@ -449,11 +449,10 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             codec = HumlaUDPMessageType.UDPVoiceCELTAlpha;
         }
 
-        if (codec != mCodec) {
+        synchronized (mEncoderLock) {
+            if (codec == mCodec) return;
             try {
-                synchronized (mEncoderLock) {
-                    setCodec(codec);
-                }
+                setCodecLocked(codec);
             } catch (NativeAudioException e) {
                 e.printStackTrace();
             }
@@ -508,39 +507,26 @@ public class AudioHandler extends HumlaNetworkListener implements AudioInput.Aud
             if (mHalfDuplex) {
                 mAudioManager.setStreamMute(getAudioStream(), talking);
             }
-
-            synchronized (mEncoderLock) {
-                // Terminate encoding when talking stops.
-                if (!talking && mEncoder != null) {
-                    try {
-                        mEncoder.terminate();
-                    } catch (NativeAudioException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        if (talking) {
-            // The pipeline has already applied the amplitude boost, after the detector rather than
-            // before it, so the amplification slider no longer moves the voice-activation
-            // threshold with it. Note the length: the frame the pipeline produced, not the array's
-            // size -- they are equal today and the pipeline is what may change that.
-            synchronized (mEncoderLock) {
-                if (mEncoder != null) {
-                    try {
-                        mEncoder.encode(processed.getSamples(), processed.getLength());
-                        mFrameCounter++;
-                    } catch (NativeAudioException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
         }
 
         synchronized (mEncoderLock) {
-            if (mEncoder != null && mEncoder.isReady()) {
-                sendEncodedAudio();
+            if (mEncoder != null) {
+                try {
+                    if (talking) {
+                        // The pipeline has already applied the amplitude boost. The length is the
+                        // frame the pipeline produced, not the array's size.
+                        mEncoder.encode(processed.getSamples(), processed.getLength());
+                        mFrameCounter++;
+                    } else if (mTalking) {
+                        // Terminate encoding when talking stops.
+                        mEncoder.terminate();
+                    }
+                } catch (NativeAudioException e) {
+                    e.printStackTrace();
+                }
+                if (mEncoder.isReady()) {
+                    sendEncodedAudio();
+                }
             }
         }
 
