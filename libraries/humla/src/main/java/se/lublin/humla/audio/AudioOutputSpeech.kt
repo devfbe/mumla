@@ -33,20 +33,17 @@ import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
-import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.protocol.AudioHandler
 
 /**
- * Decodes one user's incoming voice stream through a jitter buffer into float PCM.
+ * Decodes one user's incoming Opus stream through a jitter buffer into float PCM.
  *
- * [opusApi] and [jitterApi] are the seams JVM tests use to drive the Opus path without native
- * libraries; they default to the `*Native` objects, which load their `.so` on first touch. The
- * CELT and Speex decoders keep their own defaults, so only the Opus codec is testable this way.
+ * [opusApi] and [jitterApi] are the seams JVM tests use to run without native libraries; they
+ * default to the `*Native` objects, which load their `.so` on first touch.
  */
 class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) constructor(
     private val user: User,
-    private val codec: HumlaUDPMessageType,
     private var requestedSamples: Int,
     private val talkStateListener: TalkStateListener,
     private val opusApi: OpusDecoderApi = OpusDecoderNative,
@@ -57,10 +54,10 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
         fun onTalkStateUpdated(session: Int, state: TalkState)
     }
 
-    private val decoder: IDecoder
+    private val decoder: IDecoder = OpusDecoder(AudioHandler.SAMPLE_RATE, 1, opusApi)
     private val jitterBuffer: SpeexJitterBuffer
     private val jitterLock = Any()
-    private var audioBufferSize = AudioHandler.FRAME_SIZE
+    private val audioBufferSize = AudioHandler.FRAME_SIZE * 12
 
     // State-specific
     private var buffer: FloatArray
@@ -76,17 +73,6 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
     private var ucFlags = 0
 
     init {
-        decoder = when (codec) {
-            HumlaUDPMessageType.UDPVoiceOpus -> {
-                audioBufferSize *= 12
-                OpusDecoder(AudioHandler.SAMPLE_RATE, 1, opusApi)
-            }
-            HumlaUDPMessageType.UDPVoiceCELTBeta -> CELT11Decoder(AudioHandler.SAMPLE_RATE, 1)
-            HumlaUDPMessageType.UDPVoiceCELTAlpha -> CELT7Decoder(AudioHandler.SAMPLE_RATE, AudioHandler.FRAME_SIZE, 1)
-            HumlaUDPMessageType.UDPVoiceSpeex -> SpeexDecoder()
-            else -> throw NativeAudioException("No decoder for codec $codec")
-        }
-
         // Larger initial buffer so we can save performance by not resizing at runtime.
         buffer = FloatArray(audioBufferSize * 2)
         out = FloatArray(audioBufferSize)
@@ -108,30 +94,13 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
 
         synchronized(jitterLock) {
             try {
-                var samples = 0
-                if (codec == HumlaUDPMessageType.UDPVoiceOpus) {
-                    val header = pb.readLong()
-                    val size = (header and ((1L shl 13) - 1)).toInt()
-                    if (size > 0) {
-                        val data = pb.dataBlock(size)
-                        if (data.size != size) return
-                        val frameCount = opusApi.packetGetNbFrames(data, size)
-                        samples = frameCount * opusApi.packetGetSamplesPerFrame(data, AudioHandler.SAMPLE_RATE)
-                    } else {
-                        return
-                    }
-                } else {
-                    try {
-                        var header: Int
-                        do {
-                            header = pb.next()
-                            samples += AudioHandler.FRAME_SIZE
-                            pb.skip(header and 0x7f)
-                        } while ((header and 0x80) > 0)
-                    } catch (e: BufferUnderflowException) {
-                        // reached end of buffer
-                    }
-                }
+                val header = pb.readLong()
+                val opusSize = (header and ((1L shl 13) - 1)).toInt()
+                if (opusSize <= 0) return
+                val opusData = pb.dataBlock(opusSize)
+                if (opusData.size != opusSize) return
+                val frameCount = opusApi.packetGetNbFrames(opusData, opusSize)
+                val samples = frameCount * opusApi.packetGetSamplesPerFrame(opusData, AudioHandler.SAMPLE_RATE)
                 pb.rewind()
 
                 val size = pb.left()
@@ -196,23 +165,10 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
                         ucFlags = jbp.userData
                         hasTerminator = false
                         try {
-                            if (codec == HumlaUDPMessageType.UDPVoiceOpus) {
-                                val header = pb.readLong()
-                                val size = (header and ((1L shl 13) - 1)).toInt()
-                                hasTerminator = (header and (1L shl 13)) > 0
-                                frames.add(pb.bufferBlock(size))
-                            } else {
-                                var header: Int
-                                do {
-                                    header = pb.next()
-                                    val size = header and 0x7f
-                                    if (header > 0) {
-                                        frames.add(pb.bufferBlock(size))
-                                    } else {
-                                        hasTerminator = true
-                                    }
-                                } while ((header and 0x80) > 0)
-                            }
+                            val header = pb.readLong()
+                            val size = (header and ((1L shl 13) - 1)).toInt()
+                            hasTerminator = (header and (1L shl 13)) > 0
+                            frames.add(pb.bufferBlock(size))
                         } catch (e: BufferOverflowException) {
                             e.printStackTrace()
                         } catch (e: BufferUnderflowException) {
@@ -285,8 +241,6 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
     fun setRequestedSamples(samples: Int) {
         requestedSamples = samples
     }
-
-    fun getCodec(): HumlaUDPMessageType = codec
 
     fun getUser(): User = user
 

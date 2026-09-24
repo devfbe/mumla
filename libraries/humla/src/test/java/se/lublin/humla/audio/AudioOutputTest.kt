@@ -12,8 +12,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowAudioTrack
 import org.robolectric.shadows.ShadowLog
 import se.lublin.humla.audio.native.OpusDecoderApi
-import se.lublin.humla.audio.native.SpeexJitterApi
-import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
@@ -23,7 +21,7 @@ import se.lublin.humla.protocol.AudioHandler
 @RunWith(RobolectricTestRunner::class)
 class AudioOutputTest {
 
-    private val users = mapOf(SESSION to User(SESSION, "bob"), OTHER_SESSION to User(OTHER_SESSION, "alice"))
+    private val users = mapOf(SESSION to User(SESSION, "bob"))
 
     private val listener = object : AudioOutput.AudioOutputListener {
         override fun onUserTalkStateUpdated(user: User) = Unit
@@ -44,7 +42,7 @@ class AudioOutputTest {
     }
 
     private fun startedOutput(
-        factory: AudioOutput.SpeechFactory = AudioOutput.SpeechFactory { u, c, n, l -> AudioOutputSpeech(u, c, n, l) },
+        factory: AudioOutput.SpeechFactory = AudioOutput.SpeechFactory { u, n, l -> AudioOutputSpeech(u, n, l) },
     ): AudioOutput {
         val o = AudioOutput(listener, null, factory)
         output = o
@@ -118,12 +116,11 @@ class AudioOutputTest {
 
     @Test
     fun `a speech that cannot be built does not leave the packet lock held`() {
-        val o = startedOutput()
+        val o = startedOutput { _, _, _ -> throw NativeAudioException("no decoder") }
 
-        // UDPPing has no decoder: building the speech throws inside the critical section. On a
-        // thread of its own, because the lock is reentrant -- the test thread would get it back
-        // no matter what was leaked.
-        val producer = Thread { o.queueVoiceData(voicePacket(), HumlaUDPMessageType.UDPPing) }
+        // Building the speech throws inside the critical section. On a thread of its own, because
+        // the lock is reentrant -- the test thread would get it back no matter what was leaked.
+        val producer = Thread { o.queueVoiceData(voicePacket(), HumlaUDPMessageType.UDPVoiceOpus) }
         producer.start()
         producer.join(TimeUnit.SECONDS.toMillis(5))
         assertThat(producer.isAlive).isFalse()
@@ -136,34 +133,30 @@ class AudioOutputTest {
     }
 
     @Test
-    fun `a speech destroyed for a codec switch does not stay in the mix when its successor fails`() {
-        val jitters = mutableMapOf<Int, TrackingJitter>()
-        val factory = AudioOutput.SpeechFactory { u, codec, samples, talkStateListener ->
-            if (codec != HumlaUDPMessageType.UDPVoiceOpus) {
-                throw NativeAudioException("No decoder for codec $codec")
-            }
-            val jitter = TrackingJitter()
-            jitters[u.session] = jitter
-            AudioOutputSpeech(u, codec, samples, talkStateListener, NoOpusDecoder(), jitter)
+    fun `legacy codec packets are dropped without a decoder and logged once`() {
+        var built = 0
+        val o = startedOutput { u, samples, l ->
+            built++
+            AudioOutputSpeech(u, samples, l, NoOpusDecoder(), FakeJitter())
         }
-        val o = startedOutput(factory)
+        ShadowLog.clear()
 
-        // bob talks opus, then switches to a codec that cannot be built: his opus speech is
-        // destroyed on the way to its successor, and the successor never arrives.
-        o.queueVoiceData(voicePacket(SESSION), HumlaUDPMessageType.UDPVoiceOpus)
-        o.queueVoiceData(voicePacket(SESSION), HumlaUDPMessageType.UDPPing)
-        val bob = jitters.getValue(SESSION)
-        assertThat(bob.destroys).isEqualTo(1)
+        for (type in listOf(
+            HumlaUDPMessageType.UDPVoiceCELTAlpha,
+            HumlaUDPMessageType.UDPVoiceSpeex,
+            HumlaUDPMessageType.UDPVoiceCELTBeta,
+            HumlaUDPMessageType.UDPVoiceCELTAlpha,
+        )) {
+            o.queueVoiceData(voicePacket(), type)
+        }
 
-        // alice's packet wakes the playback thread, and the next mix decodes every speech still
-        // registered. A destroyed one passes a freed handle to libspeexdsp: on a device that is a
-        // native crash, here it is a counted call.
-        o.queueVoiceData(voicePacket(OTHER_SESSION), HumlaUDPMessageType.UDPVoiceOpus)
-        awaitTrue("a mix that decoded alice") { jitters.getValue(OTHER_SESSION).callsWhileAlive > 1 }
-        runBounded("stopPlaying") { o.stopPlaying() }
-        output = null
+        assertThat(built).isEqualTo(0)
+        assertThat(ShadowLog.getLogsForTag(AudioOutput::class.java.name).filter { it.msg.startsWith("Dropping") })
+            .hasSize(1)
 
-        assertThat(bob.callsAfterDestroy).isEqualTo(0)
+        // The same talker's Opus stream still plays.
+        o.queueVoiceData(voicePacket(), HumlaUDPMessageType.UDPVoiceOpus)
+        assertThat(built).isEqualTo(1)
     }
 
     // --- helpers --------------------------------------------------------------------------------
@@ -205,40 +198,6 @@ class AudioOutputTest {
         }
     }
 
-    /** Counts every call libspeexdsp would get, split at `destroy`. */
-    private class TrackingJitter : SpeexJitterApi {
-        @Volatile var destroys = 0
-        @Volatile var callsWhileAlive = 0
-        @Volatile var callsAfterDestroy = 0
-
-        private fun touch() {
-            if (destroys == 0) callsWhileAlive++ else callsAfterDestroy++
-        }
-
-        override fun init(stepSize: Int): Long = 1L
-        override fun destroy(handle: Long) {
-            destroys++
-        }
-        override fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int) = touch()
-        override fun get(handle: Long, out: ByteArray, desiredSpan: Int, meta: IntArray): Int {
-            touch()
-            return SpeexJitterNative.JITTER_BUFFER_MISSING
-        }
-        override fun pointerTimestamp(handle: Long): Int {
-            touch()
-            return 0
-        }
-        override fun tick(handle: Long) = touch()
-        override fun ctl(handle: Long, request: Int, value: IntArray): Int {
-            touch()
-            return 0
-        }
-        override fun updateDelay(handle: Long): Int {
-            touch()
-            return 0
-        }
-    }
-
     private class NoOpusDecoder : OpusDecoderApi {
         override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {
             error[0] = 0
@@ -253,7 +212,6 @@ class AudioOutputTest {
 
     private companion object {
         const val SESSION = 7
-        const val OTHER_SESSION = 8
         const val BYTES_PER_SAMPLE = 2
 
         /** What the device in the bug report answers for 48 kHz mono 16-bit, in bytes. */

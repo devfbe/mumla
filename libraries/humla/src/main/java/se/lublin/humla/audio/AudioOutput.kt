@@ -50,8 +50,8 @@ class AudioOutput @JvmOverloads constructor(
     private val listener: AudioOutputListener,
     private val farEnd: FarEndFrameChunker?,
     /** Builds one user's decoder chain; the seam JVM tests use to run without native codecs. */
-    private val speechFactory: SpeechFactory = SpeechFactory { user, codec, samples, talkStateListener ->
-        AudioOutputSpeech(user, codec, samples, talkStateListener)
+    private val speechFactory: SpeechFactory = SpeechFactory { user, samples, talkStateListener ->
+        AudioOutputSpeech(user, samples, talkStateListener)
     },
 ) : Runnable, AudioOutputSpeech.TalkStateListener {
 
@@ -59,7 +59,6 @@ class AudioOutput @JvmOverloads constructor(
         @Throws(NativeAudioException::class)
         fun create(
             user: User,
-            codec: HumlaUDPMessageType,
             requestedSamples: Int,
             talkStateListener: AudioOutputSpeech.TalkStateListener,
         ): AudioOutputSpeech
@@ -81,6 +80,9 @@ class AudioOutput @JvmOverloads constructor(
     @Volatile
     private var running = false
     private var woken = false // set by every notify() on inactiveLock, read and written under it
+    /** Legacy-codec packets are dropped; this keeps it to one log line per output. */
+    @Volatile
+    private var loggedUnsupportedCodec = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mixer: IAudioMixer<FloatArray, ShortArray> = BasicClippingShortMixer()
@@ -253,8 +255,18 @@ class AudioOutput @JvmOverloads constructor(
         return true
     }
 
+    /** True for Opus; anything else is dropped, with one log line per output. */
+    private fun isDecodable(messageType: HumlaUDPMessageType): Boolean {
+        if (messageType == HumlaUDPMessageType.UDPVoiceOpus) return true
+        if (!loggedUnsupportedCodec) {
+            loggedUnsupportedCodec = true
+            Log.w(TAG, "Dropping $messageType voice packets: only Opus is supported")
+        }
+        return false
+    }
+
     fun queueVoiceData(data: ByteArray, messageType: HumlaUDPMessageType) {
-        if (!running) return
+        if (!running || !isDecodable(messageType)) return
 
         val msgFlags = (data[0].toInt() and 0x1f).toByte()
         val pds = PacketBuffer(data, data.size)
@@ -266,15 +278,8 @@ class AudioOutput @JvmOverloads constructor(
             val seq = pds.readLong().toInt()
 
             val aop = packetLock.withLock {
-                var existing = audioOutputs[session]
-                if (existing != null && existing.getCodec() != messageType) {
-                    // Remove before destroying so a failed rebuild leaves no freed handle mapped.
-                    audioOutputs.remove(session)
-                    existing.destroy()
-                    existing = null
-                }
-                existing ?: try {
-                    speechFactory.create(user, messageType, bufferSize, this).also {
+                audioOutputs[session] ?: try {
+                    speechFactory.create(user, bufferSize, this).also {
                         Log.v(TAG, "Created audio user " + user.getName())
                         audioOutputs[session] = it
                     }

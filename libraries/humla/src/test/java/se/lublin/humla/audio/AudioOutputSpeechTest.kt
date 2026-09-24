@@ -45,7 +45,6 @@ class AudioOutputSpeechTest {
         val jitter = FakeJitter()
         val speech = AudioOutputSpeech(
             User(42, "alice"),
-            HumlaUDPMessageType.UDPVoiceOpus,
             AudioHandler.FRAME_SIZE,
             { _, _ -> },
             FakeOpusDecoder(nbFrames = 2, samplesPerFrame = 480),
@@ -73,7 +72,6 @@ class AudioOutputSpeechTest {
         val states = mutableListOf<Pair<Int, TalkState>>()
         val speech = AudioOutputSpeech(
             User(42, "alice"),
-            HumlaUDPMessageType.UDPVoiceOpus,
             AudioHandler.FRAME_SIZE,
             { session, state -> states += session to state },
             FakeOpusDecoder(),
@@ -94,7 +92,6 @@ class AudioOutputSpeechTest {
         val opus = FakeOpusDecoder()
         val speech = AudioOutputSpeech(
             User(42, "alice"),
-            HumlaUDPMessageType.UDPVoiceOpus,
             AudioHandler.FRAME_SIZE,
             { _, _ -> },
             opus,
