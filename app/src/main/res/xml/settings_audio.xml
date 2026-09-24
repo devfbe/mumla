@@ -37,6 +37,14 @@
         android:text="%"
         app:iconSpaceReserved="false"/>
 
+    <!-- Filled and saved by AudioSettingsFragment through Settings.preferredAudioDevice. -->
+    <ListPreference
+        android:key="audio_device"
+        android:persistent="false"
+        android:title="@string/audio_device"
+        android:dialogTitle="@string/audio_device"
+        app:iconSpaceReserved="false"/>
+
     <PreferenceCategory android:title="@string/voiceActivitySettings"
         android:key="vad_settings"
         app:iconSpaceReserved="false">

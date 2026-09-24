@@ -120,6 +120,8 @@
     <string name="audio_device_usb">USB headset</string>
     <string name="audio_device_bluetooth">Bluetooth headset</string>
     <string name="audio_device_other">Audio device</string>
+    <!-- The saved device in the settings while it is not there, e.g. "Bluetooth headset (not connected)". -->
+    <string name="audio_device_not_connected">%1$s (not connected)</string>
     <string name="echo_cancellation">Echo cancellation</string>
     <string name="quickConnect">Quick Connect</string>
     <string name="connect">Connect</string>

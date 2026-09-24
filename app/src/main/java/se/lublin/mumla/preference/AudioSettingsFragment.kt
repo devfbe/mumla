@@ -46,6 +46,7 @@ import se.lublin.humla.audio.capture.PcmCaptureSourceFactory
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.session.listCommunicationDevices
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.AndroidAudioTrackSink
@@ -107,7 +108,47 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             true
         }
 
+        findPreference<ListPreference>(Settings.PREF_AUDIO_DEVICE)?.apply {
+            setOnPreferenceClickListener {
+                refreshAudioDevices()
+                false
+            }
+            setOnPreferenceChangeListener { _, newValue ->
+                chooseAudioDevice(newValue as String)
+                false
+            }
+        }
+        refreshAudioDevices()
+
         updateAudioDependents(preferenceScreen, inputPreference.value)
+    }
+
+    // ---------------------------------------------------------------- the audio device
+
+    private var audioDeviceChoices: AudioDeviceChoices? = null
+
+    /** Lists the devices there now, read without routing, and shows the saved choice. */
+    private fun refreshAudioDevices() {
+        val preference = findPreference<ListPreference>(Settings.PREF_AUDIO_DEVICE) ?: return
+        val context = context ?: return
+        val choices = AudioDeviceChoices.of(
+            resources,
+            listCommunicationDevices(context.getSystemService(AudioManager::class.java)),
+            Settings.getInstance(context).preferredAudioDevice,
+        )
+        audioDeviceChoices = choices
+        preference.entries = choices.labels.toTypedArray()
+        preference.entryValues = choices.labels.indices.map(Int::toString).toTypedArray()
+        preference.value = choices.selected.toString()
+        preference.summary = choices.labels[choices.selected]
+    }
+
+    /** Saves the entry at [index]; the service routes by it once a session runs. */
+    private fun chooseAudioDevice(index: String) {
+        val choices = audioDeviceChoices ?: return
+        val position = index.toIntOrNull()?.takeIf { it in choices.devices.indices } ?: return
+        Settings.getInstance(requireContext()).preferredAudioDevice = choices.devices[position]
+        refreshAudioDevices()
     }
 
     // ---------------------------------------------------------------- the live meter
@@ -125,6 +166,8 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
 
     override fun onResume() {
         super.onResume()
+        // A headset may have come or gone, or the toolbar chooser saved another device.
+        refreshAudioDevices()
         preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefsListener)
         // The test takes the microphone and may switch to communication mode, which quietens
         // other apps' audio, so it only runs while the user asks for it.
