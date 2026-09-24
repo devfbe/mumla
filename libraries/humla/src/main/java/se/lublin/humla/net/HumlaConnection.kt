@@ -142,6 +142,10 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var udpLatency = 0L
     @Volatile private var tcpLatency = 0L
 
+    /** Round trips of the server's replies to our pings. Protocol thread only. */
+    private val udpPingStats = PingStats()
+    private val tcpPingStats = PingStats()
+
     // Protocol thread only. Assigned before the TCP transport exists and never cleared:
     // InetAddress.getByName("") resolves to 127.0.0.1, so a UDP start must never see "".
     private var host = ""
@@ -285,6 +289,7 @@ class HumlaConnection @JvmOverloads constructor(
         // In microseconds
         val now = elapsed
         tcpLatency = now - msg.timestamp
+        tcpPingStats.add(tcpLatency / MICROS_PER_MILLI)
 
         // Forced TCP freezes both UDP counters; judging them would falsely report UDP down.
         if (shouldForceTCP()) return
@@ -303,6 +308,7 @@ class HumlaConnection @JvmOverloads constructor(
         val timestamp = UdpPing.decodeTimestamp(data) ?: return
         val now = elapsed
         udpLatency = now - timestamp
+        udpPingStats.add(udpLatency / MICROS_PER_MILLI)
         udpHealth.onUdpPingReply(now)
     }
 
@@ -320,7 +326,16 @@ class HumlaConnection @JvmOverloads constructor(
         pb.late = cryptState.late
         pb.lost = cryptState.lost
         pb.resync = cryptState.resync
-        // TODO accumulate stats and send with ping
+        pb.udpPackets = udpPingStats.count
+        if (udpPingStats.count > 0) {
+            pb.udpPingAvg = udpPingStats.average
+            pb.udpPingVar = udpPingStats.variance
+        }
+        pb.tcpPackets = tcpPingStats.count
+        if (tcpPingStats.count > 0) {
+            pb.tcpPingAvg = tcpPingStats.average
+            pb.tcpPingVar = tcpPingStats.variance
+        }
         sendTCPMessage(pb.build(), HumlaTCPMessageType.Ping)
     }
 
@@ -696,6 +711,7 @@ class HumlaConnection @JvmOverloads constructor(
         private val TAG: String = HumlaConnection::class.java.name
         private const val PROTOCOL_THREAD_NAME = "humla-protocol"
         private const val PING_INTERVAL_MILLIS = 5_000L
+        private const val MICROS_PER_MILLI = 1_000.0
 
         /** How long a repeat of the last delivered [ConnectionWarning] stays suppressed. */
         private const val WARNING_REPEAT_MICROS = 60_000_000L

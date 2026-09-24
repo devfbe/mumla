@@ -317,6 +317,47 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     @Test
+    fun theClientPingReportsCryptCountersAndPingStatistics() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+        tcp.simulateMessage(
+            HumlaTCPMessageType.ServerSync,
+            Mumble.ServerSync.newBuilder().setSession(1).build().toByteArray(),
+        )
+        connection.drainProtocolQueue("first pings sent")
+        val first = tcp.sentMessages.filterIsInstance<Mumble.Ping>().single()
+        assertThat(first.tcpPackets).isEqualTo(0)
+        assertThat(first.udpPackets).isEqualTo(0)
+        assertThat(first.hasTcpPingAvg()).isFalse()
+        assertThat(first.hasUdpPingAvg()).isFalse()
+
+        // TCP round trips of 10 and 30 ms, one UDP round trip of 4 ms.
+        for ((sentAt, now) in listOf(0L to 10L, 40L to 70L)) {
+            clock.set(now * 1_000_000L)
+            tcp.simulateMessage(
+                HumlaTCPMessageType.Ping,
+                Mumble.Ping.newBuilder().setTimestamp(sentAt * 1_000L).build().toByteArray(),
+            )
+            connection.drainProtocolQueue("reply at $now ms handled")
+        }
+        clock.set(80_000_000L)
+        udp.simulateDatagram(udpPingReply(sentAtMicros = 76_000L))
+        connection.drainProtocolQueue("replies handled")
+
+        shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(5))
+        awaitUntil(description = "second ping") { tcp.sentMessages.filterIsInstance<Mumble.Ping>().size == 2 }
+        val second = tcp.sentMessages.filterIsInstance<Mumble.Ping>()[1]
+        assertThat(second.tcpPackets).isEqualTo(2)
+        assertThat(second.tcpPingAvg).isWithin(1e-3f).of(20f)
+        assertThat(second.tcpPingVar).isWithin(1e-3f).of(100f)
+        assertThat(second.udpPackets).isEqualTo(1)
+        assertThat(second.udpPingAvg).isWithin(1e-3f).of(4f)
+        assertThat(second.udpPingVar).isWithin(1e-3f).of(0f)
+        assertThat(second.good).isEqualTo(1)
+    }
+
+    @Test
     fun forcedTcpNeverStartsUdpNorWarns() {
         val connection = newConnection()
         val tcp = connection.establish(forceTcp = true)
