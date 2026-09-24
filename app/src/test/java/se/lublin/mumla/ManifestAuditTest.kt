@@ -70,7 +70,7 @@ class ManifestAuditTest {
         val permissions = requestedPermissions()
 
         assertThat(permissions).contains(Manifest.permission.FOREGROUND_SERVICE_MICROPHONE)
-        assertThat(permissions).contains(Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK)
+        assertThat(permissions).doesNotContain(Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK)
         assertThat(permissions).contains(Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
     }
 
@@ -95,15 +95,10 @@ class ManifestAuditTest {
     }
 
     @Test
-    fun mumlaServiceIsNotExportedAndDeclaresMicrophoneAndMediaPlayback() {
+    fun mumlaServiceIsNotExportedAndDeclaresOnlyTheMicrophoneType() {
         val info = pm.getServiceInfo(ComponentName(context, MumlaService::class.java), 0)
 
-        // The microphone bit is declared today already; it comes first so that a failure of
-        // this test on the old manifest proves Robolectric populates foregroundServiceType.
-        assertThat(info.foregroundServiceType and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-            .isEqualTo(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        assertThat(info.foregroundServiceType and ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-            .isEqualTo(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        assertThat(info.foregroundServiceType).isEqualTo(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         assertThat(info.exported).isFalse()
     }
 

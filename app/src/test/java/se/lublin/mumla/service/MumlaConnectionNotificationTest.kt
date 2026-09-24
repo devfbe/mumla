@@ -411,8 +411,7 @@ class MumlaConnectionNotificationTest {
     }
 
     /**
-     * Below 34 the call without a type takes every type the manifest declares
-     * (microphone|mediaPlayback); the typed call would narrow that to microphone.
+     * Below 34 the call without a type takes every type the manifest declares.
      */
     @Test
     @Config(sdk = [33])
