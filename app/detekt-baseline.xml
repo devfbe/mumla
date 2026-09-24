@@ -156,11 +156,7 @@
     <ID>MaxLineLength:MumlaSQLiteDatabaseSecretsTest.kt$MumlaSQLiteDatabaseSecretsTest.&lt;no name provided&gt;$put("name", "old"); put("host", "old.example"); put("port", 64738); put("username", "me"); put("password", "legacy")</ID>
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$assertThat(userStates().map { it.selfMute to it.selfDeaf }).containsExactly(true to true, false to false).inOrder()</ID>
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$private fun promptReceivers()</ID>
-    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$putParcelable(HumlaService.EXTRAS_SERVER, se.lublin.humla.model.Server(-1, "t", "127.0.0.1", 64738, "me", ""))</ID>
-    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })</ID>
-    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_VOICE_ACTIVITY) })</ID>
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.renderSessionState(SessionState.Disconnected(HumlaException("again", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)))</ID>
-    <ID>MaxLineLength:MumlaServiceForegroundTest.kt$MumlaServiceForegroundTest$service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })</ID>
     <ID>MaxLineLength:MumlaTrustStoreTest.kt$MumlaTrustStoreTest$assertThat(CertificatePins.forHost(store, "Mumble.Example.org")).containsExactly(CertificatePins.fingerprint(new))</ID>
     <ID>MaxLineLength:MumlaTrustStoreTest.kt$MumlaTrustStoreTest$assertThat(CertificatePins.forHost(store, "other.example.org")).containsExactly(CertificatePins.fingerprint(other))</ID>
     <ID>MaxLineLength:OutgoingImagePreparerTest.kt$OutgoingImagePreparerTest$assertThat(exif.rotationDegrees != 0 || exif.isFlipped).isEqualTo(orientation != ExifInterface.ORIENTATION_NORMAL)</ID>
@@ -175,7 +171,6 @@
     <ID>PrintStackTrace:MumlaReconnectNotification.kt$MumlaReconnectNotification$e</ID>
     <ID>PrintStackTrace:MumlaService.kt$MumlaService$e</ID>
     <ID>PrintStackTrace:PublicServerFetcher.kt$PublicServerFetcher$e</ID>
-    <ID>ReturnCount:AudioPreferenceExtras.kt$AudioPreferenceExtras$@JvmStatic fun extrasFor(key: String, settings: Settings): Bundle</ID>
     <ID>ReturnCount:AudioSettingsFragment.kt$AudioSettingsFragment$private fun restartSession( loopback: Boolean = findPreference&lt;SwitchPreferenceCompat&gt;(KEY_LOOPBACK)?.isChecked ?: false, )</ID>
     <ID>ReturnCount:BluetoothScoToggle.kt$BluetoothScoToggle$fun request(enabled: Boolean): Result</ID>
     <ID>ReturnCount:BoundedBitmapDecoder.kt$BoundedBitmapDecoder$private fun decode(bytes: ByteArray, maxWidth: Int, maxHeight: Int, exactFit: Boolean): Bitmap?</ID>

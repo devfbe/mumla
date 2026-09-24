@@ -5,10 +5,6 @@
     <ID>ComplexCondition:HumlaConnection.kt$HumlaConnection$!force &amp;&amp; (shouldForceTCP() || !usingUdp) &amp;&amp; tcpTransport != null</ID>
     <ID>ComplexCondition:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$wasOn &amp;&amp; expectedOn &amp;&amp; detected &amp;&amp; score &lt; config.startThreshold</ID>
     <ID>CyclomaticComplexMethod:AudioOutputSpeech.kt$AudioOutputSpeech$@Throws(Exception::class) override fun call(): Result</ID>
-    <ID>CyclomaticComplexMethod:HumlaConnection.kt$HumlaConnection.Companion$@JvmStatic @Throws(InvalidProtocolBufferException::class) fun getProtobufMessage(data: ByteArray, messageType: HumlaTCPMessageType): MessageLite</ID>
-    <ID>CyclomaticComplexMethod:HumlaConnection.kt$HumlaConnection.Companion$private fun broadcastTCPMessage(handler: HumlaTCPMessageListener, msg: MessageLite, messageType: HumlaTCPMessageType)</ID>
-    <ID>CyclomaticComplexMethod:HumlaService.kt$HumlaService$fun configureExtras(extras: Bundle): Boolean</ID>
-    <ID>CyclomaticComplexMethod:HumlaServiceExtrasReconnectTest.kt$HumlaServiceExtrasReconnectTest.Companion$private fun bundleFor(key: String): Bundle</ID>
     <ID>CyclomaticComplexMethod:HumlaTCP.kt$HumlaTCP$private fun readLoop()</ID>
     <ID>CyclomaticComplexMethod:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
     <ID>CyclomaticComplexMethod:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
@@ -20,10 +16,7 @@
     <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @param buffer The buffer to mix output data into. * @param bufferOffset The offset into the buffer. * @param bufferSize The size of the buffer. * @return true if the buffer contains audio data.</ID>
     <ID>ForbiddenComment:Channel.kt$Channel$* Recursively fetches the subchannel user count, holding one channel's lock at a time: the * subchannels are copied under the lock and the recursion happens outside it, so no thread ever * holds two channel locks at once (no lock-order inversion possible). * * FIXME: is it necessary to cache this? * @return The sum of users in this channel and its subchannels.</ID>
     <ID>ForbiddenComment:HumlaConnection.kt$HumlaConnection.Companion$// FIXME: assumes worst-case using TCP</ID>
-    <ID>ForbiddenComment:HumlaService.kt$HumlaService$// FIXME: reasonable default</ID>
-    <ID>LargeClass:HumlaService.kt$HumlaService : ServiceIHumlaServiceIHumlaSessionHumlaConnectionListenerHumlaLogger</ID>
     <ID>LongMethod:AudioOutputSpeech.kt$AudioOutputSpeech$@Throws(Exception::class) override fun call(): Result</ID>
-    <ID>LongMethod:HumlaService.kt$HumlaService$fun configureExtras(extras: Bundle): Boolean</ID>
     <ID>LongMethod:HumlaTCP.kt$HumlaTCP$private fun readLoop()</ID>
     <ID>LongMethod:ModelRaceTest.kt$ModelRaceTest$@Test fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread()</ID>
     <ID>LongParameterList:AudioController.kt$AudioController$( private val context: Context, private val logger: HumlaLogger, private val factory: () -&gt; AudioHandlerFactory, private val encodeListener: AudioHandler.AudioEncodeListener, private val outputListener: AudioOutput.AudioOutputListener, private val listener: Listener, private val mainHandler: Handler = Handler(Looper.getMainLooper()), )</ID>
@@ -78,7 +71,6 @@
     <ID>MagicNumber:UdpPing.kt$UdpPing$0xFF</ID>
     <ID>MagicNumber:UdpPing.kt$UdpPing$5</ID>
     <ID>MagicNumber:VadConfig.kt$VadConfig$96f</ID>
-    <ID>MagicNumber:VadConfigBundle.kt$VadConfigBundle$96f</ID>
     <ID>MagicNumber:VoiceActivityDetector.kt$VoiceActivityDetector$1_000_000L</ID>
     <ID>MagicNumber:VoiceActivityDetector.kt$VoiceActivityDetector.Companion$20.0</ID>
     <ID>MagicNumber:VoiceActivityDetector.kt$VoiceActivityDetector.Companion$32768.0</ID>
@@ -98,14 +90,11 @@
     <ID>MaxLineLength:FakeTransports.kt$RecordingConnectionListener$override fun onConnectionHandshakeFailed(chain: Array&lt;X509Certificate&gt;)</ID>
     <ID>MaxLineLength:FakeTransports.kt$RecordingConnectionListener$val allOnMainLooper: Boolean get() = callbackLoopers.isNotEmpty() &amp;&amp; callbackLoopers.all { it == Looper.getMainLooper() }</ID>
     <ID>MaxLineLength:HumlaConnection.kt$HumlaConnection$throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)</ID>
-    <ID>MaxLineLength:HumlaConnection.kt$HumlaConnection.&lt;no name provided&gt;$// Protocol says we're supposed to send a dummy UDPTunnel packet here to let the server know we don't like UDP.</ID>
-    <ID>MaxLineLength:HumlaConnection.kt$HumlaConnection.Companion$private</ID>
     <ID>MaxLineLength:HumlaConnection.kt$HumlaConnection.DefaultTransportFactory$override</ID>
     <ID>MaxLineLength:HumlaConnection.kt$HumlaConnection.TransportFactory$fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, callbackHandler: Handler): UdpTransport</ID>
     <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$Mumble.ChannelState.newBuilder().setChannelId(i).setName("channel $i").apply { if (i &gt; 0) parent = 0 }.build().toByteArray()</ID>
     <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() &amp;&amp; transports.tcps[0].connectThread != null }</ID>
     <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$awaitUntil(timeoutMillis = 30_000, description = "protocol thread processed all frames") { processed.get() == 5_000 }</ID>
-    <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$connection.addTCPMessageHandlers(ModelHandler(RuntimeEnvironment.getApplication(), callbacks, silentLogger, null, null))</ID>
     <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$tcp.simulateMessage(HumlaTCPMessageType.TextMessage, Mumble.TextMessage.newBuilder().setMessage("still here").build().toByteArray())</ID>
     <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())</ID>
     <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$val reject = Mumble.Reject.newBuilder().setType(Mumble.Reject.RejectType.WrongServerPW).setReason("wrong password").build()</ID>
@@ -168,7 +157,6 @@
     <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: CertificateParsingException</ID>
     <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
     <ID>SwallowedException:UdpPing.kt$UdpPing$e: BufferUnderflowException</ID>
-    <ID>ThrowingExceptionsWithoutMessageOrCause:HumlaService.kt$HumlaService$IllegalArgumentException()</ID>
     <ID>ThrowsCount:HumlaConnection.kt$HumlaConnection$@Throws(HumlaException::class) private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory</ID>
     <ID>TooGenericExceptionCaught:AudioController.kt$AudioController$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CapturePreprocessorFactory.kt$CapturePreprocessorFactory$e: Throwable</ID>
@@ -179,9 +167,6 @@
     <ID>TooGenericExceptionCaught:Pkcs12Certificates.kt$Pkcs12Certificates$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
     <ID>TooGenericExceptionThrown:HumlaConnection.kt$HumlaConnection$throw RuntimeException("We use BouncyCastle- what? ", e)</ID>
-    <ID>TooGenericExceptionThrown:HumlaService.kt$HumlaService$throw RuntimeException( "Connection should be synchronized in callback for synchronization!", e )</ID>
-    <ID>TooGenericExceptionThrown:HumlaService.kt$HumlaService$throw RuntimeException("$ACTION_CONNECT requires a server provided in extras.")</ID>
-    <ID>TooGenericExceptionThrown:HumlaService.kt$HumlaService$throw RuntimeException("Model handler should always be instantiated while connected!")</ID>
     <ID>TooManyFunctions:AudioRouter.kt$AudioRouter</ID>
     <ID>TooManyFunctions:Channel.kt$Channel : IChannelComparable</ID>
     <ID>TooManyFunctions:CommunicationDevices.kt$AndroidCommunicationDevices : CommunicationDevices</ID>
@@ -195,7 +180,6 @@
     <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun connectivityManager()</ID>
     <ID>UseCheckOrError:FakeCaptureSource.kt$FakeCaptureSource$throw IllegalStateException("startRecording failed")</ID>
     <ID>UseCheckOrError:HumlaCallbacksTest.kt$HumlaCallbacksTest.&lt;no name provided&gt;$throw IllegalStateException("observer failed")</ID>
-    <ID>UseCheckOrError:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest.&lt;no name provided&gt;$throw IllegalStateException("handler is broken")</ID>
     <ID>UseCheckOrError:HumlaService.kt$HumlaService$throw IllegalStateException("Session user should be set post-synchronization!")</ID>
     <ID>UseRequire:HumlaService.kt$HumlaService$throw IllegalArgumentException("Target ID must be at most 5 bits.")</ID>
     <ID>UseRequire:OpusEncoder.kt$OpusEncoder$throw IllegalArgumentException("This Opus encoder implementation requires a constant frame size.")</ID>
