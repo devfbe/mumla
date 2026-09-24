@@ -33,6 +33,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import se.lublin.humla.IHumlaService;
 import se.lublin.mumla.R;
 import se.lublin.mumla.util.HumlaServiceProvider;
+import se.lublin.mumla.util.UntrustedHtmlWebViewKt;
 
 /**
  * Fragment to change your comment using basic WYSIWYG tools.
@@ -69,6 +70,7 @@ public abstract class AbstractCommentFragment extends DialogFragment {
         View view = inflater.inflate(R.layout.dialog_comment, null, false);
 
         mCommentView = (WebView) view.findViewById(R.id.comment_view);
+        UntrustedHtmlWebViewKt.configureForUntrustedHtml(mCommentView);
         mCommentEdit = (EditText) view.findViewById(R.id.comment_edit);
 
         mTabHost = (TabHost) view.findViewById(R.id.comment_tabhost);
