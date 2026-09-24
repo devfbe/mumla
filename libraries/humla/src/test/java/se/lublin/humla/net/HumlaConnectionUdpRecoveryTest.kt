@@ -176,9 +176,9 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * Humla announces protocol 1.2.5, so a 1.5 server reads the ping as a legacy packet, and
-     * `decodePing_legacy` accepts at most nine bytes behind the header - one varint. Anything else
-     * (other than the 12-byte extended-information request) is dropped by the server.
+     * Without a server Version the connection stays on the legacy format, whose ping a 1.5 server
+     * reads with `decodePing_legacy`: at most nine bytes behind the header - one varint. Anything
+     * else (other than the 12-byte extended-information request) is dropped by the server.
      */
     @Test
     fun theUdpPingIsALegacyPingAMumble15ServerAccepts() {

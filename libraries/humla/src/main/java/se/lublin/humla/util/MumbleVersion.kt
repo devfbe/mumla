@@ -33,8 +33,8 @@ object MumbleVersion {
     private const val LEGACY_OFFSET_MINOR = 8
 
     /**
-     * The version this client advertises. It must stay below 1.5.0 as long as voice uses the legacy
-     * UDP format: servers pick the protobuf format for clients reporting 1.5.0 or newer.
+     * The version this client advertises. From 1.5.0 on, servers of 1.5.0 or newer send voice and
+     * UDP pings in the protobuf format (see [se.lublin.humla.net.UdpProtocol]).
      */
     val CLIENT_V2: Long = v2(Constants.PROTOCOL_MAJOR, Constants.PROTOCOL_MINOR, Constants.PROTOCOL_PATCH)
     val CLIENT_LEGACY: Int = toLegacy(CLIENT_V2)

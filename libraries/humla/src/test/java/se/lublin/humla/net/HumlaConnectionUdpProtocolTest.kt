@@ -66,8 +66,8 @@ class HumlaConnectionUdpProtocolTest {
         awaitUntil(description = "protocol thread quit") { !connection.protocolThread.isAlive }
     }
 
-    private fun connect(clientV2: Long, forceTcp: Boolean = false): FakeTcpTransport {
-        connection.clientVersion = clientV2
+    private fun connect(clientV2: Long? = null, forceTcp: Boolean = false): FakeTcpTransport {
+        if (clientV2 != null) connection.clientVersion = clientV2
         connection.setForceTCP(forceTcp)
         connection.addVoiceHandler { p ->
             heard += Heard(
@@ -203,6 +203,18 @@ class HumlaConnectionUdpProtocolTest {
         assertThat(opus.map { it.opus }).containsExactly(listOf<Byte>(0x55), listOf<Byte>(0x66)).inOrder()
         assertThat(opus[0].context).isEqualTo(VoicePacket.CONTEXT_SHOUT)
         assertThat(opus[0].volume).isEqualTo(1f)
+    }
+
+    @Test
+    fun `this client speaks protobuf with a 1_5 server`() {
+        connect().announce(v2Version(1, 5, 0))
+        assertThat(connection.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
+    }
+
+    @Test
+    fun `this client speaks legacy with a 1_4 server`() {
+        connect().announce(v2Version(1, 4, 287))
+        assertThat(connection.udpProtocol).isEqualTo(UdpProtocol.LEGACY)
     }
 
     @Test

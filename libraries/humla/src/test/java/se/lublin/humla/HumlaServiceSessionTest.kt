@@ -122,15 +122,15 @@ class HumlaServiceSessionTest {
     }
 
     @Test
-    fun theHandshakeAdvertisesVersion140InBothFormats() {
+    fun theHandshakeAdvertisesVersion150InBothFormats() {
         val h = start()
 
         h.service.connect()
         h.openSocket(0)
 
         val version = h.transports.tcps[0].sentMessages.filterIsInstance<Mumble.Version>().single()
-        assertThat(version.versionV1).isEqualTo(0x010400)
-        assertThat(version.versionV2).isEqualTo(0x0001_0004_0000_0000L)
+        assertThat(version.versionV1).isEqualTo(0x010500)
+        assertThat(version.versionV2).isEqualTo(0x0001_0005_0000_0000L)
     }
 
     @Test

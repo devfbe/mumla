@@ -85,9 +85,8 @@ class HumlaServiceAudioTest {
         h.synchronize(tcp)
 
         audioUp(h)
-        val negotiated = UdpProtocol.negotiate(MumbleVersion.CLIENT_V2, MumbleVersion.v2(1, 5, 0))
-        assertThat(h.service.getConnection()!!.udpProtocol).isEqualTo(negotiated)
-        assertThat(h.audioFactory.sessionParams[0].udpProtocol).isEqualTo(negotiated)
+        assertThat(h.service.getConnection()!!.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
+        assertThat(h.audioFactory.sessionParams[0].udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
     }
 
     /**
