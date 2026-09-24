@@ -69,14 +69,10 @@ import se.lublin.mumla.util.HtmlUtils
 import se.lublin.mumla.util.HumlaServiceFragment
 
 /**
- * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. It owns no chat logic —
- * parsing and rendering are [ChatAdapter], images are `ChatImageLoader`/[OutgoingImagePreparer].
- *
- * What it does own is the wiring, and three pieces of it carry contracts the collaborators cannot
- * enforce themselves: [openImageViewer] is the uniqueness gate `ChatAdapter`'s `onImageClicked`
- * KDoc demands, [sessionId] is the catch its `selfSessionId` KDoc demands, and the scope handed to
- * the adapter is a `lifecycleScope`, i.e. `Dispatchers.Main.immediate`, because the thumbnail
- * coroutine it starts touches views.
+ * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. Parsing and rendering
+ * live in [ChatAdapter], images in `ChatImageLoader`/[OutgoingImagePreparer]. [openImageViewer]
+ * is the uniqueness gate `ChatAdapter.onImageClicked` requires, [sessionId] never throws, and the
+ * adapter gets a `lifecycleScope` (`Dispatchers.Main.immediate`) because its coroutines touch views.
  */
 class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTargetSelectedListener {
 
@@ -93,11 +89,8 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     private val readPermissionRequester = registerForActivityResult(RequestPermission(), ::onReadPermissionResult)
 
     /**
-     * Method references rather than lambdas, and named rather than inline, because these two are
-     * the far end of a seam no test can otherwise reach: an `ActivityResultLauncher` is driven by
-     * the framework, so the bodies below are only reachable through the registry.
-     *
-     * Cancelling the picker is an ordinary outcome and arrives as a null uri.
+     * Named method references so tests can reach the bodies a framework-driven
+     * `ActivityResultLauncher` otherwise hides. Cancelling the picker arrives as a null uri.
      */
     @VisibleForTesting
     internal fun onImagePickResult(uri: Uri?) {
@@ -143,7 +136,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION") // Options-menu migration is out of this stream's scope.
+        @Suppress("DEPRECATION") // Options-menu migration pending.
         setHasOptionsMenu(true)
     }
 
@@ -203,9 +196,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
             }
             override fun afterTextChanged(s: Editable?) {}
         })
-        // The layout cannot do this: android:enabled is a TextView attribute, so the "false" that
-        // stood on this ImageButton since 2022 never applied and the button shipped live over an
-        // empty editor. The watcher above only fires on a change, so the initial state is set here.
+        // android:enabled does not apply to an ImageButton, and the watcher only fires on change.
         sendButton.isEnabled = chatTextEdit.text.isNotEmpty()
 
         updateChatTargetText(targetProvider.chatTarget)
@@ -218,7 +209,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         super.onDestroyView()
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION") // Options-menu migration is out of scope.
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION") // Options-menu migration pending.
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.fragment_chat, menu)
     }
@@ -249,9 +240,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         messages.clear()
         messages += mumlaService.messageLog
         submit(scrollToBottom = true)
-        // The hint is the only thing on screen that says where a message would go, and until now
-        // nothing set it on this path: onCreateView ran before the service existed, returned early,
-        // and the bind that supplied the session never came back to it.
+        // onCreateView may have run before the service was bound, so set the hint here too.
         updateChatTargetText(targetProvider.chatTarget)
     }
 
@@ -284,14 +273,10 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     /**
      * Opens the fullscreen viewer on [source], unless one is already open.
      *
-     * Two things are needed, and the second is easy to miss. The tag is not one of them:
-     * `DialogFragment.show(fm, tag)` is a plain `add` and `FragmentManager` holds as many fragments
-     * under one tag as it is given. So the lookup below is the gate — but `show` **commits
-     * asynchronously**, so the lookup cannot see a viewer that has been shown and not yet added.
-     * Measured: `findFragmentByTag` plus `show` lets two calls in one dispatch through and produces
-     * two viewers. `showNow` commits synchronously, which is what makes the lookup's answer true.
-     *
-     * Two viewers on one source matter because they export to the same share path at the same time.
+     * The tag alone does not prevent duplicates (`show` is a plain `add`), and `show` commits
+     * asynchronously, so a lookup would miss a viewer shown in the same dispatch. `showNow`
+     * commits synchronously, which makes the lookup reliable. Two viewers would export to the same
+     * share path at once.
      */
     @VisibleForTesting
     internal fun openImageViewer(source: String) {
@@ -301,9 +286,8 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     }
 
     private fun submit(scrollToBottom: Boolean) {
-        // Also the view-lifecycle guard: this is null from onDestroyView on, while the service
-        // observer stays registered until onDestroy, so a message can still arrive with no view.
-        // viewLifecycleOwner below would throw for exactly that window.
+        // Also the view-lifecycle guard: null from onDestroyView on, while the service observer
+        // stays registered until onDestroy; viewLifecycleOwner would throw in that window.
         val adapter = chatAdapter ?: return
         viewLifecycleOwner.lifecycleScope.launch {
             adapter.submitMessages(messages)
@@ -314,11 +298,8 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     }
 
     /**
-     * The local session id, or [NO_SESSION] when there is none.
-     *
-     * Must not throw: `HumlaSession()` throws [HumlaDisconnectedException], and a disconnect with
-     * the log still on screen is an ordinary event, not a rare one. The adapter calls this on
-     * every bind.
+     * The local session id, or [NO_SESSION] when there is none. Must not throw (the adapter calls
+     * this on every bind, also after a disconnect).
      */
     @VisibleForTesting
     internal fun sessionId(): Int = try {
@@ -376,10 +357,8 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     }
 
     /**
-     * Encodes and sends a confirmed image.
-     *
-     * The service is fetched again here rather than captured at the pick: a dialog stands between
-     * the two, and the session can be gone by the time it is dismissed.
+     * Encodes and sends a confirmed image. The service is fetched again because the session can be
+     * gone by the time the confirmation dialog is dismissed.
      */
     @VisibleForTesting
     internal fun sendImage(bitmap: Bitmap) {
@@ -442,12 +421,9 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         const val IMAGE_MIME = "image/*"
 
         /**
-         * What [sessionId] answers with when there is no session.
-         *
-         * Not -1: `Message(String)` sets its actor to exactly -1, so that value would make every
-         * actorless message render right-aligned, as if the local user had sent it, from the moment
-         * the connection drops. `Int.MIN_VALUE` is outside the range of a Mumble session id, which
-         * is an unsigned field on the wire.
+         * What [sessionId] answers with when there is no session. Not -1: `Message(String)` uses
+         * -1 as its actor, which would render actorless messages as our own. Mumble session ids are
+         * unsigned, so `Int.MIN_VALUE` never collides.
          */
         const val NO_SESSION = Int.MIN_VALUE
     }

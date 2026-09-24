@@ -38,7 +38,6 @@ import se.lublin.mumla.util.UntrustedHtmlWebViewKt;
 
 /**
  * Fragment to change your comment using basic WYSIWYG tools.
- * Created by andrew on 10/08/13.
  */
 public abstract class AbstractCommentFragment extends DialogFragment {
 

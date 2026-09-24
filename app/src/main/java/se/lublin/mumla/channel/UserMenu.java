@@ -41,9 +41,6 @@ import se.lublin.mumla.channel.comment.UserCommentFragment;
 import se.lublin.mumla.service.MumlaService;
 import se.lublin.mumla.util.ModelUtils;
 
-/**
- * Created by andrew on 19/11/15.
- */
 public class UserMenu implements PermissionsPopupMenu.IOnMenuPrepareListener, PopupMenu.OnMenuItemClickListener {
     private static final String TAG = UserMenu.class.getName();
 

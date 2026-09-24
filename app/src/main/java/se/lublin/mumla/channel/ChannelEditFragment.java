@@ -35,9 +35,6 @@ import se.lublin.humla.net.Permissions;
 import se.lublin.mumla.R;
 import se.lublin.mumla.util.HumlaServiceProvider;
 
-/**
- * Created by andrew on 23/11/13.
- */
 public class ChannelEditFragment extends DialogFragment {
 
     private HumlaServiceProvider mServiceProvider;

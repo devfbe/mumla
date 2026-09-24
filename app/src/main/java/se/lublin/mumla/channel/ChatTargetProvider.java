@@ -59,7 +59,6 @@ public interface ChatTargetProvider {
 
     /**
      * Interface for classes which wish to receive chat target change calls.
-     * Created by andrew on 06/08/13.
      */
     public interface OnChatTargetSelectedListener {
         public void onChatTargetSelected(ChatTarget target);

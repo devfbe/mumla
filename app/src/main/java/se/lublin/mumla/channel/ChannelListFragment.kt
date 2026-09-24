@@ -57,11 +57,8 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     private val serviceObserver: IHumlaObserver = object : HumlaObserver() {
         override fun onDisconnected(e: HumlaException?) {
             channelView.adapter = null
-            // And forget it, or the rebind that follows a reconnection takes onServiceBound's
-            // setService branch and never puts an adapter back on the list -- an empty channel
-            // list for the rest of the process, with a connected server behind it. Dropping the
-            // adapter is also the only thing that re-reads the pinned channels, which are rooted
-            // per server and were baked in when it was built.
+            // And forget it: a rebind after reconnection must build a fresh adapter (the pinned
+            // channels are per server), otherwise the setService branch leaves the list empty.
             channelListAdapter = null
         }
 
@@ -188,9 +185,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
         fillAudioDevices(menu.findItem(R.id.menu_audio_device))
 
-        // Noise suppression, live: writing the preference reaches
-        // MumlaService.onSharedPreferenceChanged -> configureExtras, which reloads the
-        // audio subsystem when it is initialized. Same three values as the settings screen.
+            // Writing the preference makes MumlaService reconfigure the audio subsystem live.
         when (settings.getNoiseSuppressionMethod()) {
             "speex" -> menu.findItem(R.id.menu_noise_speex)
             "none" -> menu.findItem(R.id.menu_noise_none)
@@ -272,10 +267,9 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     }
 
     /**
-     * The audio chooser: the devices the session offers right now, with the one voice goes to
-     * ticked, or nothing at all without a connection - the choice belongs to a session. Called
-     * when the menu is prepared and again when the chooser is opened, because a headset switched
-     * on in between has to be there when the user looks.
+     * Fills the audio chooser with the session's current devices, the active one ticked, or
+     * nothing without a connection. Called on menu preparation and again when the chooser opens,
+     * so a headset switched on in between shows up.
      */
     private fun fillAudioDevices(chooser: MenuItem) {
         val sub = chooser.subMenu ?: return
@@ -290,8 +284,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
                 .setChecked(device.id == active?.id)
         }
         sub.setGroupCheckable(R.id.menu_audio_device_group, true, true)
-        // The echo canceller for the device voice goes to: its kind's default or the user's
-        // override for that kind, as the session runs it. Its own item, outside the group.
+        // The echo canceller for the active device's kind (default or user override).
         sub.findItem(R.id.menu_audio_echo)?.let { echo ->
             echo.isVisible = active != null
             echo.isChecked = session?.isEchoCancellationEnabled == true
@@ -312,8 +305,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
             val session = connectedSession()
             val active = session?.activeAudioDevice
             if (session != null && active != null) {
-                // Remembered for this kind of device; MumlaService hands the overrides to the
-                // service, which applies them live and again whenever such a device is routed.
+                // Remembered per device kind; the service applies it live and on every routing.
                 settings.setEchoCancellationOverride(
                     AudioDeviceCategory.of(active.type), !session.isEchoCancellationEnabled,
                 )

@@ -19,9 +19,6 @@ package se.lublin.mumla.channel;
 
 import se.lublin.humla.model.IChannel;
 
-/**
- * Created by andrew on 20/10/14.
- */
 public interface OnChannelClickListener {
     public void onChannelClick(IChannel channel);
 }

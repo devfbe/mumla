@@ -45,9 +45,6 @@ import se.lublin.mumla.R;
 import se.lublin.mumla.channel.comment.ChannelDescriptionFragment;
 import se.lublin.mumla.db.MumlaDatabase;
 
-/**
- * Created by andrew on 22/11/15.
- */
 public class ChannelMenu implements PermissionsPopupMenu.IOnMenuPrepareListener, PopupMenu.OnMenuItemClickListener {
     private static final String TAG = ChannelMenu.class.getName();
 

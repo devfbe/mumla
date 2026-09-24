@@ -30,23 +30,16 @@ import se.lublin.humla.model.TalkState
 import se.lublin.mumla.R
 
 /**
- * Simple adapter to display the users in a single channel.
- * Created by andrew on 24/11/13.
- *
- * The adapter holds **one** snapshot of the channel's users and refreshes it in
- * [notifyDataSetChanged], which is the point at which its owner says the list may be re-read.
- * Asking the model per call, as this used to, meant `getCount()` and `getItem(position)` answered
- * about two different moments: a user leaving in between -- which the protocol thread does
- * whenever it likes -- made the last row an `IndexOutOfBoundsException`. Copy-on-read in the
- * model cannot fix that, because each call gets a correct copy of a different moment.
+ * Displays the users in a single channel. Holds one snapshot of the users, refreshed in
+ * [notifyDataSetChanged], so `getCount()` and `getItem(position)` always describe the same moment
+ * even while the protocol thread changes the model.
  */
 class ChannelAdapter(
     private val context: Context,
     private var channel: IChannel,
 ) : BaseAdapter() {
 
-    // Copied, not referenced: `Channel.getUsers()` hands out an unmodifiable *view* of the live
-    // list, so keeping the returned object would be no snapshot at all.
+    // Copied: `Channel.getUsers()` returns an unmodifiable view of the live list.
     private var users: List<IUser?> = channel.users.toList()
 
     override fun getCount(): Int = users.size

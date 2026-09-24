@@ -47,43 +47,16 @@ import se.lublin.mumla.drawable.CircleDrawable
 import se.lublin.mumla.service.MumlaService
 
 /**
- * Created by andrew on 31/07/13.
+ * Flattens the channel tree into rows. Main thread only, like every `RecyclerView.Adapter`.
  *
- * Every model observer answers a channel or user event with a full rebuild of this tree, and a
- * large server synchronisation delivers thousands of them: stream A's observer queue is bounded
- * in the events it may drop, but `onUserConnected` is not one of those and arrives once per user.
- * Two things keep that off the main thread's critical path:
+ * - [updateChannels] only schedules: a burst of model events in one main-thread turn collapses
+ *   into a single rebuild. Model events never carry deltas, so a rebuild just reads the model.
+ * - One pass per rebuild, including collapsed subtrees: [constructNodes] carries subtree user
+ *   counts back up instead of calling `IChannel.getSubchannelUserCount()` (O(n*depth)), and the
+ *   counts land on the [Node] so binding a row reads no model at all.
  *
- * - **At most one rebuild per main-thread turn.** [updateChannels] only schedules; the burst of
- *   events that arrives in one turn collapses into a single walk. This is sound because a model
- *   event means "read the model again" and never carries a delta (spec 4.1) -- the rebuild
- *   answers whatever state the model is in when it runs.
- * - **One pass over the whole model per rebuild -- including the subtrees the user has
- *   collapsed.** [constructNodes] carries the subtree user count back up instead of asking
- *   `IChannel.getSubchannelUserCount()`, which re-walks the whole subtree on every call and turned
- *   an O(n) walk into O(n*depth). Each channel's `getUsers()` and `getSubchannels()` are read
- *   exactly once -- *every* channel's, because a collapsed channel still has to be counted before
- *   its rows are dropped again, where the Java returned at the closed door and never looked
- *   inside. On the 5 000-channel tree that is 5 000 reads of each per rebuild against the Java's
- *   1 999, and the worst case is the root collapsed: a list showing one row that still walks 5 000
- *   channels. It is a clear net win -- O(n) at a larger constant against O(n*depth) -- but it is
- *   not "less model read", and the counts land on the [Node] so that binding a row reads no model
- *   at all.
- *
- * Measured on a 5 000-channel tree, desktop JVM (see `AdapterRebuildBenchmarkTest`): one rebuild
- * made 33 179 recursive-count node visits and now makes none, and that number is the algorithm and
- * is the same everywhere. The wall-clock figures beside it are **a sample from one machine, not a
- * budget**: the same paired run on a reviewer's hardware reproduced every count to the visit and
- * differed by up to 58 % on the clock. What is claimed is the ratio -- one rebuild roughly halves,
- * a 5 000-event synchronisation goes from seconds of main thread to well under a millisecond --
- * and the invariants behind it are pinned deterministically in `ChannelListAdapterRebuildTest`
- * (spec 4.04). Binding one channel row walked the channel's whole subtree twice; now it reads
- * nothing from the model.
- *
- * The recursion needs no depth check: `ModelHandler` refuses a parent that is the channel itself
- * or one of its descendants, and one deeper than 256 below the root (spec 4.1).
- *
- * Main thread only, like every `RecyclerView.Adapter`.
+ * The recursion needs no depth check: `ModelHandler` refuses parent cycles and trees deeper than
+ * 256 below the root.
  */
 class ChannelListAdapter(
     private val context: Context,
@@ -92,18 +65,10 @@ class ChannelListAdapter(
     private val fragmentManager: FragmentManager,
     showPinnedOnly: Boolean,
     showUserCount: Boolean,
-    /**
-     * Where the local mute/ignore rows are written. Off the main thread by default, and injected
-     * only so that a test can run the write inline: with a bare `Thread` the two clauses that
-     * decide whether the write happens at all are observable only through a race, which is how
-     * `onLocalUserStateUpdated` came to have four unpinned lines behind an unpinned condition.
-     */
+    /** Where the local mute/ignore rows are written; injectable so tests can run it inline. */
     private val databaseExecutor: Executor = Executor { Thread(it).start() },
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), UserMenu.IUserLocalStateListener {
 
-    // Not nullable: every caller reaches this through HumlaServiceFragment.onServiceBound, which
-    // is only entered with a bound service. A null check here would guard an input no test can
-    // produce and no caller can pass.
     private var humlaService: IHumlaService = service
     private val rootChannels: List<Int>
     private val nodes: MutableList<Node> = ArrayList()
@@ -141,10 +106,6 @@ class ChannelListAdapter(
         return when (viewType) {
             R.layout.channel_row -> ChannelViewHolder(view)
             R.layout.channel_user_row -> UserViewHolder(view)
-            // Unreachable: [getItemViewType] answers with one of these two for every [Node], and
-            // a Node is a channel or a user by construction. Not a guard -- no test can reach it
-            // and every mutation on it is equivalent. The Java version returned null here, which
-            // RecyclerView dereferences immediately.
             else -> throw IllegalArgumentException("unknown view type $viewType")
         }
     }
@@ -174,8 +135,7 @@ class ChannelListAdapter(
 
             cvh.channelName.text = channel.name
 
-            // Named flags rather than `or`: Typeface's styles are an @IntDef that lint refuses to
-            // see combined, and BOLD_ITALIC is the constant for the one combination that exists.
+            // Named flags rather than `or`: lint refuses combined Typeface @IntDef styles.
             var bold = false
             var italic = false
             val service = humlaService
@@ -237,10 +197,6 @@ class ChannelListAdapter(
                 }
             }
 
-            // Measured unpinned: replacing this listener body with a no-op survives the whole
-            // class. What it produces is a popup owned by ChannelMenu, and a test that asserted
-            // one appeared would be asserting that file's behaviour. The long press that reaches
-            // it *is* pinned, so the two are not one guard between them.
             cvh.moreButton.setOnClickListener { v ->
                 ChannelMenu(context, channel, humlaService, database, fragmentManager).showPopup(v)
             }
@@ -289,7 +245,6 @@ class ChannelListAdapter(
                 uvh.userHolder.paddingBottom,
             )
 
-            // Measured unpinned, same single mutation and same reason as the channel row's.
             uvh.moreButton.setOnClickListener { v ->
                 UserMenu(
                     context, user, humlaService as MumlaService, fragmentManager, this
@@ -310,23 +265,15 @@ class ChannelListAdapter(
         return when {
             node.channel != null -> R.layout.channel_row
             node.user != null -> R.layout.channel_user_row
-            // Unreachable, like [Node.nodeId]'s null: a Node's two constructors each set exactly
-            // one of the two. Kotlin cannot say so, so the branch stands and is not a guard.
             else -> 0
         }
     }
 
-    // The elvis is unreachable for the same reason as the two branches above; stable ids are on,
-    // so a real -1 here would be a duplicate id rather than a missing one.
     override fun getItemId(position: Int): Long = nodes[position].nodeId ?: -1L
 
     /**
-     * Schedules a rebuild of the channel tree model.
-     * To be used after any channel tree modifications.
-     *
-     * The rebuild runs once at the end of the current main-thread turn, however many times this
-     * is called meanwhile. Nothing is lost by that: a rebuild reads the whole model, so it always
-     * answers the newest state rather than the event that asked for it.
+     * Schedules a rebuild of the channel tree. Runs once at the end of the current main-thread
+     * turn, however often this is called meanwhile.
      */
     fun updateChannels() {
         if (rebuildScheduled) {
@@ -366,20 +313,10 @@ class ChannelListAdapter(
     }
 
     /**
-     * Repaints one user's state icon in place, without rebuilding the tree. This is the hot path:
-     * every talk-state and every mute/deafen change of every visible user arrives here.
-     *
-     * Only a row the list currently holds is touched; a user who is not laid out has no holder and
-     * nothing happens. There is no "has the icon changed?" guard, because the one that used to
-     * stand here could not answer that question: it compared `Drawable.getConstantState()`, and
-     * the icons are layer lists, whose `LayerState` is per instance and freshly copied by every
-     * `newDrawable()`. Two lookups of the same resource never share one, so the comparison was
-     * true on every call and the guard stopped nothing -- see
-     * `ChannelListAdapterRebuildTest.twoLookupsOfOneTalkStateIconNeverShareAConstantState`, which
-     * pins that premise. A guard that would work has to compare the resource, not the state.
-     *
-     * @param user The user to update.
-     * @param view The view containing this adapter.
+     * Repaints one user's state icon in place, without rebuilding the tree (the hot path for talk
+     * and mute changes). Users without a laid-out row are ignored. No "icon changed?" guard:
+     * the icons are layer lists whose `ConstantState` is per instance, so comparing it never
+     * matches; a working guard would have to compare the resource.
      */
     fun updateUserStates(user: IUser, view: RecyclerView) {
         val itemId = user.session.toLong() or USER_ID_MASK
@@ -421,11 +358,8 @@ class ChannelListAdapter(
     /**
      * The list position of a user's row, or -1.
      *
-     * Not a plain read: a rebuild scheduled in this turn is run first, and that notifies. Do not
-     * call this while the list is laying out or scrolling -- from inside
-     * `LayoutManager.onLayoutChildren`, an item animator or a scroll listener -- because
-     * `notifyDataSetChanged()` throws `IllegalStateException` there. Measured: it does throw.
-     * Every caller today reaches this as a main-looper message and so cannot be inside one.
+     * Runs a rebuild scheduled in this turn first, which notifies. Do not call this during layout,
+     * item animation or scrolling: `notifyDataSetChanged()` throws `IllegalStateException` there.
      */
     fun getUserPosition(session: Int): Int {
         rebuildIfScheduled()
@@ -434,8 +368,8 @@ class ChannelListAdapter(
     }
 
     /**
-     * The list position of a channel's row, or -1. Settles a scheduled rebuild and notifies first,
-     * with the same caveat as [getUserPosition]: not during layout or scrolling.
+     * The list position of a channel's row, or -1. Same caveat as [getUserPosition]: not during
+     * layout or scrolling.
      */
     fun getChannelPosition(channelId: Int): Int {
         rebuildIfScheduled()
@@ -451,35 +385,17 @@ class ChannelListAdapter(
         channelClickListener = listener
     }
 
-    /**
-     * Sets whether to show the channel user count in a channel row.
-     */
+    /** Sets whether to show the channel user count in a channel row. */
     fun setShowChannelUserCount(showUserCount: Boolean) {
         showChannelUserCount = showUserCount
         notifyDataSetChanged()
     }
 
     /**
-     * Recursively creates a list of [Node]s representing the channel hierarchy, and returns the
-     * number of users in [channel] and everything below it.
-     *
-     * The subtree is appended first and dropped again if the channel turns out to be contracted,
-     * because whether it is contracted is only known once its users have been counted. That keeps
-     * the walk to one pass: `getUsers()` and `getSubchannels()` are read once per channel, and
-     * nothing asks `IChannel.getSubchannelUserCount()`, which would re-walk the subtree.
-     *
-     * The price of that order is that a contracted channel is walked before it is dropped, where
-     * the Java turned back at it. One pass, but over the whole model rather than over the visible
-     * part of it -- see the class doc.
-     *
-     * A user the model has not filled in yet gets no row but is counted, because
-     * `Channel.getSubchannelUserCount()` counts it too: the number on the row has always been
-     * `mUsers.size()` deep, and this reproduces it rather than improving on it.
-     *
-     * @param parent The parent node to propagate under.
-     * @param channel The parent channel.
-     * @param depth The current depth of the subtree.
-     * @param nodes An accumulator to store generated nodes into.
+     * Appends the [Node]s for [channel] and its subtree to [nodes] and returns the number of users
+     * in it. The subtree is appended first and dropped again if the channel is contracted, because
+     * that is only known once its users have been counted. A user the model has not filled in yet
+     * gets no row but is counted, matching `Channel.getSubchannelUserCount()`.
      */
     private fun constructNodes(
         parent: Node?,
@@ -516,10 +432,7 @@ class ChannelListAdapter(
         return userCount
     }
 
-    /**
-     * Changes the service backing the adapter. Updates the list as well.
-     * @param service The new service to retrieve channels from.
-     */
+    /** Changes the service backing the adapter and updates the list. */
     fun setService(service: IHumlaService) {
         humlaService = service
         if (service.connectionState == HumlaService.ConnectionState.CONNECTED) {
@@ -565,10 +478,7 @@ class ChannelListAdapter(
         val moreButton: ImageView = itemView.findViewById(R.id.channel_row_more)
     }
 
-    /**
-     * An arbitrary node in the channel-user hierarchy.
-     * Can be either a channel or user.
-     */
+    /** A channel or user row in the flattened hierarchy. */
     private class Node {
         val parent: Node?
         val channel: IChannel?

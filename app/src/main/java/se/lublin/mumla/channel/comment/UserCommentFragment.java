@@ -21,9 +21,6 @@ import se.lublin.humla.IHumlaService;
 import se.lublin.humla.model.IUser;
 import se.lublin.humla.util.HumlaObserver;
 
-/**
- * Created by andrew on 03/03/14.
- */
 public class UserCommentFragment extends AbstractCommentFragment {
 
     @Override

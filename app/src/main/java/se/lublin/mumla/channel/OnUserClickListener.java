@@ -19,9 +19,6 @@ package se.lublin.mumla.channel;
 
 import se.lublin.humla.model.IUser;
 
-/**
- * Created by andrew on 20/10/14.
- */
 public interface OnUserClickListener {
     public void onUserClick(IUser user);
 }

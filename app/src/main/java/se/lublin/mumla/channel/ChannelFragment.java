@@ -58,7 +58,6 @@ import se.lublin.mumla.util.HumlaServiceFragment;
 
 /**
  * Class to encapsulate both a ChannelListFragment and ChannelChatFragment.
- * Created by andrew on 02/08/13.
  */
 public class ChannelFragment extends HumlaServiceFragment implements SharedPreferences.OnSharedPreferenceChangeListener, ChatTargetProvider {
     private static final String TAG = ChannelFragment.class.getName();
@@ -174,16 +173,10 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
                             getService().onTalkKeyUp();
                         }
                         break;
-                    // A parent that takes the gesture over -- the navigation drawer being dragged
-                    // open, or the system's back gesture, both of which start in the left edge zone
-                    // this full-width button sits in -- sends ACTION_CANCEL instead of ACTION_UP.
-                    // In hold mode that still has to release the press, or transmission sticks on;
-                    // it used to be papered over by resetting the talk state from MumlaActivity's
-                    // drawer listener. In toggle mode onTalkKeyUp() is not a release but the action
-                    // itself -- the ACTION_DOWN above did nothing, because onTalkKeyDown() is gated
-                    // on !isPushToTalkToggle() -- and an aborted gesture must not perform the
-                    // action, exactly as a Button does not fire onClick on a cancel. So the cancel
-                    // carries the same guard the drawer listener carried.
+                    // A parent taking over the gesture (drawer drag, system back gesture) sends
+                    // ACTION_CANCEL. In hold mode that must still release the press or transmission
+                    // sticks; in toggle mode onTalkKeyUp() is the action itself, and an aborted
+                    // gesture must not perform it, just as a Button does not click on cancel.
                     case MotionEvent.ACTION_CANCEL:
                         mTalkButtonHeld = false;
                         if (getService() != null
@@ -266,11 +259,8 @@ public class ChannelFragment extends HumlaServiceFragment implements SharedPrefe
     @Override
     public void onPause() {
         super.onPause();
-        // Release what this fragment's button is holding, and nothing else. Pausing while the
-        // button is pressed would otherwise leave transmission on, since the press can no longer
-        // be released -- but a talk state set anywhere else, by a headset media key with the
-        // screen off above all, is not ours to switch off just because the user picked the phone
-        // up.
+        // Release only what this fragment's button holds, so a pause cannot leave it transmitting.
+        // A talk state set elsewhere (e.g. a headset key with the screen off) is not ours to clear.
         if (mTalkButtonHeld && getService() != null && getService().isConnected() &&
             !Settings.getInstance(getActivity()).isPushToTalkToggle()) {
             getService().HumlaSession().setTalkingState(false);
