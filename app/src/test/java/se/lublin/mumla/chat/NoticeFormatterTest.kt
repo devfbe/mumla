@@ -106,6 +106,9 @@ class NoticeFormatterTest {
             DenyType.USER_NAME to "Invalid username.",
             DenyType.CHANNEL_FULL to "Channel is full.",
             DenyType.NESTING_LIMIT to "Channel nesting limit reached.",
+            DenyType.CHANNEL_COUNT_LIMIT to "Channel count limit reached.",
+            DenyType.CHANNEL_LISTENER_LIMIT to "No more listeners allowed in this channel.",
+            DenyType.USER_LISTENER_LIMIT to "You cannot listen to any more channels.",
             DenyType.OTHER to "Permission denied.",
         )
         for ((type, text) in expected) {

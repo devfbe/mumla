@@ -31,7 +31,7 @@ class HumlaConnectionCodecTest {
 
     /** Connects and synchronizes; the codec is only readable on a synchronized connection. */
     private fun connect(): FakeTcpTransport {
-        connection.addTcpHandler { if (it is Mumble.Version) { handledVersions += it.version } }
+        connection.addTcpHandler { if (it is Mumble.Version) { handledVersions += it.versionV1 } }
         connection.setForceTCP(true)
         connection.connect(Server(-1, "test", "127.0.0.1", 64738, "user", ""))
         awaitUntil(description = "tcp connect") {
@@ -55,7 +55,7 @@ class HumlaConnectionCodecTest {
     /** Waits until everything sent before has been handled and its callbacks delivered. */
     private fun FakeTcpTransport.drain() {
         val marker = handledVersions.size + 1000
-        val version = Mumble.Version.newBuilder().setVersion(marker).build()
+        val version = Mumble.Version.newBuilder().setVersionV1(marker).build()
         simulateMessage(HumlaTCPMessageType.Version, version.toByteArray())
         awaitUntil(description = "marker handled") { handledVersions.contains(marker) }
         mainLooper.idle()

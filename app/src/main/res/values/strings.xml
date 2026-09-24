@@ -298,6 +298,9 @@
     <string name="deny_reason_invalid_username">Invalid username.</string>
     <string name="deny_reason_channel_full">Channel is full.</string>
     <string name="deny_reason_channel_nesting">Channel nesting limit reached.</string>
+    <string name="deny_reason_channel_count">Channel count limit reached.</string>
+    <string name="deny_reason_channel_listener_limit">No more listeners allowed in this channel.</string>
+    <string name="deny_reason_user_listener_limit">You cannot listen to any more channels.</string>
     <string name="deny_reason_other">Reason: %s</string>
     <string name="server">Server</string>
     <string name="the_server">the server</string>

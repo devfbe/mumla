@@ -21,7 +21,7 @@ class MumbleProtoTest {
     @Test
     fun `version message serializes to the expected proto2 bytes and parses back`() {
         val bytes = Mumble.Version.newBuilder()
-            .setVersion(0x10305)
+            .setVersionV1(0x10305)
             .setRelease("Mumla")
             .build()
             .toByteArray()
@@ -31,7 +31,7 @@ class MumbleProtoTest {
             byteArrayOf(0x08, 0x85.toByte(), 0x86.toByte(), 0x04, 0x12, 0x05, 0x4d, 0x75, 0x6d, 0x6c, 0x61)
         )
         val parsed = Mumble.Version.parseFrom(bytes)
-        assertThat(parsed.version).isEqualTo(0x10305)
+        assertThat(parsed.versionV1).isEqualTo(0x10305)
         assertThat(parsed.release).isEqualTo("Mumla")
     }
 
@@ -114,7 +114,7 @@ class MumbleProtoTest {
         // Mumble servers may send fields a client build does not know about; forward
         // compatibility depends on those bytes being preserved verbatim across a round trip.
         val known = Mumble.Version.newBuilder()
-            .setVersion(0x10305)
+            .setVersionV1(0x10305)
             .setRelease("Mumla")
             .build()
             .toByteArray()

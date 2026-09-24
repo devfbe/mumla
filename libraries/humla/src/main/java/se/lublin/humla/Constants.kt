@@ -19,8 +19,8 @@ package se.lublin.humla
 /** Protocol and transmit constants. Prefer keeping new constants with the class that uses them. */
 object Constants {
     const val PROTOCOL_MAJOR = 1
-    const val PROTOCOL_MINOR = 2
-    const val PROTOCOL_PATCH = 5
+    const val PROTOCOL_MINOR = 4
+    const val PROTOCOL_PATCH = 0
 
     const val TRANSMIT_VOICE_ACTIVITY = 0
     const val TRANSMIT_PUSH_TO_TALK = 1

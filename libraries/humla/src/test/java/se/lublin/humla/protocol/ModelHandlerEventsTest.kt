@@ -249,6 +249,9 @@ class ModelHandlerEventsTest {
             Mumble.PermissionDenied.DenyType.UserName to DenyType.USER_NAME,
             Mumble.PermissionDenied.DenyType.ChannelFull to DenyType.CHANNEL_FULL,
             Mumble.PermissionDenied.DenyType.NestingLimit to DenyType.NESTING_LIMIT,
+            Mumble.PermissionDenied.DenyType.ChannelCountLimit to DenyType.CHANNEL_COUNT_LIMIT,
+            Mumble.PermissionDenied.DenyType.ChannelListenerLimit to DenyType.CHANNEL_LISTENER_LIMIT,
+            Mumble.PermissionDenied.DenyType.UserListenerLimit to DenyType.USER_LISTENER_LIMIT,
             Mumble.PermissionDenied.DenyType.Permission to DenyType.OTHER,
         )
         for (type in cases.keys) {

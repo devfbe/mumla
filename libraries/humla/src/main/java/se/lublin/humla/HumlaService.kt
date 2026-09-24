@@ -77,6 +77,7 @@ import se.lublin.humla.session.SessionStateMachine
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.HumlaLogger
+import se.lublin.humla.util.MumbleVersion
 import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
 
@@ -360,11 +361,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     fun isSynchronized(): Boolean = mConnection?.isSynchronized == true
 
     override fun onConnectionEstablished() {
-        val version = Mumble.Version.newBuilder()
-        version.setRelease(mConfig.clientName)
-        version.setVersion(Constants.PROTOCOL_VERSION)
-        version.setOs("Android")
-        version.setOsVersion(Build.VERSION.RELEASE)
+        val version = MumbleVersion.clientVersion(mConfig.clientName, "Android", Build.VERSION.RELEASE)
 
         val auth = Mumble.Authenticate.newBuilder()
         val server = checkNotNull(mConfig.server) { "Connected without a target server" }
@@ -374,7 +371,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         auth.addAllTokens(mConfig.accessTokens)
 
         val connection = conn()
-        connection.sendTCPMessage(version.build(), HumlaTCPMessageType.Version)
+        connection.sendTCPMessage(version, HumlaTCPMessageType.Version)
         connection.sendTCPMessage(auth.build(), HumlaTCPMessageType.Authenticate)
     }
 

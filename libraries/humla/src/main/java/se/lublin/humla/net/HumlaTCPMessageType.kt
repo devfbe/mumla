@@ -52,7 +52,8 @@ enum class HumlaTCPMessageType(private val parser: Parser<out MessageLite>?) {
     UserStats(Mumble.UserStats.parser()),
     RequestBlob(Mumble.RequestBlob.parser()),
     ServerConfig(Mumble.ServerConfig.parser()),
-    SuggestConfig(Mumble.SuggestConfig.parser());
+    SuggestConfig(Mumble.SuggestConfig.parser()),
+    PluginDataTransmission(Mumble.PluginDataTransmission.parser());
 
     /** Parses a received payload of this type. */
     @Throws(InvalidProtocolBufferException::class)

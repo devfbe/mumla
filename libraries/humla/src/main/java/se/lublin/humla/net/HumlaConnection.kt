@@ -31,6 +31,7 @@ import se.lublin.humla.protocol.TcpMessageHandler
 import se.lublin.humla.protocol.VoicePacketHandler
 import se.lublin.humla.session.ReconnectPolicy
 import se.lublin.humla.util.HumlaException
+import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
 import java.net.ConnectException
 import java.security.InvalidKeyException
@@ -205,7 +206,7 @@ class HumlaConnection @JvmOverloads constructor(
             is Mumble.UserRemove -> if (msg.session == sessionId) handleFatalException(HumlaException(msg))
             is Mumble.CryptSetup -> onCryptSetup(msg)
             is Mumble.Version -> {
-                remoteVersion = msg.version
+                remoteVersion = MumbleVersion.legacyOf(msg)
                 remoteRelease = msg.release
                 remoteOsName = msg.os
                 remoteOsVersion = msg.osVersion

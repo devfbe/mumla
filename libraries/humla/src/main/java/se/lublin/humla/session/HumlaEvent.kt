@@ -80,6 +80,13 @@ sealed interface HumlaEvent {
         USER_NAME,
         CHANNEL_FULL,
         NESTING_LIMIT,
+        CHANNEL_COUNT_LIMIT,
+
+        /** The channel has as many listeners as the server allows. */
+        CHANNEL_LISTENER_LIMIT,
+
+        /** The local user listens to as many channels as the server allows. */
+        USER_LISTENER_LIMIT,
 
         /** Any other refusal; the server's reason, if any, says why. */
         OTHER,

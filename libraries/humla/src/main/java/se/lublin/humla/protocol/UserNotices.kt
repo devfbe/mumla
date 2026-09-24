@@ -133,6 +133,9 @@ internal object UserNotices {
         Mumble.PermissionDenied.DenyType.UserName -> HumlaEvent.DenyType.USER_NAME
         Mumble.PermissionDenied.DenyType.ChannelFull -> HumlaEvent.DenyType.CHANNEL_FULL
         Mumble.PermissionDenied.DenyType.NestingLimit -> HumlaEvent.DenyType.NESTING_LIMIT
+        Mumble.PermissionDenied.DenyType.ChannelCountLimit -> HumlaEvent.DenyType.CHANNEL_COUNT_LIMIT
+        Mumble.PermissionDenied.DenyType.ChannelListenerLimit -> HumlaEvent.DenyType.CHANNEL_LISTENER_LIMIT
+        Mumble.PermissionDenied.DenyType.UserListenerLimit -> HumlaEvent.DenyType.USER_LISTENER_LIMIT
         else -> HumlaEvent.DenyType.OTHER
     }
 }

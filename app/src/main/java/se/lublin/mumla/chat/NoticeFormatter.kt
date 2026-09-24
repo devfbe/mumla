@@ -82,6 +82,9 @@ class NoticeFormatter(private val context: Context) {
         HumlaEvent.DenyType.USER_NAME -> string(R.string.deny_reason_invalid_username)
         HumlaEvent.DenyType.CHANNEL_FULL -> string(R.string.deny_reason_channel_full)
         HumlaEvent.DenyType.NESTING_LIMIT -> string(R.string.deny_reason_channel_nesting)
+        HumlaEvent.DenyType.CHANNEL_COUNT_LIMIT -> string(R.string.deny_reason_channel_count)
+        HumlaEvent.DenyType.CHANNEL_LISTENER_LIMIT -> string(R.string.deny_reason_channel_listener_limit)
+        HumlaEvent.DenyType.USER_LISTENER_LIMIT -> string(R.string.deny_reason_user_listener_limit)
         HumlaEvent.DenyType.OTHER ->
             event.reason?.let { string(R.string.deny_reason_other, it) } ?: string(R.string.perm_denied)
     }
