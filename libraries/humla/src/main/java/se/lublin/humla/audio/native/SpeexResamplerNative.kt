@@ -26,10 +26,8 @@ interface SpeexResamplerApi {
     /**
      * Resamples one channel.
      *
-     * [channelIndex] is an index, not a count: it has to be in `0 until channels` as passed to
-     * [init]. speex uses it to reach three per-channel arrays that were sized for that count and
-     * compares it against nothing, so an index outside the range is refused here with
-     * `RESAMPLER_ERR_INVALID_ARG` rather than passed on as a heap read and write.
+     * [channelIndex] must be in `0 until channels` as passed to [init]; speex does not check it,
+     * so the bridge refuses others with `RESAMPLER_ERR_INVALID_ARG`.
      *
      * `inLen[0]` and `outLen[0]` are clamped to `input.size` and `out.size` before speex sees
      * them, and come back as the counts actually consumed and produced.

@@ -18,28 +18,20 @@
 package se.lublin.humla.audio.native
 
 /**
- * xiph RNNoise v0.2 with the model embedded in the library. Handles are opaque; 0 means failure.
+ * xiph RNNoise with the model embedded in the library. Handles are opaque; 0 means failure. An
+ * interface so the capture adapters can be tested against a fake.
  *
- * Split into an interface so the capture-pipeline adapters can be unit-tested against a fake
- * without loading a native library, the way the speex bindings in this package are.
- *
- * **A handle may only be passed back to the object that issued it.** 0 is always safe, and
- * [destroy] additionally refuses any value this library did not hand out, but [processFrame] does
- * not: it runs on the audio thread, cannot afford the lock that check needs, and dereferences
- * whatever it is given. A [WebRtcApmNative] handle (a different library with its own handle
- * table), a field read before it was assigned, or two arguments swapped in an adapter is
- * therefore a type-confused dereference or a segmentation fault in native code, with no Java
- * stack trace. Keep each handle in one field of one owner.
+ * **A handle may only be passed back to the object that issued it.** 0 is always safe and
+ * [destroy] refuses unknown values, but [processFrame] dereferences whatever it is given (no lock
+ * on the audio thread), so a foreign or stale handle crashes in native code.
  */
 interface RnnoiseApi {
     /** A new denoiser, or 0 if one could not be allocated. */
     fun create(): Long
 
     /**
-     * Denoises one 10 ms 48 kHz mono frame in place.
-     *
-     * [frame] must hold at least [RnnoiseNative.FRAME_SIZE] samples; a shorter array is refused
-     * rather than overrun. Only the first [RnnoiseNative.FRAME_SIZE] samples are touched.
+     * Denoises one 10 ms 48 kHz mono frame in place; only the first [RnnoiseNative.FRAME_SIZE]
+     * samples are touched.
      *
      * @return the voice probability in `[0, 1]`, or -1 for a released handle, a null or short
      *   frame, or a failure inside the JVM.
@@ -47,29 +39,24 @@ interface RnnoiseApi {
     fun processFrame(handle: Long, frame: ShortArray): Float
 
     /**
-     * Releases [handle]. Calling this twice with the same handle is safe and frees once, and
-     * [processFrame] on a released handle returns -1 instead of corrupting the heap (see
-     * `jni_native_handle.h`). What is still not allowed is releasing a handle while another
-     * thread is inside [processFrame] with it: stop feeding frames first.
+     * Releases [handle]; a second call is a no-op and later [processFrame] calls return -1. Must
+     * not race a [processFrame] on another thread: stop feeding frames first.
      */
     fun destroy(handle: Long)
 }
 
 /**
- * The JNI binding of `libhumlarnnoise` (`jni_rnnoise.cpp`); the two files are one interface.
+ * JNI binding of `libhumlarnnoise` (`jni_rnnoise.cpp`).
  *
- * Threading: one handle is a single denoiser with its own adaptation state and must not be used
- * from two threads at once; separate handles are independent. [processFrame] takes no lock and is
- * the audio-thread entry point. [create] and [destroy] take a lock and do not belong on the audio
- * thread -- [create] allocates and [destroy] frees, neither with a bounded worst case.
+ * A handle must not be used from two threads at once. [processFrame] takes no lock; [create] and
+ * [destroy] lock and allocate, so keep them off the audio thread.
  */
 object RnnoiseNative : RnnoiseApi {
     /** Samples per frame RNNoise is built around: 10 ms at 48 kHz. Not configurable. */
     const val FRAME_SIZE = 480
 
     init {
-        // Not "humla_rnnoise": that CMake target name is taken by the static library this JNI
-        // library wraps. Same for humlaapm.
+        // "humla_rnnoise" is the static library this one wraps.
         System.loadLibrary("humlarnnoise")
     }
 
