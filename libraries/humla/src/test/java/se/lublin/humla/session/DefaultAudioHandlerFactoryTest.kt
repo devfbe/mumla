@@ -49,8 +49,9 @@ class DefaultAudioHandlerFactoryTest {
 
     /** What the factory hands the builder, keyed by setter name. */
     private fun built(config: AudioConfig, session: AudioSessionParams = params): Map<String, Any?> =
-        RecordingBuilder().also {
-            factory.builder(context, SilentLogger, config, session, encodeListener, outputListener, it)
+        RecordingBuilder().also { recording ->
+            DefaultAudioHandlerFactory { recording }
+                .builder(context, SilentLogger, config, session, encodeListener, outputListener)
         }.values
 
     /** Records every setter call; each setter is overridden, which the field-completeness test relies on. */

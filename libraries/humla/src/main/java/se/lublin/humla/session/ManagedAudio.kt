@@ -71,7 +71,10 @@ interface AudioHandlerFactory {
  * Builds the real [AudioHandler]. [AudioConfig.echoCancellation] maps to the WebRTC canceller or
  * none.
  */
-class DefaultAudioHandlerFactory : AudioHandlerFactory {
+class DefaultAudioHandlerFactory(
+    /** The builder [builder] fills; tests pass one that records the setter calls. */
+    private val newBuilder: () -> AudioHandler.Builder = { AudioHandler.Builder() },
+) : AudioHandlerFactory {
     @Throws(AudioException::class)
     override fun create(
         context: Context,
@@ -92,7 +95,7 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
     internal fun initialize(builder: AudioHandler.Builder, params: AudioSessionParams): AudioHandler =
         builder.initialize(params.self, params.maxBandwidth, params.codec, params.targetId)
 
-    /** The config-to-builder mapping, split from `initialize` so JVM tests can inspect it through [into]. */
+    /** The config-to-builder mapping, split from `initialize` so JVM tests can inspect it. */
     internal fun builder(
         context: Context,
         logger: HumlaLogger,
@@ -100,9 +103,8 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
         params: AudioSessionParams,
         encodeListener: AudioHandler.AudioEncodeListener,
         outputListener: AudioOutput.AudioOutputListener,
-        into: AudioHandler.Builder = AudioHandler.Builder(),
     ): AudioHandler.Builder =
-        into
+        newBuilder()
             .setContext(context)
             .setLogger(logger)
             .setAudioStream(config.playbackStream)

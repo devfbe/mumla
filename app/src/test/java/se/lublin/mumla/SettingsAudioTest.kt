@@ -21,7 +21,6 @@ import android.content.Context
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import org.junit.Before
 import org.junit.Test
 import se.lublin.humla.session.AudioDeviceCategory
 import org.junit.runner.RunWith
@@ -36,10 +35,6 @@ class SettingsAudioTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
     private val settings get() = Settings.getInstance(context)
-
-    @Before
-    fun clearPreferences() {
-    }
 
     // --- noise suppression: one key, because two would drift apart --------------------------
 

@@ -8,7 +8,7 @@
     <ID>CyclomaticComplexMethod:HumlaConnection.kt$HumlaConnection.Companion$@JvmStatic @Throws(InvalidProtocolBufferException::class) fun getProtobufMessage(data: ByteArray, messageType: HumlaTCPMessageType): MessageLite</ID>
     <ID>CyclomaticComplexMethod:HumlaConnection.kt$HumlaConnection.Companion$private fun broadcastTCPMessage(handler: HumlaTCPMessageListener, msg: MessageLite, messageType: HumlaTCPMessageType)</ID>
     <ID>CyclomaticComplexMethod:HumlaService.kt$HumlaService$fun configureExtras(extras: Bundle): Boolean</ID>
-    <ID>CyclomaticComplexMethod:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun bundleFor(key: String): Bundle</ID>
+    <ID>CyclomaticComplexMethod:HumlaServiceExtrasReconnectTest.kt$HumlaServiceExtrasReconnectTest.Companion$private fun bundleFor(key: String): Bundle</ID>
     <ID>CyclomaticComplexMethod:HumlaTCP.kt$HumlaTCP$private fun readLoop()</ID>
     <ID>CyclomaticComplexMethod:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
     <ID>CyclomaticComplexMethod:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
@@ -52,6 +52,10 @@
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$13</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$20</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$4096</ID>
+    <ID>MagicNumber:FakeAudio.kt$FakeAudio$12_345</ID>
+    <ID>MagicNumber:FakeSpeexPreprocessApi.kt$FakeSpeexPreprocessApi$50</ID>
+    <ID>MagicNumber:FakeWebRtcApmApi.kt$FakeWebRtcApmApi$100</ID>
+    <ID>MagicNumber:FakeWebRtcApmApi.kt$FakeWebRtcApmApi$100f</ID>
     <ID>MagicNumber:HumlaCertificateGenerator.kt$HumlaCertificateGenerator$2048</ID>
     <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$0x7</ID>
     <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$1000</ID>
@@ -70,6 +74,7 @@
     <ID>MagicNumber:SpeexJitterBuffer.kt$SpeexJitterBuffer$4</ID>
     <ID>MagicNumber:SpeexJitterBuffer.kt$SpeexJitterBuffer$5</ID>
     <ID>MagicNumber:SpeexPreprocessor.kt$SpeexPreprocessor$100</ID>
+    <ID>MagicNumber:TestWaits.kt$1_000_000L</ID>
     <ID>MagicNumber:UdpPing.kt$UdpPing$0xFF</ID>
     <ID>MagicNumber:UdpPing.kt$UdpPing$5</ID>
     <ID>MagicNumber:VadConfig.kt$VadConfig$96f</ID>
@@ -157,9 +162,6 @@
     <ID>SwallowedException:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$e: Exception</ID>
     <ID>SwallowedException:HumlaSSLSocketFactoryTrustStoreTest.kt$HumlaSSLSocketFactoryTrustStoreTest$e: IOException</ID>
     <ID>SwallowedException:HumlaService.kt$HumlaService$e: IllegalArgumentException</ID>
-    <ID>SwallowedException:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$e: NoSuchFieldException</ID>
-    <ID>SwallowedException:HumlaServiceSessionTest.kt$HumlaServiceSessionTest$e: NoSuchFieldException</ID>
-    <ID>SwallowedException:HumlaServiceVadExtrasTest.kt$HumlaServiceVadExtrasTest$e: NoSuchFieldException</ID>
     <ID>SwallowedException:HumlaTCP.kt$HumlaTCP$e: RejectedExecutionException</ID>
     <ID>SwallowedException:HumlaUDPTest.kt$HumlaUDPTest$e: SocketTimeoutException</ID>
     <ID>SwallowedException:Pkcs12Certificates.kt$Pkcs12Certificates$e: Exception</ID>
@@ -183,6 +185,7 @@
     <ID>TooManyFunctions:AudioRouter.kt$AudioRouter</ID>
     <ID>TooManyFunctions:Channel.kt$Channel : IChannelComparable</ID>
     <ID>TooManyFunctions:CommunicationDevices.kt$AndroidCommunicationDevices : CommunicationDevices</ID>
+    <ID>TooManyFunctions:Doubles.kt$NoopObserver : IHumlaObserver</ID>
     <ID>TooManyFunctions:HumlaCallbacks.kt$HumlaCallbacks : IHumlaObserver</ID>
     <ID>TooManyFunctions:HumlaConnection.kt$HumlaConnection : TCPConnectionListenerUDPConnectionListenerMessageHandlerRegistry</ID>
     <ID>TooManyFunctions:HumlaService.kt$HumlaService : ServiceIHumlaServiceIHumlaSessionHumlaConnectionListenerHumlaLogger</ID>
@@ -190,7 +193,6 @@
     <ID>TooManyFunctions:User.kt$User : IUserComparable</ID>
     <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun cancellingService(): HumlaService</ID>
     <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun connectivityManager()</ID>
-    <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun setField(target: Any, name: String, value: Any?)</ID>
     <ID>UseCheckOrError:FakeCaptureSource.kt$FakeCaptureSource$throw IllegalStateException("startRecording failed")</ID>
     <ID>UseCheckOrError:HumlaCallbacksTest.kt$HumlaCallbacksTest.&lt;no name provided&gt;$throw IllegalStateException("observer failed")</ID>
     <ID>UseCheckOrError:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest.&lt;no name provided&gt;$throw IllegalStateException("handler is broken")</ID>

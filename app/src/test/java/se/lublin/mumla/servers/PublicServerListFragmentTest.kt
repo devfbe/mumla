@@ -6,7 +6,6 @@ import android.widget.TextView
 import androidx.preference.PreferenceManager
 import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
-import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -38,10 +37,6 @@ class PublicServerListFragmentTest {
     private val downloads = AtomicInteger()
     private val activity = Robolectric.buildActivity(HostActivity::class.java).setup().get()
     private val prefs = PreferenceManager.getDefaultSharedPreferences(activity)
-
-    @After
-    fun tearDown() {
-    }
 
     /** Hosts the fragment with a download that counts its attempts and always fails. */
     private fun showFragment(): PublicServerListFragment {

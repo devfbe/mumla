@@ -394,7 +394,9 @@ class ChannelChatFragmentTest {
         launch()
         fragment.sendImage(smallBitmap())
         val sent = slot<String>()
-        drainMainUntil { runCatching { verify { session.sendChannelTextMessage(any(), capture(sent), any()) } }.isSuccess }
+        drainMainUntil {
+            runCatching { verify { session.sendChannelTextMessage(any(), capture(sent), any()) } }.isSuccess
+        }
         assertThat(sent.captured).startsWith("<img src=\"data:image/jpeg;base64,")
         assertThat(progress.visibility).isEqualTo(View.GONE)
     }

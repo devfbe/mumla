@@ -191,7 +191,8 @@ class AudioOutputTest {
         failure?.let { throw it }
     }
 
-    private fun awaitTrue(what: String, condition: () -> Boolean) = awaitUntil(description = what, condition = condition)
+    private fun awaitTrue(what: String, condition: () -> Boolean) =
+        awaitUntil(description = what, condition = condition)
 
     private class NoOpusDecoder : OpusDecoderApi {
         override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {

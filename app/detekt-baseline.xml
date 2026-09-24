@@ -160,8 +160,6 @@
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })</ID>
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_VOICE_ACTIVITY) })</ID>
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.renderSessionState(SessionState.Disconnected(HumlaException("again", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)))</ID>
-    <ID>MaxLineLength:MumlaServiceForegroundTest.kt$MumlaServiceForegroundTest$PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext()).edit().clear().commit()</ID>
-    <ID>MaxLineLength:MumlaServiceForegroundTest.kt$MumlaServiceForegroundTest$fun field(name: String)</ID>
     <ID>MaxLineLength:MumlaServiceForegroundTest.kt$MumlaServiceForegroundTest$service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })</ID>
     <ID>MaxLineLength:MumlaTrustStoreTest.kt$MumlaTrustStoreTest$assertThat(CertificatePins.forHost(store, "Mumble.Example.org")).containsExactly(CertificatePins.fingerprint(new))</ID>
     <ID>MaxLineLength:MumlaTrustStoreTest.kt$MumlaTrustStoreTest$assertThat(CertificatePins.forHost(store, "other.example.org")).containsExactly(CertificatePins.fingerprint(other))</ID>
@@ -207,7 +205,6 @@
     <ID>SwallowedException:ImageViewerDialogFragment.kt$ImageViewerDialogFragment$e: IOException</ID>
     <ID>SwallowedException:ImageViewerDialogFragment.kt$ImageViewerDialogFragment$e: ImageFetchException</ID>
     <ID>SwallowedException:MumlaService.kt$MumlaService$iae: IllegalArgumentException</ID>
-    <ID>SwallowedException:MumlaServiceAudioPreferencesTest.kt$MumlaServiceAudioPreferencesTest$e: NoSuchFieldException</ID>
     <ID>SwallowedException:MumlaTrustStoreTest.kt$MumlaTrustStoreTest$e: IOException</ID>
     <ID>SwallowedException:OutgoingImagePreparer.kt$OutgoingImagePreparer$e: IOException</ID>
     <ID>SwallowedException:OutgoingImagePreparer.kt$OutgoingImagePreparer$e: SecurityException</ID>

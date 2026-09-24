@@ -59,7 +59,8 @@ class TalkStateIconTest(
             { u: FakeUser -> u.deafened = true } to R.drawable.outline_circle_server_deafened,
             { u: FakeUser -> u.selfDeafened = true } to R.drawable.outline_circle_deafened,
         )
-        private val priorityNames = listOf("suppressed", "server muted", "self muted", "server deafened", "self deafened")
+        private val priorityNames =
+            listOf("suppressed", "server muted", "self muted", "server deafened", "self deafened")
 
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
