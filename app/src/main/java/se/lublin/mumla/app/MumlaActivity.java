@@ -63,9 +63,6 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import org.jetbrains.annotations.NotNull;
-import org.bouncycastle.util.encoders.Hex;
-
 import java.net.MalformedURLException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -100,6 +97,7 @@ import se.lublin.mumla.servers.ServerEditFragment;
 import se.lublin.mumla.service.IMumlaService;
 import se.lublin.mumla.service.MumlaService;
 import se.lublin.mumla.util.HumlaServiceFragment;
+import se.lublin.mumla.util.Hex;
 import se.lublin.mumla.util.HumlaServiceProvider;
 import se.lublin.mumla.util.MumlaTrustStore;
 import se.lublin.mumla.util.Orbot;
@@ -234,9 +232,9 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
             try {
                 MessageDigest digest1 = MessageDigest.getInstance("SHA-1");
                 MessageDigest digest2 = MessageDigest.getInstance("SHA-256");
-                String hexDigest1 = new String(Hex.encode(digest1.digest(x509.getEncoded())))
+                String hexDigest1 = Hex.toHex(digest1.digest(x509.getEncoded()))
                         .replaceAll("(..)", "$1:");
-                String hexDigest2 = new String(Hex.encode(digest2.digest(x509.getEncoded())))
+                String hexDigest2 = Hex.toHex(digest2.digest(x509.getEncoded()))
                         .replaceAll("(..)", "$1:");
 
                 textView.setText(getString(R.string.certificate_info,
@@ -443,7 +441,7 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
     }
 
     @Override
-    public boolean onOptionsItemSelected(@NotNull MenuItem item) {
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         if (mDrawerToggle.onOptionsItemSelected(item))
             return true;
         if (item.getItemId() == R.id.action_disconnect) {
@@ -454,7 +452,7 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
     }
 
     @Override
-    public void onConfigurationChanged(@NotNull Configuration newConfig) {
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         mDrawerToggle.onConfigurationChanged(newConfig);
     }

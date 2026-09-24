@@ -13,7 +13,6 @@ following third-party components. Every entry is GPLv3-compatible.
 | MiniDNS | 1.0.5 | LGPL-2.1-or-later / Apache-2.0 / WTFPL (tri-licensed) | https://github.com/MiniDNS/minidns |
 | protobuf-javalite (runtime) and protoc (build only) | 4.36.2 | BSD-3-Clause | https://github.com/protocolbuffers/protobuf |
 | Bouncy Castle (bcprov-jdk18on, bcpkix-jdk18on, and bcutil-jdk18on pulled in by bcpkix) | 1.86 | MIT (Bouncy Castle Licence) — the artifacts ship `META-INF/LICENSE.md` containing the MIT License text | https://www.bouncycastle.org/ |
-| JetBrains annotations | 26.1.0 | Apache-2.0 | https://github.com/JetBrains/java-annotations |
 | Google Play Billing Library | 9.1.0 | Android SDK License (proprietary; `goog` flavor only, not shipped in the F-Droid `foss` build) | https://developer.android.com/google/play/billing |
 | opus | 1.6.1 | BSD-3-Clause | https://github.com/xiph/opus |
 | speex (codec) | 1.2.1 | BSD-3-Clause | https://github.com/xiph/speex |

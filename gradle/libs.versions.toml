@@ -8,9 +8,7 @@ coroutines = "1.11.0"
 
 androidx-appcompat = "1.8.0"
 androidx-activity = "1.13.0"
-# Pinned low on purpose: humla alone compiles against 1.8.1, which is all @RequiresPermission
-# needs, while the app's full graph resolves it up to 1.9.1 anyway. (Current stable is 1.10.0.)
-androidx-annotation = "1.8.1"
+androidx-annotation = "1.11.0"
 androidx-cardview = "1.0.0"
 androidx-core = "1.18.0"
 androidx-documentfile = "1.1.0"
@@ -26,7 +24,6 @@ billing = "9.1.0"
 protobuf = "4.36.2"
 protobuf-plugin = "0.10.0"
 bouncycastle = "1.86"
-jetbrains-annotations = "26.1.0"
 minidns = "1.0.5"
 
 junit = "4.13.2"
@@ -58,7 +55,6 @@ protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
-jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }
 minidns-hla = { module = "org.minidns:minidns-hla", version.ref = "minidns" }
 minidns-android21 = { module = "org.minidns:minidns-android21", version.ref = "minidns" }
 

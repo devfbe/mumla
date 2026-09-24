@@ -20,7 +20,7 @@ package se.lublin.humla.protocol;
 import android.content.Context;
 import android.util.Log;
 
-import org.jetbrains.annotations.Nullable;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;

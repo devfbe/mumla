@@ -148,12 +148,11 @@ protobuf {
 
 dependencies {
     api libs.protobuf.javalite
-    api libs.bouncycastle.prov
-    api libs.bouncycastle.pkix
+    implementation libs.bouncycastle.prov
+    implementation libs.bouncycastle.pkix
 
     implementation libs.kotlinx.coroutines.android
     implementation libs.androidx.annotation
-    implementation libs.jetbrains.annotations
     implementation libs.minidns.hla
     implementation libs.minidns.android21
 

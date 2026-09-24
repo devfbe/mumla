@@ -36,6 +36,7 @@ import org.bouncycastle.pkcs.jcajce.JcePKCS12MacCalculatorBuilder
 import java.io.IOException
 import java.io.OutputStream
 import java.math.BigInteger
+import java.security.GeneralSecurityException
 import java.security.KeyPairGenerator
 import java.security.KeyStoreException
 import java.security.MessageDigest
@@ -66,7 +67,7 @@ object HumlaCertificateGenerator {
     @JvmStatic
     @Throws(
         NoSuchAlgorithmException::class,
-        OperatorCreationException::class,
+        GeneralSecurityException::class,
         CertificateException::class,
         KeyStoreException::class,
         NoSuchProviderException::class,
@@ -81,7 +82,12 @@ object HumlaCertificateGenerator {
         val keyPair = generator.generateKeyPair()
 
         val publicKeyInfo = SubjectPublicKeyInfo.getInstance(keyPair.public.encoded)
-        val signer = JcaContentSignerBuilder("SHA1withRSA").setProvider(provider).build(keyPair.private)
+        val signer = try {
+            JcaContentSignerBuilder("SHA1withRSA").setProvider(provider).build(keyPair.private)
+        } catch (e: OperatorCreationException) {
+            // Keeps BouncyCastle types out of this library's public API.
+            throw GeneralSecurityException(e)
+        }
 
         val startDate = Date()
         val calendar = Calendar.getInstance()
