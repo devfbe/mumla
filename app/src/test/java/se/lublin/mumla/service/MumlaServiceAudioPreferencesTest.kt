@@ -180,6 +180,7 @@ class MumlaServiceAudioPreferencesTest {
             "vad_settings" to "a PreferenceCategory, not a setting",
             "input_level_meter" to "not persisted: the settings screen's own live meter",
             "audio_loopback_test" to "not persisted: the settings screen's own monitor switch",
+            "audio_test_microphone" to "not persisted: the settings screen's own meter switch",
             "vad_recalibrate" to "not persisted: restarts the settings screen's own measurement",
             "ptt_settings" to "a PreferenceCategory, not a setting",
             "talkKey" to "read by the overlay and the PTT button, not by the audio chain",

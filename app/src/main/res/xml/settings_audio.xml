@@ -59,6 +59,15 @@
             android:summary="@string/vadModeSum"
             app:iconSpaceReserved="false"/>
 
+        <!-- Opt-in: the test takes the microphone and may switch the device to communication mode. -->
+        <SwitchPreferenceCompat
+            android:key="audio_test_microphone"
+            android:persistent="false"
+            android:defaultValue="false"
+            android:title="@string/audioTestMicrophone"
+            android:summary="@string/audioTestMicrophoneSum"
+            app:iconSpaceReserved="false"/>
+
         <se.lublin.mumla.preference.InputLevelMeterPreference
             android:key="input_level_meter"
             android:persistent="false"
@@ -146,6 +155,7 @@
 
         <SwitchPreferenceCompat
             android:key="audio_loopback_test"
+            android:dependency="audio_test_microphone"
             android:persistent="false"
             android:defaultValue="false"
             android:title="@string/audioLoopbackTest"

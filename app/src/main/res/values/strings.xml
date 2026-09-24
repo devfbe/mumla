@@ -328,4 +328,7 @@
     <string name="notification_channel_reconnect_description">A lost connection, while reconnecting or when it needs you to reconnect.</string>
     <string name="pref_dynamic_colors">Dynamic colors</string>
     <string name="pref_dynamic_colors_summary">Use the colors of your wallpaper instead of Mumla\'s.</string>
+    <string name="audioTestMicrophone">Test microphone</string>
+    <string name="audioTestMicrophoneSum">Shows your live input level while this is on. Other apps\' audio may get quieter meanwhile.</string>
+    <string name="inputLevelMeterIdle">Turn on “Test microphone” to see your input level.</string>
 </resources>

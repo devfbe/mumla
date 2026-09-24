@@ -35,7 +35,10 @@ class InputLevelMeterPreference(context: Context, attrs: AttributeSet?) : Prefer
     private var caption: TextView? = null
     private var reading: MeterReading? = null
     private var hysteresisDb: Float = 6f
-    private var message: String? = null
+
+    /** The sentence shown instead of a reading, if any. */
+    var message: String? = null
+        private set
 
     init {
         layoutResource = R.layout.preference_input_level_meter
