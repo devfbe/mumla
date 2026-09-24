@@ -17,7 +17,6 @@
 
 package se.lublin.mumla.servers
 
-import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,7 +31,7 @@ import java.net.URL
  * released, so every visit to the list left both to the finalizer.
  */
 @RunWith(RobolectricTestRunner::class)
-class PublicServerFetchTaskTest {
+class PublicServerFetcherTest {
     private class RecordingStream(text: String) : ByteArrayInputStream(text.toByteArray()) {
         var closed = false
         override fun close() {
@@ -51,10 +50,7 @@ class PublicServerFetchTaskTest {
         override fun getInputStream(): InputStream = body
     }
 
-    private fun fetch(connection: HttpURLConnection) =
-        object : PublicServerFetchTask(ApplicationProvider.getApplicationContext()) {
-            override fun openConnection(): HttpURLConnection = connection
-        }.doInBackground()
+    private fun fetch(connection: HttpURLConnection) = PublicServerFetcher { connection }.fetchBlocking()
 
     @Test
     fun aListThatParsesReleasesItsStreamAndConnection() {
@@ -81,5 +77,17 @@ class PublicServerFetchTaskTest {
         assertThat(servers).isNull()
         assertThat(body.closed).isTrue()
         assertThat(connection.disconnected).isTrue()
+    }
+
+    @Test
+    fun anEntryWithABadPortIsSkipped() {
+        val body = RecordingStream(
+            """<servers><server name="a" ip="a.example" port="x"/>""" +
+                """<server name="b" ip="b.example" port="64738"/></servers>""",
+        )
+
+        val servers = fetch(FakeConnection(body))
+
+        assertThat(servers!!.map { it.name }).containsExactly("b")
     }
 }
