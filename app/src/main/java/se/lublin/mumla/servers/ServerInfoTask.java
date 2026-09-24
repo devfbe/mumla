@@ -23,6 +23,7 @@ import android.util.Log;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 
 import se.lublin.humla.model.Server;
@@ -38,6 +39,11 @@ public class ServerInfoTask extends AsyncTask<Server, Void, ServerInfoResponse> 
 
     private Server server;
 
+    /** Test seam: the socket the ping is sent from. */
+    protected DatagramSocket createSocket() throws SocketException {
+        return new DatagramSocket();
+    }
+
     @Override
     protected ServerInfoResponse doInBackground(Server... params) {
         server = params[0];
@@ -49,27 +55,30 @@ public class ServerInfoTask extends AsyncTask<Server, Void, ServerInfoResponse> 
             DatagramPacket requestPacket = new DatagramPacket(buffer.array(), 12,
                     InetAddress.getByName(server.getSrvHost()), server.getSrvPort());
 
-            // Send packet and wait for response
-            DatagramSocket socket = new DatagramSocket();
-            socket.setSoTimeout(1000);
-            socket.setReceiveBufferSize(1024);
+            // Send packet and wait for response. Closed on every path: this runs once per row of
+            // the server list on every refresh, and an unclosed socket is only reclaimed by the
+            // finalizer ("A resource failed to call close").
+            try (DatagramSocket socket = createSocket()) {
+                socket.setSoTimeout(1000);
+                socket.setReceiveBufferSize(1024);
 
-            long startTime = System.nanoTime();
+                long startTime = System.nanoTime();
 
-            socket.send(requestPacket);
+                socket.send(requestPacket);
 
-            byte[] responseBuffer = new byte[24];
-            DatagramPacket responsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
-            socket.receive(responsePacket);
+                byte[] responseBuffer = new byte[24];
+                DatagramPacket responsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
+                socket.receive(responsePacket);
 
-            int latencyInMs = (int) ((System.nanoTime()-startTime)/1000000);
+                int latencyInMs = (int) ((System.nanoTime()-startTime)/1000000);
 
-            ServerInfoResponse response = new ServerInfoResponse(server, responseBuffer, latencyInMs);
+                ServerInfoResponse response = new ServerInfoResponse(server, responseBuffer, latencyInMs);
 
-            Log.d(TAG, "Server version: " + response.getVersionString()
-                    + " Users: " + response.getCurrentUsers() + "/" + response.getMaximumUsers());
+                Log.d(TAG, "Server version: " + response.getVersionString()
+                        + " Users: " + response.getCurrentUsers() + "/" + response.getMaximumUsers());
 
-            return response;
+                return response;
+            }
 
         } catch (Exception e) {
 //            e.printStackTrace();

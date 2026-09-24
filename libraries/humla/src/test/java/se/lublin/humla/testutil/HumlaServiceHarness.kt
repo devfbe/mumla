@@ -130,9 +130,14 @@ class HumlaServiceHarness(
         }
         val tcp = transports.tcps[index]
         tcp.simulateConnected()
+        // Waits for the handshake the service sends from onConnectionEstablished, not just for
+        // isConnected: the protocol thread sets `connected` *before* it posts that callback to
+        // the main looper, so an idle() between the two returned with the handshake still queued
+        // (theHandshakeAnnouncesTheCeltVersionsFromTheSeam failed on it, intermittently).
         awaitUntil(description = "connection $index established") {
             mainLooper.idle()
-            service.getConnection()?.isConnected == true
+            service.getConnection()?.isConnected == true &&
+                tcp.sent.contains(HumlaTCPMessageType.Authenticate)
         }
         return tcp
     }

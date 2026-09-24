@@ -56,6 +56,10 @@ class MumlaConnectionNotificationTest {
         override fun onOverlayToggled() {
             calls += "overlay"
         }
+
+        override fun onReconnectCancelled() {
+            calls += "cancelReconnect"
+        }
     }
 
     private val controller: ServiceController<HostService> = Robolectric.buildService(HostService::class.java).create()
@@ -204,7 +208,50 @@ class MumlaConnectionNotificationTest {
         assertThat(receivers).hasSize(1)
         assertThat(receivers.single().flags and Context.RECEIVER_NOT_EXPORTED).isNotEqualTo(0)
         assertThat(receivers.single().intentFilter.actionsIterator().asSequence().toList())
-            .containsExactly("b_mute", "b_deafen", "b_overlay")
+            .containsExactly("b_mute", "b_deafen", "b_overlay", "b_foreground_cancel_reconnect")
+    }
+
+    // ---- ConnectionLost / Reconnecting: the only thing to offer is giving up ----------------
+
+    @Test
+    fun theCancelReconnectActionIsTheOnlyOneWhileReconnecting() {
+        val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
+        notification.show()
+        notification.customContentText = "Connection lost"
+        notification.cancelReconnectShown = true
+        notification.show()
+
+        val action = posted().actions.single()
+        assertThat(action.title.toString()).isEqualTo(service.getString(R.string.cancel_reconnect))
+        assertThat(action.icon).isEqualTo(R.drawable.ic_action_delete_dark)
+        val pending = shadowOf(action.actionIntent)
+        assertThat(pending.isBroadcast).isTrue()
+        assertThat(pending.isImmutable).isTrue()
+        assertThat(pending.savedIntent.`package`).isEqualTo(service.packageName)
+    }
+
+    @Test
+    fun theCancelReconnectActionReachesItsCallbackThroughTheOneReceiver() {
+        val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
+        notification.show()
+        notification.cancelReconnectShown = true
+        notification.show()
+
+        posted().actions.single().actionIntent.send()
+        idle()
+
+        assertThat(listener.calls).containsExactly("cancelReconnect")
+        assertThat(ourReceivers()).hasSize(1)
+    }
+
+    @Test
+    fun noCancelReconnectActionUntilAskedFor() {
+        val notification = MumlaConnectionNotification.create(service, "Connected", listener)
+        notification.configure("Connected", actions = true)
+        notification.show()
+
+        assertThat(posted().actions.map { it.title.toString() })
+            .doesNotContain(service.getString(R.string.cancel_reconnect))
     }
 
     @Test

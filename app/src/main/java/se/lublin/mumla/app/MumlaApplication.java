@@ -17,6 +17,7 @@ public class MumlaApplication extends Application implements SharedPreferences.O
     @Override
     public void onCreate() {
         super.onCreate();
+        DebugStrictMode.install();
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
         applyTheme(preferences);
         preferences.registerOnSharedPreferenceChangeListener(this);
