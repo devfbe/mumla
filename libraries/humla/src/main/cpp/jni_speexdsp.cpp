@@ -1,14 +1,9 @@
 /*
  * JNI bridge for libspeexdsp: the resampler, the jitter buffer and the preprocessor.
  *
- * Every entry point here has the same hazard. libspeexdsp takes the number of samples or bytes to
- * touch from somewhere other than the buffer -- speex_preprocess_run from the frame size the
- * state was created with, speex_resampler_process_int and jitter_buffer_put from counts the
- * caller supplies separately -- so nothing under this layer can tell whether the Java array is
- * long enough. The binding this file replaced did not check, and at ultra-wideband speex wrote
- * 640 samples into a 480-element array on every frame; that was a crash in the field, not a
- * theoretical one. Each function below therefore reads the array's real length and clamps or
- * refuses. tests/test_jni_speexdsp.cpp reproduces the original overrun and fails without them.
+ * libspeexdsp takes sample/byte counts from the state or from separate arguments, never from the
+ * buffer, so each entry point checks the real Java array length and clamps or refuses. Without
+ * that, speex once wrote 640 samples into a 480-element array on every frame.
  */
 #include <jni.h>
 #include <new>
@@ -23,19 +18,15 @@
 
 namespace {
 
-/* The preprocessor writes the frame size it was CREATED with, and libspeexdsp has no ctl to ask
- * it afterwards, so the size is kept beside the state and compared against the array in PP(run).
- * The handle Kotlin holds is this struct, not the SpeexPreprocessState. */
+/* speex_preprocess_run writes the frame size the state was created with, and there is no ctl to
+ * query it, so it is kept beside the state. Kotlin holds this struct, not the SpeexPreprocessState. */
 struct PreprocessHandle {
     SpeexPreprocessState* state;
     int frameSize;
 };
 
-/* Same shape, same reason. speex_resampler_process_native indexes st->last_sample[],
- * st->samp_frac_num[] and st->mem with the caller's channel_index and never compares it against
- * the channel count the state was created with -- all three are sized for that count, so an index
- * past it reads and writes outside the allocation. libspeexdsp has no ctl to ask a state how many
- * channels it has, so the count is kept beside the state. */
+/* speex_resampler_process_native indexes per-channel arrays with the caller's channel_index
+ * without checking it, and there is no ctl to query the channel count, so it is kept here. */
 struct ResamplerHandle {
     SpeexResamplerState* state;
     int channels;
@@ -48,57 +39,34 @@ jint clampToArray(JNIEnv* env, jint count, jarray array) {
     return count > capacity ? static_cast<jint>(capacity) : count;
 }
 
-/* The resampler's error array is optional on the Kotlin side (IntArray?) and, like every other
- * array here, arrives with a length of its own; writeInt() alone would write slot 0 of an empty
- * one, which on a real JVM is a pending ArrayIndexOutOfBoundsException. */
+/* The error array is optional and may be empty; writing slot 0 of an empty array would leave a
+ * pending ArrayIndexOutOfBoundsException. */
 void writeError(JNIEnv* env, jintArray error, jint value) {
     if (error != nullptr && env->GetArrayLength(error) >= 1) writeInt(env, error, value);
 }
 
-/* The two ctl entry points below hand jitter_buffer_ctl / speex_preprocess_ctl the address of a
- * four-byte spx_int32_t on their own stack frame. The request number decides what the callee does
- * with that address, it arrives from Kotlin, and for several requests it is not "read or write
- * four bytes":
+/* The ctl entry points pass jitter_buffer_ctl / speex_preprocess_ctl the address of a four-byte
+ * spx_int32_t on the stack, and the request number comes from Kotlin. For several requests the
+ * callee does something else with that address:
  *
  *   JITTER_BUFFER_GET_DESTROY_CALLBACK (5)   *(void(**)(void*))ptr = jitter->destroy
  *   SPEEX_PREPROCESS_GET_ECHO_STATE    (25)  *(SpeexEchoState**)ptr = st->echo_state
- *       -- eight bytes into a four-byte stack object on arm64-v8a and x86_64.
+ *       -- eight bytes into a four-byte stack object on 64-bit ABIs.
  *   JITTER_BUFFER_SET_DESTROY_CALLBACK (4)   jitter->destroy = (void(*)(void*))ptr
  *   SPEEX_PREPROCESS_SET_ECHO_STATE    (24)  st->echo_state = (SpeexEchoState*)ptr
- *       -- the stack address is kept as a pointer and dereferenced, or called, long after this
- *          frame is gone; jitter_buffer_reset() calls jitter->destroy for every queued packet.
+ *       -- the stack address is kept and later dereferenced or called.
  *   SPEEX_PREPROCESS_GET_PSD           (39)
- *   SPEEX_PREPROCESS_GET_NOISE_PSD     (43)  ps_size ints, i.e. a whole frame, into those four
- *                                            bytes.
+ *   SPEEX_PREPROCESS_GET_NOISE_PSD     (43)  ps_size ints into those four bytes.
  *   SPEEX_PREPROCESS_SET_AGC_LEVEL     (6)   reads the caller's int as a float.
  *   JITTER_BUFFER_SET_MAX_LATE_RATE    (10)  divides by the value, so 0 is a SIGFPE.
  *
- * An allow list rather than a list of the dangerous ones: the argument's type is a property of
- * each request inside libspeexdsp, a version bump can add another pointer-typed request, and
- * being wrong in the allowing direction is a stack smash. Both lists are exactly the ctl requests
- * the matching Kotlin object declares as constants (SpeexJitterNative additionally declares five
- * JITTER_BUFFER_* status codes, which are return values, not requests) -- nothing else was ever
- * reachable from Kotlin without also adding a constant there. That on its own is NOT the reason
- * to refuse the rest: the request is a plain Int on a public interface, so reaching one takes no
- * native change at all.
+ * Hence an allow list: a libspeexdsp update can add pointer-typed requests. A request may be added
+ * only if the library treats ptr as exactly one spx_int32_t (read or written once) and touches
+ * nothing outside the state's own allocation.
  *
- * The criterion for adding one is about the pointer, not about the whole request: jitter.c /
- * preprocess.c must treat ptr as exactly one spx_int32_t -- read once or written once -- and
- * everything else it touches must live inside the state's own allocation. SPEEX_PREPROCESS_SET_DEREVERB
- * (8) is the entry that makes the difference visible: it reads the single int and then zeroes
- * st->reverb_estimate[0 .. ps_size) (preprocess.c:1103-1107). That loop is inside the
- * preprocessor's own correctly sized array, so it is safe, but it is not "a single spx_int32_t
- * access" and a criterion phrased that way would have excluded an entry the list already has.
- *
- * The two refusals are deliberately spelled differently, and the difference is not cosmetic.
- * JB(ctl) answers JITTER_BUFFER_BAD_ARGUMENT (-2) while jitter_buffer_ctl answers -1 for a
- * request it does not know (jitter.c:833-835), so a caller can tell "the bridge refused this"
- * from "libspeexdsp has no such request". PP(ctlInt) cannot: speex_preprocess_ctl also answers
- * -1, and SpeexPreprocessApi.ctlInt is documented as returning speex's own status, which has no
- * spare value. The asymmetry is left in place rather than invented around, because a code
- * SpeexPreprocessNative made up would be indistinguishable from a future libspeexdsp return
- * value; test_jni_speexdsp.cpp therefore pins the preprocess refusals on requests libspeexdsp
- * does implement, where -1 is only reachable through the allow list.
+ * Refusals: JB(ctl) returns JITTER_BUFFER_BAD_ARGUMENT (-2), distinct from the library's -1 for an
+ * unknown request. PP(ctlInt) returns -1 like speex_preprocess_ctl, because its status has no
+ * spare value.
  */
 bool jitterRequestAllowed(jint request) {
     switch (request) {
@@ -135,9 +103,7 @@ extern "C" {
 // ---- resampler ----
 
 JNIEXPORT jlong JNICALL RS(init)(JNIEnv* env, jobject, jint channels, jint inRate, jint outRate, jint quality, jintArray error) {
-    // A non-positive channel count is refused here rather than passed on: speex_resampler_init
-    // would allocate the per-channel arrays for it and every processInt would then be out of
-    // range, whatever channel index the caller used.
+    // speex_resampler_init accepts it, but then every processInt would be out of range.
     if (channels <= 0) {
         writeError(env, error, RESAMPLER_ERR_INVALID_ARG);
         return 0;
@@ -146,11 +112,7 @@ JNIEXPORT jlong JNICALL RS(init)(JNIEnv* env, jobject, jint channels, jint inRat
     SpeexResamplerState* st = speex_resampler_init(channels, inRate, outRate, quality, &err);
     writeError(env, error, err);
     if (st == nullptr) return 0;
-    // This failure path survives its own removal and cannot be pinned from here: jni_env_stub.h
-    // can make Get*ArrayElements fail, but nothing in the test setup can make operator new fail,
-    // so both the destroy and the error code below are unreachable in a test. Kept because the
-    // alternative is leaking the SpeexResamplerState and returning 0 with err = 0, which reads as
-    // success. Pinning it would need an allocation hook in the test binary.
+    // Otherwise we would leak st and report success (err == 0).
     auto* h = new (std::nothrow) ResamplerHandle{st, channels};
     if (h == nullptr) {
         speex_resampler_destroy(st);
@@ -166,18 +128,13 @@ JNIEXPORT jint JNICALL RS(processInt)(JNIEnv* env, jobject, jlong state, jint ch
         return RESAMPLER_ERR_INVALID_ARG;
     if (env->GetArrayLength(inLen) < 1 || env->GetArrayLength(outLen) < 1)
         return RESAMPLER_ERR_INVALID_ARG;
-    // channelIndex is an index into three per-channel arrays that speex sized for the channel
-    // count this state was created with, and speex_resampler_process_native compares it against
-    // nothing. Out of range is a heap read and write outside those allocations, not an error
-    // code, so it has to be refused here -- the only place that can see both numbers.
+    // speex indexes per-channel arrays with channelIndex without a range check.
     if (channelIndex < 0 || channelIndex >= h->channels) return RESAMPLER_ERR_INVALID_ARG;
     jint inCount = 0, outCount = 0;
     env->GetIntArrayRegion(inLen, 0, 1, &inCount);
     env->GetIntArrayRegion(outLen, 0, 1, &outCount);
-    // The two counts arrive in their own int[] and say nothing about how long the sample arrays
-    // are: speex reads inCount samples from input and writes up to outCount into out, so a count
-    // larger than its array is an out-of-bounds access rather than an error code. A negative
-    // count would become an enormous spx_uint32_t two lines further down.
+    // speex trusts these counts, not the array lengths; a negative count would become a huge
+    // spx_uint32_t.
     inCount = clampToArray(env, inCount, input);
     outCount = clampToArray(env, outCount, out);
     spx_uint32_t in = static_cast<spx_uint32_t>(inCount);
@@ -218,8 +175,7 @@ JNIEXPORT void JNICALL JB(destroy)(JNIEnv*, jobject, jlong handle) {
 JNIEXPORT void JNICALL JB(put)(JNIEnv* env, jobject, jlong handle, jbyteArray data, jint len, jint timestamp, jint span, jint sequence, jint userData) {
     auto* jb = fromHandle<JitterBuffer>(handle);
     if (jb == nullptr || data == nullptr) return;
-    // jitter_buffer_put copies packet.len bytes out of packet.data, and len is the caller's own
-    // number, not the array's.
+    // jitter_buffer_put copies len bytes, and len is the caller's number, not the array's.
     len = clampToArray(env, len, data);
     jbyte* dataPtr = env->GetByteArrayElements(data, nullptr);
     if (dataPtr == nullptr) return;
@@ -272,8 +228,7 @@ JNIEXPORT jint JNICALL JB(ctl)(JNIEnv* env, jobject, jlong handle, jint request,
     auto* jb = fromHandle<JitterBuffer>(handle);
     if (jb == nullptr || value == nullptr || env->GetArrayLength(value) < 1)
         return JITTER_BUFFER_BAD_ARGUMENT;
-    // &v below is a stack address; see jitterRequestAllowed for what the rejected requests do
-    // with it.
+    // &v is a stack address, see jitterRequestAllowed.
     if (!jitterRequestAllowed(request)) return JITTER_BUFFER_BAD_ARGUMENT;
     jint in = 0;
     env->GetIntArrayRegion(value, 0, 1, &in);
@@ -292,19 +247,13 @@ JNIEXPORT jint JNICALL JB(updateDelay)(JNIEnv*, jobject, jlong handle) {
 
 // ---- preprocessor ----
 
-// Returns 0 on failure, which the Kotlin wrapper turns into a disabled preprocessor. A
-// non-positive frame size is rejected here rather than passed on: speex would accept it and then
-// run with a frame size PP(run) could never satisfy.
+// Returns 0 on failure (the Kotlin wrapper then disables the preprocessor). A non-positive frame
+// size would be accepted by speex but could never satisfy PP(run).
 JNIEXPORT jlong JNICALL PP(init)(JNIEnv*, jobject, jint frameSize, jint sampleRate) {
     if (frameSize <= 0) return 0;
     SpeexPreprocessState* state = speex_preprocess_state_init(frameSize, sampleRate);
-    // Both checks below survive their own removal, and both for a structural reason rather than a
-    // missing test. speex_preprocess_state_init cannot return nullptr in this libspeexdsp at all:
-    // it writes st->frame_size into the allocation without checking it (preprocess.c:396-397), so
-    // an allocation failure is a crash inside speex, not a null return. The check stays because
-    // the promise belongs to the library's signature, not to this version of its body. The
-    // nothrow check below is the same case as in RS(init): nothing in the test setup can make
-    // operator new fail.
+    // speex_preprocess_state_init never returns nullptr in this version, but its signature allows
+    // it.
     if (state == nullptr) return 0;
     auto* h = new (std::nothrow) PreprocessHandle{state, frameSize};
     if (h == nullptr) {
@@ -314,10 +263,8 @@ JNIEXPORT jlong JNICALL PP(init)(JNIEnv*, jobject, jint frameSize, jint sampleRa
     return toHandle(h);
 }
 
-// Returns the speex VAD decision (1 = speech, 0 = not), or -1 when the frame cannot be processed
-// at all. The length check is the whole point: speex_preprocess_run writes frameSize samples into
-// whatever pointer it is given, so a shorter array is an overrun on every frame -- the original
-// bug this file exists to prevent.
+// Returns the speex VAD decision (1 = speech, 0 = not), or -1 when the frame cannot be processed.
+// speex_preprocess_run writes frameSize samples, so a shorter array must be refused.
 JNIEXPORT jint JNICALL PP(run)(JNIEnv* env, jobject, jlong state, jshortArray frame) {
     auto* h = fromHandle<PreprocessHandle>(state);
     if (h == nullptr || frame == nullptr) return -1;
@@ -332,8 +279,7 @@ JNIEXPORT jint JNICALL PP(run)(JNIEnv* env, jobject, jlong state, jshortArray fr
 JNIEXPORT jint JNICALL PP(ctlInt)(JNIEnv* env, jobject, jlong state, jint request, jintArray value) {
     auto* h = fromHandle<PreprocessHandle>(state);
     if (h == nullptr || value == nullptr || env->GetArrayLength(value) < 1) return -1;
-    // Same as JB(ctl): &v is a stack address, and -1 is what speex_preprocess_ctl itself returns
-    // for a request it does not know.
+    // &v is a stack address, see preprocessRequestAllowed. -1 matches speex's own "unknown".
     if (!preprocessRequestAllowed(request)) return -1;
     jint in = 0;
     env->GetIntArrayRegion(value, 0, 1, &in);

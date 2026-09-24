@@ -26,14 +26,9 @@ target_include_directories(humla_rnnoise
     PRIVATE ${RNNOISE_DIR}/include ${RNNOISE_DIR}/src ${RNNOISE_MODEL_DIR}
             ${CMAKE_CURRENT_SOURCE_DIR}/compat)   # os_support.h, see compat/os_support.h
 # RNNOISE_BUILD: configure.ac:31, unconditional upstream.
-# DISABLE_DEBUG_FLOAT: configure.ac:81-87, upstream's default (--enable-dnn-debug-float=no).
-#   It changes nothing about THIS compilation -- the macro appears nowhere under src/ or
-#   include/, only in the generated rnnoise_data.c that USE_WEIGHTS_FILE compiles out. It is
-#   here to document the flag model/weights_blob.bin was dumped with, and it must stay in sync
-#   with that blob: without it the blob also carries float copies of the int8 conv2/gru
-#   weights, and compute_linear_ (src/nnet_arch.h:138-140) prefers float_weights whenever they
-#   are present, so the network would run different arithmetic. Removing it here is harmless;
-#   removing it from the dump command in model/README.md is not.
+# DISABLE_DEBUG_FLOAT: configure.ac:81-87, upstream's default. Has no effect on this compilation
+#   but documents the flag model/weights_blob.bin was dumped with; the dump command in
+#   model/README.md must keep it, or the blob gains float weights that change the arithmetic.
 # USE_WEIGHTS_FILE: our choice (denoise.c:298) — no built-in arrays, model comes from the blob.
 # HUMLA_RNNOISE_BLOB_PATH: consumed by the .incbin in model/rnnoise_model_blob.S.
 target_compile_definitions(humla_rnnoise PRIVATE

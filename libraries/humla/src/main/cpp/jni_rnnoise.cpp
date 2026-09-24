@@ -1,21 +1,14 @@
 /*
- * JNI bridge for libhumlarnnoise. The Kotlin declaration is RnnoiseNative.kt; the two files are
- * one interface and have to be changed together.
+ * JNI bridge for libhumlarnnoise; the Kotlin side is RnnoiseNative.kt and must change with it.
  *
- * Everything here is a boundary check. humla_rnnoise_process takes a bare int16_t* and writes
- * exactly HUMLA_RNNOISE_FRAME_SIZE samples into it, on the documented precondition that the
- * caller passes a buffer that long; a Java short[] that is shorter is an out-of-bounds write on
- * every frame, not an error. Handles come back from Kotlin as opaque longs and may arrive after
- * release(). Neither is visible to the wrapper underneath, so both are stopped here.
+ * humla_rnnoise_process writes exactly HUMLA_RNNOISE_FRAME_SIZE samples into a bare int16_t*, so
+ * shorter arrays are refused here. Handles may arrive after release() (see jni_native_handle.h).
  *
- * Exceptions: every function is noexcept. Nothing below can throw -- the C wrapper is noexcept
- * and catches (...) itself, and HandleTable::add/release swallow their own allocation failures --
- * so the specification is a backstop that turns a future mistake into std::terminate at this
- * boundary rather than an exception unwinding into the JVM's frames, which is undefined.
+ * Every function is noexcept as a backstop: an exception unwinding into the JVM is undefined.
  *
- * Threads: processFrame is the audio-thread entry point and takes no lock. create and destroy
- * take the handle table's mutex and belong to whichever thread owns the instance. One handle is
- * not safe to process from two threads at once (humla_rnnoise.h), but separate handles are.
+ * Threads: processFrame is the audio-thread entry point and takes no lock. create and destroy take
+ * the handle table's mutex and belong to the owning thread. One handle must not be processed from
+ * two threads at once; separate handles may.
  */
 #include <jni.h>
 
@@ -25,11 +18,9 @@
 namespace {
 
 humla::HandleTable& handles() {
-    // Intentionally never destroyed. The table has to outlive every handle it ever issued, and
-    // static destruction order gives no such guarantee: an audio callback that has not been
-    // joined yet would find a destroyed mutex. Leaving it alive also keeps every cell reachable
-    // from a static root, which is what stops LeakSanitizer reporting the cells (a table
-    // destroyed at exit frees its own nodes first and orphans them).
+    // Intentionally never destroyed: the table must outlive every handle it issued (static
+    // destruction order could hand a late audio callback a destroyed mutex), and staying
+    // reachable keeps LeakSanitizer quiet about the cells.
     static humla::HandleTable* table = new humla::HandleTable();
     return *table;
 }
@@ -52,8 +43,7 @@ Java_se_lublin_humla_audio_native_RnnoiseNative_processFrame(JNIEnv* env, jobjec
                                                              jshortArray frame) noexcept {
     auto* denoiser = static_cast<humla_rnnoise*>(handles().get(handle));
     if (denoiser == nullptr || frame == nullptr) return -1.0f;
-    // The length check is the reason this function is not a one-liner: a short frame is an
-    // out-of-bounds write inside rnnoise, and neither rnnoise nor Kotlin can see it coming.
+    // A short frame would be an out-of-bounds write inside rnnoise.
     if (env->GetArrayLength(frame) < HUMLA_RNNOISE_FRAME_SIZE) return -1.0f;
     jshort* data = env->GetShortArrayElements(frame, nullptr);
     if (data == nullptr) return -1.0f;  // OOM inside the JVM; an exception is already pending

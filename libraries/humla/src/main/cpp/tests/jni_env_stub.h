@@ -2,25 +2,16 @@
  * A stand-in JNIEnv, enough of one to call the hand-written JNI entry points in
  * ../jni_*.cpp from a host test without a JVM.
  *
- * Why this exists at all: everything the JNI layer can get wrong is invisible from Kotlin and
- * invisible from the C wrappers underneath. A missing length check writes past the end of a Java
- * array (this project has shipped that bug: speex wrote 640 samples into a 480-element array on
- * every frame), a handle freed twice corrupts the heap, and a bridge wired to the wrong C
- * function silently turns echo cancellation off. None of those produce an error code, so the
- * only way to hold them down is to execute the JNI functions and watch the memory.
+ * Two properties make memory errors in the bridges observable:
  *
- * Two properties make that work:
+ *   - Arrays are exact-size heap blocks, so a write to element 480 of a short[480] is a
+ *     heap-buffer-overflow that ASan reports.
+ *   - Get*ArrayElements copies, like ART's non-critical accessors, and Release honours the mode
+ *     argument, so a missing release leaks the copy and LeakSanitizer fails the test.
  *
- *   - Arrays are exact-size heap blocks. A Java short[480] is 480 jshorts from malloc and not one
- *     byte more, so a write to element 480 is a heap-buffer-overflow that ASan reports with a
- *     stack trace, in the sanitized half of this directory.
- *   - Get*ArrayElements copies, like ART's does for non-critical accessors, and Release honours
- *     the mode argument. A bridge that releases with the wrong mode, or forgets to release, is
- *     therefore visible too: a missing release leaks the copy and LeakSanitizer fails the test.
- *
- * This is a test double, not an emulator. Anything not needed by the bridges under test is left
- * out of the function table on purpose: a bridge that starts calling something else crashes here
- * on a null function pointer rather than silently doing nothing.
+ * This is a test double, not an emulator: functions the bridges do not need are left out of the
+ * table on purpose, so a bridge calling something new crashes on a null pointer instead of
+ * silently doing nothing.
  */
 #ifndef HUMLA_TESTS_JNI_ENV_STUB_H
 #define HUMLA_TESTS_JNI_ENV_STUB_H
@@ -48,15 +39,11 @@ inline int& outstanding_copies() {
     return n;
 }
 
-/* Arms one Get*ArrayElements to return NULL, which is what a JVM does when it cannot allocate the
- * copy. The bridges have to survive that without dereferencing it and without leaking whatever
- * they are already holding.
+/* Arms one Get*ArrayElements to return NULL, as a JVM does when it cannot allocate the copy.
  *
- * fail_get_after(0) fails the very next call; fail_get_after(1) lets one succeed and fails the one
- * after it. The n > 0 form is the one that matters for a bridge that holds two arrays at once:
- * only the second allocation failing reaches a cleanup path that has something to release, and
- * arming the first call never gets there. Negative means disarmed, which is also where a
- * triggered failure leaves it. */
+ * fail_get_after(0) fails the next call; fail_get_after(1) lets one succeed and fails the one after
+ * it, which reaches the cleanup path of a bridge holding two arrays. Negative means disarmed, which
+ * is also where a triggered failure leaves it. */
 inline int& gets_until_failure() {
     static int n = -1;
     return n;
@@ -66,14 +53,9 @@ inline void fail_get_never() { gets_until_failure() = -1; }
 
 inline FakeArray* as_array(jarray a) { return reinterpret_cast<FakeArray*>(a); }
 
-/* jshortArray, jbyteArray and jintArray are distinct C++ types, but a FakeArray is one struct, so
- * nothing in the type system stops a bridge from calling GetByteArrayElements on a short[]. On a
- * real JVM that is a hard error; here it would quietly read the wrong number of bytes.
- *
- * The comparison is by element SIZE, not by element type, which is as much as a FakeArray knows.
- * It separates byte from short from int/float, and it does NOT separate jint from jfloat -- both
- * are four bytes. An int/float mix-up is precisely what this would have to catch, and it would not.
- * Closing it means giving FakeArray a type tag rather than a size. */
+/* jshortArray, jbyteArray and jintArray are distinct C++ types but a FakeArray is one struct, so
+ * accessor calls are checked by element SIZE. That separates byte, short and int/float, but not
+ * jint from jfloat (both four bytes); that would need a type tag. */
 template <typename T>
 inline void check_element_type(const FakeArray* fa, const char* who) {
     if (fa->elem_size != jsize(sizeof(T))) {

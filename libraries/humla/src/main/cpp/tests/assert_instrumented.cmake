@@ -1,22 +1,10 @@
 # Asserts that a named function in a linked test binary really carries AddressSanitizer
 # instrumentation.
 #
-# This exists because test_apm_asan links humla_apm.cpp twice: once instrumented, from
-# humla_apm_asan, and once not, from the humla_apm archive that supplies the ~200 uninstrumented
-# upstream objects. Which definition ends up in the executable is decided by the order of the
-# archives on the link line and by nothing else. It is currently the instrumented one. If that
-# ever flips, every target still builds, apm_sanitized still passes, and it silently stops
-# instrumenting the code it exists to instrument -- the same class of quiet, green-pipeline
-# failure the rest of this directory is built to prevent, one level further down.
-#
-# A preprocessor check inside test_apm.c would not catch this. __SANITIZE_ADDRESS__ describes
-# how the test translation unit was compiled, and that translation unit is compiled with the
-# sanitizer flags unconditionally; it says nothing about which copy of the library the linker
-# chose. Nor does anything observable at run time: ASan's allocator interceptors are
-# process-wide, so heap redzones exist either way, and what is actually lost when the
-# uninstrumented copy wins -- stack and global instrumentation inside the wrapper -- leaves no
-# trace the process can query. The property is a property of the linked image, so it is checked
-# on the linked image.
+# test_apm_asan links humla_apm.cpp twice (instrumented from humla_apm_asan, uninstrumented from
+# humla_apm), and link order alone decides which copy wins. If it flips, everything still passes
+# while instrumenting nothing. Neither __SANITIZE_ADDRESS__ nor anything observable at run time
+# can tell, so the linked image is checked.
 #
 # Invoked as: cmake -DOBJDUMP=... -DBINARY=... -DSYMBOL=... -P assert_instrumented.cmake
 execute_process(COMMAND ${OBJDUMP} -d --disassemble=${SYMBOL} ${BINARY}

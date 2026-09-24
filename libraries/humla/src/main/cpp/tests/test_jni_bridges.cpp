@@ -1,24 +1,14 @@
 /* Host test for the two hand-written JNI bridges, ../jni_rnnoise.cpp and ../jni_webrtc_apm.cpp.
  *
- * The bridges are executed for real, through a stand-in JNIEnv (jni_env_stub.h) whose arrays are
- * exact-size heap blocks. There is no JVM: the entry points are plain C functions and calling
- * them directly is exactly what the JVM does.
+ * The bridges run for real through a stand-in JNIEnv (jni_env_stub.h) whose arrays are exact-size
+ * heap blocks; the entry points are plain C functions, so calling them directly is what the JVM
+ * does. Three properties that are silent when broken:
  *
- * Three properties are held down here, all of which are silent when broken:
- *
- *   1. Every buffer that crosses the boundary is length-checked. The wrappers underneath take a
- *      bare int16_t* and write a fixed number of samples into it; a Java array that is shorter is
- *      an out-of-bounds write, not an error code. This project has shipped exactly that bug
- *      before (speex writing 640 samples into a 480-element array at ultra-wideband, on every
- *      frame). The short-buffer cases below assert the error code, which is what holds the
- *      property down; the sanitized build additionally traps the write itself, but only where
- *      the code doing the writing is instrumented, so it is evidence and not the assertion.
- *   2. A handle freed twice frees the native object once. Kotlin owns these handles; a release()
- *      that runs twice, or an adapter that is closed and then finalised, is an ordinary mistake
- *      and it corrupts the heap rather than throwing.
- *   3. processRender and processCapture are wired to the *right* C function. Swapping them
- *      returns 0 from every call and simply turns echo cancellation off. The AEC section
- *      measures that, because nothing else can see it.
+ *   1. Every buffer crossing the boundary is length-checked (the wrappers write a fixed number of
+ *      samples into a bare int16_t*). The error code is the assertion; the sanitized build
+ *      additionally traps the write where the writer is instrumented.
+ *   2. A handle freed twice frees the native object once.
+ *   3. processRender and processCapture are wired to the right C function.
  */
 #include "jni_env_stub.h"
 
@@ -44,9 +34,8 @@ static int failures = 0;
         }                                             \
     } while (0)
 
-/* The entry points under test. Declared rather than included, for the same reason test_apm.c is
- * a .c file: if a signature in the bridge ever drifts from what the JVM will call, or from what
- * the Kotlin `external fun` declares, this file stops linking. */
+/* The entry points under test. Declared rather than included, so that a signature drifting from
+ * what the JVM calls (or the Kotlin `external fun` declares) stops this file linking. */
 extern "C" {
 JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_RnnoiseNative_create(JNIEnv*, jobject) noexcept;
 JNIEXPORT jfloat JNICALL Java_se_lublin_humla_audio_native_RnnoiseNative_processFrame(JNIEnv*, jobject, jlong, jshortArray) noexcept;
@@ -70,9 +59,7 @@ JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_WebRtcApmNative_destroy
 #define APM_LEVEL Java_se_lublin_humla_audio_native_WebRtcApmNative_lastCaptureLevelDbfs
 #define APM_DESTROY Java_se_lublin_humla_audio_native_WebRtcApmNative_destroy
 
-/* webrtc::AudioProcessing::Error values the bridges pass through or produce. Spelled out rather
- * than included, because including audio_processing.h here would drag the C++ webrtc headers
- * into a translation unit whose whole subject is that the JNI layer never sees them. */
+/* webrtc::AudioProcessing::Error values, spelled out to keep the webrtc C++ headers out. */
 enum { kNullPointerError = -5, kBadDataLengthError = -8 };
 
 enum { kRate = 48000, kFrame = kRate / 100 };
@@ -112,7 +99,7 @@ static void test_rnnoise(Env& env) {
     }
 
     /* A longer frame is accepted; only the first FRAME_SIZE samples may be touched. The tail is
-     * poisoned with a sentinel so a wrapper that started reading or writing past 480 shows up. */
+     * poisoned with a sentinel to detect a wrapper reading or writing past 480. */
     {
         Array<jshort> frame(HUMLA_RNNOISE_FRAME_SIZE + 64);
         for (jsize i = HUMLA_RNNOISE_FRAME_SIZE; i < frame.length(); i++) frame[i] = 0x5a5a;
@@ -124,8 +111,7 @@ static void test_rnnoise(Env& env) {
         CHECK(tail_intact, "rnnoise does not write past FRAME_SIZE");
     }
 
-    /* A frame that is one sample short must be refused, not processed. Without the check this is
-     * a 2-byte heap overflow per frame; the sanitized build turns it into a report. */
+    /* A frame one sample short must be refused, not processed (a heap overflow otherwise). */
     {
         Array<jshort> frame(HUMLA_RNNOISE_FRAME_SIZE - 1);
         CHECK(RN_PROCESS(e, nullptr, h, frame.as<jshortArray>()) < 0.0f,
@@ -149,10 +135,8 @@ static void test_rnnoise(Env& env) {
         CHECK(jnistub::outstanding_copies() == 0, "no array copy is leaked on the failure path");
     }
 
-    /* Lifetime. destroy() is called twice on purpose: Kotlin owns this handle, and a release()
-     * that runs twice (explicit close plus a finaliser, two adapters sharing one handle) is an
-     * ordinary mistake. Without the guard this is a double free -- heap corruption in the plain
-     * build, an ASan "attempting double-free" report in the sanitized one. */
+    /* destroy() twice on purpose (explicit close plus a finaliser is an ordinary mistake):
+     * without the guard this is a double free. */
     RN_DESTROY(e, nullptr, h);
     RN_DESTROY(e, nullptr, h);
 
@@ -189,15 +173,9 @@ static void test_apm_arguments(Env& env) {
         CHECK(APM_LEVEL(e, nullptr, h) <= -99.0f, "apm reports -100 dBFS for silence");
     }
 
-    /* The short-buffer case. humla_apm writes exactly frame_size samples and cannot see the
-     * length, so the bridge is the only place this can be caught. One sample short is enough:
-     * without the check webrtc writes 480 int16 into 479 elements on every single frame.
-     *
-     * The return code is what pins this, deliberately, and not the sanitizer. Removing the check
-     * was tried: ASan does report it, but from humla_apm.cpp's own level_dbfs -- the one
-     * instrumented translation unit that happens to read the buffer afterwards. The write inside
-     * webrtc's ~250 uninstrumented objects is invisible, so a rearrangement that stopped
-     * level_dbfs touching the frame would take the sanitizer's half of the evidence with it. */
+    /* One sample short: humla_apm writes exactly frame_size samples and cannot see the length.
+     * The return code pins this, not the sanitizer: the write happens inside uninstrumented
+     * webrtc objects. */
     {
         Array<jshort> frame(kFrame - 1);
         CHECK(APM_CAPTURE(e, nullptr, h, frame.as<jshortArray>()) == kBadDataLengthError,
@@ -248,22 +226,12 @@ static void test_apm_arguments(Env& env) {
     APM_DESTROY(e, nullptr, 0);
 }
 
-/* Does processRender really feed the far-end stream, and processCapture really process the
- * near-end one?
+/* Does processRender really feed the far-end stream, and processCapture process the near-end one?
+ * Swapping them returns 0 from every call and silently disables echo cancellation.
  *
- * Swapping the two C functions inside the bridge -- or bridging processRender to
- * humla_apm_process_capture by a copy-paste slip -- returns 0 from every call and leaves the
- * capture path with no echo cancellation whatsoever. No error code, no log line.
- *
- * The rig is the one test_apm.c established and whose thresholds it measured: a -6 dB echo path
- * delayed by three frames (30 ms), 1000 frames (10 s), energies accumulated over the last 100.
- * Both numbers are load-bearing, not padding: over a zero-delay path AEC3 never converges, and
- * at 600 frames a deliberately misaligned reference still reads -23.9 dB and is indistinguishable
- * from a correct one. Shorten either and this test stops discriminating while still passing.
- *
- * `mismatched` runs the same rig with unrelated audio on the far-end stream. It is not testing
- * webrtc -- test_apm.c does that -- it is what makes the ordered arm's threshold meaningful: if
- * both arms came back attenuated, the measurement would be proving nothing about the wiring. */
+ * Same rig as test_apm.c: -6 dB echo path delayed by 30 ms, 10 s, energies over the last second;
+ * shorter runs or a zero-delay path do not converge and would stop discriminating. `mismatched`
+ * feeds unrelated far-end audio so the ordered arm's threshold means something. */
 struct AecResult {
     double input = 0, output = 0;
     jint err = 0;
