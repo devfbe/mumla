@@ -3,8 +3,6 @@ package se.lublin.humla.net
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -14,7 +12,6 @@ import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 
-@RunWith(RobolectricTestRunner::class)
 class TcpFrameReaderTest {
     private fun frame(type: Int, payload: ByteArray): ByteArray {
         val bytes = ByteArrayOutputStream()

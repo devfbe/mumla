@@ -3,12 +3,9 @@ package se.lublin.mumla.util
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import java.net.InetAddress
 import java.net.ServerSocket
 
-@RunWith(RobolectricTestRunner::class)
 class PortProbeTest {
     @Test
     fun aListeningPortIsOpen() {

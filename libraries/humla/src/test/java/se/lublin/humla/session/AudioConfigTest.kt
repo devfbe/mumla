@@ -6,15 +6,12 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.Constants
 
 /**
  * [AudioConfig] carries two decisions of its own: the half-duplex rule and, because HumlaService
  * reconfigures the pipeline on `config != previous`, structural equality over every field it holds.
  */
-@RunWith(RobolectricTestRunner::class)
 class AudioConfigTest {
     private fun config(requested: Boolean, transmitMode: Int) =
         AudioConfig(halfDuplexRequested = requested, transmitMode = transmitMode)

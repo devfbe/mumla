@@ -6,15 +6,12 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.protocol.AudioHandler
 
 /**
  * [AudioHandlerAdapter] dresses the real [AudioHandler] as a [ManagedAudio]. Each delegation must
  * reach the handler rather than a default, and the warning channel must reach whoever registered.
  */
-@RunWith(RobolectricTestRunner::class)
 class AudioHandlerAdapterTest {
     private val handler = mockk<AudioHandler>(relaxed = true)
     private val adapter = AudioHandlerAdapter(handler)

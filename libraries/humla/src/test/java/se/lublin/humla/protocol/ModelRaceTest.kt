@@ -16,12 +16,10 @@
  */
 package se.lublin.humla.protocol
 
-import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import io.mockk.mockk
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.protobuf.Mumble
@@ -49,7 +47,6 @@ import kotlin.concurrent.thread
  * Every assertion is about state accumulated while both threads ran; checking after the feeder has
  * joined would prove nothing.
  */
-@RunWith(RobolectricTestRunner::class)
 class ModelRaceTest {
 
     /** The number of channel frames fed. */
@@ -60,7 +57,7 @@ class ModelRaceTest {
     @Test
     fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread() {
         val handler = ModelHandler(
-            ApplicationProvider.getApplicationContext(),
+            mockk(relaxed = true),
             NoopObserver(),
             SilentLogger,
             null,
@@ -157,7 +154,7 @@ class ModelRaceTest {
     @Test
     fun aChannelLookupNeverMissesAChannelTheProtocolThreadAlreadyStored() {
         val handler = ModelHandler(
-            ApplicationProvider.getApplicationContext(),
+            mockk(relaxed = true),
             NoopObserver(),
             SilentLogger,
             null,

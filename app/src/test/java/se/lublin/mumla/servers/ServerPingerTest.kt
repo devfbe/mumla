@@ -19,15 +19,12 @@ package se.lublin.mumla.servers
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.Server
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 
 /** The ping behind every server list row closes its UDP socket on every path. */
-@RunWith(RobolectricTestRunner::class)
 class ServerPingerTest {
     /** A real socket, so close() has something to close, that records the call. */
     private class RecordingSocket(private val reply: ByteArray?) : DatagramSocket() {

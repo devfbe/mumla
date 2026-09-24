@@ -20,8 +20,6 @@ package se.lublin.humla.audio.capture
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.fakes.FakeResampler
 import se.lublin.humla.audio.capture.fakes.FakeRnnoiseApi
 import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
@@ -34,7 +32,6 @@ import se.lublin.humla.util.HumlaLogger
  * chain that cannot be built takes neither capture nor playback down. The seam lives here because
  * `AudioHandler` cannot be instantiated on the host.
  */
-@RunWith(RobolectricTestRunner::class)
 class CaptureWiringTest {
     private companion object {
         const val FRAME = 480

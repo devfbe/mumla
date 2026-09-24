@@ -4,8 +4,6 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import java.io.DataInputStream
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -23,7 +21,6 @@ import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocket
 
 /** Real TLS handshakes over loopback, directly and through a SOCKS5 proxy as the Tor path does. */
-@RunWith(RobolectricTestRunner::class)
 class HumlaSSLSocketFactoryHandshakeTest {
     private val pool = Executors.newCachedThreadPool()
     private val requestedSni = CopyOnWriteArrayList<String>()

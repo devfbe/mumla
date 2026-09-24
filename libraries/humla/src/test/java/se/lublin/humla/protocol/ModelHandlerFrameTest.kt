@@ -16,12 +16,10 @@
  */
 package se.lublin.humla.protocol
 
-import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import io.mockk.mockk
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.User
 import se.lublin.humla.protobuf.Mumble
@@ -36,7 +34,6 @@ import se.lublin.humla.testutil.SilentLogger
  * lands on the same object. Unknown links are skipped: a link is an attribute of a channel we
  * already have, not a place in the tree.
  */
-@RunWith(RobolectricTestRunner::class)
 class ModelHandlerFrameTest {
 
     private lateinit var handler: ModelHandler
@@ -48,7 +45,7 @@ class ModelHandlerFrameTest {
     }
 
     private fun newHandler() = ModelHandler(
-        ApplicationProvider.getApplicationContext(),
+        mockk(relaxed = true),
         NoopObserver(),
         SilentLogger,
         null,

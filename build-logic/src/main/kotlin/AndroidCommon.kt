@@ -34,6 +34,8 @@ internal fun Project.configureAndroidCommon(android: CommonExtension) {
 
         testOptions.unitTests.apply {
             isIncludeAndroidResources = true
+            // Plain JVM tests may reach android.util.Log; without Robolectric it would throw.
+            isReturnDefaultValues = true
             all { test ->
                 // Robolectric reaches jdk.internal.access, which JDK 21 does not export.
                 test.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
