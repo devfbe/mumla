@@ -26,11 +26,7 @@ import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 
-/**
- * The ping behind every row of the server list. Its UDP socket was never closed, on any path, so
- * each refresh of the list left one socket per server for the finalizer ("A resource failed to
- * call close").
- */
+/** The ping behind every server list row closes its UDP socket on every path. */
 @RunWith(RobolectricTestRunner::class)
 class ServerPingerTest {
     /** A real socket, so close() has something to close, that records the call. */

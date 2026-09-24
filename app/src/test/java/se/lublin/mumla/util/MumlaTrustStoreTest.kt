@@ -34,9 +34,8 @@ import java.nio.file.Files
 import java.security.KeyStore
 
 /**
- * The app's own trust store file is read and written through streams that were closed only on the
- * happy path: a store that failed to load or to save left its descriptor to the finalizer. The
- * check counts this process's open descriptors for the file in /proc/self/fd.
+ * The trust store's streams are closed on every path, including failed loads and saves. The check
+ * counts this process's open descriptors for the file in /proc/self/fd.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaTrustStoreTest {

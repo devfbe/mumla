@@ -26,10 +26,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * The public server list download. Neither the response stream nor the connection was ever
- * released, so every visit to the list left both to the finalizer.
- */
+/** The public server list download releases both the response stream and the connection. */
 @RunWith(RobolectricTestRunner::class)
 class PublicServerFetcherTest {
     private class RecordingStream(text: String) : ByteArrayInputStream(text.toByteArray()) {

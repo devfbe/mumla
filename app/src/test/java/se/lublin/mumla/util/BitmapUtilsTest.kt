@@ -52,22 +52,14 @@ class BitmapUtilsTest {
         assertThat(result.height).isEqualTo(240)
     }
 
-    /**
-     * Touching one bound is still "within bounds": no copy, no rescale. The Java version's `<`
-     * did not merely copy this image, it handed back a rescaled 240x99 — one row short of the
-     * original for an image that was already inside both bounds.
-     */
+    /** Touching one bound is still "within bounds": no copy, no rescale. */
     @Test
     fun imageTouchingOnlyOneBoundIsReturnedUnchanged() {
         val edge = bitmap(240, 100)
         assertThat(BitmapUtils.resizeKeepingAspect(edge, 240, 240)).isSameInstanceAs(edge)
     }
 
-    /**
-     * The other side of that boundary: one pixel over it must be scaled. Without this, moving the
-     * comparison one step further out (`<= maxWidth + 1`) goes unnoticed, and images would be let
-     * through over the bound the caller asked for.
-     */
+    /** One pixel over the bound must be scaled. */
     @Test
     fun anImageOnePixelOverTheBoundIsScaled() {
         val tooWide = bitmap(241, 240)
@@ -84,11 +76,9 @@ class BitmapUtilsTest {
     }
 
     /**
-     * The 1 px floor at the real call site, ChannelChatFragment's outgoing image preview, which
-     * passes 600 x 400. The Java version crashed in createScaledBitmap for *every* image wider
-     * than 600 times its height — not just the pathological 1000x1 — because the fitted short side
-     * truncated to zero. 601x1 is the first width that does it at a height of one; 600x1 is still
-     * inside the bounds and is handed back untouched.
+     * The 1 px floor at the real call site (ChannelChatFragment's preview, 600 x 400): without it
+     * the fitted short side truncates to zero and createScaledBitmap throws. 601x1 is the first
+     * width that does it; 600x1 is inside the bounds and handed back untouched.
      */
     @Test
     fun theSendPathBoundsKeepEveryFlatImageAtOnePixel() {
