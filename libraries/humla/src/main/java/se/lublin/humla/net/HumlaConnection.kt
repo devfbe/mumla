@@ -257,7 +257,7 @@ class HumlaConnection @JvmOverloads constructor(
             } else if (msg.hasServerNonce()) {
                 val serverNonce = msg.serverNonce
                 if (serverNonce.size() == CryptState.AES_BLOCK_SIZE) {
-                    cryptState.mUiResync++
+                    cryptState.resync++
                     cryptState.setDecryptIV(serverNonce.toByteArray())
                 }
             } else {
@@ -276,10 +276,10 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     private fun onPing(msg: Mumble.Ping) {
-        cryptState.mUiRemoteGood = msg.good
-        cryptState.mUiRemoteLate = msg.late
-        cryptState.mUiRemoteLost = msg.lost
-        cryptState.mUiRemoteResync = msg.resync
+        cryptState.remoteGood = msg.good
+        cryptState.remoteLate = msg.late
+        cryptState.remoteLost = msg.lost
+        cryptState.remoteResync = msg.resync
 
         // In microseconds
         val now = elapsed
@@ -288,7 +288,7 @@ class HumlaConnection @JvmOverloads constructor(
         // Forced TCP freezes both UDP counters; judging them would falsely report UDP down.
         if (shouldForceTCP()) return
 
-        val decision = udpHealth.onTcpPing(now, cryptState.mUiGood, cryptState.mUiRemoteGood, usingUdp)
+        val decision = udpHealth.onTcpPing(now, cryptState.good, cryptState.remoteGood, usingUdp)
         if (decision == UdpHealthMonitor.Decision.RESTORE_UDP) {
             usingUdp = true
             udpRestartAttempt = 0
@@ -315,10 +315,10 @@ class HumlaConnection @JvmOverloads constructor(
         }
         val pb = Mumble.Ping.newBuilder()
         pb.timestamp = t
-        pb.good = cryptState.mUiGood
-        pb.late = cryptState.mUiLate
-        pb.lost = cryptState.mUiLost
-        pb.resync = cryptState.mUiResync
+        pb.good = cryptState.good
+        pb.late = cryptState.late
+        pb.lost = cryptState.lost
+        pb.resync = cryptState.resync
         // TODO accumulate stats and send with ping
         sendTCPMessage(pb.build(), HumlaTCPMessageType.Ping)
     }

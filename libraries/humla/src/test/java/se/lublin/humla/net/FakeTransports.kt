@@ -95,7 +95,7 @@ class FakeTcpTransport(private val callbackHandler: Handler) : TcpTransport {
 /**
  * A UDP transport that never opens a socket.
  *
- * It keeps the [CryptState] the factory handed it: `mUiGood` only grows in `CryptState.decrypt()`,
+ * It keeps the [CryptState] the factory handed it: `good` only grows in `CryptState.decrypt()`,
  * so [simulateDatagram] counts the packet the way a successful decrypt would, which makes the
  * [UdpHealthMonitor] decisions that depend on `localGood` reachable.
  */
@@ -130,7 +130,7 @@ class FakeUdpTransport(
 
     /** A datagram that decrypted; raises the crypt state's good counter like a real decrypt. */
     fun simulateDatagram(data: ByteArray) = callbackHandler.post {
-        cryptState.mUiGood++
+        cryptState.good++
         listener.onUDPDataReceived(data)
     }
 }

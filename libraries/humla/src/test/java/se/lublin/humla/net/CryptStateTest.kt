@@ -106,10 +106,10 @@ class CryptStateTest {
         assertThat(dec.accepts(crypted)).isTrue()
 
         repeat(128) { round ->
-            dec.mUiLost = 0
+            dec.lost = 0
             repeat(15) { crypted = enc.encrypt(secret, 10) }
             assertWithMessage("round $round").that(dec.accepts(crypted)).isTrue()
-            assertWithMessage("lost in round $round").that(dec.mUiLost).isEqualTo(14)
+            assertWithMessage("lost in round $round").that(dec.lost).isEqualTo(14)
         }
         assertThat(dec.decryptIV).isEqualTo(enc.encryptIV)
 
@@ -141,11 +141,11 @@ class CryptStateTest {
         var crypted = enc.encrypt(secret, 10)
         repeat(0x30) { crypted = enc.encrypt(secret, 10) }
         assertThat(dec.accepts(crypted)).isTrue()
-        dec.mUiLost = 0
+        dec.lost = 0
         repeat(5) { crypted = enc.encrypt(secret, 10) }
         assertThat(crypted[0].toInt() and 0xFF).isGreaterThan(0x80)
         assertThat(dec.accepts(crypted)).isTrue()
-        assertThat(dec.mUiLost).isEqualTo(4)
+        assertThat(dec.lost).isEqualTo(4)
     }
 
     @Test
@@ -210,13 +210,13 @@ class CryptStateTest {
             assertThat(dec.accepts(packet)).isTrue()
         }
         repeat(3) { assertThat(dec.accepts(enc.encrypt(secret, 10))).isTrue() }
-        val goodBefore = dec.mUiGood
-        val lostBefore = dec.mUiLost
+        val goodBefore = dec.good
+        val lostBefore = dec.lost
 
         assertWithMessage("late across the wrap").that(dec.decrypt(beforeWrap, beforeWrap.size)).isEqualTo(secret)
-        assertThat(dec.mUiGood).isEqualTo(goodBefore + 1)
-        assertThat(dec.mUiLate).isEqualTo(1)
-        assertThat(dec.mUiLost).isEqualTo(lostBefore - 1)
+        assertThat(dec.good).isEqualTo(goodBefore + 1)
+        assertThat(dec.late).isEqualTo(1)
+        assertThat(dec.lost).isEqualTo(lostBefore - 1)
         assertWithMessage("IV restored after the late packet").that(dec.decryptIV).isEqualTo(enc.encryptIV)
         assertWithMessage("replayed").that(dec.accepts(beforeWrap)).isFalse()
         assertThat(dec.accepts(enc.encrypt(secret, 10))).isTrue()

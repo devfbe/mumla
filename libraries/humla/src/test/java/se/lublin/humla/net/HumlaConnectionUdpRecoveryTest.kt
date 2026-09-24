@@ -441,7 +441,7 @@ class HumlaConnectionUdpRecoveryTest {
 
     /**
      * The production restore threshold, end to end. While tunneled, UDP pings keep going out every
-     * five seconds; the replies raise `CryptState.mUiGood` (via the fake's real decrypt) and the
+     * five seconds; the replies raise `CryptState.good` (via the fake's real decrypt) and the
      * server's `good` count, and four of each per window clear a threshold of one.
      */
     @Test

@@ -60,7 +60,7 @@ class UdpHealthMonitor(
     /**
      * Judges the connection on the server's ping, the only message carrying both counters at once.
      *
-     * @param localGood packets this client decrypted successfully (`CryptState.mUiGood`, cumulative).
+     * @param localGood packets this client decrypted successfully (`CryptState.good`, cumulative).
      * @param remoteGood packets the server reported as good in its Ping (cumulative).
      * @param usingUdp whether voice currently goes over UDP.
      */
