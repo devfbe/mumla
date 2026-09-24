@@ -15,69 +15,24 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import android.media.AudioDeviceInfo
 import se.lublin.humla.net.HumlaConnection
-import se.lublin.humla.session.AudioRouter
-import se.lublin.humla.session.CommunicationDevice
-import se.lublin.humla.session.CommunicationDevices
-import se.lublin.mumla.R
+import se.lublin.humla.testutil.FakeCommunicationDevices
+import se.lublin.humla.testutil.testConnection
+import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.Settings
 
 /**
  * The Bluetooth preference drives the router: the service hands the stored wish to it from its
  * first moment and on every change, and the router takes the route whenever a session is
- * synchronized. Only the `CommunicationDevices` seam is faked; the permission, the listener
+ * synchronized. Only the communication-device seam is faked; the permission, the listener
  * registration and `AudioRouter`'s reconciliation are real.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceBluetoothTest {
 
-    /** Reads back the route calls the service makes, with one headset present to route to. */
-    class RecordingDevices : CommunicationDevices {
-        /** device id -> AudioDeviceInfo type, in the order the platform would report them. */
-        val available = linkedMapOf(HEADSET_ID to AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
-        val selectCalls = mutableListOf<Int>()
-        var clearCalls = 0
-        private var selectedId: Int? = null
-        private var listener: (() -> Unit)? = null
-
-        fun startCount(): Int = selectCalls.size
-        fun stopCount(): Int = clearCalls
-
-        override fun available(): List<CommunicationDevice> =
-            available.map { (id, type) -> CommunicationDevice(id, type, "") }
-
-        override fun select(id: Int): Boolean {
-            selectCalls += id
-            selectedId = id
-            return true
-        }
-
-        override fun clear() {
-            clearCalls++
-            selectedId = null
-        }
-
-        override fun setCommunicationMode(on: Boolean) = Unit
-
-        override fun current(): CommunicationDevice? =
-            selectedId?.let { id -> available[id]?.let { CommunicationDevice(id, it, "") } }
-
-        override fun setOnChangedListener(listener: (() -> Unit)?) {
-            this.listener = listener
-        }
-
-        companion object {
-            const val HEADSET_ID = 7
-        }
-    }
-
     private lateinit var app: Application
     private lateinit var service: MumlaService
-    private lateinit var receiver: RecordingDevices
+    private lateinit var receiver: FakeCommunicationDevices
     private lateinit var settings: Settings
-
-    private fun humlaField(name: String) =
-        Class.forName("se.lublin.humla.HumlaService").getDeclaredField(name)
-            .apply { isAccessible = true }
 
     @Before
     fun setUp() {
@@ -88,7 +43,7 @@ class MumlaServiceBluetoothTest {
     }
 
     private fun create(): MumlaService {
-        receiver = RecordingDevices()
+        receiver = FakeCommunicationDevices().apply { available[HEADSET_ID] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
         val controller = Robolectric.buildService(MumlaService::class.java)
         // Before create(): HumlaService.onCreate wraps the platform AudioManager when the seam is
         // unset, and the router it builds there is the one that lives for the service.
@@ -104,8 +59,8 @@ class MumlaServiceBluetoothTest {
         val connection = mockk<HumlaConnection>(relaxed = true)
         every { connection.isConnected } returns true
         every { connection.isSynchronized } returns true
-        humlaField("mConnection").set(service, connection)
-        (humlaField("mRouter").get(service) as AudioRouter).engage()
+        service.testConnection = connection
+        service.testRouter.engage()
     }
 
     private fun preferences() = PreferenceManager.getDefaultSharedPreferences(app)
@@ -121,7 +76,7 @@ class MumlaServiceBluetoothTest {
 
         connect()
 
-        assertThat(receiver.startCount()).isEqualTo(1)
+        assertThat(receiver.selectCalls.size).isEqualTo(1)
     }
 
     /** The router is engaged by the superclass before this class's hook runs. */
@@ -132,7 +87,7 @@ class MumlaServiceBluetoothTest {
 
         assertThat(service.usingBluetoothSco()).isFalse()
         connect()
-        assertThat(receiver.startCount()).isEqualTo(0)
+        assertThat(receiver.selectCalls.size).isEqualTo(0)
     }
 
     /** A denied BLUETOOTH_CONNECT does not gate routing; `setCommunicationDevice` doesn't need it. */
@@ -142,14 +97,14 @@ class MumlaServiceBluetoothTest {
 
         connect()
 
-        assertThat(receiver.startCount()).isEqualTo(1)
+        assertThat(receiver.selectCalls.size).isEqualTo(1)
     }
 
     @Test
     fun routingThatSucceedsSaysNothingInTheChatLog() {
         connect()
 
-        assertThat(receiver.startCount()).isEqualTo(1)
+        assertThat(receiver.selectCalls.size).isEqualTo(1)
         assertThat(warnings()).isEmpty()
     }
 
@@ -160,23 +115,23 @@ class MumlaServiceBluetoothTest {
     fun turningThePreferenceOnWhileConnectedStartsTheHeadset() {
         settings.setBluetoothScoEnabled(false)
         connect()
-        assertThat(receiver.startCount()).isEqualTo(0)
+        assertThat(receiver.selectCalls.size).isEqualTo(0)
 
         settings.setBluetoothScoEnabled(true)
 
-        assertThat(receiver.startCount()).isEqualTo(1)
-        assertThat(receiver.stopCount()).isEqualTo(0)
+        assertThat(receiver.selectCalls.size).isEqualTo(1)
+        assertThat(receiver.clearCalls).isEqualTo(0)
     }
 
     /** The router clears the communication device only when the route is its own. */
     @Test
     fun turningThePreferenceOffWhileConnectedStopsTheHeadset() {
         connect()
-        assertThat(receiver.startCount()).isEqualTo(1)
+        assertThat(receiver.selectCalls.size).isEqualTo(1)
 
         settings.setBluetoothScoEnabled(false)
 
-        assertThat(receiver.stopCount()).isEqualTo(1)
+        assertThat(receiver.clearCalls).isEqualTo(1)
     }
 
     @Test
@@ -186,8 +141,8 @@ class MumlaServiceBluetoothTest {
 
         settings.setBluetoothScoEnabled(false)
 
-        assertThat(receiver.stopCount()).isEqualTo(0)
-        assertThat(receiver.startCount()).isEqualTo(0)
+        assertThat(receiver.clearCalls).isEqualTo(0)
+        assertThat(receiver.selectCalls.size).isEqualTo(0)
     }
 
     /** The router only routes while engaged, so the wish follows the preference at any time. */
@@ -198,8 +153,8 @@ class MumlaServiceBluetoothTest {
         settings.setBluetoothScoEnabled(true)
         assertThat(service.usingBluetoothSco()).isTrue()
 
-        assertThat(receiver.startCount()).isEqualTo(0)
-        assertThat(receiver.stopCount()).isEqualTo(0)
+        assertThat(receiver.selectCalls.size).isEqualTo(0)
+        assertThat(receiver.clearCalls).isEqualTo(0)
     }
 
     @Test
@@ -210,7 +165,11 @@ class MumlaServiceBluetoothTest {
         preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()
         service.onSharedPreferenceChanged(preferences(), Settings.PREF_PTT_SOUND)
 
-        assertThat(receiver.startCount()).isEqualTo(0)
-        assertThat(receiver.stopCount()).isEqualTo(0)
+        assertThat(receiver.selectCalls.size).isEqualTo(0)
+        assertThat(receiver.clearCalls).isEqualTo(0)
+    }
+
+    private companion object {
+        const val HEADSET_ID = 7
     }
 }

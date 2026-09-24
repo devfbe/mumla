@@ -35,20 +35,8 @@ class HumlaServiceVadExtrasTest {
     private fun service(): HumlaService =
         Robolectric.buildService(HumlaService::class.java).create().get()
 
-    private fun field(target: Any, name: String): Any? {
-        var cls: Class<*>? = target.javaClass
-        while (cls != null) {
-            try {
-                return cls.getDeclaredField(name).apply { isAccessible = true }.get(target)
-            } catch (e: NoSuchFieldException) {
-                cls = cls.superclass
-            }
-        }
-        throw AssertionError("no field $name on ${target.javaClass}")
-    }
-
     private fun inputMode(service: HumlaService) =
-        field(service, "mActivityInputMode") as ActivityInputMode
+        service.mActivityInputMode
 
     @Test
     fun `the whole vad configuration reaches the live detector`() {

@@ -4,8 +4,6 @@ import android.app.Application
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Intent
-import android.os.Looper
-import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import androidx.preference.PreferenceManager
@@ -38,11 +36,15 @@ import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.util.HumlaCallbacks
+import se.lublin.humla.testutil.testCallbacks
+import se.lublin.humla.testutil.testConnection
+import se.lublin.humla.testutil.testConnectionState
+import se.lublin.humla.testutil.testModelHandler
 import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
+import se.lublin.mumla.testing.idleMainLooper
 
 /**
  * Characterizes MumlaService: observer callbacks, lifecycle hooks, non-audio preference arms and
@@ -61,17 +63,10 @@ class MumlaServiceCharacterizationTest {
     private lateinit var self: User
     private val sent = mutableListOf<Pair<HumlaTCPMessageType, ProtoMessage>>()
 
-    private fun humlaField(name: String) =
-        HumlaService::class.java.getDeclaredField(name).apply { isAccessible = true }
-
-    private fun mumlaField(name: String) =
-        MumlaService::class.java.getDeclaredField(name).apply { isAccessible = true }
-
     private fun preferences() = PreferenceManager.getDefaultSharedPreferences(app)
 
-    private fun callbacks() = humlaField("mCallbacks").get(service) as HumlaCallbacks
+    private fun callbacks() = service.testCallbacks
 
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     private val notificationManager: NotificationManager
         get() = app.getSystemService(NotificationManager::class.java)
@@ -85,8 +80,8 @@ class MumlaServiceCharacterizationTest {
         service = controller.get()
         overlay = mockk(relaxed = true)
         hotCorner = mockk(relaxed = true)
-        mumlaField("mChannelOverlay").set(service, overlay)
-        mumlaField("mHotCorner").set(service, hotCorner)
+        service.mChannelOverlay = overlay
+        service.mHotCorner = hotCorner
     }
 
     private var destroyed = false
@@ -101,7 +96,7 @@ class MumlaServiceCharacterizationTest {
      * MumlaService's own half runs in full.
      */
     private fun synchronize() {
-        humlaField("mModelHandler").set(service, null)
+        service.testModelHandler = null
         service.onConnectionSynchronized()
     }
 
@@ -119,9 +114,9 @@ class MumlaServiceCharacterizationTest {
         self = user(SELF, muted, deafened)
         val model = mockk<ModelHandler>(relaxed = true)
         every { model.getUser(SELF) } returns self
-        humlaField("mConnection").set(service, connection)
-        humlaField("mModelHandler").set(service, model)
-        humlaField("mConnectionState").set(service, HumlaService.ConnectionState.CONNECTED)
+        service.testConnection = connection
+        service.testModelHandler = model
+        service.testConnectionState = HumlaService.ConnectionState.CONNECTED
     }
 
     private fun user(session: Int, muted: Boolean = false, deafened: Boolean = false): User {
@@ -175,7 +170,7 @@ class MumlaServiceCharacterizationTest {
         service.logInfo("hello")
         service.logWarning("careful")
         service.logError("broken")
-        idle()
+        idleMainLooper()
 
         assertThat(service.getMessageLog().map { (it as IChatMessage.InfoMessage).type to it.body }).containsExactly(
             IChatMessage.InfoMessage.Type.WARNING to "careful",
@@ -188,7 +183,7 @@ class MumlaServiceCharacterizationTest {
         connect()
 
         service.logInfo("hello")
-        idle()
+        idleMainLooper()
 
         val entry = service.getMessageLog().single() as IChatMessage.InfoMessage
         assertThat(entry.type).isEqualTo(IChatMessage.InfoMessage.Type.INFO)
@@ -201,7 +196,7 @@ class MumlaServiceCharacterizationTest {
         val message = textMessage("hi there")
 
         callbacks().onMessageLogged(message)
-        idle()
+        idleMainLooper()
 
         assertThat((service.getMessageLog().single() as IChatMessage.TextMessage).message).isSameInstanceAs(message)
     }
@@ -220,7 +215,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun theReturnedLogCannotBeWrittenThrough() {
         service.logWarning("one")
-        idle()
+        idleMainLooper()
 
         @Suppress("UNCHECKED_CAST")
         val log = service.getMessageLog() as MutableList<IChatMessage>
@@ -232,7 +227,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun clearMessageLogEmptiesIt() {
         service.logWarning("one")
-        idle()
+        idleMainLooper()
 
         service.clearMessageLog()
 
@@ -247,7 +242,7 @@ class MumlaServiceCharacterizationTest {
         preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
 
         callbacks().onMessageLogged(textMessage("ping"))
-        idle()
+        idleMainLooper()
 
         assertThat(shadowOf(notificationManager).allNotifications).isNotEmpty()
     }
@@ -258,7 +253,7 @@ class MumlaServiceCharacterizationTest {
         preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, false).commit()
 
         callbacks().onMessageLogged(textMessage("ping"))
-        idle()
+        idleMainLooper()
 
         assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
     }
@@ -269,7 +264,7 @@ class MumlaServiceCharacterizationTest {
         preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
 
         callbacks().onMessageLogged(textMessage("<b>hi</b> <a href=\"https://x.example\">there</a>"))
-        idle()
+        idleMainLooper()
 
         val extras = shadowOf(notificationManager).allNotifications.single().extras
         assertThat(extras.getCharSequence(NotificationCompat.EXTRA_TEXT).toString()).isEqualTo("hi there")
@@ -282,7 +277,7 @@ class MumlaServiceCharacterizationTest {
         connect()
         preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
         callbacks().onMessageLogged(textMessage("ping"))
-        idle()
+        idleMainLooper()
 
         service.clearChatNotifications()
 
@@ -291,7 +286,7 @@ class MumlaServiceCharacterizationTest {
 
     private fun installTts(): TextToSpeech {
         val tts = mockk<TextToSpeech>(relaxed = true)
-        mumlaField("mTTS").set(service, tts)
+        service.mTTS = tts
         preferences().edit().putBoolean(Settings.PREF_USE_TTS, true).commit()
         return tts
     }
@@ -308,7 +303,7 @@ class MumlaServiceCharacterizationTest {
         val tts = installTts()
 
         callbacks().onMessageLogged(textMessage("<b>hi</b> there"))
-        idle()
+        idleMainLooper()
 
         verify(exactly = 1) {
             tts.speak(app.getString(R.string.notification_message, "alice", "hi there"), TextToSpeech.QUEUE_ADD, null)
@@ -322,7 +317,7 @@ class MumlaServiceCharacterizationTest {
         preferences().edit().putBoolean(Settings.PREF_USE_TTS, false).commit()
 
         callbacks().onMessageLogged(textMessage("hi"))
-        idle()
+        idleMainLooper()
 
         assertThat(spoken(tts)).isEmpty()
     }
@@ -333,7 +328,7 @@ class MumlaServiceCharacterizationTest {
         val tts = installTts()
 
         callbacks().onMessageLogged(textMessage("hi"))
-        idle()
+        idleMainLooper()
 
         assertThat(spoken(tts)).isEmpty()
     }
@@ -347,7 +342,7 @@ class MumlaServiceCharacterizationTest {
 
         callbacks().onMessageLogged(textMessage(atThreshold))
         callbacks().onMessageLogged(textMessage(atThreshold + "y"))
-        idle()
+        idleMainLooper()
 
         assertThat(spoken(tts)).containsExactly(prefix + atThreshold)
     }
@@ -365,7 +360,7 @@ class MumlaServiceCharacterizationTest {
                     "<a href=\"https://other.org/x\">named</a>",
             ),
         )
-        idle()
+        idleMainLooper()
 
         val link = app.getString(R.string.chat_message_tts_short_link, "example.org")
         assertThat(spoken(tts)).containsExactly(
@@ -379,7 +374,7 @@ class MumlaServiceCharacterizationTest {
         val tts = installTts()
 
         callbacks().onMessageLogged(textMessage("see <a href=\"https://example.org/a\">https://example.org/a</a>"))
-        idle()
+        idleMainLooper()
 
         assertThat(spoken(tts)).containsExactly(
             app.getString(R.string.notification_message, "alice", "see https://example.org/a"),
@@ -394,12 +389,12 @@ class MumlaServiceCharacterizationTest {
         service.onSharedPreferenceChanged(preferences(), Settings.PREF_USE_TTS)
 
         verify(exactly = 1) { tts.shutdown() }
-        assertThat(mumlaField("mTTS").get(service)).isNull()
+        assertThat(service.mTTS).isNull()
 
         preferences().edit().putBoolean(Settings.PREF_USE_TTS, true).commit()
         service.onSharedPreferenceChanged(preferences(), Settings.PREF_USE_TTS)
 
-        assertThat(mumlaField("mTTS").get(service)).isNotNull()
+        assertThat(service.mTTS).isNotNull()
     }
 
     // ---- the foreground notification ------------------------------------------------------------
@@ -407,7 +402,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun connectingEntersTheForegroundWithTheConnectingText() {
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
 
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
         assertThat(foregroundText()).isEqualTo(app.getString(R.string.mumlaConnecting))
@@ -418,7 +413,7 @@ class MumlaServiceCharacterizationTest {
         preferences().edit().putBoolean(Settings.PREF_USE_TOR, true).commit()
 
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
 
         assertThat(foregroundText()).isEqualTo(app.getString(R.string.mumlaConnecting) + " (Tor)")
     }
@@ -427,7 +422,7 @@ class MumlaServiceCharacterizationTest {
     fun connectedShowsTheConnectedTextAndTheActions() {
         service.renderSessionState(SessionState.Connecting)
         service.renderSessionState(SessionState.Connected)
-        idle()
+        idleMainLooper()
 
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
         assertThat(shadowOf(notificationManager).getNotification(FOREGROUND_ID).actions).hasLength(3)
@@ -437,21 +432,21 @@ class MumlaServiceCharacterizationTest {
     fun ourOwnMuteAndDeafenStateIsStoredAndShown() {
         connect()
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
 
         callbacks().onUserStateUpdated(user(SELF, muted = true, deafened = false))
-        idle()
+        idleMainLooper()
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.status_notify_muted))
         assertThat(Settings.getInstance(app).isMuted()).isTrue()
         assertThat(Settings.getInstance(app).isDeafened()).isFalse()
 
         callbacks().onUserStateUpdated(user(SELF, muted = true, deafened = true))
-        idle()
+        idleMainLooper()
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.status_notify_muted_and_deafened))
         assertThat(Settings.getInstance(app).isDeafened()).isTrue()
 
         callbacks().onUserStateUpdated(user(SELF))
-        idle()
+        idleMainLooper()
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
         assertThat(Settings.getInstance(app).isMuted()).isFalse()
     }
@@ -460,10 +455,10 @@ class MumlaServiceCharacterizationTest {
     fun somebodyElsesStateChangesNothing() {
         connect()
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
 
         callbacks().onUserStateUpdated(user(SELF + 1, muted = true, deafened = true))
-        idle()
+        idleMainLooper()
 
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.mumlaConnecting))
         assertThat(Settings.getInstance(app).isMuted()).isFalse()
@@ -474,11 +469,11 @@ class MumlaServiceCharacterizationTest {
         connect()
         every { connection.getSession() } throws NotSynchronizedException()
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
 
         callbacks().onUserStateUpdated(user(SELF, muted = true))
         callbacks().onUserStateUpdated(null)
-        idle()
+        idleMainLooper()
 
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.mumlaConnecting))
         assertThat(Settings.getInstance(app).isMuted()).isFalse()
@@ -488,10 +483,10 @@ class MumlaServiceCharacterizationTest {
     fun aNullUserStateChangesNothing() {
         connect()
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
 
         callbacks().onUserStateUpdated(null)
-        idle()
+        idleMainLooper()
 
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.mumlaConnecting))
     }
@@ -499,11 +494,11 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aPermissionDenialRepostsTheNotification() {
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
         val before = shadowOf(notificationManager).getNotification(FOREGROUND_ID)
 
         callbacks().onPermissionDenied("no")
-        idle()
+        idleMainLooper()
 
         assertThat(shadowOf(notificationManager).getNotification(FOREGROUND_ID)).isNotSameInstanceAs(before)
     }
@@ -511,12 +506,12 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aPermissionDenialRepostsNothingWhileNotificationsAreSuppressed() {
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
         val before = shadowOf(notificationManager).getNotification(FOREGROUND_ID)
         service.setSuppressNotifications(true)
 
         callbacks().onPermissionDenied("no")
-        idle()
+        idleMainLooper()
 
         assertThat(shadowOf(notificationManager).getNotification(FOREGROUND_ID)).isSameInstanceAs(before)
     }
@@ -525,7 +520,7 @@ class MumlaServiceCharacterizationTest {
     fun aDisconnectWithAnErrorShowsTheReconnectPrompt() {
         service.renderSessionState(SessionState.Connecting)
         service.renderSessionState(SessionState.Disconnected(error()))
-        idle()
+        idleMainLooper()
 
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
         assertThat(reconnectPrompt()!!.extras.getString(Notification.EXTRA_TEXT)).isEqualTo("socket reset")
@@ -537,7 +532,7 @@ class MumlaServiceCharacterizationTest {
 
         service.renderSessionState(SessionState.Connecting)
         service.renderSessionState(SessionState.Disconnected(error()))
-        idle()
+        idleMainLooper()
 
         assertThat(reconnectPrompt()).isNull()
     }
@@ -546,7 +541,7 @@ class MumlaServiceCharacterizationTest {
     fun aCleanDisconnectShowsNoPrompt() {
         service.renderSessionState(SessionState.Connecting)
         service.renderSessionState(SessionState.Disconnected(null))
-        idle()
+        idleMainLooper()
 
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
         assertThat(reconnectPrompt()).isNull()
@@ -555,7 +550,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun cancelReconnectHidesThePrompt() {
         service.renderSessionState(SessionState.Disconnected(error()))
-        idle()
+        idleMainLooper()
 
         service.cancelReconnect()
 
@@ -569,7 +564,7 @@ class MumlaServiceCharacterizationTest {
         assertThat(service.isErrorShown()).isTrue()
 
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
         assertThat(service.isErrorShown()).isFalse()
 
         service.markErrorShown()
@@ -579,7 +574,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun acknowledgingTheErrorHidesThePromptWhenNoReconnectIsUnderway() {
         service.renderSessionState(SessionState.Disconnected(error()))
-        idle()
+        idleMainLooper()
 
         service.markErrorShown()
 
@@ -596,7 +591,7 @@ class MumlaServiceCharacterizationTest {
 
         callbacks().onUserConnected(other)
         callbacks().onUserStateUpdated(other)
-        idle()
+        idleMainLooper()
 
         assertThat(blobRequests().map { it.sessionTextureList }).containsExactly(listOf(9), listOf(9))
     }
@@ -613,7 +608,7 @@ class MumlaServiceCharacterizationTest {
         callbacks().onUserConnected(none)
         callbacks().onUserStateUpdated(fetched)
         callbacks().onUserStateUpdated(none)
-        idle()
+        idleMainLooper()
 
         assertThat(blobRequests()).isEmpty()
     }
@@ -677,7 +672,7 @@ class MumlaServiceCharacterizationTest {
     }
 
     private fun proximityLockHeld(): Boolean {
-        val lock = mumlaField("mProximityLock").get(service) as PowerManager.WakeLock?
+        val lock = service.mProximityLock
         return lock != null && lock.isHeld &&
             shadowOf(lock).tag == "Mumla:Proximity" &&
             ShadowPowerManager.getLatestWakeLock() === lock
@@ -689,16 +684,16 @@ class MumlaServiceCharacterizationTest {
         connect()
         service.logWarning("old")
         callbacks().onMessageLogged(textMessage("ping"))
-        idle()
+        idleMainLooper()
         synchronize()
 
         service.onConnectionDisconnected(null)
-        idle()
+        idleMainLooper()
 
         assertThat(talkReceivers()).isEmpty()
         verify { overlay.hide() }
         verify { hotCorner.setShown(false) }
-        assertThat(mumlaField("mProximityLock").get(service)).isNull()
+        assertThat(service.mProximityLock).isNull()
         // The chat log and the chat notification survive a loss; only Disconnected clears them.
         assertThat(service.getMessageLog()).isNotEmpty()
     }
@@ -709,7 +704,7 @@ class MumlaServiceCharacterizationTest {
         connect()
         service.logWarning("old")
         callbacks().onMessageLogged(textMessage("ping"))
-        idle()
+        idleMainLooper()
         assertThat(shadowOf(notificationManager).allNotifications).isNotEmpty()
 
         service.renderSessionState(SessionState.Disconnected(null))
@@ -837,7 +832,7 @@ class MumlaServiceCharacterizationTest {
         connect()
         val model = mockk<ModelHandler>(relaxed = true)
         every { model.getUser(any()) } returns null
-        humlaField("mModelHandler").set(service, model)
+        service.testModelHandler = model
         service.onMuteToggled()
         service.onDeafenToggled()
 
@@ -905,7 +900,7 @@ class MumlaServiceCharacterizationTest {
     fun theHotCornerDrivesTheTalkKeys() {
         connect()
         pushToTalk(toggle = false)
-        val listener = mumlaField("mHotCornerListener").get(service) as MumlaHotCorner.MumlaHotCornerListener
+        val listener = service.mHotCornerListener
 
         listener.onHotCornerDown()
         assertThat(service.isTalking()).isTrue()
@@ -949,7 +944,7 @@ class MumlaServiceCharacterizationTest {
             connect()
             service.onSharedPreferenceChanged(preferences(), key)
             assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo(app.getString(R.string.change_requires_reconnect))
-            humlaField("mConnection").set(service, null)
+            service.testConnection = null
         }
     }
 
@@ -992,15 +987,15 @@ class MumlaServiceCharacterizationTest {
         synchronize()
         service.renderSessionState(SessionState.Connecting)
         service.renderSessionState(SessionState.Disconnected(error()))
-        idle()
+        idleMainLooper()
         service.renderSessionState(SessionState.Connecting)
-        idle()
+        idleMainLooper()
 
         preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
 
         controller.destroy()
         destroyed = true
-        idle()
+        idleMainLooper()
 
         verify { tts.shutdown() }
         assertThat(talkReceivers()).isEmpty()
@@ -1009,7 +1004,7 @@ class MumlaServiceCharacterizationTest {
         // The observer and the preference listener are gone: neither reaches the service now. A
         // registered observer would post a chat notification here (and add to a log that is gone).
         callbacks().onMessageLogged(textMessage("after"))
-        idle()
+        idleMainLooper()
         assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
         preferences().edit().putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_PTT).commit()
         verify(exactly = 0) { overlay.setPushToTalkShown(any()) }
@@ -1032,7 +1027,7 @@ class MumlaServiceCharacterizationTest {
 
     private fun talk(user: User) {
         callbacks().onUserTalkStateUpdated(user)
-        idle()
+        idleMainLooper()
     }
 
     @Test
@@ -1164,7 +1159,7 @@ class MumlaServiceCharacterizationTest {
 
         callbacks().onUserStateUpdated(user(SELF, muted = true))
         callbacks().onPermissionDenied("no")
-        idle()
+        idleMainLooper()
 
         assertThat(shadowOf(service).lastForegroundNotification).isNull()
         assertThat(shadowOf(notificationManager).getNotification(FOREGROUND_ID)).isNull()
@@ -1176,7 +1171,7 @@ class MumlaServiceCharacterizationTest {
         service.renderSessionState(SessionState.Connecting)
 
         callbacks().onUserStateUpdated(user(SELF, muted = false, deafened = true))
-        idle()
+        idleMainLooper()
 
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
     }
@@ -1204,7 +1199,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aSynchronizationTheSuperclassRejectsGoesNoFurther() {
         preferences().edit().putBoolean(Settings.PREF_MUTED, true).commit()
-        humlaField("mConnection").set(service, null) // super dereferences it: NullPointerException
+        service.testConnection = null // super dereferences it: NullPointerException
 
         service.onConnectionSynchronized()
 
@@ -1217,7 +1212,7 @@ class MumlaServiceCharacterizationTest {
         preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
         service.renderSessionState(SessionState.Disconnected(error()))
         callbacks().onMessageLogged(textMessage("ping"))
-        idle()
+        idleMainLooper()
         assertThat(shadowOf(notificationManager).allNotifications).hasSize(2)
 
         controller.destroy()

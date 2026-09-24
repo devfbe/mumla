@@ -64,37 +64,8 @@ class HumlaServiceCharacterizationTest {
         return controller.get()
     }
 
-    // ---------------------------------------------------------------- reflection helpers
-
-    /** Reads a private field by name, walking up the hierarchy. The field names are the contract. */
-    private fun field(target: Any, name: String): Any? {
-        var c: Class<*>? = target.javaClass
-        while (c != null) {
-            try {
-                return c.getDeclaredField(name).apply { isAccessible = true }.get(target)
-            } catch (e: NoSuchFieldException) {
-                c = c.superclass
-            }
-        }
-        throw AssertionError("no field $name on ${target.javaClass}")
-    }
-
     /** The input mode in force. */
-    private fun inputMode(service: HumlaService): Any = field(service, "mInputMode")!!
-
-    /** Writes a private field by name. Used only to reach a state the public API cannot produce. */
-    private fun setField(target: Any, name: String, value: Any?) {
-        var c: Class<*>? = target.javaClass
-        while (c != null) {
-            try {
-                c.getDeclaredField(name).apply { isAccessible = true }.set(target, value)
-                return
-            } catch (e: NoSuchFieldException) {
-                c = c.superclass
-            }
-        }
-        throw AssertionError("no field $name on ${target.javaClass}")
-    }
+    private fun inputMode(service: HumlaService): Any = service.mInputMode
 
     /**
      * A service whose observer cancels every connection attempt from inside `onConnecting`, which
@@ -300,9 +271,9 @@ class HumlaServiceCharacterizationTest {
     }
 
     /** Every `EXTRAS_*` constant on HumlaService, by reflection, so the table above cannot go stale. */
-    private fun declaredExtraKeys(): Set<String> = HumlaService::class.java.declaredFields
+    private fun declaredExtraKeys(): Set<String> = HumlaService::class.java.fields
         .filter { it.name.startsWith("EXTRAS_") && it.type == String::class.java }
-        .map { it.apply { isAccessible = true }.get(null) as String }
+        .map { it.get(null) as String }
         .toSet()
 
     /** One bundle carrying one key, with a value of the type `configureExtras` reads it back as. */
@@ -427,7 +398,7 @@ class HumlaServiceCharacterizationTest {
 
         service.configureExtras(Bundle().apply { putFloat(HumlaService.EXTRAS_DETECTION_THRESHOLD, 0.25f) })
 
-        val mode = field(service, "mActivityInputMode") as ActivityInputMode
+        val mode = service.mActivityInputMode
         assertThat(mode.vadConfig.startThreshold).isEqualTo(0.25f)
     }
 
@@ -493,7 +464,7 @@ class HumlaServiceCharacterizationTest {
             )
         ).isFalse()
 
-        assertThat(field(service, "mAccessTokens")).isEqualTo(listOf("a", "b"))
+        assertThat(service.mAccessTokens).isEqualTo(listOf("a", "b"))
     }
 
     // ---------------------------------------------------------------- disconnection

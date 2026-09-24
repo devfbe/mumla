@@ -31,6 +31,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import se.lublin.humla.session.AudioRouter
+import se.lublin.humla.testutil.FakeCommunicationDevices
+import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.Settings
 
 /**
@@ -41,7 +43,7 @@ import se.lublin.mumla.Settings
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceAudioRouteTest {
     private lateinit var app: Application
-    private lateinit var devices: MumlaServiceBluetoothTest.RecordingDevices
+    private lateinit var devices: FakeCommunicationDevices
     private lateinit var service: MumlaService
     private lateinit var controller: ServiceController<MumlaService>
 
@@ -53,8 +55,7 @@ class MumlaServiceAudioRouteTest {
     }
 
     private fun create() {
-        devices = MumlaServiceBluetoothTest.RecordingDevices().apply {
-            available.clear()
+        devices = FakeCommunicationDevices().apply {
             available[EARPIECE] = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
             available[SPEAKER] = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
         }
@@ -64,23 +65,16 @@ class MumlaServiceAudioRouteTest {
         service = controller.create().get()
     }
 
-    private fun router(): AudioRouter =
-        Class.forName("se.lublin.humla.HumlaService").getDeclaredField("mRouter")
-            .apply { isAccessible = true }.get(service) as AudioRouter
+    private fun router(): AudioRouter = service.testRouter
 
-    private fun proximityLock(): PowerManager.WakeLock? =
-        MumlaService::class.java.getDeclaredField("mProximityLock")
-            .apply { isAccessible = true }.get(service) as PowerManager.WakeLock?
+    private fun proximityLock(): PowerManager.WakeLock? = service.mProximityLock
 
     private fun proximityLockHeld(): Boolean {
         val lock = proximityLock()
         return lock != null && lock.isHeld && shadowOf(lock).tag == "Mumla:Proximity"
     }
 
-    private fun reportRoute(type: Int?) {
-        MumlaService::class.java.getDeclaredMethod("onAudioRouteChanged", Integer::class.java)
-            .apply { isAccessible = true }.invoke(service, type)
-    }
+    private fun reportRoute(type: Int?) = service.applyAudioRoute(type)
 
     @Test
     fun aRepeatedEarpieceReportKeepsOneLockAndLeaksNone() {

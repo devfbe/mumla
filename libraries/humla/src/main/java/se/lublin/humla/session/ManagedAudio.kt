@@ -92,7 +92,7 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
     internal fun initialize(builder: AudioHandler.Builder, params: AudioSessionParams): AudioHandler =
         builder.initialize(params.self, params.maxBandwidth, params.codec, params.targetId)
 
-    /** The config-to-builder mapping, split from `initialize` so JVM tests can inspect it. */
+    /** The config-to-builder mapping, split from `initialize` so JVM tests can inspect it through [into]. */
     internal fun builder(
         context: Context,
         logger: HumlaLogger,
@@ -100,8 +100,9 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
         params: AudioSessionParams,
         encodeListener: AudioHandler.AudioEncodeListener,
         outputListener: AudioOutput.AudioOutputListener,
+        into: AudioHandler.Builder = AudioHandler.Builder(),
     ): AudioHandler.Builder =
-        AudioHandler.Builder()
+        into
             .setContext(context)
             .setLogger(logger)
             .setAudioStream(config.playbackStream)

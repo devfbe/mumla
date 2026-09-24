@@ -30,6 +30,7 @@ import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.widget.Toast
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
 import se.lublin.humla.Constants
@@ -66,29 +67,41 @@ class MumlaService : HumlaService(),
     private var mReconnectNotification: MumlaReconnectNotification? = null
 
     /** Headset / AVRCP media buttons while connected. */
-    private var mMediaSession: MumlaMediaSession? = null
+    @VisibleForTesting
+    internal var mMediaSession: MumlaMediaSession? = null
+        private set
 
-    private lateinit var mChannelOverlay: MumlaOverlay
+    @VisibleForTesting
+    internal lateinit var mChannelOverlay: MumlaOverlay
 
     /** Proximity lock, held while voice goes to the earpiece. */
-    private var mProximityLock: PowerManager.WakeLock? = null
+    @VisibleForTesting
+    internal var mProximityLock: PowerManager.WakeLock? = null
+        private set
 
-    private var mPTTSoundEnabled = false
+    @VisibleForTesting
+    internal var mPTTSoundEnabled = false
+        private set
 
-    private var mShortTtsMessagesEnabled = false
+    @VisibleForTesting
+    internal var mShortTtsMessagesEnabled = false
+        private set
 
     /** An error causing disconnection was dismissed by the user; a hint not to bother them again. */
     private var mErrorShown = false
     private val mMessageLog = ChatMessageLog()
     private var mSuppressNotifications = false
 
-    private var mTTS: TextToSpeech? = null
+    @VisibleForTesting
+    internal var mTTS: TextToSpeech? = null
     private val mTTSInitListener = TextToSpeech.OnInitListener { status ->
         if (status == TextToSpeech.ERROR) logWarning(getString(R.string.tts_failed))
     }
 
-    private lateinit var mHotCorner: MumlaHotCorner
-    private val mHotCornerListener = object : MumlaHotCorner.MumlaHotCornerListener {
+    @VisibleForTesting
+    internal lateinit var mHotCorner: MumlaHotCorner
+    @VisibleForTesting
+    internal val mHotCornerListener = object : MumlaHotCorner.MumlaHotCornerListener {
         override fun onHotCornerDown() {
             onTalkKeyDown()
         }
@@ -423,7 +436,10 @@ class MumlaService : HumlaService(),
     }
 
     /** Earpiece route (chosen or default) turns the proximity sensor on; anything else turns it off. */
-    override fun onAudioRouteChanged(type: Int?) {
+    override fun onAudioRouteChanged(type: Int?) = applyAudioRoute(type)
+
+    @VisibleForTesting
+    internal fun applyAudioRoute(type: Int?) {
         setProximitySensorOn(type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
     }
 

@@ -30,9 +30,10 @@ import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
 import se.lublin.humla.HumlaService
 import se.lublin.humla.audio.capture.VadConfig
-import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.AudioRouter
+import se.lublin.humla.testutil.testActivityInputMode
+import se.lublin.humla.testutil.testEchoOverrides
+import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 
@@ -53,22 +54,10 @@ class MumlaServiceAudioPreferencesTest {
         service = Robolectric.buildService(MumlaService::class.java).create().get()
     }
 
-    private fun field(target: Any, name: String): Any? {
-        var cls: Class<*>? = target.javaClass
-        while (cls != null) {
-            try {
-                return cls.getDeclaredField(name).apply { isAccessible = true }.get(target)
-            } catch (e: NoSuchFieldException) {
-                cls = cls.superclass
-            }
-        }
-        throw AssertionError("no field $name on ${target.javaClass}")
-    }
-
     /** Preferences land in an immutable [se.lublin.humla.session.AudioConfig]. */
     private fun audioConfig() = service.getAudioConfigForTest()
 
-    private fun vadConfig(): VadConfig = (field(service, "mActivityInputMode") as ActivityInputMode).vadConfig
+    private fun vadConfig(): VadConfig = service.testActivityInputMode.vadConfig
 
     private fun change(key: String) = service.onSharedPreferenceChanged(prefs, key)
 
@@ -136,7 +125,7 @@ class MumlaServiceAudioPreferencesTest {
     /** The output without a headset - what the handset mode was - is the router's default. */
     @Test
     fun `the default output reaches the router`() {
-        val router = field(service, "mRouter") as AudioRouter
+        val router = service.testRouter
         prefs.edit().putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_EARPIECE).commit()
         change(Settings.PREF_DEFAULT_OUTPUT)
         assertThat(router.earpieceByDefault).isTrue()
@@ -154,11 +143,11 @@ class MumlaServiceAudioPreferencesTest {
     fun `an echo cancellation override reaches the service`() {
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
-        assertThat(field(service, "mEchoOverrides")).isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
+        assertThat(service.testEchoOverrides).isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
 
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.EARPIECE, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.EARPIECE))
-        assertThat(field(service, "mEchoOverrides")).isEqualTo(
+        assertThat(service.testEchoOverrides).isEqualTo(
             mapOf(AudioDeviceCategory.SPEAKER to false, AudioDeviceCategory.EARPIECE to false),
         )
     }

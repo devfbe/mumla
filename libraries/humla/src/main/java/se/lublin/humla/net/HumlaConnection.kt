@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.google.protobuf.ByteString
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.MessageLite
@@ -94,18 +95,32 @@ class HumlaConnection @JvmOverloads constructor(
     val protocolLooper: Looper get() = protocolHandler.looper
 
     // Authentication
-    private var certificate: ByteArray? = null
-    private var certificatePassword: String? = null
-    private var trustStorePath: String? = null
-    private var trustStorePassword: String? = null
-    private var trustStoreFormat: String? = null
+    @VisibleForTesting
+    internal var certificate: ByteArray? = null
+        private set
+    @VisibleForTesting
+    internal var certificatePassword: String? = null
+        private set
+    @VisibleForTesting
+    internal var trustStorePath: String? = null
+        private set
+    @VisibleForTesting
+    internal var trustStorePassword: String? = null
+        private set
+    @VisibleForTesting
+    internal var trustStoreFormat: String? = null
+        private set
 
     // Networking and protocols
     @Volatile private var tcp: TcpTransport? = null
     @Volatile private var udp: UdpTransport? = null
     @Volatile private var usingUdp = true
-    @Volatile private var forceTcp = false
-    @Volatile private var useTor = false
+    @Volatile @VisibleForTesting
+    internal var forceTcp = false
+        private set
+    @Volatile @VisibleForTesting
+    internal var useTor = false
+        private set
     /** Written on the protocol thread, only ever to true; read via [isConnected]/[isSynchronized]. */
     @Volatile private var connected = false
     @Volatile private var synchronizedWithServer = false

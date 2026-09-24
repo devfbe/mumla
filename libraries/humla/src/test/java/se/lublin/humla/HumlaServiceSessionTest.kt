@@ -143,13 +143,13 @@ class HumlaServiceSessionTest {
         h.mainLooper.idle()
         val connection = h.service.getConnection()!!
 
-        assertThat(field(connection, "forceTcp")).isEqualTo(true)
-        assertThat(field(connection, "useTor")).isEqualTo(false)
-        assertThat(field(connection, "certificate") as ByteArray?).isEqualTo(byteArrayOf(1, 2, 3))
-        assertThat(field(connection, "certificatePassword")).isEqualTo("cert-pw")
-        assertThat(field(connection, "trustStorePath")).isEqualTo("/store")
-        assertThat(field(connection, "trustStorePassword")).isEqualTo("store-pw")
-        assertThat(field(connection, "trustStoreFormat")).isEqualTo("BKS")
+        assertThat(connection.forceTcp).isEqualTo(true)
+        assertThat(connection.useTor).isEqualTo(false)
+        assertThat(connection.certificate).isEqualTo(byteArrayOf(1, 2, 3))
+        assertThat(connection.certificatePassword).isEqualTo("cert-pw")
+        assertThat(connection.trustStorePath).isEqualTo("/store")
+        assertThat(connection.trustStorePassword).isEqualTo("store-pw")
+        assertThat(connection.trustStoreFormat).isEqualTo("BKS")
     }
 
     /** The other configuration, where Tor is on: `useTor` is what carries it to the connection. */
@@ -161,19 +161,7 @@ class HumlaServiceSessionTest {
         h.service.connect()
         h.mainLooper.idle()
 
-        assertThat(field(h.service.getConnection()!!, "useTor")).isEqualTo(true)
-    }
-
-    private fun field(target: Any, name: String): Any? {
-        var cls: Class<*>? = target.javaClass
-        while (cls != null) {
-            try {
-                return cls.getDeclaredField(name).apply { isAccessible = true }.get(target)
-            } catch (e: NoSuchFieldException) {
-                cls = cls.superclass
-            }
-        }
-        throw AssertionError("no field $name on ${target.javaClass}")
+        assertThat(h.service.getConnection()!!.useTor).isEqualTo(true)
     }
 
     // ---------------------------------------------------------------- loss and backoff

@@ -31,14 +31,12 @@ import se.lublin.mumla.BuildConfig
  */
 @RunWith(RobolectricTestRunner::class)
 class DebugStrictModeTest {
-    private fun flag(name: String): Int =
-        StrictMode::class.java.getDeclaredField(name).apply { isAccessible = true }.getInt(null)
-
+    /** The policy's flag set, as its `toString` spells it: `[StrictMode.VmPolicy; mask=N]`. */
     private fun mask(policy: StrictMode.VmPolicy): Int =
-        StrictMode.VmPolicy::class.java.getDeclaredField("mask").apply { isAccessible = true }.getInt(policy)
+        Regex("mask=(-?\\d+)").find(policy.toString())!!.groupValues[1].toInt()
 
-    private val leakDetection get() = flag("DETECT_VM_CLOSABLE_LEAKS")
-    private val penaltyLog get() = flag("PENALTY_LOG")
+    private val closableLeaksLogged: Int
+        get() = mask(StrictMode.VmPolicy.Builder().detectLeakedClosableObjects().penaltyLog().build())
 
     @After
     fun tearDown() {
@@ -49,10 +47,9 @@ class DebugStrictModeTest {
     fun theDebugApplicationLogsLeakedClosables() {
         // Unit tests run the debug variant, so this checks the MumlaApplication wiring too.
         assertThat(BuildConfig.DEBUG).isTrue()
+        assertThat(closableLeaksLogged).isNotEqualTo(0)
 
-        val mask = mask(StrictMode.getVmPolicy())
-        assertThat(mask and leakDetection).isEqualTo(leakDetection)
-        assertThat(mask and penaltyLog).isEqualTo(penaltyLog)
+        assertThat(mask(StrictMode.getVmPolicy()) and closableLeaksLogged).isEqualTo(closableLeaksLogged)
     }
 
     @Test
@@ -73,6 +70,6 @@ class DebugStrictModeTest {
 
         val mask = mask(StrictMode.getVmPolicy())
         assertThat(mask and mask(existing)).isEqualTo(mask(existing))
-        assertThat(mask and leakDetection).isEqualTo(leakDetection)
+        assertThat(mask and closableLeaksLogged).isEqualTo(closableLeaksLogged)
     }
 }

@@ -100,7 +100,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     internal val isTcpForced: Boolean get() = mForceTcp
     private var mUseTor = false
     private var mClientName: String? = null
-    private var mAccessTokens: List<String>? = null
+    @VisibleForTesting
+    internal var mAccessTokens: List<String>? = null
+        private set
     private var mTrustStore: String? = null
     private var mTrustStorePassword: String? = null
     private var mTrustStoreFormat: String? = null
@@ -112,36 +114,51 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private var mAudioConfig = AudioConfig()
 
     /** The user's echo-cancellation choices per kind of device; see EXTRAS_ECHO_CANCELLATION_BY_DEVICE. */
-    private var mEchoOverrides: Map<AudioDeviceCategory, Boolean> = emptyMap()
+    @VisibleForTesting
+    internal var mEchoOverrides: Map<AudioDeviceCategory, Boolean> = emptyMap()
+        private set
 
     /** Held by identity: the audio thread and `isTalking()` must see the same toggle object. */
-    private lateinit var mInputMode: IInputMode
+    @VisibleForTesting
+    internal lateinit var mInputMode: IInputMode
+        private set
 
     private var mVoiceTargetId: Byte = 0
     private lateinit var mWhisperTargetList: WhisperTargetList
 
     private lateinit var mWakeLock: PowerManager.WakeLock
     private lateinit var mHandler: Handler
-    private lateinit var mCallbacks: HumlaCallbacks
+    @VisibleForTesting
+    internal lateinit var mCallbacks: HumlaCallbacks
+        private set
 
     // Written on the main thread, read on the protocol thread (ModelHandler logs through this).
     @Volatile
-    private var mConnection: HumlaConnection? = null
-    private var mConnectionState: ConnectionState = ConnectionState.DISCONNECTED
+    @VisibleForTesting
+    internal var mConnection: HumlaConnection? = null
+    @VisibleForTesting
+    internal var mConnectionState: ConnectionState = ConnectionState.DISCONNECTED
 
     @Volatile
-    private var mModelHandler: ModelHandler? = null
+    @VisibleForTesting
+    internal var mModelHandler: ModelHandler? = null
     /** Owns the audio pipeline's lifecycle on its own thread, so nothing here joins on main. */
-    private lateinit var mAudioController: AudioController
+    @VisibleForTesting
+    internal lateinit var mAudioController: AudioController
+        private set
 
     /** Engaged only while a session is synchronized. */
-    private lateinit var mRouter: AudioRouter
+    @VisibleForTesting
+    internal lateinit var mRouter: AudioRouter
+        private set
 
     /** Last warning logged, so a refusal repeated per reconnect attempt is logged once. */
     @Volatile
     private var mLastWarning: String? = null
 
-    private lateinit var mActivityInputMode: ActivityInputMode
+    @VisibleForTesting
+    internal lateinit var mActivityInputMode: ActivityInputMode
+        private set
     private lateinit var mToggleInputMode: ToggleInputMode
     private lateinit var mContinuousInputMode: ContinuousInputMode
 

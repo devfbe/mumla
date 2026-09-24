@@ -376,11 +376,9 @@ class MumlaServiceForegroundTest {
             .putBoolean(se.lublin.mumla.Settings.PREF_SHORT_TTS_MESSAGES, true)
             .commit()
         val fresh = Robolectric.buildService(MumlaService::class.java).create().get()
-        fun field(name: String) = MumlaService::class.java.getDeclaredField(name).apply { isAccessible = true }.get(fresh)
-
-        assertThat(field("mTTS")).isNotNull()
-        assertThat(field("mPTTSoundEnabled")).isEqualTo(true)
-        assertThat(field("mShortTtsMessagesEnabled")).isEqualTo(true)
+        assertThat(fresh.mTTS).isNotNull()
+        assertThat(fresh.mPTTSoundEnabled).isTrue()
+        assertThat(fresh.mShortTtsMessagesEnabled).isTrue()
         fresh.onDestroy()
     }
 }
