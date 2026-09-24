@@ -30,13 +30,13 @@ public class UserCommentFragment extends AbstractCommentFragment {
     public void requestComment(final IHumlaService service) {
         if (!service.isConnected())
             return;
-        service.registerObserver(new HumlaObserver() {
+        observeComment(service, new HumlaObserver() {
             @Override
             public void onUserStateUpdated(IUser user) {
                 if(user.getSession() == getSession() &&
                         user.getComment() != null) {
                     loadComment(user.getComment());
-                    service.unregisterObserver(this);
+                    stopObservingComment();
                 }
             }
         });

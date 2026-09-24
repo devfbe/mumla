@@ -30,13 +30,13 @@ public class ChannelDescriptionFragment extends AbstractCommentFragment {
     public void requestComment(final IHumlaService service) {
         if (!service.isConnected())
             return;
-        service.registerObserver(new HumlaObserver() {
+        observeComment(service, new HumlaObserver() {
             @Override
             public void onChannelStateUpdated(IChannel channel) {
                 if(channel.getId() == getChannelId() &&
                         channel.getDescription() != null) {
                     loadComment(channel.getDescription());
-                    service.unregisterObserver(this);
+                    stopObservingComment();
                 }
             }
         });

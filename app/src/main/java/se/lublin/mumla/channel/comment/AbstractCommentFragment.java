@@ -31,6 +31,7 @@ import androidx.fragment.app.DialogFragment;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import se.lublin.humla.IHumlaService;
+import se.lublin.humla.util.IHumlaObserver;
 import se.lublin.mumla.R;
 import se.lublin.mumla.util.HumlaServiceProvider;
 import se.lublin.mumla.util.UntrustedHtmlWebViewKt;
@@ -46,6 +47,8 @@ public abstract class AbstractCommentFragment extends DialogFragment {
     private EditText mCommentEdit;
     private HumlaServiceProvider mProvider;
     private String mComment;
+    private IHumlaService mObservedService;
+    private IHumlaObserver mCommentObserver;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -122,6 +125,29 @@ public abstract class AbstractCommentFragment extends DialogFragment {
                     .setNegativeButton(R.string.close, null)
                     .create();
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        stopObservingComment();
+        super.onDestroy();
+    }
+
+    /** Registers the observer waiting for the comment; it is unregistered at the latest in onDestroy. */
+    protected void observeComment(IHumlaService service, IHumlaObserver observer) {
+        stopObservingComment();
+        mObservedService = service;
+        mCommentObserver = observer;
+        service.registerObserver(observer);
+    }
+
+    /** Unregisters the observer registered by {@link #observeComment}, if any. */
+    protected void stopObservingComment() {
+        if (mObservedService != null && mCommentObserver != null) {
+            mObservedService.unregisterObserver(mCommentObserver);
+        }
+        mObservedService = null;
+        mCommentObserver = null;
     }
 
     protected void loadComment(String comment) {
