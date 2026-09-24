@@ -51,6 +51,9 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
         if (error[0] < 0) throw NativeAudioException("Opus encoder initialization failed with error: ${error[0]}")
         api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_VBR_REQUEST, 0)
         api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_BITRATE_REQUEST, bitrate)
+        api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_INBAND_FEC_REQUEST, 1)
+        api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_PACKET_LOSS_PERC_REQUEST, EXPECTED_PACKET_LOSS_PERCENT)
+        api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_DTX_REQUEST, 0)
     }
 
     @Throws(NativeAudioException::class)
@@ -114,5 +117,10 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
         destroyed = true
         api.destroy(state)
         state = 0L
+    }
+
+    companion object {
+        /** Loss rate the encoder plans its in-band FEC for; higher spends more bits on redundancy. */
+        const val EXPECTED_PACKET_LOSS_PERCENT = 10
     }
 }

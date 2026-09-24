@@ -3,12 +3,14 @@ package se.lublin.humla.audio.encoder
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import se.lublin.humla.audio.native.OpusEncoderApi
+import se.lublin.humla.audio.native.OpusEncoderNative
 import se.lublin.humla.net.PacketBuffer
 
 class OpusEncoderTest {
 
     private class FakeOpus : OpusEncoderApi {
         val encodedFrameSizes = mutableListOf<Int>()
+        val settings = linkedMapOf<Int, Int>()
         var destroys = 0
         override fun create(sampleRate: Int, channels: Int, application: Int, error: IntArray): Long {
             error[0] = 0
@@ -19,7 +21,10 @@ class OpusEncoderTest {
             out[0] = 0x11; out[1] = 0x22; out[2] = 0x33
             return 3
         }
-        override fun ctlSetInt(state: Long, request: Int, value: Int): Int = 0
+        override fun ctlSetInt(state: Long, request: Int, value: Int): Int {
+            settings[request] = value
+            return 0
+        }
         override fun ctlGetInt(state: Long, request: Int, value: IntArray): Int {
             value[0] = 40000
             return 0
@@ -62,6 +67,21 @@ class OpusEncoderTest {
         pb.rewind()
         assertThat(pb.readLong()).isEqualTo(3L or (1L shl 13)) // 8195: two-byte varint 0xA0 0x03
         assertThat(pb.dataBlock(3)).isEqualTo(byteArrayOf(0x11, 0x22, 0x33))
+    }
+
+    @Test
+    fun `the encoder is configured for constant bitrate with in-band FEC and no DTX`() {
+        val fake = FakeOpus()
+        OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
+
+        assertThat(fake.settings).containsExactly(
+            OpusEncoderNative.OPUS_SET_VBR_REQUEST, 0,
+            OpusEncoderNative.OPUS_SET_BITRATE_REQUEST, 40000,
+            OpusEncoderNative.OPUS_SET_INBAND_FEC_REQUEST, 1,
+            OpusEncoderNative.OPUS_SET_PACKET_LOSS_PERC_REQUEST, OpusEncoder.EXPECTED_PACKET_LOSS_PERCENT,
+            OpusEncoderNative.OPUS_SET_DTX_REQUEST, 0,
+        )
+        assertThat(OpusEncoder.EXPECTED_PACKET_LOSS_PERCENT).isEqualTo(10)
     }
 
     @Test

@@ -31,6 +31,9 @@ object OpusEncoderNative : OpusEncoderApi {
     const val OPUS_SET_BITRATE_REQUEST = 4002
     const val OPUS_GET_BITRATE_REQUEST = 4003
     const val OPUS_SET_VBR_REQUEST = 4006
+    const val OPUS_SET_INBAND_FEC_REQUEST = 4012
+    const val OPUS_SET_PACKET_LOSS_PERC_REQUEST = 4014
+    const val OPUS_SET_DTX_REQUEST = 4016
 
     init {
         System.loadLibrary("humla_opus")

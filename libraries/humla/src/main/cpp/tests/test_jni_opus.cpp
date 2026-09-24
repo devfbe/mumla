@@ -169,10 +169,49 @@ static void test_decoder(Env& env) {
     ENC(destroy)(e, nullptr, enc);
 }
 
+/* In-band FEC requested through the bridge ends up as LBRR data in the packets, which the
+ * decoder can then use to rebuild a lost frame from the packet after it. */
+static void test_inband_fec(Env& env) {
+    JNIEnv* e = env.get();
+    Array<jint> err(1);
+    jlong enc = ENC(create)(e, nullptr, kRate, 1, OPUS_APPLICATION_VOIP, err.as<jintArray>());
+    jlong dec = DEC(create)(e, nullptr, kRate, 1, err.as<jintArray>());
+    CHECK(enc != 0 && dec != 0, "codec create succeeds");
+    if (enc == 0 || dec == 0) return;
+
+    CHECK(ENC(ctlSetInt)(e, nullptr, enc, OPUS_SET_VBR_REQUEST, 0) == OPUS_OK, "set cbr");
+    CHECK(ENC(ctlSetInt)(e, nullptr, enc, OPUS_SET_BITRATE_REQUEST, 40000) == OPUS_OK, "set bitrate");
+    CHECK(ENC(ctlSetInt)(e, nullptr, enc, OPUS_SET_INBAND_FEC_REQUEST, 1) == OPUS_OK, "enable fec");
+    CHECK(ENC(ctlSetInt)(e, nullptr, enc, OPUS_SET_PACKET_LOSS_PERC_REQUEST, 10) == OPUS_OK, "set loss");
+    CHECK(ENC(ctlSetInt)(e, nullptr, enc, OPUS_SET_DTX_REQUEST, 0) == OPUS_OK, "disable dtx");
+    Array<jint> value(1);
+    CHECK(ENC(ctlGetInt)(e, nullptr, enc, OPUS_GET_INBAND_FEC_REQUEST, value.as<jintArray>()) == OPUS_OK
+              && value[0] == 1, "fec reads back as enabled");
+
+    int withLbrr = 0;
+    Array<jbyte> packet(512);
+    int len = 0;
+    for (int i = 0; i < 50; i++) {
+        len = encode_frame(e, enc, packet);
+        CHECK(len > 0, "a frame encodes with fec on");
+        if (len > 0 && opus_packet_has_lbrr(reinterpret_cast<const unsigned char*>(packet.data()), len) == 1)
+            withLbrr++;
+    }
+    CHECK(withLbrr > 0, "packets carry lbrr data once fec is on");
+
+    Array<jfloat> out(kFrame);
+    CHECK(DEC(decodeFloat)(e, nullptr, dec, packet.as<jbyteArray>(), len, out.as<jfloatArray>(), kFrame, 1)
+              == kFrame, "a lost frame decodes from the next packet's fec data");
+
+    DEC(destroy)(e, nullptr, dec);
+    ENC(destroy)(e, nullptr, enc);
+}
+
 int main() {
     Env env;
     test_encoder(env);
     test_decoder(env);
+    test_inband_fec(env);
     CHECK(jnistub::outstanding_copies() == 0, "no array copy outstanding at exit");
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
