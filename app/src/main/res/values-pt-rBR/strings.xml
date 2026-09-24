@@ -38,10 +38,6 @@
     <string name="drawer_tokens">Tokens de Acesso</string>
     <string name="drawer_server">Todos os Canais</string>
     <string name="drawer_not_connected">Não Conectado</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nova mensagem</item>
-        <item quantity="other">%d novas mensagens</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d usuário</item>
         <item quantity="other">%d usuários</item>

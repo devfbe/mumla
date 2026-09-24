@@ -50,9 +50,6 @@
     <string name="app_news_summary">檢視最近的更新內容</string>
     <string name="app_news">最近更新</string>
     <string name="app_news_footer_on_startup">這些訊息可以到關於頁面再次檢視。</string>
-    <plurals name="notification_unread_many">
-        <item quantity="other">%d 則新訊息</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="other">%d 名使用者</item>
     </plurals>

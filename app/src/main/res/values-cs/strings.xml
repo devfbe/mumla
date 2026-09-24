@@ -2,11 +2,6 @@
 <resources>
     <string name="server_info_max_bandwidth">Maximálně %.1f kbit/s</string>
     <string name="user_menu_reset_comment">Obnovit komentář</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nová zpráva</item>
-        <item quantity="few">%d nové zprávy</item>
-        <item quantity="other">%d nových zpráv</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d uživatel</item>
         <item quantity="few">%d uživatelé</item>

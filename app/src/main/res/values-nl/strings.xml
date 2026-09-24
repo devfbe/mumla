@@ -151,10 +151,6 @@
         <item quantity="one">%d gebruiker</item>
         <item quantity="other">%d gebruikers</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nieuw bericht</item>
-        <item quantity="other">%d nieuwe berichten</item>
-    </plurals>
     <string name="donation_thanks">Bedankt voor de donatie.</string>
     <string name="orbot_tor_failed">Kon geen verbinding maken met lokale Tor proxy op SOCKS-poort %d.
 \n

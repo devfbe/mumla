@@ -87,10 +87,6 @@
         <item quantity="other">%d n iseqdacen</item>
     </plurals>
     <string name="image_confirm_send">Ad tt-tazneḍ izen-a?</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d n yizen amaynut</item>
-        <item quantity="other">%d n yiznan imaynuten</item>
-    </plurals>
     <string name="messageToUser">Aru-yas izen i useqdac \'%s\'</string>
     <string name="server_match_info">Isem: %1$s\nAsenneftaɣ: %2$s:%3$d\nIseqdacen: %4$d / %5$d\nLqem: %6$s \nTamurt: %7$s \nAkud n ugani: %8$d ms</string>
     <string name="user_menu_mute">Sgugem</string>

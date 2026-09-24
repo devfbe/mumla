@@ -160,10 +160,6 @@
         <item quantity="one">%d பயனர்</item>
         <item quantity="other">%d பயனர்கள்</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d புதிய செய்தி</item>
-        <item quantity="other">%d புதிய செய்திகள்</item>
-    </plurals>
     <string name="add">கூட்டு</string>
     <string name="grant_perm_microphone">ஓரி இசைவு வழங்கவும்.</string>
     <string name="grant_perm_notifications">அறிவிப்புகளை அனுப்ப இசைவு வழங்கவும்.</string>

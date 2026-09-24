@@ -2,10 +2,6 @@
 <resources>
     <string name="sortBy">Järjestä…</string>
     <string name="connecting_to_server">Yhdistetään %s…</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d uusi viesti</item>
-        <item quantity="other">%d uusia viestejä</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d käyttäjä</item>
         <item quantity="other">%d käyttäjät</item>

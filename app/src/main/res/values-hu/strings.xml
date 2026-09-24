@@ -142,10 +142,6 @@
     <string name="default_">Alapértelmezett</string>
     <string name="donation_thanks">Köszönjük a támogatást.</string>
     <string name="image_confirm_send">Elküldöd az üzenetet?</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d új üzenet</item>
-        <item quantity="other">%d új üzenetek</item>
-    </plurals>
     <string name="error_fetching_servers">Nem sikerült lekérni a szerverek listáját.
 \nBiztosan csatlakozva vagy az Internethez?</string>
     <string name="confirm">Megerősítés</string>

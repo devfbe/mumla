@@ -228,10 +228,6 @@
         <item quantity="one">%d user</item>
         <item quantity="other">%d users</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d new message</item>
-        <item quantity="other">%d new messages</item>
-    </plurals>
 
     <string name="app_news">What\'s New</string>
     <string name="app_news_summary">View the latest updates</string>

@@ -173,11 +173,6 @@
         <item quantity="many">%d utilisateurs</item>
         <item quantity="other">%d utilisateurs</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nouveau message</item>
-        <item quantity="many">%d nouveaux messages</item>
-        <item quantity="other">%d nouveaux messages</item>
-    </plurals>
     <string name="shout_include_linked">Voix vers les salons liés</string>
     <string name="shout_include_subchannels">Voix vers les sous-salons</string>
     <string name="donation_thanks">Merci pour le don.</string>

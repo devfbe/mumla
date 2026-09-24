@@ -8,10 +8,6 @@
     <string name="drawer_close">Yan Menüyü Kapat</string>
     <string name="drawer_open">Yan Menüyü Aç</string>
     <string name="overlay">Kaplama</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d yeni mesaj</item>
-        <item quantity="other">%d yeni mesaj</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d kullanıcı</item>
         <item quantity="other">%d kullanıcı</item>

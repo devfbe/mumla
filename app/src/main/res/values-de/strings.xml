@@ -162,10 +162,6 @@
         <item quantity="one">%d Benutzer</item>
         <item quantity="other">%d Benutzer</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d neue Nachricht</item>
-        <item quantity="other">%d neue Nachrichten</item>
-    </plurals>
     <string name="context_channel_unlink_all">Alle Links aufheben</string>
     <string name="context_channel_link">Link</string>
     <string name="change_requires_reconnect">Stellen Sie die Verbindung wieder her, um neue Einstellungen zu verwenden.</string>

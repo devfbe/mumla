@@ -52,10 +52,6 @@
     <string name="server_info_codec">Kodek: %s</string>
     <string name="server_info_host">Fjernvert %1$s (port %2$d)</string>
     <string name="server_info_latency">%.2f ms latens</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d ny melding</item>
-        <item quantity="other">%d nye meldinger</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d bruker</item>
         <item quantity="other">%d brukere</item>

@@ -152,10 +152,6 @@
         <item quantity="one">%d usuario</item>
         <item quantity="other">%d usuarios</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d mensaje nuevo</item>
-        <item quantity="other">%d mensajes nuevos</item>
-    </plurals>
     <string name="shout_failed">No se pudo crear el objetivo de voz.</string>
     <string name="certificate_import_success">Importó el certificado %s.</string>
     <string name="no_certificate">No hay certificado</string>

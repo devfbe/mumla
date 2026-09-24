@@ -93,11 +93,6 @@
         <item quantity="many">%d utenti</item>
         <item quantity="other">%d utenti</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nuovo messaggio</item>
-        <item quantity="many">%d utente</item>
-        <item quantity="other">%d utente</item>
-    </plurals>
     <string name="decrypt_certificate">Decrittografa Certificato</string>
     <string name="current_chat_target">Destinazione chat attuale</string>
     <string name="shout_target">Destinazione Voce: %s</string>

@@ -138,10 +138,6 @@
     <string name="expand">Amplia</string>
     <string name="confirm_reset_comment">Esteu segur que voleu restablir el comentari de %s\?</string>
     <string name="overlay">Superposició</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nou missatge</item>
-        <item quantity="other">%d nous missatges</item>
-    </plurals>
     <string name="orbot_tor_failed">No s\'ha pogut connectar amb el proxy local de Tor al port SOCKS %d (SOCKS).
 \n
 \nAssegureu-vos que l\'aplicació Orbot funciona.</string>

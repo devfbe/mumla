@@ -184,12 +184,6 @@
         <item quantity="many">%d пользователей</item>
         <item quantity="other">%d пользователей</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d новое сообщение</item>
-        <item quantity="few">%d новых сообщения</item>
-        <item quantity="many">%d новых сообщений</item>
-        <item quantity="other">%d новых сообщений</item>
-    </plurals>
     <string name="donation_thanks">Спасибо за пожертвование.</string>
     <string name="image_confirm_send">Отправить это изображение\?</string>
     <string name="no_ptt_key">Кнопка не выбрана</string>

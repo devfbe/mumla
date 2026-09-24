@@ -189,10 +189,6 @@
         <item quantity="one">%d χρήστης</item>
         <item quantity="other">%d χρήστες</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d νέο μήνυμα</item>
-        <item quantity="other">%d νέα μηνύματα</item>
-    </plurals>
     <string name="chat_message_to">%1$s → %2$s</string>
     <string name="connection_lost_reconnecting">Η σύνδεση χάθηκε – επανασύνδεση…</string>
     <string name="foreground_start_failed">Δεν ήταν δυνατή η διατήρηση του Mumla στο παρασκήνιο. Η φωνή μπορεί να σταματήσει όταν σβήσει η οθόνη.</string>

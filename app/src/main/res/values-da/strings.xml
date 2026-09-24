@@ -59,10 +59,6 @@
     <string name="password">Adgangskode</string>
     <string name="invalid_certificate">Ugyldigt certifikat kunne ikke indlæses.</string>
     <string name="context_channel_link">Link</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d ny besked</item>
-        <item quantity="other">%d nye beskeder</item>
-    </plurals>
     <string name="default_">Standard</string>
     <string name="donation_thanks">Tak for donationen.</string>
     <plurals name="search_channel_users">

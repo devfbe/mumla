@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <plurals name="notification_unread_many">
-        <item quantity="other">%d ข้อความใหม่</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="other">%d ชื่อผู้ใช้</item>
     </plurals>

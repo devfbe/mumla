@@ -133,9 +133,6 @@
     <plurals name="search_channel_users">
         <item quantity="other">%d user</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="other">%d pesan baru</item>
-    </plurals>
     <string name="drawer_header_servers">Server</string>
     <string name="drawer_public">Server Publik</string>
     <string name="user_menu_reset_comment">Reset Komentar</string>
