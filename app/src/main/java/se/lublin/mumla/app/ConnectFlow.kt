@@ -19,10 +19,12 @@ package se.lublin.mumla.app
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
+import android.content.Intent
+import android.net.Uri
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -54,15 +56,18 @@ class ConnectFlow(
     private val settings: Settings,
     private val service: () -> IMumlaService?,
 ) {
-    private var pendingServer: Server? = null
-    private var notificationsAsked = false
+    private val gate = PermissionGate(PermissionHost())
+    private val microphoneRequest = requestLauncher(Manifest.permission.RECORD_AUDIO)
+    private val notificationsRequest = requestLauncher(Manifest.permission.POST_NOTIFICATIONS)
 
     /** Waits for a disconnect to connect elsewhere; see [awaitDisconnectThenConnect]. */
     private var pendingReconnect: Job? = null
 
+    private fun requestLauncher(permission: String) =
+        activity.registerForActivityResult(RequestPermission()) { gate.onResult(permission, it) }
+
     fun connect(server: Server) {
-        pendingServer = server
-        continueWithPermissions()
+        gate.ensure { connectNow(server) }
     }
 
     /** Asks for the username to use on the public [server], then connects. */
@@ -83,46 +88,56 @@ class ConnectFlow(
             .show()
     }
 
-    private fun continueWithPermissions() {
-        fun isGranted(permission: String) =
+    private inner class PermissionHost : PermissionGate.Host {
+        override val sdkInt: Int get() = Build.VERSION.SDK_INT
+
+        override var microphoneAsked: Boolean
+            get() = settings.isMicrophonePermissionAsked()
+            set(value) = settings.setMicrophonePermissionAsked(value)
+
+        override var notificationsAsked: Boolean
+            get() = settings.isNotificationPermissionAsked()
+            set(value) = settings.setNotificationPermissionAsked(value)
+
+        override fun isGranted(permission: String) =
             ContextCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED
-        val askNotifications = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationsAsked &&
-            !isGranted(Manifest.permission.POST_NOTIFICATIONS)
-        val server = pendingServer
-        when {
-            !isGranted(Manifest.permission.RECORD_AUDIO) ->
-                request(Manifest.permission.RECORD_AUDIO, REQUEST_RECORD_AUDIO)
-            askNotifications -> request(Manifest.permission.POST_NOTIFICATIONS, REQUEST_POST_NOTIFICATIONS)
-            server == null -> Log.w(TAG, "No pending server after getting permissions")
-            else -> {
-                pendingServer = null
-                connectNow(server)
+
+        override fun shouldShowRationale(permission: String) =
+            ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+
+        override fun request(permission: String) {
+            if (permission == Manifest.permission.RECORD_AUDIO) {
+                microphoneRequest.launch(permission)
+            } else {
+                notificationsRequest.launch(permission)
             }
         }
-    }
 
-    private fun request(permission: String, requestCode: Int) {
-        ActivityCompat.requestPermissions(activity, arrayOf(permission), requestCode)
-    }
+        override fun explainMicrophone(onContinue: () -> Unit) {
+            MaterialAlertDialogBuilder(activity)
+                .setMessage(R.string.microphone_permission_rationale)
+                .setPositiveButton(android.R.string.ok) { _, _ -> onContinue() }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
 
-    fun onRequestPermissionsResult(requestCode: Int, grantResults: IntArray) {
-        if (grantResults.isEmpty()) return
-        when (requestCode) {
-            REQUEST_RECORD_AUDIO ->
-                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    continueWithPermissions()
-                } else {
-                    Toast.makeText(activity, R.string.grant_perm_microphone, Toast.LENGTH_LONG).show()
+        override fun offerMicrophoneSettings() {
+            MaterialAlertDialogBuilder(activity)
+                .setMessage(R.string.microphone_permission_settings)
+                .setPositiveButton(R.string.open_settings) { _, _ ->
+                    val uri = Uri.fromParts("package", activity.packageName, null)
+                    activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
                 }
-            REQUEST_POST_NOTIFICATIONS -> {
-                notificationsAsked = true
-                val permission = Manifest.permission.POST_NOTIFICATIONS
-                val explain = ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
-                if (grantResults[0] == PackageManager.PERMISSION_DENIED && explain) {
-                    Toast.makeText(activity, R.string.grant_perm_notifications, Toast.LENGTH_LONG).show()
-                }
-                continueWithPermissions()
-            }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+
+        override fun onMicrophoneDenied() {
+            Toast.makeText(activity, R.string.grant_perm_microphone, Toast.LENGTH_LONG).show()
+        }
+
+        override fun onNotificationsDenied() {
+            Toast.makeText(activity, R.string.grant_perm_notifications, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -182,9 +197,6 @@ class ConnectFlow(
     }
 
     private companion object {
-        const val TAG = "ConnectFlow"
-        const val REQUEST_RECORD_AUDIO = 1
-        const val REQUEST_POST_NOTIFICATIONS = 2
         const val TOR_PROBE_TIMEOUT_MS = 2000
     }
 }

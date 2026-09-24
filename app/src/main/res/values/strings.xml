@@ -212,6 +212,9 @@
     <string name="shout_target">Shouting to %s</string>
     <string name="shout_configure">Configure Voice Target</string>
     <string name="grant_perm_microphone">Please grant microphone permission.</string>
+    <string name="microphone_permission_rationale">Mumla needs the microphone so that others on the server can hear you.</string>
+    <string name="microphone_permission_settings">Microphone access is turned off for Mumla. To connect to a server, allow it in the app settings.</string>
+    <string name="open_settings">Open settings</string>
     <string name="grant_perm_notifications">Please grant permission to send notifications.</string>
     <string name="grant_perm_draw_over_apps">Please grant permission to display over other apps.</string>
     <string name="bluetooth_perm_denied">Bluetooth headset stays switched on. Without the Nearby devices permission, some devices will refuse to route audio to it.</string>

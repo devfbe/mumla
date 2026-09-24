@@ -88,11 +88,11 @@ class MumlaActivity :
     private var boundService: IMumlaService? = null
 
     private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            serviceModel.attach((binder as MumlaService.MumlaBinder).getService())
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            serviceModel.attach((binder as? MumlaService.MumlaBinder)?.getService())
         }
 
-        override fun onServiceDisconnected(name: ComponentName) {
+        override fun onServiceDisconnected(name: ComponentName?) {
             serviceModel.attach(null)
         }
     }
@@ -392,13 +392,6 @@ class MumlaActivity :
             repository.io(save)
             showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
         }
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        @Suppress("DEPRECATION")
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        connectFlow.onRequestPermissionsResult(requestCode, grantResults)
     }
 
     companion object {

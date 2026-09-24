@@ -298,6 +298,18 @@ class Settings private constructor(context: Context) {
         preferences.edit().putBoolean(PREF_BATTERY_OPTIMIZATION_ASKED, asked).apply()
     }
 
+    fun isMicrophonePermissionAsked(): Boolean = preferences.getBoolean(PREF_MICROPHONE_PERMISSION_ASKED, false)
+
+    fun setMicrophonePermissionAsked(asked: Boolean) {
+        preferences.edit().putBoolean(PREF_MICROPHONE_PERMISSION_ASKED, asked).apply()
+    }
+
+    fun isNotificationPermissionAsked(): Boolean = preferences.getBoolean(PREF_NOTIFICATION_PERMISSION_ASKED, false)
+
+    fun setNotificationPermissionAsked(asked: Boolean) {
+        preferences.edit().putBoolean(PREF_NOTIFICATION_PERMISSION_ASKED, asked).apply()
+    }
+
     companion object {
         const val PREF_INPUT_METHOD = "audioInputMethod"
         const val ARRAY_INPUT_METHOD_VOICE = "voiceActivity"
@@ -494,6 +506,12 @@ class Settings private constructor(context: Context) {
         /** True once the battery-optimization exemption has been offered. */
         const val PREF_BATTERY_OPTIMIZATION_ASKED = "battery_optimization_asked"
         const val DEFAULT_BATTERY_OPTIMIZATION_ASKED = false
+
+        /** True once the microphone permission has been requested. */
+        const val PREF_MICROPHONE_PERMISSION_ASKED = "microphone_permission_asked"
+
+        /** True once the notification permission has been requested. */
+        const val PREF_NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked"
 
         @JvmStatic
         fun getInstance(context: Context): Settings = Settings(context)
