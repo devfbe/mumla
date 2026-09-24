@@ -17,9 +17,6 @@
 
 package se.lublin.humla.exception;
 
-/**
- * Created by andrew on 07/03/14.
- */
 @SuppressWarnings("serial")
 public class NativeAudioException extends AudioException {
     public NativeAudioException(String message) {

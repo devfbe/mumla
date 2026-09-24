@@ -19,7 +19,6 @@ package se.lublin.humla.exception;
 
 /**
  * Thrown when a Humla connection has not yet been established.
- * Created by andrew on 24/10/15.
  */
 @SuppressWarnings("serial")
 public class NotConnectedException extends Exception {
