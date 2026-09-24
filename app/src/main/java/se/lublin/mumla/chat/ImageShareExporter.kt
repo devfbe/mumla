@@ -9,8 +9,8 @@ import java.io.File
  * Writes image bytes into the app cache and exposes them through the app's FileProvider.
  *
  * The file name is [ChatImageLoader.cacheKey] of the (hostile) source, safe as a path component only
- * because it is hex; there is no sanitiser here. [export] borrows `bytes` (shared with the loader):
- * read, never written or kept.
+ * because it is hex; there is no sanitiser here. [export] borrows `bytes`: read, never written or
+ * kept.
  */
 class ImageShareExporter(
     private val context: Context,

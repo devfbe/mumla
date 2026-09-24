@@ -1,452 +1,282 @@
 package se.lublin.mumla.chat
 
+import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import coil3.network.HttpException
+import coil3.network.NetworkResponse
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import com.sun.net.httpserver.HttpServer
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestCoroutineScheduler
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.runCurrent
-import kotlinx.coroutines.test.runTest
+import mockwebserver3.MockResponse
+import mockwebserver3.MockWebServer
+import okio.Buffer
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadows.ShadowBitmapFactory
-import java.net.InetSocketAddress
+import org.robolectric.annotation.GraphicsMode
+import se.lublin.mumla.Settings
+import java.io.IOException
+import java.net.InetAddress
+import java.net.SocketTimeoutException
 import java.security.MessageDigest
-import java.security.MessageDigestSpi
-import java.security.Provider
-import java.security.Security
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
-@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ChatImageLoaderTest {
-    private val dispatcher = UnconfinedTestDispatcher()
-    private val fetched = mutableListOf<String>()
-    private var remoteBody: ByteArray = TestImages.png(300, 300)
-    private var fetcher: ImageFetcher = ImageFetcher { url -> fetched += url; remoteBody }
+    private val context: Context = ApplicationProvider.getApplicationContext()
+    private val server = MockWebServer()
     private var externalAllowed = true
     private val clock = AtomicLong(1_000_000L)
-    private val url = "https://x.org/a.png"
-
-    /**
-     * Robolectric invents a 100x100 bitmap for undecodable data unless this is off, which would make
-     * [malformedBytesFailAndTheFailureIsCached] green without decoding anything.
-     */
-    @Before
-    fun realisticDecoding() {
-        ShadowBitmapFactory.setAllowInvalidImageData(false)
-    }
 
     @Before
-    fun watchTheDigest() {
-        Sha1Probe.install()
+    fun startServer() {
+        server.start(InetAddress.getByName("127.0.0.1"), 0)
     }
 
     @After
-    fun dropTestLoader() {
-        Sha1Probe.uninstall()
+    fun tearDown() {
+        server.close()
         ChatImageLoaders.setForTests(null)
+        Settings.getInstance(context).isTorEnabled = false
     }
 
-    private fun loader(
-        maxCacheBytes: Long = 8L * 1024 * 1024,
-        dispatcher: CoroutineDispatcher = this.dispatcher,
-    ) = ChatImageLoader(fetcher, { externalAllowed }, maxCacheBytes, dispatcher, dispatcher, clock::get)
-
-    @Test
-    fun decodesDataUriToThumbnailBounds() = runTest(dispatcher) {
-        val result = loader().loadThumbnail(TestImages.dataUri(TestImages.png(1000, 500)), 240, 240) as ImageResult.Ready
-        assertThat(result.bitmap.width).isEqualTo(240)
-        assertThat(result.bitmap.height).isEqualTo(120)
-        assertThat(fetched).isEmpty()
-    }
-
-    @Test
-    fun remoteImageIsFetchedOnceAndCached() = runTest(dispatcher) {
-        val l = loader()
-        val first = l.loadThumbnail(url, 240, 240) as ImageResult.Ready
-        val second = l.loadThumbnail(url, 240, 240) as ImageResult.Ready
-        assertThat(fetched).containsExactly(url)
-        assertThat(second.bitmap).isSameInstanceAs(first.bitmap)
-    }
-
-    @Test
-    fun thumbnailsOfDifferentBoundsAreCachedSeparately() = runTest(dispatcher) {
-        val l = loader()
-        val big = l.loadThumbnail(url, 240, 240) as ImageResult.Ready
-        val small = l.loadThumbnail(url, 120, 120) as ImageResult.Ready
-        assertThat(big.bitmap.width).isEqualTo(240)
-        assertThat(small.bitmap.width).isEqualTo(120)
-        assertThat(fetched).containsExactly(url) // second call reuses the last fetched bytes
-    }
-
-    @Test
-    fun concurrentLoadsOfTheSameKeyShareOneFetch() = runTest {
-        val l = loader(dispatcher = StandardTestDispatcher(testScheduler))
-        val first = async { l.loadThumbnail(url, 240, 240) }
-        val second = async { l.loadThumbnail(url, 240, 240) }
-        advanceUntilIdle()
-        assertThat(first.await()).isInstanceOf(ImageResult.Ready::class.java)
-        assertThat(second.await()).isSameInstanceAs(first.await())
-        assertThat(fetched).containsExactly(url)
-    }
-
-    /**
-     * A row scrolls away and its job is cancelled while another row waits on the same fetch; the
-     * waiter must survive. Survivors are compared by identity, because a second fetch of the same
-     * source would be served from the `lastBytes` memo and never show up in `fetched`.
-     */
-    @Test
-    fun cancellingOneCallerDoesNotCancelAnotherWaitingOnTheSameFetch() = runTest {
-        val work = StandardTestDispatcher(TestCoroutineScheduler()) // advanced by hand, not by runTest
-        // Unconfined for the decode side: a TestDispatcher of a second scheduler cannot be switched
-        // to from inside runTest's. The fetch stays parked on `work`.
-        val l = ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, work, Dispatchers.Unconfined, clock::get)
-        val scrolledAway = async { l.loadThumbnail(url, 240, 240) }
-        val stillVisible = async { l.loadThumbnail(url, 240, 240) }
-        val alsoStillVisible = async { l.loadThumbnail(url, 240, 240) }
-        runCurrent() // all three are registered as waiters; the fetch is parked on `work`
-        assertThat(fetched).isEmpty()
-
-        scrolledAway.cancel()
-        runCurrent()
-        work.scheduler.advanceUntilIdle()
-        advanceUntilIdle()
-
-        val survivor = stillVisible.await()
-        assertThat(survivor).isInstanceOf(ImageResult.Ready::class.java)
-        assertThat(alsoStillVisible.await()).isSameInstanceAs(survivor)
-        assertThat(fetched).containsExactly(url)
-    }
-
-    /**
-     * When the last of several callers is gone, the download is abandoned (the waiter count is a
-     * count, not a flag).
-     */
-    @Test
-    fun cancellingTheLastCallerAbandonsTheFetch() = runTest {
-        val work = StandardTestDispatcher(TestCoroutineScheduler())
-        val l = ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, work, Dispatchers.Unconfined, clock::get)
-        val scrolledAway = async { l.loadThumbnail(url, 240, 240) }
-        val alsoScrolledAway = async { l.loadThumbnail(url, 240, 240) }
-        runCurrent()
-
-        scrolledAway.cancel()
-        runCurrent()
-        alsoScrolledAway.cancel()
-        runCurrent()
-        work.scheduler.advanceUntilIdle()
-
-        assertThat(fetched).isEmpty()
-    }
-
-    /**
-     * The shared job is created while `synchronized(inFlight)` is held; on an immediate dispatcher
-     * its body, blocking read included, would run under that monitor.
-     */
-    @Test(timeout = 60_000)
-    fun aFetchInProgressDoesNotKeepOtherBindsOut() {
-        val inFetch = CountDownLatch(1)
-        val otherBindDone = CountDownLatch(1)
-        val otherBindGotThrough = AtomicBoolean(false)
-        fetcher = ImageFetcher { url ->
-            if (url.endsWith("held.png")) {
-                inFetch.countDown()
-                otherBindGotThrough.set(otherBindDone.await(5, TimeUnit.SECONDS))
-            }
-            remoteBody
-        }
-        val l = ChatImageLoader(
-            fetcher, { true }, 8L * 1024 * 1024, Dispatchers.Unconfined, Dispatchers.Unconfined, clock::get,
+    /** The real client and Coil set-up, except that the test server's loopback address counts as public. */
+    private fun loader(maxBytes: Long = DEFAULT_MAX_IMAGE_BYTES): ChatImageLoader {
+        val http = chatImageHttpClient(
+            networkAllowed = { externalAllowed },
+            userAgent = "Mumla/test",
+            policy = AddressPolicy { it.isLoopbackAddress },
+            maxBytes = maxBytes,
         )
-        val other = Thread {
-            if (inFetch.await(10, TimeUnit.SECONDS)) {
-                runBlocking { l.loadThumbnail("https://x.org/other.png", 240, 240) }
-                otherBindDone.countDown()
-            }
-        }
-        other.start()
+        return ChatImageLoader(
+            context, ChatImageLoader.imageLoader(context, http), http, { externalAllowed }, nowMillis = clock::get,
+        )
+    }
 
-        runBlocking { l.loadThumbnail("https://x.org/held.png", 240, 240) }
-        other.join(10_000)
+    private fun url(path: String = "/a.png") = server.url(path).newBuilder().host("127.0.0.1").build().toString()
 
-        assertWithMessage("a second bind could not start while the first was inside the fetcher")
-            .that(otherBindGotThrough.get()).isTrue()
+    private fun serve(bytes: ByteArray) = server.enqueue(MockResponse.Builder().body(Buffer().write(bytes)).build())
+
+    private fun ImageResult.size(): Pair<Int, Int> =
+        (this as ImageResult.Ready).bitmap.let { it.width to it.height }
+
+    // Thumbnails.
+
+    @Test
+    fun aThumbnailFitsTheBoundsKeepsTheAspectRatioAndIsNeverEnlarged() = runBlocking {
+        val loader = loader()
+        assertThat(loader.loadThumbnail(TestImages.dataUri(TestImages.png(300, 300)), 240, 240).size())
+            .isEqualTo(240 to 240)
+        assertThat(loader.loadThumbnail(TestImages.dataUri(TestImages.png(480, 240)), 240, 240).size())
+            .isEqualTo(240 to 120)
+        assertThat(loader.loadThumbnail(TestImages.dataUri(TestImages.png(100, 50)), 240, 240).size())
+            .isEqualTo(100 to 50)
     }
 
     @Test
-    fun malformedBytesFailAndTheFailureIsCached() = runTest(dispatcher) {
-        remoteBody = "garbage".toByteArray()
-        val l = loader()
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.MALFORMED))
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.MALFORMED))
-        assertThat(fetched).hasSize(1)
+    fun aRemoteThumbnailIsFetchedThroughTheGuardedClientOnceAndThenServedFromMemory() = runBlocking {
+        serve(TestImages.png(300, 300))
+        val loader = loader()
+
+        assertThat(loader.loadThumbnail(url(), 240, 240).size()).isEqualTo(240 to 240)
+        assertThat(loader.loadThumbnail(url(), 240, 240).size()).isEqualTo(240 to 240)
+
+        assertThat(server.requestCount).isEqualTo(1)
+        assertThat(server.takeRequest().headers["User-Agent"]).isEqualTo("Mumla/test")
     }
 
     @Test
-    fun transientFetchErrorsAreCachedOnlyForTheTtl() = runTest(dispatcher) {
-        var calls = 0
-        fetcher = ImageFetcher { calls++; throw ImageFetchException(ImageError.TIMEOUT) }
-        val l = loader()
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TIMEOUT))
+    fun malformedBytesFailAndTheFailureIsRememberedForGood() = runBlocking {
+        serve("not an image".toByteArray())
+        val loader = loader()
+
+        assertThat(loader.loadThumbnail(url(), 240, 240)).isEqualTo(ImageResult.Failed(ImageError.MALFORMED))
+        clock.addAndGet(365L * 24 * 60 * 60 * 1000)
+        assertThat(loader.loadThumbnail(url(), 240, 240)).isEqualTo(ImageResult.Failed(ImageError.MALFORMED))
+        assertThat(server.requestCount).isEqualTo(1)
+    }
+
+    @Test
+    fun aNetworkFailureIsRememberedForTheTtlAndThenRetried() = runBlocking {
+        server.enqueue(MockResponse(404))
+        serve(TestImages.png(40, 40))
+        val loader = loader()
+
+        assertThat(loader.loadThumbnail(url(), 240, 240)).isEqualTo(ImageResult.Failed(ImageError.NETWORK))
         clock.addAndGet(ChatImageLoader.TRANSIENT_ERROR_TTL_MS - 1)
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TIMEOUT))
-        assertThat(calls).isEqualTo(1)
+        assertThat(loader.loadThumbnail(url(), 240, 240)).isEqualTo(ImageResult.Failed(ImageError.NETWORK))
+        assertThat(server.requestCount).isEqualTo(1)
 
-        clock.addAndGet(2)
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TIMEOUT))
-        assertThat(calls).isEqualTo(2)
+        clock.addAndGet(1)
+        assertThat(loader.loadThumbnail(url(), 240, 240).size()).isEqualTo(40 to 40)
+        assertThat(server.requestCount).isEqualTo(2)
     }
 
     @Test
-    fun terminalFetchErrorsAreCachedForGood() = runTest(dispatcher) {
-        var calls = 0
-        fetcher = ImageFetcher { calls++; throw ImageFetchException(ImageError.TOO_LARGE) }
-        val l = loader()
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
-        clock.addAndGet(10 * ChatImageLoader.TRANSIENT_ERROR_TTL_MS)
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
-        assertThat(calls).isEqualTo(1)
+    fun aBodyOverTheByteCapIsTooLarge() = runBlocking {
+        serve(TestImages.png(300, 300))
+        assertThat(loader(maxBytes = 100).loadThumbnail(url(), 240, 240))
+            .isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
     }
 
-    /** An entry whose expiry equals the current millisecond is gone. */
+    /** The setting (and Tor, which turns it off) can change while the log is on screen. */
     @Test
-    fun aTransientErrorExpiresExactlyAtTheTtl() = runTest(dispatcher) {
-        var calls = 0
-        fetcher = ImageFetcher { calls++; throw ImageFetchException(ImageError.TIMEOUT) }
-        val l = loader()
-        l.loadThumbnail(url, 240, 240)
-        clock.addAndGet(ChatImageLoader.TRANSIENT_ERROR_TTL_MS)
-        l.loadThumbnail(url, 240, 240)
-        assertThat(calls).isEqualTo(2)
-    }
-
-    /** A cached NETWORK failure must not survive as long as a cached bitmap does. */
-    @Test
-    fun networkFailuresExpireLikeTimeouts() = runTest(dispatcher) {
-        var calls = 0
-        fetcher = ImageFetcher { calls++; throw ImageFetchException(ImageError.NETWORK) }
-        val l = loader()
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.NETWORK))
-        clock.addAndGet(ChatImageLoader.TRANSIENT_ERROR_TTL_MS + 1)
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.NETWORK))
-        assertThat(calls).isEqualTo(2)
-    }
-
-    @Test
-    fun disabledExternalImagesAreNeitherFetchedNorCached() = runTest(dispatcher) {
+    fun disabledExternalImagesAreNeitherFetchedNorRemembered() = runBlocking {
+        serve(TestImages.png(40, 40))
+        val loader = loader()
         externalAllowed = false
-        val l = loader()
-        assertThat(l.loadThumbnail(url, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.EXTERNAL_DISABLED))
-        assertThat(fetched).isEmpty()
+
+        assertThat(loader.loadThumbnail(url(), 240, 240))
+            .isEqualTo(ImageResult.Failed(ImageError.EXTERNAL_DISABLED))
+        assertThat(server.requestCount).isEqualTo(0)
+
         externalAllowed = true
-        assertThat(l.loadThumbnail(url, 240, 240)).isInstanceOf(ImageResult.Ready::class.java)
+        assertThat(loader.loadThumbnail(url(), 240, 240).size()).isEqualTo(40 to 40)
     }
 
-    /** The setting is about *external* images; an inline data: URI carries no request anywhere. */
     @Test
-    fun disabledExternalImagesStillShowInlineDataUris() = runTest(dispatcher) {
+    fun disabledExternalImagesStillShowInlineDataUris() = runBlocking {
         externalAllowed = false
-        val result = loader().loadThumbnail(TestImages.dataUri(TestImages.png(60, 60)), 240, 240)
-        assertThat(result).isInstanceOf(ImageResult.Ready::class.java)
+        assertThat(loader().loadThumbnail(TestImages.dataUri(TestImages.png(40, 40)), 240, 240).size())
+            .isEqualTo(40 to 40)
     }
 
     @Test
-    fun unsupportedSourceFails() = runTest(dispatcher) {
-        assertThat(loader().loadThumbnail("ftp://x/a.png", 240, 240)).isEqualTo(ImageResult.Failed(ImageError.UNSUPPORTED))
+    fun sourcesThatAreNeitherHttpNorAnImageDataUriAreUnsupported() = runBlocking {
+        val loader = loader()
+        for (source in listOf(
+            "file:///etc/passwd", "content://x/y", "javascript:alert(1)", "//x.org/a.png", "ftp://x.org/a.png",
+            "data:text/html;base64,PGI+", "data:image/png,plain", "",
+        )) {
+            assertWithMessage(source).that(loader.loadThumbnail(source, 240, 240))
+                .isEqualTo(ImageResult.Failed(ImageError.UNSUPPORTED))
+        }
+        assertThat(server.requestCount).isEqualTo(0)
     }
 
     @Test
-    fun cacheEvictsLeastRecentlyUsedWhenOverBudget() = runTest(dispatcher) {
-        // A 240x240 ARGB_8888 thumbnail is 230400 bytes (225 KiB); a 300 KiB budget fits exactly one.
-        val l = loader(maxCacheBytes = 300L * 1024)
-        l.loadThumbnail("https://x.org/a.png", 240, 240)
-        l.loadThumbnail("https://x.org/b.png", 240, 240)
-        l.loadThumbnail("https://x.org/a.png", 240, 240)
-        assertThat(fetched).containsExactly("https://x.org/a.png", "https://x.org/b.png", "https://x.org/a.png").inOrder()
-    }
-
-    /**
-     * Measured against the bitmaps actually held: an [android.util.LruCache] sized in KiB rounds
-     * every entry down, so 2024-byte thumbnails would each count as one KiB.
-     */
-    @Test
-    fun theCacheStaysWithinItsByteBudgetForManySmallBitmaps() = runTest(dispatcher) {
-        remoteBody = TestImages.png(22, 23) // 22 * 23 * 4 = 2024 bytes decoded
-        val budget = 10L * 1024
-        val l = loader(maxCacheBytes = budget)
-        repeat(10) { l.loadThumbnail("https://x.org/$it.png", 240, 240) }
-        assertThat(l.cachedBitmapBytes()).isAtMost(budget)
-        assertThat(l.cachedBitmapBytes()).isAtLeast(4 * 2024L) // and it is still a useful cache
+    fun anOversizedDataUriIsRefusedWithoutDecodingIt() = runBlocking {
+        val source = "data:image/png;base64," + "A".repeat(ChatImageLoader.MAX_SOURCE_LENGTH)
+        assertThat(loader().loadThumbnail(source, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
+        assertThrows(ImageFetchException::class.java) { runBlocking { loader().fetchBytes(source) } }
+            .also { assertThat(it.error).isEqualTo(ImageError.TOO_LARGE) }
+        Unit
     }
 
     @Test
-    fun loadFullDecodesEveryTimeAndReusesTheFetchedBytes() = runTest(dispatcher) {
-        val l = loader()
-        val first = l.loadFull(url, 200, 200) as ImageResult.Ready
-        val second = l.loadFull(url, 200, 200) as ImageResult.Ready
-        // 300 into 200: one halving lands at 150, inside the box; see BoundedBitmapDecoder.decodeAtMost.
-        assertThat(first.bitmap.width).isEqualTo(150)
+    fun aDataUriAtTheLengthLimitIsStillDecoded() = runBlocking {
+        val small = TestImages.dataUri(TestImages.png(40, 40))
+        val source = small + " ".repeat(ChatImageLoader.MAX_SOURCE_LENGTH - small.length)
+        assertThat(source.length).isEqualTo(ChatImageLoader.MAX_SOURCE_LENGTH)
+        assertThat(loader().loadThumbnail(source, 240, 240).size()).isEqualTo(40 to 40)
+    }
+
+    @Test
+    fun nonPositiveBoundsSkipTheLoad() = runBlocking {
+        val loader = loader()
+        assertThat(loader.loadThumbnail(url(), 0, 240)).isEqualTo(ImageResult.Skipped)
+        assertThat(loader.loadThumbnail(url(), 240, -1)).isEqualTo(ImageResult.Skipped)
+        assertThat(loader.decodeFull(TestImages.png(4, 4), 0, 0)).isEqualTo(ImageResult.Skipped)
+        assertThat(server.requestCount).isEqualTo(0)
+    }
+
+    // The viewer's path.
+
+    @Test
+    fun fetchBytesReturnsExactlyWhatWasServed() = runBlocking {
+        val png = TestImages.png(40, 40)
+        serve(png)
+        val loader = loader()
+        assertThat(loader.fetchBytes(url())).isEqualTo(png)
+        assertThat(loader.fetchBytes(TestImages.dataUri(png))).isEqualTo(png)
+    }
+
+    @Test
+    fun fetchBytesReportsEveryRefusalByThrowing() {
+        fun errorOf(loader: ChatImageLoader, source: String) =
+            assertThrows(ImageFetchException::class.java) { runBlocking { loader.fetchBytes(source) } }.error
+
+        serve(TestImages.png(300, 300))
+        assertThat(errorOf(loader(maxBytes = 100), url())).isEqualTo(ImageError.TOO_LARGE)
+        server.enqueue(MockResponse(500))
+        assertThat(errorOf(loader(), url())).isEqualTo(ImageError.NETWORK)
+        assertThat(errorOf(loader(), "file:///etc/passwd")).isEqualTo(ImageError.UNSUPPORTED)
+
+        externalAllowed = false
+        val requests = server.requestCount
+        assertThat(errorOf(loader(), url())).isEqualTo(ImageError.EXTERNAL_DISABLED)
+        assertThat(server.requestCount).isEqualTo(requests)
+    }
+
+    @Test
+    fun decodeFullIsBoundedAndNeverCached() = runBlocking {
+        val loader = loader()
+        val bytes = TestImages.png(2000, 1000)
+        val first = loader.decodeFull(bytes, 640, 940) as ImageResult.Ready
+        val second = loader.decodeFull(bytes, 640, 940) as ImageResult.Ready
+
+        assertThat(first.bitmap.width to first.bitmap.height).isEqualTo(640 to 320)
         assertThat(second.bitmap).isNotSameInstanceAs(first.bitmap)
-        assertThat(fetched).containsExactly(url)
+        assertThat(loader.decodeFull("nope".toByteArray(), 640, 940))
+            .isEqualTo(ImageResult.Failed(ImageError.MALFORMED))
     }
 
-    /**
-     * An unmeasured view is 0 px wide, but `BoundedBitmapDecoder` throws on a non-positive bound, so
-     * the loader has to catch this itself.
-     */
-    @Test
-    fun nonPositiveBoundsSkipTheLoadInsteadOfCrashing() = runTest(dispatcher) {
-        val l = loader()
-        assertThat(l.loadThumbnail(url, 0, 240)).isEqualTo(ImageResult.Skipped)
-        assertThat(l.loadThumbnail(url, 240, 0)).isEqualTo(ImageResult.Skipped)
-        assertThat(l.loadThumbnail(url, -1, -1)).isEqualTo(ImageResult.Skipped)
-        assertThat(l.loadFull(url, 0, 0)).isEqualTo(ImageResult.Skipped)
-        assertThat(fetched).isEmpty()
-        // Nothing was cached either, so the next bind — after layout — really loads.
-        assertThat(l.loadThumbnail(url, 240, 240)).isInstanceOf(ImageResult.Ready::class.java)
-    }
+    // The production wiring.
 
-    /**
-     * `ImageSource.parse` decodes the whole base64 payload, so the source string length is the only
-     * bound. TOO_LARGE rather than MALFORMED proves the payload was never decoded.
-     */
+    /** The process-wide loader refuses a loopback `<img src>` without the server ever being asked. */
     @Test
-    fun anOversizedDataUriIsRefusedWithoutDecodingIt() = runTest(dispatcher) {
-        val payload = "A".repeat(ChatImageLoader.MAX_SOURCE_LENGTH)
-        assertThat(loader().loadThumbnail("data:image/png;base64,$payload", 240, 240))
-            .isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
+    fun theRealLoaderRefusesTheLocalNetwork() = runBlocking {
+        serve(TestImages.png(40, 40))
+        val result = ChatImageLoaders.get(context).loadThumbnail(url(), 240, 240)
+
+        assertWithMessage("a loopback <img src> from a chat message was fetched")
+            .that(server.requestCount).isEqualTo(0)
+        assertThat(result).isEqualTo(ImageResult.Failed(ImageError.NETWORK))
     }
 
     @Test
-    fun aDataUriAtTheLengthLimitIsStillDecoded() = runTest(dispatcher) {
-        val png = TestImages.png(20, 20)
-        val source = TestImages.dataUri(png)
-        val padded = source + " ".repeat(ChatImageLoader.MAX_SOURCE_LENGTH - source.length)
-        assertThat(padded.length).isEqualTo(ChatImageLoader.MAX_SOURCE_LENGTH)
-        assertThat(loader().loadThumbnail(padded, 240, 240)).isInstanceOf(ImageResult.Ready::class.java)
+    fun theRealLoaderLoadsNothingExternalUnderTor() = runBlocking {
+        Settings.getInstance(context).isTorEnabled = true
+        val loader = ChatImageLoaders.get(context)
+
+        assertThat(loader.loadThumbnail("https://example.org/a.png", 240, 240))
+            .isEqualTo(ImageResult.Failed(ImageError.EXTERNAL_DISABLED))
+        assertThat(assertThrows(ImageFetchException::class.java) {
+            runBlocking { loader.fetchBytes("https://example.org/a.png") }
+        }.error).isEqualTo(ImageError.EXTERNAL_DISABLED)
+        // Inline images carry no traffic and stay visible.
+        assertThat(loader.loadThumbnail(TestImages.dataUri(TestImages.png(8, 8)), 240, 240).size())
+            .isEqualTo(8 to 8)
     }
 
     @Test
-    fun fetchBytesReusesWhatTheThumbnailAlreadyDownloaded() = runTest(dispatcher) {
-        val l = loader()
-        l.loadThumbnail(url, 240, 240)
-        assertThat(l.fetchBytes(url)).isEqualTo(remoteBody)
-        assertThat(fetched).containsExactly(url)
+    fun theProcessWideLoaderIsSharedAndOverridableForTests() {
+        assertThat(ChatImageLoaders.get(context)).isSameInstanceAs(ChatImageLoaders.get(context))
+        val stub = loader()
+        ChatImageLoaders.setForTests(stub)
+        assertThat(ChatImageLoaders.get(context)).isSameInstanceAs(stub)
     }
 
     @Test
-    fun fetchBytesReportsAnUnsupportedSourceByThrowing() = runTest(dispatcher) {
-        val l = loader()
-        val thrown = try {
-            l.fetchBytes("file:///etc/passwd")
-            null
-        } catch (e: ImageFetchException) {
-            e
-        }
-        assertThat(thrown?.error).isEqualTo(ImageError.UNSUPPORTED)
+    fun failuresMapOntoImageErrors() {
+        val http404 = HttpException(NetworkResponse(code = 404))
+        assertThat(ChatImageLoader.errorOf(ImageRefusedException(ImageError.TOO_LARGE)))
+            .isEqualTo(ImageError.TOO_LARGE)
+        assertThat(ChatImageLoader.errorOf(ImageFetchException(ImageError.UNSUPPORTED)))
+            .isEqualTo(ImageError.UNSUPPORTED)
+        assertThat(ChatImageLoader.errorOf(SocketTimeoutException())).isEqualTo(ImageError.TIMEOUT)
+        assertThat(ChatImageLoader.errorOf(http404)).isEqualTo(ImageError.NETWORK)
+        assertThat(ChatImageLoader.errorOf(IllegalStateException(ImageRefusedException(ImageError.TOO_LARGE))))
+            .isEqualTo(ImageError.TOO_LARGE)
+        assertThat(ChatImageLoader.errorOf(IllegalStateException("BitmapFactory returned a null bitmap")))
+            .isEqualTo(ImageError.MALFORMED)
     }
 
-    /**
-     * Holds [loads] loads inside the fetcher at once and reports how many ever got in together.
-     * A `null` limit means the production default.
-     */
-    private fun peakConcurrentFetches(loads: Int, maxConcurrentLoads: Int?): Int {
-        val inFetch = AtomicInteger()
-        val peak = AtomicInteger()
-        val started = CountDownLatch(loads)
-        val release = CountDownLatch(1)
-        fetcher = ImageFetcher { _ ->
-            started.countDown()
-            val now = inFetch.incrementAndGet()
-            peak.getAndUpdate { maxOf(it, now) }
-            release.await(5, TimeUnit.SECONDS)
-            inFetch.decrementAndGet()
-            remoteBody
-        }
-        val l = if (maxConcurrentLoads == null) {
-            ChatImageLoader(fetcher, { true }, 8L * 1024 * 1024, Dispatchers.IO, Dispatchers.Default, clock::get)
-        } else {
-            ChatImageLoader(
-                fetcher, { true }, 8L * 1024 * 1024, Dispatchers.IO, Dispatchers.Default, clock::get,
-                maxConcurrentLoads = maxConcurrentLoads,
-            )
-        }
-        return runBlocking(Dispatchers.IO) {
-            val jobs = (1..loads).map { async { l.loadThumbnail("https://x.org/$it.png", 240, 240) } }
-            // Give every one of them a fair chance to reach the fetcher before looking at the peak.
-            assertWithMessage("all %s loads reached the fetcher at once", loads)
-                .that(started.await(1, TimeUnit.SECONDS)).isFalse()
-            val whileHeld = peak.get()
-            release.countDown()
-            assertThat(jobs.awaitAll()).hasSize(loads)
-            maxOf(whileHeld, peak.get())
-        }
-    }
-
-    /** Peak memory is the per-fetch cap times the fetches in flight, so their number is bounded. */
-    @Test(timeout = 60_000)
-    fun noMoreThanMaxConcurrentLoadsFetchAtTheSameTime() {
-        assertThat(peakConcurrentFetches(loads = 4, maxConcurrentLoads = 2)).isEqualTo(2)
-    }
-
-    /** The production default. */
-    @Test(timeout = 60_000)
-    fun theDefaultLimitsThreeFetchesAtATime() {
-        assertThat(peakConcurrentFetches(loads = 6, maxConcurrentLoads = null)).isEqualTo(3)
-    }
-
-    /** Property initialisers run before `init {}`, so the check must not rely on `Semaphore` failing. */
-    @Test
-    fun aNonPositiveConcurrencyLimitIsRejectedByThisClass() {
-        listOf(0, -1).forEach { limit ->
-            val thrown = assertThrows(IllegalArgumentException::class.java) {
-                ChatImageLoader(fetcher, { true }, maxConcurrentLoads = limit)
-            }
-            assertWithMessage("message for maxConcurrentLoads = %s", limit)
-                .that(thrown).hasMessageThat().contains("maxConcurrentLoads")
-        }
-    }
-
-    /**
-     * Remembered failures are charged against the budget: at 256 bytes an entry a 1 KiB budget holds
-     * four, so the fifth pushes the first out.
-     */
-    @Test
-    fun rememberedFailuresAreChargedAgainstTheBudget() = runTest(dispatcher) {
-        var calls = 0
-        fetcher = ImageFetcher { calls++; throw ImageFetchException(ImageError.TOO_LARGE) }
-        val l = loader(maxCacheBytes = 1024)
-        repeat(5) { l.loadThumbnail("https://x.org/$it.png", 240, 240) }
-        assertThat(calls).isEqualTo(5)
-
-        assertThat(l.loadThumbnail("https://x.org/0.png", 240, 240))
-            .isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
-        assertWithMessage("the oldest remembered failure was never evicted").that(calls).isEqualTo(6)
-        // ... while one that is still in the cache costs nothing.
-        l.loadThumbnail("https://x.org/4.png", 240, 240)
-        assertThat(calls).isEqualTo(6)
-    }
+    // The key, also the share file's name.
 
     @Test
     fun cacheKeysAreStableAndSourceSpecific() {
@@ -454,111 +284,6 @@ class ChatImageLoaderTest {
         assertThat(ChatImageLoader.cacheKey("abc")).isNotEqualTo(ChatImageLoader.cacheKey("abd"))
         // Used as a file name by ImageShareExporter, so it must stay filesystem-safe.
         assertThat(ChatImageLoader.cacheKey("a/b?c=d")).matches("[0-9a-f]{40}")
-    }
-
-    /**
-     * The default fetcher carries the host policy, byte cap, timeouts and redirect limit. Both the
-     * default constructor argument and `ChatImageLoaders.get` (with the real `Settings` lookup) are
-     * exercised: a loopback `<img src>` must be refused without the server ever being asked.
-     */
-    @Test(timeout = 120_000)
-    fun theRealLoaderIsWiredToTheRealFetcherAndItsHostPolicy() = runBlocking {
-        val reached = AtomicBoolean(false)
-        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/wired.png") { exchange ->
-            reached.set(true)
-            exchange.sendResponseHeaders(200, 0)
-            exchange.close()
-        }
-        server.start()
-        try {
-            val target = "http://127.0.0.1:${server.address.port}/wired.png"
-
-            val fromTheDefaultArgument = ChatImageLoader(externalImagesAllowed = { true })
-                .loadThumbnail(target, 240, 240)
-            val processWide = ChatImageLoaders.get(ApplicationProvider.getApplicationContext())
-                .loadThumbnail(target, 240, 240)
-
-            // The tripwire first: the error code is the weaker claim.
-            assertWithMessage("a loopback <img src> from a chat message was fetched")
-                .that(reached.get()).isFalse()
-            assertWithMessage("the default constructor argument").that(fromTheDefaultArgument)
-                .isEqualTo(ImageResult.Failed(ImageError.NETWORK))
-            assertWithMessage("ChatImageLoaders.get").that(processWide)
-                .isEqualTo(ImageResult.Failed(ImageError.NETWORK))
-        } finally {
-            server.stop(0)
-        }
-        Unit
-    }
-
-    @Test
-    fun theProcessWideLoaderIsSharedAndOverridableForTests() {
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        assertThat(ChatImageLoaders.get(context)).isSameInstanceAs(ChatImageLoaders.get(context))
-        val stub = loader()
-        ChatImageLoaders.setForTests(stub)
-        assertThat(ChatImageLoaders.get(context)).isSameInstanceAs(stub)
-    }
-
-    // cacheKey() hashes the whole source, and a `data:` source can be megabytes: the tests below
-    // make sure that never happens on the thread that binds the row.
-
-    /** Control for the tests below: the SHA-1 probe really counts. */
-    @Test
-    fun theDigestProbeReallySeesThisClassesHashing() {
-        Sha1Probe.reset()
-        ChatImageLoader.cacheKey("abc")
-        assertThat(Sha1Probe.calls()).isEqualTo(1)
-        assertThat(Sha1Probe.threads()).contains(Thread.currentThread().name.substringBefore(" @"))
-    }
-
-    /** Nothing expensive (hashing included) may run before the length cap; the digest is counted. */
-    @Test
-    fun anOversizedSourceIsRefusedBeforeItsKeyIsComputed() = runTest(dispatcher) {
-        val l = loader()
-        val source = "data:image/png;base64," + "A".repeat(ChatImageLoader.MAX_SOURCE_LENGTH)
-        Sha1Probe.reset()
-
-        assertThat(l.loadThumbnail(source, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
-        assertThat(l.loadFull(source, 240, 240)).isEqualTo(ImageResult.Failed(ImageError.TOO_LARGE))
-
-        assertWithMessage("SHA-1 invocations while refusing a %s character source", source.length)
-            .that(Sha1Probe.calls()).isEqualTo(0)
-    }
-
-    /**
-     * A `data:` source at the cap is 7 MB and every bind needs its key, cache hits included. The
-     * caller's thread must neither hash nor allocate it.
-     */
-    @Test(timeout = 120_000)
-    fun bindingNeverHashesTheSourceOnTheCallersThread() {
-        val small = TestImages.dataUri(TestImages.png(40, 40))
-        val source = small + " ".repeat(ChatImageLoader.MAX_SOURCE_LENGTH - small.length)
-        val callerName = "mumla-test-caller"
-        val caller = Executors.newSingleThreadExecutor { r -> Thread(r, callerName) }
-        try {
-            val l = ChatImageLoader(
-                fetcher, { true }, 8L * 1024 * 1024, Dispatchers.IO, Dispatchers.Default, clock::get,
-            )
-            // First bind: a miss, so the key is computed and the image is decoded.
-            Sha1Probe.reset()
-            val first = caller.submit<ImageResult> { runBlocking { l.loadThumbnail(source, 240, 240) } }.get()
-            assertThat(first).isInstanceOf(ImageResult.Ready::class.java)
-            assertWithMessage("something has to hash the source").that(Sha1Probe.calls()).isAtLeast(1)
-            assertWithMessage("threads that hashed a %s character source on a miss", source.length)
-                .that(Sha1Probe.threads()).doesNotContain(callerName)
-
-            // Second bind: a cache hit. The key is still needed, so this is the common case.
-            Sha1Probe.reset()
-            val second = caller.submit<ImageResult> { runBlocking { l.loadThumbnail(source, 240, 240) } }.get()
-            assertThat(second).isInstanceOf(ImageResult.Ready::class.java)
-            assertWithMessage("a cache hit still needs the key").that(Sha1Probe.calls()).isAtLeast(1)
-            assertWithMessage("threads that hashed a %s character source on a hit", source.length)
-                .that(Sha1Probe.threads()).doesNotContain(callerName)
-        } finally {
-            caller.shutdownNow()
-        }
     }
 
     /**
@@ -575,103 +300,11 @@ class ChatImageLoaderTest {
             "abc",
             "",
             "a".repeat(8_192),
-            "a".repeat(8_191) + "\uD83D\uDE00" + "b".repeat(20_000), // the pair straddles a boundary
-            "\u00e4\u20ac\uD83D\uDE00".repeat(5_000),
+            "a".repeat(8_191) + "😀" + "b".repeat(20_000), // the pair straddles a boundary
+            "ä€😀".repeat(5_000),
         ).forEach {
             assertWithMessage("key of a %s character source", it.length)
                 .that(ChatImageLoader.cacheKey(it)).isEqualTo(reference(it))
         }
     }
-
-    /**
-     * The fullscreen decode holds one bitmap: an exact fit would keep an intermediate of up to 4x
-     * the pixels alive beside the result. Checked via the shadow's `createdFromBitmap` record (a
-     * heap delta is useless because Robolectric does not implement `inJustDecodeBounds`); the
-     * thumbnail half still shows a chain of two, which validates the instrument.
-     */
-    @Test
-    fun loadFullDecodesInOneAllocationWhileTheThumbnailStillFitsExactly() = runTest(dispatcher) {
-        // 431 x 935 into 216 x 468 is just under twice the bound: the exact fit's worst case.
-        remoteBody = TestImages.png(431, 935)
-        val l = loader()
-        val full = (l.loadFull(url, 216, 468) as ImageResult.Ready).bitmap
-        assertThat(shadowOf(full).createdFromBitmap).isNull()
-        assertThat(full.width).isAtMost(216)
-        assertThat(full.height).isAtMost(468)
-
-        val thumb = (l.loadThumbnail(TestImages.dataUri(TestImages.png(431, 935)), 216, 468)
-            as ImageResult.Ready).bitmap
-        assertThat(shadowOf(thumb).createdFromBitmap).isNotNull()
-        assertThat(thumb.height).isEqualTo(468)
-    }
-
-}
-
-/**
- * A JCE provider that hands out a recording SHA-1: counts every `MessageDigest.getInstance("SHA-1")`
- * and records the thread that hashed. The digest itself is delegated, so keys do not change.
- */
-class RecordingSha1 : MessageDigestSpi() {
-    private val delegate: MessageDigest = Sha1Probe.realSha1()
-
-    init {
-        Sha1Probe.countInstance()
-    }
-
-    override fun engineUpdate(input: Byte) {
-        Sha1Probe.countThread()
-        delegate.update(input)
-    }
-
-    override fun engineUpdate(input: ByteArray, offset: Int, len: Int) {
-        Sha1Probe.countThread()
-        delegate.update(input, offset, len)
-    }
-
-    override fun engineDigest(): ByteArray = delegate.digest()
-
-    override fun engineReset() = delegate.reset()
-}
-
-object Sha1Probe {
-    private const val NAME = "MumlaSha1Probe"
-    private val instances = AtomicInteger()
-    private val threadNames = ConcurrentHashMap.newKeySet<String>()
-
-    @Suppress("DEPRECATION") // the (String, String, String) constructor is not in the Android API
-    private class ProbeProvider : Provider(NAME, 1.0, "records who computes a SHA-1, and where") {
-        init {
-            putService(Service(this, "MessageDigest", "SHA-1", RecordingSha1::class.java.name, null, null))
-        }
-    }
-
-    fun install() {
-        if (Security.getProvider(NAME) == null) Security.insertProviderAt(ProbeProvider(), 1)
-        reset()
-    }
-
-    fun uninstall() = Security.removeProvider(NAME)
-
-    fun reset() {
-        instances.set(0)
-        threadNames.clear()
-    }
-
-    fun calls(): Int = instances.get()
-
-    fun threads(): Set<String> = threadNames.toSet()
-
-    fun countInstance() {
-        instances.incrementAndGet()
-    }
-
-    /** The bare thread name, without kotlinx.coroutines' " @coroutine#n" suffix. */
-    fun countThread() {
-        threadNames += Thread.currentThread().name.substringBefore(" @")
-    }
-
-    /** The digest that would have answered without the probe in the way. */
-    fun realSha1(): MessageDigest = Security.getProviders("MessageDigest.SHA-1")
-        .first { it.name != NAME }
-        .let { MessageDigest.getInstance("SHA-1", it) }
 }

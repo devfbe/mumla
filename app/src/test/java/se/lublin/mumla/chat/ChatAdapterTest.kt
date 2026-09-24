@@ -1,6 +1,7 @@
 package se.lublin.mumla.chat
 
 import android.app.Activity
+import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.os.Looper
@@ -19,19 +20,20 @@ import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
+import io.mockk.coEvery
 import io.mockk.every
+import io.mockk.mockk
 import io.mockk.spyk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import org.junit.Before
+import kotlinx.coroutines.withContext
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.shadows.ShadowBitmapFactory
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.User
@@ -46,15 +48,9 @@ class ChatAdapterTest {
     private val activity: Activity = Robolectric.buildActivity(Activity::class.java).setup().get()
     private val parent = FrameLayout(activity).also { activity.setContentView(it) }
     private val fetched = mutableListOf<String>()
-    private var remoteBody: ByteArray = TestImages.png(300, 300)
+    private var thumbnail: ImageResult = ImageResult.Ready(Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888))
     private val clicked = mutableListOf<String>()
     private val url = "https://x.org/a.png"
-
-    @Before
-    fun rejectInvalidImageData() {
-        // Without this Robolectric invents a 100x100 bitmap for undecodable bytes.
-        ShadowBitmapFactory.setAllowInvalidImageData(false)
-    }
 
     private fun info(body: String) =
         IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
@@ -69,13 +65,7 @@ class ChatAdapterTest {
         diff: DiffUtil.ItemCallback<IChatMessage> = ChatAdapter.DIFF,
     ) = ChatAdapter(
         parser = parser,
-        loader = ChatImageLoader(
-            fetcher = ImageFetcher { source -> fetched += source; remoteBody },
-            externalImagesAllowed = { true },
-            maxCacheBytes = 8L * 1024 * 1024,
-            ioDispatcher = Dispatchers.Unconfined,
-            decodeDispatcher = decodeDispatcher,
-        ),
+        loader = fakeLoader(decodeDispatcher),
         thumbnailPx = thumbnailPx,
         selfSessionId = selfSessionId,
         onImageClicked = { clicked += it },
@@ -86,6 +76,20 @@ class ChatAdapterTest {
             .build(),
     )
 
+
+    /** Answers [thumbnail] on [decodeDispatcher], and [ImageResult.Skipped] for non-positive bounds. */
+    private fun fakeLoader(decodeDispatcher: CoroutineDispatcher): ChatImageLoader = mockk {
+        coEvery { loadThumbnail(any(), any(), any()) } coAnswers {
+            if (secondArg<Int>() <= 0 || thirdArg<Int>() <= 0) {
+                ImageResult.Skipped
+            } else {
+                withContext(decodeDispatcher) {
+                    fetched += firstArg<String>()
+                    thumbnail
+                }
+            }
+        }
+    }
 
     /**
      * Binds [position] into a fresh holder attached to a real window and laid out: an unattached
@@ -241,7 +245,7 @@ class ChatAdapterTest {
 
     @Test
     fun aFailedThumbnailIsReplacedByTheFailureText() = runTest {
-        remoteBody = "not an image".toByteArray()
+        thumbnail = ImageResult.Failed(ImageError.MALFORMED)
         val adapter = adapter()
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
         idleMainLooper()
@@ -453,7 +457,7 @@ class ChatAdapterTest {
     @Test
     fun aTapOnARowWhoseImageFailedReportsNothing() = runTest {
         // A row whose picture failed is not tappable (it is hidden and measures 0x0).
-        remoteBody = "not an image".toByteArray()
+        thumbnail = ImageResult.Failed(ImageError.MALFORMED)
         val adapter = adapter()
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
         idleMainLooper()
@@ -483,7 +487,7 @@ class ChatAdapterTest {
     @Test
     fun rebindingAHolderResetsTheFailedRowItWasShowing() = runTest {
         val adapter = adapter()
-        remoteBody = "not an image".toByteArray()
+        thumbnail = ImageResult.Failed(ImageError.MALFORMED)
         adapter.submitMessages(listOf(info("<img src=\"https://x.org/broken.png\"/>")))
         idleMainLooper()
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
@@ -491,7 +495,7 @@ class ChatAdapterTest {
         assertThat(holder.status.visibility).isEqualTo(View.VISIBLE)
 
         // Same holder, a row whose image loads. Without the reset the good row stays invisible.
-        remoteBody = TestImages.png(300, 300)
+        thumbnail = ImageResult.Ready(Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888))
         val adapter2 = adapter()
         adapter2.submitMessages(listOf(info("<img src=\"$url\"/>")))
         idleMainLooper()

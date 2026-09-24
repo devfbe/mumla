@@ -20,21 +20,17 @@ import se.lublin.mumla.databinding.DialogImageViewerBinding
 import java.io.IOException
 
 /**
- * Fullscreen viewer for one chat image; decodes off the main thread at [DECODE_SCALE] times the
- * screen, which together with `ZoomState.maxScale` sets the zoom ceiling (three screens would not
- * fit the heap).
+ * Fullscreen viewer for one chat image; decodes at most [DECODE_SCALE] times the screen, which
+ * together with `ZoomState.maxScale` sets the zoom ceiling (three screens would not fit the heap).
  *
- * The bitmap from `loadFull` is not cached and belongs to the `ImageView`; the byte array from
- * `fetchBytes` is the loader's (read-only) and is held for the life of the dialog so the share hands
- * out exactly what was shown. Teardown cancels the coroutines' continuations, not a running export.
- * The exported file must survive dismissal: the receiving app opens it afterwards.
+ * The bitmap from `decodeFull` is not cached and belongs to the `ImageView`; the bytes from
+ * `fetchBytes` are held for the life of the dialog so the share hands out exactly what was shown.
+ * Teardown cancels the coroutines' continuations, not a running export. The exported file must
+ * survive dismissal: the receiving app opens it afterwards.
  *
  * `FileProvider.getUriForFile` throws for files outside `shared_image_paths.xml`, which must keep
  * publishing [ImageShareExporter]'s directory. Fullscreen comes from `Theme.Mumla.ImageViewer`
- * (`windowIsFloating=false`).
- *
- * No timeout here: `ImageFetcher.fetch` blocks and ignores cancellation, so only the fetcher's own
- * `totalTimeoutMs` can end the wait.
+ * (`windowIsFloating=false`). No timeout here: the image HTTP client has its own total budget.
  */
 class ImageViewerDialogFragment : DialogFragment() {
 
@@ -86,8 +82,8 @@ class ImageViewerDialogFragment : DialogFragment() {
             } catch (e: ImageFetchException) {
                 return@launch fail()
             }
-            val result = loader.loadFull(
-                source,
+            val result = loader.decodeFull(
+                bytes,
                 metrics.widthPixels * DECODE_SCALE,
                 metrics.heightPixels * DECODE_SCALE,
             )

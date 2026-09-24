@@ -1,6 +1,7 @@
 package se.lublin.mumla.chat
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
@@ -13,12 +14,17 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.fragment.app.testing.FragmentScenario
 import androidx.fragment.app.testing.launchFragment
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -26,6 +32,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowToast
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.idleMainLooper
@@ -33,6 +40,7 @@ import java.io.File
 import kotlin.coroutines.CoroutineContext
 
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ImageViewerDialogFragmentTest {
     private val source = "https://x.org/a.png"
     private val other = "https://x.org/b.png"
@@ -54,17 +62,30 @@ class ImageViewerDialogFragmentTest {
 
     private var loader: ChatImageLoader? = null
 
-    /** Installs a real loader over a fake fetcher, on dispatchers that never leave this thread. */
+    /**
+     * Installs a real loader whose HTTP client answers every request with [fetch] (an
+     * [ImageFetchException] becomes that error), on dispatchers that never leave this thread.
+     */
     private fun installLoader(
         ioDispatcher: CoroutineDispatcher = Dispatchers.Unconfined,
-        fetcher: ImageFetcher,
+        fetch: (String) -> ByteArray,
     ) {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val http = OkHttpClient.Builder().addInterceptor { chain ->
+            val body = try {
+                fetch(chain.request().url.toString())
+            } catch (e: ImageFetchException) {
+                throw ImageRefusedException(e.error, e)
+            }
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(body.toResponseBody()).build()
+        }.build()
         loader = ChatImageLoader(
-            fetcher = fetcher,
+            context = context,
+            imageLoader = ChatImageLoader.imageLoader(context, http, dispatcher = Dispatchers.Unconfined),
+            http = http,
             externalImagesAllowed = { true },
-            maxCacheBytes = 8L * 1024 * 1024,
             ioDispatcher = ioDispatcher,
-            decodeDispatcher = Dispatchers.Unconfined,
         ).also { ChatImageLoaders.setForTests(it) }
     }
 
@@ -209,9 +230,8 @@ class ImageViewerDialogFragmentTest {
     }
 
     /**
-     * `BitmapUtils.resizeKeepingAspect` never enlarges, so the requested bound (twice the screen)
-     * is exactly the bitmap's size on the limiting axis. The expectation is built from the
-     * environment's own metrics.
+     * The requested bound is twice the screen, and the decode fits it exactly on the limiting axis.
+     * The expectation is built from the environment's own metrics.
      */
     @Test
     fun theImageIsDecodedBetweenOneAndTwoScreensSoThereIsDetailToZoomInto() {
@@ -238,8 +258,8 @@ class ImageViewerDialogFragmentTest {
             assertThat(metrics.widthPixels).isEqualTo(480)
             assertThat(metrics.heightPixels).isEqualTo(800)
             val bitmap = (fragment.image().drawable as BitmapDrawable).bitmap
-            // 3000 into 960 samples at 8, into 640 at 16: 750 here, 375 on the default screen.
-            assertThat(bitmap.width).isEqualTo(750)
+            // Fitted into 960 x 1600 here, 640 x 940 on the default screen.
+            assertThat(bitmap.width).isEqualTo(960)
             assertThat(bitmap.width).isAtMost(2 * metrics.widthPixels)
             assertThat(bitmap.width).isAtLeast(metrics.widthPixels)
         }
@@ -257,36 +277,9 @@ class ImageViewerDialogFragmentTest {
             assertThat(metrics.heightPixels).isEqualTo(2340)
 
             val shown = (fragment.image().drawable as BitmapDrawable).bitmap
-            // 2400 x 5200 into 2160 x 4680 samples at 2 and stops there.
-            assertThat(shown.width).isEqualTo(1200)
-            assertThat(shown.height).isEqualTo(2600)
+            // Fitted into 2160 x 4680, then into the decoder's own 4096 px limit.
+            assertThat(shown.width to shown.height).isEqualTo(1890 to 4096)
             assertThat(shown.byteCount).isAtMost(40_435_200)
-            assertThat(shadowOf(shown).createdFromBitmap).isNull()
-        }
-    }
-
-    /**
-     * The decode peak is the bitmap that is kept: `loadFull` uses `decodeAtMost`, so there is no
-     * scaled intermediate alive beside the result. The bitmap is still never smaller than one
-     * screen on the limiting axis.
-     */
-    @Test
-    fun theDecodeHoldsNothingBesideTheBitmapItKeeps() {
-        // 1279x1879 into the 640x940 box: one halving would undershoot the exact fit.
-        installLoader { TestImages.png(1279, 1879) }
-        launched { fragment ->
-            idleMainLooper()
-            val shown = (fragment.image().drawable as BitmapDrawable).bitmap
-
-            assertThat(shadowOf(shown).createdFromBitmap).isNull()
-            assertThat(shown.width to shown.height).isEqualTo(639 to 939)
-            assertThat(shown.byteCount).isEqualTo(2_400_084)
-
-            val peak = shown.byteCount.toLong()
-            assertThat(peak).isEqualTo(2_400_084L)
-            val ratio = 12_015_604.0 / peak
-            assertThat(ratio).isGreaterThan(5.0)
-            assertThat(ratio).isLessThan(5.01)
         }
     }
 
@@ -348,7 +341,7 @@ class ImageViewerDialogFragmentTest {
             val mocked = mockk<ChatImageLoader>()
             // This test is about the decode result, so the byte fetch always succeeds.
             coEvery { mocked.fetchBytes(any()) } returns TestImages.png(4, 4)
-            coEvery { mocked.loadFull(any(), any(), any()) } returns outcome
+            coEvery { mocked.decodeFull(any(), any(), any()) } returns outcome
             ChatImageLoaders.setForTests(mocked)
             launched { fragment ->
                 idleMainLooper()
@@ -390,8 +383,7 @@ class ImageViewerDialogFragmentTest {
 
     /**
      * The share hands out the bytes this dialog decoded; a second fetch could return different
-     * bytes (and a different type). The loader remembers one payload, so one row bound behind the
-     * dialog displaces it.
+     * bytes (and a different type), and a load behind the dialog must not change what is shared.
      */
     @Test
     fun theSharedBytesAreTheOnesThatWereShown() {
@@ -401,7 +393,7 @@ class ImageViewerDialogFragmentTest {
         launched { fragment ->
             fragment.ioDispatcher = Dispatchers.Unconfined
             idleMainLooper()
-            // The server changes its answer and a row bound behind the dialog displaces the payload.
+            // The server changes its answer and another image is fetched behind the dialog.
             served = "not an image at all".toByteArray()
             runBlocking { loader!!.fetchBytes(other) }
 
