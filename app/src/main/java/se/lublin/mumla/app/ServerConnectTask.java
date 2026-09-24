@@ -38,7 +38,6 @@ import se.lublin.mumla.util.MumlaTrustStore;
 
 /**
  * Constructs an intent for connection to a MumlaService and executes it.
- * Created by andrew on 20/08/14.
  */
 public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
     private Context mContext;
@@ -58,7 +57,7 @@ public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
         /* Convert input method defined in settings to an integer format used by Humla. */
         int inputMethod = mSettings.getHumlaInputMethod();
 
-        // DEFAULT and MIC are the same source; the handset mode that picked DEFAULT is gone.
+        // DEFAULT and MIC are the same source.
         int audioSource = MediaRecorder.AudioSource.MIC;
         int audioStream = Settings.PLAYBACK_STREAM;
 
@@ -66,9 +65,8 @@ public class ServerConnectTask extends AsyncTask<Server, Void, Intent> {
         connectIntent.putExtra(HumlaService.EXTRAS_SERVER, server);
         connectIntent.putExtra(HumlaService.EXTRAS_CLIENT_NAME, mContext.getString(R.string.app_name)+" "+ BuildConfig.VERSION_NAME);
         connectIntent.putExtra(HumlaService.EXTRAS_TRANSMIT_MODE, inputMethod);
-        // The whole voice-gate configuration, not just the legacy slider: EXTRAS_DETECTION_THRESHOLD
-        // cannot express a mode, a hold, an onset or a hand-set floor, and setThreshold is a no-op
-        // outside amplitude mode. Two sources for one setting would be one of them lying.
+        // The full voice-gate config: EXTRAS_DETECTION_THRESHOLD cannot express mode, hold, onset
+        // or floor.
         connectIntent.putExtra(HumlaService.EXTRAS_VAD_CONFIG,
                 VadConfigBundle.toBundle(mSettings.getVadConfig()));
         connectIntent.putExtra(HumlaService.EXTRAS_AMPLITUDE_BOOST, mSettings.getAmplitudeBoostMultiplier());

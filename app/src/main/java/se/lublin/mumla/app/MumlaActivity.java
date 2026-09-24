@@ -701,12 +701,8 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
     }
 
     /**
-     * Updates the activity to represent the connection state of the given service.
-     * Will show reconnecting dialog if reconnecting, dismiss otherwise, etc.
-     * Basically, this service will do catch-up if the activity wasn't bound to receive
-     * connection state updates.
-     *
-     * @param service A bound IHumlaService.
+     * Brings the activity up to date with [service]'s connection state (shows or dismisses the
+     * connecting/error dialogs), catching up on updates missed while unbound.
      */
     private void updateConnectionState(IHumlaService service) {
         if (mConnectingDialog != null) {
@@ -794,10 +790,6 @@ public class MumlaActivity extends AppCompatActivity implements ListView.OnItemC
                 break;
         }
     }
-
-    /*
-     * HERE BE IMPLEMENTATIONS
-     */
 
     @Override
     public IMumlaService getService() {

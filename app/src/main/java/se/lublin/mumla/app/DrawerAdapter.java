@@ -28,9 +28,6 @@ import android.widget.TextView;
 
 import se.lublin.mumla.R;
 
-/**
- * Created by andrew on 01/08/13.
- */
 public class DrawerAdapter extends ArrayAdapter<DrawerAdapter.DrawerRow> {
 
     /**
