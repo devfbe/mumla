@@ -1,8 +1,6 @@
 [versions]
-# Kotlin is compiled by AGP's built-in Kotlin support: the compiler is the Kotlin Gradle plugin
-# that AGP itself resolves (2.2.10 via AGP 9.4.1), so this catalog declares no `kotlin` version and
-# no kotlin-gradle-plugin. Adding one would put a second KGP on the build classpath.
-# Use `kotlin { compilerOptions { ... } }` in a module to change the Kotlin language level.
+# No kotlin version here: AGP's built-in Kotlin support brings its own Kotlin Gradle plugin, and
+# declaring one would put a second KGP on the classpath.
 agp = "9.4.1"
 coroutines = "1.11.0"
 
@@ -66,9 +64,7 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
-# FragmentScenario and the empty host activity it needs. Deliberately on the same version ref
-# as `androidx-fragment`: the two are one library split across two artifacts, and pinning the
-# test half a version behind the main one only invites a resolution bump nobody chose.
+# Same version ref as androidx-fragment on purpose: one library split across two artifacts.
 androidx-fragment-testing = { module = "androidx.fragment:fragment-testing", version.ref = "androidx-fragment" }
 androidx-fragment-testing-manifest = { module = "androidx.fragment:fragment-testing-manifest", version.ref = "androidx-fragment" }
 
