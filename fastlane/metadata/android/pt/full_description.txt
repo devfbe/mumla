@@ -8,7 +8,6 @@ Alguns dos recursos:
 * Suporte a headsets Bluetooth
 * Autoregistro em servidor
 * Tokens de acesso
-* Suporte a codecs Opus, CELT e Speex
 * Reconexão automática
 * Suporte a rede Tor pelo aplicativo Orbot
 * Texto-para-voz para mensagens (ativado por padrão)

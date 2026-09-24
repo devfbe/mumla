@@ -25,24 +25,19 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
-import se.lublin.humla.HumlaService
 import se.lublin.humla.audio.capture.VadConfig
-import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.AudioRouter
+import se.lublin.humla.testutil.testActivityInputMode
+import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.createMumlaService
 
 /**
- * The effect pass for the audio settings screen: for every switch it offers, the test that reads
- * the result back off the object the audio threads use.
- *
- * Without this the screen is a list of preferences that may or may not be connected to anything,
- * which is exactly the defect class this project keeps finding -- the media key that did nothing,
- * the AGC setting that never reached Speex, the preference whose default disagreed with its XML.
+ * For every switch on the audio settings screen, reads the result back off the object the audio
+ * threads use.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceAudioPreferencesTest {
@@ -53,30 +48,13 @@ class MumlaServiceAudioPreferencesTest {
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        prefs.edit().clear().commit()
-        service = Robolectric.buildService(MumlaService::class.java).create().get()
+        service = createMumlaService().get()
     }
 
-    private fun field(target: Any, name: String): Any? {
-        var cls: Class<*>? = target.javaClass
-        while (cls != null) {
-            try {
-                return cls.getDeclaredField(name).apply { isAccessible = true }.get(target)
-            } catch (e: NoSuchFieldException) {
-                cls = cls.superclass
-            }
-        }
-        throw AssertionError("no field $name on ${target.javaClass}")
-    }
-
-    /**
-     * Task A9b replaced the `AudioHandler.Builder` the service used to hold with an immutable
-     * [se.lublin.humla.session.AudioConfig], so what a preference lands in is a config field. The
-     * config-to-builder half moved with it and is pinned in `DefaultAudioHandlerFactoryTest`.
-     */
+    /** Preferences land in an immutable [se.lublin.humla.session.AudioConfig]. */
     private fun audioConfig() = service.getAudioConfigForTest()
 
-    private fun vadConfig(): VadConfig = (field(service, "mActivityInputMode") as ActivityInputMode).vadConfig
+    private fun vadConfig(): VadConfig = service.testActivityInputMode.vadConfig
 
     private fun change(key: String) = service.onSharedPreferenceChanged(prefs, key)
 
@@ -95,10 +73,9 @@ class MumlaServiceAudioPreferencesTest {
         for ((key, write) in writes) {
             prefs.edit().apply(write).commit()
             change(key)
-            assertThat(vadConfig()).isEqualTo(Settings.getInstance(service).getVadConfig())
+            assertThat(vadConfig()).isEqualTo(Settings.getInstance(service).vadConfig)
         }
-        // Read back the values themselves, not only the equality with Settings: an accessor that
-        // returned a constant would satisfy the line above on both sides.
+        // Read back the values themselves: an accessor returning a constant would pass the above.
         val config = vadConfig()
         assertThat(config.snrFraction).isWithin(0.001f).of(0.31f)
         assertThat(config.holdTimeMs).isEqualTo(410L)
@@ -145,7 +122,7 @@ class MumlaServiceAudioPreferencesTest {
     /** The output without a headset - what the handset mode was - is the router's default. */
     @Test
     fun `the default output reaches the router`() {
-        val router = field(service, "mRouter") as AudioRouter
+        val router = service.testRouter
         prefs.edit().putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_EARPIECE).commit()
         change(Settings.PREF_DEFAULT_OUTPUT)
         assertThat(router.earpieceByDefault).isTrue()
@@ -163,11 +140,12 @@ class MumlaServiceAudioPreferencesTest {
     fun `an echo cancellation override reaches the service`() {
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
-        assertThat(field(service, "mEchoOverrides")).isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
+        assertThat(service.sessionConfig.echoCancellationOverrides)
+            .isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
 
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.EARPIECE, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.EARPIECE))
-        assertThat(field(service, "mEchoOverrides")).isEqualTo(
+        assertThat(service.sessionConfig.echoCancellationOverrides).isEqualTo(
             mapOf(AudioDeviceCategory.SPEAKER to false, AudioDeviceCategory.EARPIECE to false),
         )
     }
@@ -192,11 +170,9 @@ class MumlaServiceAudioPreferencesTest {
     // --- pin the set ---------------------------------------------------------------------------
 
     /**
-     * Enumerated from the screen rather than from the diff: every `android:key` the audio settings
-     * XML declares is either turned into an extra by [AudioPreferenceExtras] or named here with the
-     * reason it is not. A switch added to the screen that reaches nothing fails this test instead
-     * of shipping, which is the case no per-key assertion above can cover -- they only know about
-     * the keys somebody already thought of.
+     * Every `android:key` in the audio settings XML is either turned into an extra by
+     * [SessionSettings] or exempted here with a reason, so a new switch that reaches nothing
+     * fails this test.
      */
     @Test
     fun `every key on the audio settings screen is either wired or exempt with a reason`() {
@@ -204,14 +180,15 @@ class MumlaServiceAudioPreferencesTest {
             "vad_settings" to "a PreferenceCategory, not a setting",
             "input_level_meter" to "not persisted: the settings screen's own live meter",
             "audio_loopback_test" to "not persisted: the settings screen's own monitor switch",
+            "audio_test_microphone" to "not persisted: the settings screen's own meter switch",
             "vad_recalibrate" to "not persisted: restarts the settings screen's own measurement",
             "ptt_settings" to "a PreferenceCategory, not a setting",
             "talkKey" to "read by the overlay and the PTT button, not by the audio chain",
             "hotCorner" to "read by MumlaService's hot corner, in its own case",
             "hidePtt" to "read by the channel fragment when it builds the PTT button",
             "togglePtt" to "read by the PTT button when it handles a press",
+            "allow_external_ptt" to "read by the talk broadcast receiver on each broadcast",
             "ptt_sound" to "read by MumlaService's own field, in its own case",
-            "disableOpus" to "flagged as requiring a reconnect, in its own case",
         )
 
         val keys = mutableSetOf<String>()
@@ -221,39 +198,25 @@ class MumlaServiceAudioPreferencesTest {
             keys += parser.getAttributeValue(ANDROID_NS, "key") ?: continue
         }
 
-        assertThat(keys.filterNot { it in AudioPreferenceExtras.KEYS || it in exempt }).isEmpty()
+        assertThat(keys.filterNot { it in SessionSettings.AUDIO_KEYS || it in exempt }).isEmpty()
         // The exemptions cannot rot: each one has to be a key the screen really still has.
         assertThat(keys).containsAtLeastElementsIn(exempt.keys)
     }
 
-    /**
-     * And the other direction, because [AudioPreferenceExtras.KEYS] alone proves only that a key
-     * is listed: every key it claims must produce a non-empty bundle, and a key it does not claim
-     * must produce an empty one.
-     */
+    /** An audio key reapplies every audio setting at once; any other key leaves the config alone. */
     @Test
-    fun `every key the mapper claims produces an extra and every other key produces none`() {
+    fun `only an audio key reconfigures the session`() {
         val settings = Settings.getInstance(service)
-        for (key in AudioPreferenceExtras.KEYS) {
-            assertThat(AudioPreferenceExtras.extrasFor(key, settings).isEmpty).isFalse()
-        }
-        for (key in listOf(Settings.PREF_USE_TTS, Settings.PREF_HOT_CORNER_KEY, Settings.PREF_PTT_SOUND, "nonsense")) {
-            assertThat(AudioPreferenceExtras.extrasFor(key, settings).isEmpty).isTrue()
-        }
-    }
+        prefs.edit().putBoolean(Settings.PREF_HALF_DUPLEX, true).commit()
+        val before = service.sessionConfig
 
-    /** Every voice-gate key produces the same one extra, so one drag is one reconfiguration. */
-    @Test
-    fun `the voice gate keys all produce exactly the vad config extra`() {
-        val settings = Settings.getInstance(service)
-        for (key in AudioPreferenceExtras.VAD_KEYS) {
-            val extras = AudioPreferenceExtras.extrasFor(key, settings)
-            assertThat(extras.keySet()).containsExactly(HumlaService.EXTRAS_VAD_CONFIG)
-            // `HumlaService.requiresAudioRebuild` is gone with task A9b: the rebuild is decided by
-            // the value of AudioConfig, not by the key, and EXTRAS_VAD_CONFIG reaches a live object
-            // rather than the config. That one drag costs no rebuild is pinned end to end by
-            // HumlaServiceAudioTest.aLiveExtraDoesNotRebuildThePipeline.
+        for (key in listOf(Settings.PREF_USE_TTS, Settings.PREF_HOT_CORNER_KEY, Settings.PREF_PTT_SOUND, "nonsense")) {
+            change(key)
+            assertThat(service.sessionConfig).isSameInstanceAs(before)
         }
+        change(Settings.PREF_HALF_DUPLEX)
+        assertThat(service.sessionConfig).isEqualTo(SessionSettings.withAudioSettings(before, settings))
+        assertThat(service.sessionConfig.halfDuplex).isTrue()
     }
 
     private companion object {

@@ -85,7 +85,6 @@
     <string name="server_port">Port</string>
     <string name="server_host">Address</string>
     <string name="server_label">Label</string>
-    <string name="connecting">Connecting</string>
     <string name="connecting_to_server">Connecting to %s…</string>
     <string name="ptt">Push-to-talk</string>
     <string name="mute">Mute</string>
@@ -110,7 +109,6 @@
     <string name="generateCertProgress">Generating certificate…</string>
     <string name="search">Search</string>
     <string name="searchHint">Search channels and users</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="audio_device">Audio device</string>
     <string name="audio_device_earpiece">Earpiece</string>
     <string name="audio_device_speaker">Speaker</string>
@@ -131,7 +129,6 @@
     <string name="offline">Offline</string>
     <string name="clearChat">Clear Chat</string>
     <string name="connected">Connected</string>
-    <string name="mumlaConnected">Mumla connected</string>
     <string name="mumlaConnecting">Mumla connecting…</string>
     <string name="connection_lost_reconnecting">Connection lost – reconnecting…</string>
     <string name="foreground_start_failed">Could not keep Mumla running in the background. Voice may stop when the screen turns off.</string>
@@ -153,6 +150,7 @@
     <string name="search_country">Country</string>
     <string name="information">Information</string>
     <string name="error_fetching_servers">Could not fetch servers.\nAre you connected to the Internet?</string>
+    <string name="public_server_list_tor_disabled">The public server list is not loaded while Tor is on, because it would be downloaded without Tor.</string>
     <string name="overlay">Overlay</string>
     <string name="hint_reason">Reason</string>
     <string name="action_settings">Settings</string>
@@ -177,6 +175,9 @@
     <string name="allow">Allow</string>
     <string name="trust_added">Added certificate to trust store</string>
     <string name="trust_add_failed">Could not add certificate to trust store.</string>
+    <string name="certificate_changed_title">Server certificate changed</string>
+    <string name="certificate_changed_message">%1$s now presents a different certificate from the one you trusted before. Someone may be intercepting your connection. Only continue if the server administrator told you the certificate was replaced.</string>
+    <string name="certificate_changed_accept">Trust new certificate</string>
     <string name="trust_cleared">Trust database cleared</string>
     <string name="cancelled">Canceled</string>
     <string name="current_chat_target">Current chat target</string>
@@ -188,7 +189,6 @@
     <string name="attempting_reconnect">Error: %s.\n\nReconnecting…</string>
     <string name="change_requires_reconnect">Reconnect to use new settings.</string>
     <string name="no_certificate">No Certificate</string>
-    <string name="certificates">Certificates</string>
     <string name="decrypt_certificate">Decrypt Certificate</string>
     <string name="password">Password</string>
     <string name="invalid_certificate">Invalid certificate could not be loaded.</string>
@@ -196,6 +196,13 @@
     <string name="certificate_import_success">Imported certificate %s.</string>
     <string name="error_writing_to_storage">Could not write to external storage.</string>
     <string name="export_success">Certificate exported to %s.</string>
+    <string name="export_password_title">Protect the exported certificate</string>
+    <string name="export_password_message">The file contains your private key. Choose a password; you will need it to import the certificate elsewhere.</string>
+    <string name="export_password_confirm">Confirm password</string>
+    <string name="export_password_empty">Enter a password.</string>
+    <string name="export_password_mismatch">The passwords do not match.</string>
+    <string name="allowExternalPtt">Allow other apps to control push-to-talk</string>
+    <string name="allowExternalPttSum">Any installed app can then start and stop your transmission, e.g. automation apps like Tasker.</string>
     <string name="context_channel_link">Link</string>
     <string name="context_channel_unlink_all">Unlink All</string>
     <string name="context_channel_shout">Set Voice Target</string>
@@ -205,8 +212,10 @@
     <string name="shout_target">Shouting to %s</string>
     <string name="shout_configure">Configure Voice Target</string>
     <string name="grant_perm_microphone">Please grant microphone permission.</string>
+    <string name="microphone_permission_rationale">Mumla needs the microphone so that others on the server can hear you.</string>
+    <string name="microphone_permission_settings">Microphone access is turned off for Mumla. To connect to a server, allow it in the app settings.</string>
+    <string name="open_settings">Open settings</string>
     <string name="grant_perm_notifications">Please grant permission to send notifications.</string>
-    <string name="grant_perm_storage">Please grant external storage permission.</string>
     <string name="grant_perm_draw_over_apps">Please grant permission to display over other apps.</string>
     <string name="bluetooth_perm_denied">Bluetooth headset stays switched on. Without the Nearby devices permission, some devices will refuse to route audio to it.</string>
     <string name="orbot_not_installed">The Orbot app is not installed. Not using Tor.</string>
@@ -218,10 +227,6 @@
     <plurals name="search_channel_users">
         <item quantity="one">%d user</item>
         <item quantity="other">%d users</item>
-    </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d new message</item>
-        <item quantity="other">%d new messages</item>
     </plurals>
 
     <string name="app_news">What\'s New</string>
@@ -239,15 +244,13 @@
     <string name="app_news_items_v3_7_3">• Make PTT hot corner visible on Android 12 and later, and on dark and light background\n
 • Make the Back-button ask to disconnect from server again on Android 16+\n</string>
 
-    <!-- Chat images (spec D2/D3) -->
+    <!-- Chat images -->
     <string name="chat_image_share">Share image</string>
     <string name="chat_image_close">Close</string>
     <string name="chat_image_load_failed">Image could not be loaded</string>
-    <!-- Spoken by a screen reader for the picture filling the viewer. Not "Open image": that one
-         labels the thumbnail in the chat log, which opens this screen when it is activated. -->
+    <!-- Screen reader label for the picture in the fullscreen viewer. -->
     <string name="chat_image_viewer_image">Image</string>
-    <!-- Spoken by a screen reader for a thumbnail in the chat log. Activating it opens the
-         fullscreen viewer, which labels its own picture with chat_image_viewer_image. -->
+    <!-- Screen reader label for a chat log thumbnail; activating it opens the viewer. -->
     <string name="chat_image_open">Open image</string>
     <!-- Stands in for the second and further images of one message, which are not rendered. -->
     <string name="chat_image_placeholder">[image]</string>
@@ -267,4 +270,100 @@
     <string name="permission_denied_storage">Permission denied to read storage</string>
     <string name="image_decode_failed">Could not read that image</string>
     <string name="image_too_large">Image is too large for this server</string>
+    <!-- Chat log notices and permission refusals from the server -->
+    <string name="chat_notify_muted_deafened">Muted and deafened.</string>
+    <string name="chat_notify_muted">Muted.</string>
+    <string name="chat_notify_unmuted">Unmuted.</string>
+    <string name="chat_notify_now_muted_deafened">%s is now muted and deafened.</string>
+    <string name="chat_notify_now_muted">%s is now muted.</string>
+    <string name="chat_notify_now_unmuted">%s is now unmuted.</string>
+    <string name="chat_notify_connected">%s connected.</string>
+    <string name="chat_notify_disconnected">%s disconnected.</string>
+    <string name="chat_notify_kick_ban_self">You were kicked and banned from the server by %1$s: %2$s.</string>
+    <string name="chat_notify_kick_self">You were kicked from the server by %1$s: %2$s.</string>
+    <string name="chat_notify_kick_ban">%3$s was kicked and banned from the server by %1$s: %2$s.</string>
+    <string name="chat_notify_kick">%3$s was kicked from the server by %1$s: %2$s.</string>
+    <string name="chat_notify_self_recording_started">Recording started</string>
+    <string name="chat_notify_self_recording_stopped">Recording stopped</string>
+    <string name="chat_notify_user_recording_started">%s started recording.</string>
+    <string name="chat_notify_user_recording_stopped">%s stopped recording.</string>
+    <string name="chat_notify_user_joined_channel">%s entered channel.</string>
+    <string name="chat_notify_user_left_channel">%1$s moved to %2$s.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s moved in from %2$s by %3$s.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s moved to %2$s by %3$s.</string>
+    <string name="deny_reason_channel_name">Denied: Invalid channel name.</string>
+    <string name="deny_reason_text_too_long">Denied: Text message too long.</string>
+    <string name="deny_reason_no_operation_temp">Denied: Operation not permitted in temporary channel.</string>
+    <string name="deny_reason_no_certificate">You need a certificate to perform this operation.</string>
+    <string name="deny_reason_invalid_username">Invalid username.</string>
+    <string name="deny_reason_channel_full">Channel is full.</string>
+    <string name="deny_reason_channel_nesting">Channel nesting limit reached.</string>
+    <string name="deny_reason_channel_count">Channel count limit reached.</string>
+    <string name="deny_reason_channel_listener_limit">No more listeners allowed in this channel.</string>
+    <string name="deny_reason_user_listener_limit">You cannot listen to any more channels.</string>
+    <string name="deny_reason_other">Reason: %s</string>
+    <string name="server">Server</string>
+    <string name="the_server">the server</string>
+    <string name="comment">Comment</string>
+    <string name="unmute">Unmute</string>
+    <string name="undeafen">Undeafen</string>
+    <string name="a11y_join_channel">Join channel</string>
+    <string name="a11y_channel_locked">Restricted channel, you cannot enter it</string>
+    <string name="a11y_channel_restricted">Restricted channel, you may enter it</string>
+    <string name="context_channel_listen">Listen to channel</string>
+    <string name="context_channel_stop_listening">Stop listening</string>
+    <string name="a11y_listener">%1$s is listening</string>
+    <string name="user_menu_local_volume">Local volume</string>
+    <string name="local_volume_percent">%1$d%%</string>
+    <string name="local_volume_reset">Reset</string>
+    <string name="local_volume_title">Local volume: %1$s</string>
+    <string name="user_menu_information">User information</string>
+    <string name="user_info_loading">Loading…</string>
+    <string name="user_info_unavailable">The server sent no information about this user.</string>
+    <string name="user_info_version">Version</string>
+    <string name="user_info_version_release">%1$s (%2$s)</string>
+    <string name="user_info_os">Operating system</string>
+    <string name="user_info_online">Online</string>
+    <string name="user_info_idle">Idle</string>
+    <string name="user_info_address">Address</string>
+    <string name="user_info_tcp_ping">TCP ping</string>
+    <string name="user_info_udp_ping">UDP ping</string>
+    <string name="user_info_ping_value">%1$.1f ms ± %2$.1f ms</string>
+    <string name="user_info_from_client">Packets from client</string>
+    <string name="user_info_from_server">Packets from server</string>
+    <string name="user_info_packets_value">Good %1$d, late %2$d, lost %3$d, resync %4$d</string>
+    <string name="user_info_bandwidth">Bandwidth</string>
+    <string name="user_info_bandwidth_value">%1$.1f kbit/s</string>
+    <string name="user_info_certificate">Certificate</string>
+    <string name="user_info_certificate_strong">%1$s (verified)</string>
+    <string name="user_info_certificate_weak">%1$s (not verified)</string>
+    <string name="markdownMessages">Format messages with Markdown</string>
+    <string name="markdownMessagesSum">Send **bold**, *italic*, `code` and [links](https://…) as formatted text</string>
+    <string name="channel_enter_denied">You are not allowed to enter %1$s.</string>
+    <string name="a11y_channel_options">Channel options</string>
+    <string name="a11y_user_options">User options</string>
+    <string name="a11y_server_options">Server options</string>
+    <string name="a11y_stop_shouting">Stop shouting</string>
+    <string name="a11y_resize_overlay">Resize</string>
+    <string name="a11y_collapse">Collapse</string>
+    <string name="a11y_state_talking">Talking</string>
+    <string name="a11y_state_muted">Muted</string>
+    <string name="a11y_state_deafened">Deafened</string>
+    <string name="a11y_state_server_muted">Muted by the server</string>
+    <string name="a11y_state_server_deafened">Deafened by the server</string>
+    <string name="a11y_state_suppressed">Suppressed</string>
+    <string name="a11y_transmitting">Transmitting</string>
+    <string name="a11y_not_transmitting">Not transmitting</string>
+    <string name="tile_mute_label">Mumla mute</string>
+    <string name="notification_you">You</string>
+    <string name="notification_reply">Reply</string>
+    <string name="notification_group_server">Server connection</string>
+    <string name="notification_channel_connection_description">Shown while connected, with buttons to mute, deafen and show the overlay.</string>
+    <string name="notification_channel_messages_description">Chat messages that arrive while you are connected.</string>
+    <string name="notification_channel_reconnect_description">A lost connection, while reconnecting or when it needs you to reconnect.</string>
+    <string name="pref_dynamic_colors">Dynamic colors</string>
+    <string name="pref_dynamic_colors_summary">Use the colors of your wallpaper instead of Mumla\'s.</string>
+    <string name="audioTestMicrophone">Test microphone</string>
+    <string name="audioTestMicrophoneSum">Shows your live input level while this is on. Other apps\' audio may get quieter meanwhile.</string>
+    <string name="inputLevelMeterIdle">Turn on “Test microphone” to see your input level.</string>
 </resources>

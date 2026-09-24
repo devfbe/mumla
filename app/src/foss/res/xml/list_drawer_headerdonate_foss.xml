@@ -2,6 +2,7 @@
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
     android:drawableStart="@drawable/ic_donate_heart_foss"
     android:drawablePadding="10dp"
     android:fontFamily="sans-serif-medium"
@@ -9,5 +10,5 @@
     android:paddingBottom="16dp"
     android:paddingStart="20dp"
     android:text="@string/donate_foss"
-    android:textColor="?android:textColorPrimaryInverse"
+    android:textColor="?attr/colorOnSurface"
     android:textSize="16sp" />

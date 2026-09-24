@@ -17,7 +17,6 @@
 
 package se.lublin.humla.testutil
 
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import org.robolectric.Robolectric
@@ -32,18 +31,18 @@ import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaObserver
+import se.lublin.humla.session.HumlaEvent
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Builds a [HumlaService] whose collaborators are fakes and drives it through a **real**
- * [HumlaConnection] over [FakeTransports], so the tests exercise the service's own wiring rather
- * than a mock of it. The one thing that is never faked is the state machine: it is the subject.
+ * Builds a [HumlaService] whose collaborators are fakes and drives it through a real
+ * [HumlaConnection] over [FakeTransports]; the session state machine is never faked.
  *
- * Under Robolectric the test thread *is* the main thread and the main looper is paused, while the
- * protocol thread is a real one. Every wait here therefore polls state owned by the protocol
- * thread and drains the main looper explicitly; a poll on main-thread state would deadlock.
+ * Under Robolectric the test thread is the main thread with a paused looper, while the protocol
+ * thread is real. Waits poll protocol-thread state and drain the main looper explicitly; polling
+ * main-thread state would deadlock.
  */
 class HumlaServiceHarness(
     private val autoReconnect: Boolean = false,
@@ -62,8 +61,6 @@ class HumlaServiceHarness(
     val mainLooper: ShadowLooper = shadowOf(Looper.getMainLooper())
     val warnings = CopyOnWriteArrayList<String?>()
 
-    /** One entry per handshake: the CELT versions the service announced. */
-    val celtAnnouncements = CopyOnWriteArrayList<IntArray>()
     val disconnects = CopyOnWriteArrayList<HumlaException?>()
 
     private val controller: ServiceController<HumlaService> =
@@ -77,42 +74,30 @@ class HumlaServiceHarness(
         service.reconnectPolicy = reconnectPolicy
         service.audioFactory = audioFactory
         service.communicationDevices = devices
-        service.celtVersions = {
-            // The native library is not on the JVM; see HumlaService.celtVersions.
-            intArrayOf(0x8000000b.toInt()).also { celtAnnouncements += it }
-        }
         controller.create()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onLogWarning(message: String?) { warnings += message }
-            override fun onDisconnected(e: HumlaException?) { disconnects += e }
-        })
-        service.configureExtras(
-            Bundle().apply {
-                if (server != null) putParcelable(HumlaService.EXTRAS_SERVER, server)
-                putBoolean(HumlaService.EXTRAS_AUTO_RECONNECT, autoReconnect)
-                // Both are pre-existing preconditions of onConnectionEstablished, not conveniences:
-                // Version.setRelease(null) and Authenticate.addAllTokens(null) each throw, so a
-                // connection without them never gets past the handshake. ServerConnectTask always
-                // writes them; this harness has to as well to reach the states it is about.
-                putString(HumlaService.EXTRAS_CLIENT_NAME, "harness")
-                putStringArrayList(HumlaService.EXTRAS_ACCESS_TOKENS, arrayListOf())
-            },
-        )
+        service.onEvents { event ->
+            when (event) {
+                is HumlaEvent.LogMessage -> if (event.level == HumlaEvent.Level.WARNING) warnings += event.text
+                is HumlaEvent.Disconnected -> disconnects += event.error
+                else -> Unit
+            }
+        }
+        service.configure(SessionConfig(server = server, clientName = "harness", autoReconnect = autoReconnect))
         mainLooper.idle()
     }
 
     fun destroy() {
         controller.destroy()
         mainLooper.idle()
-        awaitUntil(description = "no protocol thread left behind") {
+        awaitUntil(description = "nothing of the connection left behind") {
             mainLooper.idle()
-            service.getConnection()?.protocolThread?.isAlive != true
+            service.getConnection()?.isTerminated != false
         }
     }
 
-    /** Applies extras the way MumlaService does, before or during a session. */
-    fun configure(block: Bundle.() -> Unit) {
-        service.configureExtras(Bundle().apply(block))
+    /** Reconfigures the service the way MumlaService does, before or during a session. */
+    fun configure(change: SessionConfig.() -> SessionConfig) {
+        service.configure(service.sessionConfig.change())
         mainLooper.idle()
     }
 
@@ -130,10 +115,8 @@ class HumlaServiceHarness(
         }
         val tcp = transports.tcps[index]
         tcp.simulateConnected()
-        // Waits for the handshake the service sends from onConnectionEstablished, not just for
-        // isConnected: the protocol thread sets `connected` *before* it posts that callback to
-        // the main looper, so an idle() between the two returned with the handshake still queued
-        // (theHandshakeAnnouncesTheCeltVersionsFromTheSeam failed on it, intermittently).
+        // Waits for the handshake sent from onConnectionEstablished, not just isConnected:
+        // `connected` is set before that callback is posted to the main looper.
         awaitUntil(description = "connection $index established") {
             mainLooper.idle()
             service.getConnection()?.isConnected == true &&
@@ -161,7 +144,7 @@ class HumlaServiceHarness(
         )
         awaitUntil(description = "server sync delivered") {
             mainLooper.idle()
-            service.getConnectionState() == HumlaService.ConnectionState.CONNECTED
+            service.connectionState == HumlaService.ConnectionState.CONNECTED
         }
     }
 
@@ -206,7 +189,7 @@ class HumlaServiceHarness(
         transports.tcps[index].simulateSocketClosed()
         awaitUntil(description = "disconnect report delivered") {
             mainLooper.idle()
-            service.getConnectionState() != HumlaService.ConnectionState.CONNECTED
+            service.connectionState != HumlaService.ConnectionState.CONNECTED
         }
     }
 }

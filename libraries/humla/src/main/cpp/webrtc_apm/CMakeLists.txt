@@ -1,15 +1,12 @@
 # webrtc-audio-processing v2.1 (BSD-3) plus abseil-cpp 20240722.0 (Apache-2.0), built as one
 # static library with the C wrapper in humla_apm.cpp.
 #
-# Upstream ships a meson build, and meson is not one of the two build systems Gradle's
-# externalNativeBuild can drive (CMake and the deprecated ndk-build). Rather than bolt a second
-# build system and a cross file into the NDK toolchain, the meson file lists are transcribed
-# here, in upstream's own order and grouping, so that `diff`ing this file against
+# Upstream builds with meson, which Gradle's externalNativeBuild cannot drive, so the meson file
+# lists are transcribed here in upstream's order and grouping, so the result can be diffed against
 #   webrtc/{rtc_base,api,system_wrappers,common_audio,third_party/pffft,third_party/rnnoise,
 #           modules/audio_coding,modules/audio_processing}/meson.build
-# stays a reviewable exercise on every submodule bump. Every compile definition below names the
-# meson line it comes from; a definition that silently differs from upstream is not a build
-# error in a DSP library, it is different audio.
+# on every submodule bump. Compile definitions name the meson line they come from: a definition
+# that differs from upstream is not a build error in a DSP library, it is different audio.
 set(WAP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/webrtc-audio-processing)
 set(WEBRTC_DIR ${WAP_DIR}/webrtc)
 set(ABSL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/abseil-cpp)
@@ -41,39 +38,26 @@ endif()
 
 # ---- platform / arch definitions (mirrors the top-level meson.build) ----
 #
-# meson.build:170-176 common_cflags, unconditional:
-#   WEBRTC_LIBRARY_IMPL           -- selects the in-library definitions of the RTC_EXPORT macros
-#   WEBRTC_ENABLE_SYMBOL_EXPORT   -- makes RTC_EXPORT expand to a visibility attribute
-#   _WINSOCKAPI_                  -- upstream's windows.h/winsock2.h conflict guard, inert here
-#   NDEBUG                        -- upstream's buildtype=debugoptimized default; turns RTC_DCHECK
-#                                    into a no-op. Keeping it means the shipped library behaves
-#                                    like every distro's copy.
-# modules/audio_processing/meson.build:1 apm_flags:
-#   WEBRTC_APM_DEBUG_DUMP=0       -- upstream scopes this to modules/audio_processing; it is
-#                                    applied to the whole target here because the macro appears
-#                                    nowhere else in the tree (checked: only under
-#                                    modules/audio_processing and .../logging), so the two are
-#                                    equivalent and one list is easier to keep honest.
+# meson.build:170-176 common_cflags. NDEBUG matches upstream's debugoptimized default (RTC_DCHECK
+# off). WEBRTC_APM_DEBUG_DUMP=0 (modules/audio_processing/meson.build:1) is scoped to
+# audio_processing upstream; the macro is used nowhere else, so it is applied to the whole target.
 set(WAP_DEFS WEBRTC_LIBRARY_IMPL WEBRTC_ENABLE_SYMBOL_EXPORT _WINSOCKAPI_ NDEBUG
              WEBRTC_APM_DEBUG_DUMP=0)
 set(WAP_OS_LIBS "")
 
-# meson.build:74-105 os_cflags plus meson.build:107-109 platform_cflags. Only the platforms this
-# project actually builds for are transcribed; anything else stops the configure rather than
-# compiling with a quietly wrong platform define.
+# meson.build:74-109 os_cflags and platform_cflags, only for the platforms we build for; anything
+# else stops the configure rather than compiling with a wrong platform define.
 if(ANDROID)
   # meson.build:81-85: android gets WEBRTC_ANDROID *and* WEBRTC_LINUX, and links liblog.
   list(APPEND WAP_DEFS WEBRTC_ANDROID WEBRTC_LINUX WEBRTC_POSIX)
   list(APPEND WAP_OS_LIBS log)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  # meson.build:86-90. librt is `required: false` upstream and clock_gettime has been in glibc
-  # proper since 2.17, so only the threads dependency is carried over.
+  # meson.build:86-90. librt is optional upstream and clock_gettime is in glibc since 2.17.
   list(APPEND WAP_DEFS WEBRTC_LINUX WEBRTC_POSIX)
   find_package(Threads REQUIRED)
   list(APPEND WAP_OS_LIBS Threads::Threads)
 elseif(APPLE)
-  # meson.build:74-80. Here so a developer's macOS host build of the ctests is not silently
-  # compiled as Linux; the shipped product is Android only.
+  # meson.build:74-80, for macOS host builds of the ctests.
   list(APPEND WAP_DEFS WEBRTC_MAC WEBRTC_POSIX)
   if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     list(APPEND WAP_DEFS WEBRTC_IOS)
@@ -85,22 +69,10 @@ else()
                       "see meson.build:74-109 before adding them.")
 endif()
 
-# v2.1 does not build with GCC 15: libstdc++ 15 stopped pulling <cstdint> in transitively, and
-# webrtc/rtc_base/trace_event.h and .../aec3/multi_channel_content_detector.h both use uint8_t,
-# uint64_t and uintptr_t without including it. Upstream fixed exactly that in e9c78dc ("Fix
-# compilation with gcc-15", 2025-04-14) by adding `#include <cstdint>` to those two headers; the
-# commit is on master and in no release tag, and the submodule stays on v2.1. Force-including
-# <cstdint> into the C++ translation units has the same effect -- it only makes the fixed-width
-# typedefs visible, and it is a no-op for every source that already includes them -- and it
-# becomes inert the moment a tag containing e9c78dc is available, at which point delete it.
-# C++ only: <cstdint> is not a C header and this target compiles ~50 .c files.
-#
-# Note that this is deliberately broader than upstream's fix: e9c78dc edits two headers, this
-# force-includes <cstdint> into all ~213 C++ translation units. That is what keeps it a one-line
-# build-file change instead of a patch against vendored sources, but it has a cost worth knowing
-# at the next submodule bump -- it would also silently paper over a *different* missing include,
-# anywhere in the tree, for any of the fixed-width types. When the submodule moves, delete this
-# line first and only reinstate it if the build still needs it.
+# v2.1 does not build with GCC 15 (libstdc++ no longer pulls in <cstdint> transitively). Upstream
+# fixed that in e9c78dc, which is in no release tag yet. Force-including <cstdint> into the C++
+# units has the same effect; it could also hide a different missing include, so drop this line
+# first when the submodule moves past e9c78dc.
 set(WAP_CSTDINT_FIX $<$<COMPILE_LANGUAGE:CXX>:-include$<SEMICOLON>cstdint>)
 
 set(WAP_ARCH_ARM32 OFF)
@@ -124,23 +96,11 @@ else()
     set(WAP_ARCH_X86 ON)
   endif()
 endif()
-# meson.build:120-165 arch_cflags. NEON is meson's `neon` feature with value 'auto', which
-# resolves to enabled on every ARM target that can compile <arm_neon.h>; both Android ARM ABIs
-# can, so it is unconditional here.
-#   WEBRTC_ARCH_ARM64             -- meson.build:134-138 (cpu_family aarch64)
-#   WEBRTC_ARCH_ARM/_ARM_V7       -- meson.build:120-133, from __ARM_ARCH_ISA_ARM/__ARM_ARCH_7A__,
-#                                    both defined by the NDK for armeabi-v7a
-#   WEBRTC_HAS_NEON + -mfpu=neon  -- meson.build:166-171; the flag is omitted on arm64, where NEON
-#                                    is mandatory and -mfpu is not a valid aarch64 option
-#   WEBRTC_ENABLE_AVX2            -- meson.build:146-157, unconditional on x86/x86_64 because the
-#                                    AVX2 code sits in its own objects behind runtime detection
-# Deliberately NOT defined:
-#   WAP_DISABLE_INLINE_SSE        -- meson.build:158-163 adds it only when the `inline-sse` option
-#                                    is false; meson_options.txt:8-10 defaults it to true, so the
-#                                    upstream default build does not define it and neither do we.
-#   PFFFT_SIMD_DISABLE            -- third_party/pffft/meson.build:7-9 needs it only for x86
-#                                    without inline SSE, ARM without NEON, or MIPS; none of the
-#                                    four configurations built here is one of those.
+# meson.build:120-171 arch_cflags. meson's `neon` feature ('auto') resolves to enabled on both
+# Android ARM ABIs. -mfpu=neon is omitted on arm64, where NEON is mandatory and -mfpu is invalid.
+# WEBRTC_ENABLE_AVX2 is unconditional on x86: the AVX2 code sits behind runtime detection.
+# Not defined, as in the upstream default build: WAP_DISABLE_INLINE_SSE (inline-sse defaults to
+# true) and PFFFT_SIMD_DISABLE (none of our configurations needs it).
 if(WAP_ARCH_ARM64)
   list(APPEND WAP_DEFS WEBRTC_ARCH_ARM64 WEBRTC_HAS_NEON)
 elseif(WAP_ARCH_ARM32)
@@ -200,13 +160,10 @@ set(WAP_COMMON_AUDIO_SOURCES
   common_audio/third_party/ooura/fft_size_128/ooura_fft.cc common_audio/third_party/ooura/fft_size_256/fft4g.cc
   common_audio/vad/vad.cc common_audio/vad/vad_core.c common_audio/vad/vad_filterbank.c
   common_audio/vad/vad_gmm.c common_audio/vad/vad_sp.c common_audio/vad/webrtc_vad.c)
-# complex_bit_reverse, filter_ar_fast_q12 and spl_sqrt_floor have a C and a 32-bit-ARM assembly
-# implementation of the same symbols, and none of the six files carries a preprocessor guard
-# (verified: no #if/#ifdef/#ifndef in any of them). Upstream's common_audio/meson.build puts all
-# three .c files in the base list and then adds the .S files again for ARM, so on 32-bit ARM the
-# archive holds two definitions of each symbol and which one wins depends on member order. We
-# list exactly one implementation of each symbol per ABI. arm64 takes the C path, matching
-# meson.build:95-100, where `have_arm` is only true for cpu_family 'arm'.
+# complex_bit_reverse, filter_ar_fast_q12 and spl_sqrt_floor have unguarded C and 32-bit-ARM
+# assembly implementations of the same symbols. Upstream lists both on ARM (which one wins depends
+# on archive member order); we list exactly one per ABI. arm64 takes the C path, as upstream
+# (`have_arm` is only true for cpu_family 'arm').
 if(WAP_ARCH_ARM32)
   list(APPEND WAP_COMMON_AUDIO_SOURCES
     common_audio/signal_processing/complex_bit_reverse_arm.S
@@ -324,28 +281,15 @@ set(WAP_ALL_SOURCES ${WAP_BASE_SOURCES} ${WAP_API_SOURCES} ${WAP_SYSWRAP_SOURCES
     ${WAP_PFFFT_SOURCES} ${WAP_RNNOISE_VAD_SOURCES} ${WAP_ISAC_VAD_SOURCES} ${WAP_APM_SOURCES})
 list(TRANSFORM WAP_ALL_SOURCES PREPEND ${WEBRTC_DIR}/)
 
-# Everything a translation unit needs in order to include webrtc's headers, in one place, so
-# that the library, the x86 SIMD object libraries and the sanitized rebuild in tests/ cannot
-# drift apart. It is INTERFACE-only and carries no objects of its own.
+# Everything needed to include webrtc's headers, shared by the library, the x86 SIMD objects and
+# the sanitized rebuild in tests/ so they cannot drift apart.
 add_library(humla_apm_buildflags INTERFACE)
 target_include_directories(humla_apm_buildflags INTERFACE ${WEBRTC_DIR} ${WAP_DIR})
 target_compile_definitions(humla_apm_buildflags INTERFACE ${WAP_DEFS})
 target_compile_options(humla_apm_buildflags INTERFACE ${WAP_ARCH_FLAGS} ${WAP_CSTDINT_FIX})
-# meson.build:49-56 absl_dep, narrowed to the abseil headers this tree actually includes
-# (absl/{algorithm/container,base/*,functional/any_invocable,meta/type_traits,strings/*}.h).
-#
-# Upstream names six packages; the two missing here, absl_synchronization and
-# absl_bad_optional_access, are left out on purpose. Nothing in the source set includes their
-# headers directly, and both arrive anyway through abseil's own transitive dependencies, so
-# naming them would restate what abseil's CMake already propagates.
-#
-# Note what has and has not been shown about that. humla_apm is a static library, so the only
-# configuration in which these symbols reach a real linker today is the host test in tests/,
-# which links clean. The Android side does not link them yet at all: webrtc_apm is not in the
-# JNI library's CMakeLists (that is Task 3's hand-off), so the ABI builds only compile it. If an
-# undefined absl::Mutex or absl::bad_optional_access ever appears, it will appear the first time
-# Task 3 links libhumla.so -- add the two targets here then, rather than reaching for
-# -Wl,--start-group.
+# meson.build:49-56 absl_dep, narrowed to the abseil headers this tree actually includes.
+# absl_synchronization and absl_bad_optional_access are not named: nothing includes them directly
+# and abseil's own dependencies bring them in.
 target_link_libraries(humla_apm_buildflags INTERFACE
     absl::base absl::strings absl::any_invocable absl::algorithm_container absl::type_traits
     ${WAP_OS_LIBS})

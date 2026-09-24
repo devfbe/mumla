@@ -5,7 +5,6 @@ import android.app.Application
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
-import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -15,11 +14,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.mumla.R
+import se.lublin.mumla.testing.idleMainLooper
 
 /**
- * The prompt shown when a session ended with an error: what it says, and what its three
- * intents reach. Whether it is posted at all across the POST_NOTIFICATIONS boundary is
- * NotificationPostingTest's.
+ * The prompt shown when a session ended with an error: what it says and what its three intents
+ * reach. Posting across the POST_NOTIFICATIONS boundary is in NotificationPostingTest.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaReconnectNotificationTest {
@@ -54,7 +53,6 @@ class MumlaReconnectNotificationTest {
         it.intentFilter.hasAction("b_reconnect")
     }
 
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     @Test
     fun theErrorIsTheTextUnderTheDisconnectedTitle() {
@@ -90,7 +88,7 @@ class MumlaReconnectNotificationTest {
         @Suppress("DEPRECATION")
         assertThat(n.actions.single().icon).isEqualTo(R.drawable.ic_action_move)
         n.actions.single().actionIntent.send()
-        idle()
+        idleMainLooper()
         assertThat(actions.calls).containsExactly("reconnect")
     }
 
@@ -104,7 +102,7 @@ class MumlaReconnectNotificationTest {
         @Suppress("DEPRECATION")
         assertThat(n.actions.single().icon).isEqualTo(R.drawable.ic_action_delete_dark)
         n.actions.single().actionIntent.send()
-        idle()
+        idleMainLooper()
         assertThat(actions.calls).containsExactly("cancel")
     }
 
@@ -113,7 +111,7 @@ class MumlaReconnectNotificationTest {
         MumlaReconnectNotification.show(context, "socket reset", false, actions)
 
         posted()!!.deleteIntent.send()
-        idle()
+        idleMainLooper()
 
         assertThat(actions.calls).containsExactly("dismissed")
     }
@@ -151,7 +149,7 @@ class MumlaReconnectNotificationTest {
         assertThat(posted()).isNull()
         assertThat(ourReceivers()).isEmpty()
         reconnect.send()
-        idle()
+        idleMainLooper()
         assertThat(actions.calls).isEmpty()
     }
 

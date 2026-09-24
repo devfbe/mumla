@@ -8,7 +8,6 @@ Certaines des fonctionnalités :
 * Prise en charge du casque Bluetooth
 * Auto-inscription sur le serveur
 * Jetons d'accès
-* Prise en charge des codecs Opus, CELT et Speex
 * Reconnexion automatique
 * Assistance Tor via l'application Orbot
 * Synthèse vocale pour les messages (activé par défaut)

@@ -43,7 +43,6 @@
     <string name="vadFloorSum">Úroveň místnosti, od které se práh měří, v dB pod plným rozsahem. Používá se jen při vypnutém „Sledovat šum pozadí“.</string>
     <string name="vadRecalibrate">Změřit znovu</string>
     <string name="vadRecalibrateSum">Zapomene, co se zjistilo o místnosti a vašem hlasu, a začne měřit od začátku.</string>
-    <string name="vadRecalibrateDone">Měří se znovu.</string>
     <string name="vadOnset">Ignorovat krátké zvuky</string>
     <string name="vadOnsetSum">Jak dlouho musí zvuk trvat, než se počítá jako řeč. Delší nastavení odfiltruje jednotlivá cvaknutí klávesnice; každý stupeň stojí 10 ms ze začátku slova.</string>
     <string name="vadOnsetOff">Vypnuto (0 ms)</string>

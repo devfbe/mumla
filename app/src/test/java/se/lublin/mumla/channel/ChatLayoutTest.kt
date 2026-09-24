@@ -13,11 +13,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.mumla.R
 
-/**
- * Claims about `fragment_chat.xml` that hold without a fragment: what the fragment's
- * `findViewById` calls are allowed to assume, and one claim about the platform that the layout
- * used to get wrong.
- */
+/** Claims about `fragment_chat.xml` that the fragment's `findViewById` calls rely on. */
 @RunWith(RobolectricTestRunner::class)
 class ChatLayoutTest {
 
@@ -35,7 +31,7 @@ class ChatLayoutTest {
         assertThat(view.findViewById<View>(R.id.chat_image_progress).visibility).isEqualTo(View.GONE)
     }
 
-    /** Both compose-row buttons are icon-only, so a screen reader has nothing else to read out. */
+    /** Both compose-row buttons are icon-only, so they need a content description. */
     @Test
     fun bothComposeButtonsAreLabelledForAccessibility() {
         assertThat(view.findViewById<View>(R.id.chatImageSend).contentDescription.toString())
@@ -45,17 +41,8 @@ class ChatLayoutTest {
     }
 
     /**
-     * The premise of a line this layout no longer contains. Both `ImageButton`s carried
-     * `android:enabled="false"` from 2022 on, and it never did anything: `android:enabled` is a
-     * **`TextView`** attribute, not a `View` one — `com.android.internal.R.styleable` declares 122
-     * `View_*` entries and `TextView_enabled`, and no `View_enabled`, so `ImageView`'s constructor
-     * chain never reads it. Measured before the attributes were removed: both buttons inflated
-     * with `isEnabled == true` while the XML said `false`, so nothing about the shipped app
-     * changed when they went.
-     *
-     * Deleting a dead line leaves nothing that can go red, which is why the premise is written out
-     * here instead: if a platform release ever starts honouring the attribute on a plain `View`,
-     * this turns red rather than silently giving the removed lines a job again.
+     * `android:enabled` is a `TextView` attribute, not a `View` one, so it has no effect on an
+     * `ImageButton`. If a platform release starts honouring it, this fails.
      */
     @Test
     fun androidEnabledIsATextViewAttributeAndAnImageButtonIgnoresIt() {

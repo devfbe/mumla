@@ -21,8 +21,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:layout_marginLeft="16dp"
-    android:layout_marginRight="16dp"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
     android:divider="?attr/dividerHorizontal"
     android:orientation="horizontal"
     android:showDividers="middle">
@@ -43,7 +43,7 @@
         android:id="@+id/right_split"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="1"
+        android:layout_weight="@dimen/channel_list_weight"
         android:orientation="vertical" >
 
         <FrameLayout
@@ -52,33 +52,35 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-
         <FrameLayout
             android:id="@+id/target_panel"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:minHeight="48dp">
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#dadada"
+                android:background="?attr/colorOutlineVariant"
                 android:layout_gravity="top"/>
 
             <TextView
                 android:id="@+id/target_panel_warning"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:text="Shouting to Channel"
-                android:textSize="6pt"
+                tools:text="Shouting to Channel"
+                android:textSize="@dimen/target_panel_text_size"
                 android:textColor="?android:textColorPrimary"
                 android:singleLine="true"
-                android:gravity="left|center_vertical"
+                android:gravity="start|center_vertical"
                 android:textStyle="italic"
                 android:padding="8dp"/>
 
             <ImageView
                 android:id="@+id/target_panel_cancel"
-                android:layout_width="24dp"
+                android:layout_width="48dp"
+                android:padding="12dp"
+                android:contentDescription="@string/a11y_stop_shouting"
                 android:layout_height="match_parent"
                 app:srcCompat="@drawable/ic_action_delete_dark"
                 app:tint="?android:textColorPrimary"
@@ -94,11 +96,10 @@
             android:gravity="center_horizontal"
             android:orientation="vertical" >
 
-
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#dadada" />
+                android:background="?attr/colorOutlineVariant" />
 
             <Button
                 android:id="@+id/pushtotalk"
@@ -108,7 +109,7 @@
                 android:textAllCaps="true"
                 android:textStyle="bold"
                 android:textSize="14sp"
-                android:textColor="#858585"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:background="?attr/selectableItemBackground"/>
         </LinearLayout>
     </LinearLayout>

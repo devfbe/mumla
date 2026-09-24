@@ -6,7 +6,6 @@
     <string name="connectToServer">Koble til tjener</string>
     <string name="connect">Koble til</string>
     <string name="quickConnect">Hurtigtilkobling</string>
-    <string name="bluetooth">Blåtann</string>
     <string name="searchHint">Søk i kanaler og brukere</string>
     <string name="search">Søk</string>
     <string name="generateCertProgress">Genererer sertifikat …</string>
@@ -30,7 +29,6 @@
     <string name="mute">Forstum</string>
     <string name="ptt">Trykk for å snakke</string>
     <string name="connecting_to_server">Kobler til %s …</string>
-    <string name="connecting">Kobler til</string>
     <string name="server_label">Etikett</string>
     <string name="server_host">Adresse</string>
     <string name="server_port">Port</string>
@@ -54,10 +52,6 @@
     <string name="server_info_codec">Kodek: %s</string>
     <string name="server_info_host">Fjernvert %1$s (port %2$d)</string>
     <string name="server_info_latency">%.2f ms latens</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d ny melding</item>
-        <item quantity="other">%d nye meldinger</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d bruker</item>
         <item quantity="other">%d brukere</item>
@@ -69,7 +63,6 @@
 \nForsikre deg om at Orbot-programmet kjører.</string>
     <string name="orbot_not_installed">Orbot-programmet er ikke installert. Bruker ikke Tor.</string>
     <string name="grant_perm_draw_over_apps">Innvilg tilgang til å vise over andre programmer.</string>
-    <string name="grant_perm_storage">Innvilg tilgang til eksternt lagringsmedium.</string>
     <string name="grant_perm_microphone">Innvilg mikrofontilgang.</string>
     <string name="shout_configure">Sett opp stemmemål</string>
     <string name="shout_target">Roper til %s</string>
@@ -86,7 +79,6 @@
     <string name="invalid_certificate">Ugyldig sertifikat, kunne ikke laste det inn.</string>
     <string name="password">Passord</string>
     <string name="decrypt_certificate">Dekrypter sertifikat</string>
-    <string name="certificates">Sertifikater</string>
     <string name="no_certificate">Inget sertifikat</string>
     <string name="change_requires_reconnect">Koble til igjen for at endringene skal tre i effekt.</string>
     <string name="attempting_reconnect">Feil: %s
@@ -157,7 +149,6 @@
     <string name="channel">Kanal</string>
     <string name="mumlaDisconnected">Mumla er frakoblet</string>
     <string name="mumlaConnecting">Mumla kobler til …</string>
-    <string name="mumlaConnected">Mumla er tilkoblet</string>
     <string name="connected">Tilkoblet</string>
     <string name="clearChat">Tøm sludring</string>
     <string name="offline">Frakoblet</string>
@@ -220,4 +211,34 @@
     <string name="audio_device_bluetooth">Bluetooth-hodesett</string>
     <string name="audio_device_other">Lydenhet</string>
     <string name="echo_cancellation">Ekkodemping</string>
+    <string name="chat_notify_muted_deafened">Forstummet og gjort døv.</string>
+    <string name="chat_notify_muted">Forstummet.</string>
+    <string name="chat_notify_unmuted">Forstummelse opphevet.</string>
+    <string name="chat_notify_now_muted_deafened">%s er nå forstummet og gjort døv.</string>
+    <string name="chat_notify_now_muted">%s er nå forstummet.</string>
+    <string name="chat_notify_now_unmuted">%s har fått sin forstummelse opphevet.</string>
+    <string name="chat_notify_connected">%s koblet til.</string>
+    <string name="chat_notify_disconnected">%s koblet fra.</string>
+    <string name="chat_notify_kick_ban_self">Du ble kastet ut og bannlyst fra tjeneren av %1$s: %2$s.</string>
+    <string name="chat_notify_kick_self">Du ble kastet ut av tjeneren av %1$s: %2$s.</string>
+    <string name="chat_notify_kick_ban">%3$s ble kastet ut og bannlyst fra tjeneren av %1$s: %2$s.</string>
+    <string name="chat_notify_kick">%3$s ble kastet ut fra tjeneren av %1$s: %2$s.</string>
+    <string name="chat_notify_self_recording_started">Opptak startet</string>
+    <string name="chat_notify_self_recording_stopped">Opptak stoppet</string>
+    <string name="chat_notify_user_recording_started">%s startet opptak.</string>
+    <string name="chat_notify_user_recording_stopped">%s stoppet opptak.</string>
+    <string name="chat_notify_user_joined_channel">%s kom inn i kanalen.</string>
+    <string name="chat_notify_user_left_channel">%1$s ble flyttet til %2$s.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s ble flyttet inn fra %2$s av %3$s.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s ble flyttet til %2$s av %3$s.</string>
+    <string name="deny_reason_channel_name">Nektet: Ugyldig kanalnavn.</string>
+    <string name="deny_reason_text_too_long">Nektet: Tekstmeldingen er for lang.</string>
+    <string name="deny_reason_no_operation_temp">Nektet: Operasjonen tillates ikke i en midlertidig kanal.</string>
+    <string name="deny_reason_no_certificate">Du trenger et sertifikat for å utføre denne operasjonen.</string>
+    <string name="deny_reason_invalid_username">Ugyldig brukernavn.</string>
+    <string name="deny_reason_channel_full">Kanalen er full.</string>
+    <string name="deny_reason_channel_nesting">Grensen for underkanaler er nådd.</string>
+    <string name="deny_reason_other">Grunn: %s</string>
+    <string name="server">Tjener</string>
+    <string name="the_server">tjeneren</string>
 </resources>

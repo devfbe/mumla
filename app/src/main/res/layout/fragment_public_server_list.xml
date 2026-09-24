@@ -18,24 +18,22 @@
 
 <RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
     android:layout_width="fill_parent"
     android:layout_height="fill_parent">
 
-    <GridView
+    <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/server_list_grid"
-        android:layout_height="fill_parent"
-        android:layout_width="fill_parent"
-        android:gravity="center"
-        android:columnWidth="320dp"
-        android:numColumns="auto_fit"
-        android:verticalSpacing="10dp"
-        android:horizontalSpacing="10dp"
-        android:padding="10dp"
-        android:stretchMode="columnWidth"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:fastScrollEnabled="true"
-        android:listSelector="@android:color/transparent"/>
+        android:scrollbars="none"
+        app:fastScrollEnabled="true"
+        app:fastScrollHorizontalThumbDrawable="@drawable/fast_scroll_thumb"
+        app:fastScrollHorizontalTrackDrawable="@drawable/fast_scroll_track"
+        app:fastScrollVerticalThumbDrawable="@drawable/fast_scroll_thumb"
+        app:fastScrollVerticalTrackDrawable="@drawable/fast_scroll_track" />
 
     <ProgressBar
         android:id="@+id/serverProgress"
@@ -43,5 +41,15 @@
         android:layout_height="50dp"
         android:layout_centerInParent="true"
         android:indeterminate="true"
+        android:visibility="gone"/>
+
+    <TextView
+        android:id="@+id/server_list_tor_notice"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:gravity="center"
+        android:padding="@dimen/padding_medium"
+        android:text="@string/public_server_list_tor_disabled"
         android:visibility="gone"/>
 </RelativeLayout>

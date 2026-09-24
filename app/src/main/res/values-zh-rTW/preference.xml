@@ -9,7 +9,6 @@
     <string name="advancedAudio">進階</string>
     <string name="appearance">外觀</string>
     <string name="theme">主題</string>
-    <string name="disableOpusSum">關閉 Opus 對 Mumble 1.2.4 伺服器的支援。</string>
     <string name="inputMethodVoice">語音活動</string>
     <string name="inputMethodPtt">按鍵發話</string>
     <string name="hot_corner_none">關閉</string>
@@ -28,13 +27,11 @@
     <string name="defaultUsername">預設使用者名稱</string>
     <string name="certificateGenerate">產生憑證</string>
     <string name="voiceActivitySettings">語音活動設定</string>
-    <string name="disableOpus">避免 Opus 編解碼器</string>
     <string name="useTts">文字轉語音</string>
     <string name="theme_system">系統預設</string>
     <string name="language_system">系統預設</string>
     <string name="audioInputMethod">發話模式</string>
     <string name="audioInputMethodSum">語音發話的啟動模式。</string>
-    <string name="themeSum">變更 app 外觀。</string>
     <string name="audioSampleRate">輸入取樣率</string>
     <string name="forceTcpSum">不使用 UDP 進行通訊。</string>
     <string name="audioSampleRateSum">偏好的音訊取樣率。部份裝置僅支援較低頻率。</string>
@@ -76,8 +73,6 @@
     <string name="halfDuplexSum">於按鈕發話時靜音其他播放中的聲音以避免音訊回授。</string>
     <string name="pttSound">發話按鍵音效</string>
     <string name="pttSoundSum">當按下發話按鍵時播放音效。</string>
-    <string name="preprocessor_enabled">輸入預處理</string>
-    <string name="preprocessor_enabled_sum">降低環境噪音並調整語音音量。</string>
     <string name="audio_per_packet">封包音訊長度</string>
     <string name="audio_per_packet_sum">每個封包的音訊長度。</string>
     <string name="stay_awake">螢幕恆亮</string>
@@ -120,7 +115,6 @@
     <string name="vadFloorSum">計算門檻所依據的環境音量，單位為低於滿刻度的 dB。僅在「跟隨背景噪音」關閉時使用。</string>
     <string name="vadRecalibrate">重新測量</string>
     <string name="vadRecalibrateSum">清除已學習到的環境與您的聲音資訊，從頭開始測量。</string>
-    <string name="vadRecalibrateDone">正在重新測量。</string>
     <string name="vadOnset">忽略短促噪音</string>
     <string name="vadOnsetSum">聲音需持續多久才會被視為語音。較長的設定可濾掉單次鍵盤敲擊聲；每增加一級，會損失字詞開頭的 10 ms。</string>
     <string name="vadOnsetOff">關閉（0 ms）</string>

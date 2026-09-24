@@ -26,52 +26,76 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.controller.ServiceController
 import se.lublin.humla.session.AudioRouter
+import se.lublin.humla.testutil.FakeCommunicationDevices
+import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.createMumlaService
 
 /**
- * The earpiece is the handset mode now: routing voice to it - chosen in the audio chooser, or the
- * default output without a headset - holds the proximity lock that turns the screen off at the
- * ear, and every other device releases it. No switch of its own.
- *
- * Driven through the real chain: the router over a recording device seam, the service's route
- * report, and `MumlaService`'s hook - only the platform's `AudioManager` is replaced.
+ * Routing voice to the earpiece holds the proximity lock that turns the screen off at the ear;
+ * every other device releases it. Driven through the real router, route report and service hook;
+ * only the platform's `AudioManager` is replaced.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceAudioRouteTest {
     private lateinit var app: Application
-    private lateinit var devices: MumlaServiceBluetoothTest.RecordingDevices
+    private lateinit var devices: FakeCommunicationDevices
     private lateinit var service: MumlaService
+    private lateinit var controller: ServiceController<MumlaService>
 
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(app).edit().clear()
+        PreferenceManager.getDefaultSharedPreferences(app).edit()
             .putBoolean(Settings.PREF_BLUETOOTH_SCO, false).commit()
     }
 
     private fun create() {
-        devices = MumlaServiceBluetoothTest.RecordingDevices().apply {
-            available.clear()
+        devices = FakeCommunicationDevices().apply {
             available[EARPIECE] = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
             available[SPEAKER] = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
         }
-        val controller = Robolectric.buildService(MumlaService::class.java)
-        controller.get().communicationDevices = devices
-        service = controller.create().get()
+        controller = createMumlaService { communicationDevices = devices }
+        service = controller.get()
     }
 
-    private fun router(): AudioRouter =
-        Class.forName("se.lublin.humla.HumlaService").getDeclaredField("mRouter")
-            .apply { isAccessible = true }.get(service) as AudioRouter
+    private fun router(): AudioRouter = service.testRouter
+
+    private fun proximityLock(): PowerManager.WakeLock? = service.mProximityLock
 
     private fun proximityLockHeld(): Boolean {
-        val lock = MumlaService::class.java.getDeclaredField("mProximityLock")
-            .apply { isAccessible = true }.get(service) as PowerManager.WakeLock?
+        val lock = proximityLock()
         return lock != null && lock.isHeld && shadowOf(lock).tag == "Mumla:Proximity"
+    }
+
+    private fun reportRoute(type: Int?) = service.applyAudioRoute(type)
+
+    @Test
+    fun aRepeatedEarpieceReportKeepsOneLockAndLeaksNone() {
+        create()
+        reportRoute(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        val first = proximityLock()!!
+
+        reportRoute(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        reportRoute(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+
+        assertThat(first.isHeld).isFalse()
+        assertThat(proximityLockHeld()).isFalse()
+    }
+
+    @Test
+    fun destroyingTheServiceReleasesTheLock() {
+        create()
+        reportRoute(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        val lock = proximityLock()!!
+
+        controller.destroy()
+
+        assertThat(lock.isHeld).isFalse()
     }
 
     @Test
@@ -93,7 +117,7 @@ class MumlaServiceAudioRouteTest {
             .putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_EARPIECE).commit()
         create()
         // What ServerConnectTask sends at connect; the preference listener only sees changes.
-        router().earpieceByDefault = Settings.getInstance(app).isEarpieceDefaultOutput()
+        router().earpieceByDefault = Settings.getInstance(app).isEarpieceDefaultOutput
 
         router().engage()
 

@@ -35,6 +35,46 @@ import java.util.Date
 class Pkcs12CertificatesTest {
 
     @Test
+    fun `an export is protected by the password with PBES2 AES-256 and a SHA-256 MAC`() {
+        val out = ByteArrayOutputStream()
+        val generated = HumlaCertificateGenerator.generateCertificate(out)
+
+        val exported = Pkcs12Certificates.exportWithPassword(out.toByteArray(), "hunter2".toCharArray())
+
+        val pfx = PKCS12PfxPdu(exported)
+        assertThat(pfx.isMacValid(
+            org.bouncycastle.pkcs.jcajce.JcePKCS12MacCalculatorBuilderProvider().setProvider(BouncyCastleProvider()),
+            "hunter2".toCharArray(),
+        )).isTrue()
+        assertThat(pfx.macAlgorithmID.algorithm).isEqualTo(org.bouncycastle.asn1.nist.NISTObjectIdentifiers.id_sha256)
+        val infos = pfx.contentInfos
+        assertThat(infos.map { it.contentType })
+            .containsExactly(PKCSObjectIdentifiers.encryptedData, PKCSObjectIdentifiers.data)
+        val keyBag = PKCS12SafeBagFactory(infos.single { it.contentType == PKCSObjectIdentifiers.data })
+            .safeBags.single()
+        assertThat(keyBag.type).isEqualTo(PKCSObjectIdentifiers.pkcs8ShroudedKeyBag)
+        val encryptedKey = keyBag.bagValue as org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo
+        assertThat(encryptedKey.encryptionAlgorithm.algorithm).isEqualTo(PKCSObjectIdentifiers.id_PBES2)
+        val certInfo = infos.single { it.contentType == PKCSObjectIdentifiers.encryptedData }
+        val certAlg = org.bouncycastle.asn1.pkcs.EncryptedData.getInstance(certInfo.content).encryptionAlgorithm
+        assertThat(certAlg.algorithm).isEqualTo(PKCSObjectIdentifiers.id_PBES2)
+
+        assertThrows(IOException::class.java) { Pkcs12Certificates.load(exported, null) }
+        val store = Pkcs12Certificates.load(exported, "hunter2")
+        val alias = store.aliases().toList().single { store.isKeyEntry(it) }
+        assertThat(store.getCertificate(alias).encoded).isEqualTo(generated.encoded)
+        assertThat(store.getKey(alias, "hunter2".toCharArray())).isInstanceOf(RSAPrivateKey::class.java)
+    }
+
+    @Test
+    fun `isPkcs12 tells a pfx from garbage`() {
+        val out = ByteArrayOutputStream()
+        HumlaCertificateGenerator.generateCertificate(out)
+        assertThat(Pkcs12Certificates.isPkcs12(out.toByteArray())).isTrue()
+        assertThat(Pkcs12Certificates.isPkcs12(byteArrayOf(1, 2, 3))).isFalse()
+    }
+
+    @Test
     fun `loads a mumble style pkcs12 whose private key sits in an unencrypted keyBag`() {
         val keyPair = rsaKeyPair()
         val cert = selfSigned(keyPair, "CN=Mumble Test")
@@ -63,13 +103,9 @@ class Pkcs12CertificatesTest {
     }
 
     /**
-     * BouncyCastle 1.86 raised its PKCS#12 defaults to NIST levels: a MAC at 1,200,000 iterations
-     * and an encrypted certificate bag at 600,000. Deriving those costs the better part of a
-     * second per store and per load on a desktop, and several seconds on a phone -- once on every
-     * connection, on the thread that calls connect(). The key is kept with an empty password in
-     * the app's private database, so the iterations buy nothing against any realistic attacker.
-     *
-     * This pins the counts so a future BouncyCastle bump cannot quietly put them back.
+     * BouncyCastle's NIST-level PKCS#12 defaults (1.2M MAC iterations, 600k for encrypted bags)
+     * cost seconds per load on a phone, on every connection. The key is stored with an empty
+     * password in the app's private database, so the iterations buy nothing; pin the low counts.
      */
     @Test
     fun `a generated certificate uses a cheap iteration count`() {

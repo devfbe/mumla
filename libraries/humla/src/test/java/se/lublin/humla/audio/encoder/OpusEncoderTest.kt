@@ -3,12 +3,14 @@ package se.lublin.humla.audio.encoder
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import se.lublin.humla.audio.native.OpusEncoderApi
+import se.lublin.humla.audio.native.OpusEncoderNative
 import se.lublin.humla.net.PacketBuffer
 
 class OpusEncoderTest {
 
     private class FakeOpus : OpusEncoderApi {
         val encodedFrameSizes = mutableListOf<Int>()
+        val settings = linkedMapOf<Int, Int>()
         var destroys = 0
         override fun create(sampleRate: Int, channels: Int, application: Int, error: IntArray): Long {
             error[0] = 0
@@ -19,7 +21,10 @@ class OpusEncoderTest {
             out[0] = 0x11; out[1] = 0x22; out[2] = 0x33
             return 3
         }
-        override fun ctlSetInt(state: Long, request: Int, value: Int): Int = 0
+        override fun ctlSetInt(state: Long, request: Int, value: Int): Int {
+            settings[request] = value
+            return 0
+        }
         override fun ctlGetInt(state: Long, request: Int, value: IntArray): Int {
             value[0] = 40000
             return 0
@@ -30,26 +35,28 @@ class OpusEncoderTest {
     }
 
     @Test
-    fun `a full packet is written as varint length followed by the opus payload`() {
+    fun `a full packet is handed over as the bare opus payload`() {
         val fake = FakeOpus()
         val encoder = OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
 
         assertThat(encoder.encode(ShortArray(480), 480)).isEqualTo(0)
-        assertThat(encoder.isReady()).isFalse()
+        assertThat(encoder.isReady).isFalse()
         assertThat(encoder.encode(ShortArray(480), 480)).isEqualTo(3)
-        assertThat(encoder.isReady()).isTrue()
+        assertThat(encoder.isReady).isTrue()
         assertThat(fake.encodedFrameSizes).containsExactly(960)
 
+        assertThat(encoder.encodedLength).isEqualTo(3)
+        assertThat(encoder.isTerminator).isFalse()
         val pb = PacketBuffer.allocate(16)
         encoder.getEncodedData(pb)
-        assertThat(pb.size()).isEqualTo(4)
+        assertThat(pb.size()).isEqualTo(3)
         pb.rewind()
-        assertThat(pb.dataBlock(4)).isEqualTo(byteArrayOf(0x03, 0x11, 0x22, 0x33))
-        assertThat(encoder.isReady()).isFalse()
+        assertThat(pb.dataBlock(3)).isEqualTo(byteArrayOf(0x11, 0x22, 0x33))
+        assertThat(encoder.isReady).isFalse()
     }
 
     @Test
-    fun `terminate flushes a partial packet and sets the terminator bit in the header`() {
+    fun `terminate flushes a partial packet and marks it as the terminator`() {
         val fake = FakeOpus()
         val encoder = OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
         encoder.encode(ShortArray(480), 480)
@@ -57,11 +64,27 @@ class OpusEncoderTest {
         encoder.terminate()
 
         assertThat(fake.encodedFrameSizes).containsExactly(960) // zero-padded to a whole packet
+        assertThat(encoder.isTerminator).isTrue()
         val pb = PacketBuffer.allocate(16)
         encoder.getEncodedData(pb)
         pb.rewind()
-        assertThat(pb.readLong()).isEqualTo(3L or (1L shl 13)) // 8195: two-byte varint 0xA0 0x03
         assertThat(pb.dataBlock(3)).isEqualTo(byteArrayOf(0x11, 0x22, 0x33))
+        assertThat(encoder.isTerminator).isFalse()
+    }
+
+    @Test
+    fun `the encoder is configured for constant bitrate with in-band FEC and no DTX`() {
+        val fake = FakeOpus()
+        OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
+
+        assertThat(fake.settings).containsExactly(
+            OpusEncoderNative.OPUS_SET_VBR_REQUEST, 0,
+            OpusEncoderNative.OPUS_SET_BITRATE_REQUEST, 40000,
+            OpusEncoderNative.OPUS_SET_INBAND_FEC_REQUEST, 1,
+            OpusEncoderNative.OPUS_SET_PACKET_LOSS_PERC_REQUEST, OpusEncoder.EXPECTED_PACKET_LOSS_PERCENT,
+            OpusEncoderNative.OPUS_SET_DTX_REQUEST, 0,
+        )
+        assertThat(OpusEncoder.EXPECTED_PACKET_LOSS_PERCENT).isEqualTo(10)
     }
 
     @Test

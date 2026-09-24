@@ -25,7 +25,8 @@
         android:id="@+id/server_edit_name_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/server_label" />
+        android:text="@string/server_label"
+        android:labelFor="@+id/server_edit_name" />
 
     <EditText
         android:id="@+id/server_edit_name"
@@ -40,11 +41,13 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/server_host" />
+            android:text="@string/server_host"
+            android:labelFor="@+id/server_edit_host" />
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/server_port" />
+            android:text="@string/server_port"
+            android:labelFor="@+id/server_edit_port" />
     </LinearLayout>
 
     <LinearLayout
@@ -70,7 +73,8 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/server_username" />
+        android:text="@string/server_username"
+        android:labelFor="@+id/server_edit_username" />
 
     <EditText
         android:layout_height="wrap_content"
@@ -81,7 +85,8 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/server_password" />
+        android:text="@string/server_password"
+        android:labelFor="@+id/server_edit_password" />
 
     <EditText
         android:layout_height="wrap_content"

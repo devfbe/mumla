@@ -8,7 +8,6 @@ Algunas de las características:
 * Soporte para auriculares bluetooth
 * Registro automático en el servidor
 * Tokens de acceso
-* Soporte de códecs Opus, CELT y Speex
 * Reconexión automática
 * Soporte de Tor a través de la aplicación de Orbot
 * Texto-a-voz para los mensajes (encendido por defecto)

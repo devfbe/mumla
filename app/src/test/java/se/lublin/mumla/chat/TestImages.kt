@@ -21,11 +21,7 @@ object TestImages {
         return out.toByteArray()
     }
 
-    /**
-     * Real JPEG bytes. The send path is the one photographs take, and a photograph is a JPEG:
-     * it is the only format whose EXIF orientation the platform decoder acts on (see
-     * [OutgoingImagePreparer]), so a suite that only ever hands it PNGs never reaches that corner.
-     */
+    /** Real JPEG bytes: the only format whose EXIF orientation the platform decoder acts on. */
     fun jpeg(width: Int, height: Int, rgb: Int = 0x336699): ByteArray {
         val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
         val g = image.createGraphics()

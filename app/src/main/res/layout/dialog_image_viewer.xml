@@ -1,15 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    The image view must keep its android:id and must be the *only* thing ever put in it: without an
-    id View.dispatchSaveInstanceState stores nothing, and any placeholder with an intrinsic size
-    spends the restored zoom before the real image arrives. That is why the spinner and the failure
-    message are siblings rather than drawables on the image. Both pinned by
-    `theZoomSurvivesTwoRecreationsWhileTheImageIsStillLoading`.
-
-    There is deliberately no android:background here. Theme.Mumla.ImageViewer already paints the
-    window black, and a background on this root would be a second full-screen fill of every pixel on
-    every frame: lint's Overdraw, and measurable work under a 40 MB bitmap. Pinned from both sides
-    by `theBlackSurfaceIsTheWindowAndNotASecondLayerInTheLayout`.
+    The image view needs its android:id (zoom state is saved per id) and must only ever hold the
+    real image: a placeholder with an intrinsic size would consume the restored zoom. Hence the
+    spinner and error text are siblings. No android:background: the theme already paints the
+    window black, and a second full-screen fill is overdraw.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -37,6 +31,7 @@
         android:visibility="gone" />
 
     <LinearLayout
+        android:id="@+id/image_viewer_actions"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"

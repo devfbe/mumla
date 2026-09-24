@@ -3,6 +3,8 @@ package se.lublin.humla.net
 import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -10,18 +12,16 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.exception.NotSynchronizedException
-import se.lublin.humla.model.IChannel
+import se.lublin.humla.HumlaService
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.protocol.HumlaTCPMessageListener
-import se.lublin.humla.protocol.HumlaUDPMessageListener
 import se.lublin.humla.protocol.ModelHandler
+import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.MAX_EVENTS_PER_SLICE
+import se.lublin.humla.session.inMainThreadSlices
+import se.lublin.humla.testutil.collectOnMain
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.HumlaCallbacks
 import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaLogger
-import se.lublin.humla.util.HumlaObserver
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.security.cert.X509Certificate
@@ -34,9 +34,9 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 /**
- * Covers spec A1 for [HumlaConnection]: the socket is opened, frames are parsed and handlers are
- * dispatched on the "humla-protocol" thread, listener callbacks arrive on the main looper, and the
- * protocol thread's own lifecycle cannot swallow a disconnect report.
+ * [HumlaConnection] threading: the socket is opened, frames are parsed and handlers are dispatched
+ * on the "humla-protocol" thread, listener callbacks arrive on the main looper, and the protocol
+ * thread's own lifecycle cannot swallow a disconnect report.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaConnectionProtocolThreadTest {
@@ -50,16 +50,12 @@ class HumlaConnectionProtocolThreadTest {
     fun tearDown() {
         connection.disconnect()
         mainLooper.idle()
-        awaitUntil(description = "no live protocol thread left by this test") {
-            !connection.protocolThread.isAlive
-        }
+        awaitUntil(description = "nothing of the connection left by this test") { connection.isTerminated }
     }
 
     /**
-     * Waits for something the main looper still has to deliver, idling it as part of the wait.
-     * Idling once before the wait is not the same thing: every one of these callbacks is posted
-     * *after* the protocol thread has already set the flag a test could otherwise poll, so a wait
-     * on the flag races the callback it is supposed to be waiting for.
+     * Waits for something the main looper still has to deliver, idling it as part of the wait. The
+     * callbacks are posted *after* the protocol thread sets the flag a test could otherwise poll.
      */
     private fun awaitOnMain(description: String, condition: () -> Boolean) =
         awaitUntil(description = description) { mainLooper.idle(); condition() }
@@ -83,13 +79,9 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
-     * Runs [event] on the protocol thread in the window production actually hits: [disconnect] has
-     * been asked for and the teardown it posted is queued, but has not run yet - so both transports
-     * are still wired up and a callback that is not guarded really does reach them.
-     *
-     * The gate is what makes that interleaving a fact rather than a hope. Without it the event and
-     * the teardown race, and every assertion below would also hold for the run in which the
-     * teardown won, which is the run that proves nothing.
+     * Runs [event] on the protocol thread after [disconnect] has been asked for but before the
+     * teardown it posted has run, so both transports are still wired up. The gate forces that
+     * interleaving.
      */
     private fun inTheTeardownWindow(tcp: FakeTcpTransport, event: () -> Unit) {
         val gate = CountDownLatch(1)
@@ -116,42 +108,36 @@ class HumlaConnectionProtocolThreadTest {
     fun messagesAreParsedAndDispatchedOnTheProtocolThread() {
         val tcp = connectAndEstablish()
         val handlerThreads = CopyOnWriteArrayList<String>()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageVersion(msg: Mumble.Version) { handlerThreads += Thread.currentThread().name }
-        })
+        connection.addTcpHandler { if (it is Mumble.Version) { handlerThreads += Thread.currentThread().name } }
 
         tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())
 
         awaitUntil { handlerThreads.isNotEmpty() }
         assertThat(handlerThreads).containsExactly(PROTOCOL_THREAD)
         // The parsed version is only readable once the connection is synchronized.
-        assertThrows(NotSynchronizedException::class.java) { connection.getServerRelease() }
+        assertThrows(IllegalStateException::class.java) { connection.getServerRelease() }
     }
 
     @Test
-    fun fiveThousandChannelStatesDoNotStallAMainLooperTaskBeyond16ms() {
+    fun fiveThousandChannelStatesDoNotStallAMainLooperTask() {
         val tcp = connectAndEstablish()
-        val callbacks = HumlaCallbacks()
+        val events = MutableSharedFlow<HumlaEvent>(
+            extraBufferCapacity = HumlaService.EVENT_BUFFER,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
         val added = AtomicInteger()
         val lastAdded = AtomicInteger(-1)
         val addedOnMain = AtomicBoolean(true)
-        callbacks.registerObserver(object : HumlaObserver() {
-            override fun onChannelAdded(channel: IChannel) {
+        val collector = collectOnMain(events.inMainThreadSlices()) { event ->
+            if (event is HumlaEvent.ChannelAdded) {
                 added.incrementAndGet()
-                lastAdded.set(channel.id)
+                lastAdded.set(event.channel.id)
                 if (Looper.myLooper() != Looper.getMainLooper()) addedOnMain.set(false)
             }
-        })
-        val silentLogger = object : HumlaLogger {
-            override fun logInfo(message: String) {}
-            override fun logWarning(message: String) {}
-            override fun logError(message: String) {}
         }
-        connection.addTCPMessageHandlers(ModelHandler(RuntimeEnvironment.getApplication(), callbacks, silentLogger, null, null))
+        connection.addTcpHandler(ModelHandler({ events.tryEmit(it) }, null, null))
         val processed = AtomicInteger()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageChannelState(msg: Mumble.ChannelState) { processed.incrementAndGet() }
-        })
+        connection.addTcpHandler { if (it is Mumble.ChannelState) { processed.incrementAndGet() } }
         val frames = (0 until 5_000).map { i ->
             Mumble.ChannelState.newBuilder().setChannelId(i).setName("channel $i").apply { if (i > 0) parent = 0 }.build().toByteArray()
         }
@@ -172,32 +158,16 @@ class HumlaConnectionProtocolThreadTest {
             }
         }
 
-        // Spec A1's budget is 16 ms of main-thread work. What production actually bounds is the
-        // slice: at most MAX_EVENTS_PER_SLICE events (or SLICE_BUDGET_NANOS of self-measured work)
-        // per main-looper task, which is what these two assertions pin down. A wall-clock
-        // assertion here would fail on a GC pause or a loaded CI runner for reasons unrelated to
-        // the code under test.
+        // What production bounds is the slice: at most MAX_EVENTS_PER_SLICE events per main-looper
+        // task. A wall-clock assertion would be flaky on CI.
         assertThat(tasksBeforeProbe).isAtMost(1)
-        assertThat(eventsBeforeProbe).isAtMost(HumlaCallbacks.MAX_EVENTS_PER_SLICE)
+        assertThat(eventsBeforeProbe).isAtMost(MAX_EVENTS_PER_SLICE)
         mainLooper.idle()
-        // This used to assert all 5 000 arrive. The observer queue is bounded since task 5:
-        // onChannelAdded is a tree-shape event, so the oldest ones are dropped once the backlog
-        // passes MAX_QUEUED_EVENTS, and every observer of it in the tree answers by rebuilding the
-        // list from the model rather than by accumulating a delta. What this test is about -
-        // parsing off the main looper, delivery sliced, callbacks on main - is unchanged; the count
-        // is not.
-        //
-        // That the last channel arrives is asserted here only for the shape this test feeds:
-        // 5 000 frames of one droppable kind and nothing else, so the newest tree-shape event is
-        // always the newest event. It is not a property of the bound on its own - it holds because
-        // the bound never drops the newest droppable event and never lets an undroppable one evict
-        // a droppable. Those two rules are pinned in HumlaCallbacksBoundTest, on the mixed traffic
-        // this test does not produce (aQueueFullOfUndroppableEventsStillDeliversTheNewestTreeShape-
-        // Event, aUserSyncBehindAChannelSyncDoesNotSwallowEveryChannel); without them a real
-        // synchronisation, which sends users after channels, delivers no channel at all.
-        assertThat(added.get()).isEqualTo(HumlaCallbacks.MAX_QUEUED_EVENTS)
+        // All of them fit into the buffer, and they arrive in order on the main thread.
+        assertThat(added.get()).isEqualTo(5_000)
         assertThat(lastAdded.get()).isEqualTo(4_999)
         assertThat(addedOnMain.get()).isTrue()
+        collector.cancel()
     }
 
     @Test
@@ -214,20 +184,21 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
-     * The transport reports the disconnect from [TcpTransport.disconnect] itself, i.e. from inside
-     * the teardown this connection posts to its own protocol looper. If the looper is quit before
-     * that teardown has run, the post is refused; the real transport then hands its token back and
-     * the read loop is the only route left - and it has none at all when it is stuck in a connect
-     * without a timeout. A disconnect nobody reports is a session that never reconnects.
+     * The transport's own terminal callback, dispatched from inside the teardown, lands in the
+     * cancelled scope: the report the listener gets comes from disconnect() itself, exactly once.
      */
     @Test
-    fun theProtocolLooperStillAcceptsWorkWhileTheConnectionTearsItselfDown() {
+    fun theTransportsTerminalCallbackBehindTheTeardownIsDropped() {
         val tcp = connectAndEstablish()
 
         connection.disconnect()
         awaitUntil { tcp.disconnectCalls == 1 }
+        awaitUntil(description = "protocol thread quit") { !connection.protocolThread.isAlive }
+        awaitOnMain("disconnect delivered") { listener.disconnects.isNotEmpty() }
 
-        assertThat(tcp.terminalPostAccepted.get()).isTrue()
+        assertThat(tcp.terminalDelivered.get()).isFalse()
+        assertThat(listener.disconnects).containsExactly(null)
+        assertThat(listener.events.last()).isEqualTo("disconnected")
     }
 
     @Test
@@ -276,20 +247,15 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
-     * A frame that completed while the connection was being torn down must not reach the message
-     * handlers: by the time the disconnect is delivered the consumer has shut its audio path down,
-     * and a straggler packet would be decoded into it.
+     * A frame that completed during teardown must not reach the message handlers: the consumer has
+     * already shut its audio path down.
      */
     @Test
     fun framesArrivingBehindADisconnectAreNotDispatched() {
         val tcp = connectAndEstablish()
         val seen = AtomicInteger()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageVersion(msg: Mumble.Version) { seen.incrementAndGet() }
-        })
-        // Park the protocol thread so the frame is provably queued ahead of the teardown, which is
-        // the interleaving production hits: the read thread keeps delivering while the main thread
-        // has already asked for the disconnect and started shutting the audio path down.
+        connection.addTcpHandler { if (it is Mumble.Version) { seen.incrementAndGet() } }
+        // Park the protocol thread so the frame is provably queued ahead of the teardown.
         val gate = CountDownLatch(1)
         connection.protocolHandler.post { gate.await() }
         tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())
@@ -306,12 +272,8 @@ class HumlaConnectionProtocolThreadTest {
     fun aThrowingHandlerDoesNotKillTheProtocolThread() {
         val tcp = connectAndEstablish()
         val survivors = AtomicInteger()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageVersion(msg: Mumble.Version) { throw IllegalStateException("handler is broken") }
-        })
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageTextMessage(msg: Mumble.TextMessage) { survivors.incrementAndGet() }
-        })
+        connection.addTcpHandler { if (it is Mumble.Version) { error("handler is broken") } }
+        connection.addTcpHandler { if (it is Mumble.TextMessage) { survivors.incrementAndGet() } }
 
         tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())
         tcp.simulateMessage(HumlaTCPMessageType.TextMessage, Mumble.TextMessage.newBuilder().setMessage("still here").build().toByteArray())
@@ -319,6 +281,22 @@ class HumlaConnectionProtocolThreadTest {
         awaitUntil(description = "the protocol thread kept working after a handler threw") { survivors.get() == 1 }
         mainLooper.idle()
         assertThat(listener.disconnects).isEmpty()
+    }
+
+    /** What the handlers do not catch ends the connection with an error instead of the process. */
+    @Test
+    fun anErrorNothingCaughtEndsTheConnectionWithAnError() {
+        val tcp = connectAndEstablish()
+        connection.addTcpHandler { if (it is Mumble.Version) { throw AssertionError("broken invariant") } }
+
+        tcp.simulateMessage(HumlaTCPMessageType.Version, versionFrame)
+        awaitUntil { tcp.disconnectCalls == 1 }
+        awaitOnMain("disconnect delivered") { listener.disconnects.isNotEmpty() }
+
+        val error = listener.disconnects.single()!!
+        assertThat(error.reason).isEqualTo(HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+        assertThat(error.cause).isInstanceOf(AssertionError::class.java)
+        assertThat(listener.events.last()).isEqualTo("disconnected")
     }
 
     @Test
@@ -363,12 +341,7 @@ class HumlaConnectionProtocolThreadTest {
         assertThat(transports.tcps).hasSize(1)
     }
 
-    /**
-     * The other half of the single-use guard, and the only one a test can reach: a disconnect that
-     * arrives before the connection was ever started must still refuse a later connect(). Without
-     * it connect() would queue its work on a looper that is already quitting and the caller would
-     * wait in Connecting for a callback that never comes.
-     */
+    /** A disconnect before the connection was ever started must still refuse a later connect(). */
     @Test
     fun connectingAfterADisconnectThatPrecededItThrows() {
         connection.disconnect()
@@ -377,17 +350,14 @@ class HumlaConnectionProtocolThreadTest {
 
         assertThat(thrown).hasMessageThat().contains("single-use")
         assertThat(transports.tcps).isEmpty()
-        // Idled first. The main looper is paused in Robolectric, so without this the assertion
-        // below holds whether or not a phantom disconnect was posted - it would just still be
-        // sitting in the queue. That is how the guard it exists to pin stayed unpinned.
+        // The main looper is paused in Robolectric; idle it so a phantom disconnect would show up.
         mainLooper.idle()
         assertThat(listener.disconnects).isEmpty() // nothing was started, so there is nothing to report
     }
 
     /**
      * Asserts on the connection's own thread object rather than on a name filter over
-     * Thread.getAllStackTraces(): the filter direction matters here, and a thread a library renames
-     * would drop out of the filter and make a leak look like an empty result set.
+     * Thread.getAllStackTraces(), which a renamed thread would silently escape.
      */
     @Test
     fun anUnusedConnectionStartsNoProtocolThread() {
@@ -399,19 +369,38 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     @Test
-    fun aConnectionThatIsDisconnectedLeavesNoProtocolThreadBehind() {
+    fun aConnectionThatIsDisconnectedLeavesNoProtocolThreadAndNoCoroutineBehind() {
         connectAndEstablish()
         assertThat(connection.protocolThread.isAlive).isTrue()
+        assertThat(connection.isTerminated).isFalse()
 
         connection.disconnect()
 
-        awaitUntil(description = "protocol thread quit") { !connection.protocolThread.isAlive }
+        awaitUntil(description = "protocol thread quit and scope completed") { connection.isTerminated }
     }
 
+    /** Every piece of protocol work runs on the one protocol thread, in the order it was handed over. */
+    @Test
+    fun protocolWorkRunsInOrderOnTheOneProtocolThread() {
+        val tcp = connectAndEstablish()
+        val seen = CopyOnWriteArrayList<Pair<String, String>>()
+        connection.addTcpHandler { seen += Thread.currentThread().name to (it as Mumble.TextMessage).message }
+        val texts = (0 until 200).map { "message $it" }
+
+        thread(name = "fake-tcp-read") {
+            texts.forEach { tcp.simulateMessage(HumlaTCPMessageType.TextMessage, textFrame(it)) }
+        }
+
+        awaitUntil(description = "all messages handled") { seen.size == texts.size }
+        assertThat(seen.map { it.second }).containsExactlyElementsIn(texts).inOrder()
+        assertThat(seen.map { it.first }.toSet()).containsExactly(PROTOCOL_THREAD)
+    }
+
+    private fun textFrame(text: String) = Mumble.TextMessage.newBuilder().setMessage(text).build().toByteArray()
+
     /**
-     * [HumlaConnection.onTCPConnectionEstablished] behind a disconnect. The observable is the UDP
-     * transport, not the listener: the terminal gate drops a late onConnectionEstablished whether
-     * or not this guard is there, so an assertion on the listener would stay green without it.
+     * [HumlaConnection.onTCPConnectionEstablished] behind a disconnect. Observed via the UDP
+     * transport, because the terminal gate drops a late onConnectionEstablished on its own.
      */
     @Test
     fun anEstablishedCallbackBehindADisconnectStartsNoSecondUdpTransport() {
@@ -429,11 +418,7 @@ class HumlaConnectionProtocolThreadTest {
     fun aDatagramArrivingBehindADisconnectIsNotDispatched() {
         val tcp = connectAndEstablish()
         val seen = AtomicInteger()
-        connection.addUDPMessageHandlers(object : HumlaUDPMessageListener.Stub() {
-            override fun messageVoiceData(data: ByteArray, messageType: HumlaUDPMessageType) {
-                seen.incrementAndGet()
-            }
-        })
+        connection.addVoiceHandler { _ -> seen.incrementAndGet() }
 
         inTheTeardownWindow(tcp) { connection.onUDPDataReceived(voiceDatagram) }
 
@@ -441,9 +426,8 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
-     * [HumlaConnection.resyncCryptState] behind a disconnect. It sent through the transport
-     * directly, which bypassed the connected check every other send goes through, so it was the one
-     * callback that could still put bytes on a socket the user had already closed.
+     * [HumlaConnection.resyncCryptState] behind a disconnect: it sends through the transport
+     * directly, bypassing the connected check of the other sends.
      */
     @Test
     fun aCryptResyncBehindADisconnectPutsNothingOnTheWire() {
@@ -456,16 +440,8 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
-     * [HumlaConnection.isSynchronized] from the disconnect onwards. The teardown used to clear
-     * `synchronizedWithServer` as well, and the two masked each other exactly as 4.04 describes:
-     * removing either one alone left the suite green, removing both left [HumlaConnection]
-     * reporting a finished session as synchronized for the life of the object - which is
-     * `HumlaService.logInfo` writing into the chat log of a session that has ended, `getSession`
-     * handing out the dead session id, and `getAudioHandler`/`getModelHandler` returning null
-     * instead of throwing NotSynchronizedException.
-     *
-     * The window is the one that matters: the teardown is queued but has not run, so the flag the
-     * handshake set is still there and only the composition with `disconnectRequested` can answer.
+     * [HumlaConnection.isSynchronized] from the disconnect onwards, checked while the teardown is
+     * queued but has not run, so the flag the handshake set is still there.
      */
     @Test
     fun aSynchronizedConnectionIsNotSynchronizedFromTheDisconnectOnwards() {
@@ -478,17 +454,13 @@ class HumlaConnectionProtocolThreadTest {
 
         assertThat(insideTheWindow.get()).isFalse()
         assertThat(connection.isSynchronized).isFalse()
-        assertThrows(NotSynchronizedException::class.java) { connection.getSession() }
+        assertThrows(IllegalStateException::class.java) { connection.getSession() }
     }
 
     /**
-     * [HumlaConnection.sendUDPMessage] behind a disconnect. This is the send path that does *not*
-     * go through [HumlaConnection.sendTCPMessage]: both of its branches hand the bytes to a
-     * transport directly, so its own [HumlaConnection.isConnected] check is the only thing between a
-     * voice packet and a socket the user has already asked to close. It went unpinned because the
-     * teardown drops both transports a moment later, which makes the guard invisible everywhere
-     * except in the window the teardown has not reached yet - and that is the window in which the
-     * audio thread is still handing over frames.
+     * [HumlaConnection.sendUDPMessage] behind a disconnect. Both of its branches hand the bytes to a
+     * transport directly, so its own [HumlaConnection.isConnected] check is the only guard while
+     * the audio thread is still handing over frames.
      */
     @Test
     fun aVoicePacketSentBehindADisconnectReachesNeitherTransport() {
@@ -508,9 +480,8 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
-     * [HumlaConnection.onTCPConnectionFailed] behind a disconnect: it recorded the failure as this
-     * connection's error after the disconnect had already been reported as clean, so the consumer
-     * saw a null reason and a non-null [HumlaConnection.error] for the same connection.
+     * [HumlaConnection.onTCPConnectionFailed] behind a disconnect must not record an error for a
+     * connection whose disconnect was already reported as clean.
      */
     @Test
     fun aTransportFailureBehindADisconnectDoesNotBecomeTheConnectionsError() {
@@ -527,26 +498,18 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
-     * The structural half of the guard set, and the reason it is written with reflection rather
-     * than as a ninth hand-written case: every method of both transport listener interfaces has to
-     * be inert in the teardown window, so a callback a later task adds inherits the requirement
-     * instead of becoming the next mutation nobody thought to try. Adding a callback fails this
-     * test until someone has decided what it does behind a disconnect.
+     * Every method of both transport listener interfaces must be inert in the teardown window.
+     * Written with reflection so a newly added callback fails this test until its behaviour behind
+     * a disconnect has been decided.
      */
     @Test
     fun noTransportCallbackDoesAnyWorkBehindADisconnect() {
         val tcp = connectAndEstablish(forceTcp = false)
         awaitUntil(description = "udp started") { transports.udps.isNotEmpty() }
         val frames = AtomicInteger()
-        connection.addTCPMessageHandlers(object : HumlaTCPMessageListener.Stub() {
-            override fun messageVersion(msg: Mumble.Version) { frames.incrementAndGet() }
-        })
+        connection.addTcpHandler { if (it is Mumble.Version) { frames.incrementAndGet() } }
         val datagrams = AtomicInteger()
-        connection.addUDPMessageHandlers(object : HumlaUDPMessageListener.Stub() {
-            override fun messageVoiceData(data: ByteArray, messageType: HumlaUDPMessageType) {
-                datagrams.incrementAndGet()
-            }
-        })
+        connection.addVoiceHandler { _ -> datagrams.incrementAndGet() }
         val sentBefore = tcp.sent.toList()
         val invoked = CopyOnWriteArrayList<String>()
 
@@ -554,7 +517,7 @@ class HumlaConnectionProtocolThreadTest {
 
         assertThat(invoked).containsExactly(
             "onTCPConnectionDisconnect", "onTCPConnectionEstablished", "onTCPConnectionFailed",
-            "onTCPMessageReceived", "onTLSHandshakeFailed",
+            "onTCPMessageReceived", "onTLSCertificateChanged", "onTLSHandshakeFailed",
             "onUDPConnectionError", "onUDPDataReceived", "resyncCryptState",
         )
         assertThat(frames.get()).isEqualTo(0)
@@ -566,14 +529,9 @@ class HumlaConnectionProtocolThreadTest {
     }
 
     /**
-     * Terminality, the half of the listener contract that "exactly once" does not cover. Measured
-     * order on main before this: [established, disconnected, synchronized] - a ServerSync that was
-     * still being handled when disconnect() arrived reported the session as synchronized after it
-     * had ended.
-     *
-     * An entry guard cannot close this. The frame is already past every check and inside the
-     * handler; the decision has to be made where the callbacks are delivered, in the main looper's
-     * own FIFO order, or it holds 99% of the time - which in this project is the expensive state.
+     * Terminality: a ServerSync still being handled when disconnect() arrives must not report the
+     * session as synchronized after it ended. An entry guard cannot close this; the decision is
+     * made where the callbacks are delivered, in the main looper's FIFO order.
      */
     @Test
     fun aServerSyncStillInFlightWhenTheUserDisconnectsIsNotDeliveredBehindTheDisconnect() {
@@ -618,11 +576,17 @@ class HumlaConnectionProtocolThreadTest {
         assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
     }
 
-    /**
-     * onUDPConnectionError behind a disconnect. Measured order on main before this:
-     * [established, disconnected, warning:UDP_THREAD_FAILED] - "The UDP connection failed..." in
-     * the chat log of a session the user had already left.
-     */
+    @Test
+    fun aCertificateChangeBehindADisconnectPromptsNobody() {
+        val tcp = connectAndEstablish()
+
+        inTheTeardownWindow(tcp) { connection.onTLSCertificateChanged(emptyArray()) }
+
+        assertThat(listener.certificateChanges).isEmpty()
+        assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
+    }
+
+    /** onUDPConnectionError behind a disconnect must not warn in the chat of a finished session. */
     @Test
     fun aUdpErrorBehindADisconnectWarnsNobody() {
         val tcp = connectAndEstablish()
@@ -636,10 +600,8 @@ class HumlaConnectionProtocolThreadTest {
     /**
      * Invokes every method of both transport listener interfaces on [connection].
      *
-     * `methods`, not `declaredMethods`: the latter stops at the interface itself, so the first time
-     * someone pulls a shared base interface out of these two, its callbacks would be skipped in
-     * silence - which is the one thing this test exists to prevent. Static and synthetic members
-     * are dropped because they are not callbacks the transports invoke.
+     * `methods`, not `declaredMethods`, so callbacks of a shared base interface are not skipped.
+     * Static and synthetic members are not callbacks.
      */
     private fun invokeEveryTransportCallback(): List<String> {
         val interfaces = listOf(

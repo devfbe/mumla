@@ -26,170 +26,135 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 /**
- * What the race helpers in this file demand of the overlap they produce, so that a reader whose loop
- * never started cannot report no damage and pass (spec 4.04).
- *
- * This is a floor, and the distribution it sits under is machine-dependent and open downward - which
- * is what the earlier wording here got wrong by quoting a measured range as if it were the range.
- * Measured with the whole humla suite running, which is the loaded machine this has to survive, over
- * three runs: the three tests that use [ChannelTest.race] overlapped between 621 and 9 335 of their
- * observations, [ChannelTest.aRelinkIsNeverSeenHalfDone] managed 21 854 to 1 322 561 relinks, and
- * [ChannelTest.countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts] 49 267 to
- * 78 906 writes. A second machine produced 484 for the first of those, which is the lowest anything
- * has actually shown - a factor of 9.7 over this floor, and that factor rather than the range is
- * what says the floor still tells a change that closes the window from one that does not.
+ * The overlap the race helpers must produce, so that a reader whose loop never started cannot
+ * report no damage and pass. A floor on a machine-dependent distribution, kept well below the
+ * lowest counts seen under load.
  */
 private const val MIN_OVERLAPPING_READS = 50
 
-/**
- * How many observations the two tests with a fixed reader take while their writer runs.
- *
- * Fixing the reader's count instead of the writer's is what [ChannelTest.aRelinkIsNeverSeenHalfDone]
- * explains, and what makes the double-count signal in
- * [ChannelTest.countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts] fire at all.
- */
+/** How many observations the two tests with a fixed reader take while their writer runs. */
 private const val OBSERVATIONS = 20_000
 
-/**
- * How many subchannels the recursive count races against. 500 rather than the 20 it used to be:
- * the double-count signal needs two array copies of that list to overlap, and at 20 references they
- * never did - measured, five runs, zero. At 500, ten runs out of ten.
- */
+/** How many subchannels the recursive count races against; the double-count signal needs many. */
 private const val SUBCHANNELS = 500
 
 /** How many times [ChannelTest.race] calls its writer. */
 private const val WRITES = 20_000
 
 /**
- * The three lists a [Channel] owns are written on the protocol thread and read on the main thread,
- * so each one gets the same two questions: does a read hand back a snapshot, and can a read taken
- * while the protocol thread writes come back damaged? See [Damage] for what "damaged" covers and
- * why one signal is not enough.
+ * The three lists a [Channel] owns are written on the protocol thread and read on the main thread:
+ * does a read hand back a snapshot, and can a read during a write come back damaged ([Damage])?
  */
 class ChannelTest {
 
     @Test
     fun userListIsASnapshotUnaffectedByLaterMoves() {
         val root = Channel(0, false)
-        User(1, "a").setChannel(root)
+        User(1, "a").channel = root
 
-        val seen = root.getUsers()
-        User(2, "b").setChannel(root)
+        val seen = root.users
+        User(2, "b").channel = root
 
         assertThat(seen).hasSize(1)
-        assertThat(root.getUsers()).hasSize(2)
+        assertThat(root.users).hasSize(2)
     }
 
     @Test
     fun subchannelListIsASnapshotUnaffectedByLaterAdditions() {
         val root = Channel(0, false)
-        root.addSubchannel(Channel(1, false).apply { setName("a") })
+        root.addSubchannel(Channel(1, false).apply { name = "a" })
 
-        val seen = root.getSubchannels()
-        root.addSubchannel(Channel(2, false).apply { setName("b") })
+        val seen = root.subchannels
+        root.addSubchannel(Channel(2, false).apply { name = "b" })
 
         assertThat(seen).hasSize(1)
-        assertThat(root.getSubchannels()).hasSize(2)
+        assertThat(root.subchannels).hasSize(2)
     }
 
     @Test
     fun linkListIsASnapshot() {
-        val a = Channel(1, false).apply { setName("a") }
-        val b = Channel(2, false).apply { setName("b") }
+        val a = Channel(1, false).apply { name = "a" }
+        val b = Channel(2, false).apply { name = "b" }
         a.addLink(b)
 
-        val links = a.getLinks()
+        val links = a.links
         a.setLinks(emptyList())
 
         assertThat(links).containsExactly(b)
-        assertThat(a.getLinks()).isEmpty()
+        assertThat(a.links).isEmpty()
     }
 
     /**
-     * The Java original returned `Collections.unmodifiableList`, so callers outside this library
-     * are entitled to an exception when they write to what a getter handed them. Copying without
-     * wrapping would turn that exception into a write that silently goes nowhere.
+     * Getters return unmodifiable lists, so callers get an exception rather than a write that
+     * silently goes nowhere.
      */
     @Test
     fun aSnapshotIsStillNotWritable() {
         val root = Channel(0, false)
-        User(1, "a").setChannel(root)
-        root.addSubchannel(Channel(1, false).apply { setName("s") })
-        root.addLink(Channel(2, false).apply { setName("l") })
+        User(1, "a").channel = root
+        root.addSubchannel(Channel(1, false).apply { name = "s" })
+        root.addLink(Channel(2, false).apply { name = "l" })
 
         @Suppress("UNCHECKED_CAST")
         val writes = listOf<() -> Unit>(
-            { (root.getUsers() as MutableList<User>).clear() },
-            { (root.getSubchannels() as MutableList<Channel>).clear() },
-            { (root.getLinks() as MutableList<Channel>).clear() },
+            { (root.users as MutableList<User>).clear() },
+            { (root.subchannels as MutableList<Channel>).clear() },
+            { (root.links as MutableList<Channel>).clear() },
         )
         writes.forEach { assertThrows(UnsupportedOperationException::class.java) { it() } }
 
-        assertThat(root.getUsers()).hasSize(1)
-        assertThat(root.getSubchannels()).hasSize(1)
-        assertThat(root.getLinks()).hasSize(1)
+        assertThat(root.users).hasSize(1)
+        assertThat(root.subchannels).hasSize(1)
+        assertThat(root.links).hasSize(1)
     }
 
     @Test
     fun subchannelsStaySortedByPositionThenName() {
         val root = Channel(0, false)
-        val b = Channel(1, false).apply { setName("b"); setPosition(1) }
-        val a = Channel(2, false).apply { setName("a"); setPosition(1) }
-        val z = Channel(3, false).apply { setName("z"); setPosition(0) }
+        val b = Channel(1, false).apply { name = "b"; position = 1 }
+        val a = Channel(2, false).apply { name = "a"; position = 1 }
+        val z = Channel(3, false).apply { name = "z"; position = 0 }
 
         root.addSubchannel(b)
         root.addSubchannel(a)
         root.addSubchannel(z)
 
-        assertThat(root.getSubchannels().map { it.getName() }).containsExactly("z", "a", "b").inOrder()
+        assertThat(root.subchannels.map { it.name }).containsExactly("z", "a", "b").inOrder()
     }
 
     /**
-     * `ModelHandler.createStubChannel` puts a channel with no name in the tree, and the server can
-     * announce that channel as someone's parent before it announces its name. Comparing against it
-     * threw before the Kotlin conversion, which the sorted insert below would have hit.
+     * `ModelHandler.createStubChannel` puts a nameless channel in the tree, and the server can
+     * announce it as a parent before announcing its name; the sorted insert compares against it.
      */
     @Test
     fun namelessChannelsSortFirstInsteadOfThrowing() {
         val root = Channel(0, false)
-        root.addSubchannel(Channel(1, false).apply { setName("a") })
+        root.addSubchannel(Channel(1, false).apply { name = "a" })
         root.addSubchannel(Channel(2, false))
-        root.addLink(Channel(3, false).apply { setName("b") })
+        root.addLink(Channel(3, false).apply { name = "b" })
         root.addLink(Channel(4, false))
 
-        assertThat(root.getSubchannels().map { it.getId() }).containsExactly(2, 1).inOrder()
-        assertThat(root.getLinks().map { it.getId() }).containsExactly(4, 3).inOrder()
+        assertThat(root.subchannels.map { it.id }).containsExactly(2, 1).inOrder()
+        assertThat(root.links.map { it.id }).containsExactly(4, 3).inOrder()
     }
 
     @Test
     fun nullLinksAndSubchannelsAreIgnored() {
-        val a = Channel(1, false).apply { setName("a") }
+        val a = Channel(1, false).apply { name = "a" }
 
         a.addLink(null)
         a.removeLink(null)
         a.addSubchannel(null)
         a.removeSubchannel(null)
 
-        assertThat(a.getLinks()).isEmpty()
-        assertThat(a.getSubchannels()).isEmpty()
+        assertThat(a.links).isEmpty()
+        assertThat(a.subchannels).isEmpty()
     }
 
     /**
-     * The writer moves *every* user back and forth, in whole passes, for the reason the two tests
-     * below give - and here it carries a second one. `i % 2` beside `i % users.size` makes the
-     * branch a pure function of the element whenever the list is even-sized, so each user was bound
-     * to one channel for good: measured, 50 real channel changes out of 20 000 writes, with
-     * `root.getUsers()` settling between 1 and 25 instead of swinging between 0 and 50. Nobody was
-     * ever *between* two channels, so every defect that needs a source object and a target object
-     * at once was invisible - a [User.setChannel] that joined before it left, say. That is not a
-     * hypothetical: it is the very ordering
-     * [countingUsersRecursivelyWhileTheTreeChangesNeverThrows] rests its ceiling on, and this is
-     * the only test that could break it.
-     *
-     * Whole passes make all 20 000 writes real moves, and the printed range is what the reader then
-     * sees - 0 to 50 in three runs of three, against 0 to 25 before. Only the move count is
-     * asserted: it is a property of the writer and came out 20 000 every time, while the range is a
-     * property of the schedule.
+     * The writer moves every user back and forth in whole passes, so each write is a real move and
+     * users are really between channels (which catches a [User.setChannel] that joins before it
+     * leaves). Only the move count is asserted; the observed range depends on the schedule.
      */
     @Test
     fun readingUsersWhileAnotherThreadMovesThemStaysUndamaged() {
@@ -204,11 +169,11 @@ class ChannelTest {
             write = { i ->
                 val user = users[i % users.size]
                 val target = if ((i / users.size) % 2 == 0) root else other
-                if (user.getChannel() !== target) moves.incrementAndGet()
-                user.setChannel(target)
+                if (user.channel !== target) moves.incrementAndGet()
+                user.channel = target
             },
             read = {
-                root.getUsers().also {
+                root.users.also {
                     fullest.accumulateAndGet(it.size, ::maxOf)
                     emptiest.accumulateAndGet(it.size, ::minOf)
                 }
@@ -217,7 +182,7 @@ class ChannelTest {
 
         println(
             "MEASURE channel changes: ${moves.get()} of $WRITES," +
-                " root.getUsers() between ${emptiest.get()} and ${fullest.get()}"
+                " root.users between ${emptiest.get()} and ${fullest.get()}"
         )
         assertThat(damage.report()).isEmpty()
         assertThat(moves.get()).isAtLeast(WRITES / 2)
@@ -226,17 +191,16 @@ class ChannelTest {
     @Test
     fun readingSubchannelsWhileAnotherThreadAddsAndRemovesThemStaysUndamaged() {
         val root = Channel(0, false)
-        val subchannels = (1..50).map { Channel(it, false).apply { setName("channel $it") } }
+        val subchannels = (1..50).map { Channel(it, false).apply { name = "channel $it" } }
 
         val damage = race(
             write = { i ->
                 // Whole passes of adds and of removes, so the list really oscillates between
-                // empty and full. Alternating add/remove per iteration would keep hitting
-                // different elements and only ever grow the list.
+                // empty and full.
                 val sub = subchannels[i % subchannels.size]
                 if ((i / subchannels.size) % 2 == 0) root.addSubchannel(sub) else root.removeSubchannel(sub)
             },
-            read = { root.getSubchannels() },
+            read = { root.subchannels },
         )
 
         assertThat(damage.report()).isEmpty()
@@ -244,123 +208,83 @@ class ChannelTest {
 
     @Test
     fun readingLinksWhileAnotherThreadRelinksStaysUndamaged() {
-        val root = Channel(0, false).apply { setName("root") }
-        val linked = (1..50).map { Channel(it, false).apply { setName("channel $it") } }
+        val root = Channel(0, false).apply { name = "root" }
+        val linked = (1..50).map { Channel(it, false).apply { name = "channel $it" } }
 
         val damage = race(
             write = { i ->
                 val link = linked[i % linked.size]
                 if ((i / linked.size) % 2 == 0) root.addLink(link) else root.removeLink(link)
             },
-            read = { root.getLinks() },
+            read = { root.links },
         )
 
         assertThat(damage.report()).isEmpty()
     }
 
     /**
-     * A server re-announces a channel's links as a whole set, and `ChannelListAdapter` italicises a
-     * channel that is linked to ours (`:167`, `:172`), so a set that arrives in pieces makes the
-     * italics blink. [Channel.setLinks] replaces the list under the lock, which makes this the one
-     * assertion in this file that is exact rather than statistical: a reader sees the old set or
-     * the new one, never a count in between.
+     * A server re-announces a channel's links as a whole set, and a set arriving in pieces would
+     * make the italics of linked channels blink. [Channel.setLinks] replaces the list under the
+     * lock, so a reader sees the old set or the new one.
+     *
+     * Deterministic: halfway through the new set, the writer starts a reader and waits until that
+     * reader is either done (it read without waiting for the relink) or blocked on the channel's
+     * monitor. Only the second outcome is correct.
      */
     @Test
     fun aRelinkIsNeverSeenHalfDone() {
-        val root = Channel(0, false).apply { setName("root") }
-        val linked = (1..50).map { Channel(it, false).apply { setName("channel $it") } }
+        val root = Channel(0, false).apply { name = "root" }
+        val linked = (1..50).map { Channel(it, false).apply { name = "channel $it" } }
         root.setLinks(linked)
 
-        val partials = AtomicInteger()
-        val relinks = AtomicInteger()
-        val done = AtomicBoolean(false)
-        // The reader is this thread and takes a fixed number of observations, and the writer runs
-        // until it has them. The other way round - a writer with a fixed count and a reader that
-        // spins until it stops - looks equivalent and is not: a relink holds the monitor for 50
-        // sorted inserts while a read holds it for one copy, so the reader is starved by the very
-        // lock it is here to observe and its share is whatever the scheduler leaves it. Measured
-        // on that shape, over eight runs: 21 to 399 reads, a spread wide enough that any bound
-        // worth asserting is also a bound that fails on a good day. This way the observations are
-        // fixed and it is the writer's count that comes out variable - and the writer, being the
-        // greedy one, is never the starved side.
-        val writer = thread(name = "relinker") {
-            while (!done.get()) {
-                root.setLinks(linked)
-                relinks.incrementAndGet()
+        val seen = AtomicInteger(-1)
+        val reader = Thread({ seen.set(root.links.size) }, "reader")
+        val midway = linked.size / 2
+        val gated = object : AbstractCollection<Channel?>() {
+            override val size = linked.size
+            override fun iterator() = object : Iterator<Channel?> {
+                private var next = 0
+                override fun hasNext() = next < linked.size
+                override fun next(): Channel? {
+                    if (!hasNext()) throw NoSuchElementException()
+                    if (next == midway) {
+                        reader.start()
+                        awaitUntil(description = "the reader to finish or to wait for the lock") {
+                            reader.state == Thread.State.BLOCKED || reader.state == Thread.State.TERMINATED
+                        }
+                    }
+                    return linked[next++]
+                }
             }
-        }
-        try {
-            // Started, not merely spawned. Nothing here can see a half-done relink - both members
-            // hold the same monitor - so the only way this test can fail is the floor below, and
-            // the only way that can happen on a correct implementation is the reader taking all its
-            // observations before the writer thread is ever scheduled. Seen once, on a machine
-            // running a full rebuild beside it.
-            awaitUntil(description = "the relinker's first pass") { relinks.get() > 0 }
-            repeat(OBSERVATIONS) {
-                if (root.getLinks().size != linked.size) partials.incrementAndGet()
-            }
-        } finally {
-            done.set(true)
-            writer.join()
         }
 
-        assertThat(partials.get()).isEqualTo(0)
-        // Every one of the observations above was taken between the writer's first relink and its
-        // last, so what is left to establish is that there were relinks to overlap (spec 4.04).
-        assertThat(relinks.get()).isAtLeast(MIN_OVERLAPPING_READS)
+        root.setLinks(gated)
+        reader.join()
+
+        assertThat(seen.get()).isEqualTo(linked.size)
     }
 
     /**
-     * `getSubchannelUserCount` reads both lists and then recurses, so it is the one member that
-     * would hold a lock while calling into another [Channel] if it were simply `@Synchronized`. Its
-     * own race, because the reader here is the recursion rather than a returned list, and its own
-     * loop shape - see the bottom of this comment.
+     * `getSubchannelUserCount` reads both lists and then recurses, so it would hold a lock while
+     * calling into another [Channel] if it were simply `@Synchronized`. Two signals:
+     * - an **exception**: an unlocked copy of `mSubchannels` can include a slot a removal already
+     *   nulled, and the recursion dereferences it;
+     * - a **double count**: a copy taken mid-shift of an insert holds one subchannel twice. This
+     *   only fires with many subchannels, and not on every run, so both signals are reported
+     *   together.
      *
-     * Two signals, and both have now been seen red rather than argued for:
-     * - **an exception.** Without the `synchronized` block the copy of `mSubchannels` includes a
-     *   slot `fastRemove` has already nulled (`es[size = newSize] = null`) and the recursion
-     *   dereferences it, on what is the main thread in production. Measured on the fixture below
-     *   with the block removed: 341 to 756 throws per run, in 11 runs out of 11. With it: 0.
-     * - **a double count.** The same torn copy can hold one subchannel twice - `add(i, e)` shifts
-     *   the tail right with one `System.arraycopy` and a copy taken mid-shift sees the moved
-     *   element in both places - and the walk counts both. This is the signal spec 4.05 calls the
-     *   one most likely to be missing, and here it was missing: at 20 subchannels it never fired,
-     *   not in five runs, not with a reader that catches per observation and keeps going, which is
-     *   the most generous shape there is. The fixture was not unlucky, it was too small. A
-     *   duplicate only passes the ceiling while the tree is already holding every user, and at 20
-     *   subchannels the two array copies that have to overlap are 20 references long. At 500, and
-     *   with the *reader's* count fixed rather than the writer's, it fires in 10 of 11 runs of this
-     *   test with the lock removed - 1 to 8 observations per run - and in 10 of 10 runs of a
-     *   standalone harness. Never once with the lock in place, in 20 runs. It is therefore a signal
-     *   and not a certainty: on a run where it stays quiet the exception signal is what carries the
-     *   test, which is why both are reported together below rather than asserted in sequence.
-     *
-     * The count carries the second signal only because of how this fixture is built, so the
-     * constraint is written down rather than assumed: **every user has one home subchannel and only
-     * ever joins or leaves that one**, and [User.setChannel] leaves the old channel before joining
-     * the new, so a user is in at most one list at any instant and can be counted at most once per
-     * walk. The sum can then exceed the number of users only through a duplicated subchannel. Users
-     * wandering between subchannels would break the ceiling with no race at all - the walk reads one
-     * subchannel after another, so a user moving out of an already-counted one into one still to
-     * come is counted twice, and that is by design (see [Channel]'s class doc: a snapshot of one
-     * list, not of the tree). A [User.setChannel] that joined before it left would put every user in
-     * two lists at once and break the same constraint;
-     * [readingUsersWhileAnotherThreadMovesThemStaysUndamaged] is the test that has to catch that.
-     *
-     * The reader's count is fixed and the writer runs until it is done, which is the shape
-     * [aRelinkIsNeverSeenHalfDone] explains. Here it is what makes the duplicate signal a signal at
-     * all: the other way round the reader's share is whatever the scheduler leaves it - 3 713 to
-     * 21 107 observations, measured - and that variance is what decided whether it fired.
+     * Every user has one home subchannel and only ever joins or leaves that one, and
+     * [User.setChannel] leaves before it joins, so the sum can exceed the number of users only
+     * through a duplicated subchannel. Users wandering between subchannels would break the ceiling
+     * without a race, by design (see [Channel]: a snapshot of one list, not of the tree).
      */
     @Test
     fun countingUsersRecursivelyWhileTheTreeChangesNeitherThrowsNorDoubleCounts() {
-        val root = Channel(0, false).apply { setName("root") }
-        val subchannels = (1..SUBCHANNELS).map { Channel(it, false).apply { setName("channel $it") } }
+        val root = Channel(0, false).apply { name = "root" }
+        val subchannels = (1..SUBCHANNELS).map { Channel(it, false).apply { name = "channel $it" } }
         val users = (0 until 50).map { User(it, "user$it") }
-        // The tree starts empty on purpose: the writer's first pass is what attaches the
-        // subchannels, so each of them is in the list exactly once or not at all. Attaching them
-        // here as well would put every one of them in twice for the whole first pass, and the count
-        // would pass the ceiling for a reason that has nothing to do with the lock.
+        // The tree starts empty on purpose: the writer's first pass attaches the subchannels, so
+        // each is in the list exactly once or not at all.
         val overcounts = AtomicInteger()
         val throws = AtomicInteger()
         val firstThrow = AtomicReference<Throwable?>()
@@ -370,25 +294,23 @@ class ChannelTest {
         val writer = thread(name = "tree-writer") {
             var i = 0
             while (!done.get()) {
-                // Whole passes of adds and of removes, for the reason the tests above give: an
-                // add/remove alternation per iteration removes something that is not there on every
-                // odd step, so the list only ever grows and nothing is ever torn.
+                // Whole passes of adds and of removes; alternating per iteration would only grow
+                // the list.
                 val sub = subchannels[i % subchannels.size]
                 if ((i / subchannels.size) % 2 == 0) root.addSubchannel(sub) else root.removeSubchannel(sub)
                 val user = users[i % users.size]
                 val home = subchannels[(i % users.size) % subchannels.size]
-                user.setChannel(if ((i / users.size) % 2 == 0) home else null)
+                user.channel = if ((i / users.size) % 2 == 0) home else null
                 i++
                 writes.incrementAndGet()
             }
         }
         try {
             awaitUntil(description = "the tree writer's first pass") { writes.get() > 0 }
-            // Catching per observation rather than around the loop, so that one throw does not end
-            // the run and hide however many double counts were still to come.
+            // Catch per observation so one throw does not hide later double counts.
             repeat(OBSERVATIONS) {
                 try {
-                    if (root.getSubchannelUserCount() > users.size) overcounts.incrementAndGet()
+                    if (root.subchannelUserCount > users.size) overcounts.incrementAndGet()
                 } catch (t: Throwable) {
                     firstThrow.compareAndSet(null, t)
                     throws.incrementAndGet()
@@ -399,16 +321,14 @@ class ChannelTest {
             writer.join()
         }
 
-        // Reported together rather than asserted one after another, like [Damage.report] below: the
-        // exception signal fires first under the mutation that takes the lock away, and separate
-        // assertions would let it shadow the double count for good.
+        // Reported together, like [Damage.report]: the exception signal would otherwise shadow
+        // the double count.
         val damage = buildList {
             firstThrow.get()?.let {
                 add("${throws.get()} of $OBSERVATIONS observations threw, first $it")
             }
             if (overcounts.get() > 0) add("${overcounts.get()} observations counted a user twice")
-            // Every observation above was taken between the writer's first write and its last, so
-            // what is left to establish is that there were writes to overlap (spec 4.04).
+            // Every observation was taken while the writer ran; check there were enough writes.
             if (writes.get() < MIN_OVERLAPPING_READS) add("only ${writes.get()} writes to overlap")
         }
 
@@ -426,8 +346,8 @@ class ChannelTest {
      * - a **double**, the same element twice. An insert at an index shifts the tail right with one
      *   `System.arraycopy`, and a copy taken mid-shift sees the moved element in both places.
      *
-     * The last two are the quiet ones. `ChannelListAdapter.constructNodes` (`:445`) skips nulls, so
-     * on the device a hole is a user that silently vanishes and a double is one that appears twice.
+     * A hole or a double is quiet on the device: the channel list skips nulls, so a user silently
+     * vanishes or appears twice.
      */
     private class Damage {
         val failure = AtomicReference<Throwable?>()
@@ -448,15 +368,9 @@ class ChannelTest {
 
     /**
      * Runs [write] [WRITES] times on one thread while another repeatedly takes [read] and inspects
-     * the result, and reports what the reader saw. Both threads are joined before anything is
-     * asserted, but every observation is taken while the writer is running - an inspection after
-     * the join would see a settled list and prove nothing (spec 4.04).
-     *
-     * That last sentence is a claim about the schedule, so the helper counts rather than claims:
-     * an observation counts as overlapping when the writer's own counter advanced while the
-     * observation was being taken, and [Damage.report] reports a shortfall as damage of its own.
-     * A reader thread that never entered its loop - because it lost the start, or because a later
-     * change made [write] finish first - otherwise hands back an empty report and a green test.
+     * the result. An observation counts as overlapping only when the writer's counter advanced
+     * during it, and [Damage.report] reports a shortfall as damage, so a reader that never ran
+     * cannot pass.
      */
     private fun race(write: (Int) -> Unit, read: () -> List<Any?>): Damage {
         val damage = Damage()
@@ -465,9 +379,8 @@ class ChannelTest {
         val writes = AtomicInteger()
         val writer = thread(name = "writer") {
             try {
-                // The same start race the two fixed-count tests above have, in the other direction:
-                // here it is the reader that may still be unscheduled when the writer finishes all
-                // WRITES, which would leave it no window at all and report that as damage.
+                // The reader may still be unscheduled when the writer finishes, which would leave
+                // it no window at all.
                 awaitUntil(description = "the reader's loop") { reading.get() }
                 for (i in 0 until WRITES) {
                     write(i)

@@ -53,13 +53,14 @@ NDK 29.0.14206865, SDK CMake 4.1.2, meson/ninja and `git`. Inside it:
     ./gradlew test                   # unit tests of every module (JVM, Robolectric)
     ./gradlew lintFossDebug lintGoogDebug lintDonationDebug lintBetaDebug \
               :libraries:humla:lintDebug
+    ./gradlew detekt                 # Kotlin static analysis against each module's baseline
 
 If you cloned without `--recursive`, run `git submodule update --init --recursive`
 first. `libraries/humla` is an ordinary directory in this repository, not a
 submodule; the submodules are the third-party native sources under
-`libraries/humla/src/main/cpp/third_party/` — the codecs opus, speex, CELT
-0.7.0 and CELT 0.11.0, and the audio processing libraries speexdsp, RNNoise,
-webrtc-audio-processing and its dependency abseil-cpp — built for
+`libraries/humla/src/main/cpp/third_party/` — the Opus codec and the audio
+processing libraries speexdsp, RNNoise, webrtc-audio-processing and its
+dependency abseil-cpp — built for
 `arm64-v8a`, `armeabi-v7a` and `x86_64` via CMake with hand-written JNI glue.
 
 [direnv](https://direnv.net/) users can `direnv allow` to enter the shell
@@ -77,7 +78,9 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
   (nothing generated is checked in), crypto uses BouncyCastle, and
   `src/main/cpp/CMakeLists.txt` builds the native codecs and audio processing
   libraries and their JNI glue.
-- `docs/superpowers/` — the ongoing modernization specification and plans.
+- `build-logic/` — Gradle convention plugins with the Android configuration
+  shared by both modules; dependency versions live in
+  `gradle/libs.versions.toml`.
 - `NOTICE.md` — third-party components and licenses.
 
 ## Contributing
@@ -87,7 +90,7 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
   `kotlinx-coroutines-test`); native code stays a thin JNI pass-through and
   the Kotlin side is tested against fakes.
   `./gradlew assembleFossDebug assembleGoogDebug test lintFossDebug
-  lintGoogDebug lintDonationDebug lintBetaDebug :libraries:humla:lintDebug`
+  lintGoogDebug lintDonationDebug lintBetaDebug :libraries:humla:lintDebug detekt`
   (CI's acceptance command, verbatim: all four product flavors and both
   modules) must be green. The bare `lint` task only covers `betaDebug`, so
   every flavor is named.
@@ -101,9 +104,6 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
   `libraries/humla/src/main/res/values/strings.xml`; translations are
   handled on [Weblate](https://hosted.weblate.org/engage/mumla/) — please do
   not edit the translated resource files directly.
-- Work is currently organized in streams described in
-  `docs/superpowers/specs/2026-09-19-mumla-modernization.md`; check the
-  ownership table there before touching shared files.
 
 ## FAQ
 

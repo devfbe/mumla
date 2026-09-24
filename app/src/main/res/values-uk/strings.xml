@@ -57,7 +57,6 @@
     <string name="no_servers">Спочатку додайте сервер, натиснувши \'Додати\' в панелі керування.</string>
     <string name="server_host">Адреса</string>
     <string name="server_label">Позначка</string>
-    <string name="connecting">Підключення</string>
     <string name="connecting_to_server">Підключення до %s…</string>
     <string name="ptt">Натисни-щоб-говорити</string>
     <string name="mute">Приглушити</string>
@@ -136,7 +135,6 @@
     <string name="cancel_reconnect">Скасувати повторне підключення</string>
     <string name="change_requires_reconnect">Повторно підключіться, щоб використовувати нові налаштування.</string>
     <string name="no_certificate">Без сертифіката</string>
-    <string name="certificates">Сертифікати</string>
     <string name="decrypt_certificate">Розшифрувати сертифікат</string>
     <string name="error_writing_to_storage">Не вдалося записати на зовнішнє сховище.</string>
     <string name="export_success">Сертифікат експортовано в %s.</string>
@@ -150,7 +148,6 @@
     <string name="shout_configure">Налаштувати ціль голосового повідомлення</string>
     <string name="grant_perm_microphone">Будь-ласка, надайте дозвіл використовувати мікрофон.</string>
     <string name="grant_perm_notifications">Будь-ласка, надайте дозвіл надсилати сповіщення.</string>
-    <string name="grant_perm_storage">Будь-ласка, надайте дозвіл використовувати зовнішнє сховище.</string>
     <string name="grant_perm_draw_over_apps">Будь-ласка, надайте дозвіл відображати поверх інших програм.</string>
     <string name="orbot_not_installed">Програма Orbot не встановлена. Tor не використовується.</string>
     <string name="orbot_tor_failed">Не вдалося підключитися до локального Tor-проксі на порту %d (SOCKS).
@@ -165,18 +162,11 @@
         <item quantity="many">%d користувачів</item>
         <item quantity="other">%d користувачів</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d нове повідомлення</item>
-        <item quantity="few">%d нові повідомлення</item>
-        <item quantity="many">%d нових повідомлень</item>
-        <item quantity="other">%d нових повідомлень</item>
-    </plurals>
     <string name="generateCertSuccess">Ваш сертифікат встановлено та збережено як %s</string>
     <string name="generateCertFailure">Не вдалося згенерувати сертифікат.</string>
     <string name="generateCertProgress">Генерація сертифіката…</string>
     <string name="search">Пошук</string>
     <string name="searchHint">Пошук каналів і користувачів</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="quickConnect">Швидке підключення</string>
     <string name="connect">Підключитися</string>
     <string name="connectToServer">Підключитися до сервера</string>
@@ -189,7 +179,6 @@
     <string name="offline">Не в мережі</string>
     <string name="clearChat">Очистити чат</string>
     <string name="connected">Підключено</string>
-    <string name="mumlaConnected">Mumla підключена</string>
     <string name="mumlaConnecting">Mumla підключається…</string>
     <string name="mumlaDisconnected">Mumla відключена</string>
     <string name="channel">Канал</string>
@@ -225,4 +214,34 @@
     <string name="audio_device_bluetooth">Bluetooth-гарнітура</string>
     <string name="audio_device_other">Аудіопристрій</string>
     <string name="echo_cancellation">Придушення луни</string>
+    <string name="chat_notify_muted_deafened">Звук та мікрофон вимкнені.</string>
+    <string name="chat_notify_muted">Мікрофон вимкнено.</string>
+    <string name="chat_notify_unmuted">Мікрофон увімкнено.</string>
+    <string name="chat_notify_now_muted_deafened">%s вимкнув звук та мікрофон.</string>
+    <string name="chat_notify_now_muted">%s вимкнув мікрофон.</string>
+    <string name="chat_notify_now_unmuted">%s увімкнув мікрофон.</string>
+    <string name="chat_notify_connected">%s підключився.</string>
+    <string name="chat_notify_disconnected">%s відключився.</string>
+    <string name="chat_notify_kick_ban_self">Вас вигнав і заблокував на сервері %1$s:%2$s.</string>
+    <string name="chat_notify_kick_self">Вас вигнав із сервера %1$s: %2$s.</string>
+    <string name="chat_notify_kick_ban">%3$s вигнаний і заблокований на сервері %1$s: %2$s.</string>
+    <string name="chat_notify_kick">%3$s вигнаний із сервера %1$s: %2$s.</string>
+    <string name="chat_notify_self_recording_started">Початок запису</string>
+    <string name="chat_notify_self_recording_stopped">Запис зупинено</string>
+    <string name="chat_notify_user_recording_started">%s почав запис.</string>
+    <string name="chat_notify_user_recording_stopped">%s зупинив запис.</string>
+    <string name="chat_notify_user_joined_channel">%s увійшов у канал.</string>
+    <string name="chat_notify_user_left_channel">%1$s переміщений в %2$s.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s переміщений %3$s із %2$s.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s переміщений %3$s в %2$s.</string>
+    <string name="deny_reason_channel_name">Відмовлено: Неправильна назва каналу.</string>
+    <string name="deny_reason_text_too_long">Відмовлено: Текстове повідомлення занадто довге.</string>
+    <string name="deny_reason_no_operation_temp">Відмовлено: Операція не дозволена в тимчасовому каналі.</string>
+    <string name="deny_reason_no_certificate">Вам потрібен сертифікат для виконання цієї операції.</string>
+    <string name="deny_reason_invalid_username">Неправильне ім\'я користувача.</string>
+    <string name="deny_reason_channel_full">Канал заповнений.</string>
+    <string name="deny_reason_channel_nesting">Досягнуто ліміту вкладеності каналу.</string>
+    <string name="deny_reason_other">Причина: %s</string>
+    <string name="server">Сервер</string>
+    <string name="the_server">сервер</string>
 </resources>

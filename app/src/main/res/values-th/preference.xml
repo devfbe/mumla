@@ -31,7 +31,6 @@
     <string name="hotCornerSum">กดที่มุมหน้าจอเพื่อส่งสัญญาณเสียงไปทั่วระบบ Android</string>
     <string name="general">ทั่วไป</string>
     <string name="appearance">รูปร่าง</string>
-    <string name="themeSum">เปลี่ยนรูปลักษณ์ของแอป</string>
     <string name="forceTcp">เฉพาะ TCP เท่านั้น</string>
     <string name="forceTcpSum">ปิดการใช้งาน UDP สำหรับการสื่อสาร</string>
     <string name="audio">เสียง</string>
@@ -44,7 +43,6 @@
     <string name="certificateGenerateSum">สร้างใบรับรอง Mumla ที่ลงนามด้วยตนเองใหม่. เหมาะสำหรับผู้เริ่มต้น.</string>
     <string name="pttSettings">ตั้งค่ากดเพื่อพูด</string>
     <string name="voiceActivitySettings">ตั้งค่าสั่งงานด้วยเสียง</string>
-    <string name="disableOpusSum">ปิดการใช้งานการสนับสนุน Opus สำหรับเซิร์ฟเวอร์ Mumble 1.2.4</string>
     <string name="hidePtt">ซ่อนแถบปุ่มกดเพื่อพูด</string>
     <string name="useTts">แปลงข้อความเป็นเสียงพูด</string>
     <string name="useTtsSum">อ่านข้อความที่เข้ามาออกเสียงโดยใช้ระบบสังเคราะห์เสียง</string>
@@ -68,8 +66,6 @@
     <string name="halfDuplex">เสียงทางเดียว</string>
     <string name="pttSound">เสียงกดเพื่อพูด</string>
     <string name="pttSoundSum">เล่นเอฟเฟ็กต์เสียงเมื่อกดปุ่มกดเพื่อพูด.</string>
-    <string name="preprocessor_enabled">การประมวลผลข้อมูลเข้าล่วงหน้า</string>
-    <string name="preprocessor_enabled_sum">ลดเสียงรบกวนรอบข้างและปรับระดับเสียงให้เป็นปกติ.</string>
     <string name="audio_per_packet_sum">ความยาวของไฟล์เสียงต่อแพ็กเก็ตเสียง</string>
     <string name="stay_awake_sum">ตั้งค่าให้หน้าจอยังคงเปิดอยู่เมื่อเปิด Mumla.</string>
     <string name="pref_certificate_title">ใบรับรอง</string>
@@ -89,7 +85,6 @@
     <string name="stay_awake">หน้าจอไม่ดับ</string>
     <string name="hot_corner_none">ปิด</string>
     <string name="audioSampleRate">อัตราการสุ่มตัวอย่าง</string>
-    <string name="disableOpus">ปิดการใช้งาน Opus Codec</string>
     <string name="togglePtt">สลับการใช้งานปุ่มกดเพื่อพูด</string>
     <string name="hidePttSum">มีประโยชน์หากคุณใช้มุมลัดหรือปุ่มฮาร์ดแวร์เพียงอย่างเดียว.</string>
     <string name="noiseSuppression">การลดเสียงรบกวน</string>
@@ -120,7 +115,6 @@
     <string name="vadFloorSum">ระดับเสียงของห้องที่ใช้วัดเกณฑ์ หน่วยเป็น dB ต่ำกว่าสเกลเต็ม ใช้เฉพาะเมื่อปิด \"ติดตามเสียงรบกวนรอบข้าง\"</string>
     <string name="vadRecalibrate">วัดใหม่</string>
     <string name="vadRecalibrateSum">ลืมข้อมูลที่เรียนรู้เกี่ยวกับห้องและเสียงของคุณ แล้วเริ่มวัดใหม่ตั้งแต่ต้น</string>
-    <string name="vadRecalibrateDone">กำลังวัดใหม่</string>
     <string name="vadOnset">ไม่สนใจเสียงสั้นๆ</string>
     <string name="vadOnsetSum">เสียงต้องดังนานเท่าใดจึงจะนับเป็นเสียงพูด ค่าที่ยาวขึ้นช่วยกันเสียงคลิกแป้นพิมพ์ครั้งเดียวออกไป แต่ละขั้นจะเสียช่วงต้นของคำไป 10 ms</string>
     <string name="vadOnsetOff">ปิด (0 ms)</string>

@@ -7,7 +7,6 @@
     <string name="voiceActivitySettings">Inställningar för röstaktivering</string>
     <string name="certificateGenerate">Generera certifikat</string>
     <string name="pttSettings">Inställningar för Push-to-talk</string>
-    <string name="disableOpus">Undvik Opus-kodek</string>
     <string name="hidePtt">Dölj Push-to-talk-knappen</string>
     <string name="useTts">Text-till-tal</string>
     <string name="inputMethodPtt">Tryck-för-att-prata</string>
@@ -17,7 +16,6 @@
     <string name="audioInputVolumeSum">Nivå att normalisera ljudet till.</string>
     <string name="pttKeySum">Ställer in en fysisk knapp för initiering av ljudöverföring.</string>
     <string name="appearance">Utseende</string>
-    <string name="themeSum">Ändra appens utseende.</string>
     <string name="theme">Tema</string>
     <string name="forceTcp">Endast TCP</string>
     <string name="audio">Ljud</string>
@@ -57,7 +55,6 @@
     <string name="defaultUsernameSum">Ändrar förvalet för nytillagd server och för anslutning till publik server.</string>
     <string name="defaultUsernameDefault">Mumla_Användare</string>
     <string name="certificateGenerateSum">Genererar ett nytt självsignerat Mumla-certifikat. Rekommenderas för nybörjare.</string>
-    <string name="disableOpusSum">Stäng av Opus-stöd för Mumble 1.2.4-servrar.</string>
     <string name="hidePttSum">Endast användbart om du använder Push-to-talk-hörn eller fysisk knapp.</string>
     <string name="useTtsSum">Läser upp inkommande meddelanden med talsyntes.</string>
     <string name="shortTtsMessages">Förkortade text-till-tal-meddelanden</string>
@@ -77,8 +74,6 @@
     <string name="halfDuplexSum">Tystar annan uppspelning när push-to-talk är aktiv, för att undvika rundgång.</string>
     <string name="pttSound">Push-to-talk-ton</string>
     <string name="pttSoundSum">Spelar en ljudeffekt när push-to-talk-knappen trycks ned.</string>
-    <string name="preprocessor_enabled">Förbehandling av ingångsljud</string>
-    <string name="preprocessor_enabled_sum">Dämpar omgivningsljud och normaliserar volymen.</string>
     <string name="audio_per_packet_sum">Ställer in hur lång inspelning som skickas per datapaket.</string>
     <string name="stay_awake">Håll vaken</string>
     <string name="stay_awake_sum">Håller skärmen påslagen när Mumla är öppen.</string>
@@ -120,7 +115,6 @@
     <string name="vadFloorSum">Rummets nivå som tröskeln mäts från, i dB under full skala. Används bara när ”Följ bakgrundsbruset” är avstängt.</string>
     <string name="vadRecalibrate">Mät igen</string>
     <string name="vadRecalibrateSum">Glömmer det som har lärts om rummet och din röst och börjar mäta från början.</string>
-    <string name="vadRecalibrateDone">Mäter igen.</string>
     <string name="vadOnset">Ignorera korta ljud</string>
     <string name="vadOnsetSum">Hur länge ett ljud måste pågå innan det räknas som tal. Längre inställningar håller enstaka tangentbordsklick ute; varje steg kostar 10 ms av början på ett ord.</string>
     <string name="vadOnsetOff">Av (0 ms)</string>

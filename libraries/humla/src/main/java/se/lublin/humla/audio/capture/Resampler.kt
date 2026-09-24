@@ -25,14 +25,8 @@ interface Resampler {
     /**
      * Converts [inputLength] samples of [input] into [output].
      *
-     * @return the number of output samples written, in `0..output.size`. The upper bound is a
-     *   precondition of the caller rather than something [CapturePipeline] re-checks: it pads the
-     *   buffer from this index to the end, so a number above `output.size` is an exception on the
-     *   audio thread. Both implementations in this tree clamp before returning.
-     *
-     *   **Zero is a legal answer and means what it says**: no sample of [output] was written, so
-     *   whatever the buffer held before is still there. A converter that failed answers 0 rather
-     *   than the capacity it was asked for.
+     * @return the number of output samples written, in `0..output.size` (callers rely on the upper
+     *   bound). 0 means nothing was written and [output] keeps its previous contents; failures return 0.
      */
     fun resample(input: ShortArray, inputLength: Int, output: ShortArray): Int
 
@@ -41,21 +35,12 @@ interface Resampler {
 }
 
 /**
- * Adapter over F6's [SpeexResamplerNative] (`init` takes a trailing `error: IntArray?`, and
- * `processInt` reports the produced sample count in `outLen[0]` while returning the speex error
- * code). The only place in this stream that names those methods.
+ * Adapter over [SpeexResamplerNative]. Single-threaded (capture thread); the `int[]` out-params are
+ * reused fields to avoid per-frame allocation.
  *
- * Single-threaded: the capture thread owns it. The two one-element `int[]` are fields rather than
- * `intArrayOf(...)` at the call site, because the call site is a 10 ms frame path -- see
- * `CaptureThreadAllocationTest`.
- *
- * **The error code is read, and that is the whole reason this class is not three forwarding
- * lines.** `jni_speexdsp.cpp:163-173` refuses a bad argument -- a destroyed state, a null array, a
- * short `int[]` -- by returning `RESAMPLER_ERR_INVALID_ARG` **before** it writes `outLen`, so the
- * `outLen[0] = output.size` set two lines above is still standing when the call comes back.
- * Returning it unchecked reports a full frame that was never written; and since
- * [CapturePipeline]'s frame buffer is reused across frames, "never written" is not silence, it is
- * the previous frame going out on the wire again. Pinned in `SpeexResamplerTest`.
+ * The error code must be checked: on invalid arguments the bridge returns an error before writing
+ * `outLen`, so the preset `outLen[0] = output.size` would otherwise report a full frame and resend
+ * the previous frame's stale buffer contents.
  */
 class SpeexResampler @JvmOverloads constructor(
     inputRate: Int,
@@ -86,7 +71,7 @@ class SpeexResampler @JvmOverloads constructor(
     }
 
     companion object {
-        /** Same quality the old ResamplingEncoder used. */
+        /** Speex resampler quality (0-10). */
         const val DEFAULT_QUALITY = 3
 
         /** `RESAMPLER_ERR_SUCCESS` in `speex_resampler.h`; every other value is a failure. */

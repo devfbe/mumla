@@ -24,7 +24,7 @@ import org.junit.Test
 import java.lang.reflect.Modifier
 import se.lublin.humla.audio.capture.fakes.FakeRnnoiseApi
 
-/** Spec B4: RNNoise as one capture stage -- 480-sample frames at 48 kHz, its model's probability. */
+/** RNNoise as a capture stage: 480-sample frames at 48 kHz, reporting the model's probability. */
 class RnnoisePreprocessorTest {
     private companion object {
         const val FRAME = 480
@@ -65,13 +65,8 @@ class RnnoisePreprocessorTest {
     }
 
     /**
-     * The upper end only. `rnnoise_process_frame` is documented to answer `[0, 1]`, so a value
-     * above 1 is a broken build rather than an input -- but task 7 compares this number against a
-     * threshold, and a 1.4 that survives is a frame nothing can ever gate.
-     *
-     * The lower end is deliberately **not** clamped, and that asymmetry is the point: -1 is the
-     * bridge's refusal sentinel, so clamping it to 0 would turn "rnnoise never saw this frame"
-     * into "certainly not speech" and mute the user. See the next test.
+     * Only the upper end is clamped: -1 is the bridge's refusal sentinel and must not become 0
+     * ("certainly not speech"), which would mute the user.
      */
     @Test
     fun `a probability above one is clamped rather than propagated`() {
@@ -80,14 +75,8 @@ class RnnoisePreprocessorTest {
     }
 
     /**
-     * The bridge refuses a frame shorter than 480 samples with -1 rather than letting rnnoise read
-     * past the array, so -1 is reachable from a wrong-sized capture buffer and not only from a
-     * broken build.
-     *
-     * Spec §4.1, "do not throw from the capture thread": the plan's own listing wanted an
-     * `IllegalArgumentException` here. That is an exception once per 10 ms frame on the audio
-     * thread, and an uncaught one kills the capture thread -- the user goes silent with no
-     * warning, which is the complaint this project started from. Refuse and report.
+     * The bridge refuses a frame shorter than 480 samples with -1. Throwing instead would kill the
+     * capture thread once per frame, so the frame is refused and counted.
      */
     @Test
     fun `a frame the bridge refuses is reported rather than thrown`() {
@@ -101,12 +90,7 @@ class RnnoisePreprocessorTest {
         assertThat(api.processedLengths).isEmpty()
     }
 
-    /**
-     * Same guard, other half of its input space. `p < 0` misses a NaN -- every comparison against
-     * a NaN is false -- and a NaN probability reaching task 7's threshold compares false against
-     * both the start and the stop threshold, i.e. it reads as permanent silence. One inverted
-     * condition covers both, which is why there is one guard here and not two.
-     */
+    /** `p < 0` misses NaN, which would compare false against both thresholds and read as silence. */
     @Test
     fun `a not-a-number probability is refused rather than passed on`() {
         val stage = RnnoisePreprocessor(FakeRnnoiseApi(probability = Float.NaN))
@@ -158,13 +142,8 @@ class RnnoisePreprocessorTest {
     }
 
     /**
-     * RNNoise has no reverse stream, so the stage must refuse one rather than swallow it: a
-     * far-end frame that lands here instead of on the echo canceller is 21 dB of cancellation
-     * nobody notices is missing (task 2, `tests/test_apm.c`).
-     *
-     * Both halves are asserted, because they fail differently: declaring [FarEndSink] on this
-     * stage would make `CapturePreprocessorFactory` hand out a far-end sink whose every frame
-     * throws on the playback thread.
+     * A far-end frame swallowed here would silently cost about 21 dB of echo cancellation. Declaring
+     * [FarEndSink] would make the factory hand out a sink that throws on the playback thread.
      */
     @Test
     fun `the stage is not a far-end sink and refuses the reverse stream`() {
@@ -179,13 +158,8 @@ class RnnoisePreprocessorTest {
     // ------------------------------------------------------------------ handle ownership
 
     /**
-     * The walk `SingleHandleStageTest` asks every stage to repeat in its own suite: the handle
-     * lives in exactly one private field of the base, and no member of this stage's class chain
-     * mentions a long except the three callbacks, which are called with the lock already held.
-     *
-     * It carries more here than for the speex stage: `HandleTable::get()` dereferences without
-     * validating, so an RNNoise handle handed to the APM bridge is a segmentation fault with no
-     * Java stack trace, and this package now holds both.
+     * The handle lives in exactly one private field of the base, and no member mentions a long
+     * except the three callbacks, which run with the lock held.
      */
     @Test
     fun `the native handle never escapes the stage`() {
@@ -211,7 +185,7 @@ class RnnoisePreprocessorTest {
             .containsExactly("onCaptureFrame", "onFarEndFrame", "onReleaseHandle")
     }
 
-    /** `long`, `java.lang.Long`, or an array of either -- an out-parameter is an escape hatch too. */
+    /** `long`, `java.lang.Long`, or an array of either (an out-parameter is an escape too). */
     private fun mentionsLong(type: Class<*>): Boolean = when {
         type == Long::class.javaPrimitiveType || type == java.lang.Long::class.java -> true
         type.isArray -> mentionsLong(type.componentType!!)

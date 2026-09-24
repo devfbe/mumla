@@ -2,11 +2,6 @@
 <resources>
     <string name="server_info_max_bandwidth">Maximálně %.1f kbit/s</string>
     <string name="user_menu_reset_comment">Obnovit komentář</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nová zpráva</item>
-        <item quantity="few">%d nové zprávy</item>
-        <item quantity="other">%d nových zpráv</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d uživatel</item>
         <item quantity="few">%d uživatelé</item>
@@ -19,7 +14,6 @@
 \nZkontrolujte, zda je spuštěna aplikace Orbot.</string>
     <string name="orbot_not_installed">Aplikace Orbot není nainstalována. Nepoužívá se Tor.</string>
     <string name="grant_perm_draw_over_apps">Udělte prosím oprávnění k zobrazování nad ostatními aplikacemi.</string>
-    <string name="grant_perm_storage">Udělte prosím oprávnění k používání externího úložiště.</string>
     <string name="grant_perm_microphone">Udělte prosím oprávnění na používání mikrofonu.</string>
     <string name="shout_configure">Konfigurovat hlasový cíl</string>
     <string name="shout_target">Křik do %s</string>
@@ -36,7 +30,6 @@
     <string name="invalid_certificate">Neplatný certifikát nelze načíst.</string>
     <string name="password">Heslo</string>
     <string name="decrypt_certificate">Dešifrovat certifikát</string>
-    <string name="certificates">Certifikáty</string>
     <string name="no_certificate">Žádný certifikát</string>
     <string name="change_requires_reconnect">Pro použití nových nastavení se znovu připojte.</string>
     <string name="attempting_reconnect">Chyba: %s.
@@ -107,7 +100,6 @@
     <string name="channel">Kanál</string>
     <string name="mumlaDisconnected">Mumla odpojen</string>
     <string name="mumlaConnecting">Mumla se připojuje…</string>
-    <string name="mumlaConnected">Mumla připojen</string>
     <string name="connected">Připojeno</string>
     <string name="clearChat">Vyčistit chat</string>
     <string name="offline">Offline</string>
@@ -120,7 +112,6 @@
     <string name="connectToServer">Připojit k serveru</string>
     <string name="connect">Připojit</string>
     <string name="quickConnect">Rychlé připojení</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="searchHint">Prohledat kanály a uživatele</string>
     <string name="search">Hledat</string>
     <string name="generateCertProgress">Generování certifikátu…</string>
@@ -144,7 +135,6 @@
     <string name="mute">Ztlumit</string>
     <string name="ptt">Mluvení při stisku tlačítka</string>
     <string name="connecting_to_server">Připojování na %s…</string>
-    <string name="connecting">Připojování</string>
     <string name="server_label">Popisek</string>
     <string name="server_host">Adresa</string>
     <string name="server_port">Port</string>
@@ -221,4 +211,34 @@
     <string name="audio_device_bluetooth">Bluetooth headset</string>
     <string name="audio_device_other">Zvukové zařízení</string>
     <string name="echo_cancellation">Potlačení ozvěny</string>
+    <string name="chat_notify_muted_deafened">Ztlumen a ohlušen.</string>
+    <string name="chat_notify_muted">Ztlumen.</string>
+    <string name="chat_notify_unmuted">Zesílen.</string>
+    <string name="chat_notify_now_muted_deafened">%s je nyní zeslaben a ohlušen.</string>
+    <string name="chat_notify_now_muted">%s je nyní zeslaben.</string>
+    <string name="chat_notify_now_unmuted">%s je nyní zesílen.</string>
+    <string name="chat_notify_connected">%s se připojil.</string>
+    <string name="chat_notify_disconnected">%s se odpojil.</string>
+    <string name="chat_notify_kick_ban_self">Byli jste vyhozeni a zabanováni uživatelem %1$s: %2$s.</string>
+    <string name="chat_notify_kick_self">Byli jste vyhozeni ze serveru uživatelem %1$s: %2$s.</string>
+    <string name="chat_notify_kick_ban">%3$s byl vyhozen a zabanován uživatelem %1$s: %2$s.</string>
+    <string name="chat_notify_kick">%3$s byl vyhozen ze serveru uživatelem %1$s: %2$s.</string>
+    <string name="chat_notify_self_recording_started">Nahrávání spuštěno</string>
+    <string name="chat_notify_self_recording_stopped">Nahrávání zastaveno</string>
+    <string name="chat_notify_user_recording_started">%s začal nahrávat.</string>
+    <string name="chat_notify_user_recording_stopped">%s přestal nahrávat.</string>
+    <string name="chat_notify_user_joined_channel">%s vstoupil do kanálu.</string>
+    <string name="chat_notify_user_left_channel">%1$s přesunut do %2$s.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s přesunut z %2$s uživatelem %3$s.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s přesunut do %2$s uživatelem %3$s.</string>
+    <string name="deny_reason_channel_name">Zamítnuto: Neplatné jméno kanálu.</string>
+    <string name="deny_reason_text_too_long">Zamítnuto: Textová zpráva je příliš dlouhá.</string>
+    <string name="deny_reason_no_operation_temp">Zamítnuto: Operace není v dočasném kanálu povolena.</string>
+    <string name="deny_reason_no_certificate">K provedení této operace potřebujete certifikát.</string>
+    <string name="deny_reason_invalid_username">Neplatné uživatelské jméno.</string>
+    <string name="deny_reason_channel_full">Kanál je plný.</string>
+    <string name="deny_reason_channel_nesting">Dosaženo limitu vnoření kanálu.</string>
+    <string name="deny_reason_other">Důvod: %s</string>
+    <string name="server">Server</string>
+    <string name="the_server">server</string>
 </resources>

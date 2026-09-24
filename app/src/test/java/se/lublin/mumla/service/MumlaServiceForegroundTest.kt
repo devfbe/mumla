@@ -2,7 +2,6 @@ package se.lublin.mumla.service
 
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
-import android.os.Bundle
 import android.os.Looper
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
@@ -12,26 +11,23 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
-import se.lublin.humla.HumlaService
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
+import se.lublin.mumla.testing.createMumlaService
 import java.time.Duration
 
 /**
- * "The microphone is dead when the screen is off" (spec A3/A6), at the level of the service.
- *
- * The session runs through the real HumlaService and its state machine; only the connection is a
- * relaxed mock, so connect() opens nothing and the test delivers the connection's callbacks
- * itself. The platform's refusal is modelled with ShadowService.setThrowInStartForeground: once
- * the first start has succeeded, every later startForeground throws, exactly as it does on a
- * device whose screen is off (the restriction is re-checked on every call).
+ * Foreground behaviour of the service with the screen off. The session runs through the real
+ * HumlaService state machine; only the connection is a relaxed mock, and the test delivers its
+ * callbacks. ShadowService.setThrowInStartForeground models the platform refusing every
+ * startForeground after the first, as with the screen off.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceForegroundTest {
@@ -42,19 +38,13 @@ class MumlaServiceForegroundTest {
 
     @Before
     fun setUp() {
-        PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext()).edit().clear().commit()
-        controller = Robolectric.buildService(MumlaService::class.java)
-        service = controller.get()
-        service.reconnectPolicy = ReconnectPolicy(baseDelayMillis = 2_000L, maxAttempts = 2, maxJitterFraction = 0.0)
-        service.connectionFactory = {
-            mockk<HumlaConnection>(relaxed = true).also { connections += it }
+        controller = createMumlaService {
+            reconnectPolicy = ReconnectPolicy(baseDelayMillis = 2_000L, maxAttempts = 2, maxJitterFraction = 0.0)
+            connectionFactory = { mockk<HumlaConnection>(relaxed = true).also { connections += it } }
         }
-        controller.create()
-        service.configureExtras(
-            Bundle().apply {
-                putParcelable(HumlaService.EXTRAS_SERVER, Server(-1, "test", "127.0.0.1", 64738, "me", ""))
-                putBoolean(HumlaService.EXTRAS_AUTO_RECONNECT, true)
-            },
+        service = controller.get()
+        service.configure(
+            SessionConfig(server = Server(-1, "test", "127.0.0.1", 64738, "me", ""), autoReconnect = true),
         )
         mainLooper.idle()
     }
@@ -87,7 +77,7 @@ class MumlaServiceForegroundTest {
         service.onConnectionDisconnected(lost())
         mainLooper.idle()
 
-        assertThat(service.isReconnecting()).isTrue()
+        assertThat(service.isReconnecting).isTrue()
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
         assertThat(foregroundText()).isEqualTo(service.getString(R.string.connection_lost_reconnecting))
     }
@@ -104,7 +94,7 @@ class MumlaServiceForegroundTest {
 
         assertThat(connections).hasSize(2) // the backoff timer fired and a new attempt started
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
-        assertThat(service.getMessageLog().map { it.body })
+        assertThat(service.messageLog.value.map { it.body })
             .doesNotContain(service.getString(R.string.foreground_start_failed))
     }
 
@@ -135,13 +125,13 @@ class MumlaServiceForegroundTest {
         service.onConnectionDisconnected(lost()) // spent: Disconnected
         mainLooper.idle()
 
-        assertThat(service.isReconnecting()).isFalse()
+        assertThat(service.isReconnecting).isFalse()
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }
 
-    // ---- the chat log across the session (spec A3, D5) ------------------------------------------
+    // ---- the chat log across the session --------------------------------------------------------
 
-    private fun log() = service.getMessageLog().map { it.body }
+    private fun log() = service.messageLog.value.map { it.body }
 
     @Test
     fun theChatLogSurvivesAConnectionLossAndIsClearedOnDisconnect() {
@@ -180,8 +170,8 @@ class MumlaServiceForegroundTest {
         repeat(ChatMessageLog.MAX_ENTRIES + 1) { service.logWarning("m$it") }
         mainLooper.idle()
 
-        assertThat(service.getMessageLog()).hasSize(ChatMessageLog.MAX_ENTRIES)
-        assertThat(service.getMessageLog().first().body).isEqualTo("m1")
+        assertThat(service.messageLog.value).hasSize(ChatMessageLog.MAX_ENTRIES)
+        assertThat(service.messageLog.value.first().body).isEqualTo("m1")
     }
 
     // ---- the reconnect prompt -------------------------------------------------------------------
@@ -218,12 +208,12 @@ class MumlaServiceForegroundTest {
         service.cancelReconnect()
         mainLooper.idle()
 
-        assertThat(service.isReconnecting()).isFalse()
+        assertThat(service.isReconnecting).isFalse()
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
         assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
     }
 
-    // ---- cancelling from the foreground notification (spec A6 follow-up) -----------------------
+    // ---- cancelling from the foreground notification --------------------------------------------
 
     private fun foregroundActions(): List<String> =
         shadowOf(service.getSystemService(android.app.NotificationManager::class.java))
@@ -263,7 +253,7 @@ class MumlaServiceForegroundTest {
 
         pressCancelReconnect()
 
-        assertThat(service.isReconnecting()).isFalse()
+        assertThat(service.isReconnecting).isFalse()
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
         assertThat(reconnectPrompt()).isNull()
         mainLooper.idleFor(Duration.ofMillis(10_000))
@@ -284,7 +274,7 @@ class MumlaServiceForegroundTest {
         pressCancelReconnect()
 
         io.mockk.verify { connections[1].disconnect() }
-        assertThat(service.isReconnecting()).isFalse()
+        assertThat(service.isReconnecting).isFalse()
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }
 
@@ -299,7 +289,7 @@ class MumlaServiceForegroundTest {
         assertThat(reconnectPrompt()).isNotNull()
     }
 
-    // ---- spec A6: a refused start ---------------------------------------------------------------
+    // ---- a refused start ------------------------------------------------------------------------
 
     @Test
     fun aRefusedForegroundStartBecomesAWarningAndAPromptInsteadOfACrash() {
@@ -341,16 +331,15 @@ class MumlaServiceForegroundTest {
         assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
     }
 
-    // ---- spec A7 ---------------------------------------------------------------------------------
+    // ---- half duplex ----------------------------------------------------------------------------
 
-    /**
-     * Half duplex follows the transmit mode the service is in, which the connect intent always
-     * carries (ServerConnectTask) -- a settings write that carries only half duplex is enough.
-     */
+    /** Half duplex follows the transmit mode in force, so a half-duplex write alone is enough. */
     @Test
     fun aHalfDuplexPreferenceChangeTakesEffectInPushToTalk() {
-        service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })
         val preferences = PreferenceManager.getDefaultSharedPreferences(service)
+        preferences.edit()
+            .putString(se.lublin.mumla.Settings.PREF_INPUT_METHOD, se.lublin.mumla.Settings.ARRAY_INPUT_METHOD_PTT)
+            .commit()
 
         preferences.edit().putBoolean(se.lublin.mumla.Settings.PREF_HALF_DUPLEX, true).commit()
         assertThat(service.getAudioConfigForTest().halfDuplex).isTrue()
@@ -378,12 +367,10 @@ class MumlaServiceForegroundTest {
             .putBoolean(se.lublin.mumla.Settings.PREF_PTT_SOUND, true)
             .putBoolean(se.lublin.mumla.Settings.PREF_SHORT_TTS_MESSAGES, true)
             .commit()
-        val fresh = Robolectric.buildService(MumlaService::class.java).create().get()
-        fun field(name: String) = MumlaService::class.java.getDeclaredField(name).apply { isAccessible = true }.get(fresh)
-
-        assertThat(field("mTTS")).isNotNull()
-        assertThat(field("mPTTSoundEnabled")).isEqualTo(true)
-        assertThat(field("mShortTtsMessagesEnabled")).isEqualTo(true)
+        val fresh = createMumlaService().get()
+        assertThat(fresh.mTTS).isNotNull()
+        assertThat(fresh.mPTTSoundEnabled).isTrue()
+        assertThat(fresh.mShortTtsMessagesEnabled).isTrue()
         fresh.onDestroy()
     }
 }

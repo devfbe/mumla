@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    What the app's FileProvider is allowed to hand to other apps: one subdirectory of the cache,
-    and nothing else. Widening this to the cache root would publish the HTTP and WebView caches
-    along with it; `theProviderPublishesNothingButTheShareDirectory` in ImageShareExporterTest is
-    what notices.
+    The FileProvider may hand out this one cache subdirectory only; the cache root would also
+    publish the HTTP and WebView caches.
 -->
 <paths>
     <cache-path name="shared_images" path="shared_images/" />

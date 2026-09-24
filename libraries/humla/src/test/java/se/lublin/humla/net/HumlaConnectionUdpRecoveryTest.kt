@@ -21,15 +21,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Spec A5 at the connection: what the decisions of [UdpHealthMonitor] do to the voice route, and
- * what happens to the UDP transport after its thread has died.
+ * What the decisions of [UdpHealthMonitor] do to the voice route, and what happens to the UDP
+ * transport after its thread has died.
  *
- * The connection's own clock is injected, so "twenty seconds later" is a value rather than a wait.
- * The restart delays are the looper's, so they are driven by the shadow clock instead - checked
- * first with a probe that a `postDelayed` on a background [android.os.HandlerThread] really does
- * run under `shadowOf(looper).idleFor(...)`, which it does; no fallback to a zero-delay policy was
- * needed for the backoff test, and the tests that use one use it to reach an interleaving rather
- * than to avoid the clock.
+ * The connection's clock is injected, so "twenty seconds later" is a value rather than a wait. The
+ * restart delays are posted on the protocol looper and driven with `shadowOf(looper).idleFor(...)`.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaConnectionUdpRecoveryTest {
@@ -55,7 +51,7 @@ class HumlaConnectionUdpRecoveryTest {
     fun tearDown() {
         built.forEach { it.disconnect() }
         mainLooper.idle()
-        built.forEach { c -> awaitUntil(description = "protocol thread quit") { !c.protocolThread.isAlive } }
+        built.forEach { c -> awaitUntil(description = "connection terminated") { c.isTerminated } }
     }
 
     private fun HumlaConnection.establish(forceTcp: Boolean = false): FakeTcpTransport {
@@ -75,9 +71,8 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * Waits until the protocol thread has worked past everything queued before this call. A plain
-     * wait on a counter cannot stand in for it: the runnable under test is queued from inside
-     * another runnable, so it is behind whatever the test can already see.
+     * Waits until the protocol thread has worked past everything queued before this call. Needed
+     * because the runnable under test is often queued from inside another runnable.
      */
     private fun HumlaConnection.drainProtocolQueue(description: String) {
         val drained = AtomicBoolean(false)
@@ -107,9 +102,7 @@ class HumlaConnectionUdpRecoveryTest {
 
         udp.simulateError(IOException("network unreachable"))
         awaitUntil(description = "switched to tcp") { !connection.isUsingUdp }
-        // Not the same instant: the failure handler flips the route first and tells the server
-        // afterwards, so a wait on isUsingUdp lands in the middle of it. Measured - the UDPTunnel
-        // assertion below failed against an empty list without this barrier.
+        // The failure handler flips the route before it tells the server, so wait for all of it.
         connection.drainProtocolQueue("failure handled to the end")
         mainLooper.idle()
 
@@ -159,15 +152,7 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(listener.warnings).containsExactly(ConnectionWarning.UDP_PING_TIMEOUT)
     }
 
-    /**
-     * The other side of the timeout: a reply that arrives resets the clock, so the ping sixteen
-     * seconds after the *first* send does not switch anything. Without it the connection would
-     * tunnel its voice fifteen seconds into every session, however well UDP is working - the
-     * timeout would be measured from a send that was answered long ago.
-     *
-     * The latency is asserted in the same breath because it is the other thing this callback writes
-     * into the connection, and nothing read it back before.
-     */
+    /** A reply resets the timeout, so sixteen seconds after the *first* send nothing switches. */
     @Test
     fun aUdpPingReplyResetsTheTimeoutAndFeedsTheLatency() {
         val connection = newConnection()
@@ -191,12 +176,9 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * The ping a Mumble 1.5 server answers. Humla announces protocol 1.2.5, so a 1.5 server reads
-     * the ping as a legacy packet, and `decodePing_legacy` accepts at most nine bytes behind the
-     * header - one varint. The sixteen bytes this client used to send (header, eight raw bytes,
-     * seven bytes of padding) are neither that nor the 12-byte extended-information request, so
-     * the server dropped every one of them, and fifteen seconds into every session the chat said
-     * "No UDP ping reply from the server for 15 seconds" and the voice went over TCP for good.
+     * Without a server Version the connection stays on the legacy format, whose ping a 1.5 server
+     * reads with `decodePing_legacy`: at most nine bytes behind the header - one varint. Anything
+     * else (other than the 12-byte extended-information request) is dropped by the server.
      */
     @Test
     fun theUdpPingIsALegacyPingAMumble15ServerAccepts() {
@@ -212,7 +194,7 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(MumbleLegacyPingDecoder.decodeAsServer(ping)).isEqualTo(300_000_000L)
     }
 
-    /** The decoder above is not agreeing with everything: the old sixteen bytes are what it drops. */
+    /** Guards the decoder: a 16-byte ping (header, raw long, padding) must be rejected. */
     @Test
     fun theMumble15RulesDropTheSixteenBytePingThisClientUsedToSend() {
         val old = ByteArray(16).also {
@@ -222,10 +204,7 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(MumbleLegacyPingDecoder.decodeAsServer(old)).isNull()
     }
 
-    /**
-     * An hour and twenty minutes into a call the timestamp needs the eight-byte form, which is the
-     * form PacketBuffer used to read back wrong.
-     */
+    /** Eighty minutes into a call the timestamp needs the eight-byte varint form. */
     @Test
     fun aMumble15ReplyLateInALongCallFeedsTheLatency() {
         val connection = newConnection()
@@ -262,9 +241,8 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * A ping datagram too short to carry a timestamp, or carrying a negative one, is dropped quietly: no exception reaches the
-     * connection's catch-all (which logs an error per datagram), no latency, and it is not a reply,
-     * so it does not hold off the timeout either.
+     * A ping datagram too short to carry a timestamp, or carrying a negative one, is dropped
+     * quietly: no error log, no latency, and it does not hold off the timeout.
      */
     @Test
     fun aTruncatedPingReplyIsIgnoredWithoutAnError() {
@@ -288,11 +266,9 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * The way back after the ping timeout. Once the voice is tunneled the server sends nothing over
-     * UDP but the answers to our pings - sendPings keeps sending them with force = true - so those
-     * answers are all that can lift localGood past the restore threshold. With the pings answered
-     * again, one every five seconds, the connection goes back to UDP as soon as the lockout after
-     * the switch has run out.
+     * Once the voice is tunneled the server sends nothing over UDP but the answers to our pings
+     * (sent with force = true), so those answers are all that can lift localGood past the restore
+     * threshold.
      */
     @Test
     fun udpComesBackAfterAPingTimeoutOnceThePingsAreAnsweredAgain() {
@@ -304,8 +280,7 @@ class HumlaConnectionUdpRecoveryTest {
         connection.feedPings(listOf(16L), tcp, good = 5)
         awaitUntil(description = "switched to tcp") { !connection.isUsingUdp }
 
-        // The premise: tunneling moves the voice, not the ping. The next ping still goes out on
-        // the UDP transport, not wrapped into a UDPTunnel message.
+        // Tunneling moves the voice, not the ping: the next ping still goes out on UDP.
         val pingsBefore = udp.sent.size
         shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(5))
         awaitUntil(description = "a udp ping sent while tunneled") { udp.sent.size > pingsBefore }
@@ -326,12 +301,6 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(connection.getUDPLatency()).isEqualTo(30_000L)
     }
 
-    /**
-     * The other latency line, and the sibling of the one the effect sweep did catch. `tcpLatency =
-     * now - msg.timestamp` -> `0L` SURVIVED: the value is written into a field with a public getter
-     * and no test read it back, which is the same hole aUdpPingReplyResetsTheTimeout... closed one
-     * callback over. A sweep that finds one of a pair has found half a form.
-     */
     @Test
     fun aServerPingFeedsTheTcpLatency() {
         val connection = newConnection()
@@ -348,6 +317,47 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     @Test
+    fun theClientPingReportsCryptCountersAndPingStatistics() {
+        val connection = newConnection()
+        val tcp = connection.establish()
+        val udp = connection.firstUdp()
+        tcp.simulateMessage(
+            HumlaTCPMessageType.ServerSync,
+            Mumble.ServerSync.newBuilder().setSession(1).build().toByteArray(),
+        )
+        connection.drainProtocolQueue("first pings sent")
+        val first = tcp.sentMessages.filterIsInstance<Mumble.Ping>().single()
+        assertThat(first.tcpPackets).isEqualTo(0)
+        assertThat(first.udpPackets).isEqualTo(0)
+        assertThat(first.hasTcpPingAvg()).isFalse()
+        assertThat(first.hasUdpPingAvg()).isFalse()
+
+        // TCP round trips of 10 and 30 ms, one UDP round trip of 4 ms.
+        for ((sentAt, now) in listOf(0L to 10L, 40L to 70L)) {
+            clock.set(now * 1_000_000L)
+            tcp.simulateMessage(
+                HumlaTCPMessageType.Ping,
+                Mumble.Ping.newBuilder().setTimestamp(sentAt * 1_000L).build().toByteArray(),
+            )
+            connection.drainProtocolQueue("reply at $now ms handled")
+        }
+        clock.set(80_000_000L)
+        udp.simulateDatagram(udpPingReply(sentAtMicros = 76_000L))
+        connection.drainProtocolQueue("replies handled")
+
+        shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(5))
+        awaitUntil(description = "second ping") { tcp.sentMessages.filterIsInstance<Mumble.Ping>().size == 2 }
+        val second = tcp.sentMessages.filterIsInstance<Mumble.Ping>()[1]
+        assertThat(second.tcpPackets).isEqualTo(2)
+        assertThat(second.tcpPingAvg).isWithin(1e-3f).of(20f)
+        assertThat(second.tcpPingVar).isWithin(1e-3f).of(100f)
+        assertThat(second.udpPackets).isEqualTo(1)
+        assertThat(second.udpPingAvg).isWithin(1e-3f).of(4f)
+        assertThat(second.udpPingVar).isWithin(1e-3f).of(0f)
+        assertThat(second.good).isEqualTo(1)
+    }
+
+    @Test
     fun forcedTcpNeverStartsUdpNorWarns() {
         val connection = newConnection()
         val tcp = connection.establish(forceTcp = true)
@@ -360,17 +370,7 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(connection.isUsingUdp).isFalse()
     }
 
-    /**
-     * The other input to `shouldForceTCP()`, and nothing in this repository had ever written it:
-     * every test drives `forceTcp` and leaves `useTor` false, so `forceTcp || useTor` was only ever
-     * sampled over half of its two-boolean input space and the Tor clause was untested by
-     * construction - in a file where that one predicate decides whether a UDP socket is opened at
-     * all. The flag's trip into the transport was unread for the same reason; the fake now records
-     * it.
-     *
-     * Tor is also where it matters most: it is the configuration in which the handshake can outlast
-     * the ping timeout, which is the case theTimeoutIsMeasuredFromTheFirstPing... covers next door.
-     */
+    /** `useTor` is the other input to `shouldForceTCP()`. */
     @Test
     fun routingOverTorTunnelsVoiceTheSameWayTheSettingDoes() {
         val connection = newConnection()
@@ -391,20 +391,9 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * Where the UDP socket is pointed, for both callers of `startUdp()`. It was unpinned, and not
-     * for want of a mutation: `transport.connect("", 0)` at HumlaConnection.kt:751 SURVIVED all 230
-     * tests because [FakeUdpTransport] counted the call and recorded neither argument. Exactly the
-     * defect [FakeTcpTransport.connectUseTor] was added for, one class further down.
-     *
-     * Asserted against what the TCP transport was handed rather than against a literal, because
-     * "the voice goes to the server the control connection went to" is the property; the host is a
-     * SRV lookup's answer, not the string the test passed in. The emptiness check is separate
-     * because InetAddress.getByName("") resolves to loopback rather than failing, so an empty host
-     * is not an error the user would ever see - it is a call that goes quietly to 127.0.0.1.
-     *
-     * The restart half matters on its own: this task gave startUdp() its second caller, and the
-     * argument that keeps `host` from being read before it is written is written down at the
-     * fields' declaration for both of them now.
+     * Where the UDP socket is pointed, for the first start and a restart. Compared with what the TCP
+     * transport got, since the host may be an SRV answer. The emptiness check is separate because
+     * InetAddress.getByName("") silently resolves to loopback.
      */
     @Test
     fun everyUdpTransportIsConnectedToTheSameEndpointTheTcpTransportGot() {
@@ -427,16 +416,8 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * The fourth corner of `forceTcp || useTor`, and the only one the other three cannot reach:
-     * over (false,false), (true,false) and (false,true) `||` and `xor` agree. Measured before this
-     * test existed - `forceTcp || useTor` -> `forceTcp xor useTor` SURVIVED all 230 tests, while
-     * the same mutation on the restore condition in UdpHealthMonitor was KILLED(5). So what was
-     * missing was this corner, not the technique: the 2^k rule had been applied correctly one file
-     * over and left unapplied on the predicate this task had just opened up.
-     *
-     * The corner is a user who switched both settings on, and under `xor` it is the worst of the
-     * four: shouldForceTCP() answers false, the connection opens a UDP socket, and the voice of
-     * someone who asked for Tor leaves the device outside the proxy.
+     * Both settings on: the corner where `||` and `xor` differ. Under `xor` the voice of someone who
+     * asked for Tor would leave the device outside the proxy.
      */
     @Test
     fun forcingTcpWhileAlsoRoutingOverTorStillTunnelsTheVoice() {
@@ -454,12 +435,8 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * The other half of that dimension, and the half the brief's test cannot see: forcing TCP
-     * *after* the connection is up. `connect()` decides `usingUdp` once, so the judgement is still
-     * armed - and the counters it reads stop moving the moment the user forces TCP, because
-     * `sendPings` stops sending the UDP ping and voice is tunneled. Twenty seconds later the
-     * monitor would report a dead link and the chat log would say "UDP unavailable" to a user who
-     * had just switched UDP off themselves.
+     * Forcing TCP *after* the connection is up stops the UDP ping, so the counters stop moving; the
+     * monitor must not then report a dead link to a user who switched UDP off themselves.
      */
     @Test
     fun forcingTcpMidConnectionStopsTheJudgementInsteadOfWarningAboutIt() {
@@ -475,10 +452,8 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * The backoff belongs to the outage, not to the connection: once UDP has been judged healthy
-     * again, the next outage has to retry after a second rather than carrying on where the last one
-     * stopped. A monitor tuned to restore on the second ping stands in for twenty seconds of
-     * counters climbing, which the fake transports do not produce.
+     * The backoff belongs to the outage, not to the connection. The monitor is tuned to restore on
+     * the second ping.
      */
     @Test
     fun restoringUdpResetsTheBackoffSoTheNextOutageRetriesAfterASecond() {
@@ -506,19 +481,9 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * The production restore condition, driven end to end for the first time.
-     *
-     * It could not be before, and the reason was a fake rather than a missing test:
-     * `CryptState.mUiGood` grows only in `CryptState.decrypt()`, reachable only from HumlaUDP's
-     * receive loop, and [FakeTransports.createUdp] threw the crypt state away. `localGood` was
-     * therefore constant zero in every connection test here, which made `localDelta > threshold`
-     * unsatisfiable and forced restoringUdpResetsTheBackoff... to construct
-     * `restoreThreshold = -1`. The threshold the app ships was never once reached in a test.
-     *
-     * The history is the one the app actually produces while voice is tunneled: sendPings keeps
-     * sending a UDP ping every five seconds because only the *route* changed, the replies raise
-     * mUiGood here and the server's `good` count in its own Ping, and four of each per twenty
-     * second window clear a threshold of one comfortably.
+     * The production restore threshold, end to end. While tunneled, UDP pings keep going out every
+     * five seconds; the replies raise `CryptState.good` (via the fake's real decrypt) and the
+     * server's `good` count, and four of each per window clear a threshold of one.
      */
     @Test
     fun udpIsRestoredAtTheThresholdTheAppShipsOncePingRepliesFlowAgain() {
@@ -547,11 +512,8 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * SWITCH_TO_TCP_SEND at the connection, which the same fake made unreachable: it needs
-     * `localDelta > 0` while the server's count stands still, and localDelta could not move.
-     * Reachable now, and it is the case of a firewall that passes our way and not the other - we
-     * keep hearing the server, the server stops hearing us, and voice has to be tunneled anyway
-     * because a call that only works in one direction is not a call.
+     * SWITCH_TO_TCP_SEND: a firewall that passes one way only - we keep hearing the server, the
+     * server stops hearing us.
      */
     @Test
     fun aServerThatStopsHearingUsTunnelsTheVoiceWhileWeStillHearIt() {
@@ -571,11 +533,7 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(listener.warnings).containsExactly(ConnectionWarning.UDP_SEND_FAILED)
     }
 
-    /**
-     * The mirror image, SWITCH_TO_TCP_RECEIVE: the server hears us, nothing comes back. Reachable
-     * with a constant-zero localGood too, and untested for exactly that reason - every history the
-     * fakes could produce ended in SWITCH_TO_TCP_BOTH, which is the arm before it.
-     */
+    /** SWITCH_TO_TCP_RECEIVE: the server hears us, nothing comes back. */
     @Test
     fun aServerWeCanReachButNotHearTunnelsTheVoiceToo() {
         val connection = newConnection()
@@ -591,12 +549,9 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * A restart that comes due behind a disconnect. It is the one callback in this task that can
-     * still open a socket after the teardown has run, and nothing would ever close it: the teardown
-     * disconnects the transport the connection held at that moment and the object is single-use, so
-     * there is no second teardown. The zero-delay policy is what makes the interleaving a fact -
-     * with the production delay the restart is not due when `quitSafely` sweeps the queue, so it is
-     * dropped for a reason that has nothing to do with the guard.
+     * A restart that comes due behind a disconnect must not open a socket nothing would close. The
+     * zero-delay policy forces the interleaving; with the production delay the cancelled delay would
+     * drop the restart anyway.
      */
     @Test
     fun aRestartComingDueBehindADisconnectStartsNoSecondUdpTransport() {
@@ -610,12 +565,12 @@ class HumlaConnectionUdpRecoveryTest {
         connection.disconnect()
         gate.countDown()
         awaitUntil(description = "teardown ran behind the queued failure") { tcp.disconnectCalls == 1 }
-        awaitUntil(description = "protocol thread quit") { !connection.protocolThread.isAlive }
+        awaitUntil(description = "connection terminated") { connection.isTerminated }
 
         assertThat(transports.udps).hasSize(1)
     }
 
-    /** The same for the other window: the user forces TCP while a restart is already queued. */
+    /** The user forces TCP while a restart is already queued. */
     @Test
     fun aRestartIsSkippedWhenTcpWasForcedWhileItWasPending() {
         val connection = newConnection(UdpHealthMonitor(), immediateRestarts)
@@ -627,11 +582,7 @@ class HumlaConnectionUdpRecoveryTest {
 
         connection.setForceTCP(true)
         gate.countDown()
-        // Twice, for the reason the neighbour above drains twice. One drain only waits past what
-        // was queued when it was posted: if main posts the barrier before the protocol thread has
-        // taken the failure handler off the queue, the restart the handler schedules lands *behind*
-        // the barrier and the assertion is taken on an empty window. It kills its mutant today and
-        // would go on killing it - it is a race in the test, not a hole in the coverage.
+        // Twice: the restart the failure handler schedules can land behind the first barrier.
         connection.drainProtocolQueue("failure handled")
         connection.drainProtocolQueue("the restart the failure queued handled")
         mainLooper.idle()
@@ -640,11 +591,7 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(tcp.sent).contains(HumlaTCPMessageType.UDPTunnel) // the failure itself was still reported
     }
 
-    /**
-     * The policy's own answer to "stop trying" is honoured rather than read as zero. Nothing passes
-     * a finite attempt count today - the default is unbounded, because a UDP link can come back an
-     * hour into a call - so this is what keeps the branch from being a line no caller can reach.
-     */
+    /** A finite attempt count is honoured (the production default is unbounded). */
     @Test
     fun udpStopsRetryingOnceThePolicyRunsOutOfAttempts() {
         val onlyOneRetry = ReconnectPolicy(
@@ -666,15 +613,8 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * The whole loop at the connection, as it was observed: UDP voice arriving continuously in both
-     * directions and the reply to our own UDP ping never coming back. On the device this produced
-     * "Switching to TCP mode" and "Switching back to UDP mode" alternately every five seconds for
-     * the length of the call.
-     *
-     * Two things are asserted, because two separate mistakes made it: the route must settle, and
-     * the chat log must not be filled even if a decision is taken twice. This test is RED on HEAD -
-     * it is a live defect, not a coverage hole - and it could not have been written before this
-     * round, because FakeUdpTransport dropped the crypt state and localGood could not move at all.
+     * UDP voice arriving continuously while the reply to our own UDP ping never comes back: the
+     * route must stay on UDP and nothing may be logged.
      */
     @Test
     fun aMissingUdpPingReplyDoesNotFlapTheRouteWhileVoiceKeepsArriving() {
@@ -703,10 +643,8 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * The third mistake on its own: a decision that turns out wrong must not be able to fill the
-     * chat log, whoever raises it. Identical warnings inside one suppression interval are delivered
-     * once. Scope of the claim: this de-duplicates by warning, not by cause - a second genuine UDP
-     * thread failure inside the interval is silent in the log, and the route change still happens.
+     * De-duplication is by warning, not by cause: a second genuine UDP thread failure inside the
+     * interval is silent in the log, but the route change still happens.
      */
     @Test
     fun anIdenticalWarningInsideTheSuppressionIntervalIsDeliveredOnce() {
@@ -727,7 +665,7 @@ class HumlaConnectionUdpRecoveryTest {
 
         assertThat(listener.warnings).containsExactly(ConnectionWarning.UDP_THREAD_FAILED)
 
-        // And it is an interval, not a mute button. Without this half, "never warn twice" passes.
+        // It is an interval, not a mute button.
         shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(2))
         awaitUntil(description = "udp restarted twice") { transports.udps.size == 3 }
         atSeconds(70)
@@ -738,10 +676,8 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(listener.warnings)
             .containsExactly(ConnectionWarning.UDP_THREAD_FAILED, ConnectionWarning.UDP_THREAD_FAILED)
 
-        // And the interval runs from the last delivery, not from the start of the connection.
-        // Found by mutation: without this half, deleting `lastWarnedMicros = now` left all 294
-        // tests green - every earlier delivery here happens at t=0, where an unwritten field and a
-        // written one hold the same value and every later comparison agrees.
+        // The interval runs from the last delivery, not from the start of the connection (the
+        // earlier deliveries were at t=0, where that difference is invisible).
         shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(4))
         awaitUntil(description = "udp restarted three times") { transports.udps.size == 4 }
         atSeconds(100)
@@ -753,26 +689,14 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     /**
-     * What the de-duplication may not do, and did: leave a chat log whose last line says the
-     * opposite of where the voice is going.
-     *
-     * The history is a link that alternates every window - the shape [UdpHealthMonitor]'s
-     * hysteresis produces for as long as a bursty link lasts, because it bounds the rate of the
-     * changes and not their number. Over 300 s at the shipped 20 s window that is 15 route changes.
-     * Under a per-warning timestamp the interval let 8 of the 15 announcements through and
-     * suppressed the last one, so the log ended on "back on UDP" while the voice was tunneled.
-     * Measured before the change, exactly: 8 lines, last UDP_RESTORED, route TCP.
-     *
-     * The assertion is the invariant rather than the count: **after every ping, the last line the
-     * user can see names the route the connection is on.** It holds by construction once warn()
-     * de-duplicates against the last warning it delivered - a line is suppressed only when it
-     * would repeat what is already the last line - and it cannot hold for a per-warning
-     * timestamp, which suppresses a line because of what came two changes ago.
+     * A link that alternates every window. Invariant: after every ping, the last warning the user
+     * can see names the route the connection is on - warn() only suppresses a line that would
+     * repeat the last delivered one.
      */
     @Test
     fun aFlappingLinkNeverLeavesAWarningThatContradictsTheRoute() {
         // restoreThreshold = -1 restores on any full window, so the monitor alternates on every
-        // ping; the hour-long ping timeout keeps the third arm out of the measurement.
+        // ping; the hour-long ping timeout keeps the ping-timeout arm out.
         val connection = newConnection(
             UdpHealthMonitor(pingTimeoutMicros = 3_600_000_000L, restoreThreshold = -1)
         )
@@ -797,13 +721,7 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(listener.warnings.last()).isEqualTo(ConnectionWarning.UDP_UNAVAILABLE)
     }
 
-    /**
-     * The fourth corner of warn()'s two-boolean condition: a *different* warning after the interval
-     * has passed. The flap test above drives the third (different, inside the interval), and
-     * anIdenticalWarningInsideTheSuppressionIntervalIsDeliveredOnce drives the two same-warning
-     * corners. Written because `&&` and `||` agree on three of the four and the class had no test
-     * that wrote the fourth.
-     */
+    /** The remaining corner of warn()'s condition: a *different* warning after the interval. */
     @Test
     fun aDifferentWarningIsDeliveredOnceTheIntervalHasPassedAsWell() {
         val connection = newConnection(
@@ -831,9 +749,7 @@ class HumlaConnectionUdpRecoveryTest {
 
     /**
      * The answer a Mumble 1.5 server sends to a connectivity ping: the header and the timestamp as
-     * a varint, nothing else (`UDPPingEncoder::encodePingPacket_legacy`). It used to be the header
-     * and eight raw bytes, which is what an older server echoed of the ping this client used to
-     * send - a shape no server produces any more.
+     * a varint, nothing else (`UDPPingEncoder::encodePingPacket_legacy`).
      */
     private fun udpPingReply(sentAtMicros: Long): ByteArray = MumbleLegacyPingDecoder.encodeReplyAsServer(sentAtMicros)
 
@@ -847,10 +763,7 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     private companion object {
-        /**
-         * Restarts with no delay at all, so a restart can be placed in the queue beside a teardown
-         * or a setting change instead of a second behind it.
-         */
+        /** No delay, so a restart can be queued right beside a teardown or a setting change. */
         val immediateRestarts = ReconnectPolicy(
             baseDelayMillis = 0L, maxDelayMillis = 0L, maxAttempts = Int.MAX_VALUE, maxJitterFraction = 0.0
         )

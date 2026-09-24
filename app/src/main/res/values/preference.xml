@@ -56,7 +56,6 @@
     <string name="hotCornerSum">Press a screen corner to transmit audio throughout Android.</string>
     <string name="general">General</string>
     <string name="appearance">Appearance</string>
-    <string name="themeSum">Change the look of the app.</string>
     <string name="theme">Theme</string>
     <string name="language">Language</string>
     <string name="advancedAudio">Advanced</string>
@@ -74,10 +73,8 @@
     <string name="certificateGenerateSum">Generates a new self-signed Mumla certificate. Recommended for beginners.</string>
     <string name="pttSettings">Push-to-talk settings</string>
     <string name="voiceActivitySettings">Voice activity settings</string>
-    <string name="disableOpus">Avoid Opus codec</string>
-    <string name="disableOpusSum">Turn off Opus support for Mumble 1.2.4 servers.</string>
 
-    <!-- Stream B: the audio settings screen (spec B3-B6, B9, B10). -->
+    <!-- Audio settings screen -->
     <string name="noiseSuppression">Noise suppression</string>
     <string name="noiseSuppressionSum">Removes background noise from your microphone before it is sent.</string>
     <string name="noiseSuppressionNone">Off</string>
@@ -107,7 +104,6 @@
     <string name="vadFloorSum">The room level the threshold is measured from, in dB below full scale. Only used while "Follow the background noise" is off.</string>
     <string name="vadRecalibrate">Measure again</string>
     <string name="vadRecalibrateSum">Forgets what has been learned about the room and your voice, and starts measuring from scratch.</string>
-    <string name="vadRecalibrateDone">Measuring again.</string>
     <string name="vadOnset">Ignore short noises</string>
     <string name="vadOnsetSum">How long a sound has to last before it counts as speech. Longer settings keep single keyboard clicks out; each step costs 10 ms of the beginning of a word.</string>
     <string name="vadOnsetOff">Off (0 ms)</string>
@@ -156,8 +152,6 @@
     <string name="halfDuplexSum">Mutes other playback during push-to-talk to avoid audio loops/feedback.</string>
     <string name="pttSound">Push-to-talk sound</string>
     <string name="pttSoundSum">Play sound effect when pressing the push-to-talk button.</string>
-    <string name="preprocessor_enabled">Input pre-processing</string>
-    <string name="preprocessor_enabled_sum">Suppresses ambient noise and normalizes audio volume.</string>
     <string name="audio_per_packet">Audio per packet</string>
     <string name="audio_per_packet_sum">The length of audio per voice packet.</string>
     <string name="stay_awake">Stay awake</string>

@@ -30,7 +30,6 @@
     <string name="hotCornerSum">Een specifieke hoek van het scherm dat, wanneer ingedrukt, Push-to-talk activeert.</string>
     <string name="general">Algemeen</string>
     <string name="appearance">Uiterlijk</string>
-    <string name="themeSum">Verander het uiterlijk van de app.</string>
     <string name="theme">Thema</string>
     <string name="advancedAudio">Geavanceerd</string>
     <string name="forceTcp">Enkel TCP</string>
@@ -47,8 +46,6 @@
     <string name="certificateGenerateSum">Genereert een nieuw self-signed Mumla certificaat. Annbevolen voor beginners.</string>
     <string name="pttSettings">Push-to-talk instellingen</string>
     <string name="voiceActivitySettings">Stem Activatie Instellingen</string>
-    <string name="disableOpus">Schakel Opus Codec uit</string>
-    <string name="disableOpusSum">Schakel Opus Codec uit voor Mumble 1.2.4 servers.</string>
     <string name="hidePtt">Verberg Push to Talk Knop</string>
     <string name="hidePttSum">Verbergt Push to Talk knop wanneer in Push to Talk modus. Nuttig indien u uitsluitend schermhoeken of hardware knop gebruikt.</string>
     <string name="useTts">Text-to-Speech</string>
@@ -72,8 +69,6 @@
     <string name="halfDuplexSum">Dempt het geluid van het toestel bij push to talk om feedback te voorkomen.</string>
     <string name="pttSound">Push to Talk Geluid</string>
     <string name="pttSoundSum">Speelt geluidseffect wanneer Push to Talk knop ingedrukt wordt.</string>
-    <string name="preprocessor_enabled">Activeer Invoer Preprocessor</string>
-    <string name="preprocessor_enabled_sum">Activeer de Speex preprocessor om omgevingsgeluid te dempen en volume te normaliseren.</string>
     <string name="audio_per_packet">Audio per packet</string>
     <string name="audio_per_packet_sum">De lengte van audio per voice packet.</string>
     <string name="noiseSuppression">Ruisonderdrukking</string>
@@ -104,7 +99,6 @@
     <string name="vadFloorSum">Het ruimteniveau waarvan de drempel wordt gemeten, in dB onder volle schaal. Alleen gebruikt als \"Achtergrondgeluid volgen\" uit staat.</string>
     <string name="vadRecalibrate">Opnieuw meten</string>
     <string name="vadRecalibrateSum">Vergeet wat er over de ruimte en je stem is geleerd en begint opnieuw te meten.</string>
-    <string name="vadRecalibrateDone">Opnieuw aan het meten.</string>
     <string name="vadOnset">Korte geluiden negeren</string>
     <string name="vadOnsetSum">Hoe lang een geluid moet duren voordat het als spraak telt. Langere instellingen houden losse toetsaanslagen buiten; elke stap kost 10 ms van het begin van een woord.</string>
     <string name="vadOnsetOff">Uit (0 ms)</string>

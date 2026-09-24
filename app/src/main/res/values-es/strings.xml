@@ -59,7 +59,6 @@
     <string name="server_port">Puerto</string>
     <string name="server_host">Dirección</string>
     <string name="server_label">Etiqueta</string>
-    <string name="connecting">Conectando</string>
     <string name="connecting_to_server">Conectando a %s…</string>
     <string name="ptt">Presionar-para-hablar</string>
     <string name="mute">Enmudecerse</string>
@@ -83,7 +82,6 @@
     <string name="generateCertProgress">Generando certificado…</string>
     <string name="search">Buscar</string>
     <string name="searchHint">Buscar canales y usuarios</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="quickConnect">Conexión rápida</string>
     <string name="connect">Conectar</string>
     <string name="connectToServer">Conectar al servidor</string>
@@ -96,7 +94,6 @@
     <string name="offline">Desconectado</string>
     <string name="clearChat">Limpiar chat</string>
     <string name="connected">Conectado</string>
-    <string name="mumlaConnected">Mumla conectado</string>
     <string name="mumlaConnecting">Mumla está conectando…</string>
     <string name="mumlaDisconnected">Mumla desconectado</string>
     <string name="channel">Canal</string>
@@ -155,10 +152,6 @@
         <item quantity="one">%d usuario</item>
         <item quantity="other">%d usuarios</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d mensaje nuevo</item>
-        <item quantity="other">%d mensajes nuevos</item>
-    </plurals>
     <string name="shout_failed">No se pudo crear el objetivo de voz.</string>
     <string name="certificate_import_success">Importó el certificado %s.</string>
     <string name="no_certificate">No hay certificado</string>
@@ -170,7 +163,6 @@
     <string name="orbot_not_installed">La aplicación Orbot no está instalada. No uso Tor.</string>
     <string name="grant_perm_draw_over_apps">Por favor, da permiso para mostrar sobre otras aplicaciones.</string>
     <string name="grant_perm_microphone">Por favor, da permiso al micrófono.</string>
-    <string name="grant_perm_storage">Por favor, da permiso al almacenamiento externo.</string>
     <string name="shout_configure">Especificar el destino del audio</string>
     <string name="shout_target">Gritando a %s</string>
     <string name="shout_include_subchannels">Gritar en los subcanales</string>
@@ -184,7 +176,6 @@
     <string name="invalid_certificate">El certificado no es válido, no se pudo cargar.</string>
     <string name="password">Contraseña</string>
     <string name="decrypt_certificate">Decifrar el certificado</string>
-    <string name="certificates">Certificados</string>
     <string name="change_requires_reconnect">Reconectar para usar el opciones nuevos.</string>
     <string name="image_confirm_send">¿Enviar esta foto\?</string>
     <string name="grant_perm_notifications">Por favor, autorice el envío de notificaciones.</string>
@@ -209,4 +200,34 @@
     <string name="audio_device_bluetooth">Auriculares Bluetooth</string>
     <string name="audio_device_other">Dispositivo de audio</string>
     <string name="echo_cancellation">Cancelación de eco</string>
+    <string name="chat_notify_muted_deafened">Mudo y sordo.</string>
+    <string name="chat_notify_muted">Mudo.</string>
+    <string name="chat_notify_unmuted">Con voz.</string>
+    <string name="chat_notify_now_muted_deafened">%s está ahora enmudecido y ensordecido.</string>
+    <string name="chat_notify_now_muted">%s está ahora enmudecido.</string>
+    <string name="chat_notify_now_unmuted">%s ahora tiene voz.</string>
+    <string name="chat_notify_connected">%s se ha conectado.</string>
+    <string name="chat_notify_disconnected">%s se ha desconectado.</string>
+    <string name="chat_notify_kick_ban_self">Has sido expulsado y prohibido del servidor por %1$s: %2$s.</string>
+    <string name="chat_notify_kick_self">Has sido expulsado del servidor por %1$s: %2$s.</string>
+    <string name="chat_notify_kick_ban">%3$s fue expulsado y prohibido del servidor por %1$s: %2$s.</string>
+    <string name="chat_notify_kick">%3$s ha sido expulsado del servidor por %1$s: %2$s.</string>
+    <string name="chat_notify_self_recording_started">Grabación iniciada</string>
+    <string name="chat_notify_self_recording_stopped">Grabación parada</string>
+    <string name="chat_notify_user_recording_started">%s ha empezado a grabar.</string>
+    <string name="chat_notify_user_recording_stopped">%s ha parado de grabar.</string>
+    <string name="chat_notify_user_joined_channel">%s entró al canal.</string>
+    <string name="chat_notify_user_left_channel">%1$s fue movido a %2$s.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s fue movido a este canal desde %2$s por %3$s.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s fue movido a %2$s por %3$s.</string>
+    <string name="deny_reason_channel_name">Denegado: Nombre de canal inválido.</string>
+    <string name="deny_reason_text_too_long">Denegado: Mensaje de texto demasiado largo.</string>
+    <string name="deny_reason_no_operation_temp">Denegado: Acción no permitida en un canal temporal.</string>
+    <string name="deny_reason_no_certificate">Necesitas un certificado para realizar esta operación.</string>
+    <string name="deny_reason_invalid_username">Nombre de usuario inválido.</string>
+    <string name="deny_reason_channel_full">El canal está lleno.</string>
+    <string name="deny_reason_channel_nesting">Límite de canales anidados alcanzado.</string>
+    <string name="deny_reason_other">Razón: %s</string>
+    <string name="server">Servidor</string>
+    <string name="the_server">el servidor</string>
 </resources>

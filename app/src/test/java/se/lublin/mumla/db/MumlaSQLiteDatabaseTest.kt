@@ -29,10 +29,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.Server
 
-/**
- * Round trips through every query of the database, written against the Java class before its
- * conversion to Kotlin: whatever these read back, the conversion has to read back too.
- */
+/** Round trips through every query of the database. */
 @RunWith(RobolectricTestRunner::class)
 class MumlaSQLiteDatabaseTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
@@ -53,8 +50,7 @@ class MumlaSQLiteDatabaseTest {
         val b = server("b").also { db.addServer(it) }
         assertThat(a.id).isNotEqualTo(b.id)
 
-        a.name = "renamed"
-        db.updateServer(a)
+        db.updateServer(Server(a.id, "renamed", a.host, a.port, a.username, a.password))
 
         val read = db.getServers().associateBy { it.id }
         assertThat(read.keys).containsExactly(a.id, b.id)
@@ -131,6 +127,17 @@ class MumlaSQLiteDatabaseTest {
     }
 
     @Test
+    fun localVolumesAreStoredByKeyAndUnityVolumeIsForgotten() {
+        db.setLocalVolume("cert:abc", 1.5f)
+        db.setLocalVolume("name:h:1:Bob", 0.25f)
+        db.setLocalVolume("cert:abc", 0.5f)
+        assertThat(db.getLocalVolumes()).containsExactly("cert:abc", 0.5f, "name:h:1:Bob", 0.25f)
+
+        db.setLocalVolume("name:h:1:Bob", 1f)
+        assertThat(db.getLocalVolumes()).containsExactly("cert:abc", 0.5f)
+    }
+
+    @Test
     fun certificatesRoundTripWithTheirData() {
         val c = db.addCertificate("alice.p12", byteArrayOf(1, 2, 3))
 
@@ -143,10 +150,8 @@ class MumlaSQLiteDatabaseTest {
     }
 
     /**
-     * Pre-existing defect, characterized rather than fixed: markCommentSeen stores the hash as a
-     * BLOB and isCommentSeen looks it up as TEXT (`new String(commentHash)`), and in SQLite a BLOB
-     * never equals a TEXT. A marked comment therefore never reads as seen. Nothing in the app calls
-     * either method, so no user sees it.
+     * Known defect, characterized: markCommentSeen stores the hash as a BLOB and isCommentSeen
+     * looks it up as TEXT, which never matches in SQLite. Nothing in the app calls either method.
      */
     @Test
     fun aMarkedCommentNeverReadsAsSeen() {
@@ -167,23 +172,21 @@ class MumlaSQLiteDatabaseTest {
     @Test
     fun anUpgradeCreatesTheTablesNewerThanTheOldVersion() {
         val w = db.writableDatabase
-        val added = listOf("favourites", "tokens", "comments", "local_mute", "local_ignore", "certificates")
+        val sinceV5 = listOf("local_mute", "local_ignore", "certificates", "local_volume")
+        for (t in sinceV5) w.execSQL("DROP TABLE $t")
+
+        db.onUpgrade(w, 5, MumlaSQLiteDatabase.CURRENT_DB_VERSION)
+        assertThat(tables()).containsAtLeastElementsIn(sinceV5)
+
+        val added = listOf("favourites", "tokens", "comments") + sinceV5
         for (t in added) w.execSQL("DROP TABLE $t")
-
-        db.onUpgrade(w, 5, 8)
-        assertThat(tables()).containsAtLeast("local_mute", "local_ignore", "certificates")
-        assertThat(tables()).containsNoneOf("favourites", "tokens", "comments")
-
-        db.onUpgrade(w, 2, 8)
+        // A version 2 database has a server table and nothing else; the upgrade then also seals
+        // its passwords, so every table it touches has to exist by then.
+        db.onUpgrade(w, 2, MumlaSQLiteDatabase.CURRENT_DB_VERSION)
         assertThat(tables()).containsAtLeastElementsIn(added)
     }
 
-    /**
-     * Every query closes its cursor, on every path. The device log showed "A resource failed to
-     * call AbstractCursor.close" from the finalizer: isChannelPinned -- asked once per channel
-     * while the list renders -- and the local mute and ignore lists never closed theirs, and
-     * getCertificateData left it open when the id had no row.
-     */
+    /** Every query closes its cursor, on every path (including a missing certificate id). */
     @Test
     fun everyQueryClosesItsCursor() {
         val opened = mutableListOf<Cursor>()
@@ -211,8 +214,9 @@ class MumlaSQLiteDatabaseTest {
             recording.getCertificateData(cert.id)
             recording.getCertificateData(cert.id + 1)
             recording.isCommentSeen("who", byteArrayOf(1))
+            recording.getLocalVolumes()
 
-            assertThat(opened).hasSize(11)
+            assertThat(opened).hasSize(12)
             assertThat(opened.filterNot { it.isClosed }).isEmpty()
         } finally {
             recording.close()

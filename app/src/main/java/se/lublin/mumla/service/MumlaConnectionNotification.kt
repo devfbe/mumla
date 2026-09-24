@@ -19,7 +19,6 @@ package se.lublin.mumla.service
 
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.PendingIntent.FLAG_CANCEL_CURRENT
@@ -39,25 +38,15 @@ import se.lublin.mumla.app.DrawerAdapter
 import se.lublin.mumla.app.MumlaActivity
 
 /**
- * The ongoing notification that keeps the service in the foreground (spec A6).
+ * The ongoing notification that keeps the service in the foreground.
  *
- * [show] enters the foreground **once** and afterwards only re-posts the notification. That is
- * the whole fix for "the microphone dies with the screen off", seen from this class: the platform
- * re-checks the background-start restriction on every `startForeground` call, including one that
- * only changes the text of a service that is already in the foreground (ActiveServices,
- * `setServiceForegroundInnerLocked`, the `mStartForegroundCount >= 1` arm: "regardless of whether
- * stopForeground() has been called or not"). So the text change to "Connection lost –
- * reconnecting…" must not go through it.
+ * [show] enters the foreground once and afterwards only re-posts the notification: the platform
+ * re-checks the background-start restriction on every `startForeground` call, even a text-only
+ * update, so e.g. "Connection lost – reconnecting…" with the screen off must not go through it.
  *
- * [show] never throws for a refusal: [ForegroundServiceStartNotAllowedException] and
- * [SecurityException] come back as `false`, and the caller decides what the user is told.
- * Anything else still propagates -- the refusal is an [IllegalStateException], and widening the
- * catch to that would also swallow a manifest that lost its foreground service type.
- *
- * The action receiver is registered exactly while the service is in the foreground: nothing can
- * press a button on a notification that is not there.
- *
- * Created by andrew on 08/08/14.
+ * [show] returns false for a refusal ([ForegroundServiceStartNotAllowedException],
+ * [SecurityException]) instead of throwing; other exceptions (e.g. a missing foreground service
+ * type) still propagate. The action receiver is registered exactly while in the foreground.
  */
 class MumlaConnectionNotification private constructor(
     private val service: Service,
@@ -68,12 +57,10 @@ class MumlaConnectionNotification private constructor(
     /** Mute, deafen and overlay: only meaningful while a session is up. */
     var actionsShown: Boolean = false
 
-    /**
-     * "Cancel reconnect", for ConnectionLost and Reconnecting. The notification stays in the
-     * foreground through a loss (spec A6), so this button is where the user gives up on the
-     * automatic reconnect without opening the app.
-     */
+    /** "Cancel reconnect", for ConnectionLost and Reconnecting. */
     var cancelReconnectShown: Boolean = false
+
+    private var channelCreated = false
 
     /** True from a successful [show] until [hide]. */
     var isForeground: Boolean = false
@@ -91,8 +78,7 @@ class MumlaConnectionNotification private constructor(
     }
 
     /**
-     * Enters the foreground with the current text and actions, or -- once in the foreground --
-     * replaces the posted notification with them.
+     * Enters the foreground, or once there replaces the posted notification.
      * @return false if the platform refused the foreground start.
      */
     fun show(): Boolean {
@@ -135,21 +121,17 @@ class MumlaConnectionNotification private constructor(
     }
 
     private fun buildNotification(): Notification {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            service.getString(R.string.connected),
-            NotificationManager.IMPORTANCE_DEFAULT,
-        )
-        service.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        ensureChannel()
 
-        // The app name is always displayed in the notification, so no content title is set here.
+        // The app name is always shown, so no content title.
         val builder = NotificationCompat.Builder(service, CHANNEL_ID)
             .setContentText(customContentText)
             .setSmallIcon(R.drawable.ic_stat_notify)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setShowWhen(false)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
 
         if (actionsShown) {
             builder.addAction(R.drawable.ic_action_microphone, service.getString(R.string.mute), broadcast(BROADCAST_MUTE))
@@ -166,21 +148,21 @@ class MumlaConnectionNotification private constructor(
 
         val channelListIntent = Intent(service, MumlaActivity::class.java)
             .putExtra(MumlaActivity.EXTRA_DRAWER_FRAGMENT, DrawerAdapter.ITEM_SERVER)
-        // FLAG_CANCEL_CURRENT ensures that the extra always gets sent: extras are not part of a
-        // PendingIntent's identity, and MumlaMessageNotification asks for the same activity under
-        // the same request code. Today both carry ITEM_SERVER, so only the flag test pins this.
+        // FLAG_CANCEL_CURRENT so the extra is always delivered: extras are not part of a
+        // PendingIntent's identity, and MumlaMessageNotification uses the same request code.
         builder.setContentIntent(
             PendingIntent.getActivity(service, 0, channelListIntent, FLAG_CANCEL_CURRENT or FLAG_IMMUTABLE),
         )
         return builder.build()
     }
 
-    /**
-     * The buttons' intents differ in their action, which is what tells PendingIntents apart,
-     * and carry no extras that could go stale -- so neither a per-button request code nor
-     * FLAG_CANCEL_CURRENT has anything to do here. The Java original had both; changing either
-     * one left every test green (measured), which is why they are gone rather than pinned.
-     */
+    private fun ensureChannel() {
+        if (channelCreated) return
+        NotificationChannels.create(service)
+        channelCreated = true
+    }
+
+    /** Buttons differ by action, which is what tells PendingIntents apart; they carry no extras. */
     private fun broadcast(action: String): PendingIntent {
         val intent = Intent(action).setPackage(service.packageName)
         return PendingIntent.getBroadcast(service, 0, intent, FLAG_IMMUTABLE)
@@ -196,23 +178,14 @@ class MumlaConnectionNotification private constructor(
     companion object {
         private val TAG = MumlaConnectionNotification::class.java.name
         private const val NOTIFICATION_ID = 1
-        private const val CHANNEL_ID = "connected_channel"
+        private const val CHANNEL_ID = NotificationChannels.CONNECTION
         private const val BROADCAST_MUTE = "b_mute"
         private const val BROADCAST_DEAFEN = "b_deafen"
         private const val BROADCAST_OVERLAY = "b_overlay"
 
-        /**
-         * Not MumlaReconnectNotification's "b_cancel_reconnect": both receivers can be registered
-         * at once, and a shared action would deliver one press to both.
-         */
+        /** Distinct from MumlaReconnectNotification's action: both receivers can be registered at once. */
         private const val BROADCAST_CANCEL_RECONNECT = "b_foreground_cancel_reconnect"
 
-        /**
-         * Creates a foreground Mumla notification for the given service.
-         * @param service The service to register a foreground notification for.
-         * @param listener A listener for notification actions.
-         */
-        @JvmStatic
         fun create(service: Service, contentText: String, listener: OnActionListener): MumlaConnectionNotification =
             MumlaConnectionNotification(service, contentText, listener)
     }

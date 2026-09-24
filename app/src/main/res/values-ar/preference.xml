@@ -28,7 +28,6 @@
     <string name="vadFloorSum">مستوى الغرفة الذي تُقاس منه العتبة، بالديسيبل تحت أقصى نطاق. يُستخدم فقط عندما يكون «تتبّع ضوضاء الخلفية» معطّلًا.</string>
     <string name="vadRecalibrate">أعد القياس</string>
     <string name="vadRecalibrateSum">ينسى ما تعلّمه عن الغرفة وعن صوتك، ويبدأ القياس من جديد.</string>
-    <string name="vadRecalibrateDone">تجري إعادة القياس.</string>
     <string name="vadOnset">تجاهل الأصوات القصيرة</string>
     <string name="vadOnsetSum">المدة التي يجب أن يستمرها الصوت ليُحتسب كلامًا. القيم الأطول تستبعد نقرات لوحة المفاتيح المنفردة؛ وكل خطوة تقتطع 10 ms من بداية الكلمة.</string>
     <string name="vadOnsetOff">معطّل (0 ms)</string>

@@ -23,7 +23,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:foreground="?selectableItemBackground"
-    style="?cardStyle">
+    style="@style/Widget.Mumla.CardView">
 <RelativeLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -40,8 +40,8 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingBottom="18dp"
-            android:paddingLeft="18dp"
-            android:paddingRight="18dp"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
             android:paddingTop="10dp" >
 
             <TextView
@@ -50,7 +50,7 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:fontFamily="sans-serif-light"
-                android:gravity="left|center_vertical"
+                android:gravity="start|center_vertical"
                 android:lines="1"
                 android:text="@string/server_host"
                 android:textColor="?android:textColorSecondary"
@@ -69,8 +69,8 @@
                     android:fontFamily="sans-serif-light"
                     android:gravity="center_vertical"
                     android:textColor="?android:textColorSecondary"
-                    android:text="Version status"
-                    android:layout_alignParentLeft="true"/>
+                    tools:text="Version status"
+                    android:layout_alignParentStart="true"/>
 
                 <TextView
                     android:id="@+id/server_row_usercount"
@@ -84,9 +84,9 @@
                     android:scrollHorizontally="true"
                     android:singleLine="true"
                     android:textColor="?android:textColorSecondary"
-                    android:layout_toRightOf="@id/server_row_version_status"
-                    android:layout_marginLeft="8dp"
-                    android:text="15/100" />
+                    android:layout_toEndOf="@id/server_row_version_status"
+                    android:layout_marginStart="8dp"
+                    tools:text="15/100" />
 
                 <TextView
                     android:id="@+id/server_row_latency"
@@ -94,10 +94,10 @@
                     android:layout_height="match_parent"
                     android:fontFamily="sans-serif-light"
                     android:textColor="?android:textColorSecondary"
-                    android:text="100ms"
+                    tools:text="100ms"
                     android:gravity="center_vertical"
                     android:layout_centerVertical="true"
-                    android:layout_alignParentRight="true"/>
+                    android:layout_alignParentEnd="true"/>
 
                 <ProgressBar
                     android:id="@+id/server_row_ping_progress"
@@ -112,13 +112,14 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="left|center_vertical"
+                android:gravity="start|center_vertical"
                 android:paddingBottom="4dp">
 
                 <ImageView
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
-                    android:layout_marginRight="5dp"
+                    android:layout_marginEnd="5dp"
+                    android:importantForAccessibility="no"
                     app:srcCompat="@drawable/ic_server_light"
                     app:tint="?android:attr/textColorPrimary" />
 
@@ -133,12 +134,13 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="left|center_vertical" >
+                android:gravity="start|center_vertical" >
 
                 <ImageView
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
-                    android:layout_marginRight="5dp"
+                    android:layout_marginEnd="5dp"
+                    android:importantForAccessibility="no"
                     app:srcCompat="@drawable/ic_server_location"
                     app:tint="?android:attr/textColorPrimary"/>
 
@@ -146,7 +148,7 @@
                     android:id="@+id/server_row_location"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Somewhere"
+                    tools:text="Somewhere"
                     android:textColor="?android:textColorSecondary"/>
             </LinearLayout>
         </LinearLayout>
@@ -156,13 +158,15 @@
 
     <ImageView
         android:id="@+id/server_row_more"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:paddingRight="8dp"
-        android:paddingTop="4dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:padding="12dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/a11y_server_options"
         android:layout_alignTop="@id/server_card"
-        android:layout_alignRight="@id/server_card"
-        app:srcCompat="@drawable/ic_card_overflow" />
+        android:layout_alignEnd="@id/server_card"
+        app:srcCompat="@drawable/ic_more_vert"
+        app:tint="?android:textColorSecondary" />
 
 </RelativeLayout>
     </androidx.cardview.widget.CardView>

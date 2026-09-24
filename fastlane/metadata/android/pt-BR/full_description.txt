@@ -8,7 +8,6 @@ Alguns recursos:
 * Suporte para fones de ouvido Bluetooth
 * Registro automático de servidores
 * Chaves de acesso
-* Suporte para codecs Opus, CELT e Speex
 * Reconexão automática
 * Suporte para a rede Tor através do aplicativo Orbot
 * Conversão de texto em fala para mensagens (ativo por padrão)

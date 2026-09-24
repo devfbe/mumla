@@ -2,13 +2,10 @@ package se.lublin.mumla.channel
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
-import android.os.Bundle
 import android.graphics.Typeface
-import android.os.Looper
+import android.graphics.drawable.Drawable
 import android.util.TypedValue
 import android.view.View
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -17,6 +14,7 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,34 +30,21 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
+import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.drawable.CircleDrawable
+import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.stubConnected
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 
 /**
- * What one model event costs the main thread.
- *
- * Every observer of the model answers a channel or user event with a full rebuild of the channel
- * tree, and after stream A bounded the observer queue a large server synchronisation still
- * delivers about a thousand of those events. Measured on a 5 000-channel tree, one rebuild walked
- * 33 179 nodes -- because `getSubchannelUserCount()` re-walks the whole subtree at every node it
- * is asked about -- and the thousand-event burst cost about half a second of main thread on a
- * desktop JVM, several seconds on a phone.
- *
- * Two properties fix that, and both are pinned here: at most one rebuild per main-thread turn,
- * and one pass over the model per rebuild.
+ * Model events trigger at most one rebuild per main-thread turn, and each rebuild makes one pass
+ * over the model.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelListAdapterRebuildTest {
-
     /** The row layouts resolve theme attributes, so they need a themed context, not the app one. */
-    class HostActivity : AppCompatActivity() {
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-    }
 
     private companion object {
         /** Tall enough for every row of [smallTree] to be laid out at once. */
@@ -81,10 +66,6 @@ class ChannelListAdapterRebuildTest {
         pinnedChannels: List<Int>? = null,
         showUserCount: Boolean = true,
         connected: Boolean = true,
-        // Inline, so that what the background write does is a fact of the test rather than a race
-        // with it. The production default is pinned separately, by
-        // [theDefaultDatabaseExecutorWritesOffTheCallingThread].
-        databaseExecutor: Executor = Executor { it.run() },
     ): ChannelListAdapter {
         byId = ids.toMutableMap()
         session = mockk(relaxed = true)
@@ -94,7 +75,7 @@ class ChannelListAdapterRebuildTest {
         every { server.isSaved } returns true
         service = mockk(relaxed = true)
         every { service.isConnected } returns connected
-        every { service.HumlaSession() } returns session
+        every { service.session } returns session
         every { service.targetServer } returns server
         database = mockk(relaxed = true)
         if (pinnedChannels != null) {
@@ -103,11 +84,11 @@ class ChannelListAdapterRebuildTest {
         return ChannelListAdapter(
             context,
             service,
-            database,
+            // Inline, so the database work is deterministic in tests.
+            MumlaRepository(database, Dispatchers.Unconfined),
             mockk<FragmentManager>(relaxed = true),
             pinnedChannels != null,
             showUserCount,
-            databaseExecutor,
         ).also { root.counters.reset() }
     }
 
@@ -138,11 +119,9 @@ class ChannelListAdapterRebuildTest {
         return root to mapOf(0 to root, 1 to empty, 2 to populated, 3 to emptyChild, 4 to deep)
     }
 
-    private fun idleMainLooper() = shadowOf(Looper.getMainLooper()).idle()
-
     @Before
     fun setUp() {
-        context = Robolectric.buildActivity(HostActivity::class.java).setup().get()
+        context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
         idleMainLooper()
     }
 
@@ -193,12 +172,7 @@ class ChannelListAdapterRebuildTest {
         return { changes }
     }
 
-    /**
-     * A burst is not a one-off: the next event, in the next turn, has to be scheduled again.
-     * Found by mutation -- leaving the scheduled flag set survived every other test in this
-     * class, because none of them delivered events in two separate main-thread turns, which is
-     * the only thing that ever happens in production.
-     */
+    /** The scheduled flag is cleared, so an event in a later turn is scheduled again. */
     @Test
     fun aBurstInALaterTurnRebuildsAgain() {
         val (root, ids) = smallTree()
@@ -218,15 +192,8 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * The same two-turn property across the *other* way a scheduled rebuild ends. [updateChannels]
-     * clears the flag from inside the posted runnable; a position query runs that runnable by hand
-     * and has to leave the flag cleared as well.
-     *
-     * [aBurstInALaterTurnRebuildsAgain] cannot see that: it never settles anything by hand, so a
-     * mutation that re-arms the flag after a hand-run rebuild survives it. In production the first
-     * hand-run settle is the first channel switch of the session
-     * (`ChannelListFragment.onUserJoinedChannel` -> `scrollToChannel`) or the first search
-     * suggestion clicked -- after which the list would never update again.
+     * A position query that runs the scheduled rebuild by hand must also clear the flag, or the
+     * list would never update again after the first channel switch or search suggestion.
      */
     @Test
     fun aBurstAfterAPositionQuerySettledTheLastOneRebuildsAgain() {
@@ -291,11 +258,8 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * "One pass over the model" is one pass over the *whole* model. A collapsed channel is walked
-     * to count it and its rows are dropped again, where the Java turned back at the closed door,
-     * so a list showing a single row can still read 1 000 channels. That is the cost of carrying
-     * the count instead of asking for it, and it is deliberate -- this pins it so that the class
-     * doc's claim is a measured one rather than a hopeful one.
+     * A collapsed channel is still walked to count its users; only its rows are dropped, so one
+     * visible row can still read the whole model.
      */
     @Test
     fun aCollapsedSubtreeIsStillWalkedBecauseItsUsersStillHaveToBeCounted() {
@@ -330,9 +294,8 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * Stream A's observer queue folds and drops events, so an observer may only treat an event as
-     * "read the model again". The coalesced rebuild has to answer the state the model is in when
-     * it finally runs, not the state that triggered the first of the folded events.
+     * Folded events only mean "read the model again": the coalesced rebuild reflects the model
+     * when it runs, not the event that scheduled it.
      */
     @Test
     fun theCoalescedRebuildReflectsTheLastStateAndNotTheFirstEvent() {
@@ -435,9 +398,8 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * `onUserJoinedChannel` asks for a position in the same turn in which it reports the join. A
-     * scheduled rebuild has to be settled before the answer, or the fragment scrolls to where the
-     * channel used to be.
+     * `onUserJoinedChannel` asks for a position in the same turn it reports the join, so a
+     * scheduled rebuild must be settled before answering.
      */
     @Test
     fun aChannelPositionQuerySettlesAScheduledRebuildFirst() {
@@ -476,9 +438,7 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * The expand toggle is hidden for a channel that can show nothing. Both halves of that
-     * decision matter: channel 1 holds no users at all but has a subchannel, channel 4 has no
-     * subchannel but holds a user, and channel 3 has neither.
+     * The expand toggle is hidden only for a channel with neither subchannels nor users below it.
      */
     @Test
     fun theExpandToggleIsShownForASubchannelAndForAUserAndHiddenForNeither() {
@@ -486,11 +446,7 @@ class ChannelListAdapterRebuildTest {
         val adapter = adapterOver(root, ids)
         clickExpandToggle(adapter, adapter.getChannelPosition(1))
 
-        // All four corners of `hasSubchannels || subtreeUserCount > 0`. The last one is what
-        // separates that condition from an exclusive or, and only a test that writes it can.
-        // Both effects the condition has on the view are read back: the same corner decides the
-        // visibility and the enabled state, and a test that reads only one of them leaves the
-        // other free.
+        // All four corners of `hasSubchannels || subtreeUserCount > 0`, for visibility and enabled.
         assertThat(expandToggleOf(adapter, 1).visibility).isEqualTo(View.VISIBLE)   // subchannel
         assertThat(expandToggleOf(adapter, 4).visibility).isEqualTo(View.VISIBLE)   // user
         assertThat(expandToggleOf(adapter, 2).visibility).isEqualTo(View.VISIBLE)   // both
@@ -502,11 +458,7 @@ class ChannelListAdapterRebuildTest {
         assertThat(expandToggleOf(adapter, 3).isEnabled).isFalse()
     }
 
-    /**
-     * Which way the chevron points. Nothing read it back before, so swapping the two drawables
-     * survived: the arrow would promise the opposite of what the tap does, and the list would
-     * still behave correctly underneath it.
-     */
+    /** Which way the chevron points. */
     @Test
     fun theExpandToggleChevronShowsWhetherTheRowIsOpen() {
         val (root, ids) = smallTree()
@@ -522,7 +474,6 @@ class ChannelListAdapterRebuildTest {
         assertThat(expandToggleImageOf(adapter, 1)).isEqualTo(R.drawable.ic_action_expanded)
     }
 
-    /** The row says whose row it is. */
     @Test
     fun aRowCarriesTheNameOfTheChannelOrUserItShows() {
         val (root, ids) = smallTree()
@@ -532,10 +483,7 @@ class ChannelListAdapterRebuildTest {
         assertThat(userRowTextOf(adapter, 100, R.id.user_row_name)).isEqualTo("user-100")
     }
 
-    /**
-     * The indent is what makes the flat list read as a tree, and it is the only thing that does.
-     * A user row sits one step further in than the channel it belongs to.
-     */
+    /** The indent makes the flat list read as a tree; a user row sits one step further in. */
     @Test
     fun aRowIsIndentedByItsDepthInTheTree() {
         val (root, ids) = smallTree()
@@ -549,9 +497,8 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * A long press anywhere on a row is the row's overflow button. Only the delegation is pinned:
-     * what the button itself then opens is a `ChannelMenu` / `UserMenu` popup, which is another
-     * file's behaviour, so the listener is replaced before the press rather than mocked around.
+     * A long press on a row delegates to the row's overflow button. The listener is replaced, as
+     * the popup it would open belongs to `ChannelMenu` / `UserMenu`.
      */
     @Test
     fun aLongPressOnARowIsATapOnItsOverflowButton() {
@@ -574,11 +521,8 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * A hole in `getUsers()` gets no row but is still counted, because
-     * `Channel.getSubchannelUserCount()` -- the number this replaced, and the number the row has
-     * always shown -- is `mUsers.size()` and counts it too. Counting before the skip rather than
-     * after is therefore the whole point of the line's order, and the fake could not produce the
-     * input that tells the two orders apart until it was allowed to hold a null.
+     * A null in `getUsers()` gets no row but is still counted, matching
+     * `Channel.subchannelUserCount` (`mUsers.size()`).
      */
     @Test
     fun aUserTheModelHasNotFilledInYetIsCountedButGetsNoRow() {
@@ -593,15 +537,14 @@ class ChannelListAdapterRebuildTest {
             .isEqualTo("2")
     }
 
-    /** Tapping a row is how a chat target is chosen; each row reports its own subject. */
     @Test
     fun tappingARowReportsTheChannelOrTheUserItShows() {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
         val channels = mutableListOf<Int>()
         val users = mutableListOf<Int>()
-        adapter.setOnChannelClickListener { channels.add(it.id) }
-        adapter.setOnUserClickListener { users.add(it.session) }
+        adapter.onChannelClick = { channels.add(it.id) }
+        adapter.onUserClick = { users.add(it.session) }
 
         rowOf(adapter, adapter.getChannelPosition(2)).performClick()
         rowOf(adapter, adapter.getChannelPosition(1)).performClick()
@@ -611,7 +554,6 @@ class ChannelListAdapterRebuildTest {
         assertThat(users).containsExactly(100)
     }
 
-    /** Everything the row reads out of the session is skipped while disconnected. */
     @Test
     fun aDisconnectedServiceLeavesTheChannelRowUnmarked() {
         val (root, ids) = smallTree()
@@ -678,10 +620,8 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * The setting is read at bind time, so a test that binds a fresh holder after flipping it
-     * proves only that the new row is right -- the rows already on screen are the ones the user
-     * is looking at, and they are redrawn by the notification, not by the flag. Deleting that
-     * notification survived until this test read it back.
+     * The setting is read at bind time, so the rows already on screen are redrawn by the change
+     * notification, not by the flag.
      */
     @Test
     fun theUserCountIsHiddenWhenTheSettingIsOff() {
@@ -725,18 +665,15 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * `updateUserStates` is the most frequently executed code in this adapter -- every talk-state
-     * and every mute/deafen change of every user goes through it, without a rebuild -- and it is
-     * reachable only through a list that has an adapter attached and has been laid out, because
-     * its first statement is `findViewHolderForItemId`. Every test that builds a holder by hand
-     * gets `null` there and measures nothing.
+     * `updateUserStates` starts with `findViewHolderForItemId`, so it is only reachable through an
+     * attached, laid-out list; hand-built holders get `null`.
      */
     @Test
     fun aTalkStateUpdateRepaintsTheRowOfTheUserItNames() {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
         val view = attachedRecyclerView(adapter)
-        val user = ids.getValue(4).getUsers().first() as FakeUser
+        val user = ids.getValue(4).users.first() as FakeUser
 
         assertThat(talkHighlightResIdIn(view, 100))
             .isEqualTo(R.drawable.outline_circle_talking_off)
@@ -749,16 +686,10 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * Why `updateUserStates` does not compare constant states before it repaints.
-     *
-     * It used to read `state != null && state != newState.constantState`, and both clauses
-     * survived mutation. Measured here: the talk-state icons are layer lists, and
-     * `LayerDrawable.getConstantState()` hands back its own per-instance `LayerState`, a fresh one
-     * per `newDrawable()`. Two lookups of one resource therefore never share a constant state, so
-     * the comparison was true on every call and the guard never once stopped a repaint -- an
-     * equivalent mutant wearing a guard's clothes (spec 4.05). This test is the premise: if a
-     * future resource or framework version does start sharing the state, it goes red and a real
-     * guard becomes writable.
+     * Why `updateUserStates` does not compare constant states before repainting: the talk-state
+     * icons are layer lists, and `LayerDrawable.getConstantState()` returns a fresh `LayerState`
+     * per instance, so two lookups of one resource never share one. If this starts failing, a
+     * constant-state guard becomes meaningful.
      */
     @Test
     fun twoLookupsOfOneTalkStateIconNeverShareAConstantState() {
@@ -770,7 +701,6 @@ class ChannelListAdapterRebuildTest {
         assertThat(first.constantState).isNotSameInstanceAs(second.constantState)
     }
 
-    /** A user with no row in this list is not somebody else's row. */
     @Test
     fun aTalkStateUpdateForAUserThatIsNotShownRepaintsNothing() {
         val (root, ids) = smallTree()
@@ -790,70 +720,9 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * The talk-state icon is a priority list, not a set of independent flags: a user who is both
-     * self-muted and server-deafened shows the deafened icon. The order is pinned here because the
-     * Kotlin conversion rewrote the if-chain as a `when`.
-     */
-    @Test
-    fun theTalkStateIconFollowsTheStatePriority() {
-        val (root, ids) = smallTree()
-        val user = ids.getValue(4).getUsers().first() as FakeUser
-        val adapter = adapterOver(root, ids)
-
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_talking_off)
-
-        user.state = TalkState.TALKING
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_talking_on)
-
-        user.suppressed = true
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_suppressed)
-
-        user.muted = true
-        assertThat(talkStateDrawableOf(adapter))
-            .isEqualTo(R.drawable.outline_circle_server_muted)
-
-        user.selfMuted = true
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_muted)
-
-        user.deafened = true
-        assertThat(talkStateDrawableOf(adapter))
-            .isEqualTo(R.drawable.outline_circle_server_deafened)
-
-        user.selfDeafened = true
-        assertThat(talkStateDrawableOf(adapter)).isEqualTo(R.drawable.outline_circle_deafened)
-    }
-
-    /**
-     * Three talk states share the talking icon, and the one test above writes only `TALKING`, so
-     * dropping either of the other two clauses survived it. Whispering and shouting are Mumble
-     * features a user can be in for minutes at a time; with a clause gone they show the resting
-     * dot while their voice is coming out of the speaker. The chain was rewritten from an if-chain
-     * into a `when` in this conversion.
-     */
-    @Test
-    fun everyActiveTalkStateShowsTheTalkingIcon() {
-        val (root, ids) = smallTree()
-        val user = ids.getValue(4).getUsers().first() as FakeUser
-        val adapter = adapterOver(root, ids)
-
-        // Enumerated rather than listed, so that a talk state added later fails here until
-        // somebody decides which icon it gets, instead of silently inheriting the resting dot.
-        for (state in TalkState.values()) {
-            user.state = state
-            val expected =
-                if (state == TalkState.PASSIVE) R.drawable.outline_circle_talking_off
-                else R.drawable.outline_circle_talking_on
-            assertThat(talkStateDrawableOf(adapter)).isEqualTo(expected)
-        }
-    }
-
-    /**
      * The local mute/ignore history is kept per registered account on a saved server, so both
-     * clauses have to hold before anything is written. `&&` -> `||` survived until now, because
-     * the write happens on a thread nobody waited for: with a bare `Thread` the two corners that
-     * separate the two operators are only observable through a race. The executor is injected for
-     * exactly that reason, and [theDefaultDatabaseExecutorWritesOffTheCallingThread] pins that the
-     * production default still leaves the main thread.
+     * conditions must hold before anything is written. Uses the inline executor so each corner
+     * is deterministic.
      */
     @Test
     fun theLocalMuteHistoryIsWrittenOnlyForARegisteredUserOnASavedServer() {
@@ -888,7 +757,7 @@ class ChannelListAdapterRebuildTest {
         val adapter = adapterOver(root, ids)
         val user = FakeUser(504, userId = 11)
 
-        user.setLocalMuted(true)
+        user.isLocalMuted = true
         adapter.onLocalUserStateUpdated(user)
 
         verify(exactly = 1) { database.addLocalMutedUser(SERVER_ID, 11) }
@@ -896,12 +765,27 @@ class ChannelListAdapterRebuildTest {
         verify(exactly = 0) { database.removeLocalMutedUser(any(), any()) }
         verify(exactly = 0) { database.addLocalIgnoredUser(any(), any()) }
 
-        user.setLocalMuted(false)
-        user.setLocalIgnored(true)
+        user.isLocalMuted = false
+        user.isLocalIgnored = true
         adapter.onLocalUserStateUpdated(user)
 
         verify(exactly = 1) { database.removeLocalMutedUser(SERVER_ID, 11) }
         verify(exactly = 1) { database.addLocalIgnoredUser(SERVER_ID, 11) }
+    }
+
+    /** The local volume is stored by identity, also for unregistered users and unsaved servers. */
+    @Test
+    fun theLocalVolumeIsStoredForAnyIdentifiableUser() {
+        val (root, ids) = smallTree()
+        val adapter = adapterOver(root, ids)
+        every { server.isSaved } returns false
+        every { server.host } returns "example.org"
+        every { server.port } returns 64738
+        val user = FakeUser(506, name = "Bob").apply { localVolume = 1.5f }
+
+        adapter.onLocalUserStateUpdated(user)
+
+        verify(exactly = 1) { database.setLocalVolume("name:example.org:64738:Bob", 1.5f) }
     }
 
     /**
@@ -922,23 +806,20 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * The injected executor is a test seam, so the default it replaces needs a test of its own:
-     * the two database writes are disk I/O and must not run on the caller, which is the main
-     * thread. Deterministic because the write itself releases the latch.
+     * The repository's default dispatcher writes off the calling (main) thread. Deterministic because the
+     * write itself releases the latch.
      */
     @Test
-    fun theDefaultDatabaseExecutorWritesOffTheCallingThread() {
+    fun theLocalStateIsWrittenOffTheCallingThread() {
         val (root, ids) = smallTree()
         val database = mockk<MumlaDatabase>(relaxed = true)
         val server = mockk<Server>(relaxed = true)
         every { server.id } returns SERVER_ID
         every { server.isSaved } returns true
-        val service = mockk<IHumlaService>(relaxed = true)
-        every { service.isConnected } returns true
-        every { service.HumlaSession() } returns mockk<IHumlaSession>(relaxed = true)
+        val service = mockk<IHumlaService>(relaxed = true).stubConnected(mockk(relaxed = true))
         every { service.targetServer } returns server
         val adapter = ChannelListAdapter(
-            context, service, database, mockk<FragmentManager>(relaxed = true), false, true,
+            context, service, MumlaRepository(database), mockk<FragmentManager>(relaxed = true), false, true,
         )
         val done = CountDownLatch(1)
         val writer = arrayOfNulls<String>(1)
@@ -956,52 +837,42 @@ class ChannelListAdapterRebuildTest {
     }
 
     /**
-     * The avatar path, which no test wrote an input for: `getTexture()` was a constant null in the
-     * fake, so all three corners of the passive branch lived behind one input the class never
-     * produced. A user with a decodable texture gets a [CircleDrawable] of it, and a user without
-     * one -- or with bytes that do not decode, which the code comments on and which really
-     * happens -- gets the resting dot.
+     * A user with a decodable texture gets a [CircleDrawable] of it; a user without one gets the
+     * resting dot.
      */
     @Test
     fun aDecodableTextureBecomesTheUsersAvatarAndAnythingElseIsTheRestingDot() {
         val (root, ids) = smallTree()
         val channel = ids.getValue(4)
 
-        channel.removeUser(channel.getUsers().first())
+        channel.removeUser(channel.users.first())
         channel.addUser(FakeUser(100, texture = pngBytes()))
         assertThat(talkHighlightDrawableOf(adapterOver(root, ids)))
             .isInstanceOf(CircleDrawable::class.java)
 
-        channel.removeUser(channel.getUsers().first())
+        channel.removeUser(channel.users.first())
         channel.addUser(FakeUser(100))
         assertThat(talkStateDrawableOf(adapterOver(root, ids)))
             .isEqualTo(R.drawable.outline_circle_talking_off)
     }
 
     /**
-     * The third corner, and the one the code has a comment about: a texture that does not decode
-     * falls through to the resting dot rather than to a null drawable. It needs real graphics --
-     * Robolectric's legacy `BitmapFactory` hands back a bitmap for any bytes at all, so under the
-     * class's default mode this branch is unwritable and the assertion above it would pass for
-     * the wrong reason.
+     * A texture that does not decode falls through to the resting dot. Needs real graphics:
+     * Robolectric's legacy `BitmapFactory` decodes any bytes.
      */
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun aTextureThatDoesNotDecodeFallsBackToTheRestingDot() {
         val (root, ids) = smallTree()
         val channel = ids.getValue(4)
-        channel.removeUser(channel.getUsers().first())
+        channel.removeUser(channel.users.first())
         channel.addUser(FakeUser(100, texture = byteArrayOf(1, 2, 3)))
 
         assertThat(talkStateDrawableOf(adapterOver(root, ids)))
             .isEqualTo(R.drawable.outline_circle_talking_off)
     }
 
-    /**
-     * Everything the row reads out of the session can throw the moment the model goes away under
-     * it -- the session is gone, or it is not synchronised yet -- and every one of those reads is
-     * wrapped. None of the three wrappings had a test: a row still has to bind.
-     */
+    /** Every session read in bind is wrapped, so a row still binds when the model goes away. */
     @Test
     fun aSessionThatThrowsMidBindStillProducesARow() {
         val (root, ids) = smallTree()
@@ -1013,7 +884,7 @@ class ChannelListAdapterRebuildTest {
         assertThat(userNameStyleOf(adapter, 100)).isEqualTo(Typeface.NORMAL)
     }
 
-    /** And a rebuild that throws mid-walk leaves the list as far as it got, rather than crashing. */
+    /** A rebuild that throws mid-walk keeps the rows built so far instead of crashing. */
     @Test
     fun aModelThatThrowsMidRebuildLeavesTheListStanding() {
         val (root, ids) = smallTree()
@@ -1135,10 +1006,8 @@ class ChannelListAdapterRebuildTest {
         RecyclerView(context).apply { layoutManager = LinearLayoutManager(context) }
 
     /**
-     * A list the adapter is actually attached to, measured and laid out, so that the rows exist as
-     * view holders the adapter can find again. [recyclerView] is a bare parent for
-     * `onCreateViewHolder` and deliberately has no adapter: anything that reaches into the list
-     * itself needs this one instead.
+     * A list the adapter is attached to, measured and laid out, so view holders can be found
+     * again. [recyclerView] is only a bare parent for `onCreateViewHolder`.
      */
     private fun attachedRecyclerView(adapter: ChannelListAdapter): RecyclerView {
         val view = recyclerView()

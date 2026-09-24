@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MumlaActivity looks these up with getIdentifier, which the resource shrinker cannot see. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@xml/list_drawer_headerdonate_foss,@string/donate_link_foss" />

@@ -65,7 +65,6 @@
     <string name="server_port">Порт</string>
     <string name="server_host">Адрес</string>
     <string name="server_label">Название</string>
-    <string name="connecting">Подключение</string>
     <string name="connecting_to_server">Подключение к %s…</string>
     <string name="ptt">Нажать-чтобы-говорить</string>
     <string name="mute">Приглушить</string>
@@ -101,7 +100,6 @@
     <string name="offline">Не в сети</string>
     <string name="clearChat">Очистить чат</string>
     <string name="connected">Подключено</string>
-    <string name="mumlaConnected">Mumla подключена</string>
     <string name="mumlaConnecting">Mumla подключается…</string>
     <string name="mumlaDisconnected">Mumla отключена</string>
     <string name="channel">Канал</string>
@@ -158,7 +156,6 @@
 \nПереподключение…</string>
     <string name="change_requires_reconnect">Переподключитесь, чтобы использовать новые настройки.</string>
     <string name="no_certificate">Без сертификата</string>
-    <string name="certificates">Сертификаты</string>
     <string name="decrypt_certificate">Расшифровать сертификат</string>
     <string name="password">Пароль</string>
     <string name="invalid_certificate">Недействительный сертификат не может быть загружен.</string>
@@ -175,7 +172,6 @@
     <string name="shout_target">Говорим в %s</string>
     <string name="shout_configure">Настроить цель голосового сообщения</string>
     <string name="grant_perm_microphone">Пожалуйста, разрешите использовать микрофон.</string>
-    <string name="grant_perm_storage">Пожалуйста, разрешите запись во внешнее хранилище.</string>
     <string name="grant_perm_draw_over_apps">Пожалуйста, разрешите показывать окна поверх других приложений.</string>
     <string name="orbot_not_installed">Приложение Orbot не установлено. Tor не используется.</string>
     <string name="orbot_tor_failed">Не удалось подключиться к к локальному Tor-прокси на порту %d (SOCKS).
@@ -188,14 +184,7 @@
         <item quantity="many">%d пользователей</item>
         <item quantity="other">%d пользователей</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d новое сообщение</item>
-        <item quantity="few">%d новых сообщения</item>
-        <item quantity="many">%d новых сообщений</item>
-        <item quantity="other">%d новых сообщений</item>
-    </plurals>
     <string name="donation_thanks">Спасибо за пожертвование.</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="image_confirm_send">Отправить это изображение\?</string>
     <string name="no_ptt_key">Кнопка не выбрана</string>
     <string name="grant_perm_notifications">Пожалуйста, дайте разрешение на отправку уведомлений.</string>
@@ -233,4 +222,34 @@
     <string name="audio_device_bluetooth">Bluetooth-гарнитура</string>
     <string name="audio_device_other">Аудиоустройство</string>
     <string name="echo_cancellation">Эхоподавление</string>
+    <string name="chat_notify_muted_deafened">Звук и микрофон отключены.</string>
+    <string name="chat_notify_muted">Микрофон отключен.</string>
+    <string name="chat_notify_unmuted">Микрофон включен.</string>
+    <string name="chat_notify_now_muted_deafened">%s отключил звук и микрофон.</string>
+    <string name="chat_notify_now_muted">%s отключил микрофон.</string>
+    <string name="chat_notify_now_unmuted">%s включил микрофон.</string>
+    <string name="chat_notify_connected">%s подключился.</string>
+    <string name="chat_notify_disconnected">%s отключился.</string>
+    <string name="chat_notify_kick_ban_self">Вас выгнал и заблокировал на сервере %1$s: %2$s.</string>
+    <string name="chat_notify_kick_self">Вас выгнал с сервера %1$s: %2$s.</string>
+    <string name="chat_notify_kick_ban">%3$s выгнан и забанен на сервере, %1$s: %2$s.</string>
+    <string name="chat_notify_kick">%3$s выгнан с сервера, %1$s: %2$s.</string>
+    <string name="chat_notify_self_recording_started">Запись начата</string>
+    <string name="chat_notify_self_recording_stopped">Запись остановлена</string>
+    <string name="chat_notify_user_recording_started">%s начал запись.</string>
+    <string name="chat_notify_user_recording_stopped">%s остановил запись.</string>
+    <string name="chat_notify_user_joined_channel">%s вошел в канал.</string>
+    <string name="chat_notify_user_left_channel">%1$s перемещен в %2$s.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s перемещен %3$s из %2$s.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s перемещен %3$s в %2$s.</string>
+    <string name="deny_reason_channel_name">Отказано: Неверное имя канала.</string>
+    <string name="deny_reason_text_too_long">Отказано: Текстовое сообщение слишком длинное.</string>
+    <string name="deny_reason_no_operation_temp">Отказано: Операция не разрешена во временном канале.</string>
+    <string name="deny_reason_no_certificate">Для этого действия вам нужен сертификат.</string>
+    <string name="deny_reason_invalid_username">Неверное имя пользователя.</string>
+    <string name="deny_reason_channel_full">Канал переполнен.</string>
+    <string name="deny_reason_channel_nesting">Достигнул предел вложенности канала.</string>
+    <string name="deny_reason_other">Причина: %s</string>
+    <string name="server">Сервер</string>
+    <string name="the_server">сервер</string>
 </resources>

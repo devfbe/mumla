@@ -33,7 +33,7 @@ class ChatMessageLogTest {
 
     @Test
     fun theBoundIsFiveHundred() {
-        // Spec D5's number, written out so that changing the constant is a decision and not a typo.
+        // Written out so that changing the constant is a decision and not a typo.
         assertThat(ChatMessageLog.MAX_ENTRIES).isEqualTo(500)
     }
 
@@ -50,8 +50,8 @@ class ChatMessageLogTest {
     }
 
     /**
-     * ChatAdapter's DiffUtil callback compares by identity, and is only cheap while the log hands
-     * the same message objects out again (its KDoc: 4.35 s at 20 000 rows otherwise).
+     * ChatAdapter's DiffUtil callback compares by identity, so the log must hand out the same
+     * message objects again.
      */
     @Test
     fun snapshotHandsOutTheSameInstances() {

@@ -20,12 +20,9 @@ package se.lublin.humla.audio.capture.fakes
 import se.lublin.humla.audio.capture.FarEndSink
 
 /**
- * Records the far-end frames it is handed.
- *
- * [frames] holds copies, because the real sink -- `WebRtcApmPreprocessor` -> `processRender` --
- * **may modify the frame in place**, and because a chunker is free to reuse one buffer. [buffers]
- * holds the array references themselves, which is the only way to see whether a chunker handed
- * over the caller's playback buffer instead of its own.
+ * Records the far-end frames it is handed. [frames] holds copies, since the real sink may modify
+ * frames in place and a chunker may reuse one buffer; [buffers] holds the references, to detect a
+ * chunker handing over the caller's own buffer.
  */
 class RecordingFarEndSink : FarEndSink {
     val frames = mutableListOf<ShortArray>()

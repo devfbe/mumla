@@ -17,7 +17,9 @@
 
 package se.lublin.humla.audio
 
+import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Handler
 import android.os.Looper
@@ -25,9 +27,6 @@ import android.os.Process
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import java.util.Arrays
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -37,28 +36,22 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
-import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.protocol.AudioHandler
 
 /**
- * Created by andrew on 16/07/13.
+ * Decodes and mixes all users' voice streams on one playback thread, inline and without allocating
+ * per mix.
  *
- * @param farEnd where every mixed buffer is handed over a second time, on its way to the
- *               speaker. It belongs to this thread: [FarEndFrameChunker] is not
- *               thread-safe and one chunker serves one playback thread, while the sink behind
- *               it takes the one lock that also covers the capture thread.
+ * @param farEnd receives every mixed buffer as the AEC3 far-end reference, or null when the
+ *               WebRTC canceller is not in the capture chain. Used only by the playback thread.
  */
 class AudioOutput @JvmOverloads constructor(
     private val listener: AudioOutputListener,
-    /**
-     * The far-end reference for AEC3, or null when the WebRTC canceller is not in the capture
-     * chain -- which includes the case where it was asked for and could not be built. Written once
-     * in the constructor and read only by the playback thread in [run].
-     */
     private val farEnd: FarEndFrameChunker?,
     /** Builds one user's decoder chain; the seam JVM tests use to run without native codecs. */
-    private val speechFactory: SpeechFactory = SpeechFactory { user, codec, samples, talkStateListener ->
-        AudioOutputSpeech(user, codec, samples, talkStateListener)
+    private val speechFactory: SpeechFactory = SpeechFactory { user, samples, talkStateListener ->
+        AudioOutputSpeech(user, samples, talkStateListener)
     },
 ) : Runnable, AudioOutputSpeech.TalkStateListener {
 
@@ -66,7 +59,6 @@ class AudioOutput @JvmOverloads constructor(
         @Throws(NativeAudioException::class)
         fun create(
             user: User,
-            codec: HumlaUDPMessageType,
             requestedSamples: Int,
             talkStateListener: AudioOutputSpeech.TalkStateListener,
         ): AudioOutputSpeech
@@ -79,26 +71,28 @@ class AudioOutput @JvmOverloads constructor(
 
     // Lock that the audio thread waits on when there's no audio to play. Wake when we get a frame.
     private val inactiveLock = Object()
+    /** The same talkers as [audioOutputs], in the order they are decoded and mixed. */
+    private val mix = PlaybackMix()
+
     /**
-     * Guards [audioOutputs] between the network thread ([queueVoiceData]), the playback thread
-     * ([fetchAudio]) and [stopPlaying]. Only ever taken through `withLock`: an exception inside the
-     * critical section -- a codec with no decoder is one -- must not leave it held, or the
-     * playback thread parks on its next mix and [stopPlaying] never returns.
+     * Guards [audioOutputs] and [mix] between the network thread, the playback thread and [stopPlaying].
+     * Only taken through `withLock` so an exception in the critical section cannot leave it held.
      */
     private val packetLock: Lock = ReentrantLock()
-    /**
-     * Set by [startPlaying] before the thread starts, not by the thread: a [stopPlaying] that
-     * arrives before [run] has executed a line must still see a running output, or it returns
-     * early and leaves the thread playing forever.
-     */
+    /** Set before the thread starts so an early [stopPlaying] still sees a running output. */
     @Volatile
     private var running = false
     private var woken = false // set by every notify() on inactiveLock, read and written under it
+    /** Legacy-codec packets are dropped; this keeps it to one log line per output. */
+    @Volatile
+    private var loggedUnsupportedCodec = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val mixer: IAudioMixer<FloatArray, ShortArray> = BasicClippingShortMixer()
-    private val decodeExecutorService: ExecutorService =
-        Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
+    private val onEnded: (AudioOutputSpeech) -> Unit = { speech ->
+        Log.v(TAG, "Deleted audio user " + speech.user.name)
+        audioOutputs.remove(speech.session)
+        speech.destroy()
+    }
 
     @Throws(AudioInitializationException::class)
     fun startPlaying(audioStream: Int): Thread? {
@@ -119,25 +113,34 @@ class AudioOutput @JvmOverloads constructor(
                 "(system minimum $minBufferSize bytes)",
         )
 
-        audioTrack = try {
-            @Suppress("DEPRECATION")
-            AudioTrack(
-                audioStream,
-                AudioHandler.SAMPLE_RATE,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                sizes.trackBytes,
-                AudioTrack.MODE_STREAM,
-            )
-        } catch (e: IllegalArgumentException) {
-            throw AudioInitializationException(e)
-        }
+        audioTrack = buildTrack(audioStream, sizes.trackBytes)
 
         val t = Thread(this)
         thread = t
         running = true
         t.start()
         return t
+    }
+
+    @Throws(AudioInitializationException::class)
+    private fun buildTrack(audioStream: Int, bytes: Int): AudioTrack = try {
+        AudioTrack.Builder()
+            .setAudioAttributes(playbackAttributes(audioStream))
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setSampleRate(AudioHandler.SAMPLE_RATE)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .build(),
+            )
+            .setBufferSizeInBytes(bytes)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            .build()
+    } catch (e: IllegalArgumentException) {
+        throw AudioInitializationException(e)
+    } catch (e: UnsupportedOperationException) {
+        throw AudioInitializationException(e)
     }
 
     fun stopPlaying() {
@@ -156,9 +159,7 @@ class AudioOutput @JvmOverloads constructor(
         thread = null
 
         packetLock.withLock {
-            for (speech in audioOutputs.values) {
-                speech.destroy()
-            }
+            mix.clear { it.destroy() }
             audioOutputs.clear()
         }
         audioTrack?.release()
@@ -176,18 +177,14 @@ class AudioOutput @JvmOverloads constructor(
         val track = audioTrack!!
         track.play()
 
-        val mix = ShortArray(bufferSize)
+        val pcm = ShortArray(bufferSize)
 
         while (running) {
-            if (fetchAudio(mix, 0, bufferSize)) {
-                // The same samples the speaker gets, handed to the canceller before the write
-                // rather than after it: write() blocks until the track has room, and every
-                // millisecond the reference spends waiting here is a millisecond it is later than
-                // the capture frame that will carry its echo. The chunker copies what it takes, so
-                // the APM's render-side processing -- which may modify a frame in place -- cannot
-                // reach this buffer on its way to AudioTrack.
-                farEnd?.push(mix, bufferSize)
-                track.write(mix, 0, bufferSize)
+            if (fetchAudio(pcm, 0, bufferSize)) {
+                // Feed the canceller before write(), which blocks: a late reference misaligns
+                // the echo estimate. The chunker copies, so the APM cannot modify this buffer.
+                farEnd?.push(pcm, bufferSize)
+                track.write(pcm, 0, bufferSize)
             } else {
                 Log.v(TAG, "Pausing thread.")
                 synchronized(inactiveLock) {
@@ -196,28 +193,21 @@ class AudioOutput @JvmOverloads constructor(
 
                     try {
                         if (farEnd != null) {
-                            // AEC3 estimates the delay between what the speaker plays and what the
-                            // microphone hears, and it estimates it from a *continuous* reference.
-                            // Letting the stream stop here is what makes the first fragment of a
-                            // word leak through after a silence: the filter has to re-converge.
-                            // Silence at the real-time rate keeps that estimate alive, and costs
-                            // one wakeup per buffer (120 ms at 48 kHz) while nobody is speaking.
-                            // woken separates a real frame arriving from the timeout; without it
-                            // a timed wait cannot tell the two apart -- and it also closes a
-                            // pre-existing lost-notify hole, where a notify() landing before this
-                            // block was entered left the thread waiting forever.
-                            Arrays.fill(mix, 0.toShort())
+                            // AEC3 needs a continuous reference to keep its delay estimate;
+                            // otherwise the first fragment of a word leaks after a silence. Feed
+                            // silence at the real-time rate. `woken` tells a real frame from the
+                            // timeout and keeps a notify() sent before this block from being lost.
+                            Arrays.fill(pcm, 0.toShort())
                             val tickMs = maxOf(1L, (bufferSize * 1000L) / AudioHandler.SAMPLE_RATE)
                             woken = false
                             while (running && !woken) {
                                 inactiveLock.wait(tickMs)
                                 if (!woken) {
-                                    farEnd.push(mix, bufferSize)
+                                    farEnd.push(pcm, bufferSize)
                                 }
                             }
                         } else {
-                            // The same flag without the timeout: a notify() from stopPlaying or
-                            // queueVoiceData that landed before this block was entered is not lost.
+                            // `woken` keeps a notify() sent before this block from being lost.
                             while (running && !woken) {
                                 inactiveLock.wait()
                             }
@@ -241,79 +231,47 @@ class AudioOutput @JvmOverloads constructor(
      * Fetches audio data from registered audio output users and mixes them into the given buffer.
      * TODO: add priority speaker support.
      * @param buffer The buffer to mix output data into.
-     * @param bufferOffset The offset of the
+     * @param bufferOffset The offset into the buffer.
      * @param bufferSize The size of the buffer.
      * @return true if the buffer contains audio data.
      */
     private fun fetchAudio(buffer: ShortArray, bufferOffset: Int, bufferSize: Int): Boolean {
         Arrays.fill(buffer, bufferOffset, bufferOffset + bufferSize, 0.toShort())
-        val sources = ArrayList<IAudioMixerSource<FloatArray>>()
-        try {
-            packetLock.withLock {
-                // Parallelize decoding using a fixed thread pool equal to the number of cores
-                val futureResults = decodeExecutorService.invokeAll(audioOutputs.values)
-                for (future in futureResults) {
-                    val result = future.get()
-                    if (result.isAlive()) {
-                        sources.add(result)
-                    } else {
-                        val speech = result.getSpeechOutput()
-                        Log.v(TAG, "Deleted audio user " + speech.getUser().getName())
-                        audioOutputs.remove(speech.getSession())
-                        speech.destroy()
-                    }
-                }
-            }
-        } catch (e: InterruptedException) {
-            e.printStackTrace()
-            return false
-        } catch (e: ExecutionException) {
-            e.printStackTrace()
-            return false
-        }
-
-        if (sources.isEmpty()) return false
-
-        mixer.mix(sources, buffer, bufferOffset, bufferSize)
-        return true
+        return packetLock.withLock { mix.mixInto(buffer, bufferOffset, bufferSize, onEnded) }
     }
 
-    fun queueVoiceData(data: ByteArray, messageType: HumlaUDPMessageType) {
-        if (!running) return
+    /** True for Opus; anything else is dropped, with one log line per output. */
+    private fun isDecodable(messageType: HumlaUDPMessageType): Boolean {
+        if (messageType == HumlaUDPMessageType.UDPVoiceOpus) return true
+        if (!loggedUnsupportedCodec) {
+            loggedUnsupportedCodec = true
+            Log.w(TAG, "Dropping $messageType voice packets: only Opus is supported")
+        }
+        return false
+    }
 
-        val msgFlags = (data[0].toInt() and 0x1f).toByte()
-        val pds = PacketBuffer(data, data.size)
-        pds.skip(1)
-        val session = pds.readLong().toInt()
+    /** Queues [packet] for its talker; [packet] is not kept. */
+    fun queueVoiceData(packet: VoicePacket) {
+        if (!running || !isDecodable(packet.codec)) return
+
+        val session = packet.session
         val user = listener.getUser(session)
-        if (user != null && !user.isLocalMuted()) {
-            // TODO check for whispers here
-            val seq = pds.readLong().toInt()
-
-            // Synchronize so we don't destroy an output while we add a buffer to it.
+        if (user != null && !user.isLocalMuted) {
             val aop = packetLock.withLock {
-                var existing = audioOutputs[session]
-                if (existing != null && existing.getCodec() != messageType) {
-                    // Out of the map before it is destroyed: if the successor cannot be built,
-                    // nothing may be left for the next mix to decode through freed handles.
-                    audioOutputs.remove(session)
-                    existing.destroy()
-                    existing = null
-                }
-                existing ?: try {
-                    speechFactory.create(user, messageType, bufferSize, this).also {
-                        Log.v(TAG, "Created audio user " + user.getName())
+                audioOutputs[session] ?: try {
+                    speechFactory.create(user, bufferSize, this).also {
+                        Log.v(TAG, "Created audio user " + user.name)
                         audioOutputs[session] = it
+                        mix.add(it)
                     }
                 } catch (e: NativeAudioException) {
-                    Log.v(TAG, "Failed to create audio user " + user.getName())
+                    Log.v(TAG, "Failed to create audio user " + user.name)
                     e.printStackTrace()
                     null
                 }
             } ?: return
 
-            val dataBuffer = PacketBuffer(pds.bufferBlock(pds.left()))
-            aop.addFrameToBuffer(dataBuffer, msgFlags, seq)
+            aop.addFrameToBuffer(packet)
 
             synchronized(inactiveLock) {
                 woken = true
@@ -325,8 +283,8 @@ class AudioOutput @JvmOverloads constructor(
     override fun onTalkStateUpdated(session: Int, state: TalkState) {
         mainHandler.post {
             val user = listener.getUser(session)
-            if (user != null && user.getTalkState() != state) {
-                user.setTalkState(state)
+            if (user != null && user.talkState != state) {
+                user.talkState = state
                 listener.onUserTalkStateUpdated(user)
             }
         }
@@ -347,9 +305,8 @@ class AudioOutput @JvmOverloads constructor(
     }
 
     /**
-     * The two sizes playback needs, which are in different units: [mixSamples] is how many 16-bit
-     * mono samples one mix -- and one [AudioTrack.write] -- carries, [trackBytes] is the
-     * `bufferSizeInBytes` the track is built with.
+     * [mixSamples]: 16-bit mono samples per mix and per [AudioTrack.write]; [trackBytes]: the
+     * track's `bufferSizeInBytes`.
      */
     internal data class PlaybackBuffer(val mixSamples: Int, val trackBytes: Int)
 
@@ -359,12 +316,25 @@ class AudioOutput @JvmOverloads constructor(
         private const val BYTES_PER_SAMPLE = 2 // ENCODING_PCM_16BIT, CHANNEL_OUT_MONO
 
         /**
-         * [minBufferBytes] is what [AudioTrack.getMinBufferSize] answers, and that is **bytes**.
-         * Reading it as samples once built the track with half the system minimum (5760 bytes
-         * against 11520 on a Galaxy S25) and mixed twice what the track could hold. The track
-         * gets the minimum in full; a mix is at most what that minimum holds, and never more than
-         * twelve frames (120 ms), which is what the far-end chunker and the decoders are sized for.
+         * [minBufferBytes] is [AudioTrack.getMinBufferSize], in **bytes**. The track gets it in
+         * full; a mix is at most what it holds and never more than twelve frames (120 ms), which
+         * is what the far-end chunker and the decoders are sized for.
          */
+        /**
+         * The attributes a track on [stream] had with the legacy stream-type constructor. The
+         * voice-call stream is spelled out as voice communication, the usage that follows the
+         * communication device the router selects.
+         */
+        fun playbackAttributes(stream: Int): AudioAttributes =
+            if (stream == AudioManager.STREAM_VOICE_CALL) {
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            } else {
+                AudioAttributes.Builder().setLegacyStreamType(stream).build()
+            }
+
         fun playbackBuffer(minBufferBytes: Int): PlaybackBuffer {
             val mixSamples = minOf(minBufferBytes / BYTES_PER_SAMPLE, AudioHandler.FRAME_SIZE * 12)
             return PlaybackBuffer(mixSamples = mixSamples, trackBytes = minBufferBytes)

@@ -8,7 +8,6 @@ Alcune caratteristiche:
 * Supporto cuffie Bluetooth
 * Auto-registrazione sui server
 * Token d'accesso
-* Supporto codec Opus, CELT e Speex
 * Riconnessione automatica
 * Supporto Tor tramite l'app Orbot
 * Sintesi vocale (TTS) per i messaggi (attivata per impostazione predefinita)

@@ -22,15 +22,13 @@ import org.junit.Test
 class UserTest {
 
     /**
-     * `equals` compares the session and `hashCode` returned the user id, which is -1 for every
-     * unregistered user and is assigned later than the session for everyone else. Two equal users
-     * therefore hashed differently, so a `HashSet` or `HashMap` keyed on users silently held
-     * duplicates.
+     * `equals` compares the session, so `hashCode` must too: the user id is -1 for every
+     * unregistered user and assigned later, so hash-based collections would hold duplicates.
      */
     @Test
     fun usersWithTheSameSessionAreEqualAndHashAlike() {
-        val a = User(7, "a").apply { setUserId(1) }
-        val b = User(7, "b").apply { setUserId(2) }
+        val a = User(7, "a").apply { userId = 1 }
+        val b = User(7, "b").apply { userId = 2 }
 
         assertThat(a).isEqualTo(b)
         assertThat(a.hashCode()).isEqualTo(b.hashCode())
@@ -43,12 +41,12 @@ class UserTest {
         val sub = Channel(1, false)
         val user = User(1, "u")
 
-        user.setChannel(root)
-        user.setChannel(sub)
+        user.channel = root
+        user.channel = sub
 
-        assertThat(root.getUsers()).isEmpty()
-        assertThat(sub.getUsers()).containsExactly(user)
-        assertThat(user.getChannel()).isEqualTo(sub)
+        assertThat(root.users).isEmpty()
+        assertThat(sub.users).containsExactly(user)
+        assertThat(user.channel).isEqualTo(sub)
     }
 
     @Test
@@ -57,7 +55,7 @@ class UserTest {
         val lower = User(2, "alice")
         val unnamed = User(3, null)
 
-        assertThat(listOf(upper, lower, unnamed).sorted().map { it.getSession() })
+        assertThat(listOf(upper, lower, unnamed).sorted().map { it.session })
             .containsExactly(3, 2, 1).inOrder()
     }
 }

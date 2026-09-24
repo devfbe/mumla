@@ -1,0 +1,37 @@
+# Every native method JNI_OnLoad registers: <class> <method> <JNI signature>.
+# Checked against the C++ bridges by tests/test_jni_registration.cpp and against the Kotlin
+# declarations by JniRegistrationsTest.kt; change all three together.
+se/lublin/humla/audio/native/OpusDecoderNative create (II[I)J
+se/lublin/humla/audio/native/OpusDecoderNative decodeFloat (J[BII[FII)I
+se/lublin/humla/audio/native/OpusDecoderNative destroy (J)V
+se/lublin/humla/audio/native/OpusDecoderNative packetGetNbFrames ([BI)I
+se/lublin/humla/audio/native/OpusDecoderNative packetGetSamplesPerFrame ([BI)I
+se/lublin/humla/audio/native/OpusEncoderNative create (III[I)J
+se/lublin/humla/audio/native/OpusEncoderNative ctlGetInt (JI[I)I
+se/lublin/humla/audio/native/OpusEncoderNative ctlSetInt (JII)I
+se/lublin/humla/audio/native/OpusEncoderNative destroy (J)V
+se/lublin/humla/audio/native/OpusEncoderNative encode (J[SI[BI)I
+se/lublin/humla/audio/native/RnnoiseNative create ()J
+se/lublin/humla/audio/native/RnnoiseNative destroy (J)V
+se/lublin/humla/audio/native/RnnoiseNative processFrame (J[S)F
+se/lublin/humla/audio/native/SpeexJitterNative ctl (JI[I)I
+se/lublin/humla/audio/native/SpeexJitterNative destroy (J)V
+se/lublin/humla/audio/native/SpeexJitterNative get (J[BI[I)I
+se/lublin/humla/audio/native/SpeexJitterNative init (I)J
+se/lublin/humla/audio/native/SpeexJitterNative pointerTimestamp (J)I
+se/lublin/humla/audio/native/SpeexJitterNative put (J[BIIIII)V
+se/lublin/humla/audio/native/SpeexJitterNative tick (J)V
+se/lublin/humla/audio/native/SpeexJitterNative updateDelay (J)I
+se/lublin/humla/audio/native/SpeexPreprocessNative ctlInt (JI[I)I
+se/lublin/humla/audio/native/SpeexPreprocessNative destroy (J)V
+se/lublin/humla/audio/native/SpeexPreprocessNative init (II)J
+se/lublin/humla/audio/native/SpeexPreprocessNative run (J[S)I
+se/lublin/humla/audio/native/SpeexResamplerNative destroy (J)V
+se/lublin/humla/audio/native/SpeexResamplerNative init (IIII[I)J
+se/lublin/humla/audio/native/SpeexResamplerNative processInt (JI[S[I[S[I)I
+se/lublin/humla/audio/native/WebRtcApmNative create (IZZIZZ)J
+se/lublin/humla/audio/native/WebRtcApmNative destroy (J)V
+se/lublin/humla/audio/native/WebRtcApmNative frameSize (J)I
+se/lublin/humla/audio/native/WebRtcApmNative lastCaptureLevelDbfs (J)F
+se/lublin/humla/audio/native/WebRtcApmNative processCapture (J[S)I
+se/lublin/humla/audio/native/WebRtcApmNative processRender (J[S)I

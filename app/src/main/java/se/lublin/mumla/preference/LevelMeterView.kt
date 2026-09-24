@@ -25,17 +25,11 @@ import android.util.AttributeSet
 import android.view.View
 
 /**
- * Maps a level in dBFS onto the meter's horizontal position.
- *
- * The span is fixed rather than auto-ranging: an auto-ranging bar moves both the reading and the
- * marks at once, so nothing on it stays still long enough to be read, and "the threshold is here
- * and my voice is there" -- the only question this bar exists to answer -- stops being visible.
+ * Maps a level in dBFS onto the meter's horizontal position. Fixed span, not auto-ranging, so the
+ * marks stay still enough to compare the threshold with the voice.
  */
 object MeterScale {
-    /**
-     * Quieter than a phone microphone reports in a silent room. [AdaptiveVadTracker] clamps its
-     * floor estimate at -90 dBFS, but everything below about -70 is the same picture: nothing.
-     */
+    /** Everything below about -70 dBFS looks the same: nothing. */
     const val BOTTOM_DBFS = -70f
     const val TOP_DBFS = 0f
 
@@ -45,16 +39,8 @@ object MeterScale {
 
 /**
  * The bar under the threshold slider: the live level, the three zones the gate divides the range
- * into, and the two marks the tracker moves.
- *
- * The zones are what the user asked to see -- *"the levels split into zones (here is speech, here
- * speech stays active, here is none), which change adaptively"* -- so they are painted as bands
- * behind the level rather than as a single line, and they move with [startThreshold] and
- * [stopThreshold] as the tracker learns.
- *
- * Every setter clamps and invalidates. The clamp is not decoration: [MeterScale] hands over a
- * fraction, but a caller that computed one itself and got it wrong would paint outside the view
- * instead of failing, and nothing downstream would notice.
+ * into (speech, stays open, none), and the two marks the tracker moves. Every setter clamps and
+ * invalidates.
  */
 class LevelMeterView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
     View(context, attrs) {

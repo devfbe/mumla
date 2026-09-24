@@ -10,28 +10,16 @@ import java.io.ByteArrayOutputStream
 import java.util.Random
 
 /**
- * Native graphics for the whole class, deliberately: under Robolectric's legacy graphics
- * `Bitmap.compress` is `ImageUtil.writeToStream`, a different JPEG encoder from the device's, and
- * `Bitmap.createBitmap` produces bitmaps whose pixels no encoder ever sees. Every number in here is
- * about how large a JPEG comes out at a given quality, so the encoder has to be the real one.
+ * Native graphics: under legacy graphics `Bitmap.compress` is a different JPEG encoder from the
+ * device's, and every number here is about JPEG sizes.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class OutgoingImageEncoderTest {
 
     /**
-     * Noise, not a flat fill. Re-measured here, because the figures first written down did not
-     * reproduce — and the conclusion they were written for comes out **stronger**, not weaker.
-     * On a flat 600x400 bitmap the whole ten-rung ladder spans, from quality 97 to quality 7:
-     *  - `Bitmap.createBitmap(600, 400, ARGB_8888)` untouched: **2183 → 2182 bytes**;
-     *  - erased to solid black: **2183 → 2182**;
-     *  - erased to solid `0x336699`: **2187 → 2184**.
-     *
-     * That is one to three bytes across ten rungs, not the five first reported. Nine of the ten
-     * rungs are byte-identical to a neighbour, so a limit derived from one rung admits another and
-     * `everyRungOfTheQualityLadderIsReachable` could not tell which rung the ladder had stopped on.
-     * With noise the same ladder spans **276 933 → 14 809** bytes, strictly decreasing at every
-     * step, which that test asserts before it uses it.
+     * Noise, not a flat fill: a flat 600x400 bitmap compresses to within three bytes at every rung
+     * of the quality ladder, while noise spans 276 933 -> 14 809 bytes, strictly decreasing.
      */
     private fun noisyBitmap(width: Int = 600, height: Int = 400): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -86,19 +74,14 @@ class OutgoingImageEncoderTest {
     }
 
     /**
-     * The limit the server enforces is `QString::length()` of the **whole message**, markup and all
-     * (`Server::isTextAllowed`, `length > iMaxImageMessageLength` fails). The old send path compared
-     * `4 * (bytes / 3) + 4` against it, which is the length of the raw base64 — not of the
-     * percent-encoded payload, and not of the `<img src=...>` around it. Measured on this ladder the
-     * real message is 4.1 % to 7.7 % longer than that estimate, so a message the old arithmetic
-     * called a fit could be over the server's limit and be dropped.
+     * Murmur limits `QString::length()` of the whole message, markup and percent-encoding included
+     * (`Server::isTextAllowed`), not the raw base64 length.
      */
     @Test
     fun theResultFitsTheLimitTheServerActuallyMeasures() {
         val bitmap = noisyBitmap()
         val best = jpegAt(bitmap, OutgoingImageEncoder.START_QUALITY)
-        // One character short of what the best rung needs, and comfortably *above* what the old
-        // byte-count estimate claimed that rung costs.
+        // One character short of what the best rung needs.
         val limit = OutgoingImageEncoder.imageHtml(best).length - 1
         assertThat(4 * (best.size / 3) + 4).isLessThan(limit)
 
@@ -143,9 +126,8 @@ class OutgoingImageEncoderTest {
     }
 
     /**
-     * `Bitmap.compress` answers `false` and writes nothing for an `ALPHA_8` bitmap — there is no
-     * JPEG for a bitmap with no colour. Ignoring that answer would send `<img src="data:image/
-     * jpeg;base64,"/>`: a message that fits every limit and shows nothing.
+     * `Bitmap.compress` returns `false` and writes nothing for an `ALPHA_8` bitmap; ignoring that
+     * would send an empty `data:` image.
      */
     @Test
     fun aBitmapTheJpegEncoderRefusesIsNotSentAsAnEmptyImage() {

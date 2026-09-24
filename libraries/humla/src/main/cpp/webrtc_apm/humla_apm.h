@@ -1,24 +1,18 @@
 /*
  * C interface to webrtc-audio-processing (AEC3, noise suppression, AGC2, high-pass filter).
  *
- * Everything below has C linkage and C types only. The JNI layer that calls it must not have to
- * deal with C++ name mangling, C++ types or exceptions: no function here can throw or let an
- * exception from webrtc or the C++ runtime escape (see humla_apm.cpp), so a caller compiled
- * without exception support, or a caller that is plain C, is safe.
+ * C linkage and C types only; no function here can throw or let an exception escape (see
+ * humla_apm.cpp).
  *
- * The module is stateful and the two audio streams have to be fed in a fixed relation:
+ * The two audio streams have to be fed in a fixed relation:
  *
  *   for every 10 ms tick:
  *       humla_apm_process_render(h, far_end_frame_about_to_be_played);
  *       humla_apm_process_capture(h, near_end_frame_just_recorded);
  *
  * The far-end frame must be handed over before the near-end frame that will contain its echo.
- * Getting this wrong does not produce an error: every call still returns 0 and echo
- * cancellation simply stops working -- silently, and by about 21 dB. tests/test_apm.c asserts
- * that: feeding no far-end stream, feeding the wrong audio on it, or feeding it 200 ms late all
- * fail the test. Interleaving capture and render within the same 10 ms tick is the one mistake
- * AEC3's delay estimator still absorbs, and test_apm.c explains why it is measured rather than
- * asserted.
+ * Getting this wrong produces no error: every call still returns 0 and echo cancellation silently
+ * stops working. tests/test_apm.c covers this.
  */
 #ifndef HUMLA_APM_H
 #define HUMLA_APM_H
@@ -53,10 +47,8 @@ humla_apm *humla_apm_create(int sample_rate_hz, const humla_apm_config *cfg) HUM
 
 /* Samples per 10 ms frame at the rate this instance was created with, i.e. exactly how many
  * int16_t humla_apm_process_capture and humla_apm_process_render read and write. Returns 0 for
- * a NULL handle. Callers that receive a buffer from somewhere else -- the JNI layer receiving a
- * Java short[] -- must check the buffer really is this long before passing it in: neither this
- * wrapper nor webrtc can see the length, and a short buffer is an out-of-bounds read and write,
- * not an error code. */
+ * a NULL handle. Callers must make sure their buffer is this long: a short buffer is an
+ * out-of-bounds read and write, not an error code. */
 int humla_apm_frame_size(const humla_apm *h) HUMLA_APM_NOEXCEPT;
 
 /* Process one 10 ms mono near-end frame in place. Returns 0 on success

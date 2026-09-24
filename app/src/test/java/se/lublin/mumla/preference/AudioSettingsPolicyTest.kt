@@ -24,9 +24,8 @@ import se.lublin.humla.audio.capture.VadMode
 
 class AudioSettingsPolicyTest {
     /**
-     * Hidden rather than disabled. A greyed-out slider still reads as "this exists and applies to
-     * me"; the three modes measure three incomparable quantities, and showing a probability
-     * threshold next to a level threshold is how a user calibrates the wrong one.
+     * Hidden rather than disabled: the three modes measure incomparable quantities, and a
+     * greyed-out slider still invites calibrating the wrong one.
      */
     @Test
     fun `each mode shows only the controls that mean something in it`() {

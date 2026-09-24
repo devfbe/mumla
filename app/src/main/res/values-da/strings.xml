@@ -17,7 +17,6 @@
     <string name="server_match_not_found">Kunne ikke finde server</string>
     <string name="server_password">Adgangskode</string>
     <string name="server_username">Brugernavn</string>
-    <string name="connecting">Forbinder</string>
     <string name="ptt">Tryk-for-snak</string>
     <string name="perm_denied">Tilladelse nægtet.</string>
     <string name="connectionRefused">Forbindelse nægtet</string>
@@ -27,7 +26,6 @@
     <string name="messageReceived">Ny besked</string>
     <string name="generateCertProgress">Generérer certifikat…</string>
     <string name="search">Søg</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="connect">Forbind</string>
     <string name="edit">Redigér</string>
     <string name="delete">Slet</string>
@@ -36,7 +34,6 @@
     <string name="offline">Offline</string>
     <string name="clearChat">Ryd chat</string>
     <string name="connected">Forbundet</string>
-    <string name="mumlaConnected">Mumla forbundet</string>
     <string name="mumlaConnecting">Mumla forbinder…</string>
     <string name="user">Bruger</string>
     <string name="sort">Sortér</string>
@@ -62,10 +59,6 @@
     <string name="password">Adgangskode</string>
     <string name="invalid_certificate">Ugyldigt certifikat kunne ikke indlæses.</string>
     <string name="context_channel_link">Link</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d ny besked</item>
-        <item quantity="other">%d nye beskeder</item>
-    </plurals>
     <string name="default_">Standard</string>
     <string name="donation_thanks">Tak for donationen.</string>
     <plurals name="search_channel_users">
@@ -105,7 +98,6 @@
     <string name="reconnect_dialog_message">Du er allerede forbundet til en server. Forbind til denne server i stedet\?</string>
     <string name="channel_menu_view_description">Se beskrivelse</string>
     <string name="no_certificate">Intet certifikat</string>
-    <string name="certificates">Certifikater</string>
     <string name="certificate_import_success">Importérede certifikat %s.</string>
     <string name="comment_view">Se</string>
     <string name="connection_lost_reconnecting">Forbindelsen mistet – forbinder igen…</string>
@@ -128,4 +120,6 @@
     <string name="audio_device_bluetooth">Bluetooth-headset</string>
     <string name="audio_device_other">Lydenhed</string>
     <string name="echo_cancellation">Ekkoannullering</string>
+    <string name="chat_notify_connected">%s forbundet.</string>
+    <string name="server">Server</string>
 </resources>

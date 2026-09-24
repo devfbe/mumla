@@ -30,26 +30,11 @@ import se.lublin.humla.audio.capture.PcmCaptureSource
 import se.lublin.humla.exception.AudioInitializationException
 
 /**
- * Owns the capture thread -- the one bare `Thread` the audio path is allowed (spec section 2) --
- * and pumps 10 ms frames from a [PcmCaptureSource] to [listener]. Nothing else: the recorder, the
- * android audio effects and the device routing live behind the source, and the preprocessing,
- * detection and encoding above the listener.
+ * Owns the capture thread and pumps 10 ms frames from a [PcmCaptureSource] to [listener].
  *
- * **Thread ownership, because this class is nothing but that.** [startRecording], [stopRecording]
- * and [shutdown] are `synchronized` on this instance and are the only writers of [thread];
- * [recording] is `@Volatile` because the capture thread reads it every frame while another thread
- * writes it. `AudioHandler` additionally wraps its own calls in `synchronized (mInput)`, which is
- * the same monitor and reentrant. Nothing the capture thread touches takes this monitor, so the
- * bounded join inside it cannot deadlock against the loop -- that ordering is the reason
- * [listener] is called outside any lock this class holds.
- *
- * **Three corrections to the Java original, all of them race conditions it had from the start:**
- * - `mRecording` was a plain `boolean` read by the capture thread and written by the main one.
- * - `stopRecording()` joined **without a timeout** while `AudioHandler` held a lock the UI thread
- *   wants, so one wedged `AudioRecord.read` froze the app rather than one thread. Spec B8 asks for
- *   `stop()` before `join(2000)` and for the timeout to log and carry on.
- * - `getSampleRate()` read `mAudioRecord.getSampleRate()` and `shutdown()` set `mAudioRecord` to
- *   null, so the getter threw for every caller after a disconnect. The rate is read once now.
+ * [startRecording], [stopRecording] and [shutdown] are `synchronized` on this instance and are the
+ * only writers of [thread]. The capture thread never takes this monitor and [listener] is called
+ * outside it, so the bounded join in [stopRecording] cannot deadlock against the loop.
  */
 class AudioInput(
     private val listener: AudioInputListener,
@@ -57,11 +42,7 @@ class AudioInput(
     private val stateListener: ((CaptureState) -> Unit)? = null,
     private val joinTimeoutMs: Long = DEFAULT_JOIN_TIMEOUT_MS,
 ) {
-    /**
-     * The bridge `AudioHandler.java:138` still calls. It dies with that file in task 11; until then
-     * it is the only production caller and the reason the source seam has a real implementation
-     * behind it at all.
-     */
+    /** Opens an [AndroidAudioRecordSource] for [audioSource] at [targetSampleRate]. */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     @Throws(AudioInitializationException::class)
     constructor(
@@ -85,9 +66,8 @@ class AudioInput(
     fun interface AudioInputListener {
         /**
          * @param frame the **reused** capture buffer: valid until this call returns, never kept.
-         * @param frameSize always the whole buffer. A read that produced fewer samples is padded
-         *   with silence rather than shortened, because the encoder needs a full frame -- see the
-         *   padding in [loop].
+         * @param frameSize always the whole buffer; short reads are padded with silence because
+         *   the encoder needs a full frame.
          */
         fun onAudioInputReceived(frame: ShortArray, frameSize: Int)
     }
@@ -104,9 +84,8 @@ class AudioInput(
     private var thread: Thread? = null
 
     /**
-     * @throws IllegalStateException if a capture thread is still alive. Two threads reading one
-     *   source is not a recoverable state, and [isRecording] cannot be used to rule it out: that
-     *   flag is about intent and is already false when [stopRecording] has given up on a join.
+     * @throws IllegalStateException if a capture thread from a previous run (e.g. after a timed-out
+     *   join) is still alive.
      */
     @Synchronized
     fun startRecording() {
@@ -119,16 +98,11 @@ class AudioInput(
     }
 
     /**
-     * Stops the source first -- which is what makes a blocked read return -- then interrupts and
-     * joins with a bound. The interrupt is not for the read (a native one ignores it) but for
-     * whatever the listener is blocked on: `ToggleInputMode.waitForInput` parks the capture thread
-     * until the talk key is pressed, and without the interrupt the loop never comes back to notice
-     * that [recording] is false.
+     * Stops the source (which unblocks a pending read), then interrupts and joins with a bound. The
+     * interrupt wakes a listener that blocks.
      *
-     * @return whether the capture thread really exited. `false` means it is still running against
-     *   a source [shutdown] is about to release, and the caller must not free native state the
-     *   capture path still reaches (spec B8: the timeout "logs and releases anyway", which is a
-     *   decision about the recorder, not a licence for everything downstream of it).
+     * @return whether the capture thread really exited. `false` means it may still reach native
+     *   state downstream, so the caller must not free it.
      */
     @Synchronized
     fun stopRecording(): Boolean {
@@ -139,8 +113,7 @@ class AudioInput(
         try {
             t.join(joinTimeoutMs)
         } catch (e: InterruptedException) {
-            // Our caller is being cancelled. Do not swallow it the way the Java original did:
-            // every frame above this one has to be able to see it too.
+            // Restore the flag so callers further up see the cancellation.
             Thread.currentThread().interrupt()
         }
         val exited = !t.isAlive
@@ -150,7 +123,7 @@ class AudioInput(
         return exited
     }
 
-    /** @return what [stopRecording] answered; the source is released either way (spec B8). */
+    /** @return what [stopRecording] answered; the source is released either way. */
     @Synchronized
     fun shutdown(): Boolean {
         val exited = stopRecording()
@@ -175,23 +148,16 @@ class AudioInput(
         while (recording) {
             val read = source.read(buffer, frameSize)
             if (read < 0) {
-                // A read racing our own shutdown answers a negative code because the recorder is
-                // gone. That is not news, and AudioHandler puts every CaptureState.Error in front
-                // of the user (stream A8), so reporting it means a warning on every disconnect.
+                // A read racing our own shutdown fails too; don't report that to the user.
                 if (recording) {
                     Log.e(TAG, "capture read error $read")
                     stateListener?.invoke(CaptureState.Error("capture read error $read"))
                 }
                 break
             }
-            // Nothing was read, so there is nothing to deliver: a blocking AudioRecord answers 0
-            // when it is no longer recording, and the padding below would turn that into 10 ms of
-            // silence the microphone never produced.
+            // A stopped AudioRecord answers 0; padding it would invent 10 ms of silence.
             if (read == 0) continue
-            // The buffer is allocated once, so after a short read its tail is the previous frame --
-            // audio that was already sent, going out again. No `if (read < frameSize)` in front of
-            // this: `fill` over an empty range is a no-op, and a cost guard here would be a branch
-            // no test can tell from its absence.
+            // The buffer is reused: clear the stale tail after a short read.
             buffer.fill(0, read, frameSize)
             listener.onAudioInputReceived(buffer, frameSize)
         }

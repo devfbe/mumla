@@ -22,12 +22,8 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
 /**
- * Spec B6. The decision has **three** inputs -- two independent booleans and a three-valued enum --
- * so the enumeration is over all 2 x 2 x 3 = 12 corners rather than over one mutation per clause.
- * Spec 4.04 names exactly this file's shape as the case that already cost a round: `||` mutated to
- * `xor` survives a complete clause sweep because the two agree on three of the four corners of a
- * two-boolean space, "and a user who switched on both Android audio effects got neither, silently".
- * Corner (true, true) is therefore written out, not implied.
+ * All 2 x 2 x 2 corners of (noise suppressor, AGC, echo mode) are enumerated: `||` mutated to
+ * `xor` survives a per-clause sweep, differing only at (true, true).
  */
 class AudioSourcePolicyTest {
     private val mic = MediaRecorder.AudioSource.MIC
@@ -66,11 +62,7 @@ class AudioSourcePolicyTest {
         assertThat(wrong).isEmpty()
     }
 
-    /**
-     * The pass-through returns **the caller's** source, not a hardcoded MIC. Without a second
-     * requested value every "keeps the requested source" assertion above is also satisfied by
-     * `return MediaRecorder.AudioSource.MIC`.
-     */
+    /** The pass-through returns the caller's source, not a hardcoded MIC. */
     @Test
     fun `plain capture keeps whichever source was requested`() {
         assertThat(AudioSourcePolicy.resolve(voiceRecognition, AndroidAudioEffects(), EchoCancellationMode.NONE))
@@ -88,9 +80,8 @@ class AudioSourcePolicyTest {
     }
 
     /**
-     * WebRTC echo cancellation is ours, not the platform's, and it still takes the communication
-     * source: spec B6 says "whenever any effect or WebRTC AEC is active", because AEC3 needs the
-     * capture and playback clocks the communication path shares.
+     * WebRTC echo cancellation is ours, not the platform's, but it still takes the communication
+     * source: AEC3 needs the capture and playback clocks the communication path shares.
      */
     @Test
     fun `webrtc echo cancellation forces voice communication`() {

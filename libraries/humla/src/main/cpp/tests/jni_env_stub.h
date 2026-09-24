@@ -1,26 +1,15 @@
 /*
- * A stand-in JNIEnv, enough of one to call the hand-written JNI entry points in
- * ../jni_*.cpp from a host test without a JVM.
+ * A stand-in JNIEnv (and JavaVM), enough of one to register and call the JNI bridges in
+ * ../jni_*.cpp from a host test without a JVM. RegisterNatives records every binding; native()
+ * looks one up by class and name.
  *
- * Why this exists at all: everything the JNI layer can get wrong is invisible from Kotlin and
- * invisible from the C wrappers underneath. A missing length check writes past the end of a Java
- * array (this project has shipped that bug: speex wrote 640 samples into a 480-element array on
- * every frame), a handle freed twice corrupts the heap, and a bridge wired to the wrong C
- * function silently turns echo cancellation off. None of those produce an error code, so the
- * only way to hold them down is to execute the JNI functions and watch the memory.
+ * Arrays are exact-size heap blocks, and the region accessors abort on an out-of-range region, so
+ * a bridge that reads or writes past a Java array fails the test. Get*ArrayElements is left out:
+ * the bridges copy regions into buffers of their own, where ASan sees an overrun.
  *
- * Two properties make that work:
- *
- *   - Arrays are exact-size heap blocks. A Java short[480] is 480 jshorts from malloc and not one
- *     byte more, so a write to element 480 is a heap-buffer-overflow that ASan reports with a
- *     stack trace, in the sanitized half of this directory.
- *   - Get*ArrayElements copies, like ART's does for non-critical accessors, and Release honours
- *     the mode argument. A bridge that releases with the wrong mode, or forgets to release, is
- *     therefore visible too: a missing release leaks the copy and LeakSanitizer fails the test.
- *
- * This is a test double, not an emulator. Anything not needed by the bridges under test is left
- * out of the function table on purpose: a bridge that starts calling something else crashes here
- * on a null function pointer rather than silently doing nothing.
+ * This is a test double, not an emulator: functions the bridges do not need are left out of the
+ * table on purpose, so a bridge calling something new crashes on a null pointer instead of
+ * silently doing nothing.
  */
 #ifndef HUMLA_TESTS_JNI_ENV_STUB_H
 #define HUMLA_TESTS_JNI_ENV_STUB_H
@@ -30,9 +19,70 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
+#include <string>
 #include <type_traits>
+#include <vector>
+
+#include "jni_common.h"
 
 namespace jnistub {
+
+/* ---------------------------------------------------------------- classes and RegisterNatives */
+
+/* One RegisterNatives entry, with the class it was registered on. */
+struct Registration {
+    std::string cls, name, signature;
+    void* fn;
+};
+
+inline std::vector<Registration>& registrations() {
+    static std::vector<Registration> r;
+    return r;
+}
+
+/* FindClass hands out a pointer to the class name, interned so that it stays valid. */
+inline jclass find_class(JNIEnv*, const char* name) {
+    static std::deque<std::string> names;
+    for (auto& n : names)
+        if (n == name) return reinterpret_cast<jclass>(&n);
+    names.emplace_back(name);
+    return reinterpret_cast<jclass>(&names.back());
+}
+
+inline jint register_natives(JNIEnv*, jclass cls, const JNINativeMethod* methods, jint n) {
+    const std::string& name = *reinterpret_cast<const std::string*>(cls);
+    for (jint i = 0; i < n; i++)
+        registrations().push_back({name, methods[i].name, methods[i].signature, methods[i].fnPtr});
+    return JNI_OK;
+}
+
+/* The function registered as cls.name, called as type F. Aborts unless exactly one registration
+ * matches and its signature is the one F implies, so a test cannot call a bridge through the
+ * wrong type. */
+template <typename F>
+F native(const char* cls, const char* name) {
+    const Registration* found = nullptr;
+    for (const auto& r : registrations()) {
+        if (r.cls != cls || r.name != name) continue;
+        if (found != nullptr) {
+            std::fprintf(stderr, "stub: %s.%s registered twice\n", cls, name);
+            std::abort();
+        }
+        found = &r;
+    }
+    if (found == nullptr) {
+        std::fprintf(stderr, "stub: %s.%s was never registered\n", cls, name);
+        std::abort();
+    }
+    const char* expected = humla::NativeFunction<F>::descriptor();
+    if (found->signature != expected) {
+        std::fprintf(stderr, "stub: %s.%s registered as %s, called as %s\n", cls, name,
+                     found->signature.c_str(), expected);
+        std::abort();
+    }
+    return reinterpret_cast<F>(found->fn);
+}
 
 /* Backing store of one fake Java array. `length` is in elements, `bytes` per element. */
 struct FakeArray {
@@ -41,41 +91,11 @@ struct FakeArray {
     void* data;
 };
 
-/* Number of Get*ArrayElements copies currently outstanding; a bridge that forgets to release
- * leaves this above zero and the test says so without needing a sanitizer. */
-inline int& outstanding_copies() {
-    static int n = 0;
-    return n;
-}
-
-/* Arms one Get*ArrayElements to return NULL, which is what a JVM does when it cannot allocate the
- * copy. The bridges have to survive that without dereferencing it and without leaking whatever
- * they are already holding.
- *
- * fail_get_after(0) fails the very next call; fail_get_after(1) lets one succeed and fails the one
- * after it. The n > 0 form is the one that matters for a bridge that holds two arrays at once:
- * only the second allocation failing reaches a cleanup path that has something to release, and
- * arming the first call never gets there. Negative means disarmed, which is also where a
- * triggered failure leaves it. */
-inline int& gets_until_failure() {
-    static int n = -1;
-    return n;
-}
-inline void fail_get_after(int n) { gets_until_failure() = n; }
-inline void fail_get_never() { gets_until_failure() = -1; }
-
 inline FakeArray* as_array(jarray a) { return reinterpret_cast<FakeArray*>(a); }
 
-/* jshortArray, jbyteArray and jintArray are distinct C++ types, but a FakeArray is one struct, so
- * nothing in the type system stops a bridge from calling GetByteArrayElements on a short[]. On a
- * real JVM that is a hard error; here it would quietly read the wrong number of bytes.
- *
- * The comparison is by element SIZE, not by element type, which is as much as a FakeArray knows.
- * It separates byte from short from int/float, and it does NOT separate jint from jfloat -- both
- * are four bytes. Nothing currently reaches that gap (no bridge calls SetFloatArrayRegion at all;
- * the entry in Env() below is there so a bridge that starts to would not get a null function
- * pointer), but an int/float mix-up is precisely what this would have to catch, and it would not.
- * Closing it means giving FakeArray a type tag rather than a size. */
+/* jshortArray, jbyteArray and jintArray are distinct C++ types but a FakeArray is one struct, so
+ * accessor calls are checked by element SIZE. That separates byte, short and int/float, but not
+ * jint from jfloat (both four bytes); that would need a type tag. */
 template <typename T>
 inline void check_element_type(const FakeArray* fa, const char* who) {
     if (fa->elem_size != jsize(sizeof(T))) {
@@ -87,61 +107,29 @@ inline void check_element_type(const FakeArray* fa, const char* who) {
 
 inline jsize get_array_length(JNIEnv*, jarray a) { return as_array(a)->length; }
 
+/* Get/Set<Type>ArrayRegion. An out-of-range region aborts: a JVM would throw, and for these tests
+ * reaching it is the bug. */
 template <typename T>
-inline T* get_elements(JNIEnv*, jarray a, jboolean* isCopy) {
-    if (gets_until_failure() >= 0 && gets_until_failure()-- == 0) return nullptr;
-    FakeArray* fa = as_array(a);
-    check_element_type<T>(fa, "Get*ArrayElements");
-    /* Exactly length*sizeof(T) bytes: ASan's redzone starts right after the last element. */
-    T* copy = static_cast<T*>(std::malloc(size_t(fa->length) * sizeof(T)));
-    std::memcpy(copy, fa->data, size_t(fa->length) * sizeof(T));
-    if (isCopy) *isCopy = JNI_TRUE;
-    outstanding_copies()++;
-    return copy;
+inline void check_region(const FakeArray* fa, jsize start, jsize len, const char* who) {
+    check_element_type<T>(fa, who);
+    if (start < 0 || len < 0 || start + len > fa->length) {
+        std::fprintf(stderr, "stub: %s out of range (%d+%d of %d)\n", who, start, len, fa->length);
+        std::abort();
+    }
 }
 
 template <typename T>
-inline void release_elements(JNIEnv*, jarray a, T* elems, jint mode) {
+inline void get_region(JNIEnv*, jarray a, jsize start, jsize len, T* buf) {
     FakeArray* fa = as_array(a);
-    check_element_type<T>(fa, "Release*ArrayElements");
-    if (mode != JNI_ABORT) std::memcpy(fa->data, elems, size_t(fa->length) * sizeof(T));
-    if (mode != JNI_COMMIT) {
-        std::free(elems);
-        outstanding_copies()--;
-    }
+    check_region<T>(fa, start, len, "Get*ArrayRegion");
+    std::memcpy(buf, static_cast<T*>(fa->data) + start, size_t(len) * sizeof(T));
 }
 
-inline void get_int_region(JNIEnv*, jintArray a, jsize start, jsize len, jint* buf) {
+template <typename T>
+inline void set_region(JNIEnv*, jarray a, jsize start, jsize len, const T* buf) {
     FakeArray* fa = as_array(a);
-    check_element_type<jint>(fa, "GetIntArrayRegion");
-    if (start < 0 || len < 0 || start + len > fa->length) {
-        std::fprintf(stderr, "stub: GetIntArrayRegion out of range (%d+%d of %d)\n", start, len,
-                     fa->length);
-        std::abort();  /* a real JVM throws; for these tests, reaching it is the bug */
-    }
-    std::memcpy(buf, static_cast<jint*>(fa->data) + start, size_t(len) * sizeof(jint));
-}
-
-inline void set_int_region(JNIEnv*, jintArray a, jsize start, jsize len, const jint* buf) {
-    FakeArray* fa = as_array(a);
-    check_element_type<jint>(fa, "SetIntArrayRegion");
-    if (start < 0 || len < 0 || start + len > fa->length) {
-        std::fprintf(stderr, "stub: SetIntArrayRegion out of range (%d+%d of %d)\n", start, len,
-                     fa->length);
-        std::abort();
-    }
-    std::memcpy(static_cast<jint*>(fa->data) + start, buf, size_t(len) * sizeof(jint));
-}
-
-inline void set_float_region(JNIEnv*, jfloatArray a, jsize start, jsize len, const jfloat* buf) {
-    FakeArray* fa = as_array(a);
-    check_element_type<jfloat>(fa, "SetFloatArrayRegion");
-    if (start < 0 || len < 0 || start + len > fa->length) {
-        std::fprintf(stderr, "stub: SetFloatArrayRegion out of range (%d+%d of %d)\n", start, len,
-                     fa->length);
-        std::abort();
-    }
-    std::memcpy(static_cast<jfloat*>(fa->data) + start, buf, size_t(len) * sizeof(jfloat));
+    check_region<T>(fa, start, len, "Set*ArrayRegion");
+    std::memcpy(static_cast<T*>(fa->data) + start, buf, size_t(len) * sizeof(T));
 }
 
 /* The JNI function table's struct is spelled JNINativeInterface by the NDK and
@@ -155,29 +143,57 @@ class Env {
     Env() {
         std::memset(&table_, 0, sizeof(table_));
         table_.GetArrayLength = get_array_length;
-        table_.GetShortArrayElements = [](JNIEnv* e, jshortArray a, jboolean* c) {
-            return get_elements<jshort>(e, a, c);
+        table_.GetByteArrayRegion = [](JNIEnv* e, jbyteArray a, jsize s, jsize n, jbyte* b) {
+            get_region<jbyte>(e, a, s, n, b);
         };
-        table_.ReleaseShortArrayElements = [](JNIEnv* e, jshortArray a, jshort* p, jint m) {
-            release_elements<jshort>(e, a, p, m);
+        table_.SetByteArrayRegion = [](JNIEnv* e, jbyteArray a, jsize s, jsize n, const jbyte* b) {
+            set_region<jbyte>(e, a, s, n, b);
         };
-        table_.GetByteArrayElements = [](JNIEnv* e, jbyteArray a, jboolean* c) {
-            return get_elements<jbyte>(e, a, c);
+        table_.GetShortArrayRegion = [](JNIEnv* e, jshortArray a, jsize s, jsize n, jshort* b) {
+            get_region<jshort>(e, a, s, n, b);
         };
-        table_.ReleaseByteArrayElements = [](JNIEnv* e, jbyteArray a, jbyte* p, jint m) {
-            release_elements<jbyte>(e, a, p, m);
+        table_.SetShortArrayRegion = [](JNIEnv* e, jshortArray a, jsize s, jsize n, const jshort* b) {
+            set_region<jshort>(e, a, s, n, b);
         };
-        table_.GetIntArrayRegion = get_int_region;
-        table_.SetIntArrayRegion = set_int_region;
-        table_.SetFloatArrayRegion = set_float_region;
+        table_.GetIntArrayRegion = [](JNIEnv* e, jintArray a, jsize s, jsize n, jint* b) {
+            get_region<jint>(e, a, s, n, b);
+        };
+        table_.SetIntArrayRegion = [](JNIEnv* e, jintArray a, jsize s, jsize n, const jint* b) {
+            set_region<jint>(e, a, s, n, b);
+        };
+        table_.GetFloatArrayRegion = [](JNIEnv* e, jfloatArray a, jsize s, jsize n, jfloat* b) {
+            get_region<jfloat>(e, a, s, n, b);
+        };
+        table_.SetFloatArrayRegion = [](JNIEnv* e, jfloatArray a, jsize s, jsize n, const jfloat* b) {
+            set_region<jfloat>(e, a, s, n, b);
+        };
+        table_.FindClass = find_class;
+        table_.RegisterNatives = register_natives;
+        table_.DeleteLocalRef = [](JNIEnv*, jobject) {};
         env_.functions = &table_;
+
+        std::memset(&vm_table_, 0, sizeof(vm_table_));
+        vm_table_.GetEnv = [](JavaVM* vm, void** out, jint) {
+            *out = static_cast<Env*>(vm->functions->reserved0)->get();
+            return jint(JNI_OK);
+        };
+        vm_table_.reserved0 = this;
+        vm_.functions = &vm_table_;
     }
+    Env(const Env&) = delete;
+    Env& operator=(const Env&) = delete;
 
     JNIEnv* get() { return &env_; }
+    JavaVM* vm() { return &vm_; }
 
   private:
+    using InvokeInterface =
+        std::remove_const<std::remove_pointer<decltype(JavaVM::functions)>::type>::type;
+
     NativeInterface table_;
     JNIEnv env_;
+    InvokeInterface vm_table_;
+    JavaVM vm_;
 };
 
 /* A fake Java array that owns its storage. The storage is an exact-size heap block. */

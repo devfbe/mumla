@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="server">Serveris</string>
     <string name="audio_max_bandwidth">Maksimālais servera tīkla joslas platums ir tikai %1$d kbit/s. Skaņas audio kvalitāte iestatīta uz %2$d kbit/s (%3$d ms).</string>
-    <string name="deny_reason_invalid_username">Nederīgs lietotājvārds.</string>
-    <string name="deny_reason_channel_full">Kanāls ir pilns.</string>
     <string name="udp_warning_unavailable">UDP paketes nevar nosūtīt uz serveri vai saņemt no tā. Pārslēdzas uz TCP režīmu.</string>
     <string name="udp_warning_send_failed">UDP paketes nevar nosūtīt uz serveri. Pārslēdzas uz TCP režīmu.</string>
     <string name="udp_warning_receive_failed">UDP paketes nevar saņemt no servera. Pārslēdzas uz TCP režīmu.</string>

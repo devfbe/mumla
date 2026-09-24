@@ -5,15 +5,12 @@ import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 
 /**
- * A channel tree the adapter can walk, with a counter on every accessor the walk uses.
- *
- * The real [se.lublin.humla.model.Channel] is stream A's file and cannot be instrumented from
- * here; this fake reproduces its shape exactly, including the recursive
- * [getSubchannelUserCount] that the production tree computes from scratch on every call.
+ * A channel tree the adapter can walk, with a counter on every accessor the walk uses. Mirrors
+ * [se.lublin.humla.model.Channel], including the recursive [subchannelUserCount].
  */
 class FakeChannel(
-    private val id: Int,
-    private val name: String = "channel-$id",
+    override val id: Int,
+    override val name: String = "channel-$id",
     val counters: Counters = Counters(),
 ) : IChannel {
     class Counters {
@@ -27,123 +24,112 @@ class FakeChannel(
         }
     }
 
-    // Nullable, because the real list is: `Channel.getUsers()` is an unmodifiable view of a
-    // `List<User>` the model fills in as messages arrive, and the adapter has carried a null
-    // check over that list since the Java version. Without a hole to hand out, the two sides of
-    // that check cannot be told apart and the line is untestable in the fake rather than in the
-    // code -- which is where it had been hiding.
-    private val users = mutableListOf<IUser?>()
-    private val subchannels = mutableListOf<FakeChannel>()
-    private val links = mutableListOf<IChannel>()
-    private var parent: FakeChannel? = null
+    // Can hold nulls, so the adapter's null check can be exercised.
+    private val userList = mutableListOf<IUser?>()
+    private val subchannelList = mutableListOf<FakeChannel>()
+    private val linkList = mutableListOf<IChannel>()
+
+    override var parent: FakeChannel? = null
+        private set
 
     fun addLink(channel: IChannel) {
-        links.add(channel)
+        linkList.add(channel)
     }
 
     fun addSubchannel(child: FakeChannel): FakeChannel {
-        subchannels.add(child)
+        subchannelList.add(child)
         child.parent = this
         return child
     }
 
     fun addUser(user: IUser) {
-        users.add(user)
+        userList.add(user)
     }
 
     fun removeUser(user: IUser) {
-        users.remove(user)
+        userList.remove(user)
     }
 
     /** A user the model counts but has not filled in yet. */
     fun addAbsentUser() {
-        users.add(null)
+        userList.add(null)
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun getUsers(): List<IUser> {
-        counters.getUsersCalls++
-        return users as List<IUser>
-    }
-
-    override fun getId(): Int = id
-    override fun getPosition(): Int = 0
-    override fun isTemporary(): Boolean = false
-    override fun getParent(): IChannel? = parent
-    override fun getName(): String = name
-    override fun getDescription(): String = ""
-    override fun getDescriptionHash(): ByteArray? = null
-
-    override fun getSubchannels(): List<IChannel> {
-        counters.getSubchannelsCalls++
-        return subchannels
-    }
-
-    /**
-     * Same recursion as `Channel.getSubchannelUserCount()`: the whole subtree, every call.
-     * The counter therefore counts node *visits*, which is what the walk actually costs.
-     */
-    override fun getSubchannelUserCount(): Int {
-        counters.subchannelUserCountCalls++
-        var count = users.size
-        for (sub in subchannels) {
-            count += sub.getSubchannelUserCount()
+    override val users: List<IUser>
+        get() {
+            counters.getUsersCalls++
+            return userList as List<IUser>
         }
-        return count
-    }
 
-    override fun getLinks(): List<IChannel> = links
-    override fun getPermissions(): Int = 0
+    override val position: Int = 0
+    override val isTemporary: Boolean = false
+    override val description: String = ""
+    override val descriptionHash: ByteArray? = null
+
+    override val subchannels: List<IChannel>
+        get() {
+            counters.getSubchannelsCalls++
+            return subchannelList
+        }
+
+    /** Same recursion as `Channel.subchannelUserCount`, so the counter counts node visits. */
+    override val subchannelUserCount: Int
+        get() {
+            counters.subchannelUserCountCalls++
+            var count = userList.size
+            for (sub in subchannelList) {
+                count += sub.subchannelUserCount
+            }
+            return count
+        }
+
+    override val links: List<IChannel> get() = linkList
+
+    private val listenerList = mutableListOf<IUser>()
+    override val listeners: List<IUser> get() = listenerList
+
+    fun addListener(user: IUser) {
+        listenerList.add(user)
+    }
+    override val permissions: Int = 0
+    override var isEnterRestricted: Boolean = false
+    override var canEnter: Boolean = true
 
     override fun equals(other: Any?): Boolean = other is FakeChannel && other.id == id
     override fun hashCode(): Int = id
 }
 
 class FakeUser(
-    private val session: Int,
-    private val name: String = "user-$session",
+    override val session: Int,
+    override val name: String = "user-$session",
     var selfDeafened: Boolean = false,
     var deafened: Boolean = false,
     var selfMuted: Boolean = false,
     var muted: Boolean = false,
     var suppressed: Boolean = false,
-    // Not `var talkState`: that generates getTalkState(), which collides with the interface
-    // method this class overrides (spec 4.05).
     var state: TalkState = TalkState.PASSIVE,
-    // Negative for an unregistered user, which is the server's way of saying "not an account".
-    // Backed by a field rather than a `var` for the same reason: `var userId` would generate
-    // getUserId(), which is the interface's own accessor (spec 4.05).
-    userId: Int = -1,
-    // The user's avatar, as the server sends it: raw bytes that may or may not decode. A `var`
-    // would generate getTexture(), the interface's own accessor (spec 4.05).
-    texture: ByteArray? = null,
+    /** Negative for an unregistered user. */
+    override val userId: Int = -1,
+    /** Raw avatar bytes that may or may not decode. */
+    override val texture: ByteArray? = null,
 ) : IUser {
-    private val registeredUserId: Int = userId
-    private val avatar: ByteArray? = texture
-    private var localMuted = false
-    private var localIgnored = false
-
-    override fun getSession(): Int = session
-    override fun getChannel(): se.lublin.humla.model.Channel? = null
-    override fun getUserId(): Int = registeredUserId
-    override fun getName(): String = name
-    override fun getComment(): String = ""
-    override fun getCommentHash(): ByteArray? = null
-    override fun getTexture(): ByteArray? = avatar
-    override fun getTextureHash(): ByteArray? = null
-    override fun getHash(): String = ""
-    override fun isMuted(): Boolean = muted
-    override fun isDeafened(): Boolean = deafened
-    override fun isSuppressed(): Boolean = suppressed
-    override fun isSelfMuted(): Boolean = selfMuted
-    override fun isSelfDeafened(): Boolean = selfDeafened
-    override fun isPrioritySpeaker(): Boolean = false
-    override fun isRecording(): Boolean = false
-    override fun isLocalMuted(): Boolean = localMuted
-    override fun isLocalIgnored(): Boolean = localIgnored
-    override fun setLocalMuted(muted: Boolean) { localMuted = muted }
-    override fun setLocalIgnored(ignored: Boolean) { localIgnored = ignored }
-    override fun getTalkState(): TalkState = state
+    override val channel: se.lublin.humla.model.Channel? = null
+    override val comment: String = ""
+    override val commentHash: ByteArray? = null
+    override val textureHash: ByteArray? = null
+    override val hash: String = ""
+    override val isMuted: Boolean get() = muted
+    override val isDeafened: Boolean get() = deafened
+    override val isSuppressed: Boolean get() = suppressed
+    override val isSelfMuted: Boolean get() = selfMuted
+    override val isSelfDeafened: Boolean get() = selfDeafened
+    override val isPrioritySpeaker: Boolean = false
+    override val isRecording: Boolean = false
+    override var isLocalMuted: Boolean = false
+    override var isLocalIgnored: Boolean = false
+    override val talkState: TalkState get() = state
+    override var localVolume: Float = 1f
 }
 
 /**

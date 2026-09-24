@@ -18,6 +18,7 @@
   -->
 
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -38,7 +39,7 @@
             android:id="@+id/server_info_protocol"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Protocol 0.0.0"
+            tools:text="Protocol 0.0.0"
             android:layout_marginBottom="8dp"
             />
 
@@ -46,7 +47,7 @@
             android:id="@+id/server_info_os_version"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Some operating system"
+            tools:text="Some operating system"
             android:layout_marginBottom="8dp"
             />
 
@@ -69,14 +70,14 @@
             android:id="@+id/server_info_tcp_latency"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="0.0 ms average latency (0.0 deviation)"
+            tools:text="0.0 ms average latency (0.0 deviation)"
             android:layout_marginBottom="8dp"
             />
         <TextView
             android:id="@+id/server_info_host"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Remote host www.example.com (port 0)"
+            tools:text="Remote host www.example.com (port 0)"
             android:layout_marginBottom="8dp"
             />
 
@@ -99,7 +100,7 @@
             android:id="@+id/server_info_udp_latency"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="0.0 ms average latency (0.0 deviation)"
+            tools:text="0.0 ms average latency (0.0 deviation)"
             android:layout_marginBottom="8dp"
             />
 
@@ -115,7 +116,7 @@
             android:id="@+id/server_info_max_bandwidth"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Maximum 0.0kbit/s"
+            tools:text="Maximum 0.0kbit/s"
             android:layout_marginBottom="8dp"
             />
 
@@ -123,7 +124,7 @@
             android:id="@+id/server_info_current_bandwidth"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Current 0.0kbit/s"
+            tools:text="Current 0.0kbit/s"
             android:layout_marginBottom="8dp"
             />
 
@@ -131,7 +132,7 @@
             android:id="@+id/server_info_codec"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Codec: Some codec"
+            tools:text="Codec: Some codec"
             android:layout_marginBottom="8dp"
             />
 

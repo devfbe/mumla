@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The talk button, pressed or held (activated) in toggle mode. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true" android:color="?attr/colorPrimaryContainer" />
+    <item android:state_activated="true" android:color="?attr/colorPrimaryContainer" />
+    <item android:color="?attr/colorPrimary" />
+</selector>

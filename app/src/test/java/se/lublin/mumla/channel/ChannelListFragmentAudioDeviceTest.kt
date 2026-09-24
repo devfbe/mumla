@@ -23,9 +23,7 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
-import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
@@ -42,59 +40,24 @@ import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.humla.session.CommunicationDevice
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.db.DatabaseProvider
-import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.util.HumlaServiceFragment
-import se.lublin.mumla.util.HumlaServiceProvider
+import se.lublin.mumla.testing.ChatTargetParentFragment
+import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.stubConnected
 
 /**
- * The audio chooser in the channel menu - the phone app's "Bluetooth / speaker / earpiece / wired
- * headset" picker. It lists what the session offers **right now**, ticks the device voice goes to
- * and hands a tap to the session; the decision what the default is and when a headset takes over
- * belongs to `AudioRouter` and is pinned there. It replaces the "Bluetooth" item, whose standing
- * wish lives on in the settings screen.
+ * The audio chooser in the channel menu: lists what the session offers right now, ticks the device
+ * voice goes to and hands a tap to the session. Default and takeover rules belong to `AudioRouter`.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelListFragmentAudioDeviceTest {
-
-    /**
-     * Same contract as `ChannelListFragmentTest.HostActivity`, plus a count of the menu
-     * invalidations -- the only way the fragment's "redraw the tick" effect can be read back.
-     */
-    class RecordingHostActivity : AppCompatActivity(), HumlaServiceProvider, DatabaseProvider {
-        private var bound: IMumlaService? = null
-        private val db: MumlaDatabase = mockk(relaxed = true)
-        private var invalidations = 0
-
-        fun bind(service: IMumlaService?) {
-            bound = service
-        }
-
-        fun invalidationCount(): Int = invalidations
-
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-
-        override fun invalidateOptionsMenu() {
-            invalidations++
-            super.invalidateOptionsMenu()
-        }
-
-        override fun getService(): IMumlaService? = bound
-        override fun addServiceFragment(fragment: HumlaServiceFragment) = Unit
-        override fun removeServiceFragment(fragment: HumlaServiceFragment) = Unit
-        override fun getDatabase(): MumlaDatabase = db
-    }
 
     private val earpiece = CommunicationDevice(1, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, "Pixel")
     private val speaker = CommunicationDevice(2, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, "Pixel")
     private val headset = CommunicationDevice(7, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "Jabra Evolve")
 
     private lateinit var app: Application
-    private lateinit var controller: ActivityController<RecordingHostActivity>
+    private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var fragment: ChannelListFragment
     private lateinit var service: IMumlaService
     private lateinit var session: IHumlaSession
@@ -102,19 +65,17 @@ class ChannelListFragmentAudioDeviceTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(app).edit().clear().commit()
 
         service = mockk(relaxed = true)
         session = mockk(relaxed = true)
-        every { service.isConnected } returns true
-        every { service.HumlaSession() } returns session
+        service.stubConnected(session)
         every { session.audioDevices } returns listOf(earpiece, speaker, headset)
         every { session.activeAudioDevice } returns headset
         every { session.isEchoCancellationEnabled } returns false
 
-        controller = Robolectric.buildActivity(RecordingHostActivity::class.java).setup()
+        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         controller.get().bind(service)
-        val parent = ChannelListFragmentTest.HostParent()
+        val parent = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(parent, "parent").commitNow()
         fragment = ChannelListFragment()
@@ -122,14 +83,14 @@ class ChannelListFragmentAudioDeviceTest {
         parent.childFragmentManager.beginTransaction().add(fragment, "list").commitNow()
     }
 
-    private val activity: RecordingHostActivity get() = controller.get()
+    private val activity: ServiceHostActivity get() = controller.get()
 
     /** The real menu resource, inflated and prepared the way the action bar does it. */
     @Suppress("DEPRECATION")
     private fun prepared(): Menu {
         val menu = PopupMenu(activity, View(activity)).menu
         activity.menuInflater.inflate(R.menu.fragment_channel_list, menu)
-        fragment.onPrepareOptionsMenu(menu)
+        fragment.onPrepareMenu(menu)
         return menu
     }
 
@@ -142,6 +103,24 @@ class ChannelListFragmentAudioDeviceTest {
     }
 
     private fun Menu.echo(): MenuItem = chooser().subMenu!!.findItem(R.id.menu_audio_echo)
+
+    @Test
+    fun theMuteAndDeafenItemsAreTitledWithWhatATapDoes() {
+        val self = FakeUser(1)
+        every { session.sessionUser } returns self
+        prepared().let { menu ->
+            assertThat(menu.findItem(R.id.menu_mute_button).title).isEqualTo(activity.getString(R.string.mute))
+            assertThat(menu.findItem(R.id.menu_deafen_button).title).isEqualTo(activity.getString(R.string.deafen))
+        }
+
+        self.selfMuted = true
+        self.selfDeafened = true
+
+        prepared().let { menu ->
+            assertThat(menu.findItem(R.id.menu_mute_button).title).isEqualTo(activity.getString(R.string.unmute))
+            assertThat(menu.findItem(R.id.menu_deafen_button).title).isEqualTo(activity.getString(R.string.undeafen))
+        }
+    }
 
     @Test
     fun theChooserHasATitleAndAnIcon() {
@@ -163,9 +142,8 @@ class ChannelListFragmentAudioDeviceTest {
     }
 
     /**
-     * Single choice with exactly one tick, on the device voice goes to. `isChecked` alone would
-     * stay green on an item that draws no tick at all - `MenuItemImpl` stores the flag whether or
-     * not the item is checkable - so the checkable flag is asserted with it.
+     * Single choice with one tick, on the device voice goes to. `MenuItemImpl` stores `isChecked`
+     * even on non-checkable items, so checkability is asserted too.
      */
     @Test
     fun theDeviceVoiceGoesToIsTheOneTicked() {
@@ -177,21 +155,20 @@ class ChannelListFragmentAudioDeviceTest {
 
     @Test
     fun tappingADeviceHandsItToTheSessionAndRedrawsTheTick() {
-        val before = activity.invalidationCount()
+        val before = activity.menuInvalidations
         val speakerItem = prepared().choices().single { it.itemId == 2 }
 
         @Suppress("DEPRECATION")
-        val consumed = fragment.onOptionsItemSelected(speakerItem)
+        val consumed = fragment.onMenuItemSelected(speakerItem)
 
         assertThat(consumed).isTrue()
         verify(exactly = 1) { session.selectAudioDevice(2) }
-        assertThat(activity.invalidationCount()).isGreaterThan(before)
+        assertThat(activity.menuInvalidations).isGreaterThan(before)
     }
 
     /**
-     * The devices are read when the chooser is opened, not when the menu was last drawn: a headset
-     * switched on since then has to be there when the user looks. Tapping the chooser itself is
-     * not consumed, so the platform goes on to open the submenu that was just refilled.
+     * Devices are read when the chooser opens. The tap on the chooser is not consumed, so the
+     * platform opens the refilled submenu.
      */
     @Test
     fun openingTheChooserReadsTheDevicesAgain() {
@@ -203,7 +180,7 @@ class ChannelListFragmentAudioDeviceTest {
         every { session.audioDevices } returns listOf(earpiece, speaker, headset)
         every { session.activeAudioDevice } returns headset
         @Suppress("DEPRECATION")
-        val consumed = fragment.onOptionsItemSelected(menu.chooser())
+        val consumed = fragment.onMenuItemSelected(menu.chooser())
 
         assertThat(consumed).isFalse()
         assertThat(menu.choices().map { it.itemId }).containsExactly(1, 2, 7).inOrder()
@@ -228,7 +205,7 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(prepared().chooser().isVisible).isFalse()
     }
 
-    /** Nothing to choose from - a platform that refused the device list - is nothing to show. */
+    /** A platform that refused the device list shows nothing. */
     @Test
     fun anEmptyDeviceListHidesTheChooser() {
         every { session.audioDevices } returns emptyList()
@@ -241,14 +218,14 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(prepared().chooser().isVisible).isTrue()
     }
 
-    /** A tap that arrives after the connection went away does nothing and does not crash. */
+    /** A tap after the connection went away does nothing and does not crash. */
     @Test
     fun aTapAfterTheConnectionWentAwayIsIgnored() {
         val speakerItem = prepared().choices().single { it.itemId == 2 }
         every { service.isConnected } returns false
 
         @Suppress("DEPRECATION")
-        fragment.onOptionsItemSelected(speakerItem)
+        fragment.onMenuItemSelected(speakerItem)
 
         verify(exactly = 0) { session.selectAudioDevice(any()) }
     }
@@ -256,9 +233,8 @@ class ChannelListFragmentAudioDeviceTest {
     // --- echo cancellation, below the devices ------------------------------------------------
 
     /**
-     * One switch under the devices, showing what runs for the device voice goes to - its kind's
-     * default or the user's override, as the session reports it. Checkable in its own right, and
-     * not part of the single-choice group, or ticking it would untick the device.
+     * One switch under the devices showing the effective setting for the current device's kind.
+     * Checkable on its own, outside the single-choice group.
      */
     @Test
     fun theEchoSwitchShowsWhatRunsForTheActiveDevice() {
@@ -273,29 +249,26 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(prepared().echo().isChecked).isTrue()
     }
 
-    /**
-     * Tapping it is a choice about this kind of device, remembered for the next time one is
-     * routed: it is written as that kind's override, and the service picks it up from there.
-     */
+    /** Tapping it writes the override for this kind of device. */
     @Test
     fun tappingTheEchoSwitchRemembersTheChoiceForThisKindOfDevice() {
         val settings = Settings.getInstance(app)
-        val before = activity.invalidationCount()
+        val before = activity.menuInvalidations
 
         @Suppress("DEPRECATION")
-        val consumed = fragment.onOptionsItemSelected(prepared().echo())
+        val consumed = fragment.onMenuItemSelected(prepared().echo())
 
         assertThat(consumed).isTrue()
-        assertThat(settings.getEchoCancellationOverrides())
+        assertThat(settings.echoCancellationOverrides)
             .containsExactly(AudioDeviceCategory.BLUETOOTH, true)
-        assertThat(activity.invalidationCount()).isGreaterThan(before)
+        assertThat(activity.menuInvalidations).isGreaterThan(before)
 
         every { session.isEchoCancellationEnabled } returns true
         every { session.activeAudioDevice } returns speaker
         @Suppress("DEPRECATION")
-        fragment.onOptionsItemSelected(prepared().echo())
+        fragment.onMenuItemSelected(prepared().echo())
 
-        assertThat(settings.getEchoCancellationOverrides()).containsExactly(
+        assertThat(settings.echoCancellationOverrides).containsExactly(
             AudioDeviceCategory.BLUETOOTH, true,
             AudioDeviceCategory.SPEAKER, false,
         )
@@ -308,7 +281,6 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(prepared().echo().isVisible).isFalse()
     }
 
-    /** The echo menu and the settings' echo method are gone; this is the one place left. */
     @Test
     fun thereIsNoSeparateEchoMenuAnyMore() {
         val menu = prepared()
@@ -318,12 +290,12 @@ class ChannelListFragmentAudioDeviceTest {
         assertThat(menu.chooser().subMenu!!.size()).isEqualTo(4) // three devices and the switch
     }
 
-    /** The chooser replaces the old checkable "Bluetooth" item; there is no second way in. */
+    /** The chooser replaced the old checkable "Bluetooth" item. */
     @Test
     fun thereIsNoSeparateBluetoothItemAnyMore() {
         val menu = prepared()
         val titles = (0 until menu.size()).map { menu.getItem(it).title.toString() }
 
-        assertThat(titles).doesNotContain(app.getString(R.string.bluetooth))
+        assertThat(titles).doesNotContain("Bluetooth")
     }
 }

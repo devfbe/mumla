@@ -18,8 +18,6 @@
 package se.lublin.mumla.service
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.PendingIntent.FLAG_IMMUTABLE
 import android.content.BroadcastReceiver
@@ -35,7 +33,6 @@ import se.lublin.mumla.R
 /**
  * A notification indicating auto-reconnect is in progress, or if auto-reconnect is disabled,
  * a prompt to reconnect with the error message.
- * Created by andrew on 17/01/15.
  */
 class MumlaReconnectNotification(
     private val context: Context,
@@ -57,23 +54,14 @@ class MumlaReconnectNotification(
             addAction(BROADCAST_RECONNECT)
             addAction(BROADCAST_CANCEL_RECONNECT)
         }
-        // Registering an already registered receiver does not throw, so the try/catch the Java
-        // original had here could never run (measured under Robolectric: a second registration
-        // adds a second entry and no exception).
         ContextCompat.registerReceiver(context, notificationReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            context.getString(R.string.connection_lost_reconnecting),
-            NotificationManager.IMPORTANCE_DEFAULT,
-        )
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        NotificationChannels.create(context)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_notify)
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            // No setDefaults(VIBRATE | LIGHTS): from API 26 on the channel decides both, and the
-            // built notification carried defaults == 0 with the call in place (measured).
+            // No setDefaults(VIBRATE | LIGHTS): since API 26 the channel decides both.
             .setContentTitle(context.getString(R.string.mumlaDisconnected))
             .setContentText(error)
             .setDeleteIntent(broadcast(BROADCAST_DISMISS))
@@ -119,18 +107,13 @@ class MumlaReconnectNotification(
     }
 
     companion object {
-        /**
-         * Not 2: MumlaMessageNotification posts the chat notification under 2, so every chat
-         * dismissal -- one runs on every disconnect -- cancelled this prompt as well, and every
-         * chat message replaced it.
-         */
+        /** Not 2: that is MumlaMessageNotification's id, whose dismissal would cancel this too. */
         private const val NOTIFICATION_ID = 3
-        private const val CHANNEL_ID = "reconnecting_channel"
+        private const val CHANNEL_ID = NotificationChannels.RECONNECT
         private const val BROADCAST_DISMISS = "b_dismiss"
         private const val BROADCAST_RECONNECT = "b_reconnect"
         private const val BROADCAST_CANCEL_RECONNECT = "b_cancel_reconnect"
 
-        @JvmStatic
         fun show(
             context: Context,
             error: String,

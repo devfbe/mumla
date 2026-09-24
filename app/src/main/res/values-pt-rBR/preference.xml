@@ -28,7 +28,6 @@
     <string name="vadFloorSum">O nível do ambiente a partir do qual o limite é medido, em dB abaixo da escala máxima. Usado apenas quando \"Acompanhar o ruído de fundo\" está desativado.</string>
     <string name="vadRecalibrate">Medir novamente</string>
     <string name="vadRecalibrateSum">Esquece o que foi aprendido sobre o ambiente e a sua voz e começa a medir do zero.</string>
-    <string name="vadRecalibrateDone">Medindo novamente.</string>
     <string name="vadOnset">Ignorar ruídos curtos</string>
     <string name="vadOnsetSum">Quanto tempo um som precisa durar antes de contar como fala. Valores mais longos evitam cliques isolados do teclado; cada passo custa 10 ms do início de uma palavra.</string>
     <string name="vadOnsetOff">Desativado (0 ms)</string>

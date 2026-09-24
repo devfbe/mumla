@@ -59,7 +59,6 @@
     <string name="server_port">Poort</string>
     <string name="server_host">Adres</string>
     <string name="server_label">Label</string>
-    <string name="connecting">Verbinden</string>
     <string name="connecting_to_server">Verbinden met %s…</string>
     <string name="ptt">Push-To-talk</string>
     <string name="mute">Dempen</string>
@@ -83,7 +82,6 @@
     <string name="generateCertProgress">Certificaat genereren…</string>
     <string name="search">Zoeken</string>
     <string name="searchHint">Zoeken in kanalen en gebruikers</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="quickConnect">Snel Verbinden</string>
     <string name="connect">Verbinden</string>
     <string name="connectToServer">Verbinden met Server</string>
@@ -96,7 +94,6 @@
     <string name="offline">Offline</string>
     <string name="clearChat">Chat Legen</string>
     <string name="connected">Verbonden</string>
-    <string name="mumlaConnected">Mumla Verbonden</string>
     <string name="mumlaConnecting">Mumla verbindt…</string>
     <string name="mumlaDisconnected">Mumla Verbinding Verbroken</string>
     <string name="channel">Kanaal</string>
@@ -154,17 +151,12 @@
         <item quantity="one">%d gebruiker</item>
         <item quantity="other">%d gebruikers</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nieuw bericht</item>
-        <item quantity="other">%d nieuwe berichten</item>
-    </plurals>
     <string name="donation_thanks">Bedankt voor de donatie.</string>
     <string name="orbot_tor_failed">Kon geen verbinding maken met lokale Tor proxy op SOCKS-poort %d.
 \n
 \nZorg ervoor dat de Orbot-app actief is.</string>
     <string name="orbot_not_installed">De Orbot-app is niet geïnstalleerd. Tor niet gebruiken.</string>
     <string name="grant_perm_draw_over_apps">Geef toestemming voor weergave over andere apps.</string>
-    <string name="grant_perm_storage">Geef toestemming voor externe opslag.</string>
     <string name="grant_perm_microphone">Geef toestemming voor de microfoon.</string>
     <string name="shout_configure">Spraakdoel configureren</string>
     <string name="shout_target">Schreeuwen naar %s</string>
@@ -181,7 +173,6 @@
     <string name="invalid_certificate">Ongeldig certificaat kon niet worden geladen.</string>
     <string name="password">Wachtwoord</string>
     <string name="decrypt_certificate">Decodeer certificaat</string>
-    <string name="certificates">Certificaten</string>
     <string name="no_certificate">Geen certificaat</string>
     <string name="change_requires_reconnect">Maak opnieuw verbinding om de nieuwe instellingen te gebruiken.</string>
     <string name="attempting_reconnect">Fout: %s.
@@ -208,4 +199,34 @@
     <string name="audio_device_bluetooth">Bluetooth-headset</string>
     <string name="audio_device_other">Audioapparaat</string>
     <string name="echo_cancellation">Echo-onderdrukking</string>
+    <string name="chat_notify_muted_deafened">Gedempt en doof gemaakt.</string>
+    <string name="chat_notify_muted">Gedempt.</string>
+    <string name="chat_notify_unmuted">Dempen opgeheven.</string>
+    <string name="chat_notify_now_muted_deafened">%s is nu gedempt en doof gemaakt.</string>
+    <string name="chat_notify_now_muted">%s is nu gedempt.</string>
+    <string name="chat_notify_now_unmuted">%s is niet meer gedempt.</string>
+    <string name="chat_notify_connected">%s verbonden.</string>
+    <string name="chat_notify_disconnected">%s verbinding verbroken.</string>
+    <string name="chat_notify_kick_ban_self">U bent verbannnen van de server door %1$s: %2$s.</string>
+    <string name="chat_notify_kick_self">U bent van de server geschopt door %1$s: %2$s.</string>
+    <string name="chat_notify_kick_ban">%3$s is van de server verbannen door %1$s: %2$s.</string>
+    <string name="chat_notify_kick">%3$s is van de server geschopt door %1$s: %2$s.</string>
+    <string name="chat_notify_self_recording_started">Opname gestart</string>
+    <string name="chat_notify_self_recording_stopped">Opname gestopt</string>
+    <string name="chat_notify_user_recording_started">%s heeft opname gestart.</string>
+    <string name="chat_notify_user_recording_stopped">%s heeft opname gestopt.</string>
+    <string name="chat_notify_user_joined_channel">%s kanaal binnengekomen.</string>
+    <string name="chat_notify_user_left_channel">%1$s verplaatst naar %2$s.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s verplaatst van %2$s door %3$s.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s verplaatst van %2$s door %3$s.</string>
+    <string name="deny_reason_channel_name">Geweigerd: Ongeldige kanaal naam.</string>
+    <string name="deny_reason_text_too_long">Geweigerd: Tekst boodschap te lang.</string>
+    <string name="deny_reason_no_operation_temp">Geweigerd: Handeling niet toegestaan in tijdelijk kanaal.</string>
+    <string name="deny_reason_no_certificate">U hebt een certificaat nodig om deze handeling te voltooien.</string>
+    <string name="deny_reason_invalid_username">Ongeldige gebruikersnaam.</string>
+    <string name="deny_reason_channel_full">Kanaal is vol.</string>
+    <string name="deny_reason_channel_nesting">Ingesloten kanaal limiet bereikt.</string>
+    <string name="deny_reason_other">Reden: %s</string>
+    <string name="server">Server</string>
+    <string name="the_server">de server</string>
 </resources>

@@ -17,7 +17,6 @@
     <string name="hotCornerSum">Πατήστε μια γωνία της οθόνης για να μεταδώσετε ήχο σε όλο το Android.</string>
     <string name="general">Γενικά</string>
     <string name="appearance">Εμφάνιση</string>
-    <string name="themeSum">Αλλάξτε την εμφάνιση της εφαρμογής.</string>
     <string name="theme">Θέμα</string>
     <string name="advancedAudio">Επιλογές για προχωρημένος</string>
     <string name="forceTcp">Μόνο TCP</string>
@@ -44,8 +43,6 @@
     <string name="version">Έκδοση</string>
     <string name="pttSound">Ήχος για Πίεση-πλήκτρου-για-ομιλία</string>
     <string name="pttSoundSum">Παίξτε ηχητικό εφέ όταν πατάτε το κουμπί Πίεση-πλήκτρου-για-ομιλία.</string>
-    <string name="preprocessor_enabled">Προεπεξεργασία εισόδου</string>
-    <string name="preprocessor_enabled_sum">Καταστέλλει τον θόρυβο του περιβάλλοντος και ομαλοποιεί το επίπεδο ήχου.</string>
     <string name="audio_per_packet">Ήχος ανά πακέτο</string>
     <string name="stay_awake">Κρατήστε τη συσκευή ξύπνια</string>
     <string name="stay_awake_sum">Διατηρεί την οθόνη ενεργή όταν το Mumla είναι ανοιχτό.</string>
@@ -74,9 +71,7 @@
     <string name="defaultUsernameDefault">Mumla_User</string>
     <string name="certificateGenerate">Δημιουργία πιστοποιητικού</string>
     <string name="certificateGenerateSum">Δημιουργεί ένα νέο πιστοποιητικό Mumla που έχει σχεδιαστεί με αυτο-υπογραφή. Συνιστάται για αρχάριους.</string>
-    <string name="disableOpus">Αποφυγή του κωδικοποιητή Opus</string>
     <string name="pttSettings">Ρυθμίσεις για Πίεση-πλήκτρου-για-ομιλία</string>
-    <string name="disableOpusSum">Απενεργοποιήστε την υποστήριξη Opus για διακομιστές Mumble 1.2.4.</string>
     <string name="hidePtt">Απόκρυψη του κουμπιού Πίεση-πλήκτρου-για-ομιλία</string>
     <string name="useTtsSum">Διαβάστε δυνατά το εισερχόμενο μήνυμα χρησιμοποιώντας τη σύνθεση ομιλίας.</string>
     <string name="clearServerCertificatesSum">Καταργήστε όλα τα πιστοποιητικά αξιόπιστων διακομιστών από το Mumla.</string>
@@ -117,7 +112,6 @@
     <string name="vadFloorSum">Το επίπεδο του χώρου από το οποίο μετράται το όριο, σε dB κάτω από την πλήρη κλίμακα. Χρησιμοποιείται μόνο όταν η «Παρακολούθηση θορύβου περιβάλλοντος» είναι ανενεργή.</string>
     <string name="vadRecalibrate">Νέα μέτρηση</string>
     <string name="vadRecalibrateSum">Ξεχνά ό,τι έχει μάθει για τον χώρο και τη φωνή σας και ξεκινά τη μέτρηση από την αρχή.</string>
-    <string name="vadRecalibrateDone">Νέα μέτρηση σε εξέλιξη.</string>
     <string name="vadOnset">Αγνόηση σύντομων ήχων</string>
     <string name="vadOnsetSum">Πόσο πρέπει να διαρκεί ένας ήχος για να θεωρηθεί ομιλία. Μεγαλύτερες τιμές αποκλείουν μεμονωμένα κλικ πληκτρολογίου· κάθε βήμα κοστίζει 10 ms από την αρχή μιας λέξης.</string>
     <string name="vadOnsetOff">Ανενεργό (0 ms)</string>

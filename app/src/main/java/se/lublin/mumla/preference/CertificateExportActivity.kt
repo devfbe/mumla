@@ -24,84 +24,153 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
+import androidx.annotation.VisibleForTesting
+import androidx.appcompat.app.AlertDialog
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import java.io.BufferedOutputStream
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import se.lublin.humla.net.Pkcs12Certificates
+import se.lublin.mumla.R
+import se.lublin.mumla.app.showMessageDialog
+import se.lublin.mumla.databinding.DialogExportPasswordBinding
+import se.lublin.mumla.db.DatabaseCertificate
+import se.lublin.mumla.db.MumlaRepository
 import java.io.FileNotFoundException
 import java.io.IOException
-import java.io.OutputStream
-import se.lublin.mumla.R
-import se.lublin.mumla.db.DatabaseCertificate
-import se.lublin.mumla.db.MumlaDatabase
-import se.lublin.mumla.db.MumlaSQLiteDatabase
 
+/**
+ * Exports a stored client certificate as a PKCS#12 file, re-encrypted under a password the user
+ * chooses: the stored copy has an empty password and must not leave the device that way.
+ */
 class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickListener {
 
-    private lateinit var database: MumlaDatabase
-    private lateinit var certificates: List<DatabaseCertificate>
+    private val repository get() = MumlaRepository.get(this)
+    private var certificates: List<DatabaseCertificate> = emptyList()
 
     private val documentCreator: ActivityResultLauncher<String> =
         registerForActivityResult(CreateDocument("application/x-pkcs12"), ::onDocumentCreated)
     private var certificatePending: DatabaseCertificate? = null
+    private var passwordPending: CharArray? = null
+
+    /** Where the key derivation runs; it takes seconds on a phone. */
+    @VisibleForTesting
+    internal var workDispatcher: CoroutineDispatcher = Dispatchers.Default
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        database = MumlaSQLiteDatabase(this)
-        certificates = database.certificates
-
-        val labels = certificates.map { it.name as CharSequence }.toTypedArray()
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.pref_export_certificate_title)
-            .setItems(labels, this)
-            .setOnCancelListener { finish() }
-            .show()
+        enableEdgeToEdge()
+        lifecycleScope.launch {
+            certificates = repository.io { getCertificates() }
+            val labels = certificates.map { it.name as CharSequence }.toTypedArray()
+            MaterialAlertDialogBuilder(this@CertificateExportActivity)
+                .setTitle(R.string.pref_export_certificate_title)
+                .setItems(labels, this@CertificateExportActivity)
+                .setOnCancelListener { finish() }
+                .show()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        database.close()
+        clearPassword()
     }
 
     override fun onClick(dialog: DialogInterface?, which: Int) {
-        val certificate = certificates[which]
-        certificatePending = certificate
-        documentCreator.launch(certificate.name)
+        certificatePending = certificates[which]
+        askForPassword()
+    }
+
+    private fun askForPassword() {
+        val binding = DialogExportPasswordBinding.inflate(layoutInflater)
+        val view = binding.root
+        val password = binding.exportPassword
+        val confirm = binding.exportPasswordConfirm
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.export_password_title)
+            .setMessage(R.string.export_password_message)
+            .setView(view)
+            .setOnCancelListener { finish() }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> finish() }
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+        // Set after show() so a validation error keeps the dialog open.
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val chosen = password.text.toString()
+            when {
+                chosen.isEmpty() -> password.error = getString(R.string.export_password_empty)
+                chosen != confirm.text.toString() -> confirm.error = getString(R.string.export_password_mismatch)
+                else -> {
+                    passwordPending = chosen.toCharArray()
+                    dialog.dismiss()
+                    documentCreator.launch(certificatePending!!.name)
+                }
+            }
+        }
     }
 
     private fun onDocumentCreated(uri: Uri?) {
         val pending = certificatePending
-        if (uri != null && pending != null) {
-            try {
-                val os = contentResolver.openOutputStream(uri)
-                val df = DocumentFile.fromSingleUri(this, uri)
-                writeCertificate(os, pending, df?.name ?: "<unknown>")
-            } catch (e: FileNotFoundException) {
-                showErrorDialog(R.string.externalStorageUnavailable)
-                Log.w(TAG, "FileNotFound on output file picked by user?!")
-            }
-        } else if (pending == null) {
-            Log.w(TAG, "No pending certificate after user picked output file")
+        val password = passwordPending
+        if (uri == null || pending == null || password == null) {
+            if (uri != null) Log.w(TAG, "No pending certificate after user picked output file")
+            clearPassword()
+            finish()
+            return
         }
-        finish()
+        lifecycleScope.launch {
+            val exported = try {
+                val stored = checkNotNull(repository.io { getCertificateData(pending.id) })
+                withContext(workDispatcher) { Pkcs12Certificates.exportWithPassword(stored, password) }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not re-encrypt certificate for export", e)
+                null
+            } finally {
+                clearPassword()
+            }
+            if (exported == null) {
+                showErrorDialog(R.string.certificate_load_failed)
+                return@launch
+            }
+            writeCertificate(uri, exported)
+        }
     }
 
-    private fun writeCertificate(fos: OutputStream?, cert: DatabaseCertificate, path: String) {
-        val data = database.getCertificateData(cert.id)
-        try {
-            BufferedOutputStream(fos).use { it.write(data) }
-            Toast.makeText(this, getString(R.string.export_success, path), Toast.LENGTH_LONG).show()
-        } catch (e: IOException) {
-            e.printStackTrace()
-            showErrorDialog(R.string.error_writing_to_storage)
+    private suspend fun writeCertificate(uri: Uri, data: ByteArray) {
+        val name = DocumentFile.fromSingleUri(this, uri)?.name ?: "<unknown>"
+        val error = withContext(workDispatcher) {
+            try {
+                val os = contentResolver.openOutputStream(uri) ?: throw FileNotFoundException(uri.toString())
+                os.buffered().use { it.write(data) }
+                null
+            } catch (e: FileNotFoundException) {
+                Log.w(TAG, "FileNotFound on output file picked by user?!", e)
+                R.string.externalStorageUnavailable
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not write exported certificate", e)
+                R.string.error_writing_to_storage
+            }
         }
+        if (error != null) {
+            showErrorDialog(error)
+        } else {
+            Toast.makeText(this, getString(R.string.export_success, name), Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+
+    private fun clearPassword() {
+        passwordPending?.fill('\u0000')
+        passwordPending = null
     }
 
     private fun showErrorDialog(resourceId: Int) {
-        MaterialAlertDialogBuilder(this)
-            .setMessage(resourceId)
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
+        showMessageDialog(getString(resourceId)) { finish() }
     }
 
     companion object {

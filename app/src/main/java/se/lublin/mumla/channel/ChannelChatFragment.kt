@@ -18,7 +18,6 @@
 package se.lublin.mumla.channel
 
 import android.Manifest
-import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
@@ -43,61 +42,66 @@ import androidx.activity.result.contract.ActivityResultContracts.GetContent
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
+import androidx.core.view.MenuProvider
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import se.lublin.humla.IHumlaService
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IMessage
-import se.lublin.humla.model.IUser
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.HumlaDisconnectedException
-import se.lublin.humla.util.HumlaObserver
-import se.lublin.humla.util.IHumlaObserver
 import se.lublin.mumla.R
+import se.lublin.mumla.Settings
+import se.lublin.mumla.app.ServiceClient
+import se.lublin.mumla.app.ServiceViewModel
+import se.lublin.mumla.app.bindClient
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatContentParser
 import se.lublin.mumla.chat.ChatImageLoaders
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImageEncoder
 import se.lublin.mumla.chat.OutgoingImagePreparer
+import se.lublin.mumla.chat.outgoingMessageHtml
+import se.lublin.mumla.databinding.FragmentChatBinding
 import se.lublin.mumla.service.IChatMessage
-import se.lublin.mumla.util.HtmlUtils
-import se.lublin.mumla.util.HumlaServiceFragment
+import se.lublin.mumla.service.IMumlaService
 
 /**
- * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. It owns no chat logic —
- * parsing and rendering are [ChatAdapter], images are `ChatImageLoader`/[OutgoingImagePreparer].
- *
- * What it does own is the wiring, and three pieces of it carry contracts the collaborators cannot
- * enforce themselves: [openImageViewer] is the uniqueness gate `ChatAdapter`'s `onImageClicked`
- * KDoc demands, [sessionId] is the catch its `selfSessionId` KDoc demands, and the scope handed to
- * the adapter is a `lifecycleScope`, i.e. `Dispatchers.Main.immediate`, because the thumbnail
- * coroutine it starts touches views.
+ * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. Parsing and rendering
+ * live in [ChatAdapter], images in `ChatImageLoader`/[OutgoingImagePreparer]. [openImageViewer]
+ * is the uniqueness gate `ChatAdapter.onImageClicked` requires, [sessionId] never throws, and the
+ * adapter gets a `lifecycleScope` (`Dispatchers.Main.immediate`) because its coroutines touch views.
  */
-class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTargetSelectedListener {
+class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
 
-    private lateinit var targetProvider: ChatTargetProvider
+    private val serviceModel: ServiceViewModel by activityViewModels()
+    private val service: IMumlaService? get() = serviceModel.service.value
+    private var bound = false
+
+    private val chatTargets by parentChatTargets()
     private lateinit var chatList: RecyclerView
     private lateinit var chatTextEdit: EditText
     private lateinit var sendButton: ImageButton
     private lateinit var imageProgress: View
-    private var chatAdapter: ChatAdapter? = null
-    private val messages = mutableListOf<IChatMessage>()
+
+    /** The bound service, or null between an unbind and the next bind (the list then stays as it is). */
+    private val boundService = MutableStateFlow<IMumlaService?>(null)
 
     private val imagePicker = registerForActivityResult(GetContent(), ::onImagePickResult)
 
     private val readPermissionRequester = registerForActivityResult(RequestPermission(), ::onReadPermissionResult)
 
     /**
-     * Method references rather than lambdas, and named rather than inline, because these two are
-     * the far end of a seam no test can otherwise reach: an `ActivityResultLauncher` is driven by
-     * the framework, so the bodies below are only reachable through the registry.
-     *
-     * Cancelling the picker is an ordinary outcome and arrives as a null uri.
+     * Named method references so tests can reach the bodies a framework-driven
+     * `ActivityResultLauncher` otherwise hides. Cancelling the picker arrives as a null uri.
      */
     @VisibleForTesting
     internal fun onImagePickResult(uri: Uri?) {
@@ -113,79 +117,38 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         }
     }
 
-    private val chatObserver: IHumlaObserver = object : HumlaObserver() {
-        override fun onMessageLogged(message: IMessage) {
-            addChatMessage(IChatMessage.TextMessage(message), true)
+    override fun onServiceEvent(event: HumlaEvent) {
+        if (event !is HumlaEvent.UserJoinedChannel) return
+        val session = service?.takeIf { it.isConnected }?.session ?: return
+        if (event.user == session.sessionUser && chatTargets.target.value == null) {
+            // The user changed channels without a target: follow them.
+            updateChatTargetText(null)
         }
-
-        override fun onLogInfo(message: String) {
-            addChatMessage(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, message), true)
-        }
-
-        override fun onLogWarning(message: String) {
-            addChatMessage(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.WARNING, message), true)
-        }
-
-        override fun onLogError(message: String) {
-            addChatMessage(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.ERROR, message), true)
-        }
-
-        override fun onUserJoinedChannel(user: IUser?, newChannel: IChannel?, oldChannel: IChannel?) {
-            val service = getService() ?: return
-            if (!service.isConnected) return
-            val session = service.HumlaSession()
-            if (user != null && user == session.sessionUser && targetProvider.chatTarget == null) {
-                // The user changed channels without a target: follow them.
-                updateChatTargetText(null)
-            }
-        }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION") // Options-menu migration is out of this stream's scope.
-        setHasOptionsMenu(true)
-    }
-
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION") // HumlaServiceFragment overrides the same hook.
-    override fun onAttach(activity: Activity) {
-        super.onAttach(activity)
-        val parent = parentFragment
-        targetProvider = parent as? ChatTargetProvider
-            ?: throw ClassCastException("$parent must implement ChatTargetProvider")
-    }
-
-    override fun onResume() {
-        super.onResume()
-        targetProvider.registerChatTargetListener(this)
-    }
-
-    override fun onPause() {
-        super.onPause()
-        targetProvider.unregisterChatTargetListener(this)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
-        inflater.inflate(R.layout.fragment_chat, container, false)
+        FragmentChatBinding.inflate(inflater, container, false).root
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        chatList = view.findViewById(R.id.chat_list)
-        imageProgress = view.findViewById(R.id.chat_image_progress)
-        chatTextEdit = view.findViewById(R.id.chatTextEdit)
-        sendButton = view.findViewById(R.id.chatTextSend)
+        val binding = FragmentChatBinding.bind(view)
+        chatList = binding.chatList
+        imageProgress = binding.chatImageProgress
+        chatTextEdit = binding.chatTextEdit
+        sendButton = binding.chatTextSend
 
         chatList.layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = true }
-        chatAdapter = ChatAdapter(
+        val adapter = ChatAdapter(
             parser = ChatContentParser(getString(R.string.chat_image_placeholder)),
             loader = ChatImageLoaders.get(requireContext()),
             thumbnailPx = resources.getDimensionPixelSize(R.dimen.chat_thumbnail_max),
             selfSessionId = ::sessionId,
             onImageClicked = ::openImageViewer,
             scope = viewLifecycleOwner.lifecycleScope,
-        ).also { chatList.adapter = it }
+        )
+        chatList.adapter = adapter
 
-        view.findViewById<ImageButton>(R.id.chatImageSend).setOnClickListener { pickImage() }
+        binding.chatImageSend.setOnClickListener { pickImage() }
         sendButton.setOnClickListener { sendMessageFromEditor() }
 
         chatTextEdit.setOnEditorActionListener { _, actionId, event ->
@@ -203,79 +166,69 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
             }
             override fun afterTextChanged(s: Editable?) {}
         })
-        // The layout cannot do this: android:enabled is a TextView attribute, so the "false" that
-        // stood on this ImageButton since 2022 never applied and the button shipped live over an
-        // empty editor. The watcher above only fires on a change, so the initial state is set here.
+        // android:enabled does not apply to an ImageButton, and the watcher only fires on change.
         sendButton.isEnabled = chatTextEdit.text.isNotEmpty()
 
-        updateChatTargetText(targetProvider.chatTarget)
-        submit(scrollToBottom = true)
+        updateChatTargetText(chatTargets.target.value)
+        viewLifecycleOwner.lifecycleScope.launch {
+            // While resumed, as the target changes; catching up on resumption.
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                chatTargets.target.collect(::updateChatTargetText)
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                boundService.collectLatest { service ->
+                    service?.messageLog?.collect { submit(adapter, it) }
+                }
+            }
+        }
+        requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
+        if (!bound) {
+            bound = true
+            serviceModel.bindClient(this, this)
+        }
     }
 
     override fun onDestroyView() {
         chatList.adapter = null
-        chatAdapter = null
         super.onDestroyView()
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION") // Options-menu migration is out of scope.
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        inflater.inflate(R.menu.fragment_chat, menu)
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+        menuInflater.inflate(R.menu.fragment_chat, menu)
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.menu_clear_chat) {
-            clear()
-            return true
-        }
-        return super.onOptionsItemSelected(item)
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+        if (menuItem.itemId != R.id.menu_clear_chat) return false
+        clear()
+        return true
     }
 
-    /** Appends [message] to the list, optionally scrolling to the bottom afterwards. */
-    fun addChatMessage(message: IChatMessage, scroll: Boolean) {
-        messages += message
-        submit(scrollToBottom = scroll)
-    }
-
+    /** Empties the service's chat log, and with it the list. */
     fun clear() {
-        messages.clear()
-        submit(scrollToBottom = false)
-        getService()?.clearMessageLog()
+        service?.clearMessageLog()
     }
 
-    override fun onServiceBound(service: IHumlaService) {
-        val mumlaService = getService() ?: return
-        messages.clear()
-        messages += mumlaService.messageLog
-        submit(scrollToBottom = true)
-        // The hint is the only thing on screen that says where a message would go, and until now
-        // nothing set it on this path: onCreateView ran before the service existed, returned early,
-        // and the bind that supplied the session never came back to it.
-        updateChatTargetText(targetProvider.chatTarget)
+    override fun onServiceBound(service: IMumlaService) {
+        boundService.value = service
+        // onCreateView may have run before the service was bound, so set the hint here too.
+        updateChatTargetText(chatTargets.target.value)
     }
 
-    override fun getServiceObserver(): IHumlaObserver = chatObserver
-
-    override fun onChatTargetSelected(target: ChatTargetProvider.ChatTarget?) {
-        updateChatTargetText(target)
+    override fun onServiceUnbound() {
+        boundService.value = null
     }
 
     /** Updates the compose hint that shows where the next message goes. */
-    fun updateChatTargetText(target: ChatTargetProvider.ChatTarget?) {
+    fun updateChatTargetText(target: ChatTarget?) {
         if (!this::chatTextEdit.isInitialized) return
-        val service = getService() ?: return
-        if (!service.isConnected) return
-        val session = service.HumlaSession()
-        // Local vals: Kotlin cannot smart-cast the result of a Java getter.
-        val targetUser = target?.user
-        val targetChannel = target?.channel
+        val session = service?.takeIf { it.isConnected }?.session ?: return
         val sessionChannel = session.sessionChannel
-        val hint = when {
-            targetUser != null -> getString(R.string.messageToUser, targetUser.name)
-            targetChannel != null -> getString(R.string.messageToChannel, targetChannel.name)
-            sessionChannel != null -> getString(R.string.messageToChannel, sessionChannel.name)
-            else -> null
+        val hint = when (target) {
+            is ChatTarget.User -> getString(R.string.messageToUser, target.name)
+            is ChatTarget.Channel -> getString(R.string.messageToChannel, target.name)
+            null -> sessionChannel?.let { getString(R.string.messageToChannel, it.name) }
         }
         chatTextEdit.hint = hint
         chatTextEdit.requestLayout() // Needed to update bounds after a hint change.
@@ -284,14 +237,10 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     /**
      * Opens the fullscreen viewer on [source], unless one is already open.
      *
-     * Two things are needed, and the second is easy to miss. The tag is not one of them:
-     * `DialogFragment.show(fm, tag)` is a plain `add` and `FragmentManager` holds as many fragments
-     * under one tag as it is given. So the lookup below is the gate — but `show` **commits
-     * asynchronously**, so the lookup cannot see a viewer that has been shown and not yet added.
-     * Measured: `findFragmentByTag` plus `show` lets two calls in one dispatch through and produces
-     * two viewers. `showNow` commits synchronously, which is what makes the lookup's answer true.
-     *
-     * Two viewers on one source matter because they export to the same share path at the same time.
+     * The tag alone does not prevent duplicates (`show` is a plain `add`), and `show` commits
+     * asynchronously, so a lookup would miss a viewer shown in the same dispatch. `showNow`
+     * commits synchronously, which makes the lookup reliable. Two viewers would export to the same
+     * share path at once.
      */
     @VisibleForTesting
     internal fun openImageViewer(source: String) {
@@ -300,29 +249,19 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         ImageViewerDialogFragment.newInstance(source).showNow(fm, ImageViewerDialogFragment.TAG)
     }
 
-    private fun submit(scrollToBottom: Boolean) {
-        // Also the view-lifecycle guard: this is null from onDestroyView on, while the service
-        // observer stays registered until onDestroy, so a message can still arrive with no view.
-        // viewLifecycleOwner below would throw for exactly that window.
-        val adapter = chatAdapter ?: return
-        viewLifecycleOwner.lifecycleScope.launch {
-            adapter.submitMessages(messages)
-            if (scrollToBottom) {
-                chatList.post { if (adapter.itemCount > 0) chatList.scrollToPosition(adapter.itemCount - 1) }
-            }
-        }
+    /** Shows [messages] and scrolls to the newest one. */
+    private suspend fun submit(adapter: ChatAdapter, messages: List<IChatMessage>) {
+        adapter.submitMessages(messages)
+        chatList.post { if (adapter.itemCount > 0) chatList.scrollToPosition(adapter.itemCount - 1) }
     }
 
     /**
-     * The local session id, or [NO_SESSION] when there is none.
-     *
-     * Must not throw: `HumlaSession()` throws [HumlaDisconnectedException], and a disconnect with
-     * the log still on screen is an ordinary event, not a rare one. The adapter calls this on
-     * every bind.
+     * The local session id, or [NO_SESSION] when there is none. Must not throw (the adapter calls
+     * this on every bind, also after a disconnect).
      */
     @VisibleForTesting
     internal fun sessionId(): Int = try {
-        getService()?.takeIf { it.isConnected }?.HumlaSession()?.sessionId ?: NO_SESSION
+        service?.takeIf { it.isConnected }?.session?.sessionId ?: NO_SESSION
     } catch (e: HumlaDisconnectedException) {
         NO_SESSION
     }
@@ -341,7 +280,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
 
     @VisibleForTesting
     internal fun onImagePicked(uri: Uri) {
-        val service = getService() ?: return
+        val service = service ?: return
         if (!service.isConnected) return
         imageProgress.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
@@ -376,19 +315,19 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
     }
 
     /**
-     * Encodes and sends a confirmed image.
-     *
-     * The service is fetched again here rather than captured at the pick: a dialog stands between
-     * the two, and the session can be gone by the time it is dismissed.
+     * Encodes and sends a confirmed image. The service is fetched again because the session can be
+     * gone by the time the confirmation dialog is dismissed.
      */
     @VisibleForTesting
     internal fun sendImage(bitmap: Bitmap) {
-        val service = getService() ?: return
+        val service = service ?: return
         imageProgress.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
             val html = try {
-                val maxLength = service.HumlaSession().serverSettings.imageMessageLength
-                withContext(Dispatchers.Default) { OutgoingImageEncoder.encode(bitmap, maxLength) }
+                // Without the server's limit there is nothing to fit the image to.
+                val maxLength = service.session.serverSettings?.imageMessageLength
+                if (maxLength == null) null
+                else withContext(Dispatchers.Default) { OutgoingImageEncoder.encode(bitmap, maxLength) }
             } catch (e: HumlaDisconnectedException) {
                 Log.d(TAG, "disconnected while encoding an image: $e")
                 null
@@ -400,7 +339,7 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
                 return@launch
             }
             try {
-                sendMessage(html)
+                sendHtml(html)
             } catch (e: HumlaDisconnectedException) {
                 Log.d(TAG, "exception from sendMessage: $e")
             }
@@ -417,24 +356,26 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         }
     }
 
+    /** Sends what the user typed, formatted as the settings say. */
     @Throws(HumlaDisconnectedException::class)
     private fun sendMessage(message: String) {
-        val service = getService()
+        sendHtml(outgoingMessageHtml(message, Settings.getInstance(requireContext()).isMarkdownEnabled))
+    }
+
+    @Throws(HumlaDisconnectedException::class)
+    private fun sendHtml(html: String) {
+        val service = service
         if (service == null) {
-            Log.d(TAG, "getService()==null in sendMessage")
+            Log.d(TAG, "service==null in sendMessage")
             return
         }
-        val session = service.HumlaSession()
-        val formatted = HtmlUtils.markupOutgoingMessage(message)
-        val target = targetProvider.chatTarget
-        val targetUser = target?.user
-        val targetChannel = target?.channel
-        val response: IMessage = when {
-            targetUser != null -> session.sendUserTextMessage(targetUser.session, formatted)
-            targetChannel != null -> session.sendChannelTextMessage(targetChannel.id, formatted, false)
-            else -> session.sendChannelTextMessage(session.sessionChannel.id, formatted, false)
+        val session = service.session
+        // The service adds the sent message to its log, which the list shows.
+        when (val target = chatTargets.target.value) {
+            is ChatTarget.User -> session.sendUserTextMessage(target.user.session, html)
+            is ChatTarget.Channel -> session.sendChannelTextMessage(target.channel.id, html, false)
+            null -> session.sessionChannel?.let { session.sendChannelTextMessage(it.id, html, false) }
         }
-        addChatMessage(IChatMessage.TextMessage(response), true)
     }
 
     private companion object {
@@ -442,12 +383,9 @@ class ChannelChatFragment : HumlaServiceFragment(), ChatTargetProvider.OnChatTar
         const val IMAGE_MIME = "image/*"
 
         /**
-         * What [sessionId] answers with when there is no session.
-         *
-         * Not -1: `Message(String)` sets its actor to exactly -1, so that value would make every
-         * actorless message render right-aligned, as if the local user had sent it, from the moment
-         * the connection drops. `Int.MIN_VALUE` is outside the range of a Mumble session id, which
-         * is an unsigned field on the wire.
+         * What [sessionId] answers with when there is no session. Not -1: `Message(String)` uses
+         * -1 as its actor, which would render actorless messages as our own. Mumble session ids are
+         * unsigned, so `Int.MIN_VALUE` never collides.
          */
         const val NO_SESSION = Int.MIN_VALUE
     }

@@ -28,7 +28,6 @@
     <string name="vadFloorSum">Rumniveauet, som tærsklen måles fra, i dB under fuld skala. Bruges kun, når \"Følg baggrundsstøjen\" er slået fra.</string>
     <string name="vadRecalibrate">Mål igen</string>
     <string name="vadRecalibrateSum">Glemmer det, der er lært om rummet og din stemme, og begynder at måle forfra.</string>
-    <string name="vadRecalibrateDone">Måler igen.</string>
     <string name="vadOnset">Ignorer korte lyde</string>
     <string name="vadOnsetSum">Hvor længe en lyd skal vare, før den tæller som tale. Længere indstillinger holder enkelte tastaturklik ude; hvert trin koster 10 ms af begyndelsen af et ord.</string>
     <string name="vadOnsetOff">Fra (0 ms)</string>

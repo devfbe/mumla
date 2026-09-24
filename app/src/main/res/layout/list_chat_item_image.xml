@@ -22,7 +22,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="@dimen/chat_item_spacing"
-    style="?cardStyle">
+    style="@style/Widget.Mumla.CardView">
 
     <LinearLayout
         android:id="@+id/list_chat_item_box"
@@ -37,7 +37,7 @@
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceSmall"
             android:textSize="11sp"
-            android:textColor="#999"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:layout_marginBottom="4dp" />
 
         <TextView
@@ -66,7 +66,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceSmall"
-            android:textColor="#999"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:layout_marginBottom="4dp"
             android:visibility="gone" />
 
@@ -84,6 +84,6 @@
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceSmall"
             android:textSize="11sp"
-            android:textColor="#999" />
+            android:textColor="?attr/colorOnSurfaceVariant" />
     </LinearLayout>
 </androidx.cardview.widget.CardView>

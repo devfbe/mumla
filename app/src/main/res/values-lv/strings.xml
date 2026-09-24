@@ -49,4 +49,7 @@
     <string name="audio_device_bluetooth">Bluetooth austiņas</string>
     <string name="audio_device_other">Audioierīce</string>
     <string name="echo_cancellation">Atbalss slāpēšana</string>
+    <string name="deny_reason_invalid_username">Nederīgs lietotājvārds.</string>
+    <string name="deny_reason_channel_full">Kanāls ir pilns.</string>
+    <string name="server">Serveris</string>
 </resources>

@@ -1,0 +1,160 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:HumlaConnection.kt$HumlaConnection$!force &amp;&amp; (shouldForceTCP() || !usingUdp) &amp;&amp; tcpTransport != null</ID>
+    <ID>ComplexCondition:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$wasOn &amp;&amp; expectedOn &amp;&amp; detected &amp;&amp; score &lt; config.startThreshold</ID>
+    <ID>CyclomaticComplexMethod:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
+    <ID>CyclomaticComplexMethod:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
+    <ID>CyclomaticComplexMethod:VoiceActivityDetector.kt$VoiceActivityDetector$fun isVoice(pcm: ShortArray, length: Int, probability: Float?): Boolean</ID>
+    <ID>CyclomaticComplexMethod:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$@Test fun `a long score sequence agrees with the state machine on every frame`()</ID>
+    <ID>EmptyFunctionBlock:HumlaUDPTest.kt$HumlaUDPTest.RecordingListener${}</ID>
+    <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @param buffer The buffer to mix output data into. * @param bufferOffset The offset into the buffer. * @param bufferSize The size of the buffer. * @return true if the buffer contains audio data.</ID>
+    <ID>ForbiddenComment:Channel.kt$Channel$* Recursively fetches the subchannel user count, holding one channel's lock at a time: the * subchannels are copied under the lock and the recursion happens outside it, so no thread ever * holds two channel locks at once (no lock-order inversion possible). * * FIXME: is it necessary to cache this? * @return The sum of users in this channel and its subchannels.</ID>
+    <ID>ForbiddenComment:HumlaConnection.kt$HumlaConnection.Companion$// FIXME: assumes worst-case using TCP</ID>
+    <ID>LongMethod:ModelRaceTest.kt$ModelRaceTest$@Test fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread()</ID>
+    <ID>LongParameterList:AudioController.kt$AudioController$( private val context: Context, private val logger: HumlaLogger, private val factory: () -&gt; AudioHandlerFactory, private val encodeListener: AudioHandler.AudioEncodeListener, private val outputListener: AudioOutput.AudioOutputListener, private val listener: Listener, private val mainHandler: Handler = Handler(Looper.getMainLooper()), )</ID>
+    <ID>LongParameterList:CaptureWiring.kt$CaptureWiring$( inputSampleRate: Int, inputMode: IInputMode, amplitudeBoost: Float, noise: NoiseSuppressionMode, echo: EchoCancellationMode, speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB, logger: HumlaLogger? = null, factory: CapturePreprocessorFactory? = null, newResampler: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
+    <ID>LongParameterList:ManagedAudio.kt$AudioHandlerFactory$( context: Context, logger: HumlaLogger, config: AudioConfig, params: AudioSessionParams, encodeListener: AudioHandler.AudioEncodeListener, outputListener: AudioOutput.AudioOutputListener, )</ID>
+    <ID>LongParameterList:ManagedAudio.kt$DefaultAudioHandlerFactory$( context: Context, logger: HumlaLogger, config: AudioConfig, params: AudioSessionParams, encodeListener: AudioHandler.AudioEncodeListener, outputListener: AudioOutput.AudioOutputListener, )</ID>
+    <ID>LongParameterList:OpusDecoderNative.kt$OpusDecoderApi$( state: Long, data: ByteArray?, offset: Int, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int, )</ID>
+    <ID>LongParameterList:OpusEncoder.kt$OpusEncoder$( sampleRate: Int, channels: Int, private val frameSize: Int, private val framesPerPacket: Int, bitrate: Int, maxBufferSize: Int, private val api: OpusEncoderApi = OpusEncoderNative, )</ID>
+    <ID>LongParameterList:SpeexJitterBuffer.kt$SpeexJitterBuffer$(data: ByteArray, length: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
+    <ID>LongParameterList:SpeexJitterNative.kt$SpeexJitterApi$(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
+    <ID>LongParameterList:SpeexResamplerNative.kt$SpeexResamplerApi$(state: Long, channelIndex: Int, input: ShortArray, inLen: IntArray, out: ShortArray, outLen: IntArray)</ID>
+    <ID>LongParameterList:UdpHealthMonitor.kt$UdpHealthMonitor$( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, )</ID>
+    <ID>LongParameterList:VadConfig.kt$VadConfig.Companion$( snrFraction: Float = AdaptiveVadTracker.DEFAULT_FRACTION, holdTimeMs: Long = DEFAULT_HOLD_MS, onsetFrames: Int = DEFAULT_ONSET_FRAMES, hysteresisDb: Float = DEFAULT_HYSTERESIS_DB, adaptiveFloor: Boolean = true, manualFloorDbfs: Float = AdaptiveVadTracker.DEFAULT_FLOOR_DBFS, )</ID>
+    <ID>LongParameterList:WebRtcApmNative.kt$WebRtcApmApi$( sampleRate: Int, echoCancellation: Boolean, noiseSuppression: Boolean, noiseSuppressionLevel: Int, gainControl: Boolean, highPass: Boolean, )</ID>
+    <ID>LoopWithTooManyJumpStatements:AudioInput.kt$AudioInput$while</ID>
+    <ID>MagicNumber:AdaptiveVadTracker.kt$AdaptiveVadTracker$1000f</ID>
+    <ID>MagicNumber:AudioConfig.kt$AudioConfig$25</ID>
+    <ID>MagicNumber:AudioOutput.kt$AudioOutput$1000L</ID>
+    <ID>MagicNumber:AudioOutput.kt$AudioOutput.Companion$12</ID>
+    <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$0.99f</ID>
+    <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$0xFF</ID>
+    <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$10</ID>
+    <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$12</ID>
+    <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$13</ID>
+    <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$20</ID>
+    <ID>MagicNumber:FakeAudio.kt$FakeAudio$12_345</ID>
+    <ID>MagicNumber:FakeSpeexPreprocessApi.kt$FakeSpeexPreprocessApi$50</ID>
+    <ID>MagicNumber:FakeWebRtcApmApi.kt$FakeWebRtcApmApi$100</ID>
+    <ID>MagicNumber:FakeWebRtcApmApi.kt$FakeWebRtcApmApi$100f</ID>
+    <ID>MagicNumber:HumlaCertificateGenerator.kt$HumlaCertificateGenerator$2048</ID>
+    <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$1000</ID>
+    <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$3</ID>
+    <ID>MagicNumber:HumlaConnection.kt$HumlaConnection.Companion$12</ID>
+    <ID>MagicNumber:HumlaConnection.kt$HumlaConnection.Companion$20</ID>
+    <ID>MagicNumber:HumlaConnection.kt$HumlaConnection.Companion$4</ID>
+    <ID>MagicNumber:HumlaConnection.kt$HumlaConnection.Companion$8</ID>
+    <ID>MagicNumber:HumlaConnection.kt$HumlaConnection.Companion$800</ID>
+    <ID>MagicNumber:HumlaUDP.kt$HumlaUDP$5</ID>
+    <ID>MagicNumber:HumlaUDP.kt$HumlaUDP$5000000</ID>
+    <ID>MagicNumber:OpusEncoder.kt$OpusEncoder$13</ID>
+    <ID>MagicNumber:ReconnectPolicy.kt$ReconnectPolicy$30</ID>
+    <ID>MagicNumber:ServerTrust.kt$CertificatePins$0xFF</ID>
+    <ID>MagicNumber:SpeexJitterBuffer.kt$SpeexJitterBuffer$4</ID>
+    <ID>MagicNumber:SpeexJitterBuffer.kt$SpeexJitterBuffer$5</ID>
+    <ID>MagicNumber:SpeexPreprocessor.kt$SpeexPreprocessor$100</ID>
+    <ID>MagicNumber:TestWaits.kt$1_000_000L</ID>
+    <ID>MagicNumber:UdpPing.kt$UdpPing$0xFF</ID>
+    <ID>MagicNumber:UdpPing.kt$UdpPing$5</ID>
+    <ID>MagicNumber:VadConfig.kt$VadConfig$96f</ID>
+    <ID>MagicNumber:VoiceActivityDetector.kt$VoiceActivityDetector$1_000_000L</ID>
+    <ID>MagicNumber:VoiceActivityDetector.kt$VoiceActivityDetector.Companion$20.0</ID>
+    <ID>MagicNumber:VoiceActivityDetector.kt$VoiceActivityDetector.Companion$32768.0</ID>
+    <ID>MagicNumber:VoiceActivityDetector.kt$VoiceActivityDetector.Companion$96.0</ID>
+    <ID>MagicNumber:VoiceActivityDetector.kt$VoiceActivityDetector.Companion$96f</ID>
+    <ID>MaxLineLength:AudioControllerTest.kt$AudioControllerTest$private val params = AudioSessionParams(User(1, "me"), -1, HumlaUDPMessageType.UDPVoiceOpus, 0, ContinuousInputMode())</ID>
+    <ID>MaxLineLength:AudioDeviceCategoryTest.kt$AudioDeviceCategoryTest$assertThat(AudioDeviceCategory.of(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)).isEqualTo(AudioDeviceCategory.EARPIECE)</ID>
+    <ID>MaxLineLength:AudioOutputSpeechTest.kt$AudioOutputSpeechTest.FakeOpusDecoder$override</ID>
+    <ID>MaxLineLength:AudioOutputTest.kt$AudioOutputTest.NoOpusDecoder$override</ID>
+    <ID>MaxLineLength:CapturePipelineTest.kt$CapturePipelineTest$assertWithMessage("0.55409 would be the padding dragging the level down, 0.91097 the previous frame's tail holding it up")</ID>
+    <ID>MaxLineLength:CapturePipelineTest.kt$CapturePipelineTest$val pipeline = CapturePipeline(FakeResampler(1), FakePreprocessor(), ContinuousInputMode(), log = { logs += it })</ID>
+    <ID>MaxLineLength:CapturePreprocessorFactoryTest.kt$CapturePreprocessorFactoryTest${ throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_native.so not found")) }</ID>
+    <ID>MaxLineLength:CaptureWiringTest.kt$CaptureWiringTest$EchoCancellationMode.NONE</ID>
+    <ID>MaxLineLength:FakeTransports.kt$FakeTcpTransport$fun simulateMessage(type: HumlaTCPMessageType, data: ByteArray)</ID>
+    <ID>MaxLineLength:FakeTransports.kt$FakeTransports$override</ID>
+    <ID>MaxLineLength:FakeTransports.kt$RecordingConnectionListener$override fun onConnectionCertificateChanged(chain: Array&lt;X509Certificate&gt;)</ID>
+    <ID>MaxLineLength:FakeTransports.kt$RecordingConnectionListener$override fun onConnectionHandshakeFailed(chain: Array&lt;X509Certificate&gt;)</ID>
+    <ID>MaxLineLength:FakeTransports.kt$RecordingConnectionListener$val allOnMainLooper: Boolean get() = callbackLoopers.isNotEmpty() &amp;&amp; callbackLoopers.all { it == Looper.getMainLooper() }</ID>
+    <ID>MaxLineLength:HumlaConnection.kt$HumlaConnection$throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)</ID>
+    <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$Mumble.ChannelState.newBuilder().setChannelId(i).setName("channel $i").apply { if (i &gt; 0) parent = 0 }.build().toByteArray()</ID>
+    <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() &amp;&amp; transports.tcps[0].connectThread != null }</ID>
+    <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$awaitUntil(timeoutMillis = 30_000, description = "protocol thread processed all frames") { processed.get() == 5_000 }</ID>
+    <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$tcp.simulateMessage(HumlaTCPMessageType.TextMessage, Mumble.TextMessage.newBuilder().setMessage("still here").build().toByteArray())</ID>
+    <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())</ID>
+    <ID>MaxLineLength:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest$val reject = Mumble.Reject.newBuilder().setType(Mumble.Reject.RejectType.WrongServerPW).setReason("wrong password").build()</ID>
+    <ID>MaxLineLength:HumlaConnectionSrvTest.kt$HumlaConnectionSrvTest$awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() &amp;&amp; transports.tcps[0].connectThread != null }</ID>
+    <ID>MaxLineLength:HumlaConnectionUdpRecoveryTest.kt$HumlaConnectionUdpRecoveryTest$awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() &amp;&amp; transports.tcps[0].connectThread != null }</ID>
+    <ID>MaxLineLength:HumlaConnectionUdpRecoveryTest.kt$HumlaConnectionUdpRecoveryTest$awaitUntil(description = "udp restarted") { transports.udps.size == 2 &amp;&amp; transports.udps[1].connectCalls.get() == 1 }</ID>
+    <ID>MaxLineLength:HumlaConnectionUdpRecoveryTest.kt$HumlaConnectionUdpRecoveryTest$awaitUntil(description = "udp started") { transports.udps.isNotEmpty() &amp;&amp; transports.udps[0].connectCalls.get() == 1 }</ID>
+    <ID>MaxLineLength:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$assertThat(factory("mumble.example.org", pins).createSocket("127.0.0.1", goodPort).handshakeAndRead()).isEqualTo(1)</ID>
+    <ID>MaxLineLength:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$assertThat(ok.createTorSocket("localhost-tls", 64738, "127.0.0.1", socksProxy(good)).handshakeAndRead()).isEqualTo(1)</ID>
+    <ID>MaxLineLength:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$assertThrows(SSLHandshakeException::class.java) { factory.createSocket("127.0.0.1", badPort).handshakeAndRead() }</ID>
+    <ID>MaxLineLength:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply { init(keyStore, CharArray(0)) }</ID>
+    <ID>MaxLineLength:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$val socket = context.serverSocketFactory.createServerSocket(0, 5, InetAddress.getLoopbackAddress()) as SSLServerSocket</ID>
+    <ID>MaxLineLength:HumlaServiceBluetoothTest.kt$HumlaServiceBluetoothTest$awaitUntil(description = "audio rebuilt for the earpiece") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }</ID>
+    <ID>MaxLineLength:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$((v and 0x0F) shl 24) or ((at(1) ?: return null) shl 16) or ((at(2) ?: return null) shl 8) or (at(3) ?: return null)</ID>
+    <ID>MaxLineLength:SessionState.kt$SessionState.ConnectionLost$data</ID>
+    <ID>MaxLineLength:SessionStateMachineTest.kt$SessionStateMachineTest$assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))</ID>
+    <ID>MaxLineLength:SessionStateMachineTest.kt$SessionStateMachineTest$assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(4_000L, 2, error))</ID>
+    <ID>MaxLineLength:SpeexJitterNative.kt$SpeexJitterNative$external override fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
+    <ID>MaxLineLength:SpeexResamplerNative.kt$SpeexResamplerApi$fun</ID>
+    <ID>MaxLineLength:SpeexResamplerNative.kt$SpeexResamplerNative$external override fun processInt(state: Long, channelIndex: Int, input: ShortArray, inLen: IntArray, out: ShortArray, outLen: IntArray): Int</ID>
+    <ID>MaxLineLength:TcpFrameReaderTest.kt$TcpFrameReaderTest$private fun stream(vararg frames: ByteArray)</ID>
+    <ID>MaxLineLength:TestCertificates.kt$TestCertificates$fun</ID>
+    <ID>MaxLineLength:UdpHealthMonitor.kt$UdpHealthMonitor$Decision</ID>
+    <ID>MaxLineLength:UdpHealthMonitorTest.kt$UdpHealthMonitorTest$assertThat(monitor.onTcpPing(seconds(116), 0, 0, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)</ID>
+    <ID>MaxLineLength:UdpHealthMonitorTest.kt$UdpHealthMonitorTest$assertThat(monitor.onTcpPing(seconds(17), 0, 34, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)</ID>
+    <ID>MaxLineLength:UdpHealthMonitorTest.kt$UdpHealthMonitorTest$assertThat(monitor.onTcpPing(seconds(17), 34, 0, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)</ID>
+    <ID>MaxLineLength:VadConfig.kt$VadConfig$require(stopThreshold in 0f..startThreshold) { "stopThreshold must be within [0, startThreshold]: $stopThreshold" }</ID>
+    <ID>MaxLineLength:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$assertThat(detector(VadConfig.probability(start = 0.85f, stop = 0.5f)).isVoice(constant(3277), 480, null)).isFalse()</ID>
+    <ID>NestedBlockDepth:FakeCaptureSource.kt$FakeCaptureSource$override fun read(buffer: ShortArray, length: Int): Int</ID>
+    <ID>PrintStackTrace:AudioOutput.kt$AudioOutput$e</ID>
+    <ID>PrintStackTrace:AudioOutputSpeech.kt$AudioOutputSpeech$e</ID>
+    <ID>ReturnCount:AudioOutputSpeech.kt$AudioOutputSpeech$fun addFrameToBuffer(pb: PacketBuffer, flags: Byte, seq: Int)</ID>
+    <ID>ReturnCount:AudioRouter.kt$AudioRouter$private fun automatic(available: List&lt;CommunicationDevice&gt;): CommunicationDevice?</ID>
+    <ID>ReturnCount:FakeCaptureSource.kt$FakeCaptureSource$override fun read(buffer: ShortArray, length: Int): Int</ID>
+    <ID>ReturnCount:FakeSpeexResamplerApi.kt$FakeSpeexResamplerApi$override fun processInt( state: Long, channelIndex: Int, input: ShortArray, inLen: IntArray, out: ShortArray, outLen: IntArray, ): Int</ID>
+    <ID>ReturnCount:HumlaUDP.kt$HumlaUDP$override fun sendMessage(data: ByteArray, length: Int)</ID>
+    <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$fun decodeAsServer(packet: ByteArray): Long?</ID>
+    <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
+    <ID>ReturnCount:PcmCaptureSource.kt$AndroidAudioRecordSource.Factory$@SuppressLint("MissingPermission") private fun tryOpen(source: Int, rate: Int): AudioRecord?</ID>
+    <ID>ReturnCount:ServerTrust.kt$HostnameMatcher$@JvmStatic fun matches(host: String, certificate: X509Certificate): Boolean</ID>
+    <ID>ReturnCount:ServerTrust.kt$HostnameMatcher$private fun matchesDnsName(host: String, pattern: String?): Boolean</ID>
+    <ID>ReturnCount:SpeexPreprocessor.kt$SpeexPreprocessor$override fun onCaptureFrame(handle: Long, frame: ShortArray): Float?</ID>
+    <ID>ReturnCount:UdpHealthMonitor.kt$UdpHealthMonitor$fun onTcpPing(nowMicros: Long, localGood: Int, remoteGood: Int, usingUdp: Boolean): Decision</ID>
+    <ID>ReturnCount:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
+    <ID>SwallowedException:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$e: Exception</ID>
+    <ID>SwallowedException:HumlaSSLSocketFactoryTrustStoreTest.kt$HumlaSSLSocketFactoryTrustStoreTest$e: IOException</ID>
+    <ID>SwallowedException:HumlaService.kt$HumlaService$e: IllegalArgumentException</ID>
+    <ID>SwallowedException:HumlaUDPTest.kt$HumlaUDPTest$e: SocketTimeoutException</ID>
+    <ID>SwallowedException:Pkcs12Certificates.kt$Pkcs12Certificates$e: Exception</ID>
+    <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: CertificateParsingException</ID>
+    <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
+    <ID>SwallowedException:UdpPing.kt$UdpPing$e: BufferUnderflowException</ID>
+    <ID>ThrowsCount:HumlaConnection.kt$HumlaConnection$@Throws(HumlaException::class) private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory</ID>
+    <ID>TooGenericExceptionCaught:AudioController.kt$AudioController$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CapturePreprocessorFactory.kt$CapturePreprocessorFactory$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:CommunicationDevices.kt$AndroidCommunicationDevices$e: RuntimeException</ID>
+    <ID>TooGenericExceptionCaught:HumlaConnection.kt$HumlaConnection$e: RuntimeException</ID>
+    <ID>TooGenericExceptionCaught:HumlaService.kt$HumlaService$e: RuntimeException</ID>
+    <ID>TooGenericExceptionCaught:Pkcs12Certificates.kt$Pkcs12Certificates$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
+    <ID>TooGenericExceptionThrown:HumlaConnection.kt$HumlaConnection$throw RuntimeException("We use BouncyCastle- what? ", e)</ID>
+    <ID>TooManyFunctions:AudioRouter.kt$AudioRouter</ID>
+    <ID>TooManyFunctions:Channel.kt$Channel : IChannelComparable</ID>
+    <ID>TooManyFunctions:CommunicationDevices.kt$AndroidCommunicationDevices : CommunicationDevices</ID>
+    <ID>TooManyFunctions:HumlaConnection.kt$HumlaConnection : TCPConnectionListenerUDPConnectionListenerMessageHandlerRegistry</ID>
+    <ID>TooManyFunctions:HumlaService.kt$HumlaService : ServiceIHumlaServiceIHumlaSessionHumlaConnectionListenerHumlaLogger</ID>
+    <ID>TooManyFunctions:HumlaTCP.kt$HumlaTCP : TcpTransport</ID>
+    <ID>TooManyFunctions:User.kt$User : IUserComparable</ID>
+    <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun cancellingService(): HumlaService</ID>
+    <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun connectivityManager()</ID>
+    <ID>UseCheckOrError:FakeCaptureSource.kt$FakeCaptureSource$throw IllegalStateException("startRecording failed")</ID>
+    <ID>UseCheckOrError:HumlaService.kt$HumlaService$throw IllegalStateException("Session user should be set post-synchronization!")</ID>
+    <ID>UseRequire:HumlaService.kt$HumlaService$throw IllegalArgumentException("Target ID must be at most 5 bits.")</ID>
+    <ID>UseRequire:OpusEncoder.kt$OpusEncoder$throw IllegalArgumentException("This Opus encoder implementation requires a constant frame size.")</ID>
+  </CurrentIssues>
+</SmellBaseline>

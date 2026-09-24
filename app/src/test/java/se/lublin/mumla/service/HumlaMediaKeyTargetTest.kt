@@ -7,14 +7,12 @@ import org.junit.Test
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IUser
-import se.lublin.humla.util.HumlaDisconnectedException
+import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubDisconnected
 
 class HumlaMediaKeyTargetTest {
     private val session = mockk<IHumlaSession>(relaxed = true)
-    private val service = mockk<IHumlaService> {
-        every { isConnected } returns true
-        every { HumlaSession() } returns session
-    }
+    private val service = mockk<IHumlaService>().stubConnected(session)
     private val target = HumlaMediaKeyTarget(service)
 
     @Test
@@ -60,10 +58,8 @@ class HumlaMediaKeyTargetTest {
     }
 
     /**
-     * Unconditional by contract: it must not read the current state and skip the write because it
-     * believes talking is already off. Every caller of this is a lifecycle event -- a disconnect, a
-     * released media session, a switch to the "none" action -- and the cached view of that state is
-     * precisely what is being distrusted.
+     * Unconditional by contract: callers are lifecycle events (disconnect, released session,
+     * "none" action), where the cached talking state is exactly what is distrusted.
      */
     @Test
     fun stopTalkingWritesTheOffStateEvenWhenAlreadyOff() {
@@ -76,19 +72,15 @@ class HumlaMediaKeyTargetTest {
     }
 
     /**
-     * The real HumlaService throws from HumlaSession() under exactly the condition that makes
-     * isConnected false (both read mConnectionState != CONNECTED), so the double does too. Task 4
-     * calls the off switch from onDisconnected, where that is the live state.
+     * Like the real HumlaService, `session` throws exactly when isConnected is false, which
+     * is the live state in onDisconnected.
      */
     @Test
     fun stopTalkingWhileDisconnectedIsANoOpAndDoesNotThrow() {
-        val disconnected = mockk<IHumlaService> {
-            every { isConnected } returns false
-            every { HumlaSession() } throws HumlaDisconnectedException()
-        }
+        val disconnected = mockk<IHumlaService>().stubDisconnected()
 
         HumlaMediaKeyTarget(disconnected).stopTalking()
 
-        verify(exactly = 0) { disconnected.HumlaSession() }
+        verify(exactly = 0) { disconnected.session }
     }
 }

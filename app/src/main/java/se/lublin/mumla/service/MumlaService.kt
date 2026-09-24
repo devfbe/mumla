@@ -30,33 +30,33 @@ import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.widget.Toast
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
-import org.jsoup.Jsoup
 import se.lublin.humla.Constants
 import se.lublin.humla.HumlaService
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaObserver
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.chat.NoticeFormatter
+import se.lublin.mumla.chat.outgoingMessageHtml
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.util.HtmlUtils
-import java.util.Collections
+import se.lublin.mumla.util.collectEvents
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-/**
- * An extension of the Humla service with some added Mumla-exclusive non-standard Mumble features.
- * Created by andrew on 28/07/13.
- */
+/** [HumlaService] plus Mumla's notifications, overlay, hot corner, TTS and media session. */
 class MumlaService : HumlaService(),
     SharedPreferences.OnSharedPreferenceChangeListener,
     MumlaConnectionNotification.OnActionListener,
@@ -64,46 +64,48 @@ class MumlaService : HumlaService(),
     IMumlaService {
 
     private lateinit var mSettings: Settings
-    /**
-     * One per service life. Whether the service is in the foreground is its [isForeground]; a
-     * fresh object per connect would be a second place holding that answer.
-     */
+    /** One per service life; its [MumlaConnectionNotification.isForeground] is the foreground state. */
     private lateinit var mNotification: MumlaConnectionNotification
     private lateinit var mMessageNotification: MumlaMessageNotification
     private var mReconnectNotification: MumlaReconnectNotification? = null
 
-    /** Headset / AVRCP media buttons while connected (stream P). */
-    private var mMediaSession: MumlaMediaSession? = null
+    /** Headset / AVRCP media buttons while connected. */
+    @VisibleForTesting
+    internal var mMediaSession: MumlaMediaSession? = null
+        private set
 
-    /** Channel view overlay. */
-    private lateinit var mChannelOverlay: MumlaOverlay
+    @VisibleForTesting
+    internal lateinit var mChannelOverlay: MumlaOverlay
 
     /** Proximity lock, held while voice goes to the earpiece. */
-    private var mProximityLock: PowerManager.WakeLock? = null
+    @VisibleForTesting
+    internal var mProximityLock: PowerManager.WakeLock? = null
+        private set
 
-    /** Play sound when push to talk key is pressed */
-    private var mPTTSoundEnabled = false
+    @VisibleForTesting
+    internal var mPTTSoundEnabled = false
+        private set
 
-    /** Try to shorten spoken messages when using TTS */
-    private var mShortTtsMessagesEnabled = false
+    @VisibleForTesting
+    internal var mShortTtsMessagesEnabled = false
+        private set
 
-    /**
-     * True if an error causing disconnection has been dismissed by the user.
-     * This should serve as a hint not to bother the user.
-     */
+    /** An error causing disconnection was dismissed by the user; a hint not to bother them again. */
     private var mErrorShown = false
-    /** Bounded (spec D5). */
     private val mMessageLog = ChatMessageLog()
+    private val mNotices by lazy { NoticeFormatter(this) }
     private var mSuppressNotifications = false
 
-    private var mTTS: TextToSpeech? = null
+    @VisibleForTesting
+    internal var mTTS: TextToSpeech? = null
     private val mTTSInitListener = TextToSpeech.OnInitListener { status ->
         if (status == TextToSpeech.ERROR) logWarning(getString(R.string.tts_failed))
     }
 
-    /** The view representing the hot corner. */
-    private lateinit var mHotCorner: MumlaHotCorner
-    private val mHotCornerListener = object : MumlaHotCorner.MumlaHotCornerListener {
+    @VisibleForTesting
+    internal lateinit var mHotCorner: MumlaHotCorner
+    @VisibleForTesting
+    internal val mHotCornerListener = object : MumlaHotCorner.MumlaHotCornerListener {
         override fun onHotCornerDown() {
             onTalkKeyDown()
         }
@@ -115,194 +117,144 @@ class MumlaService : HumlaService(),
 
     private lateinit var mTalkReceiver: BroadcastReceiver
 
-    /**
-     * Test seam: the push-to-talk click. Robolectric's AudioManager records no sound effect, so
-     * without it nothing could read back the five-clause condition in onUserTalkStateUpdated.
-     */
+    /** Test seam: Robolectric's AudioManager records no sound effect. */
     internal var keyClickSound: () -> Unit = {
         (getSystemService(AUDIO_SERVICE) as AudioManager).playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD, -1f)
     }
 
     /**
-     * Collects the session state for the lifetime of the service. Main.immediate, because the state
-     * machine is mutated on the main thread: every transition is rendered inline, before the call
-     * that caused it returns, so no later line in HumlaService can observe a stale notification.
+     * Main.immediate: the session state is mutated on the main thread, so every transition is
+     * rendered before the call that caused it returns.
      */
     private val mServiceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val mObserver = object : HumlaObserver() {
-        override fun onUserConnected(user: IUser) {
-            if (user.getTextureHash() != null && user.getTexture() == null) {
-                // Request avatar data if available.
-                requestAvatar(user.getSession())
-            }
+    private fun onEvent(event: HumlaEvent) {
+        when (event) {
+            is HumlaEvent.UserConnected -> requestAvatarIfMissing(event.user)
+            is HumlaEvent.UserStateUpdated -> onUserStateUpdated(event.user)
+            is HumlaEvent.UserTalkStateUpdated -> onUserTalkStateUpdated(event.user)
+            is HumlaEvent.TextMessage -> onTextMessage(event.message)
+            is HumlaEvent.Notice ->
+                mMessageLog.add(IChatMessage.InfoMessage(infoType(event.level), mNotices.format(event)))
+            is HumlaEvent.PermissionDenied ->
+                if (mNotification.isForeground && !mSuppressNotifications) mNotification.show()
+            else -> Unit
+        }
+    }
+
+    private fun requestAvatarIfMissing(user: IUser) {
+        if (user.textureHash != null && user.texture == null) {
+            requestAvatar(user.session)
+        }
+    }
+
+    private fun onUserStateUpdated(user: IUser) {
+        val selfSession = try {
+            sessionId
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "exception in onUserStateUpdated: $e")
+            return
         }
 
-        override fun onUserStateUpdated(user: IUser?) {
-            if (user == null) {
-                return
-            }
-
-            val selfSession = try {
-                getSessionId()
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in onUserStateUpdated: $e")
-                return
-            }
-
-            if (user.getSession() == selfSession) {
-                // Update settings mute/deafen state
-                mSettings.setMutedAndDeafened(user.isSelfMuted(), user.isSelfDeafened())
-                if (mNotification.isForeground) {
-                    val contentText = if (user.isSelfMuted() && user.isSelfDeafened()) {
-                        getString(R.string.status_notify_muted_and_deafened)
-                    } else if (user.isSelfMuted()) {
-                        getString(R.string.status_notify_muted)
-                    } else {
-                        getString(R.string.connected)
-                    }
-                    mNotification.customContentText = contentText
-                    mNotification.show()
+        if (user.session == selfSession) {
+            mSettings.setMutedAndDeafened(user.isSelfMuted, user.isSelfDeafened)
+            if (mNotification.isForeground) {
+                val contentText = if (user.isSelfMuted && user.isSelfDeafened) {
+                    getString(R.string.status_notify_muted_and_deafened)
+                } else if (user.isSelfMuted) {
+                    getString(R.string.status_notify_muted)
+                } else {
+                    getString(R.string.connected)
                 }
-            }
-
-            if (user.getTextureHash() != null && user.getTexture() == null) {
-                // Update avatar data if available.
-                requestAvatar(user.getSession())
-            }
-        }
-
-        override fun onMessageLogged(message: IMessage) {
-            // Split on / strip all HTML tags.
-            val parsedMessage = Jsoup.parseBodyFragment(message.getMessage())
-            val strippedMessage = parsedMessage.text()
-
-            val ttsMessage = if (mShortTtsMessagesEnabled) {
-                for (anchor in parsedMessage.getElementsByTag("A")) {
-                    // Get just the domain portion of links
-                    val href = anchor.attr("href")
-                    // Only shorten anchors without custom text
-                    if (href == anchor.text()) {
-                        val urlHostname = HtmlUtils.getHostnameFromLink(href)
-                        if (urlHostname != null) {
-                            anchor.text(getString(R.string.chat_message_tts_short_link, urlHostname))
-                        }
-                    }
-                }
-                parsedMessage.text()
-            } else {
-                strippedMessage
-            }
-
-            val formattedTtsMessage = getString(R.string.notification_message, message.getActorName(), ttsMessage)
-
-            // Read if TTS is enabled, the message is less than threshold, is a text message, and not
-            // deafened. "Enabled" is `mTTS != null`: the preference listener creates and shuts it
-            // down with the setting, so a second check of the setting here could never differ
-            // (removing it alone left the suite green, spec 4.04).
-            val tts = mTTS
-            if (tts != null &&
-                formattedTtsMessage.length <= TTS_THRESHOLD &&
-                getSessionUser() != null &&
-                !getSessionUser()!!.isSelfDeafened()
-            ) {
-                @Suppress("DEPRECATION")
-                tts.speak(formattedTtsMessage, TextToSpeech.QUEUE_ADD, null)
-            }
-
-            // TODO: create a customizable notification sieve
-            if (mSettings.isChatNotifyEnabled()) {
-                mMessageNotification.show(message)
-            }
-
-            mMessageLog.add(IChatMessage.TextMessage(message))
-        }
-
-        override fun onLogInfo(message: String) {
-            mMessageLog.add(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, message))
-        }
-
-        override fun onLogWarning(message: String) {
-            mMessageLog.add(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.WARNING, message))
-        }
-
-        override fun onLogError(message: String) {
-            mMessageLog.add(IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.ERROR, message))
-        }
-
-        override fun onPermissionDenied(reason: String?) {
-            if (mNotification.isForeground && !mSuppressNotifications) {
+                mNotification.customContentText = contentText
                 mNotification.show()
             }
         }
 
-        override fun onUserTalkStateUpdated(user: IUser) {
-            var selfSession = -1
-            try {
-                selfSession = getSessionId()
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in onUserTalkStateUpdated: $e")
-            }
+        requestAvatarIfMissing(user)
+    }
 
-            if (isConnectionEstablished() &&
-                user.getSession() == selfSession &&
-                getTransmitMode() == Constants.TRANSMIT_PUSH_TO_TALK &&
-                user.getTalkState() == TalkState.TALKING &&
-                mPTTSoundEnabled
-            ) {
-                keyClickSound()
+    private fun onTextMessage(message: IMessage) {
+        val strippedMessage = HtmlUtils.toPlainText(message.message)
+        val ttsMessage = if (mShortTtsMessagesEnabled) {
+            HtmlUtils.toPlainTextWithShortLinks(message.message) { host ->
+                getString(R.string.chat_message_tts_short_link, host)
             }
+        } else {
+            strippedMessage
+        }
+
+        val sender = mNotices.senderName(message)
+        val formattedTtsMessage = getString(R.string.notification_message, sender, ttsMessage)
+
+        // mTTS is non-null exactly while the setting is on (the preference listener owns it).
+        val tts = mTTS
+        if (tts != null && formattedTtsMessage.length <= TTS_THRESHOLD && sessionUser?.isSelfDeafened == false) {
+            @Suppress("DEPRECATION")
+            tts.speak(formattedTtsMessage, TextToSpeech.QUEUE_ADD, null)
+        }
+
+        // Every message notifies while enabled; there is no per-sender filter yet.
+        if (mSettings.isChatNotifyEnabled) {
+            mMessageNotification.show(sender, strippedMessage, conversation())
+        }
+
+        mMessageLog.add(IChatMessage.TextMessage(message))
+    }
+
+    private fun onUserTalkStateUpdated(user: IUser) {
+        var selfSession = -1
+        try {
+            selfSession = sessionId
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "exception in onUserTalkStateUpdated: $e")
+        }
+
+        val selfStartedTalking = user.session == selfSession && user.talkState == TalkState.TALKING
+        val pttClick = mPTTSoundEnabled && transmitMode == Constants.TRANSMIT_PUSH_TO_TALK
+        if (pttClick && selfStartedTalking && isConnectionEstablished()) {
+            keyClickSound()
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        registerObserver(mObserver)
+        collectEvents(mServiceScope, this, ::onEvent)
 
-        // Register for preference changes
         mSettings = Settings.getInstance(this)
-        mPTTSoundEnabled = mSettings.isPttSoundEnabled()
-        mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled()
+        mPTTSoundEnabled = mSettings.isPttSoundEnabled
+        mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         preferences.registerOnSharedPreferenceChangeListener(this)
         applyBluetoothPreference()
 
-        // Manually set theme to style overlay views
-        // XML <application> theme does NOT do this!
+        // Overlay views need the theme set manually; the <application> theme does not apply.
         setTheme(R.style.Theme_Mumla)
 
         mNotification = MumlaConnectionNotification.create(this, "", this)
         mMessageNotification = MumlaMessageNotification(this@MumlaService)
 
-        // Instantiate overlay view
         mChannelOverlay = MumlaOverlay(this)
-        mHotCorner = MumlaHotCorner(this, mSettings.getHotCornerGravity(), mHotCornerListener)
+        mHotCorner = MumlaHotCorner(this, mSettings.hotCornerGravity, mHotCornerListener)
 
-        // Set up TTS
-        if (mSettings.isTextToSpeechEnabled()) mTTS = TextToSpeech(this, mTTSInitListener)
+        if (mSettings.isTextToSpeechEnabled) mTTS = TextToSpeech(this, mTTSInitListener)
 
-        mTalkReceiver = TalkBroadcastReceiver(this)
+        mTalkReceiver = TalkBroadcastReceiver(this) { mSettings.isExternalPushToTalkAllowed }
 
         mMediaSession = MumlaMediaSession(this, HumlaMediaKeyTarget(this), mSettings).also { it.attach(this) }
 
-        // Spec A3/A6: the notification is a function of the session state, and only Disconnected
-        // tears the foreground down.
-        mServiceScope.launch { getSessionState().collect { renderSessionState(it) } }
+        mServiceScope.launch { sessionState.collect { renderSessionState(it) } }
     }
 
     /**
-     * Renders one session state into the foreground notification (spec A3, A6) -- the only place
-     * that decides whether the service is in the foreground.
-     *
-     * `Connecting` enters the foreground; everything up to `Disconnected` only changes its text.
-     * In particular `ConnectionLost` and `Reconnecting` keep it: leaving the foreground on a loss
-     * meant the reconnect had to start it again, from the background with the screen off, which
-     * Android 12+ refuses -- and the microphone stayed dead after every reconnect.
+     * Renders the session state into the foreground notification; the only place that decides
+     * whether the service is in the foreground. `Connecting` enters it and only `Disconnected`
+     * leaves it: a reconnect restarting it from the background is refused on Android 12+, which
+     * would leave the microphone dead.
      */
     internal fun renderSessionState(state: SessionState) {
         when (state) {
             SessionState.Connecting -> {
-                // Remove old notification left from reconnect,
                 mReconnectNotification?.let {
                     it.hide()
                     mReconnectNotification = null
@@ -316,8 +268,7 @@ class MumlaService : HumlaService(),
                 showConnectionNotification(getString(R.string.connection_lost_reconnecting), cancelReconnect = true)
             is SessionState.Disconnected -> {
                 mNotification.hide()
-                // Session-visible state: spec A3 keeps it across a ConnectionLost, so it goes here
-                // and not in onConnectionDisconnected, which runs on every loss.
+                // Not in onConnectionDisconnected: the log survives a ConnectionLost.
                 clearMessageLog()
                 mMessageNotification.dismiss()
                 val error = state.error
@@ -330,7 +281,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    private fun torSuffix(): String = if (mSettings.isTorEnabled()) " (Tor)" else ""
+    private fun torSuffix(): String = if (mSettings.isTorEnabled) " (Tor)" else ""
 
     private fun showConnectionNotification(
         contentText: String,
@@ -341,8 +292,7 @@ class MumlaService : HumlaService(),
         mNotification.actionsShown = actions
         mNotification.cancelReconnectShown = cancelReconnect
         if (!mNotification.show()) {
-            // Spec A6: the platform refused the foreground start. Say so instead of dying -- once
-            // while the refusal repeats, since every later state change tries again.
+            // The platform refused the foreground start; warn once while the refusal repeats.
             logWarningOnce(getString(R.string.foreground_start_failed))
             if (!mSuppressNotifications) {
                 mReconnectNotification?.hide()
@@ -353,11 +303,49 @@ class MumlaService : HumlaService(),
         }
     }
 
+    /** Our name, the channel a reply goes to and the server, for the chat notification. */
+    private fun conversation() = MumlaMessageNotification.Conversation(
+        self = orNullOutsideSession { sessionUser }?.name,
+        channel = orNullOutsideSession { sessionChannel }?.name,
+        server = targetServer?.let { it.name.ifEmpty { it.host } },
+    )
+
+    /** [read]'s result, or null where it needs a synchronized session and there is none. */
+    private fun <T> orNullOutsideSession(read: () -> T?): T? = try {
+        read()
+    } catch (e: IllegalStateException) {
+        Log.d(TAG, "no session: $e")
+        null
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == MumlaMessageNotification.ACTION_REPLY) onChatReply(intent)
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    /**
+     * Sends the chat notification's inline reply to our channel. The notification is re-posted in
+     * any case, or it would keep waiting for the send; without a session it is removed instead.
+     */
+    private fun onChatReply(intent: Intent) {
+        val reply = MumlaMessageNotification.replyText(intent)?.trim()
+        val channel = orNullOutsideSession { sessionChannel }
+        if (channel == null) {
+            mMessageNotification.dismiss()
+            return
+        }
+        if (reply.isNullOrEmpty()) {
+            mMessageNotification.refresh()
+            return
+        }
+        sendChannelTextMessage(channel.id, outgoingMessageHtml(reply, mSettings.isMarkdownEnabled), false)
+        mMessageNotification.showReply(reply, conversation())
+    }
+
     override fun onBind(intent: Intent?): IBinder = MumlaBinder(this)
 
     override fun onDestroy() {
-        // Stops rendering: super.onDestroy() below disconnects, and nothing may enter the
-        // foreground for a service that is going away.
+        // Stop rendering first: super.onDestroy() disconnects, and nothing may enter the foreground now.
         mServiceScope.cancel()
         mNotification.hide()
         mReconnectNotification?.let {
@@ -373,27 +361,18 @@ class MumlaService : HumlaService(),
             e.printStackTrace()
         }
 
-        // Null-checked like every other teardown in this method: it is the last thing onCreate
-        // builds, so anything that throws earlier -- the TTS constructor above it, say -- gets
-        // here with the field still null.
-        mMediaSession?.detach(this)
-        unregisterObserver(mObserver)
+        // Null-checked: built last in onCreate, so an earlier throw leaves it null.
+        mMediaSession?.detach()
         mTTS?.shutdown()
         mMessageNotification.dismiss()
+        setProximitySensorOn(false)
         super.onDestroy()
     }
 
     override fun onConnectionSynchronized() {
-        // TODO? We seem to be getting a RuntimeException here, from the call
-        //  to the superclass function (in HumlaService). In there,
-        //  mConnect.getSession() finds that isSynchronized==false and throws
-        //  NotSynchronizedException (which is re-thrown as the
-        //  RuntimeException). But how can it be !isSynchronized? -- A server
-        //  msg triggers HumlaConnection.messageServerSync(), which sets up
-        //  mSession and mSynchronized==true and then proceeds to call us from
-        //  a Runnable post()ed to a Handler. The reason could only be that
-        //  HumlaConnect.connect() or disconnect() is called again in the
-        //  middle of all this? And it's made possible by the Handler?
+        // TODO? The superclass sometimes throws IllegalStateException (not synchronized) here,
+        //  presumably because connect()/disconnect() ran again between messageServerSync() and
+        //  this posted callback.
         try {
             super.onConnectionSynchronized()
         } catch (e: RuntimeException) {
@@ -401,23 +380,18 @@ class MumlaService : HumlaService(),
             return
         }
 
-        // Restore mute/deafen state
-        if (mSettings.isMuted() || mSettings.isDeafened()) {
-            setSelfMuteDeafState(mSettings.isMuted(), mSettings.isDeafened())
+        if (mSettings.isMuted || mSettings.isDeafened) {
+            setSelfMuteDeafState(mSettings.isMuted, mSettings.isDeafened)
         }
 
-        // No Bluetooth restore here any more. The stored wish reaches the router from onCreate
-        // and on every change (applyBluetoothPreference), and the superclass hook above takes the
-        // route when it engages the router -- before any line of this method, so nothing here can
-        // throw in front of it.
-
+        // Bluetooth is not restored here: applyBluetoothPreference hands the wish to the router.
         ContextCompat.registerReceiver(
             this, mTalkReceiver,
             IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK), ContextCompat.RECEIVER_EXPORTED,
         )
 
-        if (mSettings.isHotCornerEnabled()) {
-            mHotCorner.setShown(true)
+        if (mSettings.isHotCornerEnabled) {
+            mHotCorner.isShown = true
         }
         // The proximity sensor follows the earpiece route (onAudioRouteChanged), not this hook.
     }
@@ -429,58 +403,45 @@ class MumlaService : HumlaService(),
         } catch (iae: IllegalArgumentException) {
         }
 
-        // Remove overlay if present.
         mChannelOverlay.hide()
 
-        mHotCorner.setShown(false)
+        mHotCorner.isShown = false
 
         setProximitySensorOn(false)
     }
 
-    /**
-     * Called when the user makes a change to their preferences.
-     * Should update all preferences relevant to the service.
-     */
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        // Everything that is an audio extra lives in one function, so that "is this switch on the
-        // settings screen connected to anything?" has an answer a test can read. What stays below
-        // is the cases whose effect is not an extra.
-        val changedExtras = AudioPreferenceExtras.extrasFor(key!!, mSettings)
         var requiresReconnect = false
         when (key) {
             Settings.PREF_INPUT_METHOD ->
-                mChannelOverlay.setPushToTalkShown(mSettings.getHumlaInputMethod() == Constants.TRANSMIT_PUSH_TO_TALK)
+                mChannelOverlay.setPushToTalkShown(mSettings.humlaInputMethod == Constants.TRANSMIT_PUSH_TO_TALK)
             Settings.PREF_HOT_CORNER_KEY -> {
-                mHotCorner.setGravity(mSettings.getHotCornerGravity())
-                mHotCorner.setShown(isConnectionEstablished() && mSettings.isHotCornerEnabled())
+                mHotCorner.gravity = mSettings.hotCornerGravity
+                mHotCorner.isShown = isConnectionEstablished() && mSettings.isHotCornerEnabled
             }
             Settings.PREF_USE_TTS -> {
                 val tts = mTTS
-                if (tts == null && mSettings.isTextToSpeechEnabled()) {
+                if (tts == null && mSettings.isTextToSpeechEnabled) {
                     mTTS = TextToSpeech(this, mTTSInitListener)
-                } else if (tts != null && !mSettings.isTextToSpeechEnabled()) {
+                } else if (tts != null && !mSettings.isTextToSpeechEnabled) {
                     tts.shutdown()
                     mTTS = null
                 }
             }
             Settings.PREF_SHORT_TTS_MESSAGES ->
-                mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled()
+                mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled
             Settings.PREF_PTT_SOUND ->
-                mPTTSoundEnabled = mSettings.isPttSoundEnabled()
+                mPTTSoundEnabled = mSettings.isPttSoundEnabled
             Settings.PREF_BLUETOOTH_SCO -> applyBluetoothPreference()
             Settings.PREF_CERT_ID,
             Settings.PREF_FORCE_TCP,
             Settings.PREF_USE_TOR,
-            Settings.PREF_DISABLE_OPUS,
             ->
-                // These are settings we flag as 'requiring reconnect'.
                 requiresReconnect = true
         }
-        if (changedExtras.size() > 0) {
-            // Reconfigure the service appropriately. The result is not read: configureExtras asks
-            // for a reconnect only for server, certificate, codec, transport and history keys,
-            // and AudioPreferenceExtras produces none of them (ignoring it left the suite green).
-            configureExtras(changedExtras)
+        if (key in SessionSettings.AUDIO_KEYS) {
+            // The result is ignored: audio settings never require a reconnect.
+            configure(SessionSettings.withAudioSettings(sessionConfig, mSettings))
         }
 
         if (requiresReconnect && isConnectionEstablished()) {
@@ -489,28 +450,27 @@ class MumlaService : HumlaService(),
     }
 
     /**
-     * Hands the stored Bluetooth wish (spec P2, the one carrier) to the router, at any time. No
-     * `isSynchronized()` check: the router routes only while a session is synchronized, and
-     * dropping a change made while disconnected - which the old check did - left the next session
-     * routing the stale wish.
+     * Hands the stored Bluetooth wish to the router at any time, connected or not; the router only
+     * routes while a session is synchronized.
      */
     private fun applyBluetoothPreference() {
-        if (mSettings.isBluetoothScoEnabled()) enableBluetoothSco() else disableBluetoothSco()
+        if (mSettings.isBluetoothScoEnabled) enableBluetoothSco() else disableBluetoothSco()
     }
 
-    /**
-     * The earpiece is the handset mode: routed there - chosen, or the default output - the screen
-     * goes off at the ear; any other device, or no route at all, turns the sensor off again. The
-     * superclass reports every change of the routed device, disconnects included.
-     */
-    override fun onAudioRouteChanged(type: Int?) {
+    /** Earpiece route (chosen or default) turns the proximity sensor on; anything else turns it off. */
+    override fun onAudioRouteChanged(type: Int?) = applyAudioRoute(type)
+
+    @VisibleForTesting
+    internal fun applyAudioRoute(type: Int?) {
         setProximitySensorOn(type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
     }
 
     private fun setProximitySensorOn(on: Boolean) {
         if (on) {
+            if (mProximityLock?.isHeld == true) return
             val pm = getSystemService(POWER_SERVICE) as PowerManager
-            mProximityLock = pm.newWakeLock(PROXIMITY_SCREEN_OFF_WAKE_LOCK, "Mumla:Proximity").also { it.acquire() }
+            mProximityLock = pm.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "Mumla:Proximity")
+                .also { it.acquire() }
         } else {
             mProximityLock?.release()
             mProximityLock = null
@@ -518,26 +478,23 @@ class MumlaService : HumlaService(),
     }
 
     override fun onMuteToggled() {
-        val user = getSessionUser()
+        val user = sessionUser
         if (isConnectionEstablished() && user != null) {
-            val muted = !user.isSelfMuted()
-            val deafened = user.isSelfDeafened() && muted
+            val muted = !user.isSelfMuted
+            val deafened = user.isSelfDeafened && muted
             setSelfMuteDeafState(muted, deafened)
         }
     }
 
     override fun onDeafenToggled() {
-        val user = getSessionUser()
+        val user = sessionUser
         if (isConnectionEstablished() && user != null) {
-            setSelfMuteDeafState(!user.isSelfDeafened(), !user.isSelfDeafened())
+            setSelfMuteDeafState(!user.isSelfDeafened, !user.isSelfDeafened)
         }
     }
 
     override fun onOverlayToggled() {
-        // Ditching the notification shade/panel to make the overlay permission request visible
-        // used to happen here; Android 12 (API 31, our minSdk) no longer allows it.
-
-        if (!mChannelOverlay.isShown()) {
+        if (!mChannelOverlay.isShown) {
             if (!android.provider.Settings.canDrawOverlays(applicationContext)) {
                 val showSetting = Intent(
                     android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -554,12 +511,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    /**
-     * The foreground notification's "Cancel reconnect". The same path as the app's dialog: the
-     * session goes to Disconnected, which renders synchronously and leaves the foreground. A press
-     * on a stale notification after the reconnect has already succeeded is a no-op, because
-     * cancelReconnect only acts in ConnectionLost and Reconnecting.
-     */
+    /** A press on a stale notification after the reconnect succeeded is a no-op. */
     override fun onReconnectCancelled() {
         cancelReconnect()
     }
@@ -573,9 +525,8 @@ class MumlaService : HumlaService(),
     }
 
     /**
-     * The superclass first: it moves the session to Disconnected, which renders synchronously and
-     * would post a prompt for the loss the user has just chosen to give up on. Hiding afterwards
-     * removes that one as well as any earlier one.
+     * The superclass first: its Disconnected render would post a prompt for the loss the user just
+     * gave up on; hiding afterwards removes that one too.
      */
     override fun cancelReconnect() {
         super.cancelReconnect()
@@ -585,15 +536,7 @@ class MumlaService : HumlaService(),
         }
     }
 
-    override fun setOverlayShown(showOverlay: Boolean) {
-        if (!mChannelOverlay.isShown()) {
-            mChannelOverlay.show()
-        } else {
-            mChannelOverlay.hide()
-        }
-    }
-
-    override fun isOverlayShown(): Boolean = mChannelOverlay.isShown()
+    override val isOverlayShown: Boolean get() = mChannelOverlay.isShown
 
     override fun clearChatNotifications() {
         mMessageNotification.dismiss()
@@ -601,78 +544,62 @@ class MumlaService : HumlaService(),
 
     override fun markErrorShown() {
         mErrorShown = true
-        // Dismiss the reconnection prompt if a reconnection isn't in progress.
         val notification = mReconnectNotification
-        // No "unless reconnecting" any more: the prompt is only posted in Disconnected, or as the
-        // fallback for a refused start, and neither is something to keep once acknowledged.
+        // The prompt only exists in Disconnected or for a refused start; drop it once acknowledged.
         if (notification != null) {
             notification.hide()
             mReconnectNotification = null
         }
     }
 
-    override fun isErrorShown(): Boolean = mErrorShown
+    override val isErrorShown: Boolean get() = mErrorShown
 
-    /**
-     * Called when a user presses a talk key down (i.e. when they want to talk).
-     * Accounts for talk logic if toggle PTT is on.
-     */
+    /** Talk key pressed; a no-op in toggle PTT mode, which acts on key up. */
     override fun onTalkKeyDown() {
-        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == mSettings.getInputMethod()) {
-            // Idempotent, so no "unless already talking" (it had no observable, spec 4.04).
-            if (!mSettings.isPushToTalkToggle()) {
+        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == mSettings.inputMethod) {
+            if (!mSettings.isPushToTalkToggle) {
                 setTalkingState(true) // Start talking
             }
         }
     }
 
-    /**
-     * Called when a user releases a talk key (i.e. when they do not want to talk).
-     * Accounts for talk logic if toggle PTT is on.
-     */
+    /** Talk key released; toggles talking in toggle PTT mode, otherwise stops talking. */
     override fun onTalkKeyUp() {
-        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == mSettings.getInputMethod()) {
-            if (mSettings.isPushToTalkToggle()) {
-                setTalkingState(!isTalking()) // Toggle talk state
+        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == mSettings.inputMethod) {
+            if (mSettings.isPushToTalkToggle) {
+                setTalkingState(!isTalking) // Toggle talk state
             } else {
                 setTalkingState(false) // Stop talking (idempotent)
             }
         }
     }
 
-    override fun getMessageLog(): List<IChatMessage> = Collections.unmodifiableList(mMessageLog.snapshot())
+    override val messageLog: StateFlow<List<IChatMessage>> get() = mMessageLog.messages
 
     override fun clearMessageLog() {
         mMessageLog.clear()
     }
 
     /**
-     * Sets whether or not notifications should be suppressed.
-     *
-     * It's typically a good idea to do this when the main activity is foreground, so that the user
-     * is not bombarded with redundant alerts.
-     *
-     * **Chat notifications are NOT suppressed.** They may be if a chat indicator is added in the
-     * activity itself. For now, the user may disable chat notifications manually.
-     *
-     * @param suppressNotifications true if Mumla is to disable notifications.
+     * Suppresses connection notifications, typically while the main activity is in the foreground.
+     * Chat notifications are not suppressed.
      */
     override fun setSuppressNotifications(suppressNotifications: Boolean) {
         mSuppressNotifications = suppressNotifications
     }
 
-    class MumlaBinder internal constructor(private val mService: MumlaService) : Binder() {
+    class MumlaBinder internal constructor(private val mService: IMumlaService) : Binder() {
         fun getService(): IMumlaService = mService
     }
 
-    override fun sendUserTextMessage(session: Int, message: String?): Message {
+    override fun sendUserTextMessage(session: Int, message: String): Message {
         val msg = super.sendUserTextMessage(session, message)
 
         mMessageLog.add(IChatMessage.TextMessage(msg))
         return msg
     }
 
-    override fun sendChannelTextMessage(channel: Int, message: String?, tree: Boolean): Message {
+    override fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message {
         val msg = super.sendChannelTextMessage(channel, message, tree)
 
         mMessageLog.add(IChatMessage.TextMessage(msg))
@@ -682,9 +609,12 @@ class MumlaService : HumlaService(),
     companion object {
         private val TAG = MumlaService::class.java.name
 
-        /** Undocumented constant that permits a proximity-sensing wake lock. */
-        const val PROXIMITY_SCREEN_OFF_WAKE_LOCK = 32
+        private fun infoType(level: HumlaEvent.Level) = when (level) {
+            HumlaEvent.Level.INFO -> IChatMessage.InfoMessage.Type.INFO
+            HumlaEvent.Level.WARNING -> IChatMessage.InfoMessage.Type.WARNING
+            HumlaEvent.Level.ERROR -> IChatMessage.InfoMessage.Type.ERROR
+        }
+
         const val TTS_THRESHOLD = 250 // Maximum number of characters to read
-        const val RECONNECT_DELAY = 10000
     }
 }

@@ -23,10 +23,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import java.time.Duration
 
-// RuntimeEnvironment.getApplication() ships with robolectric itself; the plan asks not to import
-// androidx.test here (its claim that androidx.test:core is absent from the classpath is stale --
-// it has been in the `unit-test` bundle since the version catalog was introduced -- but there is
-// no reason to depend on it either).
 @RunWith(RobolectricTestRunner::class)
 class ZoomImageViewTest {
     private val context: Context = RuntimeEnvironment.getApplication()
@@ -38,8 +34,6 @@ class ZoomImageViewTest {
             setImageBitmap(Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888))
             layout(0, 0, side, side)
         }
-
-    // --- touch event plumbing ------------------------------------------------------------------
 
     private var eventTime = 0L
     private var downTime = 0L
@@ -76,8 +70,6 @@ class ZoomImageViewTest {
 
     private fun pointerUp(index: Int) =
         MotionEvent.ACTION_POINTER_UP or (index shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
-
-    // --- the plan's three tests ----------------------------------------------------------------
 
     @Test
     fun fitsTheImageCenteredAndAppliesZoomAndPan() {
@@ -124,9 +116,7 @@ class ZoomImageViewTest {
         assertThat(view.state).isEqualTo(ZoomState())
     }
 
-    // --- the state is reset through one funnel, not per entry point -----------------------------
-
-    /** setImageBitmap reaches the reset through setImageDrawable, so there is only one to break. */
+    /** setImageBitmap reaches the reset through setImageDrawable. */
     @Test
     fun aNewDrawableResetsTheStateToo() {
         val view = viewWith()
@@ -135,27 +125,18 @@ class ZoomImageViewTest {
         assertThat(view.state).isEqualTo(ZoomState())
     }
 
-    /**
-     * And so does a resource, which ImageView routes through setImageDrawable as well -- measured,
-     * not assumed. A placeholder or an error icon set by the viewer dialog therefore cannot inherit
-     * the zoom of the image before it. Integration assertion: it is the platform that routes it.
-     */
+    /** So does a resource: ImageView routes it through setImageDrawable as well. */
     @Test
     fun aNewResourceResetsTheStateToo() {
         val view = viewWith()
         view.zoomBy(3f, 0f, 0f)
-        view.setImageResource(se.lublin.mumla.R.drawable.ic_mumla)
+        view.setImageResource(se.lublin.mumla.R.drawable.ic_stat_notify)
         assertThat(view.state).isEqualTo(ZoomState())
     }
 
-    // --- the three "there is nothing to fit yet" cases ------------------------------------------
-
     /**
-     * A view that has not been measured has a width of 0. It must skip, not throw and not divide.
-     *
-     * And it must not *remember* the zoom either: a focus point means nothing without a frame to
-     * measure it in, so a zoom asked for at that moment would be stored around a centre of (0, 0)
-     * and land as a bogus offset at the first layout. What the first layout shows is the fit.
+     * An unmeasured view (width 0) must skip, not throw or divide, and must not remember the zoom:
+     * it would land as a bogus offset around (0, 0) at the first layout.
      */
     @Test
     fun zoomingAnUnmeasuredViewIsIgnored() {
@@ -181,8 +162,7 @@ class ZoomImageViewTest {
         view.zoomBy(2f, 200f, 200f)
         view.panBy(10f, 10f)
 
-        // asserted before the image arrives: setImageBitmap would reset the state anyway and hide
-        // the difference between "ignored" and "forgotten a moment later".
+        // Asserted before the image arrives: setImageBitmap would reset the state anyway.
         assertThat(view.state).isEqualTo(ZoomState())
         view.setImageBitmap(Bitmap.createBitmap(200, 100, Bitmap.Config.ARGB_8888))
         assertThat(values(view)[Matrix.MSCALE_X]).isEqualTo(2f)
@@ -210,25 +190,11 @@ class ZoomImageViewTest {
         assertThat(view.imageMatrix.isIdentity).isTrue()
     }
 
-    // --- gestures ------------------------------------------------------------------------------
-
     /**
-     * A symmetric pinch around (100, 100): the focus never moves, so nothing else in the stream can
-     * produce the result -- put the focus in the middle of the view instead and tx/ty come out 0.
-     *
-     * Two properties of ScaleGestureDetector the numbers depend on, both measured here: the gesture
-     * only begins once the span has changed by more than the span slop, and the first onScale after
-     * onScaleBegin reports a factor of exactly 1 and re-bases the span. So 180 -> 260 is the no-op
-     * that arms it and 260 -> 360 is the zoom.
-     *
-     * What that is measured against is worth being exact about, because two thirds of it are not
-     * Android. The *logic* is AOSP's and really runs: `ShadowGestureDetector` and
-     * `ShadowScaleGestureDetector` are in the path, but they delegate to the real class through a
-     * reflector. The *constants* are Robolectric's fixtures at density 1.0 -- `ShadowViewConfiguration`
-     * hard-codes touch slop 16 and paging touch slop 32, and the 170 px minimum scaling span sits
-     * behind `robolectric.useRealMinScalingSpan` -- so the 2 x 16 px that decides where this pinch
-     * starts is about 2 x 24 px on a real 3x device. These numbers pin the rule, not the pixel
-     * counts a phone would use.
+     * A symmetric pinch around (100, 100), so the focus never moves. ScaleGestureDetector only
+     * begins once the span changed by more than the span slop, and its first onScale reports a
+     * factor of 1 and re-bases the span: 180 -> 260 arms it, 260 -> 360 zooms. The slop values are
+     * Robolectric's density-1.0 fixtures, so these numbers pin the rule, not a phone's pixel counts.
      */
     @Test
     fun aPinchZoomsAroundTheGestureFocus() {
@@ -270,9 +236,7 @@ class ZoomImageViewTest {
         view.touch(MotionEvent.ACTION_DOWN, 1080, 100f, 100f)
         view.touch(MotionEvent.ACTION_UP, 1100, 100f, 100f)
 
-        // 2, not DOUBLE_TAP_SCALE: 200 px of source blown up into a 400 px view has no pixels to
-        // spare, so this image's ceiling is the floor of 2. The offset is asserted exactly, so a
-        // ceiling that stopped being applied would show up here as 150 rather than 100.
+        // 2, not DOUBLE_TAP_SCALE: 200 px of source in a 400 px view caps this image's ceiling at 2.
         assertThat(view.state).isEqualTo(ZoomState(2f, 100f, 100f))
 
         view.touch(MotionEvent.ACTION_DOWN, 2000, 100f, 100f)
@@ -284,14 +248,9 @@ class ZoomImageViewTest {
     }
 
     /**
-     * A cancelled gesture -- an incoming call, the screen going off, a parent stealing the touch --
-     * leaves the image where it was, and the gesture after it pans by its own travel.
-     *
-     * This one case cannot tell a forwarded ACTION_CANCEL from a swallowed one, and that is not a
-     * property of the design: cancelling *mid-drag* happens to be recoverable, because a plain
-     * ACTION_DOWN re-bases GestureDetector's focus anyway. The cases that are not recoverable are
-     * [aCancelDuringADoubleTapDoesNotDeafenTheNextDrag] and its vertical twin, which is where the
-     * forwarding is actually pinned.
+     * A cancelled gesture leaves the image where it was, and the next gesture pans by its own
+     * travel. The cancel forwarding itself is pinned by
+     * [aCancelDuringADoubleTapDoesNotDeafenTheNextDrag] and its vertical twin.
      */
     @Test
     fun aCancelledGestureDoesNotMoveTheImageAndTheNextOneStartsFresh() {
@@ -313,16 +272,9 @@ class ZoomImageViewTest {
     }
 
     /**
-     * Dragging on after a double-tap must not be a fourth gesture. `ScaleGestureDetector` turns
-     * `isQuickScaleEnabled` on by itself from targetSdk M upwards, which puts a second, continuous
-     * zoom on the same gesture this view's own [ZoomImageView.onDoubleTap] already owns -- two zoom
-     * sources on one gesture, neither chosen nor pinned. Measured before it was turned off: this
-     * drag took the scale from 2.5 to 4.69.
-     *
-     * What is left is the double-tap's own step and nothing else; `GestureDetector` is still in its
-     * double-tap window, so the moves reach `onDoubleTapEvent` rather than `onScroll` and the image
-     * does not pan either. The pan starts with the next gesture, which is
-     * [aCancelDuringADoubleTapDoesNotDeafenTheNextDrag].
+     * Dragging on after a double-tap must not zoom further: `ScaleGestureDetector` enables
+     * `isQuickScaleEnabled` itself from targetSdk M on, which this view turns off. The moves reach
+     * `onDoubleTapEvent`, so the image does not pan either.
      */
     @Test
     fun draggingOnAfterADoubleTapDoesNotKeepZooming() {
@@ -340,16 +292,9 @@ class ZoomImageViewTest {
     }
 
     /**
-     * ACTION_CANCEL arriving *during* a double-tap, which is the one the view cannot shrug off.
-     *
-     * `GestureDetector.mIsDoubleTapping` is cleared only by `cancel()` or by an ACTION_UP; a fresh
-     * ACTION_DOWN does not clear it. Swallow the cancel and the flag stays set for the rest of the
-     * view's life, so every following ACTION_MOVE is routed to `onDoubleTapEvent` instead of
-     * `onScroll` -- the next drag, and every drag after it, moves nothing at all.
-     *
-     * The image is big enough that its zoom ceiling is the full 5x, so the
-     * double-tap lands on 2.5 and the pan that follows stays inside the slack: nothing here is
-     * asserted downstream of a clamp.
+     * ACTION_CANCEL during a double-tap. `GestureDetector.mIsDoubleTapping` is cleared only by
+     * `cancel()` or ACTION_UP, so a swallowed cancel would route every later ACTION_MOVE to
+     * `onDoubleTapEvent` and no drag would move anything again.
      */
     @Test
     fun aCancelDuringADoubleTapDoesNotDeafenTheNextDrag() {
@@ -369,11 +314,8 @@ class ZoomImageViewTest {
     }
 
     /**
-     * The same history, dragged *down* instead of right. Split from the horizontal case on purpose:
-     * with `isQuickScaleEnabled` left on, this is the one that came out as a zoom rather than as a
-     * dead drag, because `ScaleGestureDetector.mAnchoredScaleMode` is reset only by an UP or a
-     * CANCEL and a vertical drag is exactly what drives it. The scale is asserted as well as the
-     * offset, so re-enabling quick scale without forwarding the cancel is caught too.
+     * The same, dragged down: with quick scale on, `ScaleGestureDetector.mAnchoredScaleMode` (reset
+     * only by UP or CANCEL) turns a vertical drag into a zoom, so the scale is asserted as well.
      */
     @Test
     fun aCancelDuringADoubleTapDoesNotTurnTheNextDragIntoAZoom() {
@@ -392,10 +334,8 @@ class ZoomImageViewTest {
     }
 
     /**
-     * Lifting one of two fingers must not make the image jump to the surviving finger. The
-     * re-basing that prevents it is AOSP's, in GestureDetector, not this view's -- so this is an
-     * integration assertion against the real detector: it is here to go red if a compileSdk bump
-     * changes that behaviour underneath us, not to pin code in this file.
+     * Lifting one of two fingers must not make the image jump. The re-basing is GestureDetector's,
+     * so this is an integration assertion against the real detector.
      */
     @Test
     fun liftingOneOfTwoFingersDoesNotJumpTheImage() {
@@ -413,13 +353,7 @@ class ZoomImageViewTest {
         assertThat(view.state.tx - afterLift.tx).isWithin(0.01f).of(40f)
     }
 
-    // --- the view in somebody else's hands ------------------------------------------------------
-
-    /**
-     * Task 8 hangs this view inside a scrolling container. A pan must then win against the parent,
-     * or the drag is taken away mid-gesture -- and what arrives here in exchange is the
-     * ACTION_CANCEL the two cancel tests are about.
-     */
+    /** Inside a scrolling container a pan must win against the parent. */
     @Test
     fun aGestureOnAZoomedImageIsTakenFromAScrollingParent() {
         val parent = RecordingParent(context)
@@ -461,14 +395,7 @@ class ZoomImageViewTest {
         assertThat(parent.disallow).contains(true)
     }
 
-    // --- accessibility ---------------------------------------------------------------------------
-
-    /**
-     * The two flags an accessibility service reads to decide which actions to offer. They are set
-     * in the constructor rather than left to `setOnClickListener`, so they are true before the
-     * viewer has wired anything up -- and they are asserted before this test wires anything up, for
-     * the same reason.
-     */
+    /** The flags accessibility services read are set in the constructor, before any listener. */
     @Test
     fun theViewAdvertisesItselfAsClickableAndLongClickable() {
         val view = viewWith()
@@ -528,12 +455,7 @@ class ZoomImageViewTest {
         }
     }
 
-    // --- configuration changes -----------------------------------------------------------------
-
-    /**
-     * A rotation resizes the view. The zoom factor is kept -- it is relative to the fit, so it means
-     * the same thing in the new geometry -- and the pan is re-clamped into the new bounds.
-     */
+    /** A resize keeps the (fit-relative) zoom factor and re-clamps the pan into the new bounds. */
     @Test
     fun aSizeChangeKeepsTheZoomAndReclampsThePan() {
         val view = viewWith(200, 200, side = 400)
@@ -565,10 +487,9 @@ class ZoomImageViewTest {
     }
 
     /**
-     * The zoom survives the rotation of a dialog whose image is loaded asynchronously: the state is
-     * restored before the image exists, and is applied to the image when it arrives. This goes
-     * through the real hierarchy save/restore, which also enforces that super is called on both
-     * sides -- View throws IllegalStateException if it is not.
+     * The zoom survives a rotation of a dialog whose image loads asynchronously: it is restored
+     * before the image exists and applied when it arrives. The real hierarchy save/restore also
+     * enforces that super is called on both sides.
      */
     @Test
     fun theZoomSurvivesARestoreThatArrivesBeforeTheImage() {
@@ -587,10 +508,8 @@ class ZoomImageViewTest {
     }
 
     /**
-     * And it survives a *second* rotation taken while the image is still loading. The dialog loads
-     * over the network, so that window is seconds long and is exactly when a phone gets turned; one
-     * round cannot see the bug, because the round that fails is the one that has to save a zoom it
-     * has not applied yet. What is saved is therefore the pending restore where there is one.
+     * And a second rotation while the image is still loading: what is saved then is the pending
+     * restore, not the (not yet applied) current state.
      */
     @Test
     fun theZoomSurvivesASecondRotationTakenWhileTheImageIsStillLoading() {
@@ -621,9 +540,8 @@ class ZoomImageViewTest {
     }
 
     /**
-     * Saved state is *input*, not an invariant of this process: the bytes were written by another
-     * process, possibly by another build. A number [ZoomState] cannot hold at all has to land
-     * inside the range, not throw out of `restoreHierarchyState`.
+     * Saved state is input from another process or build: an out-of-range value lands inside the
+     * range instead of throwing out of `restoreHierarchyState`.
      */
     @Test
     fun aSavedZoomOutsideWhatTheStateCanHoldIsCoercedRatherThanThrown() {
@@ -636,11 +554,7 @@ class ZoomImageViewTest {
         assertThat(view.state.scale).isEqualTo(5f) // this image's ceiling, applied on the way in
     }
 
-    /**
-     * And the scenario the coercion exists for: the ceiling is per image and can drop between
-     * releases, so a zoom saved by yesterday's build comes back at today's ceiling. Without it a
-     * user with a stored 5x crashed on the first rotation after the update.
-     */
+    /** The ceiling is per image and can drop between releases; a stored zoom is coerced to it. */
     @Test
     fun aSavedZoomAboveThisImagesCeilingComesBackAtTheCeiling() {
         val view = ZoomImageView(context).apply { id = SAVED_ID }
@@ -681,23 +595,13 @@ class ZoomImageViewTest {
         assertThat(view.state).isEqualTo(ZoomState(2f, 200f, 200f))
     }
 
-    /**
-     * A real save with one float overwritten. Going through the view's own save keeps every other
-     * key honest; "scale" is [ZoomImageView]'s private key, named here because the point of the
-     * test is precisely that the bytes on the other side of the boundary are not under our control.
-     */
+    /** A real save with the private "scale" key overwritten. */
     private fun savedStateWithScale(scale: Float): SparseArray<Parcelable> =
         savedStateOf(viewWith(200, 200)).also { (it.get(SAVED_ID) as Bundle).putFloat("scale", scale) }
 
     /**
-     * The other half of an id collision, and the common one: somebody else's *Bundle*. The
-     * "is it a Bundle" test alone lets it through, and what follows is silent -- there is no KEY_SUPER
-     * in it, so super is restored from null and the real super state is dropped, and then the
-     * default zoom is adopted as if it had been saved. One of our own keys is the marker that tells
-     * the two apart.
-     *
-     * What is left is the platform's own diagnostic for exactly this mistake, which is what any
-     * other View in the hierarchy would raise too: loud, and about the real cause.
+     * Somebody else's Bundle under our id: it has no KEY_SUPER, so without the marker check super
+     * would be restored from null. What remains is the platform's own diagnostic for the collision.
      */
     @Test
     fun aForeignBundleIsNotAdoptedAsOurOwnSavedState() {
@@ -716,15 +620,9 @@ class ZoomImageViewTest {
     }
 
     /**
-     * What survives a rotation, measured rather than asserted, because the honest answer is not
-     * "the zoom exactly and the position approximately" in the way that reads.
-     *
-     * [ZoomState.scale] is kept exactly, and it is a ratio, so it keeps *meaning* the same thing:
-     * "twice as close as the fit". It is not the number the matrix ends up with. The fit is decided
-     * by the limiting axis and the limiting axis changes with the rotation, so the image genuinely
-     * appears at a different size -- here the matrix scale goes from 2.0 to 2.67, a third *larger*,
-     * for a state that did not change. The invariant is about the *limiting* axis: the visible
-     * fraction along it stays 1 / scale, and which axis that is changes with the rotation.
+     * [ZoomState.scale] survives a rotation exactly as a ratio to the fit, but the fit's limiting
+     * axis changes, so the matrix scale goes from 2.0 to 2.67. The visible fraction along the
+     * limiting axis stays 1 / scale.
      */
     @Test
     fun aRotationKeepsTheZoomFactorButNotTheSizeOnScreen() {
@@ -741,18 +639,9 @@ class ZoomImageViewTest {
     }
 
     /**
-     * And the offset is kept in *pixels*, not in proportion, which is a weaker promise than the
-     * word "approximately" suggests. Measured here: a pan sitting halfway to the edge comes out of
-     * the rotation three quarters of the way there, because the pannable range shrank from 200 px
-     * to 133 and the offset did not shrink with it.
-     *
-     * Kept as it is, deliberately. Storing `tx / slack` instead is not the three-line change it
-     * looks like: a real rotation of the viewer goes through save/restore, not through
-     * [onSizeChanged], so the *saved format* would have to carry the normalised offset -- and the
-     * restore parks in `pendingRestore` before any geometry is known, so that parked value could no
-     * longer be a [ZoomState]. That is a change of shape, and it belongs with the viewer in task 8,
-     * which owns the restore conditions anyway. This test is here so the claim in the KDoc is a
-     * measurement and so the day someone does normalise it, it goes red on purpose.
+     * The offset is kept in pixels, not in proportion: a pan halfway to the edge ends up three
+     * quarters of the way after the pannable range shrinks from 200 px to 133. Normalising it would
+     * change the saved format, since restore parks the state before any geometry is known.
      */
     @Test
     fun aRotationKeepsTheOffsetInPixelsRatherThanInProportion() {

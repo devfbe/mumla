@@ -8,7 +8,6 @@
     <string name="audioInputVolume">Mikrofonlydstyrke</string>
     <string name="audioInputMethodSum">Lydinngangsmetode.</string>
     <string name="audioInputMethod">Overføringsmodus</string>
-    <string name="themeSum">Utseende for programmet.</string>
     <string name="forceTcp">Kun TCP</string>
     <string name="forceTcpSum">Skrur av UDP for kommunikasjon.</string>
     <string name="audioSampleRate">Samplingsrate for inngang</string>
@@ -66,7 +65,6 @@
     <string name="pttSettings">Innstillinger for trykk-for-å-snakke</string>
     <string name="pttKeySum">Maskinvaretast å overføre lyd.</string>
     <string name="audioSampleRateSum">Foretrukket takt for måling av lyd. Noen enheter støtter færre takter.</string>
-    <string name="preprocessor_enabled_sum">Undertrykker omgivelseslyd og normaliserer lydstyrke.</string>
     <string name="pttSoundSum">Spill lydeffekt når trykk-for-å-snakke trykkes.</string>
     <string name="certificateGenerateSum">Genererer et nytt selv-signert Mumla-sertifikat. Anbefales for nybegynnere.</string>
     <string name="shortTtsMessages">Forkortede tekst-til-tale -meldinger</string>
@@ -78,11 +76,8 @@
     <string name="inputQualitySum">Mål for inngangskvalitet i biter per sekund.</string>
     <string name="hotCornerSum">Trykk et hjørne for å overføre lyd i hele Android.</string>
     <string name="togglePtt">Trykk-for-å-snakke</string>
-    <string name="preprocessor_enabled">Inngangsforhåndsprosessering</string>
     <string name="pttButtonHeightSum">Endre vertikal høyde for knappen som brukes for å snakke.</string>
     <string name="hotCorner">Hjørne for trykk-for-å-snakke.</string>
-    <string name="disableOpus">Unngå Opus-kodek</string>
-    <string name="disableOpusSum">Skrur av Opus-støtte for Mumble 1.2.4-tjenere.</string>
     <string name="autoReconnectSum">Re-etablerer tilkoblingen til tjeneren når den går tapt.</string>
     <string name="halfDuplexSum">Forstummer annen avspilling under trykk-for-å-snakke for å unngå lyd-tilbakekobling/feedback.</string>
     <string name="togglePttSum">Skrur trykk-for-å-snakke på og av for hvert trykk.</string>
@@ -117,7 +112,6 @@
     <string name="vadFloorSum">Romnivået terskelen måles fra, i dB under full skala. Brukes kun når «Følg bakgrunnsstøyen» er av.</string>
     <string name="vadRecalibrate">Mål på nytt</string>
     <string name="vadRecalibrateSum">Glemmer det som er lært om rommet og stemmen din, og begynner å måle på nytt.</string>
-    <string name="vadRecalibrateDone">Måler på nytt.</string>
     <string name="vadOnset">Ignorer korte lyder</string>
     <string name="vadOnsetSum">Hvor lenge en lyd må vare før den regnes som tale. Lengre innstillinger holder enkeltstående tastetrykk ute; hvert trinn koster 10 ms av starten på et ord.</string>
     <string name="vadOnsetOff">Av (0 ms)</string>

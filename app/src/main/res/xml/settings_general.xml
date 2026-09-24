@@ -49,6 +49,13 @@
 
     <CheckBoxPreference
         android:defaultValue="true"
+        android:key="markdown_messages"
+        android:summary="@string/markdownMessagesSum"
+        android:title="@string/markdownMessages"
+        app:iconSpaceReserved="false" />
+
+    <CheckBoxPreference
+        android:defaultValue="true"
         android:key="load_images"
         android:summary="@string/loadImagesSum"
         android:title="@string/loadImages"
@@ -86,8 +93,7 @@
         android:key="controls_settings"
         android:title="@string/controls"
         app:iconSpaceReserved="false">
-        <!-- android:defaultValue must equal Settings.DEFAULT_BLUETOOTH_SCO, for the same
-             reason as the preference below it. -->
+        <!-- android:defaultValue must equal Settings.DEFAULT_BLUETOOTH_SCO. -->
         <CheckBoxPreference
             android:defaultValue="true"
             android:key="pref_bluetooth_sco"
@@ -95,9 +101,8 @@
             android:title="@string/bluetoothSco"
             app:iconSpaceReserved="false" />
 
-        <!-- android:defaultValue must equal Settings.DEFAULT_MEDIA_BUTTON_ACTION: the XML
-             default is only ever written by this screen, so every other reader falls back to
-             the constant. MediaButtonActionResourcesTest holds the two together. -->
+        <!-- android:defaultValue must equal Settings.DEFAULT_MEDIA_BUTTON_ACTION: only this
+             screen writes the XML default; every other reader falls back to the constant. -->
         <ListPreference
             android:defaultValue="auto"
             android:entries="@array/mediaButtonActionNames"

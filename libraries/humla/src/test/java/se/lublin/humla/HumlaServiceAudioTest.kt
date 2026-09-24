@@ -18,7 +18,6 @@
 package se.lublin.humla
 
 import android.media.MediaRecorder
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
@@ -27,22 +26,22 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.VadConfig
-import se.lublin.humla.audio.capture.VadConfigBundle
 import se.lublin.humla.exception.AudioInitializationException
+import se.lublin.humla.net.HumlaTCPMessageType
+import se.lublin.humla.net.UdpProtocol
+import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.AudioController
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
+import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Spec A2 and A8: the audio pipeline is built and torn down on `humla-audio-control`, never on the
- * main thread, and everything it cannot do reaches the chat log instead of a log file nobody reads.
- *
- * The teardown is the reason this matters on a phone: `AudioHandler.shutdown()` joins the capture
- * and playback threads, and the capture thread can be a full frame away from noticing. On the main
- * looper that is an ANR; the same call on the control thread is invisible.
+ * The audio pipeline is built and torn down on `humla-audio-control`, never on the main thread,
+ * and its failures reach the chat log. `AudioHandler.shutdown()` joins the capture and playback
+ * threads, which on the main looper would be an ANR.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceAudioTest {
@@ -70,24 +69,35 @@ class HumlaServiceAudioTest {
 
         audioUp(h)
         assertThat(h.audioFactory.createThreads.single()).isEqualTo(AudioController.THREAD_NAME)
-        assertThat(h.audioFactory.sessionParams[0].self.getName()).isEqualTo("me")
+        assertThat(h.audioFactory.sessionParams[0].self.name).isEqualTo("me")
         assertThat(h.audioFactory.sessionParams[0].maxBandwidth).isEqualTo(72_000)
-        assertThat(h.service.getCurrentBandwidth()).isEqualTo(12_345)
+        assertThat(h.service.currentBandwidth).isEqualTo(12_345)
+    }
+
+    /** The voice format the server's Version picked reaches the pipeline, before any voice is sent. */
+    @Test
+    fun thePipelineSendsInTheFormatTheConnectionNegotiated() {
+        val h = start()
+        h.service.connect()
+        val tcp = h.openSocket(0)
+        val version = Mumble.Version.newBuilder().setVersionV2(MumbleVersion.v2(1, 5, 0)).build()
+        tcp.simulateMessage(HumlaTCPMessageType.Version, version.toByteArray())
+        h.synchronize(tcp)
+
+        audioUp(h)
+        assertThat(h.service.getConnection()!!.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
+        assertThat(h.audioFactory.sessionParams[0].udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
     }
 
     /**
-     * The first pipeline is built from the settings and the input mode **in force**, not from
-     * defaults and not from the activity mode the service happens to start with. Each of those was
-     * a surviving mutation of its own: the config argument (E12), the input mode (S35) and the
-     * half-duplex flag, which only resolves against the transmit mode the config carries (G23).
+     * The first pipeline is built from the settings and the input mode in force, not from defaults.
+     * Half duplex resolves against the transmit mode the config carries.
      */
     @Test
     fun theFirstPipelineIsBuiltFromTheSettingsInForce() {
         val h = start()
         h.configure {
-            putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK)
-            putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true)
-            putInt(HumlaService.EXTRAS_INPUT_QUALITY, 24_000)
+            copy(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK, halfDuplex = true, inputQuality = 24_000)
         }
 
         h.connectAndSynchronize()
@@ -108,17 +118,11 @@ class HumlaServiceAudioTest {
         ).isTrue()
     }
 
-    private fun inputModeOf(h: HumlaServiceHarness): Any {
-        val f = HumlaService::class.java.getDeclaredField("mInputMode")
-        f.isAccessible = true
-        return f.get(h.service)
-    }
+    private fun inputModeOf(h: HumlaServiceHarness): Any = h.service.mInputMode
 
     /**
-     * A voice target set while the socket is up but the session is not yet synchronized reaches
-     * the pipeline that is built for that session. This is the only window in which
-     * `mVoiceTargetId` can be non-zero at build time -- `startSession` clears it -- so without it
-     * the argument could be a constant zero and no test would know (measured, S34).
+     * A voice target set while the socket is up but before synchronization reaches the pipeline
+     * built for that session; this is the only window where it is non-zero at build time.
      */
     @Test
     fun aVoiceTargetSetWhileConnectingReachesTheFirstPipeline() {
@@ -126,40 +130,39 @@ class HumlaServiceAudioTest {
         h.service.connect()
         val tcp = h.openSocket(0)
 
-        h.service.setVoiceTargetId(5)
+        h.service.voiceTargetId = 5
         h.synchronize(tcp)
 
         audioUp(h)
         assertThat(h.audioFactory.sessionParams[0].targetId).isEqualTo(5.toByte())
     }
 
-    /** And the next session starts clean: the slots the old one held are not carried over (E6/E7). */
+    /** And the next session starts clean: the slots the old one held are not carried over. */
     @Test
     fun aNewSessionStartsWithoutThePreviousVoiceTarget() {
         val h = start()
         h.service.connect()
         val tcp = h.openSocket(0)
-        h.service.setVoiceTargetId(5)
+        h.service.voiceTargetId = 5
         h.synchronize(tcp)
         audioUp(h)
 
         h.service.disconnect()
         h.mainLooper.idle()
-        // Set *after* the disconnect cleared it, so what has to clear it again is startSession's
-        // own reset and not the one on the disconnect path (measured, E6: with only the disconnect
-        // path the target survives into the next session).
-        h.service.setVoiceTargetId(9)
+        // Set after the disconnect cleared it, so what must clear it again is startSession's own
+        // reset.
+        h.service.voiceTargetId = 9
         h.service.connect()
         h.synchronize(h.openSocket(1))
 
         audioUp(h, count = 2)
-        assertThat(h.service.getVoiceTargetId()).isEqualTo(0.toByte())
+        assertThat(h.service.voiceTargetId).isEqualTo(0.toByte())
         assertThat(h.audioFactory.sessionParams[1].targetId).isEqualTo(0.toByte())
     }
 
     /**
-     * Spec A8's other half: a ServerSync whose session id names no user leaves the session up and
-     * says so, rather than building a pipeline with nothing to stamp packets with (G32).
+     * A ServerSync whose session id names no user leaves the session up and says so, rather than
+     * building a pipeline with nothing to stamp packets with.
      */
     @Test
     fun aServerSyncWithoutASessionUserSaysSoAndBuildsNoPipeline() {
@@ -175,14 +178,14 @@ class HumlaServiceAudioTest {
         )
         awaitUntil(description = "the sync is reported") {
             h.mainLooper.idle()
-            h.service.getConnectionState() == HumlaService.ConnectionState.CONNECTED
+            h.service.connectionState == HumlaService.ConnectionState.CONNECTED
         }
 
         assertThat(h.warnings).contains(h.service.getString(R.string.no_session_user))
         assertThat(h.audioFactory.created).isEmpty()
     }
 
-    /** Spec section 6 regression test: "no main-thread join in disconnect". */
+    /** No main-thread join in disconnect. */
     @Test
     fun disconnectDoesNotBlockTheMainThreadWhileAudioTearsDown() {
         val h = start()
@@ -227,14 +230,12 @@ class HumlaServiceAudioTest {
         )
 
         awaitUntil(description = "pipeline stopped") { h.audioFactory.created[0].shutdownCalls.get() == 1 }
-        assertThat(h.service.getCurrentBandwidth()).isEqualTo(-1)
+        assertThat(h.service.currentBandwidth).isEqualTo(-1)
     }
 
     /**
-     * `onDestroy` must stop the control thread, or `humla-audio-control` outlives the service for
-     * the rest of the process. Reached by reflection and asserted on the thread **object** rather
-     * than on a name filter over `Thread.getAllStackTraces` (task 7 contract): a library that
-     * renames threads turns a name filter into a leak test that passes by finding nothing.
+     * `onDestroy` must stop the control thread. Asserted on the thread object rather than by name,
+     * because a name filter over all threads passes if the thread is renamed.
      */
     @Test
     fun destroyingTheServiceStopsTheAudioControlThread() {
@@ -250,17 +251,11 @@ class HumlaServiceAudioTest {
         awaitUntil(description = "the control thread ended") { !controller.thread.isAlive }
     }
 
-    private fun controllerOf(h: HumlaServiceHarness): AudioController {
-        val f = HumlaService::class.java.getDeclaredField("mAudioController")
-        f.isAccessible = true
-        return f.get(h.service) as AudioController
-    }
+    private fun controllerOf(h: HumlaServiceHarness): AudioController = h.service.mAudioController
 
     /**
-     * A disconnect that lands between the server's sync and its delivery on the main looper: the
-     * session is synchronized as far as the protocol thread is concerned, and dead by the time
-     * `onConnectionSynchronized` runs. No pipeline is built for it -- a microphone opened for a
-     * connection that is already gone is the one thing worse than none (G3).
+     * A disconnect between the server's sync and its delivery on the main looper: no pipeline is
+     * built, since a microphone opened for a dead connection is worse than none.
      */
     @Test
     fun aDisconnectThatBeatsTheSyncCallbackBuildsNoPipeline() {
@@ -273,11 +268,11 @@ class HumlaServiceAudioTest {
         h.mainLooper.idle()
 
         assertThat(h.audioFactory.created).isEmpty()
-        assertThat(h.service.getConnectionState())
+        assertThat(h.service.connectionState)
             .isNotEqualTo(HumlaService.ConnectionState.CONNECTED)
     }
 
-    // ---------------------------------------------------------------- spec A8: problems are visible
+    // ---------------------------------------------------------------- problems are visible
 
     @Test
     fun audioCreationFailureIsLoggedAsAWarning() {
@@ -291,7 +286,7 @@ class HumlaServiceAudioTest {
         }
 
         // A microphone that cannot open is not a reason to drop the session.
-        assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.CONNECTED)
+        assertThat(h.service.connectionState).isEqualTo(HumlaService.ConnectionState.CONNECTED)
     }
 
     @Test
@@ -323,16 +318,12 @@ class HumlaServiceAudioTest {
     // ---------------------------------------------------------------- the settings that rebuild
 
     @Test
-    fun changingAnAudioExtraWhileConnectedRebuildsThePipeline() {
+    fun changingAnAudioSettingWhileConnectedRebuildsThePipeline() {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
 
-        h.service.configureExtras(
-            Bundle().apply {
-                putInt(HumlaService.EXTRAS_AUDIO_SOURCE, MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-            },
-        )
+        h.configure { copy(audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION) }
 
         audioUp(h, count = 2)
         assertThat(h.audioFactory.configs[1].audioSource)
@@ -343,83 +334,53 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * The rebuild is decided by the *value*, not by the key: re-writing a setting the pipeline
-     * already has costs a measured 110 ms with the microphone dead in the middle of it. This
-     * replaces `HumlaService.requiresAudioRebuild`, which answered by key and so rebuilt for a
-     * write that changed nothing.
+     * The rebuild is decided by the value: re-applying an unchanged setting must not cost a
+     * rebuild with the microphone dead in the middle.
      */
     @Test
-    fun anExtraWrittenWithTheSameValueDoesNotRebuildThePipeline() {
+    fun aSettingAppliedWithTheSameValueDoesNotRebuildThePipeline() {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
         val sourceInUse = h.audioFactory.configs[0].audioSource
 
-        h.service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_AUDIO_SOURCE, sourceInUse) })
-        h.mainLooper.idle()
-        awaitUntil(description = "the reconfigure was processed") { h.service.getCurrentBandwidth() == 12_345 }
+        h.configure { copy(audioSource = sourceInUse) }
+        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == 12_345 }
 
         assertThat(h.audioFactory.created).hasSize(1)
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
     }
 
     /**
-     * The two extras that write into objects a rebuild keeps - the detection threshold and the
-     * whole VAD configuration - reach a live [se.lublin.humla.audio.inputmode.ActivityInputMode]
-     * and must not tear the capture chain down. Dragging a slider used to rebuild per step.
+     * The VAD configuration reaches the live [se.lublin.humla.audio.inputmode.ActivityInputMode]
+     * without tearing down the capture chain.
      */
     @Test
-    fun aLiveExtraDoesNotRebuildThePipeline() {
+    fun aLiveSettingDoesNotRebuildThePipeline() {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
 
-        h.service.configureExtras(Bundle().apply { putFloat(HumlaService.EXTRAS_DETECTION_THRESHOLD, 0.25f) })
-        h.service.configureExtras(
-            Bundle().apply {
-                putBundle(
-                    HumlaService.EXTRAS_VAD_CONFIG,
-                    VadConfigBundle.toBundle(VadConfig.amplitude(0.8f, 120L)),
-                )
-            },
-        )
-        h.mainLooper.idle()
-        awaitUntil(description = "the reconfigure was processed") { h.service.getCurrentBandwidth() == 12_345 }
+        h.configure { copy(vadConfig = VadConfig.amplitude(0.8f, 120L)) }
+        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == 12_345 }
 
         assertThat(h.audioFactory.created).hasSize(1)
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
     }
 
-    /**
-     * Spec A7, and the repair of an old defect A9a pinned: `EXTRAS_HALF_DUPLEX` used to read
-     * `EXTRAS_TRANSMIT_MODE` out of **its own bundle**, which answers 0 (voice activity) when the
-     * bundle does not carry it - so a settings write that changed only half duplex always resolved
-     * to false. The rule now reads the mode that is in force.
-     */
+    /** Half duplex is resolved against the transmit mode in force. */
     @Test
     fun halfDuplexOnlyAppliesToPushToTalk() {
         val h = start()
 
-        h.service.configureExtras(
-            Bundle().apply {
-                putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true)
-                putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_VOICE_ACTIVITY)
-            },
-        )
+        h.configure { copy(halfDuplex = true, transmitMode = Constants.TRANSMIT_VOICE_ACTIVITY) }
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
 
-        // Switching the transmit mode alone re-evaluates it; the caller does not resend the flag.
-        h.service.configureExtras(
-            Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK) },
-        )
+        h.configure { copy(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK) }
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isTrue()
 
-        // And a half-duplex write that carries no mode no longer resolves to false by accident.
-        h.service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true) })
-        assertThat(h.service.getAudioConfigForTest().halfDuplex).isTrue()
-
-        // Both directions: the flag is what the caller wrote, not a constant (G23).
-        h.service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, false) })
+        // Both directions: the flag is what the caller wrote, not a constant.
+        h.configure { copy(halfDuplex = false) }
         assertThat(h.service.getAudioConfigForTest().halfDuplexRequested).isFalse()
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
     }
@@ -427,10 +388,8 @@ class HumlaServiceAudioTest {
     // ---------------------------------------------------------------- voice targets
 
     /**
-     * The target reaches the running pipeline **and** the session behind it, so the next rebuild
-     * starts out targeting it instead of transmitting to the channel until something repeats the
-     * call. Setting one while disconnected used to be a NullPointerException (A9a pinned it); it
-     * is now a no-op, and a connect clears the target anyway - the whisper slots go with it.
+     * The target reaches the running pipeline and the session behind it, so the next rebuild keeps
+     * targeting it. A connect clears the target, and the whisper slots with it.
      */
     @Test
     fun theVoiceTargetReachesTheRunningPipelineAndSurvivesARebuild() {
@@ -438,18 +397,14 @@ class HumlaServiceAudioTest {
         h.connectAndSynchronize()
         audioUp(h)
 
-        h.service.setVoiceTargetId(0x1F)
+        h.service.voiceTargetId = 0x1F
 
-        assertThat(h.service.getVoiceTargetId()).isEqualTo(0x1F.toByte())
+        assertThat(h.service.voiceTargetId).isEqualTo(0x1F.toByte())
         awaitUntil(description = "the target reaches the pipeline") {
             h.audioFactory.created[0].targetIds.contains(0x1F.toByte())
         }
 
-        h.service.configureExtras(
-            Bundle().apply {
-                putInt(HumlaService.EXTRAS_AUDIO_SOURCE, MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-            },
-        )
+        h.configure { copy(audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION) }
 
         audioUp(h, count = 2)
         assertThat(h.audioFactory.sessionParams[1].targetId).isEqualTo(0x1F.toByte())
@@ -460,23 +415,23 @@ class HumlaServiceAudioTest {
     fun aVoiceTargetSetWhileDisconnectedIsHarmless() {
         val h = start()
 
-        h.service.setVoiceTargetId(3)
+        h.service.voiceTargetId = 3
 
-        assertThat(h.service.getVoiceTargetId()).isEqualTo(3.toByte())
-        assertThat(h.service.getVoiceTargetMode())
+        assertThat(h.service.voiceTargetId).isEqualTo(3.toByte())
+        assertThat(h.service.voiceTargetMode)
             .isEqualTo(se.lublin.humla.util.VoiceTargetMode.WHISPER)
     }
 
-    /** The five-bit guard, repaired: `> 0` let a negative byte through, `!= 0` does not. */
+    /** A negative byte does not pass the five-bit guard. */
     @Test
     fun aVoiceTargetIdThatDoesNotFitInFiveBitsIsRefused() {
         val h = start()
 
         for (id in listOf(0x20, 0x80, 0xFF)) {
             org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
-                h.service.setVoiceTargetId(id.toByte())
+                h.service.voiceTargetId = id.toByte()
             }
         }
-        assertThat(h.service.getVoiceTargetId()).isEqualTo(0.toByte())
+        assertThat(h.service.voiceTargetId).isEqualTo(0.toByte())
     }
 }

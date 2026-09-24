@@ -17,19 +17,21 @@
 
 package se.lublin.mumla.preference
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.text.InputType
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.launch
 import se.lublin.humla.net.Pkcs12Certificates
 import se.lublin.mumla.R
-import se.lublin.mumla.db.MumlaDatabase
-import se.lublin.mumla.db.MumlaSQLiteDatabase
+import se.lublin.mumla.db.MumlaRepository
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.FileNotFoundException
@@ -40,36 +42,23 @@ import java.security.NoSuchAlgorithmException
 import java.security.cert.CertificateException
 import java.util.UUID
 
-/**
- * Created by andrew on 11/01/16.
- */
 class CertificateImportActivity : AppCompatActivity() {
+
+    private val picker = registerForActivityResult(ActivityResultContracts.GetContent(), ::onFilePicked)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val fileIntent = Intent(Intent.ACTION_GET_CONTENT)
-        fileIntent.setType("*/*")
-        fileIntent.addCategory(Intent.CATEGORY_OPENABLE)
-        @Suppress("DEPRECATION")
-        startActivityForResult(fileIntent, REQUEST_FILE)
+        enableEdgeToEdge()
+        // A recreated activity gets the pending pick's result without asking again.
+        if (savedInstanceState == null) picker.launch("*/*")
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        @Suppress("DEPRECATION")
-        super.onActivityResult(requestCode, resultCode, data)
+    private fun onFilePicked(uri: Uri?) {
+        if (uri == null) finish() else import(uri)
+    }
 
-        if (requestCode != REQUEST_FILE) return
-
-        if (resultCode == RESULT_CANCELED) {
-            finish()
-            return
-        }
-
-        val uri: Uri = data!!.data!!
-        // Read once and closed right here: the stream is a descriptor the picker lent us, and a
-        // password retry needs the bytes again anyway -- the stream itself would be spent.
+    private fun import(uri: Uri) {
+        // Read once: the picker's stream is spent after one read, and a password retry needs the bytes.
         val pkcs12: ByteArray = try {
             contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         } catch (e: FileNotFoundException) {
@@ -92,31 +81,19 @@ class CertificateImportActivity : AppCompatActivity() {
     private fun storeKeystore(password: CharArray, fileName: String, pkcs12: ByteArray) {
         val keyStore: KeyStore = try {
             Pkcs12Certificates.load(ByteArrayInputStream(pkcs12), password)
-        } catch (e: CertificateException) {
-            // A problem occurred when reading the stream; interpret this as a password being
-            // required. Request a password from the user and reattempt decryption.
-            // FIXME(acomminos): examine p12 file's SafeBags to determine the presence of a password
-            val passwordField = EditText(this)
-            passwordField.setHint(R.string.password)
-            passwordField.inputType = InputType.TYPE_TEXT_VARIATION_PASSWORD
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.decrypt_certificate)
-                .setView(passwordField)
-                .setOnCancelListener { finish() }
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    storeKeystore(passwordField.text.toString().toCharArray(), fileName, pkcs12)
+        } catch (e: Exception) {
+            when (e) {
+                is CertificateException, is KeyStoreException, is IOException, is NoSuchAlgorithmException -> {
+                    // A well-formed PKCS#12 file that does not open is taken to need a (different) password.
+                    if (Pkcs12Certificates.isPkcs12(pkcs12)) {
+                        askForPassword(fileName, pkcs12)
+                    } else {
+                        invalidCertificate(e)
+                    }
+                    return
                 }
-                .show()
-            return
-        } catch (e: KeyStoreException) {
-            invalidCertificate(e)
-            return
-        } catch (e: IOException) {
-            invalidCertificate(e)
-            return
-        } catch (e: NoSuchAlgorithmException) {
-            invalidCertificate(e)
-            return
+                else -> throw e
+            }
         }
 
         val output = ByteArrayOutputStream()
@@ -134,24 +111,33 @@ class CertificateImportActivity : AppCompatActivity() {
             }
         }
 
-        val database: MumlaDatabase = MumlaSQLiteDatabase(this)
-        try {
-            database.addCertificate(fileName, output.toByteArray())
-        } finally {
-            database.close()
+        val pkcs12Out = output.toByteArray()
+        val success = getString(R.string.certificate_import_success, fileName)
+        lifecycleScope.launch {
+            MumlaRepository.get(this@CertificateImportActivity).io { addCertificate(fileName, pkcs12Out) }
+            Toast.makeText(this@CertificateImportActivity, success, Toast.LENGTH_LONG).show()
+            finish()
         }
+    }
 
-        Toast.makeText(this, getString(R.string.certificate_import_success, fileName), Toast.LENGTH_LONG).show()
-        finish()
+    private fun askForPassword(fileName: String, pkcs12: ByteArray) {
+        val passwordField = EditText(this)
+        passwordField.setHint(R.string.password)
+        passwordField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.decrypt_certificate)
+            .setView(passwordField)
+            .setOnCancelListener { finish() }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> finish() }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                storeKeystore(passwordField.text.toString().toCharArray(), fileName, pkcs12)
+            }
+            .show()
     }
 
     private fun invalidCertificate(e: Exception) {
         e.printStackTrace()
         Toast.makeText(this, R.string.invalid_certificate, Toast.LENGTH_LONG).show()
         finish()
-    }
-
-    companion object {
-        const val REQUEST_FILE = 0
     }
 }

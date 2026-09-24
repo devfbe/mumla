@@ -36,15 +36,12 @@ import org.robolectric.shadows.ShadowAudioManager
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * The pass-through to `AudioManager`'s communication-device API, and nothing else. The rule of
- * spec A4 - *the first* TYPE_BLUETOOTH_SCO device - is verified in [AudioRouterTest] against a fake
- * that models distinct ids, because Robolectric's `AudioDeviceInfoBuilder` exposes `newBuilder()`,
- * `setType(int)`, `setProfiles(...)` and `build()` and no `setId()`, so two SCO devices built here
- * cannot be told apart.
+ * The pass-through to `AudioManager`'s communication-device API. Device selection rules are tested
+ * in [AudioRouterTest] against a fake, because Robolectric's `AudioDeviceInfoBuilder` has no
+ * `setId()`, so two SCO devices built here cannot be told apart.
  *
- * What this class pins is the seam: every available device with its type and name, `select` on an id that
- * is not in `availableCommunicationDevices` refusing, a registered listener really being invoked
- * and really stopping, and the SecurityException wrapper that spec 4.1 requires around the calls.
+ * This pins the seam: device listing, `select` refusing an unavailable id, listener registration
+ * and removal, and the SecurityException wrapper around the calls.
  */
 @RunWith(RobolectricTestRunner::class)
 class AndroidCommunicationDevicesTest {
@@ -97,8 +94,7 @@ class AndroidCommunicationDevicesTest {
             AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
             AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
         ).inOrder()
-        // Robolectric names every device it builds after itself, so this reads the name through
-        // rather than proving one headset from another; that each id keeps its own is the fake's.
+        // Robolectric names every device after itself, so this only checks the name is passed through.
         assertThat(listed.map { it.name }).containsExactly(
             speaker.productName.toString(),
             earpiece.productName.toString(),
@@ -165,12 +161,8 @@ class AndroidCommunicationDevicesTest {
     }
 
     /**
-     * The same refusal with a device present, which is the corner that tells "the device with this
-     * id" apart from "the first device". Found by mutation: with only the empty-list case above,
-     * dropping the `it.id == id` test from the lookup left all 294 tests green, because an empty
-     * list answers null either way. `ShadowAudioManager.setCommunicationDevice` does not check
-     * availability, so under that mutation this call routes the user to a device nobody asked for
-     * and returns true.
+     * Refusal with a device present, which tells "the device with this id" apart from "the first
+     * device". `ShadowAudioManager.setCommunicationDevice` does not check availability itself.
      */
     @Test
     fun selectingAnIdThatIsNotTheAvailableOnesFails() {
@@ -183,14 +175,10 @@ class AndroidCommunicationDevicesTest {
     }
 
     /**
-     * The platform's own refusal, which is a different answer from "there is no such device" and
-     * was the last constant left in the double: `ShadowAudioManager.setCommunicationDevice` returns
-     * true for anything unless the route is locked, so without `lockCommunicationDevice` this seam
-     * could only ever be asked a question it always answers yes to. Under the lock the shadow
-     * refuses and stores nothing, which is what an OEM that will not hand over the route does.
+     * The platform's own refusal. `ShadowAudioManager.setCommunicationDevice` returns true unless
+     * the route is locked, so `lockCommunicationDevice` stands in for an OEM refusing the route.
      *
-     * The lock is a **static** field of the shadow, so it is put back in a `finally`; leaving it
-     * set would refuse every selection in every test that runs afterwards in this JVM.
+     * The lock is a **static** field of the shadow, so it is reset in a `finally`.
      */
     @Test
     fun aPlatformThatRefusesTheSelectionIsReportedAsARefusal() {
@@ -210,12 +198,9 @@ class AndroidCommunicationDevicesTest {
     }
 
     /**
-     * The platform event, driven where the platform raises it. `ShadowAudioManager.setCommunication
-     * Device` stores the device and does **not** call the registered listeners - disassembled to
-     * check, it is a field write and a return - so driving the notification through `select()`
-     * would assert nothing about the registration. `callOnCommunicationDeviceChangedListeners` is
-     * the shadow's own raise, and it dispatches through the Executor we hand to
-     * `addOnCommunicationDeviceChangedListener`, which is why the main looper has to be idled.
+     * `ShadowAudioManager.setCommunicationDevice` does **not** call the registered listeners, so the
+     * event is raised with `callOnCommunicationDeviceChangedListeners`, which dispatches through
+     * the Executor we registered with - hence the main looper has to be idled.
      */
     @Test
     fun aRegisteredListenerIsInvokedOnTheMainLooperAndNotAfterItIsRemoved() {
@@ -223,8 +208,7 @@ class AndroidCommunicationDevicesTest {
         shadowOf(audioManager).setAvailableCommunicationDevices(listOf(device))
         val invocations = AtomicInteger()
         devices.setOnChangedListener { invocations.incrementAndGet() }
-        // The device callback reports the devices already present on registration, as the
-        // platform does; that one is not what this test is about.
+        // The device callback reports the devices already present on registration; flush that.
         shadowOf(Looper.getMainLooper()).idle()
         val registered = invocations.get()
 
@@ -241,11 +225,9 @@ class AndroidCommunicationDevicesTest {
     }
 
     /**
-     * Spec 4.1's ruling on `BLUETOOTH_CONNECT`: route on the wish alone, and wrap the call so an
-     * OEM that enforces a permission the SDK's own annotation database does not record cannot take
-     * the process down. Every call into `AudioManager` is wrapped, the value each one falls back to
-     * is the one that reads as "no headset", and the denial is reported **once per instance** -
-     * one instance being one service life - so the chat log carries the reason and not a stream.
+     * Route without checking `BLUETOOTH_CONNECT`, but wrap every call so an OEM that enforces it
+     * anyway cannot crash the process. Each call falls back to the "no headset" value, and the
+     * denial is reported **once per instance** (one service life).
      */
     @Test
     @Config(shadows = [DenyingAudioManagerShadow::class])

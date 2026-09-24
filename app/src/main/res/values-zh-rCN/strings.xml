@@ -65,7 +65,6 @@
     <string name="server_port">端口</string>
     <string name="server_host">地址</string>
     <string name="server_label">名称</string>
-    <string name="connecting">正在连接</string>
     <string name="connecting_to_server">正在连接至 %s…</string>
     <string name="ptt">按键发言</string>
     <string name="mute">开关麦克风</string>
@@ -89,7 +88,6 @@
     <string name="generateCertProgress">正在生成证书…</string>
     <string name="search">搜索</string>
     <string name="searchHint">搜索频道与用户</string>
-    <string name="bluetooth">蓝牙</string>
     <string name="quickConnect">快速连接</string>
     <string name="connect">连接</string>
     <string name="connectToServer">连接服务器</string>
@@ -102,7 +100,6 @@
     <string name="offline">离线</string>
     <string name="clearChat">清除聊天记录</string>
     <string name="connected">已连接</string>
-    <string name="mumlaConnected">Mumla 已连接</string>
     <string name="mumlaConnecting">Mumla 正在连接…</string>
     <string name="mumlaDisconnected">Mumla 已断开连接</string>
     <string name="channel">频道</string>
@@ -157,7 +154,6 @@
     <string name="attempting_reconnect">错误：%s。\n\n正在重新连接…</string>
     <string name="change_requires_reconnect">重新连接以使用新设置。</string>
     <string name="no_certificate">无证书</string>
-    <string name="certificates">证书</string>
     <string name="decrypt_certificate">解密证书</string>
     <string name="password">密码</string>
     <string name="invalid_certificate">无法加载无效的证书。</string>
@@ -174,7 +170,6 @@
     <string name="shout_target">向 %s 呼喊</string>
     <string name="shout_configure">配置语音目标</string>
     <string name="grant_perm_microphone">请授予麦克风权限。</string>
-    <string name="grant_perm_storage">请授予存储权限。</string>
     <string name="grant_perm_draw_over_apps">请授予在其他应用上层显示权限。</string>
     <string name="orbot_not_installed">未安装 Orbot 应用。将不会使用 Tor。</string>
     <string name="orbot_tor_failed">无法连接到端口为 %d 的本地 Tor 代理服务器（SOCKS）。\n\n请确认 Orbot 已运行。</string>
@@ -182,9 +177,6 @@
     <string name="donation_thanks">感谢您的无私捐赠。</string>
     <plurals name="search_channel_users">
         <item quantity="other">%d 名用户</item>
-    </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="other">%d 条新消息</item>
     </plurals>
     <string name="image_confirm_send">发送此图片吗？</string>
     <string name="grant_perm_notifications">请授予发送通知权限。</string>
@@ -227,4 +219,34 @@
     <string name="audio_device_bluetooth">蓝牙耳机</string>
     <string name="audio_device_other">音频设备</string>
     <string name="echo_cancellation">回声消除</string>
+    <string name="chat_notify_muted_deafened">已关闭麦克风和扬声器。</string>
+    <string name="chat_notify_muted">已关闭麦克风。</string>
+    <string name="chat_notify_unmuted">已打开麦克风。</string>
+    <string name="chat_notify_now_muted_deafened">%s 已关闭麦克风和扬声器。</string>
+    <string name="chat_notify_now_muted">%s 已关闭麦克风。</string>
+    <string name="chat_notify_now_unmuted">%s 已打开麦克风。</string>
+    <string name="chat_notify_connected">%s 已连接。</string>
+    <string name="chat_notify_disconnected">%s 已断开连接。</string>
+    <string name="chat_notify_kick_ban_self">您被 %1$s 从服务器踢出并封禁：%2$s。</string>
+    <string name="chat_notify_kick_self">您被 %1$s 从服务器踢出：%2$s。</string>
+    <string name="chat_notify_kick_ban">%3$s 被 %1$s 从服务器踢出并封禁：%2$s。</string>
+    <string name="chat_notify_kick">%3$s 被 %1$s 从服务器踢出：%2$s。</string>
+    <string name="chat_notify_self_recording_started">已开始录音</string>
+    <string name="chat_notify_self_recording_stopped">已停止录音</string>
+    <string name="chat_notify_user_recording_started">%s 已开始录音。</string>
+    <string name="chat_notify_user_recording_stopped">%s 已停止录音。</string>
+    <string name="chat_notify_user_joined_channel">%s 进入频道。</string>
+    <string name="chat_notify_user_left_channel">%1$s 移动到 %2$s。</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s 被 %3$s 从 %2$s 移动至此。</string>
+    <string name="chat_notify_user_left_channel_by">%1$s 被 %3$s 移动至 %2$s。</string>
+    <string name="deny_reason_channel_name">操作被拒绝：频道名无效。</string>
+    <string name="deny_reason_text_too_long">操作被拒绝：文本消息过长。</string>
+    <string name="deny_reason_no_operation_temp">操作被拒绝：无法在临时频道进行此操作。</string>
+    <string name="deny_reason_no_certificate">您需要有证书才能进行此操作。</string>
+    <string name="deny_reason_invalid_username">用户名无效。</string>
+    <string name="deny_reason_channel_full">频道已满。</string>
+    <string name="deny_reason_channel_nesting">频道达到嵌套层数限制。</string>
+    <string name="deny_reason_other">原因：%s</string>
+    <string name="server">服务器</string>
+    <string name="the_server">服务器</string>
 </resources>

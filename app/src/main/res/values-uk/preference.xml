@@ -36,7 +36,6 @@
     <string name="pttKey">Кнопка Push-to-talk</string>
     <string name="pttKeySum">Апаратна кнопка для передачі аудіо.</string>
     <string name="hotCorner">Кут для Push-to-talk</string>
-    <string name="disableOpusSum">Вимкнути підтримку кодека Opus для серверів Mumble 1.2.4.</string>
     <string name="hidePtt">Приховати кнопку push-to-talk</string>
     <string name="hidePttSum">Корисно, якщо ви використовуєте активний кут або апаратну кнопку.</string>
     <string name="useTts">Текст у мову</string>
@@ -51,7 +50,6 @@
     <string name="pttButtonHeight">Висота кнопки Натисни-щоб-говорити</string>
     <string name="general">Загальні</string>
     <string name="appearance">Вигляд</string>
-    <string name="themeSum">Змінити зовнішній вигляд додатку.</string>
     <string name="theme">Тема</string>
     <string name="forceTcpSum">Вимикає передачу через протокол UDP.</string>
     <string name="audio">Аудіо</string>
@@ -64,7 +62,6 @@
     <string name="certificateGenerateSum">Створює новий самопідписаний сертифікат Mumla. Рекомендовано новачкам.</string>
     <string name="pttSettings">Налаштування Натисни-щоб-говорити</string>
     <string name="voiceActivitySettings">Налаштування порогу гучності</string>
-    <string name="disableOpus">Вимкнути кодек Opus</string>
     <string name="pressKeyInfo">Для використання кнопки додаток має бути відкритим (через обмеження Android).</string>
     <string name="loadImagesSum">Завантажувати і показувати зображення в чаті.</string>
     <string name="loadImages">Зовнішні зображення</string>
@@ -77,8 +74,6 @@
     <string name="halfDuplexSum">Приглушує інші звуки під час передачі, щоб уникнути звукових петель та ехо.</string>
     <string name="pttSound">Звук \"Натисни-щоб-говорити\"</string>
     <string name="pttSoundSum">Відтворення звукового ефекту при натисканні кнопки \"Натисни-щоб-говорити\".</string>
-    <string name="preprocessor_enabled">Попередня обробка вхідного сигналу</string>
-    <string name="preprocessor_enabled_sum">Придушення фонового шуму і нормалізація гучності.</string>
     <string name="audio_per_packet">Звук на пакет</string>
     <string name="audio_per_packet_sum">Довжина аудіо в голосовому пакеті.</string>
     <string name="stay_awake">Тримати дисплей увімкненим</string>
@@ -117,7 +112,6 @@
     <string name="vadFloorSum">Рівень кімнати, від якого відраховується поріг, у дБ нижче повної шкали. Діє лише тоді, коли «Стежити за фоновим шумом» вимкнено.</string>
     <string name="vadRecalibrate">Виміряти знову</string>
     <string name="vadRecalibrateSum">Забуває все, що було виміряно про кімнату та ваш голос, і починає вимірювання спочатку.</string>
-    <string name="vadRecalibrateDone">Вимірювання розпочато знову.</string>
     <string name="vadOnset">Ігнорувати короткі шуми</string>
     <string name="vadOnsetSum">Скільки має тривати звук, щоб вважатися мовленням. Довші значення відсікають поодинокі клацання клавіатури; кожен крок коштує 10 мс початку слова.</string>
     <string name="vadOnsetOff">Викл (0 мс)</string>

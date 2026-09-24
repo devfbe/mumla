@@ -24,7 +24,7 @@ import org.junit.Test
 import java.lang.reflect.Modifier
 import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
 
-/** Spec B3: the WebRTC APM as one capture stage, with the playback thread's reverse stream. */
+/** The WebRTC APM as a capture stage that also takes the playback reverse stream. */
 class WebRtcApmPreprocessorTest {
     private companion object {
         const val FRAME = 480
@@ -33,15 +33,9 @@ class WebRtcApmPreprocessorTest {
         const val TICKS = 10
 
         /**
-         * Two configs, not one, and these two rather than any two.
-         *
-         * `FakeWebRtcApmApi` reassembles the six flat parameters of `humla_apm_create` back into a
-         * [WebRtcApmConfig], so comparing one config catches a swapped pair of booleans **only
-         * where the two differ**. Over four booleans there are six pairs and no single config can
-         * separate all of them. These two do: for every pair, at least one of them holds different
-         * values -- (ec,ns) and (ec,hp) and (ns,agc) and (agc,hp) in [ONE], (ec,agc) and (ns,hp) in
-         * [OTHER]. That is 4.04's "2^k inputs, not k mutations" applied to a positional argument
-         * list instead of to a compound condition.
+         * The fake reassembles the flat create parameters into a [WebRtcApmConfig], so a swapped
+         * pair of booleans is only caught where the two differ. Together these two configs differ
+         * in every one of the six pairs.
          */
         val ONE = WebRtcApmConfig(
             echoCancellation = true,
@@ -81,10 +75,8 @@ class WebRtcApmPreprocessorTest {
     }
 
     /**
-     * The real reason a stage fails to come up: `humla_apm_create` answers 0 for any rate that is
-     * not 8, 16, 32 or 48 kHz. `CapturePreprocessorFactory` turns this into a skipped stage and a
-     * log line rather than a dead pipeline, so it has to be an [IllegalStateException] and not a
-     * crash.
+     * `humla_apm_create` answers 0 for rates other than 8/16/32/48 kHz. The factory turns this
+     * [IllegalStateException] into a skipped stage and a log line.
      */
     @Test
     fun `construction fails loudly when the apm cannot be created`() {
@@ -108,17 +100,13 @@ class WebRtcApmPreprocessorTest {
         // -35 dBFS is 10 dB above the -45 floor, i.e. 10/21.7 of the adopted -45/-23.3 window.
         assertThat(probability).isWithin(0.0005f).of(0.4608f)
         assertThat(api.capturedLengths).containsExactly(FRAME)
-        // The counting direction of `levelReads`. Two tests below assert it is *zero* after a
-        // refused frame -- and a counter that never counted would pass both of them, which is the
-        // fake reporting a property it cannot see. One read per accepted frame, exactly.
+        // Proves the counter counts; two tests below assert it stays zero after a refused frame.
         assertThat(api.levelReads).isEqualTo(1)
     }
 
     /**
-     * A failed `processCapture` leaves `lastCaptureLevelDbfs` reporting the level of the *previous*
-     * frame -- or -100 for a released handle, which is "certainly silent". Task 7 gates
-     * transmission on this number, so reporting either would be a stage stating an opinion about a
-     * frame the APM never processed. The level must not even be read.
+     * After a failed `processCapture` the level is stale (or -100 for a released handle), so it
+     * must not even be read; transmission is gated on it.
      */
     @Test
     fun `a native error is no opinion rather than a stale level`() {
@@ -131,7 +119,7 @@ class WebRtcApmPreprocessorTest {
         assertThat(stage.rejectedFrames).isEqualTo(1)
     }
 
-    /** The bridge refuses a frame shorter than 10 ms with -8; the same rule as any other error. */
+    /** The bridge refuses a frame shorter than 10 ms with -8. */
     @Test
     fun `a frame the bridge refuses is reported rather than thrown`() {
         val api = FakeWebRtcApmApi(levelDbfs = -20f)
@@ -155,13 +143,8 @@ class WebRtcApmPreprocessorTest {
     // ------------------------------------------------------------------ the reverse stream
 
     /**
-     * The one number a wiring site must not guess. `jni_webrtc_apm.cpp:55` refuses a frame shorter
-     * than the APM's and **accepts a longer one**, reading `num_frames()` out of it and dropping
-     * the tail without a word, so an oversized chunker costs about 21 dB with
-     * [WebRtcApmPreprocessor.rejectedFarEndFrames] still reading 0. Sizing the chunker from the
-     * stage is what closes it, and the rate the chain happens to run at is not what answers here:
-     * at 16 kHz a far-end frame is 160 samples, so the 480 that `AudioHandler.FRAME_SIZE` would
-     * have supplied is wrong by a factor of three.
+     * The bridge refuses a short far-end frame but silently truncates a long one, so the chunker
+     * must be sized from the stage: at 16 kHz a far-end frame is 160 samples, not 480.
      */
     @Test
     fun `the far-end frame size is the apm's own, not the chain's frame size`() {
@@ -186,11 +169,8 @@ class WebRtcApmPreprocessorTest {
     }
 
     /**
-     * The one failure in this class with no return value to carry it. `analyzeReverseStream`
-     * answers nothing, so a reference frame the APM refuses -- a chunker built for the wrong frame
-     * size is the way that happens -- is invisible everywhere above this layer while costing about
-     * 21 dB of echo cancellation (task 2, `tests/test_apm.c`). The counter is the observable for
-     * that; whoever owns the chain reports it through `captureState.Error` (spec §4).
+     * `analyzeReverseStream` returns nothing, so a refused reference frame (which costs about
+     * 21 dB of echo cancellation) is only observable through this counter.
      */
     @Test
     fun `a far-end frame the apm refuses is counted rather than dropped in silence`() {
@@ -244,10 +224,8 @@ class WebRtcApmPreprocessorTest {
     // ------------------------------------------------------------------ level to probability
 
     /**
-     * The corner spec §4.1 wants written down rather than fixed here: this number is a **level**,
-     * not a speech model. With noise suppression NONE and echo cancellation WEBRTC it is the only
-     * opinion in the chain, so task 7 receives a loudness threshold wearing a voice probability's
-     * type, and a threshold tuned against RNNoise does not mean the same thing here.
+     * This is a level, not a speech model: with noise suppression NONE and echo cancellation WEBRTC
+     * it is the only opinion in the chain, so thresholds tuned against RNNoise mean something else.
      */
     @Test
     fun `level to probability is linear between -45 and -23_3 dBFS and clamped outside`() {
@@ -267,43 +245,12 @@ class WebRtcApmPreprocessorTest {
         }
     }
 
-    // ------------------------------------------------------------------ handle ownership
-
     // ------------------------------------------------------------- the two streams, in sequence
 
     /**
-     * The one relation the rest of this file cannot see. Every other test drives one stream at a
-     * time, so the *content* of each direction is pinned and the **order between them** is not --
-     * and that order is the third of the three ways task 2 measured the reference signal being
-     * ruined ("fed 200 ms late", -0.63 dB residual against -22.32 dB, `tests/test_apm.c`). All
-     * three are silent: every call returns 0.
-     *
-     * What is in scope here and what is not. Who calls whom per tick is the *caller's* -- the
-     * playback thread pushes, the capture thread processes, and wiring them is task 10's. What
-     * this pins is that the stage adds nothing of its own in between: given the calls in the
-     * right order, the bridge sees them in the same order, in the same tick, with the far-end
-     * frame of tick n and not of tick n-1. A stage that buffered one far-end frame and forwarded
-     * it on the next tick would satisfy every other test in this file.
-     *
-     * Driven through a real [FarEndFrameChunker] rather than by calling the sink directly,
-     * because the chunker is what stands between the playback buffer and this frame in
-     * production, and an exact-multiple push is the case where it is closest to being skippable.
-     *
-     * **What it is worth, and what it is not.** Two mutations of `onFarEndFrame`, measured:
-     *
-     * | mutation                                                  | tests red |
-     * |-----------------------------------------------------------|-----------|
-     * | defer the frame one tick through a copy                    | 4 -- this test, `far-end frames are forwarded to the reverse stream`, `a far-end frame the apm refuses is counted rather than dropped in silence`, `CaptureThreadAllocationTest` |
-     * | forward the previous tick's samples in this tick's slot, allocation-free | 2 -- this test and `far-end frames are forwarded to the reverse stream` |
-     *
-     * So this is **not** the unique killer of either, and saying otherwise would be the thing
-     * §4.04 warns about. The reason is structural: this stage cannot get the *relation* wrong
-     * without also getting the far-end *content* wrong, and the content is already pinned. What
-     * this adds is that it is the only test in the module that drives both entry points
-     * **alternately**, so a later change that batches, queues or re-orders the two streams has
-     * something to break. The relation that is genuinely unpinned -- who calls whom per tick --
-     * belongs to whoever wires the playback thread to the capture thread, i.e. task 10, and it is
-     * in the ledger under that owner.
+     * The only test that drives both entry points alternately: the stage must forward tick n's
+     * far-end frame before tick n's capture frame, without buffering. Feeding the reference late
+     * silently ruins echo cancellation. Driven through a real [FarEndFrameChunker], as in production.
      */
     @Test
     fun `each tick reaches the bridge as its far-end frame and then its near-end frame`() {
@@ -331,10 +278,9 @@ class WebRtcApmPreprocessorTest {
     }
 
     /**
-     * The walk `SingleHandleStageTest` asks every stage to repeat in its own suite. This is the
-     * stage it was written for: `HandleTable::get()` dereferences without validating, so handing
-     * the RNNoise handle to the APM bridge is a segmentation fault with no Java stack trace, and
-     * this stage has two audio threads to hand it from.
+     * `HandleTable::get()` cannot tell whose handle it is given, so another stage's handle could make
+     * the APM bridge process someone else's instance; this stage has two audio threads that could
+     * leak it.
      */
     @Test
     fun `the native handle never escapes the stage`() {
@@ -360,7 +306,7 @@ class WebRtcApmPreprocessorTest {
             .containsExactly("onCaptureFrame", "onFarEndFrame", "onReleaseHandle")
     }
 
-    /** `long`, `java.lang.Long`, or an array of either -- an out-parameter is an escape hatch too. */
+    /** `long`, `java.lang.Long`, or an array of either (an out-parameter is an escape too). */
     private fun mentionsLong(type: Class<*>): Boolean = when {
         type == Long::class.javaPrimitiveType || type == java.lang.Long::class.java -> true
         type.isArray -> mentionsLong(type.componentType!!)

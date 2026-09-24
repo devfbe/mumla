@@ -2,11 +2,8 @@ package se.lublin.mumla.service
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.Message
 
-@RunWith(RobolectricTestRunner::class)
 class IChatMessageTest {
 
     @Test

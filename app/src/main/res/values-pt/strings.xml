@@ -6,7 +6,6 @@
     <string name="mumlaDisconnected">Mumla desconectado</string>
     <string name="offline">Offline</string>
     <string name="online">Online</string>
-    <string name="mumlaConnected">Mumla conectado</string>
     <string name="connected">Conectado</string>
     <string name="clearChat">Limpar chat</string>
     <string name="messageToChannel">Enviar mensagem ao canal \'%s\'</string>
@@ -17,7 +16,6 @@
     <string name="connectToServer">Conectar-se ao servidor</string>
     <string name="connect">Conectar</string>
     <string name="quickConnect">Conexão rápida</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="searchHint">Procurar canais e usuários</string>
     <string name="search">Procurar</string>
     <string name="generateCertProgress">Gerando certificado…</string>
@@ -41,7 +39,6 @@
     <string name="mute">Silenciar</string>
     <string name="ptt">Pressionar-para-falar</string>
     <string name="connecting_to_server">Conectando-se à %s…</string>
-    <string name="connecting">Conectando</string>
     <string name="server_label">Etiqueta</string>
     <string name="server_host">Endereço</string>
     <string name="server_port">Porta</string>
@@ -100,10 +97,6 @@
     <string name="drawer_open">Abrir barra de navegação</string>
     <string name="donation_thanks">Agradecemos sua doação.</string>
     <string name="server_info_version">%1$s (%2$s)</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nova mensagem</item>
-        <item quantity="other">%d novas mensagens</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d usuário</item>
         <item quantity="other">%d usuários</item>
@@ -114,7 +107,6 @@
 \nCertifique-se que o aplicativo Orbot está sendo executado.</string>
     <string name="orbot_not_installed">O aplicativo Orbot não está instalado. Não é possível utilizar o Tor.</string>
     <string name="grant_perm_draw_over_apps">Dê permissão de sobreposição sobre outros aplicativos.</string>
-    <string name="grant_perm_storage">Dê permissão de acesso ao armazenamento externo.</string>
     <string name="grant_perm_microphone">Dê permissão de acesso ao microfone.</string>
     <string name="shout_configure">Configurar alvo de voz</string>
     <string name="shout_target">Gritando para %s</string>
@@ -131,7 +123,6 @@
     <string name="invalid_certificate">Certificado inválido não pôde ser carregado.</string>
     <string name="password">Senha</string>
     <string name="decrypt_certificate">Descriptografar certificado</string>
-    <string name="certificates">Certificados</string>
     <string name="no_certificate">Sem certificado</string>
     <string name="change_requires_reconnect">Reconecte-se para usar as novas configurações.</string>
     <string name="attempting_reconnect">Erro: %s.
@@ -219,4 +210,13 @@
     <string name="audio_device_bluetooth">Fone de ouvido Bluetooth</string>
     <string name="audio_device_other">Dispositivo de áudio</string>
     <string name="echo_cancellation">Cancelamento de eco</string>
+    <string name="chat_notify_muted_deafened">Silenciado e áudio desativado.</string>
+    <string name="chat_notify_muted">Silenciado.</string>
+    <string name="chat_notify_unmuted">Microfone reativado.</string>
+    <string name="chat_notify_now_muted_deafened">%s agora está silenciado e com o áudio desativado.</string>
+    <string name="chat_notify_now_muted">%s agora está silenciado.</string>
+    <string name="chat_notify_now_unmuted">%s agora está com o microfone ativado.</string>
+    <string name="chat_notify_connected">%s conectou-se.</string>
+    <string name="chat_notify_disconnected">%s desconectou-se.</string>
+    <string name="server">Servidor</string>
 </resources>

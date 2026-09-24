@@ -18,55 +18,32 @@
   -->
 
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:orientation="vertical"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent">
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
-    <TabHost
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/comment_tabs"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:id="@+id/comment_tabhost">
+        android:layout_height="wrap_content" />
 
-        <LinearLayout
-            android:layout_width="fill_parent"
-            android:layout_height="fill_parent"
-            android:orientation="vertical">
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
 
-            <TabWidget
-                android:id="@android:id/tabs"
-                android:layout_width="fill_parent"
-                android:layout_height="wrap_content"></TabWidget>
+        <WebView
+            android:id="@+id/comment_view"
+            android:layout_width="320dp"
+            android:layout_height="300dp" />
 
-            <FrameLayout
-                android:id="@android:id/tabcontent"
-                android:layout_width="fill_parent"
-                android:layout_height="fill_parent">
-
-                <LinearLayout
-                    android:id="@+id/comment_tab_view"
-                    android:layout_width="fill_parent"
-                    android:layout_height="fill_parent">
-
-                    <WebView
-                        android:layout_width="320dp"
-                        android:layout_height="300dp"
-                        android:id="@+id/comment_view"/>
-
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/comment_tab_edit"
-                    android:layout_width="fill_parent"
-                    android:layout_height="fill_parent">
-
-                    <EditText
-                        android:layout_width="320dp"
-                        android:layout_height="300dp"
-                        android:id="@+id/comment_edit"
-                        android:inputType="textMultiLine|textNoSuggestions"
-                        android:gravity="top|left"/>
-                </LinearLayout>
-            </FrameLayout>
-        </LinearLayout>
-    </TabHost>
+        <EditText
+            android:id="@+id/comment_edit"
+            android:layout_width="320dp"
+            android:layout_height="300dp"
+            android:gravity="top|start"
+            android:hint="@string/comment"
+            android:importantForAutofill="no"
+            android:inputType="textMultiLine|textNoSuggestions"
+            android:visibility="gone" />
+    </FrameLayout>
 </LinearLayout>

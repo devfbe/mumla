@@ -6,35 +6,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 enable_testing()
 
 # ---------------------------------------------------------------- sanitizer availability
-# Detected once, up front, because both library groups below need the answer.
-#
-# Guarded so the sanitized tests only register where the host toolchain actually supports the
-# flags. The Android build never enters this directory, but the cross-compile check is spelled
-# out anyway.
-#
-# That guard used to be able to fail silently: when the compile check came back false, ctest
-# registered only the plain tests, ran them and exited 0, so a toolchain without sanitizer
-# runtimes switched off the entire sanitized half of this directory with nothing a green
-# pipeline would surface. HUMLA_REQUIRE_SANITIZERS closes that -- where the sanitized tests are
-# meant to run, configuration fails instead of quietly shrinking.
-#
-# Configure-time failure rather than an expected-test-count assertion in CI, because a count has
-# to be edited in .gitlab-ci.yml every time a test is added here (this change alone adds two
-# entries), and an assertion that is routinely edited to match reality stops being an assertion.
-# The check below cannot drift from the guard it protects: it reads the same variable the guard
-# does. The other half of the fix lives in .gitlab-ci.yml, where ctest runs with
-# --no-tests=error so that a label selecting nothing fails instead of passing.
+# The sanitized tests only register where the host toolchain supports the flags.
+# HUMLA_REQUIRE_SANITIZERS turns a missing sanitizer runtime into a configure error instead of a
+# silently smaller test run (CI sets it and runs ctest with --no-tests=error).
 option(HUMLA_REQUIRE_SANITIZERS
        "Fail configuration if the host toolchain cannot build the sanitized tests"
        $ENV{HUMLA_REQUIRE_SANITIZERS})
-# option() only writes the cache the first time. Without the line below, a build directory that
-# was first configured without HUMLA_REQUIRE_SANITIZERS in the environment keeps :BOOL=OFF
-# forever, and reconfiguring it with the variable set changes nothing -- the guard would go on
-# being off in exactly the situation someone had just asked for it to be on. CI never sees this
-# because build/ is not cached; a developer with a warm build directory does. The environment is
-# therefore treated as authoritative whenever it says anything at all, in either direction,
-# which also means it outranks -DHUMLA_REQUIRE_SANITIZERS on the command line. Unset it to
-# hand control back to -D.
+# option() only writes the cache the first time, so a warm build directory would ignore a later
+# HUMLA_REQUIRE_SANITIZERS in the environment. The environment is authoritative whenever it is
+# set (outranking -D); unset it to hand control back to -D.
 if(DEFINED ENV{HUMLA_REQUIRE_SANITIZERS} AND NOT "$ENV{HUMLA_REQUIRE_SANITIZERS}" STREQUAL "")
   set(HUMLA_REQUIRE_SANITIZERS "$ENV{HUMLA_REQUIRE_SANITIZERS}" CACHE BOOL
       "Fail configuration if the host toolchain cannot build the sanitized tests" FORCE)
@@ -56,8 +36,7 @@ if(HUMLA_REQUIRE_SANITIZERS AND NOT HUMLA_HAVE_SANITIZERS)
 endif()
 
 if(HUMLA_HAVE_SANITIZERS)
-  # -O1 -g -fno-omit-frame-pointer rather than the real targets' -O2: it is what makes a
-  # sanitizer report name a line.
+  # -O1 -g -fno-omit-frame-pointer so sanitizer reports name a line.
   set(HUMLA_SAN_FLAGS -O1 -g -fno-omit-frame-pointer
                       -fsanitize=address,undefined -fno-sanitize-recover=all)
   # print_stacktrace makes a UBSan finding actionable; halt_on_error stops at the first one so
@@ -68,9 +47,8 @@ else()
   message(STATUS "humla: no ASan/UBSan on this toolchain, skipping the sanitized tests")
 endif()
 
-# Every test carries a label, so CI can run the fast set on every push and the slow instrumented
-# set on a schedule. Both invocations need ctest --no-tests=error, or a label that matches
-# nothing passes.
+# Every test carries a label (fast set per push, instrumented set on a schedule). Run ctest with
+# --no-tests=error, or a label that matches nothing passes.
 function(humla_add_labelled_test name target label)
   add_test(NAME ${name} COMMAND ${target})
   set_tests_properties(${name} PROPERTIES LABELS ${label})
@@ -86,17 +64,13 @@ add_executable(test_rnnoise test_rnnoise.c)
 target_link_libraries(test_rnnoise PRIVATE humla_rnnoise m)
 humla_add_labelled_test(rnnoise test_rnnoise plain)
 
-# The same sources again under ASan+UBSan. This is not belt-and-braces: part of what this
-# directory has to defend against is invisible to a plain build. The trap documented in
-# humla_rnnoise_destroy (rnnoise_model_free() reading an uninitialised FILE*) was
-# mutation-tested -- the mutant passes the plain binary 60 runs out of 60, and fails the
-# sanitized one 5 out of 5, because ASan fills fresh heap with 0xbe and the garbage FILE*
-# becomes a deterministic SEGV inside fclose(). LeakSanitizer (on by default with ASan on
-# Linux) additionally turns the 200 create/destroy cycles into a real leak check.
+# The same sources again under ASan+UBSan. Some bugs are invisible to a plain build, e.g.
+# rnnoise_model_free() reading an uninitialised FILE* (see humla_rnnoise_destroy) only fails
+# reliably under ASan, which fills fresh heap with garbage. LeakSanitizer turns the create/destroy
+# cycles into a leak check.
 if(HUMLA_HAVE_SANITIZERS)
-  # A second, instrumented copy of the library: the bugs worth catching live in rnnoise and in
-  # the wrapper, not in the test. The source list, include dirs and definitions are read back
-  # off the real target so the two cannot drift apart.
+  # A second, instrumented copy of the library. Sources, include dirs and definitions are read
+  # back from the real target so the two cannot drift apart.
   get_target_property(HUMLA_RNNOISE_SOURCES humla_rnnoise SOURCES)
   get_target_property(HUMLA_RNNOISE_INCLUDES humla_rnnoise INCLUDE_DIRECTORIES)
   get_target_property(HUMLA_RNNOISE_DEFS humla_rnnoise COMPILE_DEFINITIONS)
@@ -121,24 +95,18 @@ endif()
 # ---------------------------------------------------------------- webrtc audio processing
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../webrtc_apm ${CMAKE_BINARY_DIR}/webrtc_apm)
 
-# test_apm.c is C on purpose (see its header comment): it is the proof that humla_apm.h is valid
-# C and that the wrapper's symbols really have C linkage. CMake would therefore pick the C
-# driver to link it, which cannot resolve the C++ runtime that humla_apm and webrtc pull in, so
-# the link step is switched to the C++ driver explicitly.
+# test_apm.c is C on purpose, to prove humla_apm.h is valid C with C linkage. The C++ driver
+# links it because humla_apm and webrtc need the C++ runtime.
 add_executable(test_apm test_apm.c)
 set_target_properties(test_apm PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(test_apm PRIVATE humla_apm m)
 humla_add_labelled_test(apm test_apm plain)
 
 if(HUMLA_HAVE_SANITIZERS)
-  # Only the wrapper is instrumented by default, not the ~200 upstream translation units:
-  # rebuilding those under ASan dominates the whole directory's build time (numbers in the task
-  # report), and the bug class this repository keeps hitting -- a handle used after free, a
-  # frame buffer written past its end across the JNI boundary -- lives in humla_apm.cpp and in
-  # its caller, not in upstream's DSP. ASan still sees every allocation humla_apm makes and
-  # every access the test performs, because the malloc interceptors are process-wide; what it
-  # cannot see is accesses made inside the uninstrumented upstream objects. Configure with
-  # -DHUMLA_SANITIZE_WEBRTC=ON when a suspected fault points in there.
+  # Only the wrapper is instrumented by default, not the ~200 upstream translation units (which
+  # would dominate build time); the bugs worth catching live in humla_apm.cpp and its caller.
+  # ASan's malloc interceptors are process-wide, so allocations are still covered. Configure with
+  # -DHUMLA_SANITIZE_WEBRTC=ON to instrument upstream too.
   option(HUMLA_SANITIZE_WEBRTC "Also instrument the vendored webrtc sources" OFF)
 
   if(HUMLA_SANITIZE_WEBRTC)
@@ -148,22 +116,16 @@ if(HUMLA_HAVE_SANITIZERS)
   endif()
 
   add_library(humla_apm_asan STATIC ${HUMLA_APM_ASAN_SOURCES})
-  # humla_apm_buildflags is the same INTERFACE target the real library uses, so the include
-  # dirs, the compile definitions and the abseil dependency cannot drift between the two.
+  # Same INTERFACE target as the real library, so flags and dependencies cannot drift.
   target_link_libraries(humla_apm_asan PRIVATE humla_apm_buildflags)
   target_include_directories(humla_apm_asan PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../webrtc_apm)
   target_compile_options(humla_apm_asan PRIVATE
       ${HUMLA_SAN_FLAGS} -fvisibility=hidden -Wno-deprecated-declarations)
   target_link_options(humla_apm_asan PUBLIC -fsanitize=address,undefined)
   if(NOT HUMLA_SANITIZE_WEBRTC)
-    # The uninstrumented upstream objects still have to come from somewhere. humla_apm.cpp is
-    # in both archives; the instrumented one is listed first so its definitions win.
-    #
-    # "so its definitions win" is an assumption about link order, and an assumption that fails
-    # silently: every target would still build and apm_sanitized would still pass while
-    # instrumenting nothing. apm_is_instrumented below stops asserting it and starts checking
-    # it, on the linked image. See assert_instrumented.cmake for why it cannot be checked from
-    # inside the test process.
+    # The uninstrumented upstream objects come from humla_apm. humla_apm.cpp is in both archives;
+    # the instrumented one is listed first so its definitions win. apm_is_instrumented verifies
+    # that on the linked image (see assert_instrumented.cmake).
     target_link_libraries(humla_apm_asan PUBLIC humla_apm)
   endif()
 
@@ -174,8 +136,7 @@ if(HUMLA_HAVE_SANITIZERS)
 
   humla_add_labelled_test(apm_sanitized test_apm_asan sanitized)
 
-  # objdump is a hard requirement here rather than a soft one: making the check optional would
-  # reintroduce exactly the silent shrinkage HUMLA_REQUIRE_SANITIZERS was added to prevent.
+  # objdump is required: an optional check could silently disappear.
   find_program(HUMLA_OBJDUMP NAMES ${CMAKE_OBJDUMP} llvm-objdump objdump)
   if(NOT HUMLA_OBJDUMP)
     message(FATAL_ERROR
@@ -191,18 +152,27 @@ if(HUMLA_HAVE_SANITIZERS)
   set_tests_properties(apm_is_instrumented PROPERTIES LABELS sanitized)
 endif()
 
+# ---------------------------------------------------------------- the handle table
+add_executable(test_handle_table test_handle_table.cpp)
+target_include_directories(test_handle_table PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+humla_add_labelled_test(handle_table test_handle_table plain)
+
+if(HUMLA_HAVE_SANITIZERS)
+  add_executable(test_handle_table_asan test_handle_table.cpp)
+  target_include_directories(test_handle_table_asan PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+  target_compile_options(test_handle_table_asan PRIVATE ${HUMLA_SAN_FLAGS})
+  target_link_options(test_handle_table_asan PRIVATE -fsanitize=address,undefined)
+  humla_add_labelled_test(handle_table_sanitized test_handle_table_asan sanitized)
+endif()
+
 # ---------------------------------------------------------------- the JNI bridges
-# jni_rnnoise.cpp and jni_webrtc_apm.cpp are compiled and executed here through a stand-in
-# JNIEnv (jni_env_stub.h). Everything the JNI layer can get wrong -- a missing length check, a
-# handle freed twice, a bridge wired to the wrong C function -- is invisible from Kotlin and
-# invisible from the C wrappers underneath, and none of it produces an error code. The Android
-# build only proves these files compile and link.
+# jni_rnnoise.cpp and jni_webrtc_apm.cpp run here through a stand-in JNIEnv (jni_env_stub.h):
+# a missing length check, a double free or a bridge wired to the wrong C function produces no
+# error code and is invisible from Kotlin. The Android build only proves these files compile.
 #
-# The JDK headers are a hard requirement, for the same reason objdump is below: making the test
-# optional would reintroduce the silent shrinkage HUMLA_REQUIRE_SANITIZERS exists to prevent.
-# They come from the nix dev shell (JAVA_HOME), which CI and every developer already has because
-# Gradle needs it. The NDK's jni.h is a different file, but only in ways this test does not
-# depend on: JNINativeInterface's layout is fixed by the JNI specification.
+# The JDK headers (JAVA_HOME, provided by the nix dev shell) are required, not optional, so the
+# test cannot silently disappear. JNINativeInterface's layout is fixed by the JNI spec, so the JDK
+# jni.h is equivalent to the NDK's for this purpose.
 find_path(HUMLA_JNI_INCLUDE_DIR jni.h HINTS "$ENV{JAVA_HOME}/include")
 find_path(HUMLA_JNI_MD_INCLUDE_DIR jni_md.h
           HINTS "$ENV{JAVA_HOME}/include/linux" "$ENV{JAVA_HOME}/include/darwin")
@@ -216,8 +186,7 @@ set(HUMLA_JNI_BRIDGE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/test_jni_bridges.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../jni_rnnoise.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../jni_webrtc_apm.cpp)
-# The bridges include "rnnoise/humla_rnnoise.h" and "webrtc_apm/humla_apm.h", i.e. relative to
-# the cpp/ directory, exactly as they do in the Android build.
+# The bridges include headers relative to cpp/, as in the Android build.
 set(HUMLA_JNI_BRIDGE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${HUMLA_JNI_INCLUDE_DIR} ${HUMLA_JNI_MD_INCLUDE_DIR})
 
@@ -227,11 +196,9 @@ target_link_libraries(test_jni_bridges PRIVATE humla_rnnoise humla_apm m)
 humla_add_labelled_test(jni_bridges test_jni_bridges plain)
 
 if(HUMLA_HAVE_SANITIZERS)
-  # The same bridges against the instrumented libraries. This is where the rnnoise short-buffer
-  # case stops being an assertion about a return value and becomes a trapped heap-buffer-overflow:
-  # jni_env_stub.h hands out array copies that are exact-size malloc blocks, so element 480 of a
-  # 480-element frame is in ASan's redzone. LeakSanitizer additionally catches a bridge that
-  # returns without releasing its array copy.
+  # The same bridges against the instrumented libraries. jni_env_stub.h hands out exact-size
+  # malloc'd array copies, so an overrun lands in ASan's redzone; LeakSanitizer catches a bridge
+  # that does not release its array copy.
   add_executable(test_jni_bridges_asan ${HUMLA_JNI_BRIDGE_SOURCES})
   target_include_directories(test_jni_bridges_asan PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
   target_compile_options(test_jni_bridges_asan PRIVATE ${HUMLA_SAN_FLAGS})
@@ -239,19 +206,13 @@ if(HUMLA_HAVE_SANITIZERS)
   humla_add_labelled_test(jni_bridges_sanitized test_jni_bridges_asan sanitized)
 endif()
 
-# ---------------------------------------------------------------- the speexdsp bridge (existing)
-# ../jni_speexdsp.cpp predates this directory and was never covered by anything. It is here
-# because of one bug in particular: libspeexdsp takes the number of samples to read or write from
-# somewhere other than the buffer -- speex_preprocess_run from the frame size the state was
-# created with, the resampler and the jitter buffer from separate caller-supplied counts -- so the
-# JNI layer is the only place that can compare the two. The binding this one replaced did not, and
-# speex wrote 640 samples into a 480-element Java array on every frame at ultra-wideband.
+# ---------------------------------------------------------------- the speexdsp bridge
+# libspeexdsp takes sample counts from the state or from separate arguments, never from the
+# buffer, so the JNI layer is the only place that can compare the two.
 #
-# libspeexdsp is rebuilt here rather than taken from ../CMakeLists.txt: that file defines Android
-# SHARED targets that link -llog and cannot be configured on the host, and adding it as a
-# subdirectory would also define humla_rnnoise and humla_apm a second time. The source list below
-# is the one from ../CMakeLists.txt. If the two drift apart the result is a missing or unknown
-# symbol at link time, i.e. loud -- not a silently different library.
+# libspeexdsp is rebuilt here because ../CMakeLists.txt defines Android SHARED targets that link
+# -llog and cannot be configured on the host. The source list mirrors ../CMakeLists.txt; drift
+# shows up as a link error.
 set(HUMLA_SPEEXDSP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/speexdsp/libspeexdsp)
 set(HUMLA_SPEEXDSP_SOURCES
     ${HUMLA_SPEEXDSP_DIR}/buffer.c ${HUMLA_SPEEXDSP_DIR}/fftwrap.c
@@ -292,60 +253,50 @@ if(HUMLA_HAVE_SANITIZERS)
   humla_add_labelled_test(jni_speexdsp_sanitized test_jni_speexdsp_asan sanitized)
 endif()
 
-# ---------------------------------------------------------------- the speex codec bridge (existing)
-# ../jni_speex.cpp has the same hazard as the ctl entry points in ../jni_speexdsp.cpp: a request
-# number arrives from Kotlin and decides what speex_decoder_ctl does with the address of a
-# four-byte stack object. SPEEX_GET_STACK writes a pointer through it, SPEEX_SET_INNOVATION_SAVE
-# keeps it and writes a subframe through it on every later decode, SPEEX_SET_HANDLER reads a
-# SpeexCallback out of it. None of that is visible from Kotlin or from libspeex.
-#
-# libspeex is rebuilt here for the same reason libspeexdsp is above: ../CMakeLists.txt defines
-# Android SHARED targets that link -llog. The source list is the one from there; if the two drift
-# apart the result is a missing symbol at link time, i.e. loud.
-set(HUMLA_SPEEX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/speex/libspeex)
-set(HUMLA_SPEEX_SOURCES
-    ${HUMLA_SPEEX_DIR}/bits.c ${HUMLA_SPEEX_DIR}/cb_search.c ${HUMLA_SPEEX_DIR}/exc_10_16_table.c
-    ${HUMLA_SPEEX_DIR}/exc_10_32_table.c ${HUMLA_SPEEX_DIR}/exc_20_32_table.c
-    ${HUMLA_SPEEX_DIR}/exc_5_256_table.c ${HUMLA_SPEEX_DIR}/exc_5_64_table.c
-    ${HUMLA_SPEEX_DIR}/exc_8_128_table.c ${HUMLA_SPEEX_DIR}/filters.c
-    ${HUMLA_SPEEX_DIR}/gain_table.c ${HUMLA_SPEEX_DIR}/gain_table_lbr.c
-    ${HUMLA_SPEEX_DIR}/hexc_10_32_table.c ${HUMLA_SPEEX_DIR}/hexc_table.c
-    ${HUMLA_SPEEX_DIR}/high_lsp_tables.c ${HUMLA_SPEEX_DIR}/kiss_fft.c
-    ${HUMLA_SPEEX_DIR}/kiss_fftr.c ${HUMLA_SPEEX_DIR}/lpc.c ${HUMLA_SPEEX_DIR}/lsp.c
-    ${HUMLA_SPEEX_DIR}/lsp_tables_nb.c ${HUMLA_SPEEX_DIR}/ltp.c ${HUMLA_SPEEX_DIR}/modes.c
-    ${HUMLA_SPEEX_DIR}/modes_wb.c ${HUMLA_SPEEX_DIR}/nb_celp.c ${HUMLA_SPEEX_DIR}/quant_lsp.c
-    ${HUMLA_SPEEX_DIR}/sb_celp.c ${HUMLA_SPEEX_DIR}/speex.c ${HUMLA_SPEEX_DIR}/speex_callbacks.c
-    ${HUMLA_SPEEX_DIR}/speex_header.c ${HUMLA_SPEEX_DIR}/stereo.c ${HUMLA_SPEEX_DIR}/vbr.c
-    ${HUMLA_SPEEX_DIR}/vq.c ${HUMLA_SPEEX_DIR}/window.c)
+# ---------------------------------------------------------------- the opus bridge
+# libopus is built with the same options as ../CMakeLists.txt. Only the bridge and the test are
+# instrumented in the sanitized variant.
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_FIXED_POINT ON CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_DISABLE_INTRINSICS OFF CACHE BOOL "" FORCE)
+# abseil turns BUILD_TESTING on, and opus would then register its own suite here.
+set(BUILD_TESTING OFF)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/opus ${CMAKE_BINARY_DIR}/opus EXCLUDE_FROM_ALL)
 
-function(humla_add_speex name)  # name, then the extra compile options
-  add_library(${name} STATIC ${HUMLA_SPEEX_SOURCES})
-  target_include_directories(${name}
-      PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/speex/include
-      PRIVATE ${HUMLA_SPEEX_DIR})
-  target_compile_definitions(${name} PUBLIC __EMX__ PRIVATE FIXED_POINT USE_KISS_FFT EXPORT=)
-  target_compile_options(${name} PRIVATE ${ARGN})
-  target_link_libraries(${name} PUBLIC m)
-endfunction()
+set(HUMLA_JNI_OPUS_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_jni_opus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_opus.cpp)
 
-humla_add_speex(speex_hosttest)
-
-set(HUMLA_JNI_SPEEX_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/test_jni_speex.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_speex.cpp)
-
-add_executable(test_jni_speex ${HUMLA_JNI_SPEEX_SOURCES})
-target_include_directories(test_jni_speex PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
-target_link_libraries(test_jni_speex PRIVATE speex_hosttest m)
-humla_add_labelled_test(jni_speex test_jni_speex plain)
+add_executable(test_jni_opus ${HUMLA_JNI_OPUS_SOURCES})
+target_include_directories(test_jni_opus PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+target_link_libraries(test_jni_opus PRIVATE opus m)
+humla_add_labelled_test(jni_opus test_jni_opus plain)
 
 if(HUMLA_HAVE_SANITIZERS)
-  humla_add_speex(speex_hosttest_asan ${HUMLA_SAN_FLAGS})
-  target_link_options(speex_hosttest_asan PUBLIC -fsanitize=address,undefined)
-
-  add_executable(test_jni_speex_asan ${HUMLA_JNI_SPEEX_SOURCES})
-  target_include_directories(test_jni_speex_asan PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
-  target_compile_options(test_jni_speex_asan PRIVATE ${HUMLA_SAN_FLAGS})
-  target_link_libraries(test_jni_speex_asan PRIVATE speex_hosttest_asan m)
-  humla_add_labelled_test(jni_speex_sanitized test_jni_speex_asan sanitized)
+  add_executable(test_jni_opus_asan ${HUMLA_JNI_OPUS_SOURCES})
+  target_include_directories(test_jni_opus_asan PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+  target_compile_options(test_jni_opus_asan PRIVATE ${HUMLA_SAN_FLAGS})
+  target_link_options(test_jni_opus_asan PRIVATE -fsanitize=address,undefined)
+  target_link_libraries(test_jni_opus_asan PRIVATE opus m)
+  humla_add_labelled_test(jni_opus_sanitized test_jni_opus_asan sanitized)
 endif()
+
+# ---------------------------------------------------------------- JNI_OnLoad
+# Every bridge in one binary, as in libhumla_native.so, registered through JNI_OnLoad and compared
+# with ../jni_registrations.txt.
+add_executable(test_jni_registration
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_jni_registration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_onload.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_opus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_speexdsp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_rnnoise.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jni_webrtc_apm.cpp)
+target_include_directories(test_jni_registration PRIVATE ${HUMLA_JNI_BRIDGE_INCLUDES})
+target_link_libraries(test_jni_registration PRIVATE opus speexdsp_hosttest humla_rnnoise humla_apm m)
+add_test(NAME jni_registration
+         COMMAND test_jni_registration ${CMAKE_CURRENT_SOURCE_DIR}/../jni_registrations.txt)
+set_tests_properties(jni_registration PROPERTIES LABELS plain)

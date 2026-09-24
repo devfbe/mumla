@@ -8,7 +8,6 @@ Några av särdragen
 * Stöd för Bluetooth-headset
 * Självregistering på servern
 * Access tokens
-* Opus-, CELT- och Speex-codekstöd
 * Automatisk återansluitning
 * TOR-stöd genom appen Orbot
 * Text-till-tal för meddelanden (påslaget som standard)

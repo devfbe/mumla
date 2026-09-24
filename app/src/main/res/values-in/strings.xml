@@ -47,7 +47,6 @@
     <string name="server_port">Port</string>
     <string name="server_host">Address</string>
     <string name="server_label">Label</string>
-    <string name="connecting">Menyambungkan</string>
     <string name="connecting_to_server">Menyambungkan ke %s…</string>
     <string name="ptt">Push-to-talk</string>
     <string name="mute">Matikan Mikrofon</string>
@@ -78,7 +77,6 @@
     <string name="online">Online</string>
     <string name="offline">Offline</string>
     <string name="clearChat">Bersihkan Chat</string>
-    <string name="mumlaConnected">Mumla tersambung</string>
     <string name="mumlaConnecting">Mumla sedang menyambungkan…</string>
     <string name="mumlaDisconnected">Mumla terputus</string>
     <string name="channel">Channel</string>
@@ -114,7 +112,6 @@
     <string name="attempting_reconnect">Error: %s.\n\nMenyambungkan ulang…</string>
     <string name="change_requires_reconnect">Sambung ulang untuk menggunakan pengaturan baru.</string>
     <string name="no_certificate">Tidak ada Sertifikat Keamanan</string>
-    <string name="certificates">Sertifikat Keamanan</string>
     <string name="decrypt_certificate">Dekripsi Sertifikat Keamanan</string>
     <string name="certificate_load_failed">Tidak dapat menyimpan sertifikat keamanan.</string>
     <string name="certificate_import_success">Sertifikat keamanan %s berhasil diimpor.</string>
@@ -129,16 +126,12 @@
     <string name="shout_configure">Atur Target Suara</string>
     <string name="grant_perm_microphone">Mohon izinkan penggunaan mikrofon.</string>
     <string name="grant_perm_notifications">Mohon izinkan pengiriman notifikasi.</string>
-    <string name="grant_perm_storage">Mohon izinkan pemberian akses ke penyimpanan eksternal.</string>
     <string name="orbot_not_installed">Aplikasi Orbot tidak terinstal. Tor tidak digunakan.</string>
     <string name="default_">Default</string>
     <string name="donation_thanks">Terima kasih atas donasi anda.</string>
     <string name="image_confirm_send">Kirim gambar ini?</string>
     <plurals name="search_channel_users">
         <item quantity="other">%d user</item>
-    </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="other">%d pesan baru</item>
     </plurals>
     <string name="drawer_header_servers">Server</string>
     <string name="drawer_public">Server Publik</string>
@@ -149,7 +142,6 @@
     <string name="server_match_description">Mumla dapat secara otomatis mencarikan anda server kosong yang teroptimisasi sesuai dengan lokasi, versi, dan latensi.</string>
     <string name="no_ptt_key">Tidak ada tombol</string>
     <string name="accessAdd">Tambah Token Akses</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="connect">Sambung</string>
     <string name="generateCertProgress">Membuat sertifikat keamanan…</string>
     <string name="connected">Tersambung</string>
@@ -203,4 +195,34 @@
     <string name="audio_device_bluetooth">Headset Bluetooth</string>
     <string name="audio_device_other">Perangkat audio</string>
     <string name="echo_cancellation">Peredam gema</string>
+    <string name="chat_notify_muted_deafened">Suara masuk dan mikrofon berhasil dimatikan.</string>
+    <string name="chat_notify_muted">Mikrofon berhasil dimatikan.</string>
+    <string name="chat_notify_unmuted">Mikrofon berhasil dinyalakan.</string>
+    <string name="chat_notify_now_muted_deafened">Suara masuk dan mikrofon %s berhasil dimatikan.</string>
+    <string name="chat_notify_now_muted">Mikrofon %s berhasil dimatikan.</string>
+    <string name="chat_notify_now_unmuted">Mikrofon %s berhasil dinyalakan.</string>
+    <string name="chat_notify_connected">%s tersambung.</string>
+    <string name="chat_notify_disconnected">%s terputus.</string>
+    <string name="chat_notify_kick_ban_self">Anda telah dikeluarkan dan dilarang masuk seterusnya dari server oleh %1$s: %2$s.</string>
+    <string name="chat_notify_kick_self">Anda telah dikeluarkan dari server oleh %1$s: %2$s.</string>
+    <string name="chat_notify_kick_ban">%3$s telah dikeluarkan dan dilarang masuk seterusnya dari server oleh %1$s: %2$s.</string>
+    <string name="chat_notify_kick">%3$s telah dikeluarkan dari server oleh %1$s: %2$s.</string>
+    <string name="chat_notify_self_recording_started">Rekaman dimulai</string>
+    <string name="chat_notify_self_recording_stopped">Rekaman dihentikan</string>
+    <string name="chat_notify_user_recording_started">%s memulai rekaman.</string>
+    <string name="chat_notify_user_recording_stopped">%s menghentikan rekaman.</string>
+    <string name="chat_notify_user_joined_channel">%s masuk ke channel.</string>
+    <string name="chat_notify_user_left_channel">%1$s telah dipindah ke %2$s.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s telah dipindahkan kesini dari %2$s oleh %3$s.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s telah dipindahkan ke %2$s oleh %3$s.</string>
+    <string name="deny_reason_channel_name">Ditolak: nama channel tidak valid.</string>
+    <string name="deny_reason_text_too_long">Ditolak: pesan teks terlalu panjang.</string>
+    <string name="deny_reason_no_operation_temp">Ditolak: Operasi tidak diizinkan di channel sementara.</string>
+    <string name="deny_reason_no_certificate">Anda memerlukan sertifikat keamanan untuk dapat melakukan operasi ini.</string>
+    <string name="deny_reason_invalid_username">Username tidak valid.</string>
+    <string name="deny_reason_channel_full">Channel penuh.</string>
+    <string name="deny_reason_channel_nesting">Batas nesting channel sudah tercapai.</string>
+    <string name="deny_reason_other">Alasan: %s</string>
+    <string name="server">Server</string>
+    <string name="the_server">server</string>
 </resources>

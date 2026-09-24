@@ -30,7 +30,6 @@
     <string name="hotCornerSum">按下屏幕的一个角落，通过 Android 传输音频。</string>
     <string name="general">常规</string>
     <string name="appearance">外观</string>
-    <string name="themeSum">更改应用的外观。</string>
     <string name="theme">主题</string>
     <string name="advancedAudio">高级</string>
     <string name="forceTcp">仅使用 TCP</string>
@@ -47,8 +46,6 @@
     <string name="certificateGenerateSum">生成一份新的 Mumla 自签名证书。推荐新用户使用。</string>
     <string name="pttSettings">按住发言设置</string>
     <string name="voiceActivitySettings">语音激活设置</string>
-    <string name="disableOpus">禁用 Opus 编解码器</string>
-    <string name="disableOpusSum">为 Mumble 1.2.4 服务器禁用 Opus 支持。</string>
     <string name="hidePtt">隐藏按住发言按钮</string>
     <string name="hidePttSum">仅在使用按住发言触发角或物理按键时有意义。</string>
     <string name="useTts">文字转语音</string>
@@ -76,8 +73,6 @@
     <string name="halfDuplexSum">按住发言时，不播放其他所有声音以避免音频反馈。</string>
     <string name="pttSound">按住发言音效</string>
     <string name="pttSoundSum">按下按住发言按钮时播放音效。</string>
-    <string name="preprocessor_enabled">输入预处理</string>
-    <string name="preprocessor_enabled_sum">抑制环境噪声，并使音频音量正常化。</string>
     <string name="audio_per_packet">每数据包音频</string>
     <string name="audio_per_packet_sum">每个数据包的音频长度。</string>
     <string name="stay_awake">保持亮屏</string>
@@ -123,7 +118,6 @@
     <string name="vadFloorSum">计算阈值所依据的环境电平，单位为低于满刻度的 dB。仅在“跟随背景噪声”关闭时使用。</string>
     <string name="vadRecalibrate">重新测量</string>
     <string name="vadRecalibrateSum">清除已学习到的环境和你的声音信息，从头开始测量。</string>
-    <string name="vadRecalibrateDone">正在重新测量。</string>
     <string name="vadOnset">忽略短促噪声</string>
     <string name="vadOnsetSum">声音需要持续多长时间才会被视为语音。较长的设置可以滤掉单次键盘敲击声；每增加一级，会损失词语开头的 10 ms。</string>
     <string name="vadOnsetOff">关闭（0 ms）</string>

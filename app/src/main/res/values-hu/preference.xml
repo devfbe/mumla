@@ -29,7 +29,6 @@
     <string name="pttKeySum">Fizikai gomb használata a beszédhez.</string>
     <string name="hotCorner">Nyomd-a-beszédhez sarok</string>
     <string name="hotCornerSum">Nyomd meg a képernyő egyik sarkát a hang továbbításához.</string>
-    <string name="themeSum">Az alkalmazás kinézetének megváltoztatása.</string>
     <string name="general">Általános</string>
     <string name="appearance">Megjelenés</string>
     <string name="advancedAudio">Haladó</string>
@@ -47,8 +46,6 @@
     <string name="certificateGenerate">Tanúsítvány generálása</string>
     <string name="pttSettings">Nyomd-a-beszédhez beállítások</string>
     <string name="voiceActivitySettings">Hang aktivitás beállítások</string>
-    <string name="disableOpus">Tartózkodj az Opus kodektől</string>
-    <string name="disableOpusSum">Kapcsold ki az Opus támogatást Mumble 1.2.4 kiszolgálók esetén.</string>
     <string name="hidePtt">Rejtsd el a Nyomd-a-beszédhez gombot</string>
     <string name="hidePttSum">Csak akkor hasznos, ha Nyomd-a-beszédhez sarkot vagy fizikai gombot használsz.</string>
     <string name="useTts">Szöveg beszéddé</string>
@@ -74,10 +71,8 @@
     <string name="version">Verzió</string>
     <string name="halfDuplex">Egyirányú hang</string>
     <string name="halfDuplexSum">Elnémítja a többi lejátszást a Nyomd-a-beszédhez ideje alatt a hanghurok / feedback elkerülése érdekében.</string>
-    <string name="preprocessor_enabled_sum">Elnyomja a környezeti zajokat és normalizálja a hangerőt.</string>
     <string name="pttSound">Nyomd-a-beszédhez hang</string>
     <string name="pttSoundSum">Hanghatás lejátszása a Nyomd-a-beszédhez gomb megnyomásakor.</string>
-    <string name="preprocessor_enabled">Bemenet előfeldolgozás</string>
     <string name="audio_per_packet">Hang csomagonként</string>
     <string name="audio_per_packet_sum">A hang hossza hangcsomagonként.</string>
     <string name="stay_awake">Maradjon ébren</string>
@@ -117,7 +112,6 @@
     <string name="vadFloorSum">A szoba szintje, amelyhez képest a küszöböt mérjük, dB-ben a teljes skála alatt. Csak akkor használatos, ha a „Háttérzaj követése” ki van kapcsolva.</string>
     <string name="vadRecalibrate">Újramérés</string>
     <string name="vadRecalibrateSum">Elfelejti, amit a szobáról és a hangodról megtanult, és elölről kezdi a mérést.</string>
-    <string name="vadRecalibrateDone">Újramérés folyamatban.</string>
     <string name="vadOnset">Rövid zajok figyelmen kívül hagyása</string>
     <string name="vadOnsetSum">Mennyi ideig kell tartania egy hangnak, hogy beszédnek számítson. Hosszabb beállítás kiszűri az egyes billentyűzetkattanásokat; minden lépés 10 ms-ot vesz el a szó elejéből.</string>
     <string name="vadOnsetOff">Ki (0 ms)</string>

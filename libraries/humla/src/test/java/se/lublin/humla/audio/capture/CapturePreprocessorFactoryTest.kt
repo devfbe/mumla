@@ -27,12 +27,8 @@ import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
 import se.lublin.humla.audio.capture.fakes.SpeexPreprocessorRequests as R
 
 /**
- * Spec B2's composition rule: `[WebRTC APM] -> [Speex | RNNoise]`, and the probability is the last
- * non-null one in the chain.
- *
- * The order is semantics, not taste -- `ChainedPreprocessor`'s KDoc has the long version, and
- * task 2 measured it at 21.7 dB between a converged and an unconverged AEC3. What this file pins
- * is that the factory produces it.
+ * Composition rule: `[WebRTC APM] -> [Speex | RNNoise]`, and the probability is the last non-null
+ * one in the chain. The order matters: see `ChainedPreprocessor`.
  */
 class CapturePreprocessorFactoryTest {
     private companion object {
@@ -49,11 +45,8 @@ class CapturePreprocessorFactoryTest {
     // ------------------------------------------------------------------ off is off
 
     /**
-     * Spec §4.1, "pin off is off by identity". `NoopPreprocessor` is proven to run no code on the
-     * frame; the observable that matters here is that the factory hands back *that object*, not a
-     * stage built with neutral parameters that happens to leave the frame alone. A stage with
-     * neutral parameters still holds native state, still takes a lock on every frame and still has
-     * to be released -- and an assertion on the frame's contents cannot tell the two apart.
+     * Off must be the [NoopPreprocessor] object itself: a stage with neutral parameters would still
+     * hold native state and take a lock per frame, which the frame contents cannot reveal.
      */
     @Test
     fun `none and none is the no-op stage itself, with no far-end sink`() {
@@ -63,14 +56,7 @@ class CapturePreprocessorFactoryTest {
         assertThat(chain.farEndSink).isNull()
     }
 
-    /**
-     * The stronger half of the pair above, and the three assertions are deliberately the same
-     * strength. Each fake records the **attempt**, before its own failure check, so `0`/`null`
-     * here means "the factory never asked", not "it asked and the fake said no" -- which is the
-     * difference a `created` counter incremented after the check cannot express. Measured: a
-     * factory that builds an RNNoise stage for NONE and throws it away keeps
-     * `none and none is the no-op stage itself` green and dies **only** here.
-     */
+    /** The fakes record the attempt before their failure check, so 0/null means "never asked". */
     @Test
     fun `an off chain creates no native state at all`() {
         factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.NONE)
@@ -122,10 +108,8 @@ class CapturePreprocessorFactoryTest {
     }
 
     /**
-     * The corner the composition rule leaves behind, pinned so task 7 meets it as a fact rather
-     * than as a surprise: with no noise suppressor the only opinion in the chain is the APM's, and
-     * the APM's number is an output **level** (the fake reports -35 dBFS, which is 10 dB above the
-     * -45 floor, i.e. 0.4608 of the adopted -45/-23.3 window), not a speech model.
+     * With no noise suppressor the only opinion is the APM's output level (-35 dBFS in the fake,
+     * 0.4608 of the -45/-23.3 window), not a speech model.
      */
     @Test
     fun `webrtc echo alone provides a level-based probability and a far-end sink`() {
@@ -136,10 +120,8 @@ class CapturePreprocessorFactoryTest {
     }
 
     /**
-     * The far-end sink is the APM stage itself, not a second object wrapping it. It matters
-     * because the sink is handed to the *playback* thread while the same instance runs on the
-     * capture thread: one object, one lock (spec §4.1). A separate adapter would be a second
-     * route to the same handle, which is exactly what `SingleHandleStage` exists to prevent.
+     * The sink is handed to the playback thread while the same instance runs on the capture
+     * thread: one object, one lock. A wrapper would be a second route to the same handle.
      */
     @Test
     fun `the far-end sink is the stage that is in the chain`() {
@@ -149,10 +131,8 @@ class CapturePreprocessorFactoryTest {
     }
 
     /**
-     * The length that travels with the sink, and the reason it travels at all: only a *short*
-     * far-end frame is refused and counted, a long one is accepted and truncated in silence. A
-     * caller that sized its chunker from a constant would therefore lose about 21 dB with every
-     * counter at 0, so the APM's own answer is carried out of here instead.
+     * Carried out of the factory because a long far-end frame is silently truncated rather than
+     * refused, so a chunker sized from a constant could fail without any counter moving.
      */
     @Test
     fun `the chain carries the far-end frame size the apm demands`() {
@@ -172,19 +152,8 @@ class CapturePreprocessorFactoryTest {
     }
 
     /**
-     * The configuration the APM is built with, pinned in one place because it is a decision and
-     * not an implementation detail -- see [WebRtcApmConfig.FOR_ECHO_CANCELLATION], which carries
-     * the decision and its two effects (AGC2 is the only automatic gain control inside the capture
-     * chain today, and the level [LevelToProbability] reads is measured after NS and AGC2, so
-     * turning NS off moved it).
-     *
-     * **Written out rather than compared against the constant**, and that is the whole point of
-     * the test. Asserting `isEqualTo(WebRtcApmConfig.FOR_ECHO_CANCELLATION)` puts the value being
-     * tested on both sides: flipping `noiseSuppression` in the constant then changes what the APM
-     * is built with *and* what this expects, and the test stays green. Measured twice -- that
-     * exact mutation survived a sweep in the tautological form, and the decision to turn NS off
-     * turned this test red in this form, before the production line was touched. A decision
-     * belongs in a literal here even though it duplicates four fields.
+     * Written out rather than compared against [WebRtcApmConfig.FOR_ECHO_CANCELLATION]: comparing
+     * against the constant would put the value under test on both sides of the assertion.
      */
     @Test
     fun `the apm is built for echo cancellation at 48 kHz`() {
@@ -215,10 +184,7 @@ class CapturePreprocessorFactoryTest {
             .contains(R.SET_NOISE_SUPPRESS to SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB)
     }
 
-    /**
-     * Releasing the chain releases every stage in it. Without this, a mode switch leaks one native
-     * state per switch -- and `RnnoisePreprocessor` holds about 1.4 MB of model state.
-     */
+    /** `RnnoisePreprocessor` alone holds about 1.4 MB of native model state. */
     @Test
     fun `releasing the chain releases every stage it built`() {
         val chain = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
@@ -245,17 +211,15 @@ class CapturePreprocessorFactoryTest {
     }
 
     /**
-     * `RnnoiseNative` and `WebRtcApmNative` call `System.loadLibrary` in the Kotlin object
-     * initialiser, so a missing `.so` surfaces as `ExceptionInInitializerError` on the first touch
-     * and as `NoClassDefFoundError` on every later one -- neither of them an
-     * `UnsatisfiedLinkError`, and neither an `Exception`. Spec §0.3: a load failure of one library
-     * never takes the rest of the pipeline with it.
+     * The native objects load their library in the object initialiser, so a missing `.so` surfaces
+     * as `ExceptionInInitializerError` first and `NoClassDefFoundError` afterwards, never as an
+     * `Exception`. One failed stage must not take down the rest of the pipeline.
      */
     @Test
     fun `a stage whose native library fails to load is skipped and logged`() {
         val broken = CapturePreprocessorFactory(
             { speex },
-            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumlarnnoise.so not found")) },
+            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_native.so not found")) },
             { apm },
         ) { logs += it }
 
@@ -287,22 +251,11 @@ class CapturePreprocessorFactoryTest {
         assertThat(logs.single()).contains("WebRTC APM")
     }
 
-    /**
-     * The third branch, which had no failure test of its own while RNNoise and the APM had two
-     * each. §4.04's "sweep by effect": the speex branch makes one call into an object this file
-     * does not own -- `log` -- and nothing read the result back, so `tryStage` around it and the
-     * name it logs with were both unpinned. Measured, both surviving before this test existed:
-     * dropping `tryStage` from the speex branch, and `const val SPEEX = ""`.
-     *
-     * §0.3 decision 3 is the user-facing half: a missing `libhumla_speexdsp.so` must cost the
-     * noise suppression and nothing else. `SpeexPreprocessNative` loads it in its object
-     * initialiser exactly like the other two, so the speex branch is exposed to it exactly like
-     * the other two.
-     */
+    /** A speex stage that fails to load must cost the noise suppression and nothing else. */
     @Test
     fun `a speex stage whose native library fails to load is skipped and logged`() {
         val broken = CapturePreprocessorFactory(
-            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_speexdsp.so not found")) },
+            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_native.so not found")) },
             { rnnoise },
             { apm },
         ) { logs += it }
@@ -343,10 +296,8 @@ class CapturePreprocessorFactoryTest {
     }
 
     /**
-     * The one failure that is **not** caught: an unsupported speex suppression depth is a
-     * programmer error (task 12 falls back to the default for anything it cannot read out of the
-     * preference), so it reaches the caller instead of being logged and swallowed as a missing
-     * library. That is what keeps the catch narrow enough to mean something.
+     * An unsupported speex depth is a programmer error and must reach the caller rather than be
+     * logged as a missing library; that keeps the catch narrow.
      */
     @Test
     fun `an illegal argument is not swallowed as a missing library`() {
@@ -357,16 +308,7 @@ class CapturePreprocessorFactoryTest {
         assertThat(logs).isEmpty()
     }
 
-    /**
-     * The same throw, with a stage already built -- which is the combination the test above
-     * cannot reach, because it uses `EchoCancellationMode.NONE`.
-     *
-     * An `IllegalArgumentException` out of the speex constructor leaves `create` with a fully
-     * built `WebRtcApmPreprocessor` in a local list that nothing else can reach: one
-     * `webrtc::AudioProcessing` with its AEC3 state, unreferenced and never freed, per call. The
-     * narrow `catch` is right and stays; what was missing is that the half-built chain has an
-     * owner until `create` returns, and it has to hand back what it took.
-     */
+    /** The APM built before the throw is unreachable from anywhere else, so `create` must free it. */
     @Test
     fun `a throwing stage releases the stages already built`() {
         assertThrows(IllegalArgumentException::class.java) {
@@ -382,12 +324,7 @@ class CapturePreprocessorFactoryTest {
         assertThat(logs).isEmpty()
     }
 
-    /**
-     * Enumerated from the production file rather than from what looked interesting (§4.04): the
-     * factory branches on the noise mode, the echo mode and the number of stages that came up, so
-     * every value of both enums has to be written by some test here. A mode a later task adds
-     * fails this until someone decides what the factory does with it.
-     */
+    /** Every value of both enums must be handled; a new mode fails here until it is decided. */
     @Test
     fun `every mode combination produces a chain`() {
         for (noise in NoiseSuppressionMode.entries) {

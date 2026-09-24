@@ -31,6 +31,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
@@ -38,25 +39,24 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
+import se.lublin.humla.audio.capture.PcmCaptureSourceFactory
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.session.AudioDeviceCategory
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.audio.AndroidAudioTrackSink
 import se.lublin.mumla.audio.AudioTestSession
 import se.lublin.mumla.audio.MeterReading
+import se.lublin.mumla.audio.PcmPlaybackSinkFactory
 
-/**
- * The audio settings screen (spec B3-B6, B9, B10).
- *
- * Everything it decides lives in [AudioSettingsPolicy]; what is left here is the wiring to the
- * preference objects, which no host test can reach without an Activity and a window.
- */
-open class AudioSettingsFragment : MumlaPreferenceFragment() {
+/** The audio settings screen; the decisions live in [AudioSettingsPolicy], this is the wiring. */
+open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio) {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        setPreferencesFromResource(R.xml.settings_audio, rootKey)
+        super.onCreatePreferences(savedInstanceState, rootKey)
 
         val inputPreference = requireNotNull(findPreference<ListPreference>(Settings.PREF_INPUT_METHOD))
         inputPreference.setOnPreferenceChangeListener { _, newValue ->
@@ -97,9 +97,8 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
             }
         applyVadDependents(currentVadMode())
 
-        // Spec 4.1/B1, and it is the migration note the ledger addressed to this screen: since the
-        // preprocessor moved in front of the detector, the classic slider measures a denoised and
-        // possibly gain-controlled frame, so the same number means a different loudness than it did.
+        // The preprocessor runs before the detector, so the classic slider now measures a
+        // processed frame; the summary says so.
         findPreference<Preference>(Settings.PREF_THRESHOLD)?.summary =
             getString(R.string.detectionThresholdSum) + "\n\n" + getString(R.string.detectionThresholdMigration)
 
@@ -111,42 +110,52 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
         updateAudioDependents(preferenceScreen, inputPreference.value)
     }
 
-    // ---------------------------------------------------------------- the live meter (spec B10)
+    // ---------------------------------------------------------------- the live meter
 
     private var session: AudioTestSession? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
     /**
-     * Restarts the preview whenever a setting it was built from changes.
-     *
-     * It listens to [AudioPreferenceExtras.KEYS] rather than to a list of its own, so the preview
-     * cannot end up tracking a different set of settings than the service does -- two lists over
-     * one question is the shape this project keeps removing.
+     * Restarts a running preview whenever a setting it was built from changes; keyed on
+     * [SessionSettings.AUDIO_KEYS] so it tracks the same settings as the service.
      */
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key != null && key in se.lublin.mumla.service.AudioPreferenceExtras.KEYS) restartSession()
+        if (key != null && key in se.lublin.mumla.service.SessionSettings.AUDIO_KEYS && isTesting()) restartSession()
     }
 
     override fun onResume() {
         super.onResume()
         preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefsListener)
-        findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.setOnPreferenceChangeListener { _, newValue ->
-            restartSession(loopback = newValue as Boolean)
+        // The test takes the microphone and may switch to communication mode, which quietens
+        // other apps' audio, so it only runs while the user asks for it.
+        findPreference<SwitchPreferenceCompat>(KEY_TEST)?.setOnPreferenceChangeListener { _, newValue ->
+            if (newValue as Boolean) {
+                restartSession(loopback = false)
+            } else {
+                findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.isChecked = false
+                stopSession()
+            }
             true
         }
-        restartSession()
+        findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.setOnPreferenceChangeListener { _, newValue ->
+            if (isTesting()) restartSession(loopback = newValue as Boolean)
+            true
+        }
+        // Nothing runs until asked; this shows the idle hint.
+        stopSession()
     }
 
     override fun onPause() {
         preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(prefsListener)
-        // The microphone goes back before the screen does, not after: this session holds an
-        // AudioRecord that silences the service's own capture while it is open.
+        // This session's AudioRecord silences the service's capture, so release it first.
         stopSession()
-        // The monitor is not persisted, so a screen that is left with it on comes back with it off;
-        // reset the switch as well so the two agree.
+        // Neither switch is persisted; reset them so they agree with the stopped session.
         findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.isChecked = false
+        findPreference<SwitchPreferenceCompat>(KEY_TEST)?.isChecked = false
         super.onPause()
     }
+
+    private fun isTesting(): Boolean = findPreference<SwitchPreferenceCompat>(KEY_TEST)?.isChecked ?: false
 
     private fun restartSession(
         loopback: Boolean = findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.isChecked ?: false,
@@ -161,24 +170,27 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
             return
         }
         val settings = Settings.getInstance(context)
-        val vad = settings.getVadConfig()
+        val vad = settings.vadConfig
         meter.setHysteresisDb(vad.hysteresisDb)
         val started = AudioTestSession(
             context.getSystemService(Context.AUDIO_SERVICE) as AudioManager,
             vad,
-            settings.getNoiseSuppressionMode(),
-            settings.getSpeexNoiseSuppressDb(),
-            // The meter plays its loopback out loud, so it measures what a call on the speaker
-            // would: with the speaker's canceller, as the user has it.
+            settings.noiseSuppressionMode,
+            settings.speexNoiseSuppressDb,
+            // The loopback plays out loud, so apply the speaker's canceller as the user has it.
             if (settings.isEchoCancellationEnabled(AudioDeviceCategory.SPEAKER)) EchoCancellationMode.WEBRTC
             else EchoCancellationMode.NONE,
-            settings.getAndroidAudioEffects(),
+            settings.androidAudioEffects,
             loopback,
             onReading = { reading -> mainHandler.post { meter.setReading(reading) } },
+            captureFactory = captureFactory,
+            sinkFactory = sinkFactory,
         )
         try {
             started.start()
             session = started
+            // Clear the idle hint; the first reading follows within a few frames.
+            meter.setReading(null)
         } catch (e: AudioInitializationException) {
             Log.w(TAG, "input level meter unavailable", e)
             meter.setMessage(getString(R.string.inputLevelMeterUnavailable))
@@ -190,10 +202,10 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
         session = null
         // Readings already posted must not land on a dead meter and leave a frozen bar behind.
         mainHandler.removeCallbacksAndMessages(null)
-        findPreference<InputLevelMeterPreference>(KEY_METER)?.setReading(null)
+        findPreference<InputLevelMeterPreference>(KEY_METER)?.setMessage(getString(R.string.inputLevelMeterIdle))
     }
 
-    /** The mode as the preference file has it, which is the value [Settings] will read too. */
+    /** The mode as stored, which is what [Settings] will read. */
     protected fun currentVadMode(): VadMode =
         VadMode.fromPreferenceValue(findPreference<ListPreference>(Settings.PREF_VAD_MODE)?.value)
 
@@ -210,9 +222,8 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
     }
 
     /**
-     * Shows exactly the controls the chosen mode reads, and hides the rest rather than greying
-     * them out. Called with the mode from the listener, not from the preference: at that moment
-     * the preference has not been written yet.
+     * Shows exactly the controls [mode] reads and hides the rest. Called with the listener's value,
+     * since the preference has not been written yet at that point.
      */
     protected open fun applyVadDependents(mode: VadMode) {
         val dependents = AudioSettingsPolicy.vadDependents(mode)
@@ -242,10 +253,24 @@ open class AudioSettingsFragment : MumlaPreferenceFragment() {
             Settings.ARRAY_INPUT_METHOD_VOICE == inputMethod
     }
 
-    private companion object {
-        const val TAG = "AudioSettingsFragment"
-        const val KEY_METER = "input_level_meter"
-        const val KEY_LOOPBACK = "audio_loopback_test"
-        const val KEY_RECALIBRATE = "vad_recalibrate"
+    internal companion object {
+        private const val TAG = "AudioSettingsFragment"
+        private const val KEY_METER = "input_level_meter"
+        private const val KEY_TEST = "audio_test_microphone"
+        private const val KEY_LOOPBACK = "audio_loopback_test"
+        private const val KEY_RECALIBRATE = "vad_recalibrate"
+
+        /** Where the test session gets its microphone and speaker; replaced in tests. */
+        @VisibleForTesting
+        var captureFactory: PcmCaptureSourceFactory = AndroidAudioRecordSource.Factory()
+
+        @VisibleForTesting
+        var sinkFactory: PcmPlaybackSinkFactory = AndroidAudioTrackSink.Factory()
+
+        @VisibleForTesting
+        fun resetFactories() {
+            captureFactory = AndroidAudioRecordSource.Factory()
+            sinkFactory = AndroidAudioTrackSink.Factory()
+        }
     }
 }

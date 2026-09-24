@@ -30,7 +30,6 @@
     <string name="hotCornerSum">Eine Bildschirmecke festlegen, welche App-Übergreifend als Zum Sprechen drücken-Taste verwendet werden kann.</string>
     <string name="general">Allgemein</string>
     <string name="appearance">Aussehen</string>
-    <string name="themeSum">Ändern Sie das Aussehen der App.</string>
     <string name="theme">Erscheinungsbild</string>
     <string name="advancedAudio">Erweiterte Audioeinstellungen</string>
     <string name="forceTcp">Nur TCP</string>
@@ -47,8 +46,6 @@
     <string name="certificateGenerateSum">Erzeugt ein neues, selbst signiertes Mumla-Zertifikat. Für unerfahrene Benutzer empfohlen.</string>
     <string name="pttSettings">Zum Sprechen drücken-Einstellungen</string>
     <string name="voiceActivitySettings">Sprachaktivierungs-Einstellungen</string>
-    <string name="disableOpus">Opus Codec vermeiden</string>
-    <string name="disableOpusSum">Opus Unterstützung für Mumble 1.2.4-Server deaktivieren.</string>
     <string name="hidePtt">Verstecke die Zum Sprechen drücken-Taste</string>
     <string name="hidePttSum">Nur nützlich bei Verwendung von Bildschirmecken oder Hardwaretasten.</string>
     <string name="useTts">Text-zu-Sprache</string>
@@ -72,8 +69,6 @@
     <string name="halfDuplexSum">Andere Wiedergabe während Zum Sprechen drücken stummschalten, um Rückkopplung zu verhindern.</string>
     <string name="pttSound">Zum Sprechen drücken-Ton</string>
     <string name="pttSoundSum">Spiele einen Ton ab, wenn der Zum Sprechen drücken-Knopf gedrückt wird.</string>
-    <string name="preprocessor_enabled">Eingabe-Präprozessor</string>
-    <string name="preprocessor_enabled_sum">Umgebungsgeräusche unterdrücken und Lautstärke normalisierien.</string>
     <string name="audio_per_packet">Audio pro Paket</string>
     <string name="audio_per_packet_sum">Die Länge des Audios pro Sprachpaket.</string>
     <string name="stay_awake">Wach bleiben</string>
@@ -120,7 +115,6 @@
     <string name="vadFloorSum">Der Raumpegel, von dem aus die Schwelle gemessen wird, in dB unter Vollaussteuerung. Wird nur verwendet, wenn „Hintergrundgeräusch folgen“ aus ist.</string>
     <string name="vadRecalibrate">Neu messen</string>
     <string name="vadRecalibrateSum">Vergisst, was über den Raum und Ihre Stimme gelernt wurde, und misst von vorn.</string>
-    <string name="vadRecalibrateDone">Es wird neu gemessen.</string>
     <string name="vadOnset">Kurze Geräusche ignorieren</string>
     <string name="vadOnsetSum">Wie lange ein Geräusch andauern muss, bevor es als Sprache zählt. Längere Einstellungen halten einzelne Tastaturklicks fern; jede Stufe kostet 10 ms vom Wortanfang.</string>
     <string name="vadOnsetOff">Aus (0 ms)</string>

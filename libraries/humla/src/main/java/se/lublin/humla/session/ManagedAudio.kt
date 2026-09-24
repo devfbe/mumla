@@ -24,15 +24,16 @@ import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.protocol.AudioHandler
-import se.lublin.humla.protocol.HumlaTCPMessageListener
-import se.lublin.humla.protocol.HumlaUDPMessageListener
+import se.lublin.humla.protocol.TcpMessageHandler
+import se.lublin.humla.protocol.VoicePacketHandler
 import se.lublin.humla.util.HumlaLogger
 
 /** A running audio pipeline as [AudioController] sees it (real: AudioHandler; tests: fakes). */
 interface ManagedAudio {
-    val tcpListener: HumlaTCPMessageListener
-    val udpListener: HumlaUDPMessageListener
+    val tcpHandler: TcpMessageHandler
+    val voiceHandler: VoicePacketHandler
     val currentBandwidth: Int
     fun setVoiceTargetId(id: Byte)
 
@@ -53,6 +54,8 @@ data class AudioSessionParams(
     val codec: HumlaUDPMessageType?,
     val targetId: Byte,
     val inputMode: IInputMode,
+    /** The connection's voice packet format. */
+    val udpProtocol: UdpProtocol = UdpProtocol.LEGACY,
 )
 
 interface AudioHandlerFactory {
@@ -68,12 +71,13 @@ interface AudioHandlerFactory {
 }
 
 /**
- * Builds the real [AudioHandler]. Stream B extends the builder chain here (spec 4).
- *
- * [AudioConfig.echoCancellation] reaches `Builder.setEchoCancellationMethod` as the WebRTC
- * canceller or none; the platform canceller ("system") is no longer offered.
+ * Builds the real [AudioHandler]. [AudioConfig.echoCancellation] maps to the WebRTC canceller or
+ * none.
  */
-class DefaultAudioHandlerFactory : AudioHandlerFactory {
+class DefaultAudioHandlerFactory(
+    /** The builder [builder] fills; tests pass one that records the setter calls. */
+    private val newBuilder: () -> AudioHandler.Builder = { AudioHandler.Builder() },
+) : AudioHandlerFactory {
     @Throws(AudioException::class)
     override fun create(
         context: Context,
@@ -87,24 +91,14 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
     )
 
     /**
-     * The four per-session arguments, separated for the same reason as [builder]: on the far side
-     * of this call there is a microphone. `self` carries the session id that every voice packet is
-     * stamped with, so a wrong one is not a degraded pipeline but somebody else's audio.
+     * The per-session arguments. `self` carries the session id stamped on every voice packet, so a
+     * wrong one means sending as somebody else.
      */
     @Throws(AudioException::class)
     internal fun initialize(builder: AudioHandler.Builder, params: AudioSessionParams): AudioHandler =
         builder.initialize(params.self, params.maxBandwidth, params.codec, params.targetId)
 
-    /**
-     * The config-to-builder mapping, split off from `initialize` so that a JVM test can read it
-     * back. `initialize` opens a microphone and starts the capture and playback threads, so nothing
-     * behind it is reachable without a device - and while these fifteen calls sat on the far side of
-     * it, fourteen of them were unpinned: swapping `targetBitrate` for `inputSampleRate`, dropping
-     * `setAudioStream` or `setInputMode`, and reading `halfDuplexRequested` instead of `halfDuplex`
-     * each left the whole suite green (measured).
-     *
-     * Stream B extends the chain here.
-     */
+    /** The config-to-builder mapping, split from `initialize` so JVM tests can inspect it. */
     internal fun builder(
         context: Context,
         logger: HumlaLogger,
@@ -113,7 +107,7 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
         encodeListener: AudioHandler.AudioEncodeListener,
         outputListener: AudioOutput.AudioOutputListener,
     ): AudioHandler.Builder =
-        AudioHandler.Builder()
+        newBuilder()
             .setContext(context)
             .setLogger(logger)
             .setAudioStream(config.playbackStream)
@@ -122,7 +116,6 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
             .setTargetBitrate(config.targetBitrate)
             .setTargetFramesPerPacket(config.targetFramesPerPacket)
             .setAmplitudeBoost(config.amplitudeBoost)
-            .setBluetoothEnabled(config.bluetoothActive)
             .setHalfDuplexEnabled(config.halfDuplex)
             .setPreprocessorEnabled(config.preprocessorEnabled)
             .setEchoCancellationMethod(
@@ -130,6 +123,7 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
                 else EchoCancellationMode.NONE.preferenceValue,
             )
             .setInputMode(params.inputMode)
+            .setUdpProtocol(params.udpProtocol)
             .setEncodeListener(encodeListener)
             .setTalkingListener(outputListener)
             .setNoiseSuppressionMethod(config.noiseSuppression)
@@ -142,8 +136,8 @@ class DefaultAudioHandlerFactory : AudioHandlerFactory {
 class AudioHandlerAdapter(private val handler: AudioHandler) : ManagedAudio {
     @Volatile private var warningListener: ((String) -> Unit)? = null
 
-    override val tcpListener: HumlaTCPMessageListener get() = handler
-    override val udpListener: HumlaUDPMessageListener get() = handler
+    override val tcpHandler: TcpMessageHandler get() = handler
+    override val voiceHandler: VoicePacketHandler get() = handler
     override val currentBandwidth: Int get() = handler.currentBandwidth
     override fun setVoiceTargetId(id: Byte) = handler.setVoiceTargetId(id)
 
@@ -152,15 +146,11 @@ class AudioHandlerAdapter(private val handler: AudioHandler) : ManagedAudio {
     }
 
     /**
-     * Reports a user-facing audio problem. Everything downstream belongs to stream A and is in
-     * place: [AudioController] posts it to the main thread and `HumlaService` turns it into a
-     * chat-log warning (spec A8).
+     * Reports a user-facing audio problem; [AudioController] posts it to the main thread and
+     * `HumlaService` logs it to chat.
      *
-     * **Stream B hook** (<= 6 lines): collect `handler.captureState` (spec 4) and call this for
-     * `CaptureState.Silenced` and `CaptureState.Error`. Nothing calls it yet, so today this channel
-     * is pinned by AudioHandlerAdapterTest and by nothing in production; decoder-creation failures
-     * and UDP failures reach the log through [AudioController.Listener.onAudioFailed] and
-     * `ConnectionWarning` instead.
+     * Intended for `CaptureState.Silenced`/`Error` from `handler.captureState`; nothing calls this
+     * in production yet.
      */
     fun reportWarning(message: String) {
         warningListener?.invoke(message)

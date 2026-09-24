@@ -1,21 +1,13 @@
 /*
  * C ABI wrapper around webrtc::AudioProcessing. See humla_apm.h for the contract.
  *
- * Exception safety is the point of this file, not a detail of it. Task 3 calls these functions
- * from JNI, and an exception unwinding out of a function with C linkage into a C caller, or into
- * the JVM's frames, is undefined behaviour rather than a crash with a stack trace. Two
- * independent measures are used:
+ * An exception unwinding out of a C-linkage function into the JVM is undefined behaviour, so
+ * every entry point is noexcept, and every entry point that can allocate also catches (...) and
+ * returns a failure value.
  *
- *   - every entry point is declared noexcept, so the compiler is required to stop any escaping
- *     exception at this boundary (with std::terminate) instead of unwinding through it;
- *   - every entry point that can allocate wraps its body in catch (...) and returns a failure
- *     value, so the noexcept backstop is never actually reached.
- *
- * webrtc itself does not signal errors by throwing -- RTC_CHECK calls abort() -- so the only
- * realistic exception is std::bad_alloc from a container or from `new`. That an RTC_CHECK is
- * fatal rather than catchable is precisely why every argument is validated here, before webrtc
- * sees it: an unsupported sample rate or a null buffer must come back as a return value, not as
- * an abort inside the audio thread.
+ * webrtc does not throw -- RTC_CHECK calls abort() -- so every argument is validated here before
+ * webrtc sees it: an unsupported sample rate or a null buffer must be a return value, not an abort
+ * on the audio thread.
  */
 #include "humla_apm.h"
 
@@ -61,8 +53,7 @@ extern "C" humla_apm* humla_apm_create(int sample_rate_hz, const humla_apm_confi
         c.echo_canceller.mobile_mode = false;
         c.noise_suppression.enabled = cfg->noise_suppression != 0;
         using NS = webrtc::AudioProcessing::Config::NoiseSuppression;
-        // Clamped rather than rejected: the level comes from a user preference by way of JNI and
-        // must never be able to reach the enum as an out-of-range value.
+        // Clamped rather than rejected: the level comes from a user preference via JNI.
         int lvl = cfg->noise_suppression_level < 0
                       ? 0
                       : (cfg->noise_suppression_level > 3 ? 3 : cfg->noise_suppression_level);

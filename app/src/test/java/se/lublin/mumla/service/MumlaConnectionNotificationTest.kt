@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
-import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -25,15 +24,12 @@ import org.robolectric.annotation.Config
 import se.lublin.mumla.R
 import se.lublin.mumla.app.DrawerAdapter
 import se.lublin.mumla.app.MumlaActivity
+import se.lublin.mumla.testing.idleMainLooper
 
 /**
  * The foreground notification: what it shows, what its buttons reach, and when it holds the
- * service in the foreground.
- *
- * Every assertion reads a result back from an object the notification does not own -- the
- * notification manager, the service's foreground state, the registered receivers, a listener
- * called through the button's own PendingIntent -- because that is all this class does (spec
- * 4.04, sweep by effect).
+ * service in the foreground. Every assertion reads back from an object the notification does not
+ * own (notification manager, foreground state, receivers, the buttons' own PendingIntents).
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaConnectionNotificationTest {
@@ -74,7 +70,6 @@ class MumlaConnectionNotificationTest {
         controller.destroy()
     }
 
-    /** The only line that differs between the Java class and its Kotlin conversion. */
     private fun MumlaConnectionNotification.configure(text: String, actions: Boolean) {
         customContentText = text
         actionsShown = actions
@@ -86,7 +81,6 @@ class MumlaConnectionNotificationTest {
         it.intentFilter.hasAction("b_mute")
     }
 
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     // ---- what the notification shows -------------------------------------------------------
 
@@ -111,18 +105,40 @@ class MumlaConnectionNotificationTest {
         assertThat(n.flags and Notification.FLAG_ONGOING_EVENT).isNotEqualTo(0)
         assertThat(n.extras.getBoolean(Notification.EXTRA_SHOW_WHEN, true)).isFalse()
         @Suppress("DEPRECATION")
-        assertThat(n.priority).isEqualTo(NotificationCompat.PRIORITY_DEFAULT)
+        assertThat(n.priority).isEqualTo(NotificationCompat.PRIORITY_LOW)
         assertThat(n.channelId).isEqualTo(CHANNEL_ID)
     }
 
     @Test
-    fun theChannelIsCreatedWithTheConnectedLabelAtDefaultImportance() {
+    fun aTextChangeDoesNotAlertAgain() {
+        val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
+        notification.show()
+        notification.customContentText = "Connected"
+        notification.show()
+
+        assertThat(posted().flags and Notification.FLAG_ONLY_ALERT_ONCE).isNotEqualTo(0)
+        assertThat(posted().extras.getString(Notification.EXTRA_TEXT)).isEqualTo("Connected")
+    }
+
+    @Test
+    fun theChannelOfEarlierVersionsIsDeleted() {
+        notificationManager.createNotificationChannel(
+            android.app.NotificationChannel("connected_channel", "old", NotificationManager.IMPORTANCE_DEFAULT),
+        )
+
+        MumlaConnectionNotification.create(service, "Connecting", listener).show()
+
+        assertThat(notificationManager.getNotificationChannel("connected_channel")).isNull()
+    }
+
+    @Test
+    fun theChannelIsCreatedWithTheConnectedLabelAtLowImportance() {
         MumlaConnectionNotification.create(service, "Connecting", listener).show()
 
         val channel = notificationManager.getNotificationChannel(CHANNEL_ID)
         assertThat(channel).isNotNull()
         assertThat(channel.name.toString()).isEqualTo(service.getString(R.string.connected))
-        assertThat(channel.importance).isEqualTo(NotificationManager.IMPORTANCE_DEFAULT)
+        assertThat(channel.importance).isEqualTo(NotificationManager.IMPORTANCE_LOW)
     }
 
     @Test
@@ -139,8 +155,7 @@ class MumlaConnectionNotificationTest {
 
     /**
      * Extras are not part of a PendingIntent's identity, and MumlaMessageNotification asks for the
-     * same activity under the same request code. Both carry ITEM_SERVER today, so the only thing
-     * that shows the flag is the flag.
+     * same activity under the same request code, so the flag itself is asserted.
      */
     @Test
     fun theContentIntentReplacesAnyEarlierOneSoItsExtraIsTheOneSent() {
@@ -195,7 +210,7 @@ class MumlaConnectionNotificationTest {
         for ((index, expected) in listOf("mute", "deafen", "overlay").withIndex()) {
             listener.calls.clear()
             shadowOf(service).lastForegroundNotification.actions[index].actionIntent.send()
-            idle()
+            idleMainLooper()
             assertThat(listener.calls).containsExactly(expected)
         }
     }
@@ -238,7 +253,7 @@ class MumlaConnectionNotificationTest {
         notification.show()
 
         posted().actions.single().actionIntent.send()
-        idle()
+        idleMainLooper()
 
         assertThat(listener.calls).containsExactly("cancelReconnect")
         assertThat(ourReceivers()).hasSize(1)
@@ -267,7 +282,7 @@ class MumlaConnectionNotificationTest {
         assertThat(shadowOf(service).notificationShouldRemoved).isTrue()
         assertThat(ourReceivers()).isEmpty()
         mute.send()
-        idle()
+        idleMainLooper()
         assertThat(listener.calls).isEmpty()
     }
 
@@ -278,7 +293,7 @@ class MumlaConnectionNotificationTest {
         assertThat(ourReceivers()).isEmpty()
     }
 
-    // ---- spec A6: the foreground start is made once, and a refusal is survivable -----------
+    // ---- the foreground start is made once, and a refusal is survivable ---------------------
 
     @Test
     fun showReportsThatTheServiceIsInTheForeground() {
@@ -312,9 +327,8 @@ class MumlaConnectionNotificationTest {
     }
 
     /**
-     * ForegroundServiceStartNotAllowedException is an IllegalStateException, so this is the test
-     * that tells "catch the refusal" apart from "catch everything of its supertype": a manifest
-     * that lost its foregroundServiceType is a build defect and must not turn into a chat line.
+     * ForegroundServiceStartNotAllowedException is an IllegalStateException; only the refusal is
+     * caught, since a manifest without a foregroundServiceType is a build defect.
      */
     @Test
     fun anyOtherFailureOfTheForegroundStartStillPropagates() {
@@ -325,12 +339,9 @@ class MumlaConnectionNotificationTest {
     }
 
     /**
-     * The platform re-checks the background-start restriction on EVERY startForeground call,
-     * "regardless of whether stopForeground() has been called or not" (ActiveServices,
-     * setServiceForegroundInnerLocked, the `mStartForegroundCount >= 1` arm). A text change sent
-     * through startForeground while the screen is off is therefore refused exactly like a fresh
-     * start -- which is the complaint this task closes. From the second show on, the platform
-     * here refuses every start, and the update must still arrive.
+     * The platform re-checks the background-start restriction on every startForeground call, so a
+     * text update while the screen is off is refused like a fresh start. From the second show on
+     * every start is refused here, and the update must still arrive.
      */
     @Test
     fun aSecondShowUpdatesTheNotificationWithoutAnotherForegroundStart() {
@@ -359,7 +370,7 @@ class MumlaConnectionNotificationTest {
 
         assertThat(ourReceivers()).hasSize(1)
         posted().actions[0].actionIntent.send()
-        idle()
+        idleMainLooper()
         assertThat(listener.calls).containsExactly("mute")
     }
 
@@ -388,10 +399,7 @@ class MumlaConnectionNotificationTest {
         assertThat(service.foregroundServiceType).isEqualTo(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }
 
-    /**
-     * Below 34 the call without a type takes every type the manifest declares
-     * (microphone|mediaPlayback); the typed call would narrow that to microphone.
-     */
+    /** Below 34 the call without a type takes every type the manifest declares. */
     @Test
     @Config(sdk = [33])
     fun belowAndroid14TheForegroundTakesTheManifestTypes() {
@@ -403,6 +411,6 @@ class MumlaConnectionNotificationTest {
 
     private companion object {
         const val NOTIFICATION_ID = 1
-        const val CHANNEL_ID = "connected_channel"
+        const val CHANNEL_ID = "connection_status"
     }
 }

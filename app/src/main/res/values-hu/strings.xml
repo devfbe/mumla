@@ -65,7 +65,6 @@
     <string name="server_username">Felhasználónév</string>
     <string name="server_port">Port</string>
     <string name="server_label">Címke</string>
-    <string name="connecting">Kapcsolódás</string>
     <string name="connecting_to_server">Kapcsolódás ehhez: %s…</string>
     <string name="ptt">Nyomd-a-beszédhez</string>
     <string name="deafen">Süketít</string>
@@ -86,7 +85,6 @@
     <string name="generateCertProgress">Tanúsítvány létrehozása…</string>
     <string name="search">Keresés</string>
     <string name="searchHint">Csatorna és felhasználó keresés</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="quickConnect">Gyors csatlakozás</string>
     <string name="connect">Csatlakozás</string>
     <string name="connectToServer">Kapcsolódás szerverhez</string>
@@ -96,7 +94,6 @@
     <string name="online">Elérhető</string>
     <string name="clearChat">Chat üzenetek törlése</string>
     <string name="connected">Csatlakoztatva</string>
-    <string name="mumlaConnected">Mumla csatlakozott</string>
     <string name="mumlaConnecting">Mumla csatlakozás…</string>
     <string name="mumlaDisconnected">Mumla leválasztva</string>
     <string name="channel">Csatorna</string>
@@ -132,7 +129,6 @@
     <string name="current_chat_target">Csevegő címzettje</string>
     <string name="invalid_port_range">Helytelen portszám (1-65535)</string>
     <string name="cancel_reconnect">Újracsatlakozás megszakítása</string>
-    <string name="certificates">Tanúsítványok</string>
     <string name="certificate_load_failed">Nem sikerült eltárolni a tanúsítványt.</string>
     <string name="certificate_import_success">Importált tanúsítvány: %s.</string>
     <string name="export_success">Tanúsítvány exportálva: %s.</string>
@@ -146,10 +142,6 @@
     <string name="default_">Alapértelmezett</string>
     <string name="donation_thanks">Köszönjük a támogatást.</string>
     <string name="image_confirm_send">Elküldöd az üzenetet?</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d új üzenet</item>
-        <item quantity="other">%d új üzenetek</item>
-    </plurals>
     <string name="error_fetching_servers">Nem sikerült lekérni a szerverek listáját.
 \nBiztosan csatlakozva vagy az Internethez?</string>
     <string name="confirm">Megerősítés</string>
@@ -190,7 +182,6 @@
     <string name="context_channel_unlink_all">Összes szétválasztása</string>
     <string name="shout_include_linked">Kiáltás a kapcsolt csatornákra</string>
     <string name="grant_perm_notifications">Kérlek, adj engedélyt az értesítések küldésére.</string>
-    <string name="grant_perm_storage">Kérlek, adj engedélyt a külső tárolóhoz.</string>
     <string name="grant_perm_draw_over_apps">Kérlek, adj engedélyt a más alkalmazások feletti megjelenítésre.</string>
     <string name="orbot_not_installed">Az Orbot alkalmazás nincs telepítve. Így a Tor nem használható.</string>
     <string name="orbot_tor_failed">Nem sikerült a helyi Tor proxyhoz csatlakozni ezen a porton: %d (SOCKS).
@@ -221,4 +212,21 @@
     <string name="audio_device_bluetooth">Bluetooth headset</string>
     <string name="audio_device_other">Hangeszköz</string>
     <string name="echo_cancellation">Visszhangszűrés</string>
+    <string name="chat_notify_muted_deafened">Némítva és süketítve.</string>
+    <string name="chat_notify_muted">Némítva.</string>
+    <string name="chat_notify_unmuted">Némítás visszavonva.</string>
+    <string name="chat_notify_now_muted_deafened">%s most némítva és süketítve.</string>
+    <string name="chat_notify_now_muted">%s némítva.</string>
+    <string name="chat_notify_now_unmuted">%s némítás feloldva.</string>
+    <string name="chat_notify_connected">%s kapcsolódott.</string>
+    <string name="chat_notify_disconnected">%s szétkapcsolt.</string>
+    <string name="chat_notify_kick_ban_self">%1$s kidobott és kitiltott a szerverről: %2$s.</string>
+    <string name="chat_notify_kick_self">Ki lettél rúgva a szerverről %1$s: %2$s.</string>
+    <string name="chat_notify_kick_ban">%1$s kidobta és kitiltotta a szerverről %3$s felhasználót: %2$s.</string>
+    <string name="chat_notify_self_recording_started">Rögzítés elkezdődött</string>
+    <string name="chat_notify_self_recording_stopped">Rögzítés leállítva</string>
+    <string name="chat_notify_user_recording_started">%s elindította a felvételt.</string>
+    <string name="chat_notify_user_recording_stopped">%s leállította a felvételt.</string>
+    <string name="chat_notify_user_joined_channel">%s belépett a csatornába.</string>
+    <string name="chat_notify_user_left_channel">%1$s átmozgatva ide %2$s.</string>
 </resources>

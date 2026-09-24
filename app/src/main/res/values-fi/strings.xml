@@ -2,11 +2,6 @@
 <resources>
     <string name="sortBy">Järjestä…</string>
     <string name="connecting_to_server">Yhdistetään %s…</string>
-    <string name="connecting">Yhdistetään</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d uusi viesti</item>
-        <item quantity="other">%d uusia viestejä</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d käyttäjä</item>
         <item quantity="other">%d käyttäjät</item>
@@ -18,7 +13,6 @@
 \nVarmista, että Orbot-sovellus on käynnissä.</string>
     <string name="orbot_not_installed">Orbot-sovellusta ei ole asennettu. Ei käytä Tor-verkkoa tällä hetkellä.</string>
     <string name="grant_perm_draw_over_apps">Myönnä käyttöoikeus näyttää muiden sovellusten päällä.</string>
-    <string name="grant_perm_storage">Anna ulkoiselle tallennustilalle lupa.</string>
     <string name="grant_perm_microphone">Anna mikrofonin käyttöoikeus.</string>
     <string name="shout_configure">Määritä äänikohde</string>
     <string name="shout_target">Huudetaan henkilölle %s</string>
@@ -35,7 +29,6 @@
     <string name="invalid_certificate">Virheellinen sertifikaatti, lataaminen epäonnistui.</string>
     <string name="password">Salasana</string>
     <string name="decrypt_certificate">Pura Sertifikaatti</string>
-    <string name="certificates">Sertifikaatit</string>
     <string name="no_certificate">Ei sertifikaattia</string>
     <string name="change_requires_reconnect">Muodosta yhteys uudelleen käyttääksesi uusia asetuksia.</string>
     <string name="attempting_reconnect">Virhe: %s.
@@ -105,7 +98,6 @@
     <string name="channel">Kanava</string>
     <string name="mumlaDisconnected">Mumla katkaisi yhteyden</string>
     <string name="mumlaConnecting">Mumla-yhteyden muodostaminen…</string>
-    <string name="mumlaConnected">Mumla yhdistetty</string>
     <string name="connected">Yhdistetty</string>
     <string name="clearChat">Tyhjennä chat</string>
     <string name="offline">Offline-tilassa</string>
@@ -118,7 +110,6 @@
     <string name="connectToServer">Yhdistä palvelimeen</string>
     <string name="connect">Yhdistä</string>
     <string name="quickConnect">Pikayhteys</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="searchHint">Hae kanavia ja käyttäjiä</string>
     <string name="search">Haku</string>
     <string name="generateCertProgress">Luodaan sertifikaattia…</string>
@@ -219,4 +210,34 @@
     <string name="audio_device_bluetooth">Bluetooth-kuulokkeet</string>
     <string name="audio_device_other">Äänilaite</string>
     <string name="echo_cancellation">Kaiunpoisto</string>
+    <string name="chat_notify_muted_deafened">Mykistetty ja hiljennetty.</string>
+    <string name="chat_notify_muted">Mykistetty.</string>
+    <string name="chat_notify_unmuted">Mykistys poistettu.</string>
+    <string name="chat_notify_now_muted_deafened">%s on nyt mykistetty ja hiljennetty.</string>
+    <string name="chat_notify_now_muted">%s on nyt mykistetty.</string>
+    <string name="chat_notify_now_unmuted">%s ei ole enää mykistetty.</string>
+    <string name="chat_notify_connected">%s liittyi.</string>
+    <string name="chat_notify_disconnected">%s poistui.</string>
+    <string name="chat_notify_kick_ban_self">Sinut on potkittu ja asetettu porttikieltoon serverille %1$s:%2$s.</string>
+    <string name="chat_notify_kick_self">Sinut on potkittu palvelimelta %1$s:%2$s toimesta.</string>
+    <string name="chat_notify_kick_ban">%3$s on potkittu ja asetettu porttikieltoon palvelimelle %1$s%2$s toimesta.</string>
+    <string name="chat_notify_kick">%3$s on potkittu palvelimelta %1$s:%2$s toimesta.</string>
+    <string name="chat_notify_self_recording_started">Nauhoitus aloitettu</string>
+    <string name="chat_notify_self_recording_stopped">Nauhoitus pysäytetty</string>
+    <string name="chat_notify_user_recording_started">%s aloitti nauhoituksen.</string>
+    <string name="chat_notify_user_recording_stopped">%s pysäytti nauhoituksen.</string>
+    <string name="chat_notify_user_joined_channel">%s liittyi kanavalle.</string>
+    <string name="chat_notify_user_left_channel">%1$s siirtyi kanavalle %2$s.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s siirtyi kanavalta %2$s käyttäjän %3$s toimesta.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s on siirretty kanavalle %2$s käyttäjän %3$s toimesta.</string>
+    <string name="deny_reason_channel_name">Estetty: Vääränlainen kanavannimi.</string>
+    <string name="deny_reason_text_too_long">Estetty: Tekstiviesti on liian pitkä.</string>
+    <string name="deny_reason_no_operation_temp">Estetty: Toiminto ei ole sallittu väliaikaisella kanavalla.</string>
+    <string name="deny_reason_no_certificate">Tarvitset sertifikaatin käyttääksesi tätä toimintoa.</string>
+    <string name="deny_reason_invalid_username">Väärä käyttäjätunnus.</string>
+    <string name="deny_reason_channel_full">Kanava on täynnä.</string>
+    <string name="deny_reason_channel_nesting">Alikanavien maksimimäärä saavutettu.</string>
+    <string name="deny_reason_other">Syy: %s</string>
+    <string name="server">Palvelin</string>
+    <string name="the_server">palvelin</string>
 </resources>

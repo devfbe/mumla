@@ -20,6 +20,7 @@ package se.lublin.mumla
 import android.content.Context
 import android.content.SharedPreferences
 import android.view.Gravity
+import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import se.lublin.humla.Constants
 import se.lublin.humla.audio.capture.AdaptiveVadTracker
@@ -29,316 +30,283 @@ import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
+import kotlin.properties.ReadOnlyProperty
+import kotlin.properties.ReadWriteProperty
+import kotlin.reflect.KProperty
 
 /**
- * Settings class for universal access to the app's preferences.
- *
- * Streams B (audio) and P (platform) add keys and accessors here; keep the Java-visible
- * API (static constants, `getInstance`, method names) stable because Java callers remain.
+ * Typed access to the app's preferences. Each preference's key and default live in the companion;
+ * the properties read and write through to disk, so they always reflect the current value.
  */
-class Settings private constructor(context: Context) {
+@Suppress("TooManyFunctions") // One accessor per preference.
+class Settings private constructor(private val context: Context) {
 
     private val preferences: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
 
-    init {
-        // One-time cleanup of keys the audio chooser replaced. Checked on every construction and
-        // written only while an old key is still there, so it costs two lookups afterwards.
-        if (preferences.contains(LEGACY_PREF_ECHO_CANCELLATION_METHOD)) {
-            preferences.edit().remove(LEGACY_PREF_ECHO_CANCELLATION_METHOD).apply()
-        }
-        if (preferences.contains(LEGACY_PREF_HANDSET_MODE)) {
-            val editor = preferences.edit().remove(LEGACY_PREF_HANDSET_MODE)
-            // The handset mode was the earpiece; a default output the user already picked wins.
-            if (preferences.getBoolean(LEGACY_PREF_HANDSET_MODE, false) && !preferences.contains(PREF_DEFAULT_OUTPUT)) {
-                editor.putString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_EARPIECE)
-            }
-            editor.apply()
-        }
-    }
-
-    fun getInputMethod(): String {
-        val method = preferences.getString(PREF_INPUT_METHOD, ARRAY_INPUT_METHOD_VOICE)
-        // Set default method for users who used to use handset mode before removal.
-        return if (method != null && method in ARRAY_INPUT_METHODS) method else ARRAY_INPUT_METHOD_VOICE
-    }
-
-    /**
-     * Converts the preference input method value to the one used to connect to a server via Humla.
-     * @return An input method value used to instantiate a Humla service.
-     */
-    fun getHumlaInputMethod(): Int = when (val inputMethod = getInputMethod()) {
-        ARRAY_INPUT_METHOD_VOICE -> Constants.TRANSMIT_VOICE_ACTIVITY
-        ARRAY_INPUT_METHOD_PTT -> Constants.TRANSMIT_PUSH_TO_TALK
-        ARRAY_INPUT_METHOD_CONTINUOUS -> Constants.TRANSMIT_CONTINUOUS
-        else -> throw RuntimeException("Could not convert input method '$inputMethod' to a Humla input method id!")
-    }
-
-    fun setInputMethod(inputMethod: String) {
-        if (inputMethod in ARRAY_INPUT_METHODS) {
-            preferences.edit().putString(PREF_INPUT_METHOD, inputMethod).apply()
-        } else {
-            throw RuntimeException("Invalid input method $inputMethod")
+    /** Rewrites the keys older versions left behind. Runs once per process, on first use. */
+    private fun migrateLegacyKeys() {
+        // The first two were replaced by the audio chooser.
+        val legacy = listOf(LEGACY_PREF_ECHO_CANCELLATION_METHOD, LEGACY_PREF_DISABLE_OPUS, LEGACY_PREF_HANDSET_MODE)
+            .filter(preferences::contains)
+        if (legacy.isEmpty()) return
+        // The handset mode was the earpiece; a default output the user already picked wins.
+        val earpiece = preferences.getBoolean(LEGACY_PREF_HANDSET_MODE, false) &&
+            !preferences.contains(PREF_DEFAULT_OUTPUT)
+        preferences.edit {
+            legacy.forEach(::remove)
+            if (earpiece) putString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_EARPIECE)
         }
     }
 
-    fun getInputSampleRate(): Int = preferences.getString(PREF_INPUT_RATE, DEFAULT_RATE)!!.toInt()
-
-    fun getInputQuality(): Int = preferences.getInt(PREF_INPUT_QUALITY, DEFAULT_INPUT_QUALITY)
-
-    fun getAmplitudeBoostMultiplier(): Float =
-        preferences.getInt(PREF_AMPLITUDE_BOOST, DEFAULT_AMPLITUDE_BOOST).toFloat() / 100
-
-    fun getDetectionThreshold(): Float =
-        preferences.getInt(PREF_THRESHOLD, DEFAULT_THRESHOLD).toFloat() / 100
-
-    fun getPushToTalkKey(): Int = preferences.getInt(PREF_PUSH_KEY, DEFAULT_PUSH_KEY)
-
-    fun getHotCorner(): String = preferences.getString(PREF_HOT_CORNER_KEY, DEFAULT_HOT_CORNER)!!
-
-    /** @return true if a hot corner should be shown. */
-    fun isHotCornerEnabled(): Boolean = ARRAY_HOT_CORNER_NONE != getHotCorner()
-
-    /** @return A [Gravity] value, or 0 if the hot corner is disabled. */
-    fun getHotCornerGravity(): Int = when (getHotCorner()) {
-        ARRAY_HOT_CORNER_BOTTOM_LEFT -> Gravity.LEFT or Gravity.BOTTOM
-        ARRAY_HOT_CORNER_BOTTOM_RIGHT -> Gravity.RIGHT or Gravity.BOTTOM
-        ARRAY_HOT_CORNER_TOP_LEFT -> Gravity.LEFT or Gravity.TOP
-        ARRAY_HOT_CORNER_TOP_RIGHT -> Gravity.RIGHT or Gravity.TOP
-        else -> 0
+    private fun booleanPref(key: String, default: Boolean) = object : ReadWriteProperty<Settings, Boolean> {
+        override fun getValue(thisRef: Settings, property: KProperty<*>) = preferences.getBoolean(key, default)
+        override fun setValue(thisRef: Settings, property: KProperty<*>, value: Boolean) =
+            preferences.edit { putBoolean(key, value) }
     }
 
-    /** @return the height of the PTT button */
-    fun getPTTButtonHeight(): Int = preferences.getInt(PREF_PTT_BUTTON_HEIGHT, DEFAULT_PTT_BUTTON_HEIGHT)
-
-    /**
-     * Returns a database identifier for the default certificate, or a negative number if there is
-     * no default certificate set.
-     */
-    fun getDefaultCertificate(): Long = preferences.getLong(PREF_CERT_ID, -1)
-
-    fun getDefaultUsername(): String = preferences.getString(PREF_DEFAULT_USERNAME, DEFAULT_DEFAULT_USERNAME)!!
-
-    fun isPushToTalkToggle(): Boolean = preferences.getBoolean(PREF_PTT_TOGGLE, DEFAULT_PTT_TOGGLE)
-
-    fun isPushToTalkButtonShown(): Boolean = !preferences.getBoolean(PREF_PUSH_BUTTON_HIDE_KEY, DEFAULT_PUSH_BUTTON_HIDE)
-
-    fun isChatNotifyEnabled(): Boolean = preferences.getBoolean(PREF_CHAT_NOTIFY, DEFAULT_CHAT_NOTIFY)
-
-    fun isTextToSpeechEnabled(): Boolean = preferences.getBoolean(PREF_USE_TTS, DEFAULT_USE_TTS)
-
-    fun isShortTextToSpeechMessagesEnabled(): Boolean =
-        preferences.getBoolean(PREF_SHORT_TTS_MESSAGES, DEFAULT_SHORT_TTS_MESSAGES)
-
-    fun isAutoReconnectEnabled(): Boolean = preferences.getBoolean(PREF_AUTO_RECONNECT, DEFAULT_AUTO_RECONNECT)
-
-    fun isTcpForced(): Boolean = preferences.getBoolean(PREF_FORCE_TCP, DEFAULT_FORCE_TCP)
-
-    fun isOpusDisabled(): Boolean = preferences.getBoolean(PREF_DISABLE_OPUS, DEFAULT_DISABLE_OPUS)
-
-    fun isTorEnabled(): Boolean = preferences.getBoolean(PREF_USE_TOR, DEFAULT_USE_TOR)
-
-    fun disableTor() {
-        preferences.edit().putBoolean(PREF_USE_TOR, false).apply()
+    private fun intPref(key: String, default: Int) = ReadOnlyProperty<Settings, Int> { _, _ ->
+        preferences.getInt(key, default)
     }
 
-    fun isMuted(): Boolean = preferences.getBoolean(PREF_MUTED, DEFAULT_MUTED)
+    private fun stringPref(key: String, default: String) = ReadOnlyProperty<Settings, String> { _, _ ->
+        preferences.getString(key, default) ?: default
+    }
 
-    fun isDeafened(): Boolean = preferences.getBoolean(PREF_DEAFENED, DEFAULT_DEAFENED)
+    /** One of [ARRAY_INPUT_METHODS]; an unknown stored value reads as voice activity. */
+    var inputMethod: String
+        get() = preferences.getString(PREF_INPUT_METHOD, ARRAY_INPUT_METHOD_VOICE)
+            ?.takeIf { it in ARRAY_INPUT_METHODS } ?: ARRAY_INPUT_METHOD_VOICE
+        set(value) {
+            require(value in ARRAY_INPUT_METHODS) { "Invalid input method $value" }
+            preferences.edit { putString(PREF_INPUT_METHOD, value) }
+        }
 
-    fun isFirstRun(): Boolean = preferences.getBoolean(PREF_FIRST_RUN, DEFAULT_FIRST_RUN)
+    /** The input method as a Humla `Constants.TRANSMIT_*` value. */
+    val humlaInputMethod: Int
+        get() = when (inputMethod) {
+            ARRAY_INPUT_METHOD_PTT -> Constants.TRANSMIT_PUSH_TO_TALK
+            ARRAY_INPUT_METHOD_CONTINUOUS -> Constants.TRANSMIT_CONTINUOUS
+            else -> Constants.TRANSMIT_VOICE_ACTIVITY
+        }
 
-    fun shouldLoadExternalImages(): Boolean = preferences.getBoolean(PREF_LOAD_IMAGES, DEFAULT_LOAD_IMAGES)
+    val inputSampleRate: Int get() = preferences.getString(PREF_INPUT_RATE, DEFAULT_RATE)!!.toInt()
+
+    val inputQuality: Int by intPref(PREF_INPUT_QUALITY, DEFAULT_INPUT_QUALITY)
+
+    val amplitudeBoostMultiplier: Float
+        get() = preferences.getInt(PREF_AMPLITUDE_BOOST, DEFAULT_AMPLITUDE_BOOST).toFloat() / 100
+
+    val detectionThreshold: Float get() = preferences.getInt(PREF_THRESHOLD, DEFAULT_THRESHOLD).toFloat() / 100
+
+    val pushToTalkKey: Int by intPref(PREF_PUSH_KEY, DEFAULT_PUSH_KEY)
+
+    val hotCorner: String by stringPref(PREF_HOT_CORNER_KEY, DEFAULT_HOT_CORNER)
+
+    val isHotCornerEnabled: Boolean get() = hotCorner != ARRAY_HOT_CORNER_NONE
+
+    /** A [Gravity] value, or 0 if the hot corner is disabled. */
+    val hotCornerGravity: Int
+        get() = when (hotCorner) {
+            ARRAY_HOT_CORNER_BOTTOM_LEFT -> Gravity.LEFT or Gravity.BOTTOM
+            ARRAY_HOT_CORNER_BOTTOM_RIGHT -> Gravity.RIGHT or Gravity.BOTTOM
+            ARRAY_HOT_CORNER_TOP_LEFT -> Gravity.LEFT or Gravity.TOP
+            ARRAY_HOT_CORNER_TOP_RIGHT -> Gravity.RIGHT or Gravity.TOP
+            else -> 0
+        }
+
+    val pttButtonHeight: Int by intPref(PREF_PTT_BUTTON_HEIGHT, DEFAULT_PTT_BUTTON_HEIGHT)
+
+    /** Database id of the default certificate, or negative if none is set. */
+    var defaultCertificateId: Long
+        get() = preferences.getLong(PREF_CERT_ID, NO_CERTIFICATE)
+        set(value) = preferences.edit { putLong(PREF_CERT_ID, value) }
+
+    val isUsingCertificate: Boolean get() = defaultCertificateId >= 0
+
+    fun disableCertificate() {
+        defaultCertificateId = NO_CERTIFICATE
+    }
+
+    val defaultUsername: String by stringPref(PREF_DEFAULT_USERNAME, DEFAULT_DEFAULT_USERNAME)
+
+    val isPushToTalkToggle: Boolean by booleanPref(PREF_PTT_TOGGLE, DEFAULT_PTT_TOGGLE)
+
+    /** Whether other apps may start and stop transmission through the talk broadcast. */
+    val isExternalPushToTalkAllowed: Boolean by booleanPref(PREF_ALLOW_EXTERNAL_PTT, DEFAULT_ALLOW_EXTERNAL_PTT)
+
+    val isPushToTalkButtonShown: Boolean
+        get() = !preferences.getBoolean(PREF_PUSH_BUTTON_HIDE_KEY, DEFAULT_PUSH_BUTTON_HIDE)
+
+    val isChatNotifyEnabled: Boolean by booleanPref(PREF_CHAT_NOTIFY, DEFAULT_CHAT_NOTIFY)
+
+    val isTextToSpeechEnabled: Boolean by booleanPref(PREF_USE_TTS, DEFAULT_USE_TTS)
+
+    val isShortTextToSpeechMessagesEnabled: Boolean by booleanPref(PREF_SHORT_TTS_MESSAGES, DEFAULT_SHORT_TTS_MESSAGES)
+
+    val isAutoReconnectEnabled: Boolean by booleanPref(PREF_AUTO_RECONNECT, DEFAULT_AUTO_RECONNECT)
+
+    val isTcpForced: Boolean by booleanPref(PREF_FORCE_TCP, DEFAULT_FORCE_TCP)
+
+    var isTorEnabled: Boolean by booleanPref(PREF_USE_TOR, DEFAULT_USE_TOR)
+
+    val isMuted: Boolean by booleanPref(PREF_MUTED, DEFAULT_MUTED)
+
+    val isDeafened: Boolean by booleanPref(PREF_DEAFENED, DEFAULT_DEAFENED)
+
+    var isFirstRun: Boolean by booleanPref(PREF_FIRST_RUN, DEFAULT_FIRST_RUN)
+
+    /** Whether remote chat images may be fetched; never while Tor is on, since the fetch would bypass it. */
+    /** Whether typed chat messages are sent as Markdown turned into HTML. */
+    val isMarkdownEnabled: Boolean by booleanPref(PREF_MARKDOWN, DEFAULT_MARKDOWN)
+
+    val shouldLoadExternalImages: Boolean
+        get() = preferences.getBoolean(PREF_LOAD_IMAGES, DEFAULT_LOAD_IMAGES) && !isTorEnabled
 
     fun setMutedAndDeafened(muted: Boolean, deafened: Boolean) {
-        preferences.edit()
-            .putBoolean(PREF_MUTED, muted || deafened)
-            .putBoolean(PREF_DEAFENED, deafened)
-            .apply()
-    }
-
-    fun setFirstRun(run: Boolean) {
-        preferences.edit().putBoolean(PREF_FIRST_RUN, run).apply()
-    }
-
-    fun getFramesPerPacket(): Int = preferences.getString(PREF_FRAMES_PER_PACKET, DEFAULT_FRAMES_PER_PACKET)!!.toInt()
-
-    fun isHalfDuplex(): Boolean = preferences.getBoolean(PREF_HALF_DUPLEX, DEFAULT_HALF_DUPLEX)
-
-    /**
-     * Where voice goes when no headset is there: the speaker, or the earpiece - which is what the
-     * handset mode was, proximity sensor included. The audio chooser overrides it per session.
-     */
-    fun isEarpieceDefaultOutput(): Boolean =
-        preferences.getString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_SPEAKER) == DEFAULT_OUTPUT_EARPIECE
-
-    fun isPttSoundEnabled(): Boolean = preferences.getBoolean(PREF_PTT_SOUND, DEFAULT_PTT_SOUND)
-
-    fun isPreprocessorEnabled(): Boolean = preferences.getBoolean(PREF_PREPROCESSOR_ENABLED, DEFAULT_PREPROCESSOR_ENABLED)
-
-
-    fun getNoiseSuppressionMethod(): String =
-        preferences.getString(PREF_NOISE_SUPPRESSION_METHOD,
-            if (isPreprocessorEnabled()) "rnnoise" else "none")!!
-
-    /**
-     * Written by the channel-list menu and by the audio settings screen, so the chain can be
-     * switched without a restart.
-     *
-     * **One key, deliberately.** The first version of this also wrote [PREF_PREPROCESSOR_ENABLED]
-     * to keep the legacy flag in step, and every key written is a `configureExtras` of its own:
-     * one tap rebuilt the whole audio chain twice, measured 93 ms apart, with the microphone dead
-     * in between. The legacy flag is only ever *read* now, by [getNoiseSuppressionMode], and only
-     * while the new key has never been written.
-     */
-    fun setNoiseSuppressionMethod(method: String) {
-        preferences.edit().putString(PREF_NOISE_SUPPRESSION_METHOD, method).apply()
-    }
-
-    /**
-     * Spec B2/B3. The stored value wins; an installation that has never seen this key keeps what it
-     * has been running, which is what the legacy `preprocessor_enabled` checkbox decided.
-     */
-    fun getNoiseSuppressionMode(): NoiseSuppressionMode =
-        NoiseSuppressionMode.fromPreferenceValue(getNoiseSuppressionMethod())
-
-    /** Spec B9. Anything outside [SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB] is the default. */
-    fun getSpeexNoiseSuppressDb(): Int {
-        val stored = preferences.getString(PREF_SPEEX_NOISE_SUPPRESS_DB, null)?.toIntOrNull()
-        return if (stored != null && stored in SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB) stored
-        else DEFAULT_SPEEX_NOISE_SUPPRESS_DB
-    }
-
-    fun getVadMode(): VadMode = VadMode.fromPreferenceValue(preferences.getString(PREF_VAD_MODE, DEFAULT_VAD_MODE))
-
-    /**
-     * The whole voice-gate configuration as one value, so that a settings change reaches the
-     * running detector in one call instead of one call per slider.
-     *
-     * Every read is clamped here rather than at the detector: [VadConfig]'s constructor throws on a
-     * value out of range, and a preference file is user-writable in a debug build and survives a
-     * downgrade. A crash on startup because a slider holds 140 is not a better answer than 100.
-     */
-    fun getVadConfig(): VadConfig {
-        val holdMs = preferences.getInt(PREF_VAD_HOLD_MS, DEFAULT_VAD_HOLD_MS)
-            .coerceIn(0, MAX_VAD_HOLD_MS).toLong()
-        // A ListPreference, so the value on disk is a string even though it counts frames.
-        val onsetFrames = (preferences.getString(PREF_VAD_ONSET_FRAMES, null)?.toIntOrNull()
-            ?: DEFAULT_VAD_ONSET_FRAMES).coerceIn(1, MAX_VAD_ONSET_FRAMES)
-        return when (getVadMode()) {
-            VadMode.AMPLITUDE -> VadConfig.amplitude(getDetectionThreshold(), holdMs, onsetFrames)
-            VadMode.PROBABILITY -> {
-                val start = preferences.getInt(PREF_VAD_START, DEFAULT_VAD_START).coerceIn(0, 100) / 100f
-                val stop = (preferences.getInt(PREF_VAD_STOP, DEFAULT_VAD_STOP).coerceIn(0, 100) / 100f)
-                    .coerceAtMost(start)
-                VadConfig(VadMode.PROBABILITY, start, stop, holdMs, onsetFrames = onsetFrames)
-            }
-            VadMode.ADAPTIVE -> VadConfig.adaptive(
-                snrFraction = preferences.getInt(PREF_VAD_SENSITIVITY, DEFAULT_VAD_SENSITIVITY)
-                    .coerceIn(0, 100) / 100f,
-                holdTimeMs = holdMs,
-                onsetFrames = onsetFrames,
-                adaptiveFloor = preferences.getBoolean(PREF_VAD_ADAPTIVE_FLOOR, DEFAULT_VAD_ADAPTIVE_FLOOR),
-                manualFloorDbfs = (-preferences.getInt(PREF_VAD_FLOOR_DB, DEFAULT_VAD_FLOOR_DB).toFloat())
-                    .coerceIn(AdaptiveVadTracker.MIN_FLOOR_DBFS, AdaptiveVadTracker.MAX_FLOOR_DBFS),
-            )
+        preferences.edit {
+            putBoolean(PREF_MUTED, muted || deafened)
+            putBoolean(PREF_DEAFENED, deafened)
         }
     }
 
-    /** Spec B6: the two `android.media.audiofx` effects attached to the recorder's session. */
-    fun getAndroidAudioEffects(): AndroidAudioEffects = AndroidAudioEffects(
-        noiseSuppressor = preferences.getBoolean(PREF_ANDROID_NOISE_SUPPRESSOR, DEFAULT_ANDROID_NOISE_SUPPRESSOR),
-        automaticGainControl = preferences.getBoolean(PREF_ANDROID_AGC, DEFAULT_ANDROID_AGC),
-    )
+    val framesPerPacket: Int get() = preferences.getString(PREF_FRAMES_PER_PACKET, DEFAULT_FRAMES_PER_PACKET)!!.toInt()
+
+    val isHalfDuplex: Boolean by booleanPref(PREF_HALF_DUPLEX, DEFAULT_HALF_DUPLEX)
+
+    /** Voice output without a headset: speaker, or the earpiece (with proximity sensor). */
+    val isEarpieceDefaultOutput: Boolean
+        get() = preferences.getString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_SPEAKER) == DEFAULT_OUTPUT_EARPIECE
+
+    val isPttSoundEnabled: Boolean by booleanPref(PREF_PTT_SOUND, DEFAULT_PTT_SOUND)
+
+    val isPreprocessorEnabled: Boolean by booleanPref(PREF_PREPROCESSOR_ENABLED, DEFAULT_PREPROCESSOR_ENABLED)
 
     /**
-     * The user's echo-cancellation choice for a kind of device, or null while they have made none
-     * and the kind's default applies. Written by the audio chooser's switch, one key per kind, so
-     * the choice comes back the next time such a device is routed.
+     * The stored value, else what the legacy `preprocessor_enabled` checkbox decided. Writes only
+     * this key, not [PREF_PREPROCESSOR_ENABLED]: every written key triggers its own `configure`,
+     * and two would rebuild the audio chain twice with the mic dead in between.
      */
+    var noiseSuppressionMethod: String
+        get() = preferences.getString(PREF_NOISE_SUPPRESSION_METHOD, null)
+            ?: if (isPreprocessorEnabled) "rnnoise" else "none"
+        set(value) = preferences.edit { putString(PREF_NOISE_SUPPRESSION_METHOD, value) }
+
+    val noiseSuppressionMode: NoiseSuppressionMode
+        get() = NoiseSuppressionMode.fromPreferenceValue(noiseSuppressionMethod)
+
+    /** Anything outside [SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB] is the default. */
+    val speexNoiseSuppressDb: Int
+        get() = preferences.getString(PREF_SPEEX_NOISE_SUPPRESS_DB, null)?.toIntOrNull()
+            ?.takeIf { it in SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB } ?: DEFAULT_SPEEX_NOISE_SUPPRESS_DB
+
+    val vadMode: VadMode get() = VadMode.fromPreferenceValue(preferences.getString(PREF_VAD_MODE, DEFAULT_VAD_MODE))
+
+    /**
+     * The whole voice-gate configuration as one value. Every read is clamped here because
+     * [VadConfig] throws on out-of-range values and preference files can hold anything (debug
+     * edits, downgrades).
+     */
+    val vadConfig: VadConfig
+        get() {
+            val holdMs = preferences.getInt(PREF_VAD_HOLD_MS, DEFAULT_VAD_HOLD_MS)
+                .coerceIn(0, MAX_VAD_HOLD_MS).toLong()
+            // A ListPreference, so the value on disk is a string.
+            val onsetFrames = (preferences.getString(PREF_VAD_ONSET_FRAMES, null)?.toIntOrNull()
+                ?: DEFAULT_VAD_ONSET_FRAMES).coerceIn(1, MAX_VAD_ONSET_FRAMES)
+            return when (vadMode) {
+                VadMode.AMPLITUDE -> VadConfig.amplitude(detectionThreshold, holdMs, onsetFrames)
+                VadMode.PROBABILITY -> {
+                    val start = percent(PREF_VAD_START, DEFAULT_VAD_START)
+                    val stop = percent(PREF_VAD_STOP, DEFAULT_VAD_STOP).coerceAtMost(start)
+                    VadConfig(VadMode.PROBABILITY, start, stop, holdMs, onsetFrames = onsetFrames)
+                }
+                VadMode.ADAPTIVE -> VadConfig.adaptive(
+                    snrFraction = percent(PREF_VAD_SENSITIVITY, DEFAULT_VAD_SENSITIVITY),
+                    holdTimeMs = holdMs,
+                    onsetFrames = onsetFrames,
+                    adaptiveFloor = preferences.getBoolean(PREF_VAD_ADAPTIVE_FLOOR, DEFAULT_VAD_ADAPTIVE_FLOOR),
+                    manualFloorDbfs = (-preferences.getInt(PREF_VAD_FLOOR_DB, DEFAULT_VAD_FLOOR_DB).toFloat())
+                        .coerceIn(AdaptiveVadTracker.MIN_FLOOR_DBFS, AdaptiveVadTracker.MAX_FLOOR_DBFS),
+                )
+            }
+        }
+
+    /** A 0..100 slider as a fraction. */
+    private fun percent(key: String, default: Int): Float = preferences.getInt(key, default).coerceIn(0, 100) / 100f
+
+    /** The two `android.media.audiofx` effects attached to the recorder's session. */
+    val androidAudioEffects: AndroidAudioEffects
+        get() = AndroidAudioEffects(
+            noiseSuppressor = preferences.getBoolean(PREF_ANDROID_NOISE_SUPPRESSOR, DEFAULT_ANDROID_NOISE_SUPPRESSOR),
+            automaticGainControl = preferences.getBoolean(PREF_ANDROID_AGC, DEFAULT_ANDROID_AGC),
+        )
+
+    /** The user's echo-cancellation choice for a device kind, or null to use the kind's default. */
     fun getEchoCancellationOverride(category: AudioDeviceCategory): Boolean? {
         val key = echoCancellationKey(category)
         return if (preferences.contains(key)) preferences.getBoolean(key, false) else null
     }
 
     fun setEchoCancellationOverride(category: AudioDeviceCategory, enabled: Boolean) {
-        preferences.edit().putBoolean(echoCancellationKey(category), enabled).apply()
+        preferences.edit { putBoolean(echoCancellationKey(category), enabled) }
     }
 
     /** What runs on a device of [category]: the user's choice, else the kind's default. */
     fun isEchoCancellationEnabled(category: AudioDeviceCategory): Boolean =
         getEchoCancellationOverride(category) ?: category.echoCancellationByDefault
 
-    /** Every override the user has made, for `HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE`. */
-    fun getEchoCancellationOverrides(): Map<AudioDeviceCategory, Boolean> =
-        AudioDeviceCategory.entries.mapNotNull { c -> getEchoCancellationOverride(c)?.let { c to it } }.toMap()
+    /** Every override the user has made, for `SessionConfig.echoCancellationOverrides`. */
+    val echoCancellationOverrides: Map<AudioDeviceCategory, Boolean>
+        get() = AudioDeviceCategory.entries.mapNotNull { c -> getEchoCancellationOverride(c)?.let { c to it } }.toMap()
 
-    fun shouldStayAwake(): Boolean = preferences.getBoolean(PREF_STAY_AWAKE, DEFAULT_STAY_AWAKE)
+    val shouldStayAwake: Boolean by booleanPref(PREF_STAY_AWAKE, DEFAULT_STAY_AWAKE)
 
-    fun setDefaultCertificateId(defaultCertificateId: Long) {
-        preferences.edit().putLong(PREF_CERT_ID, defaultCertificateId).apply()
-    }
+    val shouldShowUserCount: Boolean by booleanPref(PREF_SHOW_USER_COUNT, DEFAULT_SHOW_USER_COUNT)
 
-    fun disableCertificate() {
-        preferences.edit().putLong(PREF_CERT_ID, -1).apply()
-    }
+    /** Wallpaper-based colours instead of the brand scheme, where the platform offers them. */
+    val isDynamicColorEnabled: Boolean by booleanPref(PREF_DYNAMIC_COLORS, DEFAULT_DYNAMIC_COLORS)
 
-    fun isUsingCertificate(): Boolean = getDefaultCertificate() >= 0
+    val shouldStartUpInPinnedMode: Boolean by booleanPref(PREF_START_UP_IN_PINNED_MODE, DEFAULT_START_UP_IN_PINNED_MODE)
 
-    /** @return true if the user count should be shown next to channels. */
-    fun shouldShowUserCount(): Boolean = preferences.getBoolean(PREF_SHOW_USER_COUNT, DEFAULT_SHOW_USER_COUNT)
-
-    fun shouldStartUpInPinnedMode(): Boolean =
-        preferences.getBoolean(PREF_START_UP_IN_PINNED_MODE, DEFAULT_START_UP_IN_PINNED_MODE)
-
-    fun getNewsShownVersions(): Set<String> =
-        preferences.getStringSet(PREF_NEWS_SHOWN_VERSIONS, HashSet())!!
+    val newsShownVersions: Set<String>
+        get() = preferences.getStringSet(PREF_NEWS_SHOWN_VERSIONS, null).orEmpty()
 
     fun addNewsShownVersions(versions: List<String>) {
-        // Copy: getStringSet docs state that the returned set must not be modified.
-        val shownVersions = HashSet(preferences.getStringSet(PREF_NEWS_SHOWN_VERSIONS, HashSet())!!)
-        val added = shownVersions.addAll(versions.filter { it.isNotEmpty() })
-        if (added) {
-            preferences.edit().putStringSet(PREF_NEWS_SHOWN_VERSIONS, shownVersions).apply()
+        // Copied: the set getStringSet returns must not be modified.
+        val shownVersions = HashSet(newsShownVersions)
+        if (shownVersions.addAll(versions.filter { it.isNotEmpty() })) {
+            preferences.edit { putStringSet(PREF_NEWS_SHOWN_VERSIONS, shownVersions) }
         }
     }
 
     fun resetNewsShownVersion() {
-        preferences.edit().putStringSet(PREF_NEWS_SHOWN_VERSIONS, HashSet()).apply()
+        preferences.edit { putStringSet(PREF_NEWS_SHOWN_VERSIONS, HashSet()) }
     }
 
-    fun isBluetoothScoEnabled(): Boolean =
-        preferences.getBoolean(PREF_BLUETOOTH_SCO, DEFAULT_BLUETOOTH_SCO)
+    var isBluetoothScoEnabled: Boolean by booleanPref(PREF_BLUETOOTH_SCO, DEFAULT_BLUETOOTH_SCO)
 
-    fun setBluetoothScoEnabled(enabled: Boolean) {
-        preferences.edit().putBoolean(PREF_BLUETOOTH_SCO, enabled).apply()
-    }
-
-    fun getMediaButtonAction(): MediaButtonAction =
-        MediaButtonAction.fromPrefValue(
-            preferences.getString(PREF_MEDIA_BUTTON_ACTION, DEFAULT_MEDIA_BUTTON_ACTION)
+    val mediaButtonAction: MediaButtonAction
+        get() = MediaButtonAction.fromPrefValue(
+            preferences.getString(PREF_MEDIA_BUTTON_ACTION, DEFAULT_MEDIA_BUTTON_ACTION),
         )
 
-    fun isBatteryOptimizationAsked(): Boolean =
-        preferences.getBoolean(PREF_BATTERY_OPTIMIZATION_ASKED, DEFAULT_BATTERY_OPTIMIZATION_ASKED)
+    var isBatteryOptimizationAsked: Boolean by booleanPref(
+        PREF_BATTERY_OPTIMIZATION_ASKED, DEFAULT_BATTERY_OPTIMIZATION_ASKED,
+    )
 
-    fun setBatteryOptimizationAsked(asked: Boolean) {
-        preferences.edit().putBoolean(PREF_BATTERY_OPTIMIZATION_ASKED, asked).apply()
-    }
+    var isMicrophonePermissionAsked: Boolean by booleanPref(PREF_MICROPHONE_PERMISSION_ASKED, false)
+
+    var isNotificationPermissionAsked: Boolean by booleanPref(PREF_NOTIFICATION_PERMISSION_ASKED, false)
 
     companion object {
         const val PREF_INPUT_METHOD = "audioInputMethod"
-        /** Voice activity transmits depending on the amplitude of user input. */
         const val ARRAY_INPUT_METHOD_VOICE = "voiceActivity"
-        /** Push to talk transmits on command. */
         const val ARRAY_INPUT_METHOD_PTT = "ptt"
-        /** Continuous transmits always. */
         const val ARRAY_INPUT_METHOD_CONTINUOUS = "continuous"
-        @JvmField
-        val ARRAY_INPUT_METHODS: Set<String> = setOf(ARRAY_INPUT_METHOD_VOICE, ARRAY_INPUT_METHOD_PTT, ARRAY_INPUT_METHOD_CONTINUOUS)
+        val ARRAY_INPUT_METHODS: Set<String> =
+            setOf(ARRAY_INPUT_METHOD_VOICE, ARRAY_INPUT_METHOD_PTT, ARRAY_INPUT_METHOD_CONTINUOUS)
 
-        // NOTE: When changing DEFAULTs, the default value in the corresponding
-        // widget in settings_PAGE.xml must also be changed. It doesn't pick this
-        // up itself...
+        // NOTE: When changing DEFAULTs, also change the default in the matching settings_*.xml.
 
         const val PREF_THRESHOLD = "vadThreshold"
         const val DEFAULT_THRESHOLD = 50
@@ -359,6 +327,9 @@ class Settings private constructor(context: Context) {
 
         const val PREF_PTT_TOGGLE = "togglePtt"
         const val DEFAULT_PTT_TOGGLE = false
+
+        const val PREF_ALLOW_EXTERNAL_PTT = "allow_external_ptt"
+        const val DEFAULT_ALLOW_EXTERNAL_PTT = false
 
         const val PREF_INPUT_RATE = "input_quality"
         const val DEFAULT_RATE = "48000"
@@ -382,25 +353,24 @@ class Settings private constructor(context: Context) {
         const val DEFAULT_AUTO_RECONNECT = true
 
         const val PREF_THEME = "theme"
+        const val PREF_DYNAMIC_COLORS = "dynamic_colors"
+        const val DEFAULT_DYNAMIC_COLORS = false
         const val PREF_LANGUAGE = "language"
 
         const val PREF_PTT_BUTTON_HEIGHT = "pttButtonHeight"
         const val DEFAULT_PTT_BUTTON_HEIGHT = 150
 
-        /** The DB identifier for the default certificate. @see se.lublin.mumla.db.DatabaseCertificate */
+        /** Database id of the default certificate; see [se.lublin.mumla.db.DatabaseCertificate]. */
         const val PREF_CERT_ID = "certificateId"
 
         const val PREF_DEFAULT_USERNAME = "defaultUsername"
-        const val DEFAULT_DEFAULT_USERNAME = "Mumla_User" // funny var name
+        const val DEFAULT_DEFAULT_USERNAME = "Mumla_User"
 
         const val PREF_FORCE_TCP = "forceTcp"
         const val DEFAULT_FORCE_TCP = false
 
         const val PREF_USE_TOR = "useTor"
         const val DEFAULT_USE_TOR = false
-
-        const val PREF_DISABLE_OPUS = "disableOpus"
-        const val DEFAULT_DISABLE_OPUS = false
 
         const val PREF_MUTED = "muted"
         const val DEFAULT_MUTED = false
@@ -411,6 +381,8 @@ class Settings private constructor(context: Context) {
         const val PREF_FIRST_RUN = "firstRun"
         const val DEFAULT_FIRST_RUN = true
 
+        const val PREF_MARKDOWN = "markdown_messages"
+        const val DEFAULT_MARKDOWN = true
         const val PREF_LOAD_IMAGES = "load_images"
         const val DEFAULT_LOAD_IMAGES = true
 
@@ -436,20 +408,13 @@ class Settings private constructor(context: Context) {
 
         const val PREF_NOISE_SUPPRESSION_METHOD = "noise_suppression_method"
 
-        /** Stored as a string because it is a ListPreference; spec B9 allows -15/-25/-35. */
+        /** Stored as a string because it is a ListPreference; -15/-25/-35. */
         const val PREF_SPEEX_NOISE_SUPPRESS_DB = "speex_noise_suppress_db"
         const val DEFAULT_SPEEX_NOISE_SUPPRESS_DB = -25
 
         /**
-         * One of [VadMode.preferenceValue].
-         *
-         * **The default is the new mode, and that is a user-visible change rather than a silent
-         * one.** `VadConfig`'s KDoc refuses a default that takes a working slider away from someone
-         * who never saw the new key -- the objection is to a control that silently stops doing
-         * anything. Here the settings screen shows the mode, explains what the slider means in it,
-         * disables the controls the mode does not use, and leaves `vadThreshold` on disk, so
-         * switching back restores the old calibration exactly. What made the objection bite was
-         * *silence*, and the screen is the answer to it.
+         * One of [VadMode.preferenceValue]. Switching modes keeps `vadThreshold` on disk, so going
+         * back to amplitude restores the old calibration.
          */
         const val PREF_VAD_MODE = "vad_mode"
         const val DEFAULT_VAD_MODE = "adaptive"
@@ -474,18 +439,13 @@ class Settings private constructor(context: Context) {
         const val PREF_VAD_HOLD_MS = "vad_hold_ms"
         const val DEFAULT_VAD_HOLD_MS = 250
 
-        /** Two seconds of hold is already longer than any pause inside a word. */
         const val MAX_VAD_HOLD_MS = 2000
 
-        /**
-         * The transient guard, in 10 ms frames. Two by default here while the library keeps one,
-         * because a library default that changes every caller is the silent migration this project
-         * refuses; this is the user-facing default and the settings screen explains it.
-         */
+        /** The transient guard, in 10 ms frames; the library default is one. */
         const val PREF_VAD_ONSET_FRAMES = "vad_onset_frames"
         const val DEFAULT_VAD_ONSET_FRAMES = 2
 
-        /** Five frames is 50 ms of a word's beginning, which is already audible as a clipped word. */
+        /** Five frames (50 ms) already clips a word's beginning audibly. */
         const val MAX_VAD_ONSET_FRAMES = 5
 
         const val PREF_ANDROID_NOISE_SUPPRESSOR = "android_noise_suppressor"
@@ -495,11 +455,8 @@ class Settings private constructor(context: Context) {
 
 
         /**
-         * The stream playback is always on. The audio router holds the communication mode for the
-         * session and routes every device explicitly, and only the voice-call stream follows that
-         * route - and in that mode it is also the stream the volume keys adjust. It used to be
-         * `STREAM_MUSIC` unless handset mode or a canceller was on, which is how a canceller once
-         * put playback on a route nobody could hear (EchoCancellationDefaultRouteTest).
+         * Playback always uses the voice-call stream: the audio router holds communication mode and
+         * routes devices explicitly, and only this stream follows that route (and the volume keys).
          */
         const val PLAYBACK_STREAM = android.media.AudioManager.STREAM_VOICE_CALL
 
@@ -508,12 +465,13 @@ class Settings private constructor(context: Context) {
         /** The global echo method the audio chooser replaced; removed on first read. */
         private const val LEGACY_PREF_ECHO_CANCELLATION_METHOD = "echo_cancellation_method"
 
+        /** The "avoid Opus" checkbox; Opus is now always offered. Removed on first read. */
+        private const val LEGACY_PREF_DISABLE_OPUS = "disableOpus"
+
         /** The preference key of the echo-cancellation override for [category]. */
-        @JvmStatic
         fun echoCancellationKey(category: AudioDeviceCategory): String =
             PREF_ECHO_CANCELLATION_PREFIX + category.name.lowercase()
 
-        @JvmField
         val ECHO_CANCELLATION_KEYS: Set<String> = AudioDeviceCategory.entries.map { echoCancellationKey(it) }.toSet()
 
         const val PREF_STAY_AWAKE = "stay_awake"
@@ -527,23 +485,43 @@ class Settings private constructor(context: Context) {
 
         const val PREF_NEWS_SHOWN_VERSIONS = "newsShownVersions"
 
-        /**
-         * Take a connected Bluetooth headset automatically while connected to a server. Spec P2.
-         * On by default since the audio chooser: a headset is used without being asked for, as in
-         * the phone app, and the chooser in the channel menu picks another device for the session.
-         */
+        /** Use a connected Bluetooth headset automatically while connected. */
         const val PREF_BLUETOOTH_SCO = "pref_bluetooth_sco"
         const val DEFAULT_BLUETOOTH_SCO = true
 
-        /** Headset / AVRCP media button behavior, one of [MediaButtonAction.prefValue]. Spec P1. */
+        /** Headset / AVRCP media button behavior, one of [MediaButtonAction.prefValue]. */
         const val PREF_MEDIA_BUTTON_ACTION = "media_button_action"
         const val DEFAULT_MEDIA_BUTTON_ACTION = "auto"
 
-        /** True once the battery-optimization exemption has been offered. Spec P4. */
+        /** True once the battery-optimization exemption has been offered. */
         const val PREF_BATTERY_OPTIMIZATION_ASKED = "battery_optimization_asked"
         const val DEFAULT_BATTERY_OPTIMIZATION_ASKED = false
 
-        @JvmStatic
-        fun getInstance(context: Context): Settings = Settings(context)
+        /** True once the microphone permission has been requested. */
+        const val PREF_MICROPHONE_PERMISSION_ASKED = "microphone_permission_asked"
+
+        /** True once the notification permission has been requested. */
+        const val PREF_NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked"
+
+        private const val NO_CERTIFICATE = -1L
+
+        @Volatile
+        private var instance: Settings? = null
+
+        /**
+         * The settings of [context]'s application. Created, and the legacy keys migrated, on first
+         * use; a new application (as in tests) gets a new instance.
+         */
+        fun getInstance(context: Context): Settings {
+            val app = context.applicationContext
+            instance?.takeIf { it.context === app }?.let { return it }
+            return synchronized(this) {
+                instance?.takeIf { it.context === app }
+                    ?: Settings(app).also {
+                        it.migrateLegacyKeys()
+                        instance = it
+                    }
+            }
+        }
     }
 }

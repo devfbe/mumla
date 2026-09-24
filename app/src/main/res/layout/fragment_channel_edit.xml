@@ -26,7 +26,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="?android:attr/textAppearanceSmall"
-        android:text="@string/name"/>
+        android:text="@string/name"
+        android:labelFor="@+id/channel_edit_name"/>
 
     <EditText
         android:layout_width="fill_parent"
@@ -37,7 +38,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="?android:attr/textAppearanceSmall"
-        android:text="@string/description"/>
+        android:text="@string/description"
+        android:labelFor="@+id/channel_edit_description"/>
 
     <!-- TODO rich text editing / HTML -->
     <EditText
@@ -52,7 +54,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="?android:attr/textAppearanceSmall"
-        android:text="@string/position"/>
+        android:text="@string/position"
+        android:labelFor="@+id/channel_edit_position"/>
 
     <EditText
         android:layout_width="fill_parent"

@@ -16,11 +16,13 @@ import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.testutil.SilentLogger
 import android.content.Context
 import se.lublin.humla.Constants
-import java.lang.reflect.Modifier
+import se.lublin.humla.audio.inputmode.IInputMode
+import se.lublin.humla.util.HumlaLogger
 
 /**
  * The real factory needs a microphone, so what a JVM test can reach is the config-to-builder
@@ -46,6 +48,50 @@ class DefaultAudioHandlerFactoryTest {
     private fun create(config: AudioConfig) =
         factory.create(context, SilentLogger, config, params, encodeListener, outputListener)
 
+    /** What the factory hands the builder, keyed by setter name. */
+    private fun built(config: AudioConfig, session: AudioSessionParams = params): Map<String, Any?> =
+        RecordingBuilder().also { recording ->
+            DefaultAudioHandlerFactory { recording }
+                .builder(context, SilentLogger, config, session, encodeListener, outputListener)
+        }.values
+
+    /** Records every setter call; each setter is overridden, which the field-completeness test relies on. */
+    private class RecordingBuilder : AudioHandler.Builder() {
+        val values = linkedMapOf<String, Any?>()
+
+        private fun rec(name: String, value: Any?): AudioHandler.Builder = apply { values[name] = value }
+
+        override fun setContext(context: Context) = rec("setContext", context).also { super.setContext(context) }
+        override fun setLogger(logger: HumlaLogger) = rec("setLogger", logger).also { super.setLogger(logger) }
+        override fun setAudioStream(v: Int) = rec("setAudioStream", v).also { super.setAudioStream(v) }
+        override fun setAudioSource(v: Int) = rec("setAudioSource", v).also { super.setAudioSource(v) }
+        override fun setTargetBitrate(v: Int) = rec("setTargetBitrate", v).also { super.setTargetBitrate(v) }
+        override fun setTargetFramesPerPacket(v: Int) =
+            rec("setTargetFramesPerPacket", v).also { super.setTargetFramesPerPacket(v) }
+        override fun setInputSampleRate(v: Int) = rec("setInputSampleRate", v).also { super.setInputSampleRate(v) }
+        override fun setAmplitudeBoost(v: Float) = rec("setAmplitudeBoost", v).also { super.setAmplitudeBoost(v) }
+        override fun setHalfDuplexEnabled(v: Boolean) =
+            rec("setHalfDuplexEnabled", v).also { super.setHalfDuplexEnabled(v) }
+        override fun setNoiseSuppressionMethod(v: String?) =
+            rec("setNoiseSuppressionMethod", v).also { super.setNoiseSuppressionMethod(v) }
+        override fun setPreprocessorEnabled(v: Boolean) =
+            rec("setPreprocessorEnabled", v).also { super.setPreprocessorEnabled(v) }
+        override fun setEchoCancellationMethod(v: String?) =
+            rec("setEchoCancellationMethod", v).also { super.setEchoCancellationMethod(v) }
+        override fun setSpeexNoiseSuppressDb(v: Int) =
+            rec("setSpeexNoiseSuppressDb", v).also { super.setSpeexNoiseSuppressDb(v) }
+        override fun setAndroidNoiseSuppressor(v: Boolean) =
+            rec("setAndroidNoiseSuppressor", v).also { super.setAndroidNoiseSuppressor(v) }
+        override fun setAndroidAutomaticGainControl(v: Boolean) =
+            rec("setAndroidAutomaticGainControl", v).also { super.setAndroidAutomaticGainControl(v) }
+        override fun setEncodeListener(v: AudioHandler.AudioEncodeListener) =
+            rec("setEncodeListener", v).also { super.setEncodeListener(v) }
+        override fun setTalkingListener(v: AudioOutput.AudioOutputListener) =
+            rec("setTalkingListener", v).also { super.setTalkingListener(v) }
+        override fun setInputMode(v: IInputMode) = rec("setInputMode", v).also { super.setInputMode(v) }
+        override fun setUdpProtocol(v: UdpProtocol) = rec("setUdpProtocol", v).also { super.setUdpProtocol(v) }
+    }
+
     @Test
     fun withoutTheRecordAudioPermissionCreationFailsWithAnAudioException() {
         val e = assertThrows(AudioException::class.java) { create(AudioConfig()) }
@@ -59,10 +105,7 @@ class DefaultAudioHandlerFactoryTest {
      */
     @Test
     fun echoCancellationReachesTheBuilderAsTheWebRtcCanceller() {
-        fun method(config: AudioConfig) =
-            AudioHandler.Builder::class.java.getDeclaredField("mEchoCancellationMethod")
-                .apply { isAccessible = true }
-                .get(factory.builder(context, SilentLogger, config, params, encodeListener, outputListener))
+        fun method(config: AudioConfig) = built(config)["setEchoCancellationMethod"]
 
         assertThat(method(AudioConfig(echoCancellation = true))).isEqualTo("webrtc")
         assertThat(method(AudioConfig(echoCancellation = false))).isEqualTo("none")
@@ -72,10 +115,8 @@ class DefaultAudioHandlerFactoryTest {
     }
 
     /**
-     * Enumerated from `AudioHandler.Builder`'s own fields rather than written out, so a setter
-     * stream B adds and forgets to wire fails here the moment the field exists (spec 4.04: pin the
-     * set, not the member). Every value below is distinct from every other and from the Java
-     * default, so a cross-wiring is visible and not only an omission.
+     * Enumerated from `AudioHandler.Builder`'s public setters, so a new setter that is not wired fails
+     * here. Every value is distinct from every other and from the default, so a cross-wiring shows.
      */
     @Test
     fun everyBuilderFieldIsSetFromTheConfigAndTheSessionParams() {
@@ -98,104 +139,72 @@ class DefaultAudioHandlerFactoryTest {
             androidAgc = false,
         )
 
-        val builder = factory.builder(
-            context, SilentLogger, config, params.copy(inputMode = inputMode),
-            encodeListener, outputListener,
-        )
-
         val expected = mapOf(
-            "mContext" to context,
-            "mLogger" to SilentLogger,
+            "setContext" to context,
+            "setLogger" to SilentLogger,
             // Not STREAM_ALARM: a routed device moves playback to the voice-call stream, see
-            // aRoutedDevicePlaysOnTheVoiceCallStreamAndOnlyBluetoothIsBluetooth.
-            "mAudioStream" to AudioManager.STREAM_VOICE_CALL,
-            "mAudioSource" to MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            "mInputSampleRate" to 16_000,
-            "mTargetBitrate" to 24_000,
-            "mTargetFramesPerPacket" to 4,
-            "mAmplitudeBoost" to 2.5f,
-            "mBluetoothEnabled" to true,
-            "mHalfDuplexEnabled" to true,
-            "mPreprocessorEnabled" to true,
-            "mEchoCancellationMethod" to "webrtc",
-            "mNoiseSuppressionMethod" to "rnnoise",
-            "mSpeexNoiseSuppressDb" to -35,
-            "mAndroidNoiseSuppressor" to true,
-            "mAndroidAutomaticGainControl" to false,
-            "mInputMode" to inputMode,
-            "mEncodeListener" to encodeListener,
-            "mTalkingListener" to outputListener,
+            // aRoutedDevicePlaysOnTheVoiceCallStream.
+            "setAudioStream" to AudioManager.STREAM_VOICE_CALL,
+            "setAudioSource" to MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            "setInputSampleRate" to 16_000,
+            "setTargetBitrate" to 24_000,
+            "setTargetFramesPerPacket" to 4,
+            "setAmplitudeBoost" to 2.5f,
+            "setHalfDuplexEnabled" to true,
+            "setPreprocessorEnabled" to true,
+            "setEchoCancellationMethod" to "webrtc",
+            "setNoiseSuppressionMethod" to "rnnoise",
+            "setSpeexNoiseSuppressDb" to -35,
+            "setAndroidNoiseSuppressor" to true,
+            "setAndroidAutomaticGainControl" to false,
+            "setInputMode" to inputMode,
+            "setUdpProtocol" to UdpProtocol.PROTOBUF,
+            "setEncodeListener" to encodeListener,
+            "setTalkingListener" to outputListener,
         )
-        val declared = AudioHandler.Builder::class.java.declaredFields
-            .filterNot { Modifier.isStatic(it.modifiers) || it.isSynthetic }
-        assertThat(declared.map { it.name }).containsExactlyElementsIn(expected.keys)
-        for (field in declared) {
-            field.isAccessible = true
-            assertThat(field.get(builder)).isEqualTo(expected.getValue(field.name))
-        }
+        val setters = AudioHandler.Builder::class.java.methods.map { it.name }.filter { it.startsWith("set") }
+        assertThat(setters).containsExactlyElementsIn(expected.keys)
+        val session = params.copy(inputMode = inputMode, udpProtocol = UdpProtocol.PROTOBUF)
+        assertThat(built(config, session)).containsExactlyEntriesIn(expected)
     }
 
-    /**
-     * The three boolean fields cannot all be distinct inside one fixture, so the fixture above
-     * cannot tell them apart - measured: reading `preprocessorEnabled` into `setBluetoothEnabled`
-     * survived it, because both were true there. Three patterns, chosen so that every pair differs
-     * in at least one of them. This is spec 4.04's fixture rule, applied to a test of my own.
-     */
+    /** The two boolean fields must not be cross-wired. */
     @Test
-    fun theThreeBooleanBuilderFieldsAreNotInterchangeable() {
-        fun booleansOf(config: AudioConfig): Triple<Any?, Any?, Any?> {
-            val b = factory.builder(context, SilentLogger, config, params, encodeListener, outputListener)
-            fun read(name: String) =
-                AudioHandler.Builder::class.java.getDeclaredField(name).apply { isAccessible = true }.get(b)
-            return Triple(read("mBluetoothEnabled"), read("mPreprocessorEnabled"), read("mHalfDuplexEnabled"))
-        }
+    fun theBooleanBuilderFieldsAreNotInterchangeable() {
+        fun booleansOf(config: AudioConfig): Pair<Any?, Any?> =
+            built(config).let { it["setPreprocessorEnabled"] to it["setHalfDuplexEnabled"] }
 
         assertThat(
             booleansOf(
                 AudioConfig(
-                    routedDeviceType = AudioDeviceInfo.TYPE_BLUETOOTH_SCO, preprocessorEnabled = false,
+                    preprocessorEnabled = false,
                     halfDuplexRequested = true, transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
                 ),
             ),
-        ).isEqualTo(Triple(true, false, true))
+        ).isEqualTo(false to true)
         assertThat(
-            booleansOf(AudioConfig(routedDeviceType = null, preprocessorEnabled = true, halfDuplexRequested = false)),
-        ).isEqualTo(Triple(false, true, false))
-        assertThat(
-            booleansOf(
-                AudioConfig(
-                    routedDeviceType = AudioDeviceInfo.TYPE_BLUETOOTH_SCO, preprocessorEnabled = false,
-                    halfDuplexRequested = false, transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
-                ),
-            ),
-        ).isEqualTo(Triple(true, false, false))
+            booleansOf(AudioConfig(preprocessorEnabled = true, halfDuplexRequested = false)),
+        ).isEqualTo(true to false)
     }
 
     /**
-     * The stream and the Bluetooth flag both depend on the routed device, which the fixture above
-     * can only show one value of. Unrouted, the configured stream goes through as it is; routed to
-     * a device that is not a headset, playback moves to the voice-call stream - the only one that
-     * follows the communication device - and Bluetooth stays off.
+     * Unrouted, the configured stream goes through as it is; routed to any device, playback moves
+     * to the voice-call stream, the only one that follows the communication device.
      */
     @Test
-    fun aRoutedDevicePlaysOnTheVoiceCallStreamAndOnlyBluetoothIsBluetooth() {
-        fun streamAndBluetooth(config: AudioConfig): Pair<Any?, Any?> {
-            val b = factory.builder(context, SilentLogger, config, params, encodeListener, outputListener)
-            fun read(name: String) =
-                AudioHandler.Builder::class.java.getDeclaredField(name).apply { isAccessible = true }.get(b)
-            return read("mAudioStream") to read("mBluetoothEnabled")
-        }
+    fun aRoutedDevicePlaysOnTheVoiceCallStream() {
+        fun stream(config: AudioConfig): Any? = built(config)["setAudioStream"]
 
-        assertThat(streamAndBluetooth(AudioConfig(audioStream = AudioManager.STREAM_ALARM)))
-            .isEqualTo(AudioManager.STREAM_ALARM to false)
+        assertThat(stream(AudioConfig(audioStream = AudioManager.STREAM_ALARM)))
+            .isEqualTo(AudioManager.STREAM_ALARM)
         assertThat(
-            streamAndBluetooth(
+            stream(
                 AudioConfig(
                     audioStream = AudioManager.STREAM_ALARM,
                     routedDeviceType = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
                 ),
             ),
-        ).isEqualTo(AudioManager.STREAM_VOICE_CALL to false)
+        ).isEqualTo(AudioManager.STREAM_VOICE_CALL)
     }
 
     /** The per-session arguments, which are the session identity and not just a setting. */
@@ -211,17 +220,12 @@ class DefaultAudioHandlerFactoryTest {
         }
     }
 
-    /** Half duplex reaches the builder through the rule, not as the raw request (spec A7). */
+    /** Half duplex reaches the builder through the rule, not as the raw request. */
     @Test
     fun halfDuplexReachesTheBuilderThroughTheRule() {
         val requestedButNotPushToTalk = AudioConfig(
             halfDuplexRequested = true, transmitMode = Constants.TRANSMIT_VOICE_ACTIVITY,
         )
-        val builder = factory.builder(
-            context, SilentLogger, requestedButNotPushToTalk, params, encodeListener, outputListener,
-        )
-        val field = AudioHandler.Builder::class.java.getDeclaredField("mHalfDuplexEnabled")
-        field.isAccessible = true
-        assertThat(field.get(builder)).isEqualTo(false)
+        assertThat(built(requestedButNotPushToTalk)["setHalfDuplexEnabled"]).isEqualTo(false)
     }
 }

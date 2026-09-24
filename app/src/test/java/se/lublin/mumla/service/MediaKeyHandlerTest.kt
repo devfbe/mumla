@@ -46,7 +46,6 @@ class MediaKeyHandlerTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
         settings = Settings.getInstance(context)
         target = FakeTarget()
         handler = MediaKeyHandler(settings, target)
@@ -94,9 +93,8 @@ class MediaKeyHandlerTest {
     }
 
     /**
-     * One press, one toggle -- and the toggle happens on the DOWN. The platform delivers a press
-     * as a DOWN/UP pair (see [longPressTakenByTheVoiceAssistantDoesNotToggle]), so the UP must be
-     * swallowed, not acted on, or every press would toggle twice and land back where it started.
+     * One press, one toggle, on the DOWN. The platform delivers a press as a DOWN/UP pair, so the
+     * UP must be swallowed or every press would toggle twice.
      */
     @Test
     fun actionFiresOnceOnTheKeyDownOfAPress() {
@@ -126,11 +124,8 @@ class MediaKeyHandlerTest {
     }
 
     /**
-     * A canceled event never acts. Measured: nothing canceled reaches us through the media
-     * session, because AOSP's MediaSessionService drops canceled events before it dispatches
-     * them. The check is kept because this class is a pure function of the KeyEvent and a second
-     * feeder is planned -- the foreground Activity path, where canceled events are ordinary --
-     * and because the failure it prevents is an unattended open microphone.
+     * A canceled event never acts. MediaSessionService already drops canceled events, but this
+     * class is a pure function of the KeyEvent and the failure is an unattended open microphone.
      */
     @Test
     fun canceledKeyDownIsConsumedWithoutToggling() {
@@ -149,14 +144,9 @@ class MediaKeyHandlerTest {
      * A long press of the headset button belongs to the voice assistant, and the events that
      * reach us afterwards must not toggle anything.
      *
-     * This is the sequence the platform really delivers, read out of AOSP API 36
-     * (`MediaSessionService$SessionManagerImpl$KeyEventHandler`): for HEADSETHOOK and
-     * MEDIA_PLAY_PAUSE the service tracks the press itself, so the first DOWN is swallowed, the
-     * long-press DOWN (repeatCount 1, FLAG_LONG_PRESS) starts the assistant and ends the
-     * tracking, and every event after that -- the remaining DOWN repeats and the final UP -- is
-     * dispatched to our session unchanged. That UP carries repeatCount 0 and no FLAG_CANCELED:
-     * handleKeyEventLocked drops canceled events before dispatch, so a canceled event never
-     * arrives at all and cannot be what tells this case apart.
+     * The sequence is the one AOSP's MediaSessionService delivers: it swallows the first DOWN and
+     * the long-press DOWN (repeatCount 1, FLAG_LONG_PRESS), then dispatches the remaining repeats
+     * and a final UP with repeatCount 0 and no FLAG_CANCELED.
      */
     @Test
     fun longPressTakenByTheVoiceAssistantDoesNotToggle() {
@@ -193,9 +183,8 @@ class MediaKeyHandlerTest {
     }
 
     /**
-     * "Off is off" must hold for every event of a handled key, not only the UP that would act.
-     * The system stops dispatching a gesture once any part of it is claimed, so consuming the DOWN
-     * silently breaks the media button of whatever app the user actually meant to control.
+     * "Off is off" holds for every event of a handled key: the system stops dispatching a gesture
+     * once any part of it is claimed, so consuming the DOWN breaks the media button for other apps.
      */
     @Test
     fun noneSettingDoesNotConsumeTheKeyDownEither() {

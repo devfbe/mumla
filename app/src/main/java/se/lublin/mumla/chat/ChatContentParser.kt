@@ -9,21 +9,12 @@ import android.text.style.ImageSpan
 import androidx.core.text.HtmlCompat
 
 /**
- * Parses Mumble HTML message bodies into [ChatContent]. Pure CPU work, safe to call from any thread.
- * `HtmlCompat.fromHtml` inserts an [ImageSpan] per `<img>`, which is what this parser splits on.
+ * Parses Mumble HTML message bodies into [ChatContent], splitting on the [ImageSpan] that
+ * `HtmlCompat.fromHtml` inserts per `<img>`. Pure CPU work, safe to call from any thread.
  *
- * The four-argument overload is used on purpose: without an image getter AOSP's
- * `HtmlToSpannedConverter.startImg` falls back to `Resources.getSystem().getDrawable(unknown_image)`
- * and calls `setBounds` on it for every `<img>`, i.e. it loads and mutates a framework drawable that
- * is thrown away immediately — on a background thread. The trivial getter below avoids that and
- * keeps the `ImageSpan`'s `source` intact, which is all this parser reads.
- *
- * Messages come from other Mumble clients over the network and are not guaranteed to be well
- * formed or benign: unterminated/nested tags, unquoted or mismatched-quote attributes, missing or
- * empty `src`, non-image `src` schemes (`javascript:`, `file:`, ...), huge bodies and deeply nested
- * markup are all expected input, not error cases. `HtmlCompat.fromHtml` uses a lenient (TagSoup-based)
- * parser that never throws on malformed markup, and this parser never inspects or decodes `src` —
- * it is handed on exactly as sent so a later stage can validate/decode it (see [ChatContent.Image]).
+ * An image getter is passed because without one AOSP loads and mutates a framework drawable for
+ * every `<img>`. Bodies are untrusted network input; the lenient parser never throws on malformed
+ * markup, and `src` is handed on undecoded for a later stage to validate.
  */
 class ChatContentParser(private val imagePlaceholder: String) {
 

@@ -17,12 +17,12 @@
 
 package se.lublin.mumla.channel
 
-import android.app.Activity
 import android.app.SearchManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.database.CursorWrapper
 import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -34,118 +34,98 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
+import androidx.core.view.MenuProvider
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.HumlaDisconnectedException
-import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaObserver
-import se.lublin.humla.util.IHumlaObserver
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.db.DatabaseProvider
-import se.lublin.mumla.util.HumlaServiceFragment
+import se.lublin.mumla.app.ServiceClient
+import se.lublin.mumla.app.ServiceViewModel
+import se.lublin.mumla.app.bindClient
+import se.lublin.mumla.databinding.FragmentChannelListBinding
+import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.service.toggleSelfMute
 
-class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUserClickListener,
-    SharedPreferences.OnSharedPreferenceChangeListener {
+class ChannelListFragment :
+    Fragment(),
+    ServiceClient,
+    SharedPreferences.OnSharedPreferenceChangeListener,
+    MenuProvider {
 
-    private val serviceObserver: IHumlaObserver = object : HumlaObserver() {
-        override fun onDisconnected(e: HumlaException?) {
-            channelView.adapter = null
-            // And forget it, or the rebind that follows a reconnection takes onServiceBound's
-            // setService branch and never puts an adapter back on the list -- an empty channel
-            // list for the rest of the process, with a connected server behind it. Dropping the
-            // adapter is also the only thing that re-reads the pinned channels, which are rooted
-            // per server and were baked in when it was built.
-            channelListAdapter = null
-        }
+    private val serviceModel: ServiceViewModel by activityViewModels()
+    private val service: IMumlaService? get() = serviceModel.service.value
+    private var bound = false
 
-        override fun onUserJoinedChannel(user: IUser, newChannel: IChannel, oldChannel: IChannel?) {
-            channelListAdapter?.updateChannels()
-
-            val service = service
-            if (service == null || !service.isConnected) {
-                return
+    override fun onServiceEvent(event: HumlaEvent) {
+        when (event) {
+            is HumlaEvent.Disconnected -> {
+                channelView.adapter = null
+                // And forget it: a rebind after reconnection must build a fresh adapter (the pinned
+                // channels are per server), otherwise the setService branch leaves the list empty.
+                channelListAdapter = null
             }
-
-            val selfSession = try {
-                service.HumlaSession().sessionId
-            } catch (e: HumlaDisconnectedException) {
-                Log.d(TAG, "exception in onUserJoinedChannel: $e")
-                return
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in onUserJoinedChannel: $e")
-                return
+            is HumlaEvent.UserJoinedChannel -> onUserJoinedChannel(event.user, event.newChannel)
+            is HumlaEvent.ChannelAdded,
+            is HumlaEvent.ChannelRemoved,
+            is HumlaEvent.ChannelStateUpdated,
+            is HumlaEvent.UserConnected,
+            is HumlaEvent.UserListeningUpdated,
+            -> channelListAdapter?.updateChannels()
+            is HumlaEvent.UserRemoved -> {
+                // If we are the user being removed, don't update the channel list.
+                // We won't be in a synchronized state.
+                val service = service
+                if (service != null && service.isConnected) channelListAdapter?.updateChannels()
             }
-
-            if (user.session == selfSession) {
-                scrollToChannel(newChannel.id)
+            is HumlaEvent.UserStateUpdated -> {
+                channelListAdapter?.updateUserStates(event.user, channelView)
+                requireActivity().invalidateMenu() // Update self mute/deafen state
             }
+            is HumlaEvent.UserTalkStateUpdated -> channelListAdapter?.updateUserStates(event.user, channelView)
+            else -> Unit
+        }
+    }
+
+    private fun onUserJoinedChannel(user: IUser, newChannel: IChannel) {
+        channelListAdapter?.updateChannels()
+
+        val service = service?.takeIf { it.isConnected } ?: return
+        val selfSession = try {
+            service.session.sessionId
+        } catch (e: HumlaDisconnectedException) {
+            Log.d(TAG, "exception in onUserJoinedChannel: $e")
+            null
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "exception in onUserJoinedChannel: $e")
+            null
         }
 
-        override fun onChannelAdded(channel: IChannel) {
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onChannelRemoved(channel: IChannel) {
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onChannelStateUpdated(channel: IChannel) {
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onUserConnected(user: IUser) {
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onUserRemoved(user: IUser, reason: String?) {
-            // If we are the user being removed, don't update the channel list.
-            // We won't be in a synchronized state.
-            val service = service
-            if (service == null || !service.isConnected) {
-                return
-            }
-
-            channelListAdapter?.updateChannels()
-        }
-
-        override fun onUserStateUpdated(user: IUser) {
-            channelListAdapter?.updateUserStates(user, channelView)
-            requireActivity().invalidateOptionsMenu() // Update self mute/deafen state
-        }
-
-        override fun onUserTalkStateUpdated(user: IUser) {
-            channelListAdapter?.updateUserStates(user, channelView)
+        if (selfSession != null && user.session == selfSession) {
+            scrollToChannel(newChannel.id)
         }
     }
 
     private lateinit var channelView: RecyclerView
     private var channelListAdapter: ChannelListAdapter? = null
-    private lateinit var targetProvider: ChatTargetProvider
-    private lateinit var databaseProvider: DatabaseProvider
+    private val chatTargets by parentChatTargets()
     private var actionMode: ActionMode? = null
     private lateinit var settings: Settings
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setHasOptionsMenu(true)
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onAttach(activity: Activity) {
-        super.onAttach(activity)
-        targetProvider = parentFragment as? ChatTargetProvider
-            ?: throw ClassCastException("$parentFragment must implement ChatTargetProvider")
-        databaseProvider = activity as? DatabaseProvider
-            ?: throw ClassCastException("$activity must implement DatabaseProvider")
-        settings = Settings.getInstance(activity)
-        PreferenceManager.getDefaultSharedPreferences(activity)
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        settings = Settings.getInstance(context)
+        PreferenceManager.getDefaultSharedPreferences(context)
             .registerOnSharedPreferenceChangeListener(this)
     }
 
@@ -154,16 +134,19 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
-        val view = inflater.inflate(R.layout.fragment_channel_list, container, false)
-        channelView = view.findViewById(R.id.channelUsers)
+        val binding = FragmentChannelListBinding.inflate(inflater, container, false)
+        channelView = binding.channelUsers
         channelView.layoutManager = LinearLayoutManager(activity)
-        return view
+        return binding.root
     }
 
-    @Suppress("DEPRECATION")
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        super.onActivityCreated(savedInstanceState)
-        registerForContextMenu(channelView)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
+        if (!bound) {
+            bound = true
+            serviceModel.bindClient(this, this)
+        }
     }
 
     override fun onDestroy() {
@@ -172,9 +155,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
             .unregisterOnSharedPreferenceChangeListener(this)
     }
 
-    override fun getServiceObserver(): IHumlaObserver = serviceObserver
-
-    override fun onServiceBound(service: IHumlaService) {
+    override fun onServiceBound(service: IMumlaService) {
         val adapter = channelListAdapter
         if (adapter == null) {
             setupChannelList(service)
@@ -183,15 +164,11 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
         }
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu) {
-        super.onPrepareOptionsMenu(menu)
-
+    override fun onPrepareMenu(menu: Menu) {
         fillAudioDevices(menu.findItem(R.id.menu_audio_device))
 
-        // Noise suppression, live: writing the preference reaches
-        // MumlaService.onSharedPreferenceChanged -> configureExtras, which reloads the
-        // audio subsystem when it is initialized. Same three values as the settings screen.
-        when (settings.getNoiseSuppressionMethod()) {
+            // Writing the preference makes MumlaService reconfigure the audio subsystem live.
+        when (settings.noiseSuppressionMethod) {
             "speex" -> menu.findItem(R.id.menu_noise_speex)
             "none" -> menu.findItem(R.id.menu_noise_none)
             else -> menu.findItem(R.id.menu_noise_rnnoise)
@@ -202,12 +179,10 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
         val service = service
         if (service != null && service.isConnected) {
-            val session = service.HumlaSession()
+            val session = service.session
 
-            // Color the action bar icons to the primary text color of the theme, TODO move this elsewhere
-            val foregroundColor = requireActivity().theme
-                .obtainStyledAttributes(intArrayOf(android.R.attr.textColorPrimaryInverse))
-                .getColor(0, -1)
+            // Tinted like the app bar title.
+            val foregroundColor = requireActivity().getColor(R.color.on_app_bar)
 
             val self = session.sessionUser
             if (self != null) {
@@ -219,14 +194,18 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
                     if (self.isSelfDeafened) R.drawable.ic_action_audio_muted
                     else R.drawable.ic_action_audio
                 )
-                muteItem.icon?.mutate()?.setColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
-                deafenItem.icon?.mutate()?.setColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
+                // The action a tap takes, which is also what accessibility services read.
+                muteItem.setTitle(if (self.isSelfMuted) R.string.unmute else R.string.mute)
+                deafenItem.setTitle(if (self.isSelfDeafened) R.string.undeafen else R.string.deafen)
+                val tint = PorterDuffColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
+                muteItem.icon?.mutate()?.colorFilter = tint
+                deafenItem.icon?.mutate()?.colorFilter = tint
             }
         }
     }
 
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        inflater.inflate(R.menu.fragment_channel_list, menu)
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+        menuInflater.inflate(R.menu.fragment_channel_list, menu)
 
         val searchItem = menu.findItem(R.id.menu_search)
         val searchManager =
@@ -251,11 +230,16 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
                 val itemType = cursor.getString(typeColumn)
                 val itemId = cursor.getInt(dataIdColumn)
 
-                val session = service.HumlaSession()
+                val session = service.session
                 return when (itemType) {
                     ChannelSearchProvider.INTENT_DATA_CHANNEL -> {
-                        if (session.sessionChannel.id != itemId) {
-                            session.joinChannel(itemId)
+                        if (session.sessionChannel?.id != itemId) {
+                            val channel = session.getChannel(itemId)
+                            if (channel != null) {
+                                session.joinOrExplain(requireContext(), channel)
+                            } else {
+                                session.joinChannel(itemId)
+                            }
                         } else {
                             scrollToChannel(itemId)
                         }
@@ -272,10 +256,9 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
     }
 
     /**
-     * The audio chooser: the devices the session offers right now, with the one voice goes to
-     * ticked, or nothing at all without a connection - the choice belongs to a session. Called
-     * when the menu is prepared and again when the chooser is opened, because a headset switched
-     * on in between has to be there when the user looks.
+     * Fills the audio chooser with the session's current devices, the active one ticked, or
+     * nothing without a connection. Called on menu preparation and again when the chooser opens,
+     * so a headset switched on in between shows up.
      */
     private fun fillAudioDevices(chooser: MenuItem) {
         val sub = chooser.subMenu ?: return
@@ -290,8 +273,7 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
                 .setChecked(device.id == active?.id)
         }
         sub.setGroupCheckable(R.id.menu_audio_device_group, true, true)
-        // The echo canceller for the device voice goes to: its kind's default or the user's
-        // override for that kind, as the session runs it. Its own item, outside the group.
+        // The echo canceller for the active device's kind (default or user override).
         sub.findItem(R.id.menu_audio_echo)?.let { echo ->
             echo.isVisible = active != null
             echo.isChecked = session?.isEchoCancellationEnabled == true
@@ -300,81 +282,68 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
     /** The session, while there is a connection to have one; the chooser acts on nothing else. */
     private fun connectedSession(): IHumlaSession? =
-        service?.takeIf { it.isConnected }?.HumlaSession()
+        service?.takeIf { it.isConnected }?.session
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.menu_audio_device) {
-            fillAudioDevices(item)
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when {
+        menuItem.itemId == R.id.menu_audio_device -> {
+            fillAudioDevices(menuItem)
             // Not consumed, so the platform goes on to open the submenu just refilled.
-            return false
+            false
         }
-        if (item.itemId == R.id.menu_audio_echo) {
-            val session = connectedSession()
-            val active = session?.activeAudioDevice
-            if (session != null && active != null) {
-                // Remembered for this kind of device; MumlaService hands the overrides to the
-                // service, which applies them live and again whenever such a device is routed.
-                settings.setEchoCancellationOverride(
-                    AudioDeviceCategory.of(active.type), !session.isEchoCancellationEnabled,
-                )
-                requireActivity().invalidateOptionsMenu()
-            }
-            return true
+        menuItem.itemId == R.id.menu_audio_echo -> {
+            toggleEchoCancellation()
+            true
         }
-        if (item.groupId == R.id.menu_audio_device_group) {
+        menuItem.groupId == R.id.menu_audio_device_group -> {
             connectedSession()?.let {
-                it.selectAudioDevice(item.itemId)
-                requireActivity().invalidateOptionsMenu()
+                it.selectAudioDevice(menuItem.itemId)
+                requireActivity().invalidateMenu()
             }
-            return true
+            true
         }
-        val noise = when (item.itemId) {
-            R.id.menu_noise_none -> "none"
-            R.id.menu_noise_speex -> "speex"
-            R.id.menu_noise_rnnoise -> "rnnoise"
-            else -> null
+        menuItem.itemId in NOISE_METHODS -> {
+            settings.noiseSuppressionMethod = NOISE_METHODS.getValue(menuItem.itemId)
+            menuItem.isChecked = true
+            true
         }
-        if (noise != null) {
-            settings.setNoiseSuppressionMethod(noise)
-            item.isChecked = true
-            return true
-        }
-        val service = service
-        if (service == null || !service.isConnected) {
-            return super.onOptionsItemSelected(item)
-        }
-        val session = service.HumlaSession()
-
-        return when (item.itemId) {
-            R.id.menu_mute_button -> {
-                session.sessionUser?.let { self ->
-                    val muted = !self.isSelfMuted
-                    val deafened = self.isSelfDeafened && muted // Undeafen if mute is off
-                    session.setSelfMuteDeafState(muted, deafened)
-                }
-                requireActivity().invalidateOptionsMenu()
-                true
-            }
-            R.id.menu_deafen_button -> {
-                session.sessionUser?.let { self ->
-                    val deafened = !self.isSelfDeafened
-                    session.setSelfMuteDeafState(deafened, deafened)
-                }
-                requireActivity().invalidateOptionsMenu()
-                true
-            }
-            R.id.menu_search -> false
-            else -> super.onOptionsItemSelected(item)
-        }
+        menuItem.itemId == R.id.menu_mute_button || menuItem.itemId == R.id.menu_deafen_button ->
+            toggleSelfMuteDeaf(deafen = menuItem.itemId == R.id.menu_deafen_button)
+        else -> false
     }
 
-    private fun setupChannelList(service: IHumlaService) {
+    /** Flips the echo canceller of the active device's kind; the service applies it live and on every routing. */
+    private fun toggleEchoCancellation() {
+        val session = connectedSession() ?: return
+        val active = session.activeAudioDevice ?: return
+        settings.setEchoCancellationOverride(AudioDeviceCategory.of(active.type), !session.isEchoCancellationEnabled)
+        requireActivity().invalidateMenu()
+    }
+
+    /** Flips our own mute, or deafness with [deafen]; returns false while not connected. */
+    private fun toggleSelfMuteDeaf(deafen: Boolean): Boolean {
+        val session = connectedSession() ?: return false
+        if (deafen) {
+            session.sessionUser?.let { self ->
+                val deafened = !self.isSelfDeafened
+                session.setSelfMuteDeafState(deafened, deafened)
+            }
+        } else {
+            toggleSelfMute(session)
+        }
+        requireActivity().invalidateMenu()
+        return true
+    }
+
+    private fun setupChannelList(service: IMumlaService) {
+        val repository = MumlaRepository.get(requireContext())
+        // Read now, off the main thread, for the channel menus' pin toggle.
+        service.targetServer?.let { repository.pinnedChannels.of(it.id) }
         val adapter = ChannelListAdapter(
-            requireActivity(), service, databaseProvider.database, childFragmentManager,
-            isShowingPinnedChannels(), settings.shouldShowUserCount(),
+            requireActivity(), service, repository, childFragmentManager,
+            isShowingPinnedChannels(), settings.shouldShowUserCount,
         )
-        adapter.setOnChannelClickListener(this)
-        adapter.setOnUserClickListener(this)
+        adapter.onChannelClick = ::onChannelClick
+        adapter.onUserClick = ::onUserClick
         channelView.adapter = adapter
         adapter.notifyDataSetChanged()
         channelListAdapter = adapter
@@ -394,48 +363,38 @@ class ChannelListFragment : HumlaServiceFragment(), OnChannelClickListener, OnUs
 
     private fun isShowingPinnedChannels(): Boolean = requireArguments().getBoolean("pinned")
 
-    override fun onChannelClick(channel: IChannel) {
-        val current = targetProvider.chatTarget
-        if (current != null && channel == current.channel && actionMode != null) {
-            // Dismiss action mode if double pressed. FIXME: use list view selection instead?
-            actionMode?.finish()
-        } else {
-            val cb = object :
-                ChatTargetActionModeCallback(targetProvider, ChatTargetProvider.ChatTarget(channel)) {
-                override fun onDestroyActionMode(actionMode: ActionMode) {
-                    super.onDestroyActionMode(actionMode)
-                    this@ChannelListFragment.actionMode = null
-                }
-            }
-            actionMode = (requireActivity() as AppCompatActivity).startSupportActionMode(cb)
-        }
-    }
+    /** Makes [channel] the chat target, or closes the target if it is [channel] already. */
+    fun onChannelClick(channel: IChannel) = toggleTarget(ChatTarget.Channel(channel))
 
-    override fun onUserClick(user: IUser) {
-        val current = targetProvider.chatTarget
-        if (current != null && user == current.user && actionMode != null) {
-            // Dismiss action mode if double pressed. FIXME: use list view selection instead?
-            actionMode?.finish()
+    /** Makes [user] the chat target, or closes the target if it is [user] already. */
+    fun onUserClick(user: IUser) = toggleTarget(ChatTarget.User(user))
+
+    private fun toggleTarget(target: ChatTarget) {
+        val mode = actionMode
+        if (mode != null && chatTargets.target.value == target) {
+            // Tapped the open target again.
+            mode.finish()
         } else {
-            val cb = object :
-                ChatTargetActionModeCallback(targetProvider, ChatTargetProvider.ChatTarget(user)) {
-                override fun onDestroyActionMode(actionMode: ActionMode) {
-                    super.onDestroyActionMode(actionMode)
-                    this@ChannelListFragment.actionMode = null
-                }
-            }
-            actionMode = (requireActivity() as AppCompatActivity).startSupportActionMode(cb)
+            val callback = ChatTargetActionModeCallback(chatTargets, target) { actionMode = null }
+            actionMode = (requireActivity() as AppCompatActivity).startSupportActionMode(callback)
         }
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
         when (key) {
             Settings.PREF_SHOW_USER_COUNT ->
-                channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount())
+                channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount)
         }
     }
 
     companion object {
         private val TAG: String = ChannelListFragment::class.java.name
+
+        /** The noise suppression items and the methods they pick. */
+        private val NOISE_METHODS = mapOf(
+            R.id.menu_noise_none to "none",
+            R.id.menu_noise_speex to "speex",
+            R.id.menu_noise_rnnoise to "rnnoise",
+        )
     }
 }

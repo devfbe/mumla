@@ -24,7 +24,6 @@
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -37,7 +36,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <queries>
-        <!-- We're using guardianproject's OrbotHelper to check if Orbot is installed -->
+        <!-- Orbot.isInstalled looks this package up. -->
         <package android:name="org.torproject.android" />
     </queries>
 
@@ -47,6 +46,7 @@
         android:dataExtractionRules="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:supportsRtl="true"
         android:theme="@style/Theme.Mumla"
         android:localeConfig="@xml/local_config">
 
@@ -84,13 +84,23 @@
             android:name=".service.MumlaService"
             android:exported="false"
             android:enabled="true"
-            android:foregroundServiceType="microphone|mediaPlayback" />
+            android:foregroundServiceType="microphone" />
 
-        <!--
-            Publishes one cache subdirectory so the chat image viewer can hand a single image to
-            another app through the share sheet. Not exported: the only way in is a per-URI grant
-            travelling on the share intent. See res/xml/shared_image_paths.xml.
-        -->
+        <service
+            android:name=".service.MuteTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_action_microphone_muted"
+            android:label="@string/tile_mute_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true" />
+        </service>
+
+        <!-- Shares chat images; not exported, access only via per-URI grants on the share intent. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -104,6 +114,7 @@
         <activity
             android:name=".app.MumlaActivity"
             android:label="@string/app_name"
+            android:windowSoftInputMode="adjustResize"
             android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>

@@ -18,8 +18,8 @@
         };
 
         # Single source for the Android toolchain version pins within this file: Nix cannot read
-        # gradle.properties, so these literals and the ones in gradle.properties (read by both
-        # libraries/humla/build.gradle and app/build.gradle) must be kept in sync by hand. Every
+        # gradle.properties, so these literals and the ones in gradle.properties (read by
+        # build-logic and libraries/humla/build.gradle.kts) must be kept in sync by hand. Every
         # other flake.nix reference to these versions goes through these bindings.
         ndkVersion = "29.0.14206865";
         buildToolsVersion = "36.1.0";

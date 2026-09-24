@@ -9,7 +9,6 @@ Noen av funksjonene:
 * Støtte for Blåtannshodesett 
 * Selvbetjent registrering på tjenere
 * Tilgangssymboler
-* Opus, CELT, og Speex-kodekstøtte
 * Automatisk gjenkjennelse
 * Tor-støtte gjennom Orbot-programmet
 * Tekst-til-tale for meldinger (skrudd på som forvalg)

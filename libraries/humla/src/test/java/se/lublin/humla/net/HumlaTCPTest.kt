@@ -1,6 +1,5 @@
 package se.lublin.humla.net
 
-import android.net.SSLCertificateSocketFactory
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -8,8 +7,12 @@ import android.os.Message
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
 import io.mockk.unmockkAll
+import io.mockk.verify
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -31,17 +34,16 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLSocket
 
 /**
  * Covers the TCP transport's lifecycle: which thread callbacks arrive on, that a failed or aborted
- * connect reports onTCPConnectionDisconnect exactly once, and that no socket thread outlives the
- * connection.
+ * connect reports onTCPConnectionDisconnect exactly once, and that no coroutine of the transport
+ * outlives the connection.
  *
- * The real read loop is reachable here too: HumlaTCP hands its socket to
- * SSLCertificateSocketFactory.setHostname for SNI, which rejects anything that is not a Conscrypt
- * socket, but mockkStatic on that factory replaces the SNI call, and a mocked SSLSocket carrying a
- * piped stream then drives readFrame and the frame callbacks for real.
+ * The real read loop is reachable here too: a mocked SSLSocket carrying a piped stream drives
+ * readFrame and the frame callbacks for real.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaTCPTest {
@@ -55,6 +57,7 @@ class HumlaTCPTest {
         val disconnects = AtomicInteger()
         override fun onTCPConnectionEstablished() { record("established") }
         override fun onTLSHandshakeFailed(chain: Array<X509Certificate>) { record("handshakeFailed") }
+        override fun onTLSCertificateChanged(chain: Array<X509Certificate>) { record("certificateChanged") }
         override fun onTCPConnectionFailed(e: HumlaException) { record("failed") }
         override fun onTCPConnectionDisconnect() { disconnects.incrementAndGet(); record("disconnect") }
         override fun onTCPMessageReceived(type: HumlaTCPMessageType, length: Int, data: ByteArray) { record("message") }
@@ -63,35 +66,31 @@ class HumlaTCPTest {
             events.poll(5, TimeUnit.SECONDS) ?: throw AssertionError("no callback within 5s")
     }
 
-    /**
-     * The threads that were already running when this test started. Thread.getAllStackTraces() is
-     * JVM-global, so a humla-tcp-* thread leaked by an earlier test would otherwise show up in this
-     * one's checks and fail it as pure collateral damage; [tearDown] pins a leak on the test that
-     * caused it instead.
-     */
-    private val preexistingThreads = Thread.getAllStackTraces().keys.toSet()
+    private val scopes = mutableListOf<CoroutineScope>()
 
     @After
     fun tearDown() {
         tcp?.disconnect()
         try {
-            awaitUntil(description = "no live thread named humla-tcp-* left by this test") {
-                liveThreadNames("humla-tcp-").isEmpty()
-            }
+            awaitUntil(description = "no coroutine of the transport left by this test") { tcp?.isFinished != false }
         } finally {
+            scopes.forEach { it.cancel() }
             callbackThread.quitSafely()
             unmockkAll()
         }
     }
 
-    private fun newTransport(handler: Handler? = null) =
-        (if (handler == null) HumlaTCP(socketFactory) else HumlaTCP(socketFactory, handler))
-            .also { it.setTCPConnectionListener(listener); tcp = it }
+    /** A scope like the connection's, dispatching the callbacks on [handler]. */
+    private fun scopeOn(handler: Handler) =
+        CoroutineScope(SupervisorJob() + handler.asCoroutineDispatcher()).also { scopes += it }
 
-    /** Only threads this test started: see [preexistingThreads] for why the filter is needed. */
-    private fun liveThreadNames(prefix: String) = Thread.getAllStackTraces().keys
-        .filter { it.isAlive && it.name.startsWith(prefix) && it !in preexistingThreads }
-        .map { it.name }
+    private fun newTransport(
+        handler: Handler = Handler(callbackThread.looper),
+        scope: CoroutineScope = scopeOn(handler),
+    ) = HumlaTCP(socketFactory, scope).also { it.setTCPConnectionListener(listener); tcp = it }
+
+    private fun awaitFinished(transport: HumlaTCP) =
+        awaitUntil(description = "every coroutine of the transport finished") { transport.isFinished }
 
     /** Waits until everything already queued on the callback handler has been delivered. */
     private fun drainCallbacks() {
@@ -107,10 +106,9 @@ class HumlaTCPTest {
     }
 
     /**
-     * Delivers for real, but runs [beforeQueueing] with the running post count first - at the one
-     * instruction post() has between capturing the epoch and handing the callback to the handler.
-     * Handler.post is final, so the hook sits on the funnel every post goes through. [posts] is the
-     * same count afterwards, so a test can pin how many callbacks the transport handed over.
+     * Delivers for real, but runs [beforeQueueing] with the running post count first - between
+     * post() deciding to deliver and handing the callback to the handler (Handler.post is final, so
+     * the hook sits on the funnel every post goes through). [posts] is the same count afterwards.
      */
     private class HookedHandler(looper: Looper, private val beforeQueueing: (Int) -> Unit) : Handler(looper) {
         val posts = AtomicInteger()
@@ -129,7 +127,7 @@ class HumlaTCPTest {
     @Test
     fun aFailedConnectReportsFailureThenExactlyOneDisconnectOnTheCallbackHandler() {
         every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
-        val transport = newTransport(Handler(callbackThread.looper))
+        val transport = newTransport()
 
         transport.connect("example.invalid", 64738, false)
 
@@ -140,40 +138,36 @@ class HumlaTCPTest {
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
 
-    /**
-     * The default handler must stay the main looper: HumlaConnection is still a main-thread
-     * consumer until Task 4 moves it, and a different delivery thread would reorder its callbacks.
-     */
+    /** Makes the TLS handshake fail with [failure] as the trust verdict. */
+    private fun failHandshakeWith(failure: TrustFailure) {
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socket.startHandshake() } throws SSLHandshakeException("rejected")
+        every { socketFactory.createSocket(any(), any()) } returns socket
+        every { socketFactory.serverChain } returns arrayOf(mockk<X509Certificate>())
+        every { socketFactory.trustFailure } returns failure
+    }
+
     @Test
-    fun theDefaultHandlerDeliversOnTheMainLooper() {
-        every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
-        val transport = newTransport()
+    fun anUntrustedCertificateAsksForTrust() {
+        failHandshakeWith(TrustFailure.UNTRUSTED)
+        newTransport().connect("example.invalid", 64738, false)
 
-        transport.connect("example.invalid", 64738, false)
+        assertThat(listener.next().first).isEqualTo("handshakeFailed")
+    }
 
-        awaitUntil(description = "the callbacks reached the main looper queue") {
-            !shadowOf(Looper.getMainLooper()).isIdle
-        }
-        assertThat(listener.events).isEmpty() // nothing was delivered on the read thread
-        // Wait for the event, not for isRunning: the read loop clears that flag one statement
-        // before it posts the disconnect, so a single idle() keyed on it can run while only the
-        // failure is queued and leave the disconnect sitting in the paused queue for good.
-        awaitUntil(description = "the disconnect reached the main looper") {
-            shadowOf(Looper.getMainLooper()).idle()
-            listener.disconnects.get() == 1
-        }
-        assertThat(transport.isRunning).isFalse()
-        val main = Looper.getMainLooper().thread.name
-        assertThat(listener.next()).isEqualTo("failed" to main)
-        assertThat(listener.next()).isEqualTo("disconnect" to main)
-        assertThat(listener.disconnects.get()).isEqualTo(1)
+    @Test
+    fun aChangedPinnedCertificateIsReportedAsSuch() {
+        failHandshakeWith(TrustFailure.CHANGED)
+        newTransport().connect("example.invalid", 64738, false)
+
+        assertThat(listener.next().first).isEqualTo("certificateChanged")
     }
 
     @Test
     fun aSecondConnectWhileRunningIsRefused() {
         val gate = CountDownLatch(1)
         every { socketFactory.createSocket(any(), any()) } answers { gate.await(); throw IOException("no route") }
-        val transport = newTransport(Handler(callbackThread.looper))
+        val transport = newTransport()
 
         transport.connect("example.invalid", 64738, false)
         try {
@@ -196,7 +190,7 @@ class HumlaTCPTest {
         val socket = mockk<SSLSocket>(relaxed = true)
         every { socket.close() } answers { closed.countDown() }
         every { socketFactory.createSocket(any(), any()) } answers { gate.await(); socket }
-        val transport = newTransport(Handler(callbackThread.looper))
+        val transport = newTransport()
 
         transport.connect("example.invalid", 64738, false)
         transport.disconnect()
@@ -205,7 +199,7 @@ class HumlaTCPTest {
         assertThat(listener.next()).isEqualTo("disconnect" to "test-tcp-callbacks")
         assertThat(closed.await(5, TimeUnit.SECONDS)).isTrue()
         awaitUntil(description = "the transport stopped") { !transport.isRunning }
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        awaitFinished(transport)
         drainCallbacks() // a barrier, so "nothing else arrived" cannot pass by being early
         assertThat(listener.events).isEmpty()
         assertThat(listener.disconnects.get()).isEqualTo(1)
@@ -214,16 +208,15 @@ class HumlaTCPTest {
     /**
      * HumlaSSLSocketFactory.createSocket() connects with no timeout, so a blackholed server keeps
      * the read thread blocked with no socket for disconnect() to close. The caller must still be
-     * told it is disconnected - HumlaService only releases its wake lock and shuts audio down when
-     * that callback arrives - and it must still be told exactly once when the read loop finally
-     * unwinds.
+     * told it is disconnected (HumlaService releases its wake lock on that callback), and exactly
+     * once when the read loop finally unwinds.
      */
     @Test
     fun aDisconnectIsReportedEvenWhileTheConnectAttemptIsStillBlocked() {
         val gate = CountDownLatch(1)
         val socket = mockk<SSLSocket>(relaxed = true)
         every { socketFactory.createSocket(any(), any()) } answers { gate.await(); socket }
-        val transport = newTransport(Handler(callbackThread.looper))
+        val transport = newTransport()
 
         transport.connect("example.invalid", 64738, false)
         try {
@@ -233,16 +226,16 @@ class HumlaTCPTest {
             gate.countDown() // always let the read thread unwind, however the assertion went
         }
 
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        awaitFinished(transport)
         drainCallbacks() // a barrier, so "nothing else arrived" cannot pass by being early
         assertThat(listener.events).isEmpty() // the read loop did not report a second disconnect
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
 
-    /** A disconnect before connect() must stay a no-op, exactly as the Java original was. */
+    /** A disconnect before connect() is a no-op. */
     @Test
     fun aDisconnectBeforeConnectIsSilent() {
-        val transport = newTransport(Handler(callbackThread.looper))
+        val transport = newTransport()
 
         transport.disconnect()
 
@@ -251,23 +244,20 @@ class HumlaTCPTest {
     }
 
     @Test
-    fun noTcpThreadOutlivesTheConnection() {
+    fun noTcpCoroutineOutlivesTheConnection() {
         every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
-        val transport = newTransport(Handler(callbackThread.looper))
+        val transport = newTransport()
 
         transport.connect("example.invalid", 64738, false)
 
         assertThat(listener.next().first).isEqualTo("failed")
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        awaitFinished(transport)
     }
 
     /**
-     * The read loop parks inside readFrame with no idea that a disconnect has happened: disconnect()
-     * reports at once and closes the socket only from the send thread, behind everything queued
-     * there. A frame that completes in that window used to be delivered after
-     * onTCPConnectionDisconnect - by which time HumlaService has released its wake lock, shut the
-     * audio handler down and nulled its handlers, so the late packet walks into a torn-down
-     * consumer. The disconnect callback is terminal: nothing follows it.
+     * The read loop parks inside readFrame unaware of a disconnect; disconnect() reports at once and
+     * closes the socket only later from the writer. A frame completing in that window must not
+     * be delivered after onTCPConnectionDisconnect, which is terminal.
      */
     @Test
     fun aFrameCompletingAfterTheDisconnectIsNotDelivered() {
@@ -278,10 +268,7 @@ class HumlaTCPTest {
         every { socket.inputStream } returns fromServer
         every { socket.outputStream } returns ByteArrayOutputStream()
         every { socketFactory.createSocket(any(), any()) } returns socket
-        mockkStatic(SSLCertificateSocketFactory::class)
-        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
-        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
-        val transport = newTransport(Handler(callbackThread.looper))
+        val transport = newTransport()
 
         transport.connect("example.invalid", 64738, false)
         assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
@@ -292,151 +279,19 @@ class HumlaTCPTest {
         toClient.write(frame(HumlaTCPMessageType.Ping)) // the server's answer only lands now
         toClient.flush()
 
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        awaitFinished(transport)
         drainCallbacks()
         assertThat(listener.events).isEmpty()
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
 
     /**
-     * disconnect() clears "running" while the read thread is still unwinding: it may still be stuck
-     * in a connect with no timeout, and its finally still has to report the disconnect and shut the
-     * executors down. A connect() slipping into that window would hand the old finally the new
-     * connection's disconnect token and let it shut down the new connection's executors, after
-     * which sendMessage is a silent no-op and nobody ever reports a disconnect. The Java original
-     * refused this with "Threads already initialized."; the transport is busy until its read loop
-     * is done.
-     */
-    @Test
-    fun aConnectIsRefusedUntilTheReadLoopHasFinishedUnwinding() {
-        val gate = CountDownLatch(1)
-        val socket = mockk<SSLSocket>(relaxed = true)
-        every { socketFactory.createSocket(any(), any()) } answers { gate.await(); socket }
-        val transport = newTransport(Handler(callbackThread.looper))
-
-        transport.connect("example.invalid", 64738, false)
-        transport.disconnect()
-        assertThat(listener.next()).isEqualTo("disconnect" to "test-tcp-callbacks")
-        assertThat(transport.isRunning).isFalse() // reported and stopped, but not yet torn down
-
-        try {
-            assertThrows(ConnectException::class.java) { transport.connect("example.invalid", 64738, false) }
-        } finally {
-            gate.countDown()
-        }
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
-        drainCallbacks()
-        assertThat(listener.events).isEmpty()
-        assertThat(listener.disconnects.get()).isEqualTo(1)
-    }
-
-    /**
-     * Where inUse is released inside the finally is the whole point of holding it: everything from
-     * postDisconnectOnce() down still belongs to the connection that is ending. A connect() let
-     * through any earlier would have its disconnect token consumed and its brand-new executors
-     * shut down by the outgoing finally, leaving sendMessage a silent no-op with nobody ever
-     * reporting a disconnect.
+     * "Terminal" is decided at delivery, not when queued: post() reads disconnectReported and
+     * queues the callback as two steps, and a disconnect() in between would queue the terminal
+     * callback ahead of the frame. Reproduced by disconnecting from inside the frame's own post.
      *
-     * aConnectIsRefusedUntilTheReadLoopHasFinishedUnwinding cannot see this: it takes the token
-     * while the read thread still hangs in createSocket, long before the finally is entered, so it
-     * holds for a release anywhere inside the finally. Here the read thread is parked *inside* the
-     * finally - in the disconnect post, its first interceptable statement - which makes the
-     * position of the release observable rather than just its existence.
-     */
-    @Test
-    fun aConnectIsRefusedWhileTheReadLoopIsStillInsideItsFinally() {
-        val inFinally = CountDownLatch(1)
-        val release = CountDownLatch(1)
-        // Post 1 is the failure report from the catch, post 2 the disconnect from the finally.
-        val handler = HookedHandler(callbackThread.looper) { post ->
-            if (post == 2) {
-                inFinally.countDown()
-                release.await(5, TimeUnit.SECONDS)
-            }
-        }
-        every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
-        val transport = newTransport(handler)
-
-        transport.connect("example.invalid", 64738, false)
-        assertThat(inFinally.await(5, TimeUnit.SECONDS)).isTrue()
-
-        try {
-            assertThrows(ConnectException::class.java) { transport.connect("example.invalid", 64738, false) }
-        } finally {
-            release.countDown() // always let the read thread unwind, however the assertion went
-        }
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
-        drainCallbacks()
-        assertThat(listener.next().first).isEqualTo("failed")
-        assertThat(listener.next().first).isEqualTo("disconnect")
-        assertThat(listener.events).isEmpty()
-        assertThat(listener.disconnects.get()).isEqualTo(1)
-    }
-
-    /** Refusing during teardown must not turn the transport into a one-shot. */
-    @Test
-    fun theTransportConnectsAgainOnceTheReadLoopHasFinished() {
-        every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
-        val transport = newTransport(Handler(callbackThread.looper))
-
-        transport.connect("example.invalid", 64738, false)
-        assertThat(listener.next().first).isEqualTo("failed")
-        assertThat(listener.next().first).isEqualTo("disconnect")
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
-
-        transport.connect("example.invalid", 64738, false)
-
-        assertThat(listener.next().first).isEqualTo("failed")
-        assertThat(listener.next().first).isEqualTo("disconnect")
-        assertThat(listener.disconnects.get()).isEqualTo(2)
-    }
-
-    /**
-     * Handler.post returns false once its looper has quit - which Task 4's protocol thread can do.
-     * The token that makes the disconnect exactly-once must only be consumed by a callback that was
-     * actually queued, otherwise the one report is dropped on the floor and the read loop, which
-     * would have reported it a moment later, stays suppressed: nobody ever reports.
-     *
-     * The fake leaves the runnable unrun, because that is what a quit looper does: post() returning
-     * false means the message was never queued, so the listener hears nothing and the epoch the
-     * runnable would have marked stays untouched. Running it inline instead - and on the calling
-     * thread at that - would have this one test on this path assert a delivery the device never
-     * makes. What it pins is the second attempt; the rest is the transport's real chain.
-     */
-    @Test
-    fun aDisconnectThePostRejectsIsReportedAgainByTheReadLoop() {
-        val attempts = AtomicInteger()
-        val handler = mockk<Handler>()
-        every { handler.post(any()) } answers {
-            attempts.incrementAndGet()
-            false // the looper is gone: the message was not queued, so the runnable never runs
-        }
-        val gate = CountDownLatch(1)
-        val socket = mockk<SSLSocket>(relaxed = true)
-        every { socketFactory.createSocket(any(), any()) } answers { gate.await(); socket }
-        val transport = newTransport(handler)
-
-        transport.connect("example.invalid", 64738, false)
-        transport.disconnect()
-        assertThat(attempts.get()).isEqualTo(1)
-
-        gate.countDown() // the read thread unwinds and finds the report still unclaimed
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
-        assertThat(attempts.get()).isEqualTo(2)
-        assertThat(listener.events).isEmpty() // both attempts were refused, so nothing was delivered
-        assertThat(listener.disconnects.get()).isEqualTo(0)
-    }
-
-    /**
-     * "Terminal" has to be decided when the callback is delivered, not when it is queued: post()
-     * reads disconnectReported and hands the callback to the handler as two separate steps, and a
-     * consumer calling disconnect() in between gets its terminal callback queued first, with the
-     * frame landing behind it. That is the same walk into a torn-down consumer as
-     * aFrameCompletingAfterTheDisconnectIsNotDelivered, only through a window two instructions
-     * wide - reproduced here exactly, by disconnecting from inside the frame's own post.
-     *
-     * Robolectric's main looper is paused, so nothing runs until the test idles it: the delivery
-     * order below is exactly the order the transport handed the callbacks over in.
+     * Robolectric's main looper is paused, so the delivery order below is exactly the order the
+     * transport handed the callbacks over in.
      */
     @Test
     fun aFrameQueuedWhileTheDisconnectRunsIsStillNotDelivered() {
@@ -448,9 +303,6 @@ class HumlaTCPTest {
         every { socket.inputStream } returns fromServer
         every { socket.outputStream } returns ByteArrayOutputStream()
         every { socketFactory.createSocket(any(), any()) } returns socket
-        mockkStatic(SSLCertificateSocketFactory::class)
-        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
-        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
         lateinit var transport: HumlaTCP
         // Post 1 is onTCPConnectionEstablished, post 2 the frame, post 3 the disconnect the hook
         // itself triggers - after the frame passed the check in post(), before it is queued.
@@ -468,122 +320,129 @@ class HumlaTCPTest {
         toClient.write(frame(HumlaTCPMessageType.Ping))
         toClient.flush()
 
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        awaitFinished(transport)
         shadowOf(Looper.getMainLooper()).idle()
         val main = Looper.getMainLooper().thread.name
         assertThat(listener.next()).isEqualTo("established" to main)
         assertThat(listener.next()).isEqualTo("disconnect" to main)
         assertThat(listener.events).isEmpty() // the frame was queued behind the disconnect, not delivered
         assertThat(listener.disconnects.get()).isEqualTo(1)
-        // Pins the numbering the hook keys on: an extra post anywhere before the frame would
-        // otherwise shift it silently and leave this test green for the wrong reason.
+        // Pins the numbering the hook keys on.
         assertThat(handler.posts.get()).isEqualTo(3)
     }
 
-    /**
-     * A reconnect on the same transport must not write into the previous connection's streams. The
-     * read loop closes them but used to leave the fields pointing at them, so between connect() and
-     * the new handshake - the new send executor is already running - sendMessage still found the old
-     * output. On a real socket that is an IOException swallowed by the send thread, so the message
-     * would simply vanish; the fake here keeps the bytes instead, which is what makes it visible.
-     * What the fix buys is therefore not a delivered message - it is lost either way - but that no
-     * send reaches into a dead stream and that a live transport holds no reference to the streams
-     * of the connection it has finished with.
-     */
     @Test
-    fun aSendBetweenTwoConnectionsDoesNotReachThePreviousConnectionsStream() {
-        val firstOutput = ByteArrayOutputStream()
-        val toClient = PipedOutputStream()
-        val first = mockk<SSLSocket>(relaxed = true)
-        every { first.inputStream } returns PipedInputStream(toClient, 64)
-        every { first.outputStream } returns firstOutput
-        val handshaking = CountDownLatch(1)
-        val gate = CountDownLatch(1)
-        val secondClosed = CountDownLatch(1)
-        val second = mockk<SSLSocket>(relaxed = true)
-        every { second.startHandshake() } answers { handshaking.countDown(); gate.await() }
-        every { second.close() } answers { secondClosed.countDown() }
-        every { socketFactory.createSocket(any(), any()) } returnsMany listOf(first, second)
-        mockkStatic(SSLCertificateSocketFactory::class)
-        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
-        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
-        val transport = newTransport(Handler(callbackThread.looper))
+    fun aFinishedTransportRefusesASecondConnect() {
+        every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
+        val transport = newTransport()
 
         transport.connect("example.invalid", 64738, false)
-        assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
-        toClient.close() // the server hangs up; the read loop unwinds and tears everything down
         assertThat(listener.next().first).isEqualTo("failed")
         assertThat(listener.next().first).isEqualTo("disconnect")
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
-        assertThat(firstOutput.size()).isEqualTo(0)
+        awaitFinished(transport)
 
-        transport.connect("example.invalid", 64738, false) // the second connection parks in the handshake
-        assertThat(handshaking.await(5, TimeUnit.SECONDS)).isTrue()
-        transport.sendMessage(byteArrayOf(1, 2, 3), 3, HumlaTCPMessageType.Ping)
-        transport.disconnect() // queued behind the send on the single send thread, so it is a barrier
-        try {
-            assertThat(secondClosed.await(5, TimeUnit.SECONDS)).isTrue()
-            assertThat(firstOutput.size()).isEqualTo(0)
-        } finally {
-            gate.countDown()
-        }
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        assertThrows(ConnectException::class.java) { transport.connect("example.invalid", 64738, false) }
+        assertThat(listener.disconnects.get()).isEqualTo(1)
+    }
+
+    /** What was queued before disconnect() is written before the socket closes. */
+    @Test
+    fun messagesQueuedBeforeADisconnectAreWrittenBeforeTheSocketCloses() {
+        val written = ByteArrayOutputStream()
+        val writtenWhenClosed = AtomicInteger(-1)
+        val toClient = PipedOutputStream()
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socket.inputStream } returns PipedInputStream(toClient, 64)
+        every { socket.outputStream } returns written
+        every { socket.close() } answers { writtenWhenClosed.compareAndSet(-1, written.size()); toClient.close() }
+        every { socketFactory.createSocket(any(), any()) } returns socket
+        val transport = newTransport()
+        transport.connect("example.invalid", 64738, false)
+        assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
+
+        transport.sendMessage(byteArrayOf(1, 2, 3), 3, HumlaTCPMessageType.UDPTunnel)
+        transport.disconnect()
+
+        assertThat(listener.next()).isEqualTo("disconnect" to "test-tcp-callbacks")
+        awaitFinished(transport)
+        assertThat(writtenWhenClosed.get()).isEqualTo(2 + 4 + 3)
     }
 
     /**
-     * The terminal flag belongs to the connection, not to the transport. Its closing edge is the
-     * only one of the transport's flags that runs on the callback handler, so it is the only one
-     * [inUse] does not fence in: a disconnect queued for connection A can still be delivered after
-     * A's read loop released the transport and B is already up. Resetting in connect() cannot help,
-     * because A's setter arrives after that. B would then be silenced for good - no established, no
-     * frame, and a later failure arriving as a bare disconnect with no exception, which
-     * HumlaService's reconnect logic does not retry from.
+     * Cancelling the scope - what the connection's disconnect does - closes the socket without a
+     * disconnect() on the transport, and nothing more is delivered.
      */
     @Test
-    fun aDisconnectDeliveredAfterTheNextConnectDoesNotSilenceIt() {
-        val callbacksBlocked = CountDownLatch(1)
-        val connecting = CountDownLatch(1)
-        val gate = CountDownLatch(1)
-        val establishedQueued = CountDownLatch(1)
-        val calls = AtomicInteger()
+    fun cancellingTheScopeClosesTheSocketAndDeliversNothingMore() {
+        val reading = CountDownLatch(1)
+        val closed = CountDownLatch(1)
         val toClient = PipedOutputStream()
-        val second = mockk<SSLSocket>(relaxed = true)
-        every { second.inputStream } returns PipedInputStream(toClient, 4096)
-        every { second.outputStream } returns ByteArrayOutputStream()
-        every { socketFactory.createSocket(any(), any()) } answers {
-            if (calls.incrementAndGet() == 1) {
-                connecting.countDown()
-                gate.await()
-                throw IOException("no route")
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socket.inputStream } returns Reading(PipedInputStream(toClient, 64), reading)
+        every { socket.outputStream } returns ByteArrayOutputStream()
+        every { socket.close() } answers { closed.countDown(); toClient.close() }
+        every { socketFactory.createSocket(any(), any()) } returns socket
+        val scope = scopeOn(Handler(callbackThread.looper))
+        val transport = newTransport(scope = scope)
+        transport.connect("example.invalid", 64738, false)
+        assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
+        assertThat(reading.await(5, TimeUnit.SECONDS)).isTrue()
+
+        scope.cancel()
+
+        assertThat(closed.await(5, TimeUnit.SECONDS)).isTrue()
+        awaitFinished(transport)
+        drainCallbacks()
+        assertThat(listener.events).isEmpty()
+    }
+
+    /** A connect into a scope that is already cancelled opens no socket. */
+    @Test
+    fun aConnectIntoACancelledScopeOpensNoSocket() {
+        val scope = scopeOn(Handler(callbackThread.looper)).also { it.cancel() }
+        val transport = newTransport(scope = scope)
+
+        transport.connect("example.invalid", 64738, false)
+
+        awaitFinished(transport)
+        verify(exactly = 0) { socketFactory.createSocket(any(), any()) }
+        drainCallbacks()
+        assertThat(listener.events).isEmpty()
+    }
+
+    /**
+     * The voice path hands over one reused packet buffer; the send thread writes later, so the
+     * transport must copy it before returning.
+     */
+    @Test
+    fun aTunnelledPacketIsCopiedSoTheCallerMayReuseItsBuffer() {
+        val written = ByteArrayOutputStream()
+        val writing = CountDownLatch(1)
+        val gate = CountDownLatch(1)
+        val output = object : java.io.OutputStream() {
+            override fun write(b: Int) {
+                writing.countDown()
+                gate.await(5, TimeUnit.SECONDS)
+                written.write(b)
             }
-            second
         }
-        mockkStatic(SSLCertificateSocketFactory::class)
-        runCatching { SSLCertificateSocketFactory.getDefault(0) } // run the static initializer outside every {}
-        every { SSLCertificateSocketFactory.getDefault(0) } returns mockk<SSLCertificateSocketFactory>(relaxed = true)
-        // Post 1 is A's disconnect, post 2 is B's onTCPConnectionEstablished.
-        val handler = HookedHandler(callbackThread.looper) { post ->
-            if (post == 2) establishedQueued.countDown()
-        }
-        val transport = newTransport(handler)
-        Handler(callbackThread.looper).post { callbacksBlocked.await(10, TimeUnit.SECONDS) }
+        val toClient = PipedOutputStream()
+        val socket = mockk<SSLSocket>(relaxed = true)
+        every { socket.inputStream } returns PipedInputStream(toClient, 64)
+        every { socket.outputStream } returns output
+        every { socketFactory.createSocket(any(), any()) } returns socket
+        val transport = newTransport()
+        transport.connect("example.invalid", 64738, false)
+        assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
 
-        transport.connect("example.invalid", 64738, false) // A
-        assertThat(connecting.await(5, TimeUnit.SECONDS)).isTrue()
-        transport.disconnect() // A's disconnect is queued behind the busy callback thread
-        gate.countDown() // A's read loop unwinds and releases the transport
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        val packet = byteArrayOf(1, 2, 3, 4)
+        transport.sendMessage(packet, 3, HumlaTCPMessageType.UDPTunnel)
+        assertThat(writing.await(5, TimeUnit.SECONDS)).isTrue()
+        packet.fill(9) // the caller's next packet, while the first is still being written
+        gate.countDown()
 
-        transport.connect("example.invalid", 64738, false) // B
-        assertThat(establishedQueued.await(5, TimeUnit.SECONDS)).isTrue()
-        callbacksBlocked.countDown() // now A's disconnect runs, then B's established
-
-        try {
-            assertThat(listener.next()).isEqualTo("disconnect" to "test-tcp-callbacks")
-            assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
-        } finally {
-            toClient.close() // always let B's read loop unwind, however the assertion went
-        }
-        awaitUntil(description = "no live thread named humla-tcp-*") { liveThreadNames("humla-tcp-").isEmpty() }
+        awaitUntil(description = "the whole frame is written") { written.size() == 2 + 4 + 3 }
+        assertThat(written.toByteArray().takeLast(3)).containsExactly(1.toByte(), 2.toByte(), 3.toByte()).inOrder()
+        toClient.close()
     }
 }

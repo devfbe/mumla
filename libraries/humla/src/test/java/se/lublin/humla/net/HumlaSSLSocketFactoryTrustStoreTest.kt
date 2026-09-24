@@ -28,12 +28,8 @@ import java.nio.file.Files
 import java.security.KeyStore
 
 /**
- * Every connection made after the user has trusted a certificate loads the app's trust store from
- * a file. The stream was never closed, so each connection -- every reconnect attempt included --
- * left a file descriptor for the finalizer ("A resource failed to call close").
- *
- * The check counts this process's open descriptors for the store file in /proc/self/fd, which is
- * the one observable that does not depend on how the stream was opened.
+ * Loading the trust store must close its file stream, or every connection leaks a descriptor.
+ * Counted via this process's open descriptors for the store file in /proc/self/fd.
  */
 class HumlaSSLSocketFactoryTrustStoreTest {
     @get:Rule

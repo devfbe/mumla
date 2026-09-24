@@ -51,7 +51,6 @@
     <string name="server_port">துறைமுகம்</string>
     <string name="server_host">முகவரி</string>
     <string name="server_label">சிட்டை</string>
-    <string name="connecting">இணைத்தல்</string>
     <string name="connecting_to_server">%s உடன் இணைக்கிறது…</string>
     <string name="ptt">பேசுவதற்கு-தள்ளு</string>
     <string name="mute">முடக்கு</string>
@@ -74,7 +73,6 @@
     <string name="generateCertProgress">சான்றிதழ் உருவாக்குதல்…</string>
     <string name="search">தேடல்</string>
     <string name="searchHint">தடங்கள் மற்றும் பயனர்களைத் தேடுங்கள்</string>
-    <string name="bluetooth">ஊடலை</string>
     <string name="quickConnect">விரைவான இணைப்பு</string>
     <string name="connect">இணை</string>
     <string name="connectToServer">சேவையகத்துடன் இணைக்கவும்</string>
@@ -87,7 +85,6 @@
     <string name="offline">இணையம் இல்லாமல்</string>
     <string name="clearChat">அரட்டை அழி</string>
     <string name="connected">இணைக்கப்பட்டுள்ளது</string>
-    <string name="mumlaConnected">மும்லா இணைக்கப்பட்டுள்ளது</string>
     <string name="mumlaConnecting">மும்லா இணைத்தல்…</string>
     <string name="mumlaDisconnected">மும்லா துண்டிக்கப்பட்டது</string>
     <string name="channel">தடம்</string>
@@ -142,7 +139,6 @@
     <string name="attempting_reconnect">பிழை: %s.\n\nமீண்டும் இணைத்தல்…</string>
     <string name="change_requires_reconnect">புதிய அமைப்புகளைப் பயன்படுத்த மீண்டும் இணை.</string>
     <string name="no_certificate">சான்றிதழ் இல்லை</string>
-    <string name="certificates">சான்றிதழ்கள்</string>
     <string name="decrypt_certificate">மறைவிலக்கு சான்றிதழ்</string>
     <string name="password">கடவுச்சொல்</string>
     <string name="invalid_certificate">தவறான சான்றிதழை ஏற்ற முடியவில்லை.</string>
@@ -164,14 +160,9 @@
         <item quantity="one">%d பயனர்</item>
         <item quantity="other">%d பயனர்கள்</item>
     </plurals>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d புதிய செய்தி</item>
-        <item quantity="other">%d புதிய செய்திகள்</item>
-    </plurals>
     <string name="add">கூட்டு</string>
     <string name="grant_perm_microphone">ஓரி இசைவு வழங்கவும்.</string>
     <string name="grant_perm_notifications">அறிவிப்புகளை அனுப்ப இசைவு வழங்கவும்.</string>
-    <string name="grant_perm_storage">வெளிப்புற சேமிப்பக அனுமதியை வழங்கவும்.</string>
     <string name="grant_perm_draw_over_apps">பிற பயன்பாடுகளைக் காண்பிக்க இசைவு வழங்கவும்.</string>
     <string name="orbot_not_installed">ஆர்போட் பயன்பாடு நிறுவப்படவில்லை. டோர் பயன்படுத்தவில்லை.</string>
     <string name="default_">இயல்புநிலை</string>
@@ -198,4 +189,34 @@
     <string name="audio_device_bluetooth">Bluetooth தலையணி</string>
     <string name="audio_device_other">ஒலிச் சாதனம்</string>
     <string name="echo_cancellation">எதிரொலி நீக்கம்</string>
+    <string name="chat_notify_muted_deafened">ஒலிமுடக்கப்பட்டது மற்றும் காது கேளாதது.</string>
+    <string name="chat_notify_muted">ஒலிமுடக்கப்பட்டது.</string>
+    <string name="chat_notify_unmuted">ஒலிஇயக்கப்பட்டது.</string>
+    <string name="chat_notify_now_muted_deafened">%s இப்போது முடக்கப்பட்டு காது கேளாதவை.</string>
+    <string name="chat_notify_now_muted">%s இப்போது ஒலி முடக்கப்பட்டுள்ளது.</string>
+    <string name="chat_notify_now_unmuted">%s இப்போது ஒலிஇயக்கப்பட்டது.</string>
+    <string name="chat_notify_connected">%s இணைக்கப்பட்டுள்ளன.</string>
+    <string name="chat_notify_disconnected">%s துண்டிக்கப்பட்டது.</string>
+    <string name="chat_notify_kick_ban_self">சேவையகத்திலிருந்து %1$s: %2$s ஆல் நீங்கள் நீக்கப்பட்டு தடை செய்யப்பட்டீர்கள்.</string>
+    <string name="chat_notify_kick_self">நீங்கள் சேவையகத்திலிருந்து %1$s: %2$s ஆல் நீக்கப்பட்டீர்கள்.</string>
+    <string name="chat_notify_kick_ban">%3$s நீக்கப்பட்டு சேவையகத்திலிருந்து %1$s: %2$s ஆல் தடை செய்யப்பட்டது.</string>
+    <string name="chat_notify_kick">%3$s சேவையகத்திலிருந்து %1$s: %2$s ஆல் நீக்கப்பட்டார்.</string>
+    <string name="chat_notify_self_recording_started">பதிவு தொடங்கியது</string>
+    <string name="chat_notify_self_recording_stopped">பதிவு நிறுத்தப்பட்டது</string>
+    <string name="chat_notify_user_recording_started">%s பதிவு செய்யத் தொடங்கினார்.</string>
+    <string name="chat_notify_user_recording_stopped">%s பதிவு செய்வதை நிறுத்தினார்.</string>
+    <string name="chat_notify_user_joined_channel">%s தடத்தில் நுழைந்தார்.</string>
+    <string name="chat_notify_user_left_channel">%1$s %2$s க்கு நகர்ந்தார்.</string>
+    <string name="chat_notify_user_joined_channel_by">%1$s %2$s இலிருந்து %3$s ஆல் நகர்ந்தார்.</string>
+    <string name="chat_notify_user_left_channel_by">%1$s %2$s க்கு %3$s ஆல் நகர்ந்தப்பட்டார்.</string>
+    <string name="deny_reason_channel_name">மறுக்கப்பட்டது: தவறான தடம் பெயர்.</string>
+    <string name="deny_reason_text_too_long">மறுக்கப்பட்டது: உரை செய்தி மிக நீளமானது.</string>
+    <string name="deny_reason_no_operation_temp">மறுக்கப்பட்டது: தற்காலிக தடத்தில் செயல்பாடு அனுமதிக்கப்படவில்லை.</string>
+    <string name="deny_reason_no_certificate">இந்தச் செயல்பாட்டைச் செய்ய உங்களுக்குச் சான்றிதழ் தேவை.</string>
+    <string name="deny_reason_invalid_username">தவறான பயனர்பெயர்.</string>
+    <string name="deny_reason_channel_full">தடம் நிரம்பியுள்ளது.</string>
+    <string name="deny_reason_channel_nesting">தடம் கூடு வரம்பை எட்டியது.</string>
+    <string name="deny_reason_other">காரணம்: %s</string>
+    <string name="server">சேவையகம்</string>
+    <string name="the_server">அந்தச் சேவையகம்</string>
 </resources>

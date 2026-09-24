@@ -3,8 +3,6 @@ package se.lublin.humla.net
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -14,7 +12,6 @@ import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 
-@RunWith(RobolectricTestRunner::class)
 class TcpFrameReaderTest {
     private fun frame(type: Int, payload: ByteArray): ByteArray {
         val bytes = ByteArrayOutputStream()
@@ -128,10 +125,8 @@ class TcpFrameReaderTest {
     }
 
     /**
-     * A hostile or broken server can put anything in the length field. ByteArray(length) throws
-     * NegativeArraySizeException for a negative one, which is not an IOException, so it escaped the
-     * read loop's catch clauses into the default handler - process death on Android, and no
-     * onTCPConnectionFailed, so nothing would have reconnected either.
+     * A hostile or broken server can put anything in the length field. ByteArray(length) would
+     * throw NegativeArraySizeException, which is not an IOException and would escape the read loop.
      */
     @Test
     fun aNegativeLengthIsReportedAsAConnectionErrorRatherThanKillingTheReader() {

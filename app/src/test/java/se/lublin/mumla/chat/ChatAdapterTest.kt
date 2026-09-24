@@ -1,6 +1,7 @@
 package se.lublin.mumla.chat
 
 import android.app.Activity
+import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.os.Looper
@@ -19,25 +20,26 @@ import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
+import io.mockk.coEvery
 import io.mockk.every
+import io.mockk.mockk
 import io.mockk.spyk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import org.junit.Before
+import kotlinx.coroutines.withContext
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadows.ShadowBitmapFactory
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.User
 import se.lublin.mumla.R
 import se.lublin.mumla.service.IChatMessage
+import se.lublin.mumla.testing.idleMainLooper
 import java.util.Collections
 import kotlin.coroutines.CoroutineContext
 
@@ -46,16 +48,9 @@ class ChatAdapterTest {
     private val activity: Activity = Robolectric.buildActivity(Activity::class.java).setup().get()
     private val parent = FrameLayout(activity).also { activity.setContentView(it) }
     private val fetched = mutableListOf<String>()
-    private var remoteBody: ByteArray = TestImages.png(300, 300)
+    private var thumbnail: ImageResult = ImageResult.Ready(Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888))
     private val clicked = mutableListOf<String>()
     private val url = "https://x.org/a.png"
-
-    @Before
-    fun rejectInvalidImageData() {
-        // Without this Robolectric invents a 100x100 bitmap for undecodable bytes and the
-        // failure test would be green without testing anything (spec 4.05).
-        ShadowBitmapFactory.setAllowInvalidImageData(false)
-    }
 
     private fun info(body: String) =
         IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
@@ -70,13 +65,7 @@ class ChatAdapterTest {
         diff: DiffUtil.ItemCallback<IChatMessage> = ChatAdapter.DIFF,
     ) = ChatAdapter(
         parser = parser,
-        loader = ChatImageLoader(
-            fetcher = ImageFetcher { source -> fetched += source; remoteBody },
-            externalImagesAllowed = { true },
-            maxCacheBytes = 8L * 1024 * 1024,
-            ioDispatcher = Dispatchers.Unconfined,
-            decodeDispatcher = decodeDispatcher,
-        ),
+        loader = fakeLoader(decodeDispatcher),
         thumbnailPx = thumbnailPx,
         selfSessionId = selfSessionId,
         onImageClicked = { clicked += it },
@@ -87,18 +76,30 @@ class ChatAdapterTest {
             .build(),
     )
 
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+
+    /** Answers [thumbnail] on [decodeDispatcher], and [ImageResult.Skipped] for non-positive bounds. */
+    private fun fakeLoader(decodeDispatcher: CoroutineDispatcher): ChatImageLoader = mockk {
+        coEvery { loadThumbnail(any(), any(), any()) } coAnswers {
+            if (secondArg<Int>() <= 0 || thirdArg<Int>() <= 0) {
+                ImageResult.Skipped
+            } else {
+                withContext(decodeDispatcher) {
+                    fetched += firstArg<String>()
+                    thumbnail
+                }
+            }
+        }
+    }
 
     /**
-     * Binds [position] into a freshly created holder that is **attached to a real window** and laid
-     * out. Attachment is not decoration: an unattached View queues its click in
-     * `HandlerActionQueue` instead of running it, so a tap on a detached row never reports.
+     * Binds [position] into a fresh holder attached to a real window and laid out: an unattached
+     * View queues its click in `HandlerActionQueue` instead of running it.
      */
     private fun ChatAdapter.holderAt(position: Int, viewType: Int): ChatAdapter.Holder {
         val holder = createViewHolder(parent, viewType)
         parent.addView(holder.itemView)
         bindViewHolder(holder, position)
-        idle()
+        idleMainLooper()
         parent.measure(
             View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.AT_MOST),
@@ -108,12 +109,8 @@ class ChatAdapterTest {
     }
 
     /**
-     * A real touch **through the row**, not [View.performClick] and not a direct dispatch to the
-     * target either. `performClick` ignores `isEnabled` and visibility; a direct
-     * `view.dispatchTouchEvent` ignores visibility too, because it is the *parent* that filters
-     * GONE children out of hit-testing (`ViewGroup.canViewReceivePointerEvents`). Only a touch
-     * that enters at the row and is routed down sees what a finger sees — which is why
-     * [holderAt] attaches the row to a real window and lays it out.
+     * A real touch entering at the row and routed down, so disabled and GONE targets are filtered
+     * as for a finger ([View.performClick] and a direct dispatch to the target ignore visibility).
      */
     private fun tapRow(holder: ChatAdapter.Holder, targetId: Int) {
         val target = holder.itemView.findViewById<View>(targetId)
@@ -132,7 +129,7 @@ class ChatAdapterTest {
         holder.itemView.dispatchTouchEvent(up)
         down.recycle()
         up.recycle()
-        idle()
+        idleMainLooper()
     }
 
     @Test
@@ -147,9 +144,9 @@ class ChatAdapterTest {
         val messages = listOf(info("hello"), info("<img src=\"$url\"/>"))
 
         adapter.submitMessages(messages)
-        idle()
+        idleMainLooper()
         adapter.submitMessages(messages)
-        idle()
+        idleMainLooper()
 
         // Parsed once per message: the second submit reads IChatMessage.content.
         assertThat(parseThreads).hasSize(2)
@@ -165,7 +162,7 @@ class ChatAdapterTest {
         val first = info("one")
         val second = info("two")
         adapter.submitMessages(listOf(first))
-        idle()
+        idleMainLooper()
 
         val events = mutableListOf<String>()
         adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
@@ -182,7 +179,7 @@ class ChatAdapterTest {
         })
 
         adapter.submitMessages(listOf(first, second))
-        idle()
+        idleMainLooper()
 
         assertThat(events).containsExactly("insert 1+1")
         assertThat(adapter.itemCount).isEqualTo(2)
@@ -195,7 +192,7 @@ class ChatAdapterTest {
             Message(7, "alice", emptyList(), emptyList(), emptyList(), "hi")
         )
         adapter.submitMessages(listOf(text, info("joined"), info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_TEXT)
         assertThat(adapter.getItemViewType(1)).isEqualTo(ChatAdapter.TYPE_INFO)
@@ -204,17 +201,12 @@ class ChatAdapterTest {
 
     @Test
     fun aPictureAUserSentIsAnImageRowAndNotItsRawMarkup() = runTest {
-        // getItemViewType branches on two booleans, and this is the corner the rest of the suite
-        // never builds: every other image fixture here is an InfoMessage, while the feature's
-        // actual use case is a TextMessage -- MumlaService wraps *every* incoming chat message in
-        // one (MumlaService.java:246), so a picture a user sends arrives as a TextMessage whose
-        // body holds the <img>. Under `content is Image && message is InfoMessage` this row falls
-        // through to the TextHolder, which finds no ChatContent.Text to unwrap and prints the raw
-        // body -- the user sees `look <img src="..."/>` where the picture should be.
+        // The real use case: MumlaService wraps every incoming chat message in a TextMessage, so a
+        // sent picture arrives as a TextMessage whose body holds the <img>, not as an InfoMessage.
         val adapter = adapter()
         val sent = text(body = "look <img src=\"$url\"/>")
         adapter.submitMessages(listOf(sent))
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_IMAGE)
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
@@ -232,7 +224,7 @@ class ChatAdapterTest {
     fun anImageRowShowsABoundedThumbnailAndReportsTaps() = runTest {
         val adapter = adapter()
         adapter.submitMessages(listOf(info("before <img src=\"$url\"/> after")))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
 
@@ -253,10 +245,10 @@ class ChatAdapterTest {
 
     @Test
     fun aFailedThumbnailIsReplacedByTheFailureText() = runTest {
-        remoteBody = "not an image".toByteArray()
+        thumbnail = ImageResult.Failed(ImageError.MALFORMED)
         val adapter = adapter()
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
 
@@ -267,9 +259,7 @@ class ChatAdapterTest {
         assertThat(status.text.toString()).isEqualTo(activity.getString(R.string.chat_image_load_failed))
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Input sweep: every input ChatAdapter.kt branches on, enumerated from the production file.
-    // ------------------------------------------------------------------------------------------
+    // Input sweep: every input ChatAdapter.kt branches on.
 
     private fun channel(name: String?) = Channel().also { it.name = name }
 
@@ -290,7 +280,7 @@ class ChatAdapterTest {
         val adapter = adapter()
         val message = text(channels = listOf(channel("Root")), body = "see <a href=\"https://x.org\">this</a>")
         adapter.submitMessages(listOf(message))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.textHolderAt(0)
         assertThat(holder.target.visibility).isEqualTo(View.VISIBLE)
@@ -302,7 +292,7 @@ class ChatAdapterTest {
     }
 
     @Test
-    fun theTargetLabelFallsThroughChannelTreeUserActorAndFinallyUnknown() = runTest {
+    fun theTargetLabelFallsThroughChannelTreeUserAndActorWithTheServerForNoActor() = runTest {
         val adapter = adapter()
         val messages = listOf(
             text(channels = listOf(channel("Root"))),
@@ -310,16 +300,14 @@ class ChatAdapterTest {
             text(users = listOf(User(3, "bob"))),
             text(),
             text(actorName = null),
-            // Present but nameless: the old ListView adapter printed "Unknown" here and stopped.
+            // Present but nameless.
             text(channels = listOf(channel(null)), users = listOf(User(3, "bob"))),
-            // The same corner one target kind further down, which nothing used to build: a user
-            // that is there but has no name. Without the `?.name` on the user check this renders
-            // "alice -> null", the raw-null-into-setText defect this adapter exists to have fixed.
+            // A user that is there but has no name must not render "alice -> null".
             text(users = listOf(User(3, null))),
             text(actorName = null, users = listOf(User(3, null))),
         )
         adapter.submitMessages(messages)
-        idle()
+        idleMainLooper()
 
         val labels = messages.indices.map { adapter.textHolderAt(it).target.text.toString() }
         assertThat(labels).containsExactly(
@@ -327,21 +315,15 @@ class ChatAdapterTest {
             "alice → Sub",
             "alice → bob",
             "alice",
-            activity.getString(R.string.unknown),
+            activity.getString(R.string.server),
             "alice → bob",
             "alice",
-            activity.getString(R.string.unknown),
+            activity.getString(R.string.server),
         ).inOrder()
     }
 
     @Test
     fun aMessageNeverHandsOutANullTargetList() = runTest {
-        // The premise under targetLabel reading the three target lists without a null check.
-        // Message wraps each one in Collections.unmodifiableList, so every Message the app can
-        // build answers non-null -- and one built with a null list *throws* there rather than
-        // answering null, so even that corner never reaches a null branch. Message is the only
-        // IMessage implementation in production (the one other implementation in the repo is a
-        // fake in NotificationPostingTest, which never meets this adapter).
         val full = Message(7, "alice", listOf(channel("Root")), listOf(channel("Sub")), listOf(User(3, "bob")), "hi")
         val empty = Message("just a body")
         for (message in listOf(full, empty)) {
@@ -349,23 +331,13 @@ class ChatAdapterTest {
             assertThat(message.targetTrees).isNotNull()
             assertThat(message.targetUsers).isNotNull()
         }
-
-        val nulls = Message(7, "alice", null, null, null, "hi")
-        for (read in listOf<() -> Any?>({ nulls.targetChannels }, { nulls.targetTrees }, { nulls.targetUsers })) {
-            try {
-                read()
-                fail("a null target list came back as null instead of throwing")
-            } catch (expected: NullPointerException) {
-                // The point: unreadable, not null.
-            }
-        }
     }
 
     @Test
     fun ownMessagesAreRightAlignedAndEveryoneElseIsLeftAligned() = runTest {
         val adapter = adapter(selfSessionId = { 7 })
         adapter.submitMessages(listOf(text(actor = 7), text(actor = 8), info("joined")))
-        idle()
+        idleMainLooper()
 
         val mine = adapter.textHolderAt(0)
         val theirs = adapter.textHolderAt(1)
@@ -381,10 +353,8 @@ class ChatAdapterTest {
 
     @Test
     fun theCaptionsAroundAnOwnPictureFollowTheBubbleTheySitIn() = runTest {
-        // bindHeader aligns the box to the END for an own message, and the text row passes that on
-        // to its own TextView. bindImage did not, so the caption of a picture *you* sent sat
-        // left-aligned inside a right-aligned bubble while the plain text line next to it did not.
-        // One holder, bound twice, so the reset on reuse is pinned as well as the set.
+        // An own message aligns its caption to the END like its text line; one holder bound twice
+        // pins the reset on reuse as well.
         val adapter = adapter(selfSessionId = { 7 })
         adapter.submitMessages(
             listOf(
@@ -392,7 +362,7 @@ class ChatAdapterTest {
                 text(actor = 8, body = "theirs <img src=\"$url\"/> here"),
             )
         )
-        idle()
+        idleMainLooper()
         val captions = intArrayOf(R.id.list_chat_item_text_before, R.id.list_chat_item_text_after)
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
@@ -403,7 +373,7 @@ class ChatAdapterTest {
         }
 
         adapter.bindViewHolder(holder, 1)
-        idle()
+        idleMainLooper()
         assertThat(holder.box.gravity and Gravity.HORIZONTAL_GRAVITY_MASK).isEqualTo(Gravity.LEFT)
         for (id in captions) {
             assertThat(holder.itemView.findViewById<TextView>(id).gravity and Gravity.HORIZONTAL_GRAVITY_MASK)
@@ -413,12 +383,10 @@ class ChatAdapterTest {
 
     @Test
     fun aRecycledRowResetsBothWaysRoundBetweenAnOwnMessageAndANotice() = runTest {
-        // One holder, both orders. Each direction pins a different line: a fresh row is already
-        // left-aligned with a visible name, so only the *reuse* makes the resets observable, and
-        // only doing it both ways round makes both resets observable.
+        // One holder, both orders: only reuse makes the resets observable.
         val adapter = adapter(selfSessionId = { 7 })
         adapter.submitMessages(listOf(text(actor = 7, channels = listOf(channel("Root"))), info("joined")))
-        idle()
+        idleMainLooper()
         val holder = adapter.createViewHolder(parent, ChatAdapter.TYPE_TEXT) as ChatAdapter.TextHolder
 
         adapter.bindViewHolder(holder, 0)
@@ -437,12 +405,11 @@ class ChatAdapterTest {
 
     @Test
     fun anUnparsedMessageStillRendersItsRawBodyInsteadOfCrashing() = runTest {
-        // submitList is not the supported entry point, but it is inherited and public. A message
-        // that reaches the list unparsed must render as text, not throw.
+        // submitList is inherited and public: an unparsed message must render as text, not throw.
         val adapter = adapter()
         val message = info("not parsed")
         adapter.submitList(listOf(message))
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_INFO)
         assertThat(adapter.textHolderAt(0).text.text.toString()).isEqualTo("not parsed")
@@ -454,7 +421,7 @@ class ChatAdapterTest {
         adapter.submitMessages(
             listOf(info("<img src=\"$url\"/>"), info("a <img src=\"$url\"/> b"))
         )
-        idle()
+        idleMainLooper()
 
         val alone = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
         assertThat(alone.itemView.findViewById<TextView>(R.id.list_chat_item_text_before).visibility)
@@ -473,14 +440,12 @@ class ChatAdapterTest {
 
     @Test
     fun anEmptyTextAroundAnImageIsHiddenJustLikeAnAbsentOne() = runTest {
-        // ChatContentParser returns null rather than an empty Spanned, so this only reaches
-        // bindImage through the public ChatContent.Image/IChatMessage.content pair. An empty but
-        // VISIBLE TextView would still cost its 4dp bottom margin under the picture.
+        // An empty but VISIBLE TextView would still cost its bottom margin under the picture.
         val adapter = adapter()
         val message = info("<img src=\"$url\"/>")
         message.content = ChatContent.Image(url, SpannableStringBuilder(""), SpannableStringBuilder(""))
         adapter.submitMessages(listOf(message))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
         assertThat(holder.itemView.findViewById<TextView>(R.id.list_chat_item_text_before).visibility)
@@ -491,17 +456,11 @@ class ChatAdapterTest {
 
     @Test
     fun aTapOnARowWhoseImageFailedReportsNothing() = runTest {
-        // What this pins is the user-facing claim: a row whose picture failed is not tappable.
-        // The mechanism is more than one thing at once and the test does not isolate any of them --
-        // a failed row has no drawable, so it also measures 0x0 and isTransformedTouchPointInView
-        // turns the touch away before visibility is ever consulted. Either would do. The routing in
-        // tapRow still earns its keep: a performClick() would report a tap here whatever the row
-        // looked like, and it is the same routing that anImageRowShowsABoundedThumbnailAndReportsTaps
-        // needs on the other side of the claim.
-        remoteBody = "not an image".toByteArray()
+        // A row whose picture failed is not tappable (it is hidden and measures 0x0).
+        thumbnail = ImageResult.Failed(ImageError.MALFORMED)
         val adapter = adapter()
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
         tapRow(holder, R.id.list_chat_item_image)
@@ -514,7 +473,7 @@ class ChatAdapterTest {
         // ChatImageLoader answers Skipped for these; a Failed(UNSUPPORTED) would be cached forever.
         val adapter = adapter(thumbnailPx = 0)
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
 
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE)
         assertThat(holder.itemView.findViewById<ImageView>(R.id.list_chat_item_image).visibility)
@@ -528,20 +487,20 @@ class ChatAdapterTest {
     @Test
     fun rebindingAHolderResetsTheFailedRowItWasShowing() = runTest {
         val adapter = adapter()
-        remoteBody = "not an image".toByteArray()
+        thumbnail = ImageResult.Failed(ImageError.MALFORMED)
         adapter.submitMessages(listOf(info("<img src=\"https://x.org/broken.png\"/>")))
-        idle()
+        idleMainLooper()
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
         assertThat(holder.image.visibility).isEqualTo(View.GONE)
         assertThat(holder.status.visibility).isEqualTo(View.VISIBLE)
 
         // Same holder, a row whose image loads. Without the reset the good row stays invisible.
-        remoteBody = TestImages.png(300, 300)
+        thumbnail = ImageResult.Ready(Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888))
         val adapter2 = adapter()
         adapter2.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
         adapter2.bindViewHolder(holder, 0)
-        idle()
+        idleMainLooper()
 
         assertThat(holder.image.visibility).isEqualTo(View.VISIBLE)
         assertThat(holder.status.visibility).isEqualTo(View.GONE)
@@ -552,12 +511,12 @@ class ChatAdapterTest {
     fun rebindingAHolderDropsTheBitmapOfTheRowItWasShowing() = runTest {
         val adapter = adapter(thumbnailPx = 0)
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
         holder.image.setImageDrawable(ColorDrawable(0x112233))
 
         adapter.bindViewHolder(holder, 0)
-        idle()
+        idleMainLooper()
 
         assertThat(holder.image.drawable).isNull()
     }
@@ -568,7 +527,7 @@ class ChatAdapterTest {
         val decode = QueueingDispatcher()
         val adapter = adapter(decodeDispatcher = decode)
         adapter.submitMessages(listOf(info("<img src=\"$url\"/>")))
-        idle()
+        idleMainLooper()
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
         holder.image.setImageDrawable(ColorDrawable(0x112233))
         val job = holder.job
@@ -576,7 +535,7 @@ class ChatAdapterTest {
 
         adapter.onViewRecycled(holder)
         decode.drain()
-        idle()
+        idleMainLooper()
 
         assertThat(job!!.isCancelled).isTrue()
         assertThat(holder.job).isNull()
@@ -589,7 +548,7 @@ class ChatAdapterTest {
     fun recyclingATextRowIsNotAnImageRowsBusiness() = runTest {
         val adapter = adapter()
         adapter.submitMessages(listOf(info("plain")))
-        idle()
+        idleMainLooper()
         val holder = adapter.textHolderAt(0)
 
         adapter.onViewRecycled(holder)
@@ -604,14 +563,14 @@ class ChatAdapterTest {
         adapter.submitMessages(
             listOf(info("<img src=\"https://x.org/slow.png\"/>"), info("<img src=\"$url\"/>"))
         )
-        idle()
+        idleMainLooper()
         val holder = adapter.holderAt(0, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
         val first = holder.job
 
         // The row scrolls on before its thumbnail arrives and the holder is reused for row 1.
         adapter.bindViewHolder(holder, 1)
         decode.drain()
-        idle()
+        idleMainLooper()
 
         assertThat(first!!.isCancelled).isTrue()
         assertThat(holder.job).isNotSameInstanceAs(first)
@@ -619,17 +578,12 @@ class ChatAdapterTest {
         assertThat(fetched).containsExactly(url)
     }
 
-    // ------------------------------------------------------------------------------------------
     // The snapshot and the submit ordering.
-    // ------------------------------------------------------------------------------------------
 
     @Test
     fun theDifferOnlyEverAsksAboutTheContentsOfOneAndTheSameInstance() = runTest {
-        // The premise that lets areContentsTheSame be a constant: DiffUtil only asks it about
-        // pairs areItemsTheSame has already merged, and that callback merges by identity -- so
-        // both arguments are the same object every time and no comparison could answer otherwise.
-        // Collapsing two rows into one would take areItemsTheSame conflating two *distinct*
-        // instances, which is the assertion below it and a different method.
+        // areContentsTheSame can be a constant: DiffUtil only asks it about pairs areItemsTheSame
+        // merged, and that merges by identity.
         val pairs = mutableListOf<Pair<IChatMessage, IChatMessage>>()
         val recording = object : DiffUtil.ItemCallback<IChatMessage>() {
             override fun areItemsTheSame(oldItem: IChatMessage, newItem: IChatMessage) =
@@ -644,35 +598,33 @@ class ChatAdapterTest {
         val first = info("one")
         val second = info("two")
         adapter.submitMessages(listOf(first))
-        idle()
+        idleMainLooper()
         adapter.submitMessages(listOf(first, second))
-        idle()
+        idleMainLooper()
         // A fresh list holding the same instances: AsyncListDiffer short-circuits on the identical
-        // List object, so this is what makes it compare contents at all.
+        // List object.
         adapter.submitMessages(listOf(first, second))
-        idle()
+        idleMainLooper()
 
         assertThat(pairs).isNotEmpty()
         for ((oldItem, newItem) in pairs) {
             if (oldItem !== newItem) fail("asked about two different instances: $oldItem / $newItem")
         }
 
-        // The other half, which identity really does carry: two messages that read the same are
-        // still two rows.
+        // Two messages that read the same are still two rows.
         val twin = adapter(diff = ChatAdapter.DIFF)
         twin.submitMessages(listOf(info("same"), info("same")))
-        idle()
+        idleMainLooper()
         assertThat(twin.itemCount).isEqualTo(2)
     }
 
     @Test
     fun replacingTheWholeLogRemovesAndInsertsRatherThanRebindingInPlace() = runTest {
-        // With areItemsTheSame always true, DiffUtil would pair row i with row i and report
-        // changes. The log only ever appends today, so this is the dimension that says what
-        // happens the day it does not.
+        // With areItemsTheSame always true, DiffUtil would pair row i with row i; the log only
+        // appends today, so this pins what happens the day it does not.
         val adapter = adapter()
         adapter.submitMessages(listOf(info("one"), info("two")))
-        idle()
+        idleMainLooper()
 
         val events = mutableListOf<String>()
         adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
@@ -689,7 +641,7 @@ class ChatAdapterTest {
         })
 
         adapter.submitMessages(listOf(info("three"), info("four")))
-        idle()
+        idleMainLooper()
 
         assertThat(events).doesNotContain("change 0+2")
         assertThat(events).containsExactly("remove 0+2", "insert 0+2").inOrder()
@@ -701,10 +653,10 @@ class ChatAdapterTest {
         val adapter = adapter()
         val log = mutableListOf<IChatMessage>(info("one"))
         adapter.submitMessages(log)
-        idle()
+        idleMainLooper()
 
         log += info("two")
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.itemCount).isEqualTo(1)
     }
@@ -737,23 +689,20 @@ class ChatAdapterTest {
         outside.launch { adapter.submitMessages(listOf(one, two)) }
         // The newer one finishes parsing first, so the older submit lands last.
         parse.drainNewestFirst()
-        idle()
+        idleMainLooper()
 
         assertThat(adapter.itemCount).isEqualTo(2)
         assertThat(adapter.currentList.map { it.body }).containsExactly("one", "two").inOrder()
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Effect sweep: the layouts. Every attribute the adapter relies on, read back off the view.
-    // ------------------------------------------------------------------------------------------
+    // The layouts: every attribute the adapter relies on, read back off the view.
 
     private fun inflate(layout: Int): View =
         activity.layoutInflater.inflate(layout, parent, false)
 
     @Test
     fun bothRowLayoutsWrapTheirContentAndKeepTheOldDividerAsAMargin() = runTest {
-        // match_parent here is what the ListView tolerated and a RecyclerView does not: every row
-        // would be one viewport tall. The margin replaces ListView's dividerHeight.
+        // match_parent would make every RecyclerView row one viewport tall.
         val spacing = activity.resources.getDimensionPixelSize(R.dimen.chat_item_spacing)
         for (layout in intArrayOf(R.layout.list_chat_item, R.layout.list_chat_item_image)) {
             val params = inflate(layout).layoutParams as ViewGroup.MarginLayoutParams
@@ -773,11 +722,8 @@ class ChatAdapterTest {
         assertThat(image.maxHeight).isEqualTo(max)
         // Without adjustViewBounds the maxima above do nothing for a wrap_content ImageView.
         assertThat(image.adjustViewBounds).isTrue()
-        // Explicitly FOCUSABLE, not FOCUSABLE_AUTO. Measured: with the attribute removed,
-        // isFocusable is still true at minSdk 31 because FOCUSABLE_AUTO resolves itself from
-        // clickable — so isFocusable alone cannot tell the two apart and the attribute would read
-        // as unpinned. What the explicit value buys is that the thumbnail stays reachable by
-        // keyboard and switch access even if someone later drops android:clickable.
+        // Explicitly FOCUSABLE, not FOCUSABLE_AUTO (which resolves from clickable), so the thumbnail
+        // stays reachable by keyboard and switch access even without android:clickable.
         assertThat(image.focusable).isEqualTo(View.FOCUSABLE)
         assertThat(image.isFocusable).isTrue()
         assertThat(image.isClickable).isTrue()
@@ -790,17 +736,13 @@ class ChatAdapterTest {
     fun theImageRowStacksItsPartsAndKeepsTheTextSelectable() = runTest {
         val row = inflate(R.layout.list_chat_item_image)
         val box = row.findViewById<LinearLayout>(R.id.list_chat_item_box)
-        // The default for a LinearLayout is HORIZONTAL, which would put the target line, the
-        // caption, the thumbnail, the status and the timestamp side by side in one strip.
+        // The LinearLayout default is HORIZONTAL.
         assertThat(box.orientation).isEqualTo(LinearLayout.VERTICAL)
-        // The plain text row lets a message be selected and copied. Dropping it only around a
-        // picture would be a silent regression against the ListView row this replaces, and one
-        // nothing else here would notice.
+        // The plain text row lets a message be selected and copied; so must the picture row.
         for (id in intArrayOf(R.id.list_chat_item_text_before, R.id.list_chat_item_text_after)) {
             assertThat(row.findViewById<TextView>(id).isTextSelectable).isTrue()
         }
-        // The gap the comment in anEmptyTextAroundAnImageIsHiddenJustLikeAnAbsentOne leans on: a
-        // VISIBLE but empty caption would still cost this much space under the picture.
+        // A VISIBLE but empty caption would still cost this much space under the picture.
         for (id in intArrayOf(
             R.id.list_chat_item_text_before,
             R.id.list_chat_item_text_after,
@@ -837,11 +779,8 @@ class ChatAdapterTest {
             .isInstanceOf(ChatAdapter.ImageHolder::class.java)
     }
 
-    // ------------------------------------------------------------------------------------------
-    // The log is unbounded (stream A). Both of these compare index by index and report the first
-    // divergence: Truth renders both lists into the failure message, which on a list this size is
-    // the "TIMED OUT without output" failure mode of spec 4.05.
-    // ------------------------------------------------------------------------------------------
+    // The log is unbounded. These compare index by index: Truth would render both lists into the
+    // failure message, which on a list this size times out.
 
     @Test
     fun aLongSessionParsesEachMessageExactlyOnceNoMatterHowOftenTheLogIsResubmitted() = runTest {
@@ -855,7 +794,7 @@ class ChatAdapterTest {
             log += info("message $it")
             adapter.submitMessages(log)
         }
-        idle()
+        idleMainLooper()
 
         assertThat(parsed.get()).isEqualTo(400)
         assertThat(adapter.itemCount).isEqualTo(400)

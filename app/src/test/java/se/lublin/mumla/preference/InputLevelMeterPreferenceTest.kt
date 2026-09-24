@@ -30,14 +30,7 @@ import org.robolectric.RobolectricTestRunner
 import se.lublin.mumla.R
 import se.lublin.mumla.audio.MeterReading
 
-/**
- * The effect pass for the meter: every field of a [MeterReading] has to arrive on the bar, and the
- * test that reads it back.
- *
- * Without this the preference is exactly the shape spec 4.04 warns about -- a file that writes into
- * an object it does not own (a `View`) and never reads the result, so every mutation in it survives
- * whatever else the suite does.
- */
+/** Every field of a [MeterReading] has to arrive on the bar, read back off the view. */
 @RunWith(RobolectricTestRunner::class)
 class InputLevelMeterPreferenceTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()

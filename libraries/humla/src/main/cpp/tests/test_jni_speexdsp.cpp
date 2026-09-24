@@ -1,22 +1,14 @@
 /* Host test for ../jni_speexdsp.cpp, driven through the stand-in JNIEnv in jni_env_stub.h.
  *
- * This file exists for one specific bug and its relatives. libspeexdsp's API takes bare pointers
- * and takes the length from somewhere other than the buffer:
+ * libspeexdsp takes the length from somewhere other than the buffer:
  *
- *   - speex_preprocess_run writes the frame size the state was CREATED with, not the length of
- *     the array it is handed. The javacpp binding this JNI layer replaced passed a raw pointer,
- *     and at ultra-wideband speex wrote 640 samples into a 480-element Java array -- 640 bytes
- *     past the end of a pinned array, on every single frame. That was a real crash in the field.
- *   - speex_resampler_process_int takes the input and output counts as in/out parameters that
- *     the Kotlin caller supplies, in a separate int[], with no relation to the arrays' lengths.
+ *   - speex_preprocess_run writes the frame size the state was created with. Without a check,
+ *     speex once wrote 640 samples into a 480-element Java array on every frame.
+ *   - speex_resampler_process_int takes the input and output counts from a separate int[].
  *   - jitter_buffer_put takes the payload length as a separate argument.
  *
- * In each case the number that decides how far native code reads or writes arrives independently
- * of the buffer it applies to. The bridge is the only place that can see both, so the bridge is
- * where it has to be checked, and this is where that is held down.
- *
- * The arrays here are exact-size heap blocks, so in the sanitized build an overrun is a trapped
- * heap-buffer-overflow rather than a return value nobody looks at.
+ * The bridge is the only place that sees both, so it has to check. The arrays here are exact-size
+ * heap blocks, so in the sanitized build an overrun is a trapped heap-buffer-overflow.
  */
 #include "jni_env_stub.h"
 
@@ -24,6 +16,8 @@
 #include <speex/speex_resampler.h>
 
 #include <cstdio>
+
+#include "jni_bridges.h"
 
 using jnistub::Array;
 using jnistub::Env;
@@ -37,47 +31,43 @@ static int failures = 0;
         }                                             \
     } while (0)
 
-extern "C" {
-JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_init(JNIEnv*, jobject, jint, jint);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_run(JNIEnv*, jobject, jlong, jshortArray);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_destroy(JNIEnv*, jobject, jlong);
-
-JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_SpeexResamplerNative_init(JNIEnv*, jobject, jint, jint, jint, jint, jintArray);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexResamplerNative_processInt(JNIEnv*, jobject, jlong, jint, jshortArray, jintArray, jshortArray, jintArray);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexResamplerNative_destroy(JNIEnv*, jobject, jlong);
-
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_ctlInt(JNIEnv*, jobject, jlong, jint, jintArray);
-
-JNIEXPORT jlong JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_init(JNIEnv*, jobject, jint);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_ctl(JNIEnv*, jobject, jlong, jint, jintArray);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_put(JNIEnv*, jobject, jlong, jbyteArray, jint, jint, jint, jint, jint);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_get(JNIEnv*, jobject, jlong, jbyteArray, jint, jintArray);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_pointerTimestamp(JNIEnv*, jobject, jlong);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_tick(JNIEnv*, jobject, jlong);
-JNIEXPORT jint JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_updateDelay(JNIEnv*, jobject, jlong);
-JNIEXPORT void JNICALL Java_se_lublin_humla_audio_native_SpeexJitterNative_destroy(JNIEnv*, jobject, jlong);
-}
-
-#define PP_INIT Java_se_lublin_humla_audio_native_SpeexPreprocessNative_init
-#define PP_RUN Java_se_lublin_humla_audio_native_SpeexPreprocessNative_run
-#define PP_CTL Java_se_lublin_humla_audio_native_SpeexPreprocessNative_ctlInt
-#define PP_DESTROY Java_se_lublin_humla_audio_native_SpeexPreprocessNative_destroy
-#define RS_INIT Java_se_lublin_humla_audio_native_SpeexResamplerNative_init
-#define RS_PROCESS Java_se_lublin_humla_audio_native_SpeexResamplerNative_processInt
-#define RS_DESTROY Java_se_lublin_humla_audio_native_SpeexResamplerNative_destroy
-#define JB_INIT Java_se_lublin_humla_audio_native_SpeexJitterNative_init
-#define JB_PUT Java_se_lublin_humla_audio_native_SpeexJitterNative_put
-#define JB_GET Java_se_lublin_humla_audio_native_SpeexJitterNative_get
-#define JB_CTL Java_se_lublin_humla_audio_native_SpeexJitterNative_ctl
-#define JB_DESTROY Java_se_lublin_humla_audio_native_SpeexJitterNative_destroy
-#define JB_POINTER_TIMESTAMP Java_se_lublin_humla_audio_native_SpeexJitterNative_pointerTimestamp
-#define JB_TICK Java_se_lublin_humla_audio_native_SpeexJitterNative_tick
-#define JB_UPDATE_DELAY Java_se_lublin_humla_audio_native_SpeexJitterNative_updateDelay
+/* The entry points under test, looked up in what the bridge registered; jnistub::native() checks
+ * each registered signature against the type it is called through. */
+#define SPEEX(cls, name, type) (jnistub::native<type>("se/lublin/humla/audio/native/" cls, name))
+#define PP_INIT \
+    SPEEX("SpeexPreprocessNative", "init", jlong (*)(JNIEnv*, jobject, jint, jint) noexcept)
+#define PP_RUN \
+    SPEEX("SpeexPreprocessNative", "run", jint (*)(JNIEnv*, jobject, jlong, jshortArray) noexcept)
+#define PP_CTL \
+    SPEEX("SpeexPreprocessNative", "ctlInt", jint (*)(JNIEnv*, jobject, jlong, jint, jintArray) noexcept)
+#define PP_DESTROY \
+    SPEEX("SpeexPreprocessNative", "destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
+#define RS_INIT \
+    SPEEX("SpeexResamplerNative", "init", jlong (*)(JNIEnv*, jobject, jint, jint, jint, jint, jintArray) noexcept)
+#define RS_PROCESS \
+    SPEEX("SpeexResamplerNative", "processInt", jint (*)(JNIEnv*, jobject, jlong, jint, jshortArray, jintArray, jshortArray, jintArray) noexcept)
+#define RS_DESTROY \
+    SPEEX("SpeexResamplerNative", "destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
+#define JB_INIT \
+    SPEEX("SpeexJitterNative", "init", jlong (*)(JNIEnv*, jobject, jint) noexcept)
+#define JB_PUT \
+    SPEEX("SpeexJitterNative", "put", void (*)(JNIEnv*, jobject, jlong, jbyteArray, jint, jint, jint, jint, jint) noexcept)
+#define JB_GET \
+    SPEEX("SpeexJitterNative", "get", jint (*)(JNIEnv*, jobject, jlong, jbyteArray, jint, jintArray) noexcept)
+#define JB_CTL \
+    SPEEX("SpeexJitterNative", "ctl", jint (*)(JNIEnv*, jobject, jlong, jint, jintArray) noexcept)
+#define JB_DESTROY \
+    SPEEX("SpeexJitterNative", "destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
+#define JB_POINTER_TIMESTAMP \
+    SPEEX("SpeexJitterNative", "pointerTimestamp", jint (*)(JNIEnv*, jobject, jlong) noexcept)
+#define JB_TICK \
+    SPEEX("SpeexJitterNative", "tick", void (*)(JNIEnv*, jobject, jlong) noexcept)
+#define JB_UPDATE_DELAY \
+    SPEEX("SpeexJitterNative", "updateDelay", jint (*)(JNIEnv*, jobject, jlong) noexcept)
 
 enum { kJitterBadArgument = -2 };  /* JITTER_BUFFER_BAD_ARGUMENT */
 
-/* The historical crash, reproduced exactly: a state created for 640-sample frames (ultra-wideband,
- * what Mumble's highest quality setting used) handed a 480-element array. */
+/* A state created for 640-sample frames (ultra-wideband) handed a 480-element array. */
 static void test_preprocessor(Env& env) {
     JNIEnv* e = env.get();
     enum { kWideband = 640, kNarrow = 480 };
@@ -90,13 +80,11 @@ static void test_preprocessor(Env& env) {
         Array<jshort> frame(kWideband);
         CHECK(PP_RUN(e, nullptr, state, frame.as<jshortArray>()) >= 0,
               "a frame of exactly the configured size is processed");
-        CHECK(jnistub::outstanding_copies() == 0, "the array copy is released");
     }
     {
         Array<jshort> frame(kNarrow);
         CHECK(PP_RUN(e, nullptr, state, frame.as<jshortArray>()) < 0,
               "a 480-sample frame is refused by a 640-sample preprocessor, not overrun");
-        CHECK(jnistub::outstanding_copies() == 0, "a refused frame is never pinned");
     }
     {
         /* Longer than configured is fine; speex only touches the first frameSize samples. */
@@ -139,7 +127,6 @@ static void test_resampler(Env& env) {
                          out.as<jshortArray>(), outLen.as<jintArray>()) == 0,
               "a correctly sized resample succeeds");
         CHECK(inLen[0] <= 480 && outLen[0] <= 160, "the counts written back stay within the arrays");
-        CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
     }
     {
         /* Lying caller: counts far beyond both arrays. Clamped, not obeyed. */
@@ -152,17 +139,9 @@ static void test_resampler(Env& env) {
         CHECK(inLen[0] <= 480, "an input count larger than the input array is clamped to it");
         CHECK(outLen[0] <= 160, "an output count larger than the output array is clamped to it");
     }
-    /* The arm above lies about both counts, and that is not enough to hold either clamp down:
-     * each one keeps the other's overrun out of reach, because speex stops as soon as the first
-     * of the two budgets runs out. Measured, three runs: with only the input clamp deleted both
-     * binaries pass, with only the output clamp deleted both binaries pass, and only deleting
-     * both at once produces a SEGV. So a later edit that drops one line as obviously redundant
-     * ("the output array is ours anyway") passes the whole suite in both builds.
-     *
-     * The two arms below are asymmetric on purpose: each lies about exactly one count and gives
-     * the other array room to spare, so exactly one clamp is load bearing in each. Deleting
-     * either line alone then fails BOTH builds -- the plain one on a signal, the sanitized one on
-     * a heap-buffer-overflow inside resample.c. */
+    /* The lying call above cannot pin either clamp on its own: speex stops as soon as the first
+     * budget runs out, so each clamp hides the other's overrun. The two cases below each lie about
+     * exactly one count, so deleting either clamp alone fails both builds. */
     {
         /* Only the input clamp carries: out really can hold the 16000 samples asked for. */
         Array<jshort> in(480), out(16000);
@@ -172,7 +151,6 @@ static void test_resampler(Env& env) {
         RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), inLen.as<jintArray>(),
                    out.as<jshortArray>(), outLen.as<jintArray>());
         CHECK(inLen[0] <= 480, "an input count is clamped even when the output array has room");
-        CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
     }
     {
         /* Only the output clamp carries: inLen is honest, outLen is 100x the output array. */
@@ -183,12 +161,10 @@ static void test_resampler(Env& env) {
         RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), inLen.as<jintArray>(),
                    out.as<jshortArray>(), outLen.as<jintArray>());
         CHECK(outLen[0] <= 160, "an output count is clamped even when the input count is honest");
-        CHECK(jnistub::outstanding_copies() == 0, "both array copies are released");
     }
     {
-        /* inLen and outLen are int[] like every other array here, and GetIntArrayRegion(.., 0, 1,
-         * ..) on an empty one throws on a real JVM (the stub aborts). The Kotlin signature says
-         * IntArray, not IntArray(1). */
+        /* inLen and outLen may be empty; GetIntArrayRegion on an empty array throws on a real JVM
+         * (the stub aborts). */
         Array<jshort> in(480), out(160);
         Array<jint> empty(0), outLen(1);
         outLen[0] = 160;
@@ -200,7 +176,6 @@ static void test_resampler(Env& env) {
         CHECK(RS_PROCESS(e, nullptr, st, 0, in.as<jshortArray>(), inLen2.as<jintArray>(),
                          out.as<jshortArray>(), empty.as<jintArray>()) != RESAMPLER_ERR_SUCCESS,
               "an empty output-count array is refused, not read");
-        CHECK(jnistub::outstanding_copies() == 0, "neither refusal pins an array");
     }
     {
         Array<jshort> in(480), out(160);
@@ -222,12 +197,9 @@ static void test_resampler(Env& env) {
     RS_DESTROY(e, nullptr, 0);
 }
 
-/* channelIndex is a public argument of SpeexResamplerApi.processInt and it is an index, not a
- * count: speex_resampler_process_native uses it to reach st->last_sample[channel_index],
- * st->samp_frac_num[channel_index] and st->mem + channel_index * st->mem_alloc_size, all three of
- * them sized for the channel count the state was created with, and it never compares the two.
- * Every shipped caller passes 0, but nothing below Kotlin enforces that, and getting it wrong is
- * a heap read AND write outside three allocations rather than an error code. */
+/* channelIndex is an index, not a count: speex_resampler_process_native uses it on three
+ * per-channel arrays sized for the state's channel count and never range-checks it. Out of range
+ * is a heap read and write, not an error code. */
 static void test_resampler_channel_index(Env& env) {
     JNIEnv* e = env.get();
     Array<jint> err(1);
@@ -250,12 +222,10 @@ static void test_resampler_channel_index(Env& env) {
               "a channel index far beyond the channel count is refused");
         CHECK(RS_PROCESS(e, nullptr, mono, -1, i, il, o, ol) == RESAMPLER_ERR_INVALID_ARG,
               "a negative channel index is refused");
-        CHECK(jnistub::outstanding_copies() == 0, "a refused channel index never pins an array");
     }
     RS_DESTROY(e, nullptr, mono);
 
-    /* The check has to be against the state's own channel count, not against "0 is the only
-     * legal index": a two-channel state really does have a channel 1. */
+    /* The check is against the state's own channel count: a two-channel state has a channel 1. */
     jlong stereo = RS_INIT(e, nullptr, 2, 48000, 16000, 3, err.as<jintArray>());
     CHECK(stereo != 0, "stereo resampler init succeeds");
     if (stereo != 0) {
@@ -291,17 +261,10 @@ static void test_resampler_channel_index(Env& env) {
           "init tolerates an empty error array");
 }
 
-/* speex_resampler_init returns NULL for more than a bad channel count: nb_channels == 0,
- * ratio_num == 0, ratio_den == 0, quality > 10 or quality < 0 all fail the same test at
- * resample.c:804-808, and in speex_resampler_init the two ratio terms ARE the two sample rates.
- * So a sample rate of 0 -- which ResamplingEncoder.kt:35 forwards from whatever the device or the
- * server said, without looking at the return value -- reaches this bridge as a NULL state that the
- * channels <= 0 guard above does not see. Wrapping it in a handle would hand Kotlin a live handle
- * to a null state, and the next processInt is a null dereference inside resample.c:933, in native
- * code, with no Java stack trace.
- *
- * This is the guard the channel-index test cannot pin: both of its init cases (0 and -2 channels)
- * make speex return NULL too, so they stay green with the null check deleted. */
+/* speex_resampler_init also returns NULL for a zero sample rate or an out-of-range quality, which
+ * the channels <= 0 guard does not see. Wrapping that in a handle would give Kotlin a live handle
+ * to a null state and the next processInt would crash in native code. The channel-index test
+ * cannot pin this guard: its init cases make speex return NULL too. */
 static void test_resampler_init_failure(Env& env) {
     JNIEnv* e = env.get();
     Array<jint> err(1);
@@ -314,8 +277,7 @@ static void test_resampler_init_failure(Env& env) {
     CHECK(RS_INIT(e, nullptr, 1, 48000, 0, 3, err.as<jintArray>()) == 0,
           "an output rate of 0 is refused rather than wrapped in a handle");
     CHECK(err[0] == RESAMPLER_ERR_INVALID_ARG, "and reported as an invalid argument");
-    /* speex_resampler_init takes quality 0..10 and nothing else. SPEEX_RESAMPLE_QUALITY is 3
-     * today, but the argument is public and unvalidated on the Kotlin side. */
+    /* speex_resampler_init takes quality 0..10 only; the Kotlin side does not validate it. */
     err[0] = 0;
     CHECK(RS_INIT(e, nullptr, 1, 48000, 16000, 99, err.as<jintArray>()) == 0,
           "a quality above 10 is refused rather than wrapped in a handle");
@@ -338,7 +300,6 @@ static void test_jitter(Env& env) {
         for (jsize i = 0; i < payload.length(); i++) payload[i] = jbyte(i);
         /* A length far beyond the array: clamped to the array, not read past it. */
         JB_PUT(e, nullptr, jb, payload.as<jbyteArray>(), 4096, 0, 480, 0, 0);
-        CHECK(jnistub::outstanding_copies() == 0, "put releases the payload copy");
 
         Array<jbyte> out(4096);
         Array<jint> meta(5);
@@ -349,19 +310,16 @@ static void test_jitter(Env& env) {
     JB_PUT(e, nullptr, jb, nullptr, 16, 0, 480, 0, 0);  /* a null payload must not crash */
     JB_PUT(e, nullptr, 0, nullptr, 0, 0, 480, 0, 0);    /* nor a null handle */
     {
-        /* get() writes five ints into meta. A shorter array must not be written past: the stub's
-         * SetIntArrayRegion aborts the process on an out-of-range write, the way a real JVM
-         * would throw, so reaching the next line at all is the assertion. */
+        /* get() writes five ints into meta. The stub aborts on an out-of-range write, as a real
+         * JVM would throw, so reaching the next line is the assertion. */
         Array<jbyte> out(64);
         Array<jint> meta(2);
         JB_GET(e, nullptr, jb, out.as<jbyteArray>(), 480, meta.as<jintArray>());
         CHECK(true, "get with a short meta array does not write past it");
-        CHECK(jnistub::outstanding_copies() == 0, "get releases the output copy");
     }
 
-    /* pointerTimestamp, tick and updateDelay all dereference the handle in libspeexdsp. 0 is what
-     * init() returns on failure and what a Kotlin field holds before it is assigned, so each of
-     * them has to answer rather than follow it. */
+    /* pointerTimestamp, tick and updateDelay all dereference the handle in libspeexdsp; 0 (a
+     * failed init or an unassigned Kotlin field) must be answered, not followed. */
     CHECK(JB_POINTER_TIMESTAMP(e, nullptr, 0) == 0, "pointerTimestamp with a null handle answers 0");
     JB_TICK(e, nullptr, 0);
     CHECK(true, "tick with a null handle does not dereference it");
@@ -372,29 +330,10 @@ static void test_jitter(Env& env) {
     JB_DESTROY(e, nullptr, 0);
 }
 
-/* Both ctl entry points hand a ctl function the address of a 4-byte spx_int32_t that lives on the
- * JNI function's own stack frame, and both take the request number straight from Kotlin. The
- * request decides what the callee does with that address, and for several requests it is not
- * "read or write four bytes":
- *
- *   JITTER_BUFFER_GET_DESTROY_CALLBACK (5)   *(void(**)(void*))ptr = jitter->destroy
- *   SPEEX_PREPROCESS_GET_ECHO_STATE    (25)  *(SpeexEchoState**)ptr = st->echo_state
- *       -- an 8-byte write into a 4-byte stack object on arm64-v8a and x86_64.
- *   JITTER_BUFFER_SET_DESTROY_CALLBACK (4)   jitter->destroy = (void(*)(void*))ptr
- *   SPEEX_PREPROCESS_SET_ECHO_STATE    (24)  st->echo_state = (SpeexEchoState*)ptr
- *       -- a stack address stored as a pointer that is dereferenced or CALLED later, after that
- *          frame is gone.
- *   SPEEX_PREPROCESS_GET_PSD           (39)
- *   SPEEX_PREPROCESS_GET_NOISE_PSD     (43)  for(i=0;i<st->ps_size;i++) ((spx_int32_t*)ptr)[i] = ...
- *       -- ps_size ints, i.e. the whole frame size, into the same 4-byte stack object.
- *   SPEEX_PREPROCESS_SET_AGC_LEVEL     (6)   st->agc_level = *(float*)ptr
- *       -- reads the caller's int as a float; not an overrun, but ctlInt is an int interface.
- *   JITTER_BUFFER_SET_MAX_LATE_RATE    (10)  100*TOP_DELAY/jitter->max_late_rate
- *       -- SIGFPE on a value of 0.
- *
- * Nothing about the buffer-length checks these functions already carry touches that, so both
- * bridges take an allow list of the requests the Kotlin objects actually name as constants.
- * These two tests pin the refusals. */
+/* Both ctl entry points hand the ctl function the address of a 4-byte stack spx_int32_t, with the
+ * request number straight from Kotlin. Several requests do something else with that address (see
+ * the allow list comment in ../jni_speexdsp.cpp): store it as a callback, write 8 bytes or
+ * ps_size ints into it, read it as a float, or divide by it. These tests pin the refusals. */
 static void test_jitter_ctl(Env& env) {
     JNIEnv* e = env.get();
     jlong jb = JB_INIT(e, nullptr, 480);
@@ -413,9 +352,8 @@ static void test_jitter_ctl(Env& env) {
           "GET_AVAILABLE_COUNT is allowed");
     CHECK(value[0] >= 0, "GET_AVAILABLE_COUNT writes a count back");
 
-    /* The handle and the array are checked before the request is: ctl dereferences the jitter
-     * buffer inside libspeexdsp, and reads and writes value[0]. Each of the three has its own
-     * case, because an allowed request reaches all three. */
+    /* The handle and the array are checked before the request: an allowed request reaches the
+     * jitter buffer and value[0]. */
     CHECK(JB_CTL(e, nullptr, 0, 0 /* SET_MARGIN */, v) == kJitterBadArgument,
           "ctl with a null handle is refused");
     CHECK(JB_CTL(e, nullptr, jb, 0 /* SET_MARGIN */, nullptr) == kJitterBadArgument,
@@ -426,8 +364,8 @@ static void test_jitter_ctl(Env& env) {
               "ctl with an empty value array is refused, not read");
     }
 
-    /* Everything else, whether libspeexdsp knows it or not. 4 and 5 are the dangerous pair; the
-     * rest are int-typed but were never reachable from Kotlin, and 12345/-1 are not requests. */
+    /* Everything else, whether libspeexdsp knows it or not. 4 and 5 are the dangerous pair;
+     * 12345/-1 are not requests. */
     const jint refused[] = {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 2, 14, -1, 12345, 0x7fffffff};
     for (jint request : refused) {
         value[0] = 0x5a5a5a5a;
@@ -436,10 +374,8 @@ static void test_jitter_ctl(Env& env) {
         CHECK(value[0] == 0x5a5a5a5a, "a refused jitter request leaves the caller's value alone");
     }
 
-    /* SET_DESTROY_CALLBACK does not write through ptr, it stores ptr ITSELF as the function
-     * jitter_buffer_reset calls for every queued packet. Had the ctl gone through, the destroy
-     * below would call the address of a spx_int32_t whose frame is long gone. Reaching the line
-     * after it is the assertion. */
+    /* SET_DESTROY_CALLBACK stores ptr itself as the callback jitter_buffer_reset calls for every
+     * queued packet. Reaching the line after the destroy below is the assertion. */
     {
         Array<jbyte> payload(16);
         JB_PUT(e, nullptr, jb, payload.as<jbyteArray>(), 16, 0, 480, 0, 0);
@@ -463,27 +399,9 @@ static void test_preprocess_ctl(Env& env) {
         value[0] = 1;
         CHECK(PP_CTL(e, nullptr, st, request, v) == 0, "a named preprocess request is allowed");
     }
-    /* SET_AGC (2) and SET_AGC_TARGET (46) are on the allow list too, and speex answers -1 to
-     * both: its whole AGC control block sits behind #ifndef FIXED_POINT (preprocess.c:1057,
-     * :1193) and this library is built with FIXED_POINT (../CMakeLists.txt, the speexdsp target;
-     * the ndk-build flavour that file replaced passed the same -DFIXED_POINT, so it has never
-     * been otherwise). That -1 is libspeexdsp's, not the bridge's, and it is measured here so
-     * the difference stays visible: PreprocessingEncoder.kt:39,43 sets both and ignores the
-     * return value, so those two calls have never done anything.
-     *
-     * What this is NOT is a setting in the UI that quietly does nothing. There is no AGC
-     * preference in Mumla -- no agc key under app/src/main/res/xml/, no AutomaticGainControl
-     * anywhere in the tree; the 1 and the 30000 are literals in PreprocessingEncoder's
-     * constructor. The gain the user can actually change is the amplitude boost
-     * (Settings.kt:65-66,228 -> HumlaService.EXTRAS_AMPLITUDE_BOOST ->
-     * protocol/AudioHandler.java:454-458), a float multiplication that works. So this is dead
-     * code, not a lying switch; what is open is whether to delete the two calls or implement
-     * them elsewhere (the WebRTC APM's AGC2 is already built).
-     *
-     * This is also the only place that can see it. PreprocessingEncoderTest drives a
-     * FakePreprocess whose ctlInt returns a hard-coded 0, so the JVM test could never observe a
-     * -1 no matter what the real library does. Dropping the two requests from the allow list
-     * would hide libspeexdsp's -1 behind the bridge's own, and nothing would be left. */
+    /* SET_AGC (2) and SET_AGC_TARGET (46) are allowed, but speex answers -1 to both: its AGC
+     * block sits behind #ifndef FIXED_POINT and this library is built with FIXED_POINT. That -1
+     * is libspeexdsp's, not the bridge's; only a native test can observe it. */
     const jint agc[] = {2, 46};
     for (jint request : agc) {
         value[0] = 1;
@@ -508,7 +426,7 @@ static void test_preprocess_ctl(Env& env) {
     }
 
     /* 24/25 store or write a pointer, 39/43 write ps_size ints, 6/7 read and write a float, and
-     * the remainder are simply not part of this interface. */
+     * the rest are not part of this interface. */
     const jint refused[] = {24, 25, 39, 43, 6, 7, 10, 12, 33, 35, 37, 41, 47, -1, 12345};
     for (jint request : refused) {
         value[0] = 0x5a5a5a5a;
@@ -521,80 +439,49 @@ static void test_preprocess_ctl(Env& env) {
     PP_DESTROY(e, nullptr, st);
 }
 
-/* Get*ArrayElements returns NULL when the JVM cannot allocate the copy. Every entry point in the
- * bridge that takes an array has to answer an error instead of dereferencing it, and -- the part
- * that had no test at all -- has to give back anything it is already holding on the way out.
- *
- * RS(processInt) is the only function in the file that holds two array copies at once, so it is
- * the only one with a cleanup path that has something to release. Deleting that whole path
- *
- *     if (outPtr == nullptr) { env->ReleaseShortArrayElements(input, inPtr, JNI_ABORT);
- *                              return RESAMPLER_ERR_ALLOC_FAILED; }
- *
- * left all nine ctest entries green before this test existed. */
-static void test_allocation_failure(Env& env) {
+/* The bridges copy regions and write back only what libspeexdsp produced: the rest of an output
+ * array is left as the caller had it. */
+static void test_partial_write_back(Env& env) {
     JNIEnv* e = env.get();
     Array<jint> err(1);
     jlong rs = RS_INIT(e, nullptr, 1, 48000, 16000, 3, err.as<jintArray>());
-    jlong pp = PP_INIT(e, nullptr, 640, 48000);
     jlong jb = JB_INIT(e, nullptr, 480);
-    CHECK(rs != 0 && pp != 0 && jb != 0, "the three states for the allocation-failure run exist");
-    if (rs == 0 || pp == 0 || jb == 0) return;
+    CHECK(rs != 0 && jb != 0, "the states for the write-back run exist");
+    if (rs == 0 || jb == 0) return;
 
     {
-        Array<jshort> in(480), out(160);
+        Array<jshort> in(480), out(400);
+        for (jsize i = 0; i < out.length(); i++) out[i] = 0x5a5a;
         Array<jint> inLen(1), outLen(1);
         inLen[0] = 480;
-        outLen[0] = 160;
-        jshortArray i = in.as<jshortArray>(), o = out.as<jshortArray>();
-        jintArray il = inLen.as<jintArray>(), ol = outLen.as<jintArray>();
-
-        /* The input copy fails: nothing is held yet. */
-        jnistub::fail_get_after(0);
-        CHECK(RS_PROCESS(e, nullptr, rs, 0, i, il, o, ol) != RESAMPLER_ERR_SUCCESS,
-              "processInt survives the input array copy failing");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "no copy is outstanding after the input failure");
-
-        /* The OUTPUT copy fails, with the input copy already held. This is the leak path. */
-        jnistub::fail_get_after(1);
-        CHECK(RS_PROCESS(e, nullptr, rs, 0, i, il, o, ol) != RESAMPLER_ERR_SUCCESS,
-              "processInt survives the output array copy failing");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0,
-              "the input copy is released when the output copy fails");
+        outLen[0] = 400;
+        CHECK(RS_PROCESS(e, nullptr, rs, 0, in.as<jshortArray>(), inLen.as<jintArray>(),
+                         out.as<jshortArray>(), outLen.as<jintArray>()) == RESAMPLER_ERR_SUCCESS,
+              "a 48 kHz to 16 kHz frame resamples");
+        bool tail_intact = outLen[0] < 400;
+        for (jsize i = outLen[0]; i < out.length(); i++)
+            if (out[i] != jshort(0x5a5a)) tail_intact = false;
+        CHECK(tail_intact, "processInt leaves the output beyond the produced count untouched");
     }
     {
-        Array<jshort> frame(640);
-        jnistub::fail_get_after(0);
-        CHECK(PP_RUN(e, nullptr, pp, frame.as<jshortArray>()) < 0,
-              "run survives GetShortArrayElements returning NULL");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "no copy is leaked on the run failure path");
-    }
-    {
-        Array<jbyte> payload(16);
-        jnistub::fail_get_after(0);
-        JB_PUT(e, nullptr, jb, payload.as<jbyteArray>(), 16, 0, 480, 0, 0);
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "put survives GetByteArrayElements returning NULL");
-
         Array<jbyte> out(64);
+        for (jsize i = 0; i < out.length(); i++) out[i] = 0x5a;
         Array<jint> meta(5);
-        jnistub::fail_get_after(0);
         CHECK(JB_GET(e, nullptr, jb, out.as<jbyteArray>(), 480, meta.as<jintArray>()) != 0,
-              "get survives GetByteArrayElements returning NULL");
-        jnistub::fail_get_never();
-        CHECK(jnistub::outstanding_copies() == 0, "no copy is leaked on the get failure path");
+              "an empty jitter buffer delivers no packet");
+        bool untouched = true;
+        for (jsize i = 0; i < out.length(); i++)
+            if (out[i] != jbyte(0x5a)) untouched = false;
+        CHECK(untouched, "get without a packet leaves the output array untouched");
     }
 
     RS_DESTROY(e, nullptr, rs);
-    PP_DESTROY(e, nullptr, pp);
     JB_DESTROY(e, nullptr, jb);
 }
 
 int main() {
     Env env;
+    CHECK(humla::registerSpeexdspNatives(env.get()), "the speexdsp bridge registers");
     test_preprocessor(env);
     test_resampler(env);
     test_resampler_channel_index(env);
@@ -602,8 +489,7 @@ int main() {
     test_jitter(env);
     test_jitter_ctl(env);
     test_preprocess_ctl(env);
-    test_allocation_failure(env);
-    CHECK(jnistub::outstanding_copies() == 0, "no array copy is outstanding at the end of the run");
+    test_partial_write_back(env);
     std::printf("%s\n", failures ? "FAILED" : "OK");
     return failures ? 1 : 0;
 }

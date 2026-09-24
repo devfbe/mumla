@@ -1,13 +1,10 @@
 package se.lublin.mumla
 
 import android.content.Context
-import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceGroup
-import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -19,41 +16,21 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.mumla.preference.GeneralSettingsFragment
 import se.lublin.mumla.preference.SettingsActivity
+import se.lublin.mumla.testing.ThemedActivity
 
 /**
- * The headset-button preference, checked where the user meets it rather than only in the
- * resource tables.
- *
- * Two of these tests exist because of what stream P already got wrong once: eleven tests in
- * `ChannelFragmentTalkStateTest` drove a talk button that was `GONE`, and passed. A settings
- * entry has the same failure mode one level up -- an array can be perfect while the preference
- * is on no screen, or the screen on no index -- so the screen is inflated for real here, out of
- * the fragment the settings index actually launches.
- *
- * The wording assertions are not decoration. Spec section 4.1 ("Name the two push-to-talk
- * behaviours in the settings UI") makes three statements binding on this preference, and the
- * only place they can be pinned is the text the user reads.
+ * The headset-button preference, checked on the settings screen the index actually launches
+ * (inflated for real), including the wording the user reads.
  */
 @RunWith(RobolectricTestRunner::class)
 class MediaButtonActionResourcesTest {
-
-    class HostActivity : AppCompatActivity() {
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-    }
-
     private lateinit var context: Context
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        // A persisted value shadows the XML default, and a ListPreference persists the default
-        // the moment it is attached -- so the default test only means anything from empty
-        // preferences. This is the one stored value that can change what these tests observe;
-        // the other nine keys on this screen are independent checkboxes.
-        PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
+        // A ListPreference persists its default the moment it is attached, so the default test
+        // only means anything from empty preferences.
     }
 
     private fun stringArrayByName(name: String): List<String> {
@@ -64,7 +41,7 @@ class MediaButtonActionResourcesTest {
 
     private fun generalScreen(): PreferenceScreen {
         val fragment = GeneralSettingsFragment()
-        val controller = Robolectric.buildActivity(HostActivity::class.java).setup()
+        val controller = Robolectric.buildActivity(ThemedActivity::class.java).setup()
         controller.get().supportFragmentManager.beginTransaction()
             .add(android.R.id.content, fragment)
             .commitNow()
@@ -98,7 +75,7 @@ class MediaButtonActionResourcesTest {
     @Test
     fun theGeneralScreenIsReachableFromTheSettingsIndex() {
         val index = SettingsActivity.RootPreferenceFragment()
-        val controller = Robolectric.buildActivity(HostActivity::class.java).setup()
+        val controller = Robolectric.buildActivity(ThemedActivity::class.java).setup()
         controller.get().supportFragmentManager.beginTransaction()
             .add(android.R.id.content, index)
             .commitNow()
@@ -114,8 +91,7 @@ class MediaButtonActionResourcesTest {
 
         // Spelled out so the assertion cannot mirror the enum ...
         assertThat(values).containsExactly("none", "auto", "mute").inOrder()
-        // ... and compared against the whole enum, so a fourth constant added later fails here
-        // instead of quietly becoming an action the user cannot choose.
+        // ... and compared against the whole enum, so a new constant fails here.
         assertThat(values).isEqualTo(MediaButtonAction.entries.map { it.prefValue })
     }
 
@@ -148,21 +124,15 @@ class MediaButtonActionResourcesTest {
         // gets. A mismatch is invisible at runtime because fromPrefValue() falls back to AUTO.
         assertThat(preference.value).isEqualTo(Settings.DEFAULT_MEDIA_BUTTON_ACTION)
         assertThat(stringArrayByName("mediaButtonActionValues")).contains(preference.value)
-        assertThat(Settings.getInstance(context).getMediaButtonAction())
+        assertThat(Settings.getInstance(context).mediaButtonAction)
             .isEqualTo(MediaButtonAction.fromPrefValue(preference.value))
     }
 
     @Test
     fun theSummarySaysTapAndNotHold() {
-        // Measured in task 4 against the decompiled MediaSessionService: once a press produces
-        // repeats (~400 ms) the service stops tracking, and everything after that -- the repeats
-        // and the final UP -- is swallowed, so a held button produces zero toggles. The user has
-        // to learn that from the preference rather than from not being heard.
-        //
-        // These match phrases, not words, on purpose: the first draft asserted `contains("tap")`
-        // and would have survived deleting the whole imperative, because "one tap switches on"
-        // sits in another sentence. Reword the summary freely -- but both facts have to survive
-        // the rewording, and then these patterns are updated deliberately.
+        // A held button produces repeats, after which MediaSessionService stops tracking and
+        // swallows the rest, so a held button produces zero toggles; the summary must say so.
+        // Phrases, not single words, so deleting the imperative can't slip through.
         val summary = mediaButtonPreference().summary.toString().lowercase()
 
         assertWithMessage("the summary must tell the user to tap the button: %s", summary)
@@ -173,10 +143,8 @@ class MediaButtonActionResourcesTest {
 
     @Test
     fun theSummaryNamesTheHoldVersusToggleDifference() {
-        // Same physical button, two behaviours: PREF_PTT_TOGGLE defaults to false, so the
-        // on-screen and physical push-to-talk keys transmit only while held, while this one
-        // toggles -- a headset button cannot be held. Spec 4.1 requires that to be said where
-        // the action is chosen, not only in a stream ledger.
+        // Same physical button, two behaviours: PREF_PTT_TOGGLE defaults to false, so the other
+        // push-to-talk keys transmit only while held, while this one toggles.
         val summary = mediaButtonPreference().summary.toString().lowercase()
 
         assertWithMessage("the summary must say that this button toggles: %s", summary)

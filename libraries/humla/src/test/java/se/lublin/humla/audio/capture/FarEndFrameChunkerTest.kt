@@ -26,31 +26,17 @@ import se.lublin.humla.audio.capture.fakes.RecordingFarEndSink
 
 /**
  * The playback thread hands over whatever the mixer produced; AEC3 needs exactly 10 ms frames, in
- * order, with nothing inserted and nothing lost.
- *
- * **What goes wrong if this is wrong, and why a spot check is not enough.** The native host test
- * measured all three ways of getting the reference stream wrong -- never feeding it, feeding the
- * wrong buffer, feeding it 200 ms late -- at about 21 dB of lost echo cancellation each, and every
- * one of them is silent: every call still returns 0. The same is true one layer up here. A chunker
- * that drops a remainder, repeats a sample or reorders two frames produces a reference stream that
- * is *almost* the playback signal, and nothing above this file can tell. So the load-bearing test
- * is not the two hand-written cases; it is the one that pushes [PUSHES] buffers of pseudo-random
- * length, reassembles every delivered frame and compares the result against the source stream.
- * That is the JVM's version of the 21 dB measurement: any misalignment at all is a mismatch,
- * rather than a number that has to be far enough from another number.
+ * order, with nothing inserted and nothing lost. A reference stream that is only almost right fails
+ * silently (about 21 dB of lost echo cancellation), hence the sample-exact random sweep below.
  */
 class FarEndFrameChunkerTest {
     private companion object {
-        /** Long enough that a misalignment cannot hide: about 1 000 frames, against the 700 the
-         *  native AEC3 measurement needed before a swapped reference separated from a correct one. */
+        /** About 1 000 frames, enough that any misalignment shows up. */
         const val PUSHES = 1_024
 
         /**
-         * The largest push the production caller can make, in frames. `AudioOutput` sizes its mix
-         * buffer `minOf(minBufferSizeSamples, AudioHandler.FRAME_SIZE * 12)`, so a push is
-         * anywhere from 0 to 12 frames -- enumerated from the caller rather than from what looked
-         * like enough. The sweep used to stop at 2, which closes at most two frames per push and
-         * never exercises the loop body more than twice.
+         * `AudioOutput` sizes its mix buffer `minOf(minBufferSizeSamples, AudioHandler.FRAME_SIZE * 12)`,
+         * so a push is anywhere from 0 to 12 frames.
          */
         const val MAX_PUSH_FRAMES = 12
     }
@@ -110,29 +96,8 @@ class FarEndFrameChunkerTest {
     }
 
     /**
-     * The measurement. [PUSHES] pushes of pseudo-random length reassembled into one stream: every
-     * complete frame that could be built must have been delivered, in order, sample for sample,
-     * and the remainder must still be waiting rather than lost or guessed at.
-     *
-     * Measured, this seed and this configuration: **1 024 pushes, 3 019 317 samples, 6 290 frames
-     * delivered, 117 samples still pending.**
-     *
-     * **What the sweep is worth, measured rather than asserted.** Five mutations of
-     * `FarEndFrameChunker`, each applied and reverted on its own:
-     *
-     * | mutation                                             | tests red                        |
-     * |------------------------------------------------------|----------------------------------|
-     * | `available = minOf(length, samples.size)` -> `samples.size` | **1 -- this test alone**  |
-     * | `filled = 0` at the end of `push` (remainder dropped) | 3 -- this test and 2 hand cases  |
-     * | copy destination `filled` -> `0`                     | 3 -- this test and 2 hand cases  |
-     * | `while (offset < available)` -> `available - 1`      | 2 -- this test and 1 hand case   |
-     * | `analyzeReverseStream(pending)` -> `pending.copyOf()`| 1 -- `the same buffer is reused` |
-     *
-     * So the honest claim is not "four mutations, none of which the hand cases catch". It is:
-     * **exactly one of the five dies here and nowhere else**, three die here *and* at a hand case,
-     * and the fifth is about a different guard altogether. One is enough -- the length trim is the
-     * production caller's own bug class -- and this test is also the only one that reports *where*
-     * a divergence starts.
+     * [PUSHES] pushes of pseudo-random length reassembled into one stream: every complete frame must
+     * have been delivered, in order, sample for sample, with the remainder still pending.
      */
     @Test
     fun `the delivered stream is the pushed stream, sample for sample, over random buffer sizes`() {
@@ -156,18 +121,8 @@ class FarEndFrameChunkerTest {
         assertWithMessage("the chunker delivered %s samples of %s pushed", delivered, pushedCount)
             .that(delivered).isEqualTo(pushedCount / frameSize * frameSize)
 
-        // Index by index, reporting the first divergence, because the obvious form is expensive
-        // in a way that is worth writing down. Measured here, both arms on the same machine:
-        // handing the two ~3 000 000-element sample lists to isEqualTo and introducing one
-        // single-sample divergence makes this test take **273 s** and emit a **43 MB** failure
-        // message -- against 0.1 s for this test and about 12 s for the whole module green.
-        // Truth renders both sequences, and that message then goes into the XML, the HTML report
-        // and the CI log.
-        //
-        // An earlier revision of this comment said the naive form "hit the suite timeout with no
-        // output at all". That is corrected: it does fail, with output, and under a per-test
-        // timeout shorter than 273 s it would be reported as a timeout rather than as the
-        // mismatch it is. The cost is real; the hang was not measured.
+        // Index by index, reporting the first divergence: comparing the two ~3M-element lists with
+        // isEqualTo takes minutes and produces a huge failure message.
         var firstDivergence = -1
         var index = 0
         for (frame in sink.frames) {
@@ -185,11 +140,8 @@ class FarEndFrameChunkerTest {
     }
 
     /**
-     * The optimisation nobody may add: when a push happens to be an exact multiple of the frame
-     * size, handing the caller's array straight to the sink saves a copy -- and `processRender`
-     * **may modify the frame in place**. The buffer the playback thread handed over is the buffer
-     * it is about to write to the audio device, so the APM's render-side processing would land in
-     * the user's speakers.
+     * `processRender` may modify the frame in place, and the caller's buffer is about to be written
+     * to the audio device, so even an exact-multiple push must be copied.
      */
     @Test
     fun `the frame handed to the sink is never the caller's own buffer`() {
@@ -202,9 +154,8 @@ class FarEndFrameChunkerTest {
     }
 
     /**
-     * One reusable buffer, because this runs on the playback thread once per 10 ms and a garbage
-     * collection between two frames is a dropout. The consequence is part of the contract: a sink
-     * that keeps the array it is handed keeps a buffer that will be overwritten.
+     * One reusable buffer, since this runs on the playback thread every 10 ms. A sink must not keep
+     * the array it is handed.
      */
     @Test
     fun `the same buffer is reused for every frame`() {
@@ -219,10 +170,8 @@ class FarEndFrameChunkerTest {
     }
 
     /**
-     * A length past the end of the buffer is a caller's bug, and the honest place to find it is a
-     * failing test rather than the playback thread: `System.arraycopy` would throw there, once per
-     * 10 ms, and the thread that dies is the one playing audio. The valid prefix is used and the
-     * rest is not invented.
+     * A length past the end is a caller bug, but throwing would kill the playback thread; the valid
+     * prefix is used and nothing is invented.
      */
     @Test
     fun `a length past the end of the buffer is trimmed instead of throwing`() {
@@ -232,11 +181,7 @@ class FarEndFrameChunkerTest {
             .containsExactly(1.toShort(), 2.toShort(), 3.toShort(), 4.toShort()).inOrder()
     }
 
-    /**
-     * The far-end path of a released stage drops its frames (`SingleHandleStage`), so a chunker
-     * that outlives a mode switch must not be the thing that crashes: it keeps chunking into a
-     * sink that does nothing, which is what makes a swap survivable.
-     */
+    /** A released stage drops far-end frames, so a chunker outliving a mode switch keeps working. */
     @Test
     fun `a chunker whose sink has been released keeps working`() {
         val stage = WebRtcApmPreprocessor(

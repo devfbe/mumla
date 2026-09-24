@@ -17,8 +17,8 @@
 
 package se.lublin.humla.net
 
-import se.lublin.humla.protocol.HumlaTCPMessageListener
-import se.lublin.humla.protocol.HumlaUDPMessageListener
+import se.lublin.humla.protocol.TcpMessageHandler
+import se.lublin.humla.protocol.VoicePacketHandler
 
 /**
  * Registration of protocol message handlers, implemented by [HumlaConnection].
@@ -28,8 +28,8 @@ import se.lublin.humla.protocol.HumlaUDPMessageListener
  * A handler removed while a message is being dispatched may still see that dispatch.
  */
 interface MessageHandlerRegistry {
-    fun addTCPMessageHandlers(vararg handlers: HumlaTCPMessageListener)
-    fun removeTCPMessageHandler(handler: HumlaTCPMessageListener)
-    fun addUDPMessageHandlers(vararg handlers: HumlaUDPMessageListener)
-    fun removeUDPMessageHandler(handler: HumlaUDPMessageListener)
+    fun addTcpHandler(handler: TcpMessageHandler)
+    fun removeTcpHandler(handler: TcpMessageHandler)
+    fun addVoiceHandler(handler: VoicePacketHandler)
+    fun removeVoiceHandler(handler: VoicePacketHandler)
 }

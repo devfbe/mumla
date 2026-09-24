@@ -19,18 +19,13 @@
 
 package se.lublin.humla.session
 
-import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaRecorder
 import se.lublin.humla.Constants
 
 /**
- * Everything the audio pipeline is configured with. Immutable; `HumlaService` replaces it on every
- * settings change and [AudioController] rebuilds the pipeline when the value differs - which is
- * what makes structural equality over every field load-bearing (AudioConfigTest pins it).
- *
- * The last eight fields carry the spec 4 EXTRAS_* values for stream B, which reads them in
- * [DefaultAudioHandlerFactory].
+ * Everything the audio pipeline is configured with. Immutable; [AudioController] rebuilds the
+ * pipeline when a new value differs, so structural equality over every field matters.
  */
 data class AudioConfig(
     val audioStream: Int = AudioManager.STREAM_MUSIC,
@@ -42,20 +37,16 @@ data class AudioConfig(
     val transmitMode: Int = Constants.TRANSMIT_VOICE_ACTIVITY,
     val halfDuplexRequested: Boolean = false,
     val preprocessorEnabled: Boolean = false,
-    /**
-     * Whether WebRTC's AEC3 runs. Not a setting any more: `HumlaService` derives it from the
-     * routed device's [AudioDeviceCategory] and the user's override for that kind of device.
-     */
+    /** Whether WebRTC's AEC3 runs; derived by `HumlaService` from the routed device category. */
     val echoCancellation: Boolean = false,
     /**
-     * The `AudioDeviceInfo` type of the communication device [AudioRouter] routes voice to, or null
-     * while the route is the platform's own. More than a bool on purpose (contract 9b, point 15):
-     * playback has to follow any routed device, not only a headset, and SCO is the one route the
-     * pipeline needs to tell apart.
+     * The `AudioDeviceInfo` type of the device [AudioRouter] routes voice to, or null while the
+     * route is the platform's own. A type rather than a flag: playback must follow any routed
+     * device, and SCO needs to be told apart.
      */
     val routedDeviceType: Int? = null,
     val noiseSuppression: String = "none",
-    /** Spec B9: how deep the Speex denoiser may cut. One of the three supported steps. */
+    /** How deep the Speex denoiser may cut, in dB. One of the three supported steps. */
     val speexNoiseSuppressDb: Int = -25,
     val vadMode: String = "amplitude",
     val vadStart: Float = 0.6f,
@@ -64,28 +55,13 @@ data class AudioConfig(
     val androidNoiseSuppressor: Boolean = false,
     val androidAgc: Boolean = false,
 ) {
-    /**
-     * Half duplex only applies to push-to-talk (spec A7).
-     *
-     * The axis that matters is *which* transmit mode the rule reads: this config's, which is the
-     * mode in force. The old `EXTRAS_HALF_DUPLEX` handling read `extras.getInt(EXTRAS_TRANSMIT_MODE)`
-     * of the same bundle, which is 0 - voice activity - whenever that bundle does not also carry the
-     * mode, so a settings write that changed only half duplex always resolved to false.
-     *
-     * Being a `get()` rather than a stored val is not part of that: the value is immutable and
-     * `copy` re-derives, so no test can tell the two apart, and none claims to.
-     */
+    /** Half duplex only applies to push-to-talk, as per this config's transmit mode. */
     val halfDuplex: Boolean get() = halfDuplexRequested && transmitMode == Constants.TRANSMIT_PUSH_TO_TALK
 
-    /** True while a Bluetooth SCO route is the routed communication device. */
-    val bluetoothActive: Boolean get() = routedDeviceType == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-
     /**
-     * The stream the playback track is opened on. [audioStream] is what the client asked for and
-     * holds while nothing is routed; a routed device moves playback to the voice-call stream,
-     * because a media-stream track does not follow the communication device - the earpiece or a
-     * speaker chosen over a plugged-in headset would otherwise stay silent. This generalizes what
-     * `AudioHandler` did for Bluetooth alone. (Mumla itself always asks for the voice-call stream.)
+     * The stream the playback track is opened on: [audioStream] while nothing is routed, the
+     * voice-call stream otherwise, because a media-stream track does not follow the communication
+     * device.
      */
     val playbackStream: Int
         get() = if (routedDeviceType != null) AudioManager.STREAM_VOICE_CALL else audioStream

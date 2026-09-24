@@ -20,21 +20,13 @@ package se.lublin.humla.audio.capture
 import android.media.MediaRecorder
 
 /**
- * Spec B6: `VOICE_COMMUNICATION` source and `MODE_IN_COMMUNICATION` whenever any android audio
- * effect or any echo canceller is active.
+ * Uses the `VOICE_COMMUNICATION` source and `MODE_IN_COMMUNICATION` whenever any Android audio effect
+ * or echo canceller is active. Source and audio mode must agree (an AEC on a `MIC` session in
+ * `MODE_NORMAL` misbehaves on many devices), so [resolve] is defined via [needsCommunicationMode].
  *
- * The two questions have **one** decision between them: [resolve] is written in terms of
- * [needsCommunicationMode] rather than repeating the condition, because the source and the audio
- * mode have to agree -- a canceller attached to a session captured from `MIC` while the manager
- * sits in `MODE_NORMAL` is the configuration every device vendor's AEC documentation warns about,
- * and two copies of one condition drift (spec 4.04, "one bottleneck instead of N entry guards").
- *
- * [EchoCancellationMode.WEBRTC] is in the condition although the canceller is ours: AEC3 aligns a
- * far-end reference against the capture stream, and only the communication path gives the two a
- * shared clock and a fixed, low capture latency. Spec B6 spells it out ("any effect or WebRTC AEC").
- * The cost is in the ledger: `VOICE_COMMUNICATION` also switches on whatever the device's own
- * pre-processing is, which cascades with ours exactly the way spec 4.1 refused to cascade two noise
- * suppressors. Nothing in this repository can measure that without hardware.
+ * WebRTC AEC3 counts too: only the communication path gives capture and playback a shared clock and
+ * fixed low capture latency. Downside: it also enables the device's own pre-processing, which then
+ * runs in front of ours.
  */
 object AudioSourcePolicy {
     @JvmStatic

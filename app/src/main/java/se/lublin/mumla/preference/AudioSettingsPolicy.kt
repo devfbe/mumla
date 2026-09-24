@@ -23,16 +23,11 @@ import se.lublin.humla.audio.capture.VadMode
 /** Which group of voice-gate controls the screen shows. Exactly one is true. */
 data class VadDependents(val adaptive: Boolean, val amplitude: Boolean, val probability: Boolean)
 
-/**
- * The decisions behind `AudioSettingsFragment`, separated from it so they can be tested without a
- * Fragment, an Activity or a window.
- */
+/** The decisions behind `AudioSettingsFragment`, testable without a Fragment. */
 object AudioSettingsPolicy {
     /**
-     * Hidden, not disabled. The three modes compare three quantities that are not comparable -- a
-     * level in dBFS, a speech model's probability, and a fraction of a measured gap -- so a control
-     * left visible in the wrong mode invites the user to calibrate the one that is not in use. The
-     * `when` is exhaustive on purpose: a fourth mode has to be given an answer here.
+     * Hidden, not disabled: the modes' quantities (dBFS, probability, gap fraction) are not
+     * comparable, so a visible control of another mode invites calibrating the wrong one.
      */
     fun vadDependents(mode: VadMode): VadDependents = when (mode) {
         VadMode.ADAPTIVE -> VadDependents(adaptive = true, amplitude = false, probability = false)
@@ -44,6 +39,6 @@ object AudioSettingsPolicy {
     fun manualFloorVisible(mode: VadMode, adaptiveFloor: Boolean): Boolean =
         vadDependents(mode).adaptive && !adaptiveFloor
 
-    /** Spec B9: the Speex depth reaches nothing unless Speex is the denoiser in the chain. */
+    /** The Speex depth only matters when Speex is the denoiser in the chain. */
     fun speexDepthVisible(mode: NoiseSuppressionMode): Boolean = mode == NoiseSuppressionMode.SPEEX
 }

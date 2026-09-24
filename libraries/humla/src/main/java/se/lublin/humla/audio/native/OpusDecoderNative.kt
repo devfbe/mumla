@@ -17,11 +17,21 @@
 
 package se.lublin.humla.audio.native
 
-/** libopus decoder and packet inspection. State handles are `OpusDecoder*`. `data == null` requests PLC. */
+/**
+ * libopus decoder and packet inspection. State handles are opaque; 0 means creation failed.
+ * [decodeFloat] decodes `len` bytes of `data` from `offset`; `data == null` requests PLC.
+ */
 interface OpusDecoderApi {
     fun create(sampleRate: Int, channels: Int, error: IntArray): Long
-    fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int
-    fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int): Int
+    fun decodeFloat(
+        state: Long,
+        data: ByteArray?,
+        offset: Int,
+        len: Int,
+        out: FloatArray,
+        frameSize: Int,
+        decodeFec: Int,
+    ): Int
     fun destroy(state: Long)
     fun packetGetNbFrames(packet: ByteArray, len: Int): Int
     fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int
@@ -29,12 +39,19 @@ interface OpusDecoderApi {
 
 object OpusDecoderNative : OpusDecoderApi {
     init {
-        System.loadLibrary("humla_opus")
+        HumlaNativeLibrary.load()
     }
 
     external override fun create(sampleRate: Int, channels: Int, error: IntArray): Long
-    external override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int): Int
-    external override fun decodeShort(state: Long, data: ByteArray?, len: Int, out: ShortArray, frameSize: Int, decodeFec: Int): Int
+    external override fun decodeFloat(
+        state: Long,
+        data: ByteArray?,
+        offset: Int,
+        len: Int,
+        out: FloatArray,
+        frameSize: Int,
+        decodeFec: Int,
+    ): Int
     external override fun destroy(state: Long)
     external override fun packetGetNbFrames(packet: ByteArray, len: Int): Int
     external override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int

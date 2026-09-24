@@ -1,11 +1,9 @@
 package se.lublin.mumla.channel
 
 import android.content.Context
-import android.os.Bundle
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
@@ -15,32 +13,21 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.TalkState
 import se.lublin.mumla.R
+import se.lublin.mumla.testing.ThemedActivity
 
 /**
- * The overlay's user list has to answer about one state of the channel.
- *
- * `getCount()` and `getItem(position)` each asked the model for the user list of the moment, so a
- * user leaving between the two calls -- which the protocol thread can do at any time -- turned a
- * list row into an IndexOutOfBoundsException. Copy-on-read in the model does not fix that: each
- * call gets a correct copy, of a different moment. The adapter has to hold one.
+ * The overlay's user list answers about one snapshot of the channel: `getCount()` and
+ * `getItem(position)` must not see different moments, or a user leaving between them throws.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelAdapterSnapshotTest {
-
-    class HostActivity : AppCompatActivity() {
-        override fun onCreate(savedInstanceState: Bundle?) {
-            setTheme(R.style.Theme_Mumla)
-            super.onCreate(savedInstanceState)
-        }
-    }
-
     private lateinit var context: Context
     private lateinit var channel: FakeChannel
     private lateinit var users: List<FakeUser>
 
     @Before
     fun setUp() {
-        context = Robolectric.buildActivity(HostActivity::class.java).setup().get()
+        context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
         channel = FakeChannel(0)
         users = (1..3).map { FakeUser(it) }
         users.forEach { channel.addUser(it) }
@@ -108,7 +95,7 @@ class ChannelAdapterSnapshotTest {
 
         assertThat(adapter.getChannel()).isEqualTo(other)
         assertThat(adapter.count).isEqualTo(1)
-        assertThat(adapter.getItem(0)).isEqualTo(other.getUsers()[0])
+        assertThat(adapter.getItem(0)).isEqualTo(other.users[0])
     }
 
     @Test

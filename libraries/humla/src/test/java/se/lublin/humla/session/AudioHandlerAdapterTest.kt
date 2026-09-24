@@ -6,25 +6,20 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.protocol.AudioHandler
 
 /**
- * [AudioHandlerAdapter] is the only place where the real [AudioHandler] is dressed as a
- * [ManagedAudio]. Every member is a delegation, so the thing worth pinning is that each one reaches
- * the handler rather than a default - and that the warning channel, which the handler does not have
- * yet, still carries a message to whoever registered for it (spec A8).
+ * [AudioHandlerAdapter] dresses the real [AudioHandler] as a [ManagedAudio]. Each delegation must
+ * reach the handler rather than a default, and the warning channel must reach whoever registered.
  */
-@RunWith(RobolectricTestRunner::class)
 class AudioHandlerAdapterTest {
     private val handler = mockk<AudioHandler>(relaxed = true)
     private val adapter = AudioHandlerAdapter(handler)
 
     @Test
     fun theProtocolListenersAreTheHandlerItself() {
-        assertThat(adapter.tcpListener).isSameInstanceAs(handler)
-        assertThat(adapter.udpListener).isSameInstanceAs(handler)
+        assertThat(adapter.tcpHandler).isSameInstanceAs(handler)
+        assertThat(adapter.voiceHandler).isSameInstanceAs(handler)
     }
 
     @Test

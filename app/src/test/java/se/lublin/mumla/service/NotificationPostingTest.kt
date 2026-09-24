@@ -14,22 +14,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import se.lublin.humla.model.Channel
-import se.lublin.humla.model.IMessage
-import se.lublin.humla.model.User
 
 /**
- * Pins that both user-visible notifications actually reach the notification manager across the
- * API 33 boundary, where POST_NOTIFICATIONS was introduced.
+ * Both user-visible notifications reach the notification manager across the API 33 boundary.
  *
- * On 31 and 32 -- both inside this app's minSdk -- the platform does not define
- * POST_NOTIFICATIONS, so `Context.checkSelfPermission` answers "denied" for every app.
- * `ContextCompat.checkSelfPermission` is what makes the gate in both notification classes correct
- * there: below 33 it answers with `NotificationManagerCompat.areNotificationsEnabled()` instead of
- * asking the package manager. Replacing it with the platform method silently drops every
- * notification on Android 12 and 12L, so the API 31 cases below deny the permission outright and
- * still expect the notification, and one case turns notifications off to pin that the gate keeps
- * honouring the user's choice rather than posting unconditionally.
+ * On 31 and 32 the platform does not define POST_NOTIFICATIONS, so `Context.checkSelfPermission`
+ * answers "denied"; `ContextCompat.checkSelfPermission` falls back to
+ * `areNotificationsEnabled()`. So the API 31 cases deny the permission and still expect the
+ * notification, and one case turns notifications off to pin that the user's choice is honoured.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 33])
@@ -48,25 +40,13 @@ class NotificationPostingTest {
 
     private fun postedNotifications() = shadowOf(notificationManager).allNotifications
 
-    private val message = object : IMessage {
-        override fun getActor(): Int = 1
-        override fun getActorName(): String = "alice"
-        override fun getTargetChannels(): List<Channel> = emptyList()
-        override fun getTargetTrees(): List<Channel> = emptyList()
-        override fun getTargetUsers(): List<User> = emptyList()
-        override fun getMessage(): String = "hello"
-        override fun getReceivedTime(): Long = 0L
-    }
-
-    private fun showMessage() = MumlaMessageNotification(context).show(message)
+    private fun showMessage() = MumlaMessageNotification(context).show("alice", "hello")
 
     /**
-     * Below API 33 ContextCompat.registerReceiver emulates RECEIVER_NOT_EXPORTED by registering
-     * the receiver behind [DYNAMIC_RECEIVER_PERMISSION] and throws unless the app holds it. A real
-     * install grants it, because androidx.core's own manifest declares it at signature level and
-     * the app signs itself; Robolectric grants no install-time permission at all (it reports even
-     * INTERNET as denied), so the grant is made explicit here. That the merged manifest really
-     * carries the declaration is a separate test.
+     * Below API 33 ContextCompat.registerReceiver emulates RECEIVER_NOT_EXPORTED behind
+     * [DYNAMIC_RECEIVER_PERMISSION] and throws unless the app holds it. A real install grants it
+     * (androidx.core declares it at signature level); Robolectric grants no install-time
+     * permissions, so it is granted here.
      */
     private fun showReconnect(): MumlaReconnectNotification {
         shadowOf(context as Application)
@@ -75,9 +55,8 @@ class NotificationPostingTest {
     }
 
     /**
-     * The declaration comes from androidx.core's own manifest, not from ours. If a future
-     * androidx.core drops it while minSdk is still below 33, MumlaReconnectNotification.show()
-     * starts throwing on Android 12 instead of showing the reconnect prompt.
+     * The declaration comes from androidx.core's manifest. If it disappears while minSdk < 33,
+     * MumlaReconnectNotification.show() throws on Android 12.
      */
     @Test
     fun `the merged manifest declares the permission ContextCompat needs below api 33`() {

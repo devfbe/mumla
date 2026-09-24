@@ -23,13 +23,8 @@ import android.media.AudioTrack
 import se.lublin.humla.exception.AudioInitializationException
 
 /**
- * Blocking 16-bit mono PCM playback, the one hardware edge of the loopback monitor.
- *
- * **Why this lives in the app and not in humla.** The plan gave the playback seam to task B10
- * (`AudioOutput`), and task B10 was cancelled -- `PcmPlaybackSink` does not exist anywhere in the
- * library, which the brief for this task assumed it would. Rather than claim a seam a cancelled
- * task owned, the monitor brings its own: it is a dozen lines, it is only ever used by the settings
- * screen, and if `AudioOutput` is ever rewritten it can take this over without a migration.
+ * Blocking 16-bit mono PCM playback for the settings screen's loopback monitor. Lives in the app
+ * because only the settings screen uses it.
  */
 interface PcmPlaybackSink {
     fun play()

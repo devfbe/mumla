@@ -38,10 +38,6 @@
     <string name="drawer_tokens">Tokens de Acesso</string>
     <string name="drawer_server">Todos os Canais</string>
     <string name="drawer_not_connected">Não Conectado</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d nova mensagem</item>
-        <item quantity="other">%d novas mensagens</item>
-    </plurals>
     <plurals name="search_channel_users">
         <item quantity="one">%d usuário</item>
         <item quantity="other">%d usuários</item>
@@ -53,7 +49,6 @@
 \nVerifique se o aplicativo Orbot está em execução.</string>
     <string name="orbot_not_installed">O aplicativo Orbot não está instalado. Não usando o Tor.</string>
     <string name="grant_perm_draw_over_apps">Por favor, conceda permissão para exibir sobre outros aplicativos.</string>
-    <string name="grant_perm_storage">Por favor, conceda permissão de armazenamento externo.</string>
     <string name="grant_perm_microphone">Por favor, conceda permissão de microfone.</string>
     <string name="export_success">Certificado exportado para %s.</string>
     <string name="error_writing_to_storage">Não foi possível gravar no armazenamento externo.</string>
@@ -61,7 +56,6 @@
     <string name="certificate_load_failed">Não foi possível armazenar o certificado.</string>
     <string name="invalid_certificate">O certificado inválido não pôde ser carregado.</string>
     <string name="password">Senha</string>
-    <string name="certificates">Certificados</string>
     <string name="no_certificate">Nenhum Certificado</string>
     <string name="attempting_reconnect">Erro: %s.
 \n
@@ -103,7 +97,6 @@
     <string name="user">Usuário</string>
     <string name="channel">Canal</string>
     <string name="mumlaDisconnected">Mumla desconectou</string>
-    <string name="mumlaConnected">Mumla conectou</string>
     <string name="mumlaConnecting">Mumla conectando…</string>
     <string name="connected">Conectado</string>
     <string name="online">Disponível</string>
@@ -113,7 +106,6 @@
     <string name="edit">Editar</string>
     <string name="connectToServer">Conectar ao Servidor</string>
     <string name="connect">Conectar</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="searchHint">Pesquisar canais e usuários</string>
     <string name="search">Pesquisar</string>
     <string name="generateCertProgress">Gerando certificado…</string>
@@ -129,7 +121,6 @@
     <string name="disconnect">Desconectar</string>
     <string name="ptt">Pressione para falar</string>
     <string name="connecting_to_server">Conectando a %s…</string>
-    <string name="connecting">Conectando</string>
     <string name="server_host">Endereço</string>
     <string name="server_port">Porta</string>
     <string name="server_username">Nome de usuário</string>
@@ -189,4 +180,13 @@
     <string name="audio_device_bluetooth">Fone de ouvido Bluetooth</string>
     <string name="audio_device_other">Dispositivo de áudio</string>
     <string name="echo_cancellation">Cancelamento de eco</string>
+    <string name="chat_notify_muted_deafened">Silenciado e ensurdecido.</string>
+    <string name="chat_notify_muted">Silenciado.</string>
+    <string name="chat_notify_unmuted">Dessilenciado.</string>
+    <string name="chat_notify_now_muted_deafened">%s agora está mudo e ensurdecido.</string>
+    <string name="chat_notify_now_muted">%s agora está silenciado.</string>
+    <string name="chat_notify_now_unmuted">%s agora está dessilenciado.</string>
+    <string name="chat_notify_connected">%s conectou.</string>
+    <string name="chat_notify_disconnected">%s desconectou.</string>
+    <string name="server">Servidor</string>
 </resources>

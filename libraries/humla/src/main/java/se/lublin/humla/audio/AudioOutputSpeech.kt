@@ -17,13 +17,7 @@
 
 package se.lublin.humla.audio
 
-import java.nio.BufferOverflowException
-import java.nio.BufferUnderflowException
-import java.nio.ByteBuffer
 import java.util.Arrays
-import java.util.Queue
-import java.util.concurrent.Callable
-import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.ceil
 import kotlin.math.sin
 import se.lublin.humla.audio.native.OpusDecoderApi
@@ -33,60 +27,66 @@ import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
-import se.lublin.humla.net.HumlaUDPMessageType
-import se.lublin.humla.net.PacketBuffer
+import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.protocol.AudioHandler
 
 /**
- * Decodes one user's incoming voice stream through a jitter buffer into float PCM.
+ * Decodes one user's incoming Opus stream through a jitter buffer into float PCM. Each [decode]
+ * leaves the next mix in [samples]; it reuses its buffers and allocates nothing per call.
  *
- * [opusApi] and [jitterApi] are the seams JVM tests use to drive the Opus path without native
- * libraries; they default to the `*Native` objects, which load their `.so` on first touch. The
- * CELT and Speex decoders keep their own defaults, so only the Opus codec is testable this way.
+ * [opusApi] and [jitterApi] are the seams JVM tests use to run without native libraries; they
+ * default to the `*Native` objects, which load the native library on first touch.
  */
 class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) constructor(
-    private val user: User,
-    private val codec: HumlaUDPMessageType,
+    val user: User,
     private var requestedSamples: Int,
     private val talkStateListener: TalkStateListener,
     private val opusApi: OpusDecoderApi = OpusDecoderNative,
     jitterApi: SpeexJitterApi = SpeexJitterNative,
-) : Callable<AudioOutputSpeech.Result> {
+) : IAudioMixerSource<FloatArray> {
 
     fun interface TalkStateListener {
         fun onTalkStateUpdated(session: Int, state: TalkState)
     }
 
-    private val decoder: IDecoder
+    private val decoder: IDecoder = OpusDecoder(AudioHandler.SAMPLE_RATE, 1, opusApi)
     private val jitterBuffer: SpeexJitterBuffer
     private val jitterLock = Any()
-    private var audioBufferSize = AudioHandler.FRAME_SIZE
+    private val audioBufferSize = AudioHandler.FRAME_SIZE * 12
 
     // State-specific
     private var buffer: FloatArray
     private val out: FloatArray
     private val fadeOut = FloatArray(AudioHandler.FRAME_SIZE)
     private val fadeIn = FloatArray(AudioHandler.FRAME_SIZE)
-    private val frames: Queue<ByteBuffer> = ConcurrentLinkedQueue()
+
+    /** A packet on its way into the jitter buffer; guarded by [jitterLock]. */
+    private val ingestBytes = ByteArray(MAX_PACKET_BYTES)
+
+    /** The packet taken out of the jitter buffer: an opus frame of [frameLength] bytes, then the trailer. */
+    private val packetBytes = ByteArray(MAX_PACKET_BYTES)
+    private var hasFrame = false
+    private var frameLength = 0
+
+    /** The volume adjustment of the last packet taken; concealed frames keep it. */
+    private var frameVolume = 1f
+
     private var missCount = 0
     private var hasTerminator = false
     private var lastAlive = true
+
+    /** Whether the stream is still alive after the mix being decoded. */
+    private var nextAlive = true
     private var bufferFilled = 0
     private var lastConsume = 0
     private var ucFlags = 0
+    private var reportedState: TalkState? = null
+
+    override val samples: FloatArray get() = buffer
+    override var numSamples: Int = 0
+        private set
 
     init {
-        decoder = when (codec) {
-            HumlaUDPMessageType.UDPVoiceOpus -> {
-                audioBufferSize *= 12
-                OpusDecoder(AudioHandler.SAMPLE_RATE, 1, opusApi)
-            }
-            HumlaUDPMessageType.UDPVoiceCELTBeta -> CELT11Decoder(AudioHandler.SAMPLE_RATE, 1)
-            HumlaUDPMessageType.UDPVoiceCELTAlpha -> CELT7Decoder(AudioHandler.SAMPLE_RATE, AudioHandler.FRAME_SIZE, 1)
-            HumlaUDPMessageType.UDPVoiceSpeex -> SpeexDecoder()
-            else -> throw NativeAudioException("No decoder for codec $codec")
-        }
-
         // Larger initial buffer so we can save performance by not resizing at runtime.
         buffer = FloatArray(audioBufferSize * 2)
         out = FloatArray(audioBufferSize)
@@ -103,48 +103,36 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
         jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_SET_MARGIN, 10 * AudioHandler.FRAME_SIZE)
     }
 
-    fun addFrameToBuffer(pb: PacketBuffer, flags: Byte, seq: Int) {
-        if (pb.capacity() < 2) return
+    /**
+     * Queues the Opus packet of [packet] in the jitter buffer, with its terminator flag and volume
+     * adjustment behind it and its context as the user data. Called on the network thread.
+     */
+    fun addFrameToBuffer(packet: VoicePacket) {
+        val length = packet.opusLength
+        if (length <= 0 || length + TRAILER_BYTES > ingestBytes.size) return
 
         synchronized(jitterLock) {
-            try {
-                var samples = 0
-                if (codec == HumlaUDPMessageType.UDPVoiceOpus) {
-                    val header = pb.readLong()
-                    val size = (header and ((1L shl 13) - 1)).toInt()
-                    if (size > 0) {
-                        val data = pb.dataBlock(size)
-                        if (data.size != size) return
-                        val frameCount = opusApi.packetGetNbFrames(data, size)
-                        samples = frameCount * opusApi.packetGetSamplesPerFrame(data, AudioHandler.SAMPLE_RATE)
-                    } else {
-                        return
-                    }
-                } else {
-                    try {
-                        var header: Int
-                        do {
-                            header = pb.next()
-                            samples += AudioHandler.FRAME_SIZE
-                            pb.skip(header and 0x7f)
-                        } while ((header and 0x80) > 0)
-                    } catch (e: BufferUnderflowException) {
-                        // reached end of buffer
-                    }
-                }
-                pb.rewind()
-
-                val size = pb.left()
-                val data = pb.dataBlock(size)
-                jitterBuffer.put(data, size, AudioHandler.FRAME_SIZE * seq, samples, 0, flags.toInt())
-            } catch (e: BufferOverflowException) {
-                e.printStackTrace()
+            System.arraycopy(packet.data, packet.opusOffset, ingestBytes, 0, length)
+            val frameCount = opusApi.packetGetNbFrames(ingestBytes, length)
+            if (frameCount <= 0) return
+            val samples = frameCount * opusApi.packetGetSamplesPerFrame(ingestBytes, AudioHandler.SAMPLE_RATE)
+            val volumeBits = packet.volumeAdjustment.toRawBits()
+            for (i in 0 until Int.SIZE_BYTES) {
+                ingestBytes[length + i] = (volumeBits ushr (Byte.SIZE_BITS * (Int.SIZE_BYTES - 1 - i))).toByte()
             }
+            ingestBytes[length + Int.SIZE_BYTES] = if (packet.isTerminator) 1 else 0
+            val timestamp = AudioHandler.FRAME_SIZE * packet.frameNumber.toInt()
+            jitterBuffer.put(ingestBytes, length + TRAILER_BYTES, timestamp, samples, 0, packet.context)
         }
     }
 
-    @Throws(Exception::class)
-    override fun call(): Result {
+    /**
+     * Decodes the next mix into [samples] ([numSamples] valid). Called on the playback thread only.
+     *
+     * @return false once the stream has ended and the previous mix was its last; the caller then
+     *   destroys this instance.
+     */
+    fun decode(): Boolean {
         if (bufferFilled - lastConsume > 0) {
             // Shift over the remaining unconsumed data in the buffer.
             System.arraycopy(buffer, lastConsume, buffer, 0, bufferFilled - lastConsume)
@@ -152,145 +140,149 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
         bufferFilled -= lastConsume
         lastConsume = requestedSamples
 
-        if (bufferFilled >= requestedSamples) return Result(this, lastAlive, buffer, bufferFilled)
+        if (bufferFilled >= requestedSamples) {
+            numSamples = bufferFilled
+            return lastAlive
+        }
 
-        var nextAlive = lastAlive
-
+        nextAlive = lastAlive
         while (bufferFilled < requestedSamples) {
-            var decodedSamples = AudioHandler.FRAME_SIZE
             resizeBuffer(bufferFilled + audioBufferSize)
-
-            if (!lastAlive) {
-                Arrays.fill(out, 0f)
+            val decodedSamples = if (lastAlive) {
+                decodeFrame()
             } else {
-                val (ts, availPackets) = synchronized(jitterLock) {
-                    jitterBuffer.pointerTimestamp to
-                        jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT, 0).toFloat()
-                }
-
-                // Make sure that we have enough packets in the jitter buffer before we even begin
-                // decoding, based on the average # of packets available. Prevents a metallic
-                // 'twang' when the user starts talking, caused by buffer underrun. The official
-                // Mumble project uses the same technique.
-                if (ts == 0) {
-                    val want = ceil(user.averageAvailable.toDouble()).toInt()
-                    if (availPackets < want) {
-                        missCount++
-                        if (missCount < 20) {
-                            Arrays.fill(out, 0f)
-                            System.arraycopy(out, 0, buffer, bufferFilled, decodedSamples)
-                            bufferFilled += decodedSamples
-                            continue
-                        }
-                    }
-                }
-
-                if (frames.isEmpty()) {
-                    val packetBytes = ByteArray(4096)
-                    val jbp = synchronized(jitterLock) { jitterBuffer.get(packetBytes, AudioHandler.FRAME_SIZE) }
-
-                    if (jbp.status == SpeexJitterNative.JITTER_BUFFER_OK) {
-                        val pb = PacketBuffer(packetBytes, jbp.length)
-
-                        missCount = 0
-                        ucFlags = jbp.userData
-                        hasTerminator = false
-                        try {
-                            if (codec == HumlaUDPMessageType.UDPVoiceOpus) {
-                                val header = pb.readLong()
-                                val size = (header and ((1L shl 13) - 1)).toInt()
-                                hasTerminator = (header and (1L shl 13)) > 0
-                                frames.add(pb.bufferBlock(size))
-                            } else {
-                                var header: Int
-                                do {
-                                    header = pb.next()
-                                    val size = header and 0x7f
-                                    if (header > 0) {
-                                        frames.add(pb.bufferBlock(size))
-                                    } else {
-                                        hasTerminator = true
-                                    }
-                                } while ((header and 0x80) > 0)
-                            }
-                        } catch (e: BufferOverflowException) {
-                            e.printStackTrace()
-                        } catch (e: BufferUnderflowException) {
-                            e.printStackTrace()
-                        }
-
-                        if (availPackets >= user.averageAvailable) {
-                            user.averageAvailable = availPackets
-                        } else {
-                            user.averageAvailable = user.averageAvailable * 0.99f
-                        }
-                    } else {
-                        synchronized(jitterLock) { jitterBuffer.updateDelay() }
-                        missCount++
-                        if (missCount > 10) nextAlive = false
-                    }
-                }
-
-                try {
-                    if (!frames.isEmpty()) {
-                        val data = frames.poll()
-                        decodedSamples = decoder.decodeFloat(data, data.limit(), out, audioBufferSize)
-                        if (frames.isEmpty()) {
-                            synchronized(jitterLock) { jitterBuffer.updateDelay() }
-                        }
-                        if (frames.isEmpty() && hasTerminator) nextAlive = false
-                    } else {
-                        decodedSamples = decoder.decodeFloat(null, 0, out, AudioHandler.FRAME_SIZE)
-                    }
-                } catch (e: NativeAudioException) {
-                    e.printStackTrace()
-                    decodedSamples = AudioHandler.FRAME_SIZE
-                }
-
-                if (!nextAlive) {
-                    for (i in 0 until AudioHandler.FRAME_SIZE) out[i] *= fadeOut[i]
-                } else if (ts == 0) {
-                    for (i in 0 until AudioHandler.FRAME_SIZE) out[i] *= fadeIn[i]
-                }
-
-                synchronized(jitterLock) {
-                    repeat(decodedSamples / AudioHandler.FRAME_SIZE) { jitterBuffer.tick() }
-                }
+                Arrays.fill(out, 0f)
+                AudioHandler.FRAME_SIZE
             }
-
             System.arraycopy(out, 0, buffer, bufferFilled, decodedSamples)
             bufferFilled += decodedSamples
         }
 
-        if (!nextAlive) ucFlags = 0xFF
-
-        val talkState = when (ucFlags) {
-            0 -> TalkState.TALKING
-            1 -> TalkState.SHOUTING
-            0xFF -> TalkState.PASSIVE
-            else -> TalkState.WHISPERING
-        }
-        talkStateListener.onTalkStateUpdated(user.session, talkState)
+        if (!nextAlive) ucFlags = PASSIVE_FLAGS
+        reportTalkState()
 
         val tmp = lastAlive
         lastAlive = nextAlive
-        return Result(this, tmp, buffer, requestedSamples)
+        numSamples = requestedSamples
+        return tmp
+    }
+
+    /** Decodes (or conceals) the next frame into [out]; returns the number of samples. */
+    private fun decodeFrame(): Int {
+        val ts: Int
+        val availPackets: Float
+        synchronized(jitterLock) {
+            ts = jitterBuffer.pointerTimestamp
+            availPackets =
+                jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_GET_AVAILABLE_COUNT, 0).toFloat()
+        }
+
+        // Make sure that we have enough packets in the jitter buffer before we even begin
+        // decoding, based on the average # of packets available. Prevents a metallic 'twang' when
+        // the user starts talking, caused by buffer underrun. The official Mumble project uses the
+        // same technique.
+        if (ts == 0 && availPackets < ceil(user.averageAvailable.toDouble()).toInt()) {
+            missCount++
+            if (missCount < 20) {
+                Arrays.fill(out, 0f)
+                return AudioHandler.FRAME_SIZE
+            }
+        }
+
+        if (!hasFrame) fetchFrame(availPackets)
+
+        val decodedSamples = try {
+            if (hasFrame) {
+                hasFrame = false
+                val decoded = decoder.decodeFloat(packetBytes, 0, frameLength, out, audioBufferSize)
+                synchronized(jitterLock) { jitterBuffer.updateDelay() }
+                if (hasTerminator) nextAlive = false
+                decoded
+            } else {
+                decoder.decodeFloat(null, 0, 0, out, AudioHandler.FRAME_SIZE)
+            }
+        } catch (e: NativeAudioException) {
+            e.printStackTrace()
+            AudioHandler.FRAME_SIZE
+        }
+
+        val gain = user.localVolume * frameVolume
+        if (gain != 1f) {
+            for (i in 0 until decodedSamples) out[i] *= gain
+        }
+
+        if (!nextAlive) {
+            for (i in 0 until AudioHandler.FRAME_SIZE) out[i] *= fadeOut[i]
+        } else if (ts == 0) {
+            for (i in 0 until AudioHandler.FRAME_SIZE) out[i] *= fadeIn[i]
+        }
+
+        synchronized(jitterLock) {
+            repeat(decodedSamples / AudioHandler.FRAME_SIZE) { jitterBuffer.tick() }
+        }
+        return decodedSamples
+    }
+
+    /** Takes the next packet out of the jitter buffer, or counts a miss. */
+    private fun fetchFrame(availPackets: Float) {
+        val status = synchronized(jitterLock) { jitterBuffer.get(packetBytes, AudioHandler.FRAME_SIZE) }
+        if (status == SpeexJitterNative.JITTER_BUFFER_OK) {
+            missCount = 0
+            ucFlags = jitterBuffer.packetUserData
+            takeFrame(jitterBuffer.packetLength)
+
+            if (availPackets >= user.averageAvailable) {
+                user.averageAvailable = availPackets
+            } else {
+                user.averageAvailable = user.averageAvailable * 0.99f
+            }
+        } else {
+            synchronized(jitterLock) { jitterBuffer.updateDelay() }
+            missCount++
+            if (missCount > 10) nextAlive = false
+        }
+    }
+
+    private fun reportTalkState() {
+        // Like desktop Mumble: audio heard through a channel listener, or in an unknown context,
+        // shows as plain talking.
+        val talkState = when (ucFlags) {
+            PASSIVE_FLAGS -> TalkState.PASSIVE
+            VoicePacket.CONTEXT_SHOUT -> TalkState.SHOUTING
+            VoicePacket.CONTEXT_WHISPER -> TalkState.WHISPERING
+            else -> TalkState.TALKING
+        }
+        if (talkState != reportedState) {
+            reportedState = talkState
+            talkStateListener.onTalkStateUpdated(user.session, talkState)
+        }
+    }
+
+    /** Takes the frame and trailer out of the first [length] bytes of [packetBytes]. */
+    private fun takeFrame(length: Int) {
+        hasTerminator = false
+        if (length <= TRAILER_BYTES || length > packetBytes.size) return
+        frameLength = length - TRAILER_BYTES
+        var volumeBits = 0
+        for (i in 0 until Int.SIZE_BYTES) {
+            volumeBits = (volumeBits shl Byte.SIZE_BITS) or (packetBytes[frameLength + i].toInt() and BYTE_MASK)
+        }
+        frameVolume = Float.fromBits(volumeBits)
+        hasTerminator = packetBytes[length - 1].toInt() != 0
+        hasFrame = true
     }
 
     private fun resizeBuffer(newSize: Int) {
         if (newSize > buffer.size) buffer = Arrays.copyOf(buffer, newSize)
     }
 
-    /** Sets the preferred number of samples to return when the callable is executed. */
+    /** Sets the number of samples each [decode] prepares. */
     fun setRequestedSamples(samples: Int) {
         requestedSamples = samples
     }
 
-    fun getCodec(): HumlaUDPMessageType = codec
-
-    fun getUser(): User = user
-
-    fun getSession(): Int = user.session
+    val session: Int
+        get() = user.session
 
     /** Cleans up all native resources linked to this instance. MUST be called eventually. */
     fun destroy() {
@@ -298,16 +290,15 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
         jitterBuffer.destroy()
     }
 
-    /** The outcome of a decoding pass. */
-    class Result internal constructor(
-        private val speechOutput: AudioOutputSpeech,
-        private val alive: Boolean,
-        private val samples: FloatArray,
-        private val numSamples: Int,
-    ) : IAudioMixerSource<FloatArray> {
-        fun getSpeechOutput(): AudioOutputSpeech = speechOutput
-        fun isAlive(): Boolean = alive
-        override fun getSamples(): FloatArray = samples
-        override fun getNumSamples(): Int = numSamples
+    private companion object {
+        /** Larger than any voice packet the jitter buffer holds. */
+        const val MAX_PACKET_BYTES = 4096
+
+        /** Behind the opus frame in the jitter buffer: the volume adjustment (float bits) and the terminator flag. */
+        const val TRAILER_BYTES = Int.SIZE_BYTES + 1
+
+        /** The user data after the stream ended. */
+        const val PASSIVE_FLAGS = 0xFF
+        const val BYTE_MASK = 0xFF
     }
 }

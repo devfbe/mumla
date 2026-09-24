@@ -22,7 +22,6 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.net.ConnectivityManager
-import android.os.Bundle
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
@@ -40,42 +39,21 @@ import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ConnectionWarning
 import se.lublin.humla.session.AudioConfig
+import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.testutil.EventRecorder
+import se.lublin.humla.testutil.HumlaServiceHarness
+import se.lublin.humla.testutil.onEvents
 import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.HumlaException
-import se.lublin.humla.util.HumlaObserver
 import java.util.concurrent.TimeUnit
 
 /**
- * Characterization of [HumlaService] as it behaves **before** the Kotlin conversion (task A9a).
+ * Characterization of [HumlaService] without a live connection: lifecycle, configuration, and the
+ * disconnected arm of the session API.
  *
- * This file exists for one purpose and has one rule: **it is written against the Java service,
- * run green against it, and then run again, unchanged, against the Kotlin one.** A test written
- * after the conversion describes what the conversion produced, not what was there before, and
- * characterizes nothing. Every statement below was therefore committed before `HumlaService.kt`
- * existed.
- *
- * Two consequences for how it is written:
- *
- * - **Every accessor is called as a function, never as a Kotlin synthetic property.**
- *   `service.getConnectionState()`, not `service.connectionState`; `service.isTalking()`, not
- *   `service.isTalking`. A Java getter can be reached either way, a getter *declared in Kotlin*
- *   only as a property, and a Kotlin function only as a call — so the call form is the only form
- *   that compiles against both, and it is what forces the conversion to keep these members
- *   functions rather than turning them into `val`s. (Turning one into a `val` is also how spec
- *   §4.05's `var`/`setX` platform clash gets in: `IHumlaSession` declares `isTalking()` and
- *   `setTalkingState(boolean)` as methods.)
- * - **Assertions are about observable results, not about the shape of the code.** Where the
- *   observable is a value written into an object the service does not own — the fifteen
- *   `AudioHandler.Builder` setters, the threshold on [ActivityInputMode] — it is read back by
- *   reflection over that object's fields, because those objects have no getters. Spec §4.04's
- *   effect pass: for every call into a foreign object, name the test that reads the result back.
- *   Fifteen one-line delegations are exactly what a diff-derived mutation list omits.
- *
- * What this file deliberately does **not** cover: everything that needs a live connection
- * (`onConnectionEstablished`, `onConnectionSynchronized`, `createAudioHandler`, the SCO reload
- * paths, and every `IHumlaSession` call in its *connected* arm). Reaching `CONNECTED` from a
- * Robolectric service means opening a socket to a real server. Those paths are characterized here
- * only in their disconnected arm, which is the arm the conversion can break silently.
+ * Accessors are called as functions (`getConnectionState()`), not as properties, so that they
+ * stay functions. Values written into objects without getters are read back by reflection.
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceCharacterizationTest {
@@ -89,80 +67,36 @@ class HumlaServiceCharacterizationTest {
         return controller.get()
     }
 
-    // ---------------------------------------------------------------- reflection helpers
-
-    /** Reads a private field by name, walking up the hierarchy. The field names are the contract. */
-    private fun field(target: Any, name: String): Any? {
-        var c: Class<*>? = target.javaClass
-        while (c != null) {
-            try {
-                return c.getDeclaredField(name).apply { isAccessible = true }.get(target)
-            } catch (e: NoSuchFieldException) {
-                c = c.superclass
-            }
-        }
-        throw AssertionError("no field $name on ${target.javaClass}")
-    }
-
-    /** The input mode in force. Task A9b replaced `mAudioBuilder.mInputMode` with this field. */
-    private fun inputMode(service: HumlaService): Any = field(service, "mInputMode")!!
-
-    /** Writes a private field by name. Used only to reach a state the public API cannot produce. */
-    private fun setField(target: Any, name: String, value: Any?) {
-        var c: Class<*>? = target.javaClass
-        while (c != null) {
-            try {
-                c.getDeclaredField(name).apply { isAccessible = true }.set(target, value)
-                return
-            } catch (e: NoSuchFieldException) {
-                c = c.superclass
-            }
-        }
-        throw AssertionError("no field $name on ${target.javaClass}")
-    }
+    /** The input mode in force. */
+    private fun inputMode(service: HumlaService): Any = service.mInputMode
 
     /**
-     * A service whose only observer cancels every connection attempt from inside `onConnecting`.
-     * `onConnecting` is delivered inline on the handler's own thread, so the cancellation lands
-     * before `HumlaConnection.connect` opens anything - the trick
-     * [HumlaServiceConnectCancellationTest] uses, and the only way to drive `connect()` in a unit
-     * test without a socket.
+     * A service that cancels every connection attempt on `Connecting`, which a main-thread
+     * collector sees inline, so `connect()` can be driven without opening a socket.
      */
     private fun cancellingService(): HumlaService = service().also { service ->
-        service.registerObserver(object : HumlaObserver() {
-            override fun onConnecting() = service.disconnect()
-        })
+        service.onEvents { if (it == HumlaEvent.Connecting) service.disconnect() }
     }
 
     private fun connectivityManager() = RuntimeEnvironment.getApplication()
         .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    @Suppress("DEPRECATION")
-    private fun sendConnectivityBroadcast() {
-        RuntimeEnvironment.getApplication()
-            .sendBroadcast(Intent(ConnectivityManager.CONNECTIVITY_ACTION))
-        shadowOf(Looper.getMainLooper()).idle()
-    }
-
     // ---------------------------------------------------------------- lifecycle and initial state
 
-    /**
-     * The brief's first characterization: a freshly created service is disconnected and has no
-     * session. `HumlaSession()` is the gate the whole binder API sits behind.
-     */
+    /** A fresh service is disconnected and has no session; `session` gates the binder API. */
     @Test
     fun startsDisconnectedWithoutSession() {
         val service = service()
 
-        assertThat(service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
-        assertThat(service.isConnected()).isFalse()
-        assertThat(service.isReconnecting()).isFalse()
-        assertThat(service.getConnectionError()).isNull()
+        assertThat(service.connectionState).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
+        assertThat(service.isConnected).isFalse()
+        assertThat(service.isReconnecting).isFalse()
+        assertThat(service.connectionError).isNull()
         assertThat(service.getConnection()).isNull()
-        assertThat(service.getTargetServer()).isNull()
+        assertThat(service.targetServer).isNull()
         assertThat(service.isSynchronized()).isFalse()
         assertThat(service.isConnectionEstablished()).isFalse()
-        assertThrows(HumlaDisconnectedException::class.java) { service.HumlaSession() }
+        assertThrows(HumlaDisconnectedException::class.java) { service.session }
     }
 
     /** onCreate's own defaults, before any extra is applied. */
@@ -170,22 +104,14 @@ class HumlaServiceCharacterizationTest {
     fun startsWithVoiceActivityTransmitAndNoVoiceTarget() {
         val service = service()
 
-        assertThat(service.getTransmitMode()).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
-        assertThat(service.getVoiceTargetId()).isEqualTo(0.toByte())
-        assertThat(service.getVoiceTargetMode()).isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
-        assertThat(service.getWhisperTarget()).isNull()
-        assertThat(service.isTalking()).isFalse()
+        assertThat(service.transmitMode).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
+        assertThat(service.voiceTargetId).isEqualTo(0.toByte())
+        assertThat(service.voiceTargetMode).isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
+        assertThat(service.whisperTarget).isNull()
+        assertThat(service.isTalking).isFalse()
     }
 
-    /**
-     * **Gone with `BluetoothScoReceiver` (task A9b).** The service no longer registers a broadcast
-     * receiver for `ACTION_SCO_AUDIO_STATE_UPDATED`; the route goes through `AudioRouter` over
-     * `CommunicationDevices`, which is the API this module's minSdk of 31 has, and the listener is
-     * registered on the platform's `AudioManager` instead of on the broadcast registry. The
-     * lifetime property is pinned by
-     * `HumlaServiceBluetoothTest.destroyingTheServiceReleasesTheRouteAndTheListener`, and this test
-     * asserts what is left of it here: that nothing registers that broadcast any more.
-     */
+    /** SCO state comes from `AudioRouter`, not from an `ACTION_SCO_AUDIO_STATE_UPDATED` receiver. */
     @Test
     fun noScoBroadcastReceiverIsRegisteredAnyMore() {
         val controller = Robolectric.buildService(HumlaService::class.java).create()
@@ -198,10 +124,7 @@ class HumlaServiceCharacterizationTest {
         assertThat(scoReceivers).isEmpty()
     }
 
-    /**
-     * Effect pass: the wake lock is built in `onCreate` with a fixed tag and is *not* taken until
-     * synchronization. A conversion that acquires it earlier keeps the CPU awake forever.
-     */
+    /** The wake lock is built in `onCreate` but not taken until synchronization. */
     @Test
     fun theWakeLockIsCreatedUnheldWithTheHumlaTag() {
         service()
@@ -222,212 +145,70 @@ class HumlaServiceCharacterizationTest {
         assertThat(binder.getService()).isSameInstanceAs(service)
     }
 
-    // ---------------------------------------------------------------- onStartCommand input space
+    // ---------------------------------------------------------------- start and configure
 
-    /**
-     * The four corners of `onStartCommand`'s input: intent present or not, extras present or not,
-     * action CONNECT or not, and — under CONNECT — EXTRAS_SERVER present or not. Spec §4.04: for a
-     * compound condition over k inputs the requirement is 2^k inputs, not k mutations.
-     */
+    /** A start command only keeps the service started; connecting goes through the binder. */
     @Test
-    fun aStartCommandWithoutAnIntentDoesNothingAndIsNotSticky() {
+    fun aStartCommandNeitherConfiguresNorConnectsAndIsNotSticky() {
         val service = service()
 
-        assertThat(service.onStartCommand(null, 0, 0)).isEqualTo(Service.START_NOT_STICKY)
+        for (intent in listOf(null, Intent(), Intent().setAction("se.lublin.humla.CONNECT"))) {
+            assertThat(service.onStartCommand(intent, 0, 0)).isEqualTo(Service.START_NOT_STICKY)
+        }
         assertThat(service.getConnection()).isNull()
-        assertThat(service.getTargetServer()).isNull()
+        assertThat(service.targetServer).isNull()
     }
 
+    /** The configured server is the one connected to, and the state is CONNECTING on `Connecting`. */
     @Test
-    fun anIntentWithoutExtrasConfiguresNothingAndIsNotSticky() {
-        val service = service()
-
-        assertThat(service.onStartCommand(Intent(), 0, 0)).isEqualTo(Service.START_NOT_STICKY)
-        assertThat(service.getTargetServer()).isNull()
-    }
-
-    @Test
-    fun anIntentWithExtrasButNoConnectActionOnlyConfigures() {
-        val service = service()
-        val intent = Intent().putExtra(HumlaService.EXTRAS_SERVER, server)
-
-        assertThat(service.onStartCommand(intent, 0, 0)).isEqualTo(Service.START_NOT_STICKY)
-
-        assertThat(service.getTargetServer()!!.host).isEqualTo("127.0.0.1")
-        assertThat(service.getConnection()).isNull()
-    }
-
-    @Test
-    fun aConnectActionWithoutAServerExtraThrows() {
-        val service = service()
-        val intent = Intent().setAction(HumlaService.ACTION_CONNECT)
-
-        val e = assertThrows(RuntimeException::class.java) { service.onStartCommand(intent, 0, 0) }
-
-        assertThat(e).hasMessageThat().contains("requires a server provided in extras")
-    }
-
-    @Test
-    fun aConnectActionWithExtrasThatCarryNoServerThrowsToo() {
-        val service = service()
-        val intent = Intent().setAction(HumlaService.ACTION_CONNECT)
-            .putExtra(HumlaService.EXTRAS_AUTO_RECONNECT, true)
-
-        assertThrows(RuntimeException::class.java) { service.onStartCommand(intent, 0, 0) }
-    }
-
-    /**
-     * The ordering inside `onStartCommand`: the extras are applied *before* `connect()` reads them,
-     * which is the only reason CONNECT-with-a-server works at all. The observer cancels the attempt
-     * from inside `onConnecting` so that nothing opens a socket — the same trick
-     * `HumlaServiceConnectCancellationTest` uses, and it doubles as the characterization that
-     * `mConnectionState` is already CONNECTING when that callback runs.
-     */
-    @Test
-    fun aConnectActionAppliesTheExtrasBeforeItConnects() {
+    fun connectUsesTheConfiguredServer() {
         val service = service()
         val stateInsideOnConnecting = mutableListOf<HumlaService.ConnectionState>()
         val serverInsideOnConnecting = mutableListOf<String?>()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onConnecting() {
-                stateInsideOnConnecting += service.getConnectionState()
-                serverInsideOnConnecting += service.getTargetServer()?.host
+        service.onEvents {
+            if (it == HumlaEvent.Connecting) {
+                stateInsideOnConnecting += service.connectionState
+                serverInsideOnConnecting += service.targetServer?.host
                 service.disconnect()
             }
-        })
-        val intent = Intent().setAction(HumlaService.ACTION_CONNECT)
-            .putExtra(HumlaService.EXTRAS_SERVER, server)
+        }
 
-        service.onStartCommand(intent, 0, 0)
+        service.configure(SessionConfig(server = server))
+        service.connect()
 
         assertThat(stateInsideOnConnecting).containsExactly(HumlaService.ConnectionState.CONNECTING)
         assertThat(serverInsideOnConnecting).containsExactly("127.0.0.1")
         assertThat(service.getConnection()).isNotNull()
     }
 
-    // ---------------------------------------------------------------- configureExtras
-
-    /**
-     * Which extras demand a reconnect, as a table over **every** EXTRAS_ constant the class
-     * declares — enumerated by reflection, not written out. Spec §4.04 handle 2, "pin the set, not
-     * the member": an extra added later fails this test until someone decides which half it is in.
-     */
+    /** Every audio setting lands in its [AudioConfig] field; the VAD config reaches a live object instead. */
     @Test
-    fun exactlyTheseExtrasRequireAReconnect() {
-        val reconnectNeeded = mapOf(
-            HumlaService.EXTRAS_SERVER to true,
-            HumlaService.EXTRAS_AUTO_RECONNECT to false,
-            HumlaService.EXTRAS_AUTO_RECONNECT_DELAY to false,
-            HumlaService.EXTRAS_CERTIFICATE to true,
-            HumlaService.EXTRAS_CERTIFICATE_PASSWORD to true,
-            HumlaService.EXTRAS_DETECTION_THRESHOLD to false,
-            HumlaService.EXTRAS_AMPLITUDE_BOOST to false,
-            HumlaService.EXTRAS_TRANSMIT_MODE to false,
-            HumlaService.EXTRAS_INPUT_RATE to false,
-            HumlaService.EXTRAS_INPUT_QUALITY to false,
-            HumlaService.EXTRAS_USE_OPUS to true,
-            HumlaService.EXTRAS_USE_TOR to true,
-            HumlaService.EXTRAS_FORCE_TCP to true,
-            HumlaService.EXTRAS_CLIENT_NAME to true,
-            HumlaService.EXTRAS_ACCESS_TOKENS to false,
-            HumlaService.EXTRAS_AUDIO_SOURCE to false,
-            HumlaService.EXTRAS_AUDIO_STREAM to false,
-            HumlaService.EXTRAS_FRAMES_PER_PACKET to false,
-            HumlaService.EXTRAS_TRUST_STORE to true,
-            HumlaService.EXTRAS_TRUST_STORE_PASSWORD to true,
-            HumlaService.EXTRAS_TRUST_STORE_FORMAT to true,
-            HumlaService.EXTRAS_HALF_DUPLEX to false,
-            HumlaService.EXTRAS_LOCAL_MUTE_HISTORY to true,
-            HumlaService.EXTRAS_LOCAL_IGNORE_HISTORY to true,
-            HumlaService.EXTRAS_ENABLE_PREPROCESSOR to false,
-            HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE to false,
-            HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD to false,
-            HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB to false,
-            HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR to false,
-            HumlaService.EXTRAS_ANDROID_AGC to false,
-            HumlaService.EXTRAS_VAD_CONFIG to false,
-            HumlaService.EXTRAS_BLUETOOTH_WANTED to false,
-            HumlaService.EXTRAS_EARPIECE_BY_DEFAULT to false,
-        )
-
-        assertThat(declaredExtraKeys()).containsExactlyElementsIn(reconnectNeeded.keys)
-
-        for ((key, expected) in reconnectNeeded) {
-            val service = service()
-            assertThat(service.configureExtras(bundleFor(key))).isEqualTo(expected)
-        }
-    }
-
-    /** Every `EXTRAS_*` constant on HumlaService, by reflection, so the table above cannot go stale. */
-    private fun declaredExtraKeys(): Set<String> = HumlaService::class.java.declaredFields
-        .filter { it.name.startsWith("EXTRAS_") && it.type == String::class.java }
-        .map { it.apply { isAccessible = true }.get(null) as String }
-        .toSet()
-
-    /** One bundle carrying one key, with a value of the type `configureExtras` reads it back as. */
-    private fun bundleFor(key: String): Bundle = Bundle().apply {
-        when (key) {
-            HumlaService.EXTRAS_SERVER -> putParcelable(key, server)
-            HumlaService.EXTRAS_CERTIFICATE -> putByteArray(key, byteArrayOf(1, 2, 3))
-            HumlaService.EXTRAS_ACCESS_TOKENS -> putStringArrayList(key, arrayListOf("token"))
-            HumlaService.EXTRAS_LOCAL_MUTE_HISTORY -> putIntegerArrayList(key, arrayListOf(7))
-            HumlaService.EXTRAS_LOCAL_IGNORE_HISTORY -> putIntegerArrayList(key, arrayListOf(8))
-            HumlaService.EXTRAS_DETECTION_THRESHOLD -> putFloat(key, 0.25f)
-            HumlaService.EXTRAS_AMPLITUDE_BOOST -> putFloat(key, 1.5f)
-            HumlaService.EXTRAS_TRANSMIT_MODE -> putInt(key, Constants.TRANSMIT_CONTINUOUS)
-            HumlaService.EXTRAS_AUTO_RECONNECT_DELAY -> putInt(key, 5000)
-            HumlaService.EXTRAS_INPUT_RATE -> putInt(key, 48000)
-            HumlaService.EXTRAS_INPUT_QUALITY -> putInt(key, 40000)
-            HumlaService.EXTRAS_AUDIO_SOURCE -> putInt(key, 7)
-            HumlaService.EXTRAS_AUDIO_STREAM -> putInt(key, 3)
-            HumlaService.EXTRAS_FRAMES_PER_PACKET -> putInt(key, 4)
-            HumlaService.EXTRAS_AUTO_RECONNECT,
-            HumlaService.EXTRAS_USE_OPUS,
-            HumlaService.EXTRAS_USE_TOR,
-            HumlaService.EXTRAS_FORCE_TCP,
-            HumlaService.EXTRAS_HALF_DUPLEX,
-            HumlaService.EXTRAS_BLUETOOTH_WANTED,
-            HumlaService.EXTRAS_EARPIECE_BY_DEFAULT,
-            HumlaService.EXTRAS_ENABLE_PREPROCESSOR -> putBoolean(key, true)
-            HumlaService.EXTRAS_ECHO_CANCELLATION_BY_DEVICE ->
-                putBundle(key, Bundle().apply { putBoolean("SPEAKER", false) })
-            else -> putString(key, "value-for-$key")
-        }
-    }
-
-    /**
-     * Effect pass over every extra that configures audio. Task A9b replaced the
-     * `AudioHandler.Builder` the service used to hold with an immutable [AudioConfig]; the setters
-     * this test used to read back by reflection are now `DefaultAudioHandlerFactory.builder`'s and
-     * are pinned there, so what is left here is the mapping this file owns - bundle key to config
-     * field, fourteen of them, plus the two that write into live objects instead.
-     */
-    @Test
-    fun everyAudioExtraLandsInTheAudioConfig() {
+    fun everyAudioSettingLandsInTheAudioConfig() {
         val service = service()
-        val extras = Bundle().apply {
-            putFloat(HumlaService.EXTRAS_AMPLITUDE_BOOST, 1.5f)
-            putInt(HumlaService.EXTRAS_INPUT_RATE, 48000)
-            putInt(HumlaService.EXTRAS_INPUT_QUALITY, 40000)
-            putInt(HumlaService.EXTRAS_AUDIO_SOURCE, 7)
-            putInt(HumlaService.EXTRAS_AUDIO_STREAM, 3)
-            putInt(HumlaService.EXTRAS_FRAMES_PER_PACKET, 4)
-            putBoolean(HumlaService.EXTRAS_ENABLE_PREPROCESSOR, true)
-            putString(HumlaService.EXTRAS_NOISE_SUPPRESSION_METHOD, "rnnoise")
-            putInt(HumlaService.EXTRAS_SPEEX_NOISE_SUPPRESS_DB, -40)
-            putBoolean(HumlaService.EXTRAS_ANDROID_NOISE_SUPPRESSOR, true)
-            putBoolean(HumlaService.EXTRAS_ANDROID_AGC, true)
-            putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK)
-            putBoolean(HumlaService.EXTRAS_HALF_DUPLEX, true)
-        }
 
-        service.configureExtras(extras)
+        service.configure(
+            SessionConfig(
+                amplitudeBoost = 1.5f,
+                inputSampleRate = 16_000,
+                inputQuality = 24_000,
+                audioSource = 7,
+                audioStream = 3,
+                framesPerPacket = 4,
+                preprocessorEnabled = true,
+                noiseSuppressionMethod = "rnnoise",
+                speexNoiseSuppressDb = -40,
+                androidNoiseSuppressor = true,
+                androidAgc = true,
+                transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+                halfDuplex = true,
+            )
+        )
 
         assertThat(service.getAudioConfigForTest()).isEqualTo(
             AudioConfig(
                 amplitudeBoost = 1.5f,
-                inputSampleRate = 48000,
-                targetBitrate = 40000,
+                inputSampleRate = 16_000,
+                targetBitrate = 24_000,
                 audioSource = 7,
                 audioStream = 3,
                 targetFramesPerPacket = 4,
@@ -440,15 +221,12 @@ class HumlaServiceCharacterizationTest {
                 halfDuplexRequested = true,
             )
         )
-        // The fields no extra writes: the route decides them, not a setting.
-        assertThat(service.getAudioConfigForTest().bluetoothActive).isFalse()
+        // The fields no setting writes: the route decides them.
+        assertThat(service.getAudioConfigForTest().routedDeviceType).isNull()
         assertThat(service.getAudioConfigForTest().echoCancellation).isFalse()
     }
 
-    /**
-     * The transmit mode picks one of the three input modes the service owns, by identity, and a
-     * fourth value is refused. Four arms, one test each side of the `switch`.
-     */
+    /** The transmit mode picks one of the three input modes by identity; a fourth value is refused. */
     @Test
     fun theTransmitModeSelectsTheInputModeByIdentity() {
         val expected = mapOf(
@@ -459,125 +237,50 @@ class HumlaServiceCharacterizationTest {
 
         for ((mode, type) in expected) {
             val service = service()
-            service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, mode) })
+            service.configure(SessionConfig(transmitMode = mode))
 
-            assertThat(service.getTransmitMode()).isEqualTo(mode)
+            assertThat(service.transmitMode).isEqualTo(mode)
             assertThat(inputMode(service)).isInstanceOf(type)
         }
     }
 
     @Test
-    fun anUnknownTransmitModeIsRefused() {
+    fun anUnknownTransmitModeIsRefusedAndChangesNothing() {
         val service = service()
 
         assertThrows(IllegalArgumentException::class.java) {
-            service.configureExtras(Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, 99) })
+            service.configure(SessionConfig(transmitMode = 99, server = server))
         }
+        assertThat(service.sessionConfig).isEqualTo(SessionConfig())
     }
 
-    /**
-     * The chosen input mode is the *same instance* the service answers `isTalking()` from, not a
-     * fresh one: the toggle the audio thread consults is the toggle a key press writes.
-     */
+    /** The chosen input mode is the instance `isTalking()` reads, not a fresh copy. */
     @Test
     fun thePushToTalkModeHandedToTheAudioPipelineIsTheOneIsTalkingReads() {
         val service = service()
-        service.configureExtras(
-            Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK) }
-        )
+        service.configure(SessionConfig(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK))
 
         service.setTalkingState(true)
 
         val mode = inputMode(service) as ToggleInputMode
         assertThat(mode.isTalkingOn()).isTrue()
-        assertThat(service.isTalking()).isTrue()
+        assertThat(service.isTalking).isTrue()
     }
 
-    /** Effect pass: the detection threshold is written into the service's own ActivityInputMode. */
+    /** Access tokens are kept even with no connection to send them on; nothing throws. */
     @Test
-    fun theDetectionThresholdReachesTheActivityInputMode() {
+    fun accessTokensAreKeptWithoutAConnection() {
         val service = service()
 
-        service.configureExtras(Bundle().apply { putFloat(HumlaService.EXTRAS_DETECTION_THRESHOLD, 0.25f) })
+        assertThat(service.configure(SessionConfig(accessTokens = listOf("a", "b")))).isFalse()
 
-        val mode = field(service, "mActivityInputMode") as ActivityInputMode
-        assertThat(mode.vadConfig.startThreshold).isEqualTo(0.25f)
-    }
-
-    /**
-     * `mUseTor` and `mForceTcp` accumulate with `|=`: Tor turns TCP on, and neither flag can be
-     * turned off again by a later write of `false`. Four corners over the two booleans, read back
-     * through the fields, because nothing else exposes them until a connection is built.
-     */
-    @Test
-    fun torForcesTcpAndNeitherFlagCanBeClearedAgain() {
-        val service = service()
-
-        service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_FORCE_TCP, false) })
-        assertThat(field(service, "mForceTcp")).isEqualTo(false)
-
-        service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_USE_TOR, true) })
-        assertThat(field(service, "mUseTor")).isEqualTo(true)
-        assertThat(field(service, "mForceTcp")).isEqualTo(true)
-
-        // Neither `false` takes: the writes are `|=`, not `=`.
-        service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_FORCE_TCP, false) })
-        assertThat(field(service, "mForceTcp")).isEqualTo(true)
-
-        service.configureExtras(Bundle().apply { putBoolean(HumlaService.EXTRAS_USE_TOR, false) })
-        assertThat(field(service, "mUseTor")).isEqualTo(false)
-        assertThat(field(service, "mForceTcp")).isEqualTo(true)
-    }
-
-    /**
-     * **Repaired in task A9b; the test that pinned the defect is now
-     * `HumlaServiceAudioTest.halfDuplexOnlyAppliesToPushToTalk`.** Half duplex used to read
-     * `EXTRAS_TRANSMIT_MODE` out of **the same bundle**, which answers 0 - voice activity - when
-     * the bundle does not carry it, so a settings write that changed only the half-duplex flag
-     * always resolved to false. `AudioConfig.halfDuplex` reads the mode in force instead.
-     */
-    /** The brief's third characterization: a transmit mode change is visible without a reconnect. */
-    @Test
-    fun transmitModeExtraIsReflectedImmediately() {
-        val service = service()
-        val extras = Bundle().apply {
-            putInt(HumlaService.EXTRAS_TRANSMIT_MODE, Constants.TRANSMIT_PUSH_TO_TALK)
-        }
-
-        assertThat(service.configureExtras(extras)).isFalse()
-        assertThat(service.getTransmitMode()).isEqualTo(Constants.TRANSMIT_PUSH_TO_TALK)
-    }
-
-    /** The brief's second characterization: the server extra lands and demands a reconnect. */
-    @Test
-    fun serverExtraRequiresAReconnect() {
-        val service = service()
-        val extras = Bundle().apply { putParcelable(HumlaService.EXTRAS_SERVER, server) }
-
-        assertThat(service.configureExtras(extras)).isTrue()
-        assertThat(service.getTargetServer()!!.host).isEqualTo("127.0.0.1")
-    }
-
-    /** Access tokens are stored even with no connection to send them on; nothing throws. */
-    @Test
-    fun accessTokensAreStoredWithoutAConnection()  {
-        val service = service()
-
-        assertThat(
-            service.configureExtras(
-                Bundle().apply {
-                    putStringArrayList(HumlaService.EXTRAS_ACCESS_TOKENS, arrayListOf("a", "b"))
-                }
-            )
-        ).isFalse()
-
-        assertThat(field(service, "mAccessTokens")).isEqualTo(listOf("a", "b"))
+        assertThat(service.sessionConfig.accessTokens).isEqualTo(listOf("a", "b"))
     }
 
     // ---------------------------------------------------------------- disconnection
 
     /**
-     * `onConnectionDisconnected` over its input space: the error, its reason, and `mAutoReconnect`.
+     * `onConnectionDisconnected` over its input space: the error, its reason, and `autoReconnect`.
      * Four corners decide whether the service goes reconnecting; the state itself is decided by the
      * error alone.
      */
@@ -585,42 +288,34 @@ class HumlaServiceCharacterizationTest {
     fun aCleanDisconnectGoesToDisconnectedAndNeverReconnects() {
         for (autoReconnect in listOf(false, true)) {
             val service = service()
-            service.configureExtras(
-                Bundle().apply { putBoolean(HumlaService.EXTRAS_AUTO_RECONNECT, autoReconnect) }
-            )
+            service.configure(SessionConfig(autoReconnect = autoReconnect))
 
             service.onConnectionDisconnected(null)
 
-            assertThat(service.getConnectionState())
+            assertThat(service.connectionState)
                 .isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
-            assertThat(service.isReconnecting()).isFalse()
+            assertThat(service.isReconnecting).isFalse()
         }
     }
 
-    /**
-     * **Moved to `HumlaServiceSessionTest` (task A9b), same four corners.** It used to reach the
-     * reconnecting state on a service that had never connected, because `setReconnecting` was a
-     * field write. `SessionStateMachine.lost()` returns the current state when there was no
-     * session, so a disconnect report with nothing to report no longer starts a reconnect - the
-     * corner is now driven over a real session, which is also the only shape the app produces.
-     */
-    /** The error object reaches the observer unchanged, and the state is already set when it does. */
+    /** The error object reaches collectors unchanged, and the state is already set when it does. */
     @Test
     fun theDisconnectReportCarriesTheSameErrorAndAStateThatIsAlreadySet() {
-        val service = service()
+        val h = HumlaServiceHarness()
+        h.connectAndSynchronize()
+        val service = h.service
         val error = HumlaException("gone", HumlaException.HumlaDisconnectReason.REJECT)
         val seen = mutableListOf<Pair<HumlaException?, HumlaService.ConnectionState>>()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onDisconnected(e: HumlaException?) {
-                seen += e to service.getConnectionState()
-            }
-        })
+        service.onEvents {
+            if (it is HumlaEvent.Disconnected) seen += it.error to service.connectionState
+        }
 
         service.onConnectionDisconnected(error)
 
         assertThat(seen).hasSize(1)
         assertThat(seen[0].first).isSameInstanceAs(error)
         assertThat(seen[0].second).isEqualTo(HumlaService.ConnectionState.CONNECTION_LOST)
+        h.destroy()
     }
 
     /** A disconnect drops the voice target and empties the whisper slots. */
@@ -630,139 +325,73 @@ class HumlaServiceCharacterizationTest {
 
         service.onConnectionDisconnected(null)
 
-        assertThat(service.getVoiceTargetId()).isEqualTo(0.toByte())
-        assertThat(service.getWhisperTarget()).isNull()
+        assertThat(service.voiceTargetId).isEqualTo(0.toByte())
+        assertThat(service.whisperTarget).isNull()
     }
-
-    /**
-     * **Deleted (task A9b), and it was worth nothing before that.** `aDisconnectHaltsBluetoothSco`
-     * called `AudioManager.startBluetoothSco()` and then asserted `isBluetoothScoOn` was false
-     * after a disconnect - but Robolectric's `ShadowAudioManager` never sets that flag from
-     * `startBluetoothSco()`, so the assertion was true whatever the service did. Measured in A9a's
-     * sweep: deleting the `stopBluetoothSco()` call from the service left it green. Spec 4.04's
-     * fake case, a dimension closed by the double rather than by the code.
-     *
-     * What replaced it, against a seam that can express the dimension:
-     * `HumlaServiceBluetoothTest.aUserDisconnectReleasesTheRouteAndKeepsTheWish` and
-     * `bluetoothScoIsRestartedAfterAReconnect`.
-     */
-
-    // ---------------------------------------------------------------- reconnect and connectivity
-
-    /**
-     * **Eight tests lived here and are now in `HumlaServiceSessionTest` (task A9b).** They drove
-     * `setReconnecting(boolean)` - the field write A9b replaced with `SessionStateMachine` - and
-     * they reached it on a service that had never connected, which the state machine refuses:
-     * a loss with nothing to lose is not a loss. Every corner they enumerated is still enumerated,
-     * one test per corner, over a real session on fake transports:
-     *
-     * - the four corners of (disconnect reason x EXTRAS_AUTO_RECONNECT) ->
-     *   `onlyAConnectionErrorWithAutoReconnectOnStartsReconnecting`
-     * - polling with connectivity -> `aReconnectWithConnectivityPollsAfterTheBackoffDelay`, now
-     *   against the backoff rather than EXTRAS_AUTO_RECONNECT_DELAY, which A9b accepts and ignores
-     * - waiting for the network without it -> `aReconnectWithoutConnectivityWaitsForTheNetworkInstead`
-     * - the receiver's two guards -> `theConnectivityReceiverReconnectsOnlyWhenTheNetworkIsBack`
-     *   and `aBroadcastThatArrivesAfterTheSessionEndedUnregistersTheReceiver`
-     * - `cancelReconnect`, both arms -> `cancelReconnectStopsTheTimerAndEndsTheSession` and
-     *   `cancellingAReconnectThatNeverStartedIsHarmless`
-     * - the idempotence of `setReconnecting(true)` -> gone with the method. The transition table
-     *   that replaced it is pinned by `SessionStateMachineTest`.
-     * - a retry without a target server, which used to crash on the looper, is now a reported
-     *   failure -> `aConnectWithoutATargetServerReportsAFailureInsteadOfCrashing`.
-     */
-    private fun connectivityReceivers() = shadowOf(RuntimeEnvironment.getApplication())
-        .registeredReceivers
-        .filter {
-            @Suppress("DEPRECATION")
-            it.intentFilter.hasAction(ConnectivityManager.CONNECTIVITY_ACTION)
-        }
 
     // ---------------------------------------------------------------- logging
 
-    /**
-     * `logInfo` is dropped before synchronization; `logWarning` and `logError` are not. Three
-     * methods of one interface, one guard, and the guard is on exactly one of them.
-     */
+    /** `logInfo` is dropped before synchronization; `logWarning` and `logError` are not. */
     @Test
     fun onlyInfoLoggingIsSuppressedBeforeSynchronization() {
         val service = service()
-        val infos = mutableListOf<String?>()
-        val warnings = mutableListOf<String?>()
-        val errors = mutableListOf<String?>()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onLogInfo(message: String?) { infos += message }
-            override fun onLogWarning(message: String?) { warnings += message }
-            override fun onLogError(message: String?) { errors += message }
-        })
+        val recorder = EventRecorder(service)
 
         service.logInfo("info")
         service.logWarning("warning")
         service.logError("error")
 
-        assertThat(infos).isEmpty()
-        assertThat(warnings).containsExactly("warning")
-        assertThat(errors).containsExactly("error")
+        assertThat(recorder.of<HumlaEvent.LogMessage>()).containsExactly(
+            HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, "warning"),
+            HumlaEvent.LogMessage(HumlaEvent.Level.ERROR, "error"),
+        ).inOrder()
     }
 
-    /**
-     * Effect pass: a connection warning is resolved to a string *here*, through this service's
-     * resources, and delivered as a warning. The connection raises the enum precisely because it
-     * has no Context (see [ConnectionWarning]); this is the other end of that split.
-     */
+    /** Chat log notices follow the same rule: info waits for synchronization, warnings do not. */
+    @Test
+    fun onlyInfoNoticesAreSuppressedBeforeSynchronization() {
+        val service = service()
+        val recorder = EventRecorder(service)
+
+        service.emit(HumlaEvent.UserJoinedServer("Ann"))
+        service.emit(HumlaEvent.SelfKicked("Mod", "spam", ban = false))
+        service.emit(HumlaEvent.UserConnected(se.lublin.humla.model.User(2, "Ann")))
+
+        assertThat(recorder.events.map { it::class }).containsExactly(
+            HumlaEvent.SelfKicked::class,
+            HumlaEvent.UserConnected::class,
+        ).inOrder()
+    }
+
+    /** A [ConnectionWarning] is resolved to a string through this service's resources. */
     @Test
     fun aConnectionWarningIsResolvedAgainstTheServicesResources() {
         val service = service()
-        val warnings = mutableListOf<String?>()
-        service.registerObserver(object : HumlaObserver() {
-            override fun onLogWarning(message: String?) { warnings += message }
-        })
+        val recorder = EventRecorder(service)
 
         service.onConnectionWarning(ConnectionWarning.UDP_UNAVAILABLE)
 
+        val warnings = recorder.of<HumlaEvent.LogMessage>().map { it.text }
         assertThat(warnings)
             .containsExactly(service.getString(ConnectionWarning.UDP_UNAVAILABLE.messageRes))
         assertThat(warnings[0]).isNotEmpty()
     }
 
-    /** An unregistered observer hears nothing further. */
+    /** A cancelled collector hears nothing further. */
     @Test
-    fun anUnregisteredObserverStopsHearingWarnings() {
+    fun aCancelledCollectorStopsHearingWarnings() {
         val service = service()
-        val warnings = mutableListOf<String?>()
-        val observer = object : HumlaObserver() {
-            override fun onLogWarning(message: String?) { warnings += message }
-        }
-        service.registerObserver(observer)
+        val recorder = EventRecorder(service)
         service.logWarning("first")
 
-        service.unregisterObserver(observer)
+        recorder.job.cancel()
         service.logWarning("second")
 
-        assertThat(warnings).containsExactly("first")
+        assertThat(recorder.of<HumlaEvent.LogMessage>().map { it.text }).containsExactly("first")
     }
 
     // ---------------------------------------------------------------- voice targets
 
-    /** The brief's fourth characterization: a voice target id must fit in five bits. */
-    @Test
-    fun voiceTargetIdMustFitInFiveBits() {
-        val service = service()
-
-        assertThrows(IllegalArgumentException::class.java) { service.setVoiceTargetId(0x20) }
-    }
-
-    /**
-     * **Both defects this pinned are repaired in task A9b.**
-     *
-     * 1. The guard was `(targetId & ~0x1F) > 0`, not `!= 0`: for a *negative* byte the masked
-     *    value is negative too, so `0x80` passed a check that says "at most 5 bits". It is `!= 0`
-     *    now, and `HumlaServiceAudioTest.aVoiceTargetIdThatDoesNotFitInFiveBitsIsRefused` walks
-     *    0x20, 0x80 and 0xFF through it.
-     * 2. `mAudioHandler` was dereferenced unconditionally, so setting a voice target while
-     *    disconnected threw NullPointerException. It goes to [se.lublin.humla.session.AudioController]
-     *    now, which posts and drops it when no pipeline is up -
-     *    `HumlaServiceAudioTest.aVoiceTargetSetWhileDisconnectedIsHarmless`.
-     */
     /** Freeing a slot that was never taken is harmless, and whispering is off while disconnected. */
     @Test
     fun unregisteringAWhisperTargetThatWasNeverRegisteredIsHarmless() {
@@ -770,86 +399,65 @@ class HumlaServiceCharacterizationTest {
 
         service.unregisterWhisperTarget(3)
 
-        assertThat(service.getWhisperTarget()).isNull()
-        assertThat(service.getVoiceTargetMode())
+        assertThat(service.whisperTarget).isNull()
+        assertThat(service.voiceTargetMode)
             .isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
     }
 
     // ---------------------------------------------------------------- the session API, disconnected
 
-    /**
-     * Which exception each session call throws while the service is disconnected — and it is **not**
-     * one answer. The calls that go through `getConnection()` dereference a null field and throw
-     * **NullPointerException**; the calls that go through `getModelHandler()`, `getAudioHandler()`
-     * or `getBluetoothReceiver()` get a `NotSynchronizedException`, which those methods catch and
-     * rethrow as **IllegalStateException**; and two are not implemented at all.
-     *
-     * This is the single most conversion-fragile thing in the file. Replacing `getConnection()` with
-     * a `requireConnection()` that throws `IllegalStateException` — the obvious Kotlin tidy-up, and
-     * what the task brief's own listing does — changes eleven of these answers at once, silently,
-     * and `IHumlaService`'s own documentation ("any call that depends on connection state will throw
-     * IllegalStateException if disconnected") makes the change look like a fix rather than a change.
-     * It is a change: it is behaviour A9b may take, with a reason, and A9a may not.
-     */
+    /** Every session call fails with the same, explicit error while disconnected. */
     @Test
-    fun everySessionCallThrowsItsOwnExceptionWhileDisconnected() {
+    fun everySessionCallThrowsIllegalStateWhileDisconnected() {
         val service = service()
-        val npe: Class<out Throwable> = NullPointerException::class.java
-        val ise: Class<out Throwable> = IllegalStateException::class.java
 
-        val calls = listOf<Triple<String, Class<out Throwable>, () -> Unit>>(
-            // via getConnection(): a null dereference.
-            Triple("getTCPLatency", npe) { service.getTCPLatency() },
-            Triple("getUDPLatency", npe) { service.getUDPLatency() },
-            Triple("getMaxBandwidth", npe) { service.getMaxBandwidth() },
-            Triple("getServerVersion", npe) { service.getServerVersion() },
-            Triple("getServerRelease", npe) { service.getServerRelease() },
-            Triple("getServerOSName", npe) { service.getServerOSName() },
-            Triple("getServerOSVersion", npe) { service.getServerOSVersion() },
-            Triple("getSessionId", npe) { service.getSessionId() },
-            Triple("getCodec", npe) { service.getCodec() },
-            Triple("moveUserToChannel", npe) { service.moveUserToChannel(1, 2) },
-            Triple("joinChannel", npe) { service.joinChannel(2) },
-            Triple("createChannel", npe) { service.createChannel(0, "n", "d", 0, false) },
-            Triple("sendAccessTokens", npe) { service.sendAccessTokens(listOf("t")) },
-            Triple("requestPermissions", npe) { service.requestPermissions(0) },
-            Triple("requestComment", npe) { service.requestComment(1) },
-            Triple("requestAvatar", npe) { service.requestAvatar(1) },
-            Triple("requestChannelDescription", npe) { service.requestChannelDescription(0) },
-            Triple("registerUser", npe) { service.registerUser(1) },
-            Triple("kickBanUser", npe) { service.kickBanUser(1, "r", false) },
-            Triple("setUserComment", npe) { service.setUserComment(1, "c") },
-            Triple("setPrioritySpeaker", npe) { service.setPrioritySpeaker(1, true) },
-            Triple("removeChannel", npe) { service.removeChannel(1) },
-            Triple("setMuteDeafState", npe) { service.setMuteDeafState(1, true, false) },
-            Triple("setSelfMuteDeafState", npe) { service.setSelfMuteDeafState(true, false) },
-            // via getModelHandler(): NotSynchronized, rewrapped.
-            Triple("getSessionUser", ise) { service.getSessionUser() },
-            Triple("getSessionChannel", ise) { service.getSessionChannel() },
-            Triple("getUser", ise) { service.getUser(1) },
-            Triple("getChannel", ise) { service.getChannel(1) },
-            Triple("getRootChannel", ise) { service.getRootChannel() },
-            Triple("getPermissions", ise) { service.getPermissions() },
-            Triple("getServerSettings", ise) { service.getServerSettings() },
-            Triple("sendUserTextMessage", ise) { service.sendUserTextMessage(1, "m") },
-            Triple("sendChannelTextMessage", ise) { service.sendChannelTextMessage(1, "m", false) },
-            // not implemented at all.
-            Triple("requestBanList", UnsupportedOperationException::class.java) { service.requestBanList() },
-            Triple("requestUserList", UnsupportedOperationException::class.java) { service.requestUserList() },
+        val calls = listOf<Pair<String, () -> Unit>>(
+            "getTCPLatency" to { service.tcpLatency },
+            "getUDPLatency" to { service.udpLatency },
+            "getMaxBandwidth" to { service.maxBandwidth },
+            "getServerVersion" to { service.serverVersion },
+            "getServerRelease" to { service.serverRelease },
+            "getServerOSName" to { service.serverOSName },
+            "getServerOSVersion" to { service.serverOSVersion },
+            "getSessionId" to { service.sessionId },
+            "getCodec" to { service.codec },
+            "moveUserToChannel" to { service.moveUserToChannel(1, 2) },
+            "joinChannel" to { service.joinChannel(2) },
+            "createChannel" to { service.createChannel(0, "n", "d", 0, false) },
+            "sendAccessTokens" to { service.sendAccessTokens(listOf("t")) },
+            "requestPermissions" to { service.requestPermissions(0) },
+            "requestComment" to { service.requestComment(1) },
+            "requestAvatar" to { service.requestAvatar(1) },
+            "requestChannelDescription" to { service.requestChannelDescription(0) },
+            "registerUser" to { service.registerUser(1) },
+            "kickBanUser" to { service.kickBanUser(1, "r", false) },
+            "setUserComment" to { service.setUserComment(1, "c") },
+            "setPrioritySpeaker" to { service.setPrioritySpeaker(1, true) },
+            "removeChannel" to { service.removeChannel(1) },
+            "setMuteDeafState" to { service.setMuteDeafState(1, true, false) },
+            "setSelfMuteDeafState" to { service.setSelfMuteDeafState(true, false) },
+            "getSessionUser" to { service.sessionUser },
+            "getSessionChannel" to { service.sessionChannel },
+            "getUser" to { service.getUser(1) },
+            "getChannel" to { service.getChannel(1) },
+            "getRootChannel" to { service.rootChannel },
+            "getPermissions" to { service.permissions },
+            "getServerSettings" to { service.serverSettings },
+            "sendUserTextMessage" to { service.sendUserTextMessage(1, "m") },
+            "sendChannelTextMessage" to { service.sendChannelTextMessage(1, "m", false) },
         )
 
-        val wrong = calls.mapNotNull { (name, expected, call) ->
+        val wrong = calls.mapNotNull { (name, call) ->
             val thrown = try {
                 call()
                 null
             } catch (t: Throwable) {
                 t
             }
-            when {
-                thrown == null -> "$name threw nothing, expected ${expected.simpleName}"
-                !expected.isInstance(thrown) ->
-                    "$name threw ${thrown.javaClass.simpleName}, expected ${expected.simpleName}"
-                else -> null
+            when (thrown) {
+                null -> "$name threw nothing"
+                is IllegalStateException -> null
+                else -> "$name threw ${thrown.javaClass.simpleName}"
             }
         }
 
@@ -861,22 +469,19 @@ class HumlaServiceCharacterizationTest {
     fun theSessionCallsThatDoNotDependOnAConnectionStillAnswer() {
         val service = service()
 
-        assertThat(service.getTransmitMode()).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
-        assertThat(service.isTalking()).isFalse()
-        assertThat(service.getVoiceTargetId()).isEqualTo(0.toByte())
-        assertThat(service.getVoiceTargetMode())
+        assertThat(service.transmitMode).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
+        assertThat(service.isTalking).isFalse()
+        assertThat(service.voiceTargetId).isEqualTo(0.toByte())
+        assertThat(service.voiceTargetMode)
             .isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
-        assertThat(service.getWhisperTarget()).isNull()
+        assertThat(service.whisperTarget).isNull()
         service.setTalkingState(true)
-        assertThat(service.isTalking()).isTrue()
-        // Task A9b: the pipeline is asynchronous, so "connected" and "a pipeline is up" are no
-        // longer the same statement. This answers -1 where it used to throw IllegalStateException.
-        assertThat(service.getCurrentBandwidth()).isEqualTo(-1)
-        // Task A9b: the Bluetooth wish outlives every session, so asking for it outside one is a
-        // question with an answer. All three threw IllegalStateException while disconnected before,
-        // by way of a getBluetoothReceiver() that demanded synchronization.
+        assertThat(service.isTalking).isTrue()
+        // The pipeline is asynchronous: -1 while none is up.
+        assertThat(service.currentBandwidth).isEqualTo(-1)
+        // The Bluetooth wish outlives every session, so these answer while disconnected.
         assertThat(service.usingBluetoothSco()).isFalse()
-        assertThat(service.isBluetoothScoActive()).isFalse()
+        assertThat(service.isBluetoothScoActive).isFalse()
         service.enableBluetoothSco()
         assertThat(service.usingBluetoothSco()).isTrue()
         service.disableBluetoothSco()

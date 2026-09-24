@@ -21,13 +21,15 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="horizontal"
               android:layout_width="match_parent"
-              android:layout_height="match_parent"
+              android:layout_height="wrap_content"
+              android:background="?attr/selectableItemBackground"
               android:padding="8dp">
 
     <ImageView
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:id="@+id/drawer_item_icon"
+            android:importantForAccessibility="no"
             app:srcCompat="@drawable/ic_action_user_dark"
             android:padding="4dp"/>
 
@@ -37,9 +39,9 @@
             android:text="@string/action_settings"
             android:id="@+id/drawer_item_title"
             android:gravity="center_vertical"
-            android:layout_marginLeft="8dp"
+            android:layout_marginStart="8dp"
             android:textSize="16sp"
             android:fontFamily="sans-serif-light"
-            android:textColor="?android:textColorPrimaryInverse"
+            android:textColor="?attr/colorOnSurface"
             android:layout_weight="1"/>
 </LinearLayout>

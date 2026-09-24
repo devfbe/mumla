@@ -1,0 +1,58 @@
+/*
+ * Copyright (C) 2014 Andrew Comminos
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+package se.lublin.mumla.servers
+
+import android.util.Log
+import se.lublin.humla.model.Server
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
+import java.nio.ByteBuffer
+
+/** Pings Mumble servers over UDP. [ping] blocks for up to a second, so call it off the main thread. */
+class ServerPinger(private val createSocket: () -> DatagramSocket = { DatagramSocket() }) {
+
+    /** Returns [server]'s ping reply, or a dummy response when there is none. */
+    fun ping(server: Server): ServerInfoResponse = try {
+        val request = ByteBuffer.allocate(REQUEST_SIZE).putInt(0).putLong(server.id).array()
+        val requestPacket = DatagramPacket(
+            request, request.size, InetAddress.getByName(server.srvHost), server.srvPort,
+        )
+        createSocket().use { socket ->
+            socket.soTimeout = TIMEOUT_MS
+            socket.receiveBufferSize = 1024
+            val startTime = System.nanoTime()
+            socket.send(requestPacket)
+            val reply = ByteArray(REPLY_SIZE)
+            socket.receive(DatagramPacket(reply, reply.size))
+            val latencyMs = ((System.nanoTime() - startTime) / 1_000_000).toInt()
+            ServerInfoResponse(server, reply, latencyMs).also {
+                Log.d(TAG, "Server version: ${it.versionString} Users: ${it.currentUsers}/${it.maximumUsers}")
+            }
+        }
+    } catch (e: Exception) {
+        ServerInfoResponse()
+    }
+
+    private companion object {
+        const val TAG = "ServerPinger"
+        const val REQUEST_SIZE = 12
+        const val REPLY_SIZE = 24
+        const val TIMEOUT_MS = 1000
+    }
+}

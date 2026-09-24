@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="preprocessor_enabled_sum">Ortam gürültüsünü bastırır ve ses seviyesini normalleştirir.</string>
     <string name="halfDuplex">Tek yönlü ses</string>
     <string name="pressKeyInfo">Bunu kullanmak için uygulamanın açık olması gerekir (Android kısıtlamaları nedeniyle).</string>
     <string name="loadImagesSum">Sohbette resimleri indirir ve gösterir.</string>
@@ -42,8 +41,6 @@
     <string name="certificateGenerate">Sertifika oluştur</string>
     <string name="pttSettings">Bas konuş ayarları</string>
     <string name="voiceActivitySettings">Ses etkinliği ayarları</string>
-    <string name="disableOpus">Opus kod çözücüden kaçın</string>
-    <string name="disableOpusSum">Mumble 1.2.4 sunucuları için Opus desteğini kapatın.</string>
     <string name="hidePtt">Bas konuş düğmesini gizle</string>
     <string name="useTts">Metin okuma</string>
     <string name="shortTtsMessages">Kısaltılmış metin okuma mesajları</string>
@@ -59,7 +56,6 @@
     <string name="halfDuplexSum">Ses döngülerini/geri bildirimi önlemek için bas konuş sırasında diğer oynatımları sessize alır.</string>
     <string name="pttSound">Bas konuş sesi</string>
     <string name="pttSoundSum">Bas konuş düğmesine basıldığında ses efekti oynat.</string>
-    <string name="preprocessor_enabled">Giriş ön işlemesi</string>
     <string name="stay_awake">Uyanık kal</string>
     <string name="stay_awake_sum">Mumla açıkken ekranı açık tutar.</string>
     <string name="pref_certificate_summary">Bir sunucuya bağlanırken kullanılacak öntanımlı olan.</string>
@@ -77,7 +73,6 @@
     <string name="pttKeySum">Sesi iletmek için fiziksel bir düğme kullanın.</string>
     <string name="hotCorner">Bas konuş köşesi</string>
     <string name="hotCornerSum">Android genelinde sesi iletmek için bir ekran köşesine basın.</string>
-    <string name="themeSum">Uygulamanın görünümünü değiştirin.</string>
     <string name="audio">Ses</string>
     <string name="audioSampleRate">Giriş örnekleme hızı</string>
     <string name="audioSampleRateSum">Tercih edilen ses örnekleme hızı. Bazı aygıtlar daha az hızı destekler.</string>
@@ -120,7 +115,6 @@
     <string name="vadFloorSum">Eşiğin ölçüldüğü oda seviyesi, tam ölçeğin altında dB olarak. Yalnızca \"Arka plan gürültüsünü izle\" kapalıyken kullanılır.</string>
     <string name="vadRecalibrate">Yeniden ölç</string>
     <string name="vadRecalibrateSum">Oda ve sesiniz hakkında öğrenilenleri unutur ve ölçüme baştan başlar.</string>
-    <string name="vadRecalibrateDone">Yeniden ölçülüyor.</string>
     <string name="vadOnset">Kısa sesleri yok say</string>
     <string name="vadOnsetSum">Bir sesin konuşma sayılması için ne kadar sürmesi gerektiği. Uzun ayarlar tek tük klavye tıklamalarını dışarıda tutar; her adım bir kelimenin başından 10 ms alır.</string>
     <string name="vadOnsetOff">Kapalı (0 ms)</string>

@@ -6,7 +6,6 @@
     <string name="server_port">Tawwurt</string>
     <string name="server_host">Tansa</string>
     <string name="server_label">Tabzimt</string>
-    <string name="connecting">Itteqqen</string>
     <string name="ptt">Sit akken ad temmeslayeḍ</string>
     <string name="mute">Sgugem</string>
     <string name="action_settings">Iɣewwaren</string>
@@ -15,7 +14,6 @@
     <string name="add">Rnu</string>
     <string name="chat">Adiwenni</string>
     <string name="search">Nadi</string>
-    <string name="bluetooth">Bluetooth</string>
     <string name="connect">Tuqqna</string>
     <string name="edit">Ẓreg</string>
     <string name="remove">Kkes</string>
@@ -43,7 +41,6 @@
     <string name="allow">Sireg</string>
     <string name="cancelled">Yettwasemmet</string>
     <string name="channel_join">Ttekki</string>
-    <string name="certificates">Iselkinen</string>
     <string name="password">Awal n uɛeddi</string>
     <string name="default_">Amezwer</string>
     <string name="donate_dialog_negativebutton_goog">Ticki</string>
@@ -63,7 +60,6 @@
     <string name="generateCertProgress">Asarew n uselkin…</string>
     <string name="quickConnect">Tuqqna taruradt</string>
     <string name="clearChat">Sfeḍ adiwenni</string>
-    <string name="mumlaConnected">Mumla d uqqin</string>
     <string name="mumlaConnecting">Mumla iteqqen…</string>
     <string name="sortBy">Semyizzwer s…</string>
     <string name="channel_edit">Ẓreg abadu</string>
@@ -91,10 +87,6 @@
         <item quantity="other">%d n iseqdacen</item>
     </plurals>
     <string name="image_confirm_send">Ad tt-tazneḍ izen-a?</string>
-    <plurals name="notification_unread_many">
-        <item quantity="one">%d n yizen amaynut</item>
-        <item quantity="other">%d n yiznan imaynuten</item>
-    </plurals>
     <string name="messageToUser">Aru-yas izen i useqdac \'%s\'</string>
     <string name="server_match_info">Isem: %1$s\nAsenneftaɣ: %2$s:%3$d\nIseqdacen: %4$d / %5$d\nLqem: %6$s \nTamurt: %7$s \nAkud n ugani: %8$d ms</string>
     <string name="user_menu_mute">Sgugem</string>

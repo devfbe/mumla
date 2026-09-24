@@ -20,37 +20,28 @@ package se.lublin.humla.audio.capture.fakes
 import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.PcmCaptureSource
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * A [PcmCaptureSource] that behaves like a blocking `AudioRecord`, scripted read by read.
+ * A [PcmCaptureSource] that behaves like a blocking `AudioRecord`, scripted read by read: full,
+ * short and zero reads, negative codes, reads that answer only after [stop] or keep answering after
+ * it, a throwing [start], and reads after [release].
  *
- * Every value the production loop branches on has to be producible here, or the branch is closed
- * off by the double rather than by the code (spec 4.04's fakes pass): a full frame, a **short**
- * frame, a **zero** read, a **negative** error code, a read that answers only after [stop], one
- * that keeps answering for a while **after** [stop], a [start] that throws, and a [read] after
- * [release].
- *
- * Two behaviours are copied from the real thing on purpose:
- * - **Reads ignore thread interrupts.** A native `AudioRecord.read` does; only `stop()` (or an
- *   error) ends one. A fake that returned on an interrupt would let `AudioInput.stopRecording`
- *   pass its test with the `source.stop()` call deleted.
- * - **[codeAfterStop] is what an in-flight read answers once [stop] has run**, because a real one
- *   can come back with a negative code rather than with 0 when the recorder is taken away
- *   underneath it. Without it the corner "a read failed while we were already stopping" is
- *   unreachable, and the guard that exists for exactly that corner survives every mutation.
- * - **[sampleRate] throws once [release] has run**, because `AudioRecord`'s accessors do. Without
- *   that, "the rate is cached, not read off a released recorder" is not a statement any test in
- *   this module can distinguish -- and the Java original's `getSampleRate()` dereferenced a field
- *   `shutdown()` had just nulled out.
+ * Copied from the real thing on purpose:
+ * - Reads ignore thread interrupts; only `stop()` or an error ends a native read.
+ * - [codeAfterStop] is what an in-flight read answers once [stop] has run; a real one may come
+ *   back with a negative code when the recorder is taken away underneath it.
+ * - [sampleRate] throws after [release], as `AudioRecord`'s accessors do.
  */
 class FakeCaptureSource(
     private val rate: Int = 48000,
     script: List<Read> = emptyList(),
-    private val hangAfterStopMs: Long = 0,
+    /** Held shut, a read in flight at [stop] does not return until it opens: a hung native read. */
+    private val hangAfterStop: CountDownLatch? = null,
     private val failStart: Boolean = false,
     private val codeAfterStop: Int = 0,
 ) : PcmCaptureSource {
@@ -71,7 +62,7 @@ class FakeCaptureSource(
     /** `start`, `stop` and `release` in the order they happened. */
     val events = CopyOnWriteArrayList<String>()
 
-    /** By identity, never by name: `kotlinx.coroutines` renames threads (spec 4.05). */
+    /** By identity, not name: coroutines rename the threads they run on. */
     val readingThreads = CopyOnWriteArraySet<Thread>()
 
     val reads = AtomicInteger()
@@ -118,16 +109,14 @@ class FakeCaptureSource(
         }
     }
 
-    /** A recorder whose `stop()` does not make the in-flight read return, for the join timeout. */
     private fun hangIgnoringInterrupts() {
-        val deadline = System.currentTimeMillis() + hangAfterStopMs
+        val gate = hangAfterStop ?: return
         while (true) {
-            val left = deadline - System.currentTimeMillis()
-            if (left <= 0) return
             try {
-                Thread.sleep(left)
+                gate.await()
+                return
             } catch (e: InterruptedException) {
-                // Again: a native read does not come back because someone interrupted us.
+                // A native read does not return on interrupt either.
             }
         }
     }
