@@ -155,7 +155,6 @@
     <ID>MaxLineLength:MumlaSQLiteDatabaseSecretsTest.kt$MumlaSQLiteDatabaseSecretsTest$while (c.moveToNext()) add(if (c.getType(0) == android.database.Cursor.FIELD_TYPE_BLOB) c.getBlob(0) else c.getString(0))</ID>
     <ID>MaxLineLength:MumlaSQLiteDatabaseSecretsTest.kt$MumlaSQLiteDatabaseSecretsTest.&lt;no name provided&gt;$put("name", "old"); put("host", "old.example"); put("port", 64738); put("username", "me"); put("password", "legacy")</ID>
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$assertThat(userStates().map { it.selfMute to it.selfDeaf }).containsExactly(true to true, false to false).inOrder()</ID>
-    <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$for</ID>
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$private fun promptReceivers()</ID>
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$putParcelable(HumlaService.EXTRAS_SERVER, se.lublin.humla.model.Server(-1, "t", "127.0.0.1", 64738, "me", ""))</ID>
     <ID>MaxLineLength:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest$service.configureExtras(android.os.Bundle().apply { putInt(HumlaService.EXTRAS_TRANSMIT_MODE, se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK) })</ID>

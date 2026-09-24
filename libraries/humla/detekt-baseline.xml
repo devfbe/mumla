@@ -14,10 +14,6 @@
     <ID>CyclomaticComplexMethod:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
     <ID>CyclomaticComplexMethod:VoiceActivityDetector.kt$VoiceActivityDetector$fun isVoice(pcm: ShortArray, length: Int, probability: Float?): Boolean</ID>
     <ID>CyclomaticComplexMethod:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$@Test fun `a long score sequence agrees with the state machine on every frame`()</ID>
-    <ID>EmptyFunctionBlock:CELT11DecoderTest.kt$CELT11DecoderTest.FakeCelt11${}</ID>
-    <ID>EmptyFunctionBlock:CELT11EncoderTest.kt$CELT11EncoderTest.FakeCelt11${}</ID>
-    <ID>EmptyFunctionBlock:CELT7DecoderTest.kt$CELT7DecoderTest.FakeCelt7${}</ID>
-    <ID>EmptyFunctionBlock:CELT7EncoderTest.kt$CELT7EncoderTest.FakeCelt7${}</ID>
     <ID>EmptyFunctionBlock:HumlaConnectionProtocolThreadTest.kt$HumlaConnectionProtocolThreadTest.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:HumlaUDPTest.kt$HumlaUDPTest.RecordingListener${}</ID>
     <ID>EmptyWhileBlock:HumlaCallbacksTest.kt$HumlaCallbacksTest.&lt;no name provided&gt;${ }</ID>
@@ -31,7 +27,6 @@
     <ID>LongMethod:HumlaTCP.kt$HumlaTCP$private fun readLoop()</ID>
     <ID>LongMethod:ModelRaceTest.kt$ModelRaceTest$@Test fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread()</ID>
     <ID>LongParameterList:AudioController.kt$AudioController$( private val context: Context, private val logger: HumlaLogger, private val factory: () -&gt; AudioHandlerFactory, private val encodeListener: AudioHandler.AudioEncodeListener, private val outputListener: AudioOutput.AudioOutputListener, private val listener: Listener, private val mainHandler: Handler = Handler(Looper.getMainLooper()), )</ID>
-    <ID>LongParameterList:CELT7Encoder.kt$CELT7Encoder$( sampleRate: Int, frameSize: Int, channels: Int, private val framesPerPacket: Int, bitrate: Int, maxBufferSize: Int, private val api: Celt7Api = Celt7Native, )</ID>
     <ID>LongParameterList:CaptureWiring.kt$CaptureWiring$( inputSampleRate: Int, inputMode: IInputMode, amplitudeBoost: Float, noise: NoiseSuppressionMode, echo: EchoCancellationMode, speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB, logger: HumlaLogger? = null, factory: CapturePreprocessorFactory? = null, newResampler: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
     <ID>LongParameterList:ManagedAudio.kt$AudioHandlerFactory$( context: Context, logger: HumlaLogger, config: AudioConfig, params: AudioSessionParams, encodeListener: AudioHandler.AudioEncodeListener, outputListener: AudioOutput.AudioOutputListener, )</ID>
     <ID>LongParameterList:ManagedAudio.kt$DefaultAudioHandlerFactory$( context: Context, logger: HumlaLogger, config: AudioConfig, params: AudioSessionParams, encodeListener: AudioHandler.AudioEncodeListener, outputListener: AudioOutput.AudioOutputListener, )</ID>
@@ -51,22 +46,14 @@
     <ID>MagicNumber:AudioOutput.kt$AudioOutput$1000L</ID>
     <ID>MagicNumber:AudioOutput.kt$AudioOutput.Companion$12</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$0.99f</ID>
-    <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$0x7f</ID>
-    <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$0x80</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$0xFF</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$10</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$12</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$13</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$20</ID>
     <ID>MagicNumber:AudioOutputSpeech.kt$AudioOutputSpeech$4096</ID>
-    <ID>MagicNumber:CELT11Encoder.kt$CELT11Encoder$0x80</ID>
-    <ID>MagicNumber:CELT11Encoder.kt$CELT11Encoder$800</ID>
-    <ID>MagicNumber:CELT7Encoder.kt$CELT7Encoder$0x80</ID>
-    <ID>MagicNumber:CELT7Encoder.kt$CELT7Encoder$800</ID>
     <ID>MagicNumber:HumlaCertificateGenerator.kt$HumlaCertificateGenerator$2048</ID>
-    <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$0x10202</ID>
     <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$0x7</ID>
-    <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$0xFF</ID>
     <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$1000</ID>
     <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$3</ID>
     <ID>MagicNumber:HumlaConnection.kt$HumlaConnection$5</ID>
@@ -96,11 +83,6 @@
     <ID>MaxLineLength:AudioDeviceCategoryTest.kt$AudioDeviceCategoryTest$assertThat(AudioDeviceCategory.of(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)).isEqualTo(AudioDeviceCategory.EARPIECE)</ID>
     <ID>MaxLineLength:AudioOutputSpeechTest.kt$AudioOutputSpeechTest.FakeOpusDecoder$override</ID>
     <ID>MaxLineLength:AudioOutputTest.kt$AudioOutputTest.NoOpusDecoder$override</ID>
-    <ID>MaxLineLength:AudioOutputTest.kt$AudioOutputTest.TrackingJitter$override fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>
-    <ID>MaxLineLength:CELT11Decoder.kt$CELT11Decoder$if (error[0] &lt; 0) throw NativeAudioException("CELT 0.11.0 decoder initialization failed with error: ${error[0]}")</ID>
-    <ID>MaxLineLength:CELT11DecoderTest.kt$CELT11DecoderTest.FakeCelt11$override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int): Int</ID>
-    <ID>MaxLineLength:CELT11Encoder.kt$CELT11Encoder$if (error[0] &lt; 0) throw NativeAudioException("CELT 0.11.0 encoder initialization failed with error: ${error[0]}")</ID>
-    <ID>MaxLineLength:CELT11EncoderTest.kt$CELT11EncoderTest.FakeCelt11$override fun decodeFloat(state: Long, data: ByteArray?, len: Int, out: FloatArray, frameSize: Int): Int</ID>
     <ID>MaxLineLength:CapturePipelineTest.kt$CapturePipelineTest$assertWithMessage("0.55409 would be the padding dragging the level down, 0.91097 the previous frame's tail holding it up")</ID>
     <ID>MaxLineLength:CapturePipelineTest.kt$CapturePipelineTest$val pipeline = CapturePipeline(FakeResampler(1), FakePreprocessor(), ContinuousInputMode(), log = { logs += it })</ID>
     <ID>MaxLineLength:CapturePreprocessorFactoryTest.kt$CapturePreprocessorFactoryTest${ throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_speexdsp.so not found")) }</ID>
@@ -172,7 +154,6 @@
     <ID>ReturnCount:SpeexPreprocessor.kt$SpeexPreprocessor$override fun onCaptureFrame(handle: Long, frame: ShortArray): Float?</ID>
     <ID>ReturnCount:UdpHealthMonitor.kt$UdpHealthMonitor$fun onTcpPing(nowMicros: Long, localGood: Int, remoteGood: Int, usingUdp: Boolean): Decision</ID>
     <ID>ReturnCount:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
-    <ID>SwallowedException:AudioOutputSpeech.kt$AudioOutputSpeech$e: BufferUnderflowException</ID>
     <ID>SwallowedException:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$e: Exception</ID>
     <ID>SwallowedException:HumlaSSLSocketFactoryTrustStoreTest.kt$HumlaSSLSocketFactoryTrustStoreTest$e: IOException</ID>
     <ID>SwallowedException:HumlaService.kt$HumlaService$e: IllegalArgumentException</ID>
