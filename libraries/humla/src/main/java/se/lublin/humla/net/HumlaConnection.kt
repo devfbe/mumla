@@ -47,21 +47,13 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * One connection to a Mumble server.
+ * One connection to a Mumble server. Single-use.
  *
- * Threading: host resolution, socket setup, frame parsing, handler dispatch, voice routing, the
- * ping timer and every transport callback run on the "humla-protocol" [HandlerThread] this object
- * owns. [HumlaConnectionListener] callbacks are posted to [mainHandler]. [sendTCPMessage] and
- * [sendUDPMessage] may be called from any thread.
- *
- * [mainHandler] must be the same thread `HumlaCallbacks` delivers on (both default to the main
- * looper): its queue ceiling exempts the connection-lifecycle events only because they are raised
- * on the delivery thread. See `HumlaCallbacks.Policy.Lifecycle`.
- *
- * Single-use: the state flags are only ever set, never cleared, so no late writer can reopen a
- * window. [isConnected] and [isSynchronized] compose [connected]/[synchronizedWithServer] with
- * [disconnectRequested], so [disconnect] closes both without writing them. A send already past its
- * [isConnected] check may still reach the socket after [disconnect]; that is harmless.
+ * Resolution, sockets, parsing, dispatch, voice routing, pings and transport callbacks run on the
+ * "humla-protocol" [HandlerThread]; [HumlaConnectionListener] callbacks are posted to [mainHandler],
+ * which must be the thread `HumlaCallbacks` delivers on. [sendTCPMessage] and [sendUDPMessage] may
+ * be called from any thread. State flags are only ever set, never cleared; [disconnect] closes
+ * [isConnected]/[isSynchronized] via [disconnectRequested].
  */
 class HumlaConnection @JvmOverloads constructor(
     private val listener: HumlaConnectionListener,
@@ -91,16 +83,10 @@ class HumlaConnection @JvmOverloads constructor(
             HumlaUDP(cryptState, listener, callbackHandler)
     }
 
-    /**
-     * The thread this connection runs on; internal so tests can assert on it. Reading this does
-     * not start the thread; [protocolHandler] does.
-     */
+    /** Not started by reading this; [protocolHandler] starts it. */
     internal val protocolThread = HandlerThread(PROTOCOL_THREAD_NAME)
 
-    /**
-     * Runs parsing, model updates and voice routing. Started on first access (by [connect]), so a
-     * connection that is never connected leaks no thread. Quit from inside the queued teardown.
-     */
+    /** Started on first access (by [connect]), so an unconnected connection leaks no thread. */
     val protocolHandler: Handler by lazy {
         protocolThread.start()
         Handler(protocolThread.looper)
@@ -120,10 +106,7 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var usingUdp = true
     @Volatile private var forceTcp = false
     @Volatile private var useTor = false
-    /**
-     * Whether the socket came up, and whether the handshake completed. Written only on the protocol
-     * thread and only ever to true; read only through [isConnected] and [isSynchronized].
-     */
+    /** Written on the protocol thread, only ever to true; read via [isConnected]/[isSynchronized]. */
     @Volatile private var connected = false
     @Volatile private var synchronizedWithServer = false
     @Volatile private var lastError: HumlaException? = null
@@ -132,15 +115,12 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var connectCalled = false
     @Volatile private var disconnectRequested = false
 
-    /**
-     * Whether the listener has been told the connection ended. Only touched on [mainHandler]'s
-     * thread, so it needs no volatile; see [notifyListener].
-     */
+    /** [mainHandler]'s thread only. */
     private var disconnectReported = false
     @Volatile private var startTimestamp = 0L // Time that the connection was initiated in nanoseconds
     private val cryptState = CryptState()
 
-    /** The last warning handed to the listener and when; protocol thread only, see [warn]. */
+    /** Protocol thread only; see [warn]. */
     private var lastWarning: ConnectionWarning? = null
     private var lastWarnedMicros = 0L
 
@@ -148,10 +128,8 @@ class HumlaConnection @JvmOverloads constructor(
     @Volatile private var udpLatency = 0L
     @Volatile private var tcpLatency = 0L
 
-    // Server. Protocol thread only. Assigned in [connect] before the TCP transport is created,
-    // which is what guarantees [startUdp] never sees the initial "". Deliberately not cleared on
-    // teardown: InetAddress.getByName resolves "" and null to 127.0.0.1, so a UDP start racing a
-    // disconnect would open a socket to the local machine.
+    // Protocol thread only. Assigned before the TCP transport exists and never cleared:
+    // InetAddress.getByName("") resolves to 127.0.0.1, so a UDP start must never see "".
     private var host = ""
     private var port = 0
     @Volatile private var remoteVersion = 0
@@ -168,10 +146,7 @@ class HumlaConnection @JvmOverloads constructor(
     private val tcpHandlers = ConcurrentLinkedQueue<HumlaTCPMessageListener>()
     private val udpHandlers = ConcurrentLinkedQueue<HumlaUDPMessageListener>()
 
-    /**
-     * Sends the pings and reschedules itself. No entry guard: quitSafely drops a reschedule that
-     * is not yet due, and every send goes through the [isConnected] check.
-     */
+    /** Sends the pings and reschedules itself; quitSafely drops a not-yet-due reschedule. */
     private val pingRunnable = object : Runnable {
         override fun run() {
             sendPings()
@@ -179,17 +154,12 @@ class HumlaConnection @JvmOverloads constructor(
         }
     }
 
-    /**
-     * How many times the UDP transport has been rebuilt since it last carried traffic. Protocol
-     * thread only. Reset when UDP works again, so the backoff belongs to the outage, not to the
-     * connection.
-     */
+    /** UDP rebuilds since it last carried traffic, so the backoff is per outage. Protocol thread. */
     private var udpRestartAttempt = 0
 
     /**
-     * Rebuilds the UDP transport after its thread died. The only entry guard in the restart path:
-     * a restart can still be delivered after the teardown (quitSafely runs due posts), and without
-     * the [disconnectRequested] check it would open a UDP socket nothing ever closes.
+     * Rebuilds the UDP transport after its thread died. Guarded by [disconnectRequested]: quitSafely
+     * still runs due posts, and a post-teardown restart would open a socket nothing closes.
      */
     private val udpRestartRunnable = Runnable {
         if (disconnectRequested || shouldForceTCP()) return@Runnable
@@ -199,8 +169,7 @@ class HumlaConnection @JvmOverloads constructor(
 
     private fun scheduleUdpRestart() {
         udpRestartAttempt += 1
-        // No jitter: it exists to spread a fleet of reconnecting clients, and this is one socket
-        // inside a live session. A null delay means the policy gave up.
+        // No jitter: this is one socket in a live session. Null means the policy gave up.
         val delay = udpRestartPolicy.delayFor(udpRestartAttempt, 0.0) ?: return
         Log.i(TAG, "UDP restart scheduled in $delay ms")
         protocolHandler.postDelayed(udpRestartRunnable, delay)
@@ -297,8 +266,7 @@ class HumlaConnection @JvmOverloads constructor(
             val now = elapsed
             tcpLatency = now - msg.timestamp
 
-            // Forced TCP freezes both UDP counters, so judging them would falsely report UDP as
-            // unavailable.
+            // Forced TCP freezes both UDP counters; judging them would falsely report UDP down.
             if (shouldForceTCP()) return
 
             val decision = udpHealth.onTcpPing(now, cryptState.mUiGood, cryptState.mUiRemoteGood, usingUdp)
@@ -345,14 +313,11 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     /**
-     * Starts connecting. Host resolution - including the blocking SRV lookup in
-     * [Server.getSrvHost], skipped over Tor - key store loading and socket creation all happen on the protocol
-     * thread; every outcome, certificate errors included, is reported through the listener rather
-     * than thrown at the caller.
+     * Starts connecting. Resolution (incl. the blocking SRV lookup, skipped over Tor), key store
+     * loading and socket creation run on the protocol thread; every outcome goes to the listener.
      */
     fun connect(server: Server) {
-        // Written before disconnectRequested is read (disconnect() does the mirror image), so a
-        // racing disconnect() either sees a connection to report or this throws.
+        // Written before disconnectRequested is read (disconnect() mirrors this).
         check(!connectCalled) { "HumlaConnection is single-use; create a new one for another connection" }
         connectCalled = true
         check(!disconnectRequested) { "HumlaConnection is single-use; create a new one after disconnect()" }
@@ -391,17 +356,12 @@ class HumlaConnection @JvmOverloads constructor(
 
     val isConnected: Boolean get() = connected && !disconnectRequested
 
-    /**
-     * Returns whether or not the service is fully synchronized with the remote server - this
-     * happens when we get the ServerSync message. You shouldn't log any user actions until the
-     * connection is synchronized.
-     */
+    /** True once ServerSync arrived; don't log user actions before that. */
     val isSynchronized: Boolean get() = synchronizedWithServer && !disconnectRequested
 
     /**
-     * Whether [sendUDPMessage] would put an unforced packet on the UDP transport. Not the same as
-     * "voice goes over UDP": [setForceTCP] mid-connection tunnels voice without changing this, so
-     * read [shouldForceTCP] alongside it.
+     * Whether [sendUDPMessage] would use UDP for an unforced packet. [setForceTCP] mid-connection
+     * doesn't change this, so read [shouldForceTCP] alongside it.
      */
     val isUsingUdp: Boolean get() = usingUdp
 
@@ -505,19 +465,14 @@ class HumlaConnection @JvmOverloads constructor(
     fun shouldForceTCP(): Boolean = forceTcp || useTor
 
     /**
-     * Shuts down networking. Safe from any thread, idempotent, and never blocks on a network
-     * thread. The listener's onConnectionDisconnected is delivered exactly once per *started*
-     * connection and last, carrying [error] if one was recorded - a disconnect before [connect]
-     * reports nothing at all, because there is nothing to report. This object is not reusable
-     * afterwards.
+     * Shuts down networking. Safe from any thread, idempotent, non-blocking. onConnectionDisconnected
+     * is delivered exactly once per started connection, and last.
      */
     fun disconnect() {
         // Written before connectCalled is read; see connect().
         disconnectRequested = true
         if (protocolThread.isAlive) {
             protocolHandler.post {
-                // No removeCallbacks(pingRunnable): quitSafely drops the pending reschedule and
-                // sends are gated on isConnected.
                 tcp?.disconnect()
                 tcp = null
                 udp?.disconnect()
@@ -529,10 +484,8 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     /**
-     * Quits the protocol looper, only from the protocol thread at the end of the teardown.
-     * Quitting it earlier would refuse the terminal callbacks the transports post from their own
-     * disconnect(), and an unreported disconnect never reconnects. quitSafely still delivers
-     * everything already queued.
+     * Quits the protocol looper at the end of the teardown; earlier would refuse the transports'
+     * terminal callbacks, and an unreported disconnect never reconnects.
      */
     private fun quitProtocolThread() {
         protocolThread.quitSafely()
@@ -558,11 +511,8 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     /**
-     * Tells the user something about the connection, suppressing a warning that would only repeat
-     * the last warning delivered, for [WARNING_REPEAT_MICROS]. Protocol thread only.
-     *
-     * Compared against the last warning delivered rather than per warning type, so on a flapping
-     * link the last line the user sees always matches the current voice route.
+     * Tells the user about the connection, suppressing a repeat of the last delivered warning for
+     * [WARNING_REPEAT_MICROS], so on a flapping link the last line matches the current route.
      */
     private fun warn(warning: ConnectionWarning) {
         val now = elapsed
@@ -576,22 +526,14 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     /**
-     * Queues a listener callback on [mainHandler], and drops it if the disconnect report has
-     * already been delivered. This is what makes [HumlaConnectionListener.onConnectionDisconnected]
-     * terminal and not merely exactly-once.
-     *
-     * The check happens at delivery, not at the call site: a handler already past its guard can
-     * post after disconnect() has posted the report, and only the looper's FIFO order settles
-     * which came first.
+     * Queues a listener callback on [mainHandler], dropped at delivery if the disconnect report
+     * already ran, which makes onConnectionDisconnected terminal.
      */
     private fun notifyListener(callback: HumlaConnectionListener.() -> Unit) {
         mainHandler.post { if (!disconnectReported) listener.callback() }
     }
 
-    /**
-     * Creates a socket factory using this connection's certificate and trust store configuration.
-     * [peerHost] is the host the user entered, which the server certificate must match.
-     */
+    /** [peerHost] is the host the user entered, which the server certificate must match. */
     @Throws(HumlaException::class)
     private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory {
         try {
@@ -628,10 +570,7 @@ class HumlaConnection @JvmOverloads constructor(
         tcp?.sendMessage(message, messageType)
     }
 
-    /**
-     * Sends a datagram over UDP, or tunnels it through TCP unless [force]. The [isConnected] check
-     * here is the only gate on the voice path.
-     */
+    /** Sends over UDP, or tunnels through TCP unless [force]; the only gate on the voice path. */
     fun sendUDPMessage(data: ByteArray, length: Int, force: Boolean) {
         if (!isConnected) return
         require(length <= data.size) { "Requested length $length is longer than available data length ${data.size}!" }
@@ -695,8 +634,7 @@ class HumlaConnection @JvmOverloads constructor(
 
     override fun onTLSHandshakeFailed(chain: Array<X509Certificate>) {
         notifyListener { onConnectionHandshakeFailed(chain) }
-        // Posted first, so the certificate prompt is queued ahead of the disconnect that follows
-        // it; disconnect() posts the report to the same looper.
+        // Posted first, so the certificate prompt is queued ahead of the disconnect.
         disconnect()
     }
 
@@ -767,19 +705,11 @@ class HumlaConnection @JvmOverloads constructor(
         /** Called when the protocol handshake completes. */
         fun onConnectionSynchronized()
 
-        /**
-         * Called if the host's certificate failed verification. Typically you would use this
-         * callback to prompt the user to authorize the certificate. Note that
-         * [onConnectionDisconnected] will still be called.
-         */
+        /** Certificate verification failed; [onConnectionDisconnected] still follows. */
         fun onConnectionHandshakeFailed(chain: Array<X509Certificate>)
         fun onConnectionCertificateChanged(chain: Array<X509Certificate>)
 
-        /**
-         * Called when the connection was lost, with the error that caused termination, or null if
-         * the disconnect was clean. Exactly once per started connection, and last: no other method
-         * is called afterwards. Not called for a connection disconnected before it was started.
-         */
+        /** [e] is null for a clean disconnect. Exactly once per started connection, and last. */
         fun onConnectionDisconnected(e: HumlaException?)
 
         /** Called if the user should be notified of a connection-related warning. */
@@ -791,16 +721,10 @@ class HumlaConnection @JvmOverloads constructor(
         private const val PROTOCOL_THREAD_NAME = "humla-protocol"
         private const val PING_INTERVAL_MILLIS = 5_000L
 
-        /**
-         * How long a [ConnectionWarning] identical to the last one delivered stays suppressed.
-         * A warning that differs from the last one delivered is never suppressed; see [warn].
-         */
+        /** How long a repeat of the last delivered [ConnectionWarning] stays suppressed. */
         private const val WARNING_REPEAT_MICROS = 60_000_000L
 
-        /**
-         * The warning a [UdpHealthMonitor.Decision] carries when it takes voice off UDP, or null
-         * when it is not a switch at all.
-         */
+        /** The warning for a decision that takes voice off UDP, else null. */
         internal fun switchWarningFor(decision: UdpHealthMonitor.Decision): ConnectionWarning? = when (decision) {
             UdpHealthMonitor.Decision.KEEP, UdpHealthMonitor.Decision.RESTORE_UDP -> null
             UdpHealthMonitor.Decision.SWITCH_TO_TCP_BOTH -> ConnectionWarning.UDP_UNAVAILABLE
@@ -818,10 +742,7 @@ class HumlaConnection @JvmOverloads constructor(
         const val TOR_HOST = "localhost"
         const val TOR_PORT = 9050
 
-        /**
-         * Calculates the bandwidth in bps required to send audio with the given parameters,
-         * including packet overhead.
-         */
+        /** Bandwidth in bps for audio with these parameters, including packet overhead. */
         @JvmStatic
         fun calculateAudioBandwidth(bitrate: Int, framesPerPacket: Int): Int {
             // FIXME: assumes worst-case using TCP
