@@ -20,14 +20,11 @@ package se.lublin.humla.audio.capture
 import android.os.Bundle
 
 /**
- * Carries a whole [VadConfig] through `HumlaService.configureExtras`, which speaks `Bundle`.
+ * Carries a whole [VadConfig] as one `Bundle` extra through `HumlaService.configureExtras`, so a
+ * settings change triggers one audio-chain rebuild rather than one per field.
  *
- * It exists so that a settings change is **one** extra rather than one extra per slider. Every
- * extra that reaches `configureExtras` used to rebuild the audio chain; nine separate keys for one
- * screen would be nine rebuilds, which is the defect the quick-access menu shipped with, multiplied.
- *
- * Reading is total: a missing key is that field's default and an out-of-range value is clamped,
- * because [VadConfig]'s constructor throws and the caller is a `Service` handling a settings write.
+ * Reading is total: missing keys take the default and out-of-range values are clamped, since
+ * [VadConfig]'s constructor throws.
  */
 object VadConfigBundle {
     private const val MODE = "vad_mode"

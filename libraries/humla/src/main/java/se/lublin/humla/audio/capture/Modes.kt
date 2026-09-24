@@ -18,13 +18,8 @@
 package se.lublin.humla.audio.capture
 
 /**
- * Preference values are stable on-disk identifiers (see app Settings.kt).
- *
- * There is no on-disk value for this setting yet: today's preference is the boolean
- * `preprocessor_enabled`, default true (`Settings.kt:288-289`,
- * `res/xml/settings_audio.xml:137-142`). [SPEEX] is the fallback for that reason -- an
- * installation that has never seen the new key keeps the noise suppressor it has been running
- * all along.
+ * Preference values are stable on-disk identifiers (see app Settings.kt). Unknown or missing values
+ * fall back to [SPEEX], the suppressor older installs were already running.
  */
 enum class NoiseSuppressionMode(val preferenceValue: String) {
     NONE("none"),
@@ -39,10 +34,8 @@ enum class NoiseSuppressionMode(val preferenceValue: String) {
 }
 
 /**
- * Which canceller runs: WebRTC's AEC3 or none. The platform's `AcousticEchoCanceler` ("system", or
- * "android" in spec §4's spelling) is no longer offered - the canceller now follows the routed
- * device (`AudioDeviceCategory`), and a platform canceller in front of AEC3 would hand it an
- * already-altered echo. A value that is not one of the two reads as [NONE].
+ * Which canceller runs: WebRTC's AEC3 or none. The platform `AcousticEchoCanceler` is not offered: in
+ * front of AEC3 it would hand it an already-altered echo. Unknown values read as [NONE].
  */
 enum class EchoCancellationMode(val preferenceValue: String) {
     NONE("none"),
@@ -55,7 +48,7 @@ enum class EchoCancellationMode(val preferenceValue: String) {
     }
 }
 
-/** android.media.audiofx effects attached to the AudioRecord session (spec B6). */
+/** android.media.audiofx effects attached to the AudioRecord session. */
 data class AndroidAudioEffects(
     val noiseSuppressor: Boolean = false,
     val automaticGainControl: Boolean = false,

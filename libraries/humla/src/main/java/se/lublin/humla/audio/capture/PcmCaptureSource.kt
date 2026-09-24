@@ -30,13 +30,9 @@ import android.util.Log
 import se.lublin.humla.exception.AudioInitializationException
 import java.util.concurrent.Executor
 
-/**
- * Blocking 16-bit mono PCM capture. The one hardware edge of the capture path: everything above it
- * -- `AudioInput`, `CapturePipeline`, the preprocessor chain -- is testable on the host because
- * this interface can be faked.
- */
+/** Blocking 16-bit mono PCM capture; the hardware edge of the capture path (fakeable for tests). */
 interface PcmCaptureSource {
-    /** The rate the source really opened at, which is not necessarily the one that was asked for. */
+    /** The rate the source actually opened at (may differ from the requested one). */
     val sampleRate: Int
 
     /** The `AudioRecord` session the android audio effects are attached to. */
@@ -47,11 +43,8 @@ interface PcmCaptureSource {
     /**
      * Blocking read of at most [length] samples into [buffer], starting at index 0.
      *
-     * @return how many samples were written: a positive count, `0` when the source produced
-     *   nothing, or a negative error code. **It may never exceed [length]**, and no guard above
-     *   this interface checks that -- `AudioInput` pads from the returned count to the end of its
-     *   frame, and a count past the end is an out-of-bounds write on the capture thread rather than
-     *   an error code. Same precondition, and for the same reason, as `Resampler.resample`'s.
+     * @return samples written (never more than [length]; callers rely on it), `0` when the source
+     *   produced nothing, or a negative error code.
      */
     fun read(buffer: ShortArray, length: Int): Int
 
@@ -69,16 +62,13 @@ interface PcmCaptureSource {
     fun setSilenceListener(listener: ((Boolean) -> Unit)?)
 }
 
-/**
- * Everything the capture side needs to open a recorder. [audioSource] is a starting point rather
- * than a decision: [AudioSourcePolicy] may override it (spec B6).
- */
+/** Everything needed to open a recorder. [AudioSourcePolicy] may override [audioSource]. */
 data class CaptureRequest(
     val audioSource: Int,
     val targetSampleRate: Int,
     val effects: AndroidAudioEffects = AndroidAudioEffects(),
     val echo: EchoCancellationMode = EchoCancellationMode.NONE,
-    /** Routes capture to this device -- the SCO headset (spec B11) -- when set. */
+    /** Routes capture to this device (e.g. the SCO headset) when set. */
     val preferredDevice: AudioDeviceInfo? = null,
 )
 
@@ -87,46 +77,21 @@ fun interface PcmCaptureSourceFactory {
     fun open(request: CaptureRequest): PcmCaptureSource
 }
 
-/**
- * The real source: one `AudioRecord` plus the `android.media.audiofx` effects attached to its
- * session (spec B6).
- */
+/** The real source: one `AudioRecord` plus the `android.media.audiofx` effects on its session. */
 class AndroidAudioRecordSource internal constructor(
     internal val record: AudioRecord,
     internal val effects: List<AudioEffect>,
 ) : PcmCaptureSource {
-    /**
-     * Cached, not delegated. The Java original's `getSampleRate()` read the `AudioRecord` field on
-     * every call and `shutdown()` set that field to null, so asking a shut-down `AudioInput` for its
-     * rate was a `NullPointerException`; reading it off a *released* `AudioRecord` is worse.
-     *
-     * **Not pinnable here, and the mutation that would do it has been run**: `= record.sampleRate`
-     * to `get() = record.sampleRate` leaves all 297 tests green, because Robolectric's
-     * `AudioRecord.release()` leaves `mSampleRate` standing and its getter keeps answering. The
-     * same property one level up **is** pinned -- `AudioInputTest.the rate and the frame size still
-     * answer after shutdown`, over a fake whose accessor throws after release, kills the equivalent
-     * mutation in `AudioInput`. What is unproven is only that a *released device* recorder still
-     * answers, which is a statement about `AudioRecord`, not about this line.
-     */
+    /** Cached so it still answers after [release]. */
     override val sampleRate: Int = record.sampleRate
     override val audioSessionId: Int = record.audioSessionId
 
     private var recordingCallback: AudioManager.AudioRecordingCallback? = null
 
     /**
-     * What this flag does and does not do, because the difference decides whether the comment is a
-     * guarantee or a description (spec 4.04).
-     *
-     * It does: make every read **after** [release] answer [ERROR_RELEASED] without touching the
-     * released object, so a capture thread that outlived `AudioInput`'s join timeout leaves its
-     * loop by the error arm instead of hammering a freed recorder. Pinned by
-     * `AndroidAudioRecordSourceTest.a read after release reports the released code`, which without
-     * the flag reads `AudioRecord`'s own -3 instead.
-     *
-     * It does not: close the window on a read that is already **inside** `AudioRecord.read` when
-     * [release] runs. That is a native use-after-free and a `@Volatile` cannot reach it; what closes
-     * it is `AudioInput` joining the capture thread first, and spec B8 deliberately gives that join
-     * a timeout ("a join timeout logs and releases anyway"). The residual risk is in the ledger.
+     * Makes reads after [release] return [ERROR_RELEASED] without touching the freed recorder. It
+     * cannot protect a read already inside `AudioRecord.read`; `AudioInput` joins the capture thread
+     * (with a timeout) before releasing for that.
      */
     @Volatile
     private var released = false
@@ -144,20 +109,9 @@ class AndroidAudioRecordSource internal constructor(
     }
 
     /**
-     * No `if (released) return` in front of this, deliberately. Everything below it is idempotent --
-     * `AudioEffect.release()` is a no-op once its state is `STATE_UNINITIALIZED`, `AudioRecord`'s
-     * swallows the `IllegalStateException` from its own `stop()` and its native side clears the
-     * handle it already cleared -- so such a guard would be a line whose premise is false, which
-     * spec 4.04 says to delete and replace with a test of the premise. That test is
-     * `releasing twice is safe`.
-     *
-     * The `setSilenceListener(null)` below is **unpinned, and the mutation has been run**: deleting
-     * it leaves all 297 tests green, because `ShadowAudioRecord` shadows neither
-     * `registerAudioRecordingCallback` nor its counterpart, so `recordingCallback` is null in every
-     * test and the call is a no-op there. It stays because `release()` is public and may be reached
-     * without `AudioInput.stopRecording` having unregistered first, and because a platform callback
-     * outliving the recorder it names is a leak on a device. A device test is the only thing that
-     * could kill it.
+     * Idempotent without a guard: `AudioEffect.release()` and `AudioRecord.release()` are both safe to
+     * repeat. Unregisters the recording callback in case [release] is reached without
+     * `AudioInput.stopRecording`, so it can't outlive the recorder.
      */
     override fun release() {
         released = true
@@ -181,8 +135,7 @@ class AndroidAudioRecordSource internal constructor(
     }
 
     class Factory : PcmCaptureSourceFactory {
-        // RECORD_AUDIO is requested by the app before it connects (spec P3); a library cannot
-        // request it, and AudioHandler's constructor checks it before reaching this.
+        // RECORD_AUDIO is requested by the app; AudioHandler's constructor checks it before this.
         @SuppressLint("MissingPermission")
         @Throws(AudioInitializationException::class)
         override fun open(request: CaptureRequest): PcmCaptureSource {
@@ -216,10 +169,8 @@ class AndroidAudioRecordSource internal constructor(
         }
 
         /**
-         * Spec B6. [EchoCancellationMode.WEBRTC] attaches **nothing** here on purpose: the
-         * canceller is then ours, running inside the capture chain, and the platform one in front
-         * of it would hand AEC3 a signal whose echo has already been altered by an unknown
-         * algorithm -- the same cascade spec 4.1 refused for noise suppression.
+         * Attaches the requested platform effects. No platform AEC: with WEBRTC our AEC3 runs in the
+         * chain, and a platform canceller in front of it would alter the echo it models.
          */
         private fun attachEffects(sessionId: Int, request: CaptureRequest): List<AudioEffect> {
             val attached = mutableListOf<AudioEffect>()

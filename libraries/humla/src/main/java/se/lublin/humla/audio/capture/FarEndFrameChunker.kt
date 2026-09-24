@@ -18,48 +18,21 @@
 package se.lublin.humla.audio.capture
 
 /**
- * Re-blocks the playback thread's arbitrarily sized mix buffers into exact [frameSize] frames for
- * a [FarEndSink].
+ * Re-blocks the playback thread's arbitrarily sized mix buffers into exact [frameSize] frames for a
+ * [FarEndSink]. The APM silently refuses shorter frames and ignores the tail of longer ones.
  *
- * The APM will not take anything else: a frame shorter than 10 ms is refused with -8, and a longer
- * one has its tail ignored. Both are silent -- the reverse stream has no return value to carry
- * them -- and either costs about 21 dB of echo cancellation, which is the whole benefit
- * (`WebRtcApmPreprocessor.rejectedFarEndFrames` is where a refusal becomes visible).
- *
- * ### Not thread-safe, and it does not need to be
- *
- * [pending] and [filled] are touched only by [push], which is called from the playback thread and
- * from nowhere else. The sink it feeds *is* shared -- [SingleHandleStage] takes its one lock
- * around the native call -- so what crosses threads is locked and what is not locked never
- * crosses. One chunker belongs to one playback thread; a mode switch builds a new one rather than
- * repointing this one.
- *
- * ### The copy is not an inefficiency
- *
- * [pending] is one buffer for the life of the chunker, so [push] holds no allocation of its own.
- * `CaptureThreadAllocationTest` measures it at **under 8.0 B per call** -- half the smallest
- * object the JVM can allocate, which is the closest a heap-delta measurement gets to zero, and
- * the reason "allocates nothing at all" is not a claim this file makes. It is also never
- * bypassed: handing the caller's own array to the sink when a push
- * happens to be an exact multiple of [frameSize] would save a copy and put the APM's render-side
- * processing -- which **may modify the frame in place** -- into the buffer that is on its way to
- * the speaker.
- *
- * The other half of that: the sink is handed the same array every time, so a sink that keeps it
- * keeps a buffer that is about to be overwritten.
+ * Not thread-safe: owned by one playback thread. Reuses one internal buffer (no per-call allocation)
+ * and always copies, because the APM's render processing may modify the frame in place and must not
+ * touch the buffer headed for the speaker. The sink gets the same array each time and must not keep it.
  */
 class FarEndFrameChunker(private val frameSize: Int, private val sink: FarEndSink) {
     private val pending = ShortArray(frameSize)
     private var filled = 0
 
     /**
-     * Takes the first [length] samples of [samples] and hands every complete frame they make up to
-     * the sink, in order. What is left over waits here for the next push.
-     *
-     * [length] past the end of [samples] is trimmed rather than thrown, for the reason the whole
-     * capture path refuses instead of throwing: `System.arraycopy` would throw on the playback
-     * thread, once per 10 ms, and the thread that dies is the one playing audio. The valid prefix
-     * is used; nothing is invented to fill the rest.
+     * Hands every complete frame in the first [length] samples of [samples] to the sink, in order; the
+     * remainder waits for the next push. A [length] past the end of [samples] is trimmed rather than
+     * thrown, so the playback thread never dies on it.
      */
     fun push(samples: ShortArray, length: Int) {
         val available = minOf(length, samples.size)
