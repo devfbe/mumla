@@ -99,7 +99,7 @@ class AudioInput(
 
     /**
      * Stops the source (which unblocks a pending read), then interrupts and joins with a bound. The
-     * interrupt wakes a listener parked in `ToggleInputMode.waitForInput`.
+     * interrupt wakes a listener that blocks.
      *
      * @return whether the capture thread really exited. `false` means it may still reach native
      *   state downstream, so the caller must not free it.

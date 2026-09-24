@@ -29,10 +29,4 @@ interface IInputMode {
      * @return true if the input should be transmitted.
      */
     fun shouldTransmit(pcm: ShortArray, length: Int, vadProbability: Float?): Boolean
-
-    /**
-     * Called on the capture thread before processing; may block until input becomes available
-     * (e.g. push to talk). Must return immediately while [shouldTransmit] returns true.
-     */
-    fun waitForInput()
 }

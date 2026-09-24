@@ -95,9 +95,4 @@ class ActivityInputModeTest {
         mode.setThreshold(0.9f)
         assertThat(mode.vadConfig).isEqualTo(VadConfig(VadMode.AMPLITUDE, 0.9f, 0.75f, 40L))
     }
-
-    @Test
-    fun `waitForInput returns immediately`() {
-        ActivityInputMode(0.5f).waitForInput()
-    }
 }

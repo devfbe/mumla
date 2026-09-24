@@ -46,6 +46,4 @@ class ActivityInputMode(private val detector: VoiceActivityDetector) : IInputMod
 
     override fun shouldTransmit(pcm: ShortArray, length: Int, vadProbability: Float?): Boolean =
         detector.isVoice(pcm, length, vadProbability)
-
-    override fun waitForInput() = Unit
 }

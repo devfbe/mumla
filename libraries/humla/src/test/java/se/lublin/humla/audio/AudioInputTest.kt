@@ -235,7 +235,7 @@ class AudioInputTest {
                 try {
                     condition.await()
                 } catch (e: InterruptedException) {
-                    // As ToggleInputMode.waitForInput does: return, so the caller can unwind.
+                    // Return on the interrupt, so the caller can unwind.
                 }
             }
         })

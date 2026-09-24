@@ -17,23 +17,13 @@
 
 package se.lublin.humla.audio.inputmode
 
-import android.util.Log
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
-
 /**
- * An input mode that depends on a toggle, such as push to talk.
+ * An input mode that depends on a toggle, such as push to talk. The capture thread keeps running
+ * while the toggle is off, so no stale audio is queued up for the next key press.
  *
  * [inputOn] is written by the UI thread and read by the capture thread, hence `@Volatile`.
- *
- * [waitForInput] guards `await()` with `if`, not `while`, on purpose: a spurious wakeup just costs
- * one capture-loop turn, whereas a bare `while` would park the thread again after the shutdown
- * interrupt and never return.
  */
 class ToggleInputMode : IInputMode {
-    private val toggleLock = ReentrantLock()
-    private val toggleCondition = toggleLock.newCondition()
-
     @Volatile
     private var inputOn = false
 
@@ -42,30 +32,8 @@ class ToggleInputMode : IInputMode {
     fun isTalkingOn(): Boolean = inputOn
 
     fun setTalkingOn(talking: Boolean) {
-        toggleLock.withLock {
-            inputOn = talking
-            toggleCondition.signalAll()
-        }
+        inputOn = talking
     }
 
     override fun shouldTransmit(pcm: ShortArray, length: Int, vadProbability: Float?): Boolean = inputOn
-
-    override fun waitForInput() {
-        toggleLock.withLock {
-            if (!inputOn) {
-                Log.v(TAG, "PTT: Suspending audio input.")
-                val start = System.currentTimeMillis()
-                try {
-                    toggleCondition.await()
-                } catch (e: InterruptedException) {
-                    Log.w(TAG, "Blocking for PTT interrupted, likely due to input thread shutdown.")
-                }
-                Log.v(TAG, "PTT: Suspended audio input for " + (System.currentTimeMillis() - start) + "ms.")
-            }
-        }
-    }
-
-    private companion object {
-        val TAG: String = ToggleInputMode::class.java.name
-    }
 }

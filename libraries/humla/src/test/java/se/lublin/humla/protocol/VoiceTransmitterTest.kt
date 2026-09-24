@@ -26,6 +26,7 @@ import se.lublin.humla.audio.capture.NoopPreprocessor
 import se.lublin.humla.audio.encoder.IEncoder
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.IInputMode
+import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 
@@ -69,7 +70,7 @@ class VoiceTransmitterTest {
     }
 
     private fun transmitter(listener: AudioHandler.AudioEncodeListener, mode: IInputMode = ContinuousInputMode()) =
-        VoiceTransmitter(CapturePipeline(null, NoopPreprocessor, mode), mode, listener).apply {
+        VoiceTransmitter(CapturePipeline(null, NoopPreprocessor, mode), listener).apply {
             setCodec(HumlaUDPMessageType.UDPVoiceOpus) { FirstSampleEncoder() }
         }
 
@@ -101,6 +102,33 @@ class VoiceTransmitterTest {
 
         assertThat(listener.buffers).hasSize(3)
         assertThat(listener.buffers.distinct()).hasSize(1)
+    }
+
+    /**
+     * With push-to-talk released every frame still comes through and returns at once, so the
+     * capture loop keeps draining the recorder; at key press the first packet is the frame captured
+     * after it, not audio that queued up while the key was released.
+     */
+    @Test
+    fun `push-to-talk keeps draining while released and sends only fresh audio at key press`() {
+        val listener = RecordingListener()
+        val ptt = ToggleInputMode()
+        val transmitter = transmitter(listener, ptt)
+
+        val released = Thread {
+            repeat(50) { transmitter.onAudioInputReceived(frame(0x0101), FRAME) }
+        }
+        released.start()
+        released.join(5_000)
+        assertWithMessage("the capture thread must not park while the key is released")
+            .that(released.isAlive).isFalse()
+        assertThat(listener.packets).isEmpty()
+
+        ptt.setTalkingOn(true)
+        transmitter.onAudioInputReceived(frame(0x0202), FRAME)
+
+        assertThat(listener.packets.map { it.toList().takeLast(2) }).containsExactly(listOf<Byte>(2, 2))
+        assertThat(listener.talking).containsExactly(true)
     }
 
     @Test

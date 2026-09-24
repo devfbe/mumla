@@ -402,7 +402,5 @@ class CapturePipelineTest {
             scores += VoiceActivityDetector.amplitudeScore(pcm, length)
             return true
         }
-
-        override fun waitForInput() = Unit
     }
 }

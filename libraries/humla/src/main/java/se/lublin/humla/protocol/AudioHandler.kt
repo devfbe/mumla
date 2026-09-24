@@ -116,7 +116,7 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
             input.sampleRate, inputMode, amplitudeBoost, noise, echo, builder.speexNoiseSuppressDb, logger,
         )
         capturePipeline = wiring.pipeline
-        transmitter = VoiceTransmitter(capturePipeline, inputMode, encodeListener) { talking ->
+        transmitter = VoiceTransmitter(capturePipeline, encodeListener) { talking ->
             @Suppress("DEPRECATION")
             if (isHalfDuplex) audioManager.setStreamMute(audioStream, talking)
         }

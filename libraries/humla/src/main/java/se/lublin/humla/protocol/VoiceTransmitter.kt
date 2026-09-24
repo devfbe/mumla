@@ -21,21 +21,21 @@ import android.util.Log
 import se.lublin.humla.audio.AudioInput
 import se.lublin.humla.audio.capture.CapturePipeline
 import se.lublin.humla.audio.encoder.IEncoder
-import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 
 /**
  * Turns captured frames into voice packets: runs [pipeline] on every frame, tracks the talking
- * state, encodes while talking and hands each packet to [listener].
+ * state, encodes while talking and hands each packet to [listener]. Every frame is processed and
+ * none is waited on, also while nobody talks: the recorder keeps being drained and the
+ * preprocessors stay warm, so the first packet after a push-to-talk press is fresh audio.
  *
  * [onAudioInputReceived] runs on the capture thread and allocates nothing per frame; [setCodec],
  * [releaseEncoder], [muteState] and [targetId] may be used from other threads.
  */
 internal class VoiceTransmitter(
     private val pipeline: CapturePipeline,
-    private val inputMode: IInputMode,
     private val listener: AudioHandler.AudioEncodeListener,
     /** Called on the capture thread when the talking state flips, after [listener] heard of it. */
     private val onTalkingChanged: (Boolean) -> Unit = {},
@@ -124,7 +124,6 @@ internal class VoiceTransmitter(
         }
 
         talking = nowTalking
-        if (!nowTalking) inputMode.waitForInput()
     }
 
     /** Sends the buffered audio of [encoder] to [listener]. Called under [encoderLock]. */

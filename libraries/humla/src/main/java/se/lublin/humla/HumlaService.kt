@@ -439,8 +439,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun onConnectionDisconnected(e: HumlaException?) {
         // Clear push-to-talk first: the toggle outlives the connection, so an auto-reconnect would
-        // otherwise transmit without a key press. This also releases the input thread waiting in
-        // waitForInput(). An event collector can't do it: isConnected is already false by then.
+        // otherwise transmit without a key press. An event collector can't do it: isConnected is
+        // already false by then.
         mToggleInputMode.setTalkingOn(false)
 
         if (e != null) {
