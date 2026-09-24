@@ -19,19 +19,20 @@ package se.lublin.mumla.channel.comment
 
 import android.app.Dialog
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.webkit.WebView
 import android.widget.EditText
-import android.widget.TabHost
+import androidx.core.view.isVisible
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.Job
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.app.ServiceViewModel
+import se.lublin.mumla.databinding.DialogCommentBinding
 import se.lublin.mumla.util.collectEvents
 import se.lublin.mumla.util.configureForUntrustedHtml
 
@@ -54,13 +55,10 @@ abstract class AbstractCommentFragment : DialogFragment() {
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_comment, null, false)
-        val commentView = view.findViewById<WebView>(R.id.comment_view).also { this.commentView = it }
+        val binding = DialogCommentBinding.inflate(layoutInflater)
+        val commentView = binding.commentView.also { this.commentView = it }
         commentView.configureForUntrustedHtml()
-        commentEdit = view.findViewById(R.id.comment_edit)
-
-        val tabHost = view.findViewById<TabHost>(R.id.comment_tabhost)
-        tabHost.setup()
+        commentEdit = binding.commentEdit
 
         val known = comment
         if (known == null) {
@@ -70,23 +68,31 @@ abstract class AbstractCommentFragment : DialogFragment() {
             loadComment(known)
         }
 
-        val viewLabel = getString(R.string.comment_view)
-        tabHost.addTab(tabHost.newTabSpec(TAB_VIEW).setIndicator(viewLabel).setContent(R.id.comment_tab_view))
-        val editLabel = getString(if (isEditing) R.string.comment_edit_source else R.string.comment_view_source)
-        tabHost.addTab(tabHost.newTabSpec(TAB_EDIT).setIndicator(editLabel).setContent(R.id.comment_tab_edit))
-        tabHost.setOnTabChangedListener { tabId ->
-            if (tabId == TAB_VIEW) {
-                // Show the user's HTML changes.
-                commentView.loadData(commentEdit.text.toString(), "text/html", "UTF-8")
-            } else if (tabId == TAB_EDIT && commentEdit.text.isEmpty()) {
-                // Filled on first view only, which is faster with long comments.
-                commentEdit.setText(comment)
+        val tabs = binding.commentTabs
+        tabs.addTab(tabs.newTab().setText(R.string.comment_view))
+        val sourceLabel = if (isEditing) R.string.comment_edit_source else R.string.comment_view_source
+        tabs.addTab(tabs.newTab().setText(sourceLabel))
+        tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                val showSource = tab.position == TAB_SOURCE
+                commentView.isVisible = !showSource
+                commentEdit.isVisible = showSource
+                if (!showSource) {
+                    // Show the user's HTML changes.
+                    commentView.loadData(commentEdit.text.toString(), "text/html", "UTF-8")
+                } else if (commentEdit.text.isEmpty()) {
+                    // Filled on first view only, which is faster with long comments.
+                    commentEdit.setText(comment)
+                }
             }
-        }
-        tabHost.currentTab = if (isEditing) 1 else 0
+
+            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+            override fun onTabReselected(tab: TabLayout.Tab) = Unit
+        })
+        if (isEditing) tabs.selectTab(tabs.getTabAt(TAB_SOURCE))
 
         val builder = MaterialAlertDialogBuilder(requireActivity())
-            .setView(view)
+            .setView(binding.root)
             .setNegativeButton(R.string.close, null)
         if (isEditing) {
             builder.setPositiveButton(R.string.save) { _, _ ->
@@ -137,7 +143,6 @@ abstract class AbstractCommentFragment : DialogFragment() {
     abstract fun editComment(service: IHumlaService, comment: String)
 
     private companion object {
-        const val TAB_VIEW = "View"
-        const val TAB_EDIT = "Edit"
+        const val TAB_SOURCE = 1
     }
 }
