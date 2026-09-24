@@ -137,12 +137,6 @@ class HumlaServiceCharacterizationTest {
     private fun connectivityManager() = RuntimeEnvironment.getApplication()
         .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    @Suppress("DEPRECATION")
-    private fun sendConnectivityBroadcast() {
-        RuntimeEnvironment.getApplication()
-            .sendBroadcast(Intent(ConnectivityManager.CONNECTIVITY_ACTION))
-        shadowOf(Looper.getMainLooper()).idle()
-    }
 
     // ---------------------------------------------------------------- lifecycle and initial state
 
@@ -660,8 +654,8 @@ class HumlaServiceCharacterizationTest {
      *   `onlyAConnectionErrorWithAutoReconnectOnStartsReconnecting`
      * - polling with connectivity -> `aReconnectWithConnectivityPollsAfterTheBackoffDelay`
      * - waiting for the network without it -> `aReconnectWithoutConnectivityWaitsForTheNetworkInstead`
-     * - the receiver's two guards -> `theConnectivityReceiverReconnectsOnlyWhenTheNetworkIsBack`
-     *   and `aBroadcastThatArrivesAfterTheSessionEndedUnregistersTheReceiver`
+     * - the network callback's guards -> `theNetworkCallbackReconnectsAsSoonAsTheNetworkIsBack`
+     *   and `aCallbackThatArrivesAfterTheSessionEndedDoesNotReconnect`
      * - `cancelReconnect`, both arms -> `cancelReconnectStopsTheTimerAndEndsTheSession` and
      *   `cancellingAReconnectThatNeverStartedIsHarmless`
      * - the idempotence of `setReconnecting(true)` -> gone with the method. The transition table
@@ -669,12 +663,6 @@ class HumlaServiceCharacterizationTest {
      * - a retry without a target server, which used to crash on the looper, is now a reported
      *   failure -> `aConnectWithoutATargetServerReportsAFailureInsteadOfCrashing`.
      */
-    private fun connectivityReceivers() = shadowOf(RuntimeEnvironment.getApplication())
-        .registeredReceivers
-        .filter {
-            @Suppress("DEPRECATION")
-            it.intentFilter.hasAction(ConnectivityManager.CONNECTIVITY_ACTION)
-        }
 
     // ---------------------------------------------------------------- logging
 

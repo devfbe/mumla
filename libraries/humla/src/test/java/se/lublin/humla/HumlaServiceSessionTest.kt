@@ -27,6 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowNetwork
 import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.model.WhisperTargetList
 import se.lublin.humla.session.SessionState
@@ -64,15 +65,12 @@ class HumlaServiceSessionTest {
     private fun connectivityManager() = RuntimeEnvironment.getApplication()
         .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    @Suppress("DEPRECATION")
-    private fun connectivityReceivers() = shadowOf(RuntimeEnvironment.getApplication())
-        .registeredReceivers
-        .filter { it.intentFilter.hasAction(ConnectivityManager.CONNECTIVITY_ACTION) }
+    private fun networkCallbacks() = shadowOf(connectivityManager()).networkCallbacks.toList()
 
-    @Suppress("DEPRECATION")
-    private fun sendConnectivityBroadcast(harness: HumlaServiceHarness) {
-        RuntimeEnvironment.getApplication()
-            .sendBroadcast(Intent(ConnectivityManager.CONNECTIVITY_ACTION))
+    /** Tells every registered callback that a default network came up. */
+    private fun networkAvailable(harness: HumlaServiceHarness) {
+        val network = ShadowNetwork.newInstance(1)
+        networkCallbacks().forEach { it.onAvailable(network) }
         harness.mainLooper.idle()
     }
 
@@ -447,23 +445,23 @@ class HumlaServiceSessionTest {
      * A disconnect while the reconnect waits out its backoff ends the session for good, so it has
      * to give back what only Disconnected releases. The connection already reported its end when
      * it was lost and reports nothing a second time, so nothing on the disconnect-report path runs:
-     * the wake lock stayed held and the connectivity receiver registered until the next session.
+     * the wake lock stayed held and the network callback registered until the next session.
      */
     @Test
-    fun aDisconnectWhileWaitingToReconnectReleasesTheWakeLockAndTheReceiver() {
+    fun aDisconnectWhileWaitingToReconnectReleasesTheWakeLockAndTheNetworkCallback() {
         val h = start(autoReconnect = true)
         h.connectAndSynchronize()
         shadowOf(connectivityManager()).setActiveNetworkInfo(null) // waits for the network
         h.failConnection(0, connectionError())
         assertThat(h.service.isWakeLockHeldForTest()).isTrue()
-        assertThat(connectivityReceivers()).isNotEmpty()
+        assertThat(networkCallbacks()).isNotEmpty()
 
         h.service.disconnect()
         h.mainLooper.idle()
 
         assertThat(h.service.getSessionState().value).isEqualTo(SessionState.Disconnected())
         assertThat(h.service.isWakeLockHeldForTest()).isFalse()
-        assertThat(connectivityReceivers()).isEmpty()
+        assertThat(networkCallbacks()).isEmpty()
         assertThat(h.service.getConnectionState()).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
     }
 
@@ -521,7 +519,7 @@ class HumlaServiceSessionTest {
         h.service.cancelReconnect()
 
         assertThat(h.service.isReconnecting()).isFalse()
-        assertThat(connectivityReceivers()).isEmpty()
+        assertThat(networkCallbacks()).isEmpty()
     }
 
     private fun whisperTarget(h: HumlaServiceHarness) =
@@ -555,8 +553,8 @@ class HumlaServiceSessionTest {
     // ---------------------------------------------------------------- connectivity
 
     /**
-     * Without connectivity the service does **not** burn attempts: it registers the connectivity
-     * receiver and waits. Idling a full minute past the backoff shows nothing was queued at all.
+     * Without connectivity the service does **not** burn attempts: it registers the network
+     * callback and waits. Idling a full minute past the backoff shows nothing was queued at all.
      */
     @Test
     fun aReconnectWithoutConnectivityWaitsForTheNetworkInstead() {
@@ -567,12 +565,12 @@ class HumlaServiceSessionTest {
         h.failConnection(0, connectionError())
 
         assertThat(h.service.isReconnecting()).isTrue()
-        assertThat(connectivityReceivers()).hasSize(1)
+        assertThat(networkCallbacks()).hasSize(1)
         h.mainLooper.idleFor(60, TimeUnit.SECONDS)
         assertThat(h.transports.tcps).hasSize(1)
     }
 
-    /** With connectivity it polls instead, and registers no receiver. */
+    /** With connectivity it polls instead, and registers no network callback. */
     @Test
     fun aReconnectWithConnectivityPollsAfterTheBackoffDelay() {
         val h = start(autoReconnect = true)
@@ -580,7 +578,7 @@ class HumlaServiceSessionTest {
 
         h.failConnection(0, connectionError())
 
-        assertThat(connectivityReceivers()).isEmpty()
+        assertThat(networkCallbacks()).isEmpty()
         h.mainLooper.idleFor(9, TimeUnit.MILLISECONDS)
         assertThat(h.transports.tcps).hasSize(1)
         h.mainLooper.idleFor(1, TimeUnit.MILLISECONDS)
@@ -593,71 +591,61 @@ class HumlaServiceSessionTest {
         awaitUntil(description = "second connection attempt") { h.transports.tcps.size == 2 }
     }
 
-    /**
-     * The connectivity receiver's own input space: it retries only while the service still wants
-     * to reconnect **and** the network is back.
-     */
+    /** A default network coming back retries at once instead of waiting out the backoff. */
     @Test
-    fun theConnectivityReceiverReconnectsOnlyWhenTheNetworkIsBack() {
+    fun theNetworkCallbackReconnectsAsSoonAsTheNetworkIsBack() {
         val h = start(autoReconnect = true)
         h.connectAndSynchronize()
-        @Suppress("DEPRECATION")
-        val connected = connectivityManager().activeNetworkInfo
         shadowOf(connectivityManager()).setActiveNetworkInfo(null)
         h.failConnection(0, connectionError())
-        assertThat(connectivityReceivers()).hasSize(1)
-
-        // Still no network: the broadcast changes nothing and the receiver stays registered.
-        sendConnectivityBroadcast(h)
+        assertThat(networkCallbacks()).hasSize(1)
         assertThat(h.transports.tcps).hasSize(1)
-        assertThat(connectivityReceivers()).hasSize(1)
 
-        // Network back: the receiver retries immediately rather than waiting out the backoff.
-        shadowOf(connectivityManager()).setActiveNetworkInfo(connected)
-        sendConnectivityBroadcast(h)
+        networkAvailable(h)
+
         awaitUntil(description = "immediate retry") { h.transports.tcps.size == 2 }
-        assertThat(connectivityReceivers()).isEmpty()
+        assertThat(networkCallbacks()).isEmpty()
     }
 
     /**
-     * The receiver's first guard: once the session has ended, a late broadcast unregisters the
-     * receiver instead of reconnecting. `cancelReconnect` already unregisters it, so this arm is
-     * only reachable when the broadcast beats the unregistration - which is why the guard cannot
+     * The callback's first guard: once the session has ended, a late callback unregisters it
+     * instead of reconnecting. `cancelReconnect` already unregisters it, so this arm is only
+     * reachable when the callback beats the unregistration - which is why the guard cannot
      * be dropped as redundant.
      */
     @Test
-    fun aBroadcastThatArrivesAfterTheSessionEndedUnregistersTheReceiver() {
+    fun aCallbackThatArrivesAfterTheSessionEndedDoesNotReconnect() {
         val h = start(autoReconnect = true)
         h.connectAndSynchronize()
         shadowOf(connectivityManager()).setActiveNetworkInfo(null)
         h.failConnection(0, connectionError())
-        val receiver = connectivityReceivers().single().broadcastReceiver
+        val callback = networkCallbacks().single()
 
         h.service.cancelReconnect()
-        receiver.onReceive(RuntimeEnvironment.getApplication(), Intent())
+        callback.onAvailable(ShadowNetwork.newInstance(1))
         h.mainLooper.idle()
 
         assertThat(h.transports.tcps).hasSize(1)
-        assertThat(connectivityReceivers()).isEmpty()
+        assertThat(networkCallbacks()).isEmpty()
     }
 
     /**
-     * `cancelReconnect` takes the receiver off by itself, with no broadcast to help it. The test
-     * above delivers one, and the receiver's own first arm unregisters too -- two guards over one
+     * `cancelReconnect` takes the callback off by itself, with no callback to help it. The test
+     * above delivers one, and the callback's own first arm unregisters too -- two guards over one
      * observable, and the mutation that deletes the one in `releaseSessionResources` survived it
      * (measured, S29).
      */
     @Test
-    fun cancellingWhileWaitingForTheNetworkUnregistersTheReceiver() {
+    fun cancellingWhileWaitingForTheNetworkUnregistersTheNetworkCallback() {
         val h = start(autoReconnect = true)
         h.connectAndSynchronize()
         shadowOf(connectivityManager()).setActiveNetworkInfo(null)
         h.failConnection(0, connectionError())
-        assertThat(connectivityReceivers()).hasSize(1)
+        assertThat(networkCallbacks()).hasSize(1)
 
         h.service.cancelReconnect()
 
-        assertThat(connectivityReceivers()).isEmpty()
+        assertThat(networkCallbacks()).isEmpty()
     }
 
     /**
@@ -666,42 +654,42 @@ class HumlaServiceSessionTest {
      * `releaseSessionResources` is never reached (measured, S30).
      */
     @Test
-    fun destroyingTheServiceWhileWaitingForTheNetworkUnregistersTheReceiver() {
+    fun destroyingTheServiceWhileWaitingForTheNetworkUnregistersTheNetworkCallback() {
         val h = start(autoReconnect = true)
         h.connectAndSynchronize()
         shadowOf(connectivityManager()).setActiveNetworkInfo(null)
         h.failConnection(0, connectionError())
-        assertThat(connectivityReceivers()).hasSize(1)
+        assertThat(networkCallbacks()).hasSize(1)
 
         h.destroy()
         harnesses.remove(h)
 
-        assertThat(connectivityReceivers()).isEmpty()
+        assertThat(networkCallbacks()).isEmpty()
     }
 
     /**
-     * The receiver's own first arm, on the one path that reaches it: a manual `connect()` while
-     * the service is waiting for the network leaves the receiver registered -- `startSession` has
-     * no business unregistering it -- so the next broadcast finds a session that is no longer
-     * lost. Without the arm the receiver would ask the state machine to restore connectivity in a
+     * The callback's own first arm, on the one path that reaches it: a manual `connect()` while
+     * the service is waiting for the network leaves the callback registered -- `startSession` has
+     * no business unregistering it -- so the next callback finds a session that is no longer
+     * lost. Without the arm the callback would ask the state machine to restore connectivity in a
      * state that has nothing to restore (measured, S26 and G12). The network deliberately stays
-     * down, so the arm that has to fire is the state one and not `isOnline()`.
+     * down, so the arm that has to fire is the state one.
      */
     @Test
-    fun aBroadcastAfterAManualConnectUnregistersTheReceiverInsteadOfRetrying() {
+    fun aCallbackAfterAManualConnectUnregistersItInsteadOfRetrying() {
         val h = start(autoReconnect = true)
         h.connectAndSynchronize()
         shadowOf(connectivityManager()).setActiveNetworkInfo(null)
         h.failConnection(0, connectionError())
-        val receiver = connectivityReceivers().single().broadcastReceiver
+        val callback = networkCallbacks().single()
 
-        h.service.connect() // Connecting, and the receiver is still registered
+        h.service.connect() // Connecting, and the callback is still registered
         h.mainLooper.idle()
         val connection = h.service.getConnection()
-        receiver.onReceive(RuntimeEnvironment.getApplication(), Intent())
+        callback.onAvailable(ShadowNetwork.newInstance(1))
         h.mainLooper.idle()
 
-        assertThat(connectivityReceivers()).isEmpty()
+        assertThat(networkCallbacks()).isEmpty()
         assertThat(h.service.getConnection()).isSameInstanceAs(connection)
     }
 

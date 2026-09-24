@@ -18,12 +18,11 @@
 package se.lublin.humla
 
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.media.AudioManager
 import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Binder
 import android.os.Build
 import android.os.Bundle
@@ -187,7 +186,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * The session lifecycle (spec A3). Confined to the main thread, which is the one thread every
      * mutator here runs on: `connect`/`disconnect`/`cancelReconnect` arrive through the binder,
      * the connection's own callbacks are posted to the main looper by [HumlaConnection], and the
-     * reconnect timer and the connectivity receiver both run on [mHandler]. Any other thread that
+     * reconnect timer and the network callback both run on [mHandler]. Any other thread that
      * wants the state collects [getSessionState] instead (task 1 contract).
      */
     private lateinit var mStateMachine: SessionStateMachine
@@ -224,21 +223,17 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      */
     var celtVersions: () -> IntArray = { intArrayOf(CELT7Encoder.getBitstreamVersion()) }
 
-    /**
-     * Listen for connectivity changes while waiting to reconnect, and retry immediately.
-     */
-    private val mConnectivityReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (mStateMachine.current !is SessionState.ConnectionLost) {
-                unregisterConnectivityReceiver()
-                return
-            }
-            if (!isOnline()) return
+    /** Waits for a default network while the reconnect is on hold, and retries as soon as one is up. */
+    private val mNetworkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            // Registered with mHandler, so this runs on the main thread like every other mutator.
+            unregisterNetworkCallback()
+            if (mStateMachine.current !is SessionState.ConnectionLost) return
             Log.v(TAG, "Connectivity restored, attempting reconnect.")
-            unregisterConnectivityReceiver()
             if (mStateMachine.connectivityRestored()) mHandler.post(mReconnectRunnable)
         }
     }
+    private var mNetworkCallbackRegistered = false
 
     /**
      * The backoff timer. One Runnable instance for the lifetime of the service, because
@@ -391,7 +386,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // already disengaged and released -- harmless, since a disengaged router holds no route to
         // give back.
         disconnect()
-        unregisterConnectivityReceiver()
+        unregisterNetworkCallback()
         mRouter.disengage()
         mRouter.release()
         // Posts the teardown and then quits the looper; it does not wait for either (spec A2).
@@ -489,7 +484,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * Ends the session for good. While the reconnect waits out its backoff (ConnectionLost) there
      * is no live connection: it reported its end when it was lost and reports nothing a second
      * time, so onConnectionDisconnected -- the usual place Disconnected gives back the wake lock
-     * and the connectivity receiver -- never runs. They are released here instead; without it
+     * and the network callback -- never runs. They are released here instead; without it
      * both stayed held until the next session, also past onDestroy. In every other state the
      * connection's own report does it.
      */
@@ -707,13 +702,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         } else {
             // No point in burning attempts while there is no network; wait for it to come back.
             Log.v(TAG, "Offline; waiting for connectivity before reconnecting.")
-            registerConnectivityReceiver()
+            registerNetworkCallback()
         }
     }
 
     /** Gives back everything a live session holds. Only a Disconnected state reaches this. */
     private fun releaseSessionResources() {
-        unregisterConnectivityReceiver()
+        unregisterNetworkCallback()
         // The chooser's pick belongs to this session, as a pick in the phone app belongs to one
         // call; a dropped connection keeps it, the end of the session does not.
         mRouter.forgetChoice()
@@ -736,21 +731,23 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         return cm.activeNetwork != null
     }
 
-    private fun registerConnectivityReceiver() {
+    private fun registerNetworkCallback() {
+        if (mNetworkCallbackRegistered) return
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
         try {
-            @Suppress("DEPRECATION")
-            registerReceiver(
-                mConnectivityReceiver,
-                IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
-            )
-        } catch (e: IllegalArgumentException) {
-            Log.e(TAG, "Error registering connectivity receiver: " + e.message)
+            cm.registerDefaultNetworkCallback(mNetworkCallback, mHandler)
+            mNetworkCallbackRegistered = true
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "Error registering the network callback: " + e.message)
         }
     }
 
-    private fun unregisterConnectivityReceiver() {
+    private fun unregisterNetworkCallback() {
+        if (!mNetworkCallbackRegistered) return
+        mNetworkCallbackRegistered = false
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
         try {
-            unregisterReceiver(mConnectivityReceiver)
+            cm.unregisterNetworkCallback(mNetworkCallback)
         } catch (e: IllegalArgumentException) {
             // Not registered; nothing to do.
         }
