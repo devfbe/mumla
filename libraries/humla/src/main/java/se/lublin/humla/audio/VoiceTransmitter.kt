@@ -26,6 +26,9 @@ import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.net.UdpAudioEncoder
 import se.lublin.humla.net.UdpProtocol
 
+private const val TAG = "VoiceTransmitter"
+private const val PACKET_SIZE = 1024
+
 /**
  * Turns captured frames into voice packets: runs [pipeline] on every frame, tracks the talking
  * state, encodes while talking and hands each packet to [listener]. Every frame is processed and
@@ -137,10 +140,5 @@ internal class VoiceTransmitter(
         encoder.getEncodedData(packet)
         UdpAudioEncoder.writeTrailer(protocol, packet, terminator)
         listener.onAudioEncoded(packetBytes, packet.size())
-    }
-
-    private companion object {
-        const val TAG = "VoiceTransmitter"
-        const val PACKET_SIZE = 1024
     }
 }

@@ -286,7 +286,7 @@ class ChannelListFragment :
         service.targetServer?.let { repository.pinnedChannels.of(it.id) }
         val adapter = ChannelListAdapter(
             requireActivity(), service, repository, childFragmentManager,
-            isShowingPinnedChannels(), settings.shouldShowUserCount,
+            isShowingPinnedChannels, settings.shouldShowUserCount,
         )
         adapter.onChannelClick = ::onChannelClick
         adapter.onUserClick = ::onUserClick
@@ -307,7 +307,7 @@ class ChannelListFragment :
         channelView.scrollToPosition(adapter.getUserPosition(userId))
     }
 
-    private fun isShowingPinnedChannels(): Boolean = requireArguments().getBoolean(ARG_PINNED)
+    private val isShowingPinnedChannels: Boolean get() = requireArguments().getBoolean(ARG_PINNED)
 
     /** Makes [channel] the chat target, or closes the target if it is [channel] already. */
     fun onChannelClick(channel: IChannel) = toggleTarget(ChatTarget.Channel(channel))

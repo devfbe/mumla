@@ -29,6 +29,8 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
+private const val MUMBLE_PUBLIC_URL = "https://mumble.info/list2.cgi"
+
 /** Downloads the public Mumble server list. */
 class PublicServerFetcher(
     private val openConnection: () -> HttpURLConnection = {
@@ -89,9 +91,5 @@ class PublicServerFetcher(
         }
         parser.nextTag()
         return server
-    }
-
-    private companion object {
-        const val MUMBLE_PUBLIC_URL = "https://mumble.info/list2.cgi"
     }
 }

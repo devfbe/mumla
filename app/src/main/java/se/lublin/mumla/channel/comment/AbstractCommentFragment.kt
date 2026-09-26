@@ -36,6 +36,8 @@ import se.lublin.mumla.ui.ServiceViewModel
 import se.lublin.mumla.util.collectEvents
 import se.lublin.mumla.util.configureForUntrustedHtml
 
+private const val TAB_SOURCE = 1
+
 internal const val ARG_COMMENT = "comment"
 internal const val ARG_EDITING = "editing"
 
@@ -144,8 +146,4 @@ abstract class AbstractCommentFragment : DialogFragment() {
 
     /** Asks [service] to replace the comment with [comment]. */
     abstract fun editComment(service: IHumlaService, comment: String)
-
-    private companion object {
-        const val TAB_SOURCE = 1
-    }
 }

@@ -196,11 +196,11 @@ class AudioInputTest {
         val audioInput = AudioInput({ _, _ -> }, source)
         input = audioInput
 
-        assertThat(audioInput.isRecording()).isFalse()
+        assertThat(audioInput.isRecording).isFalse()
         audioInput.startRecording()
-        assertThat(audioInput.isRecording()).isTrue()
+        assertThat(audioInput.isRecording).isTrue()
         audioInput.stopRecording()
-        assertThat(audioInput.isRecording()).isFalse()
+        assertThat(audioInput.isRecording).isFalse()
     }
 
     /** The source is stopped before the join, which is what makes the blocked read return. */
@@ -213,7 +213,7 @@ class AudioInputTest {
         val exited = audioInput.stopRecording()
 
         assertThat(exited).isTrue()
-        assertThat(audioInput.isRecording()).isFalse()
+        assertThat(audioInput.isRecording).isFalse()
         assertThat(source.events.first()).isEqualTo("start")
         assertThat(source.events).contains("stop")
         assertThat(source.events).doesNotContain("release")
@@ -257,7 +257,7 @@ class AudioInputTest {
         val exited = audioInput.stopRecording()
 
         assertThat(exited).isFalse()
-        assertThat(audioInput.isRecording()).isFalse()
+        assertThat(audioInput.isRecording).isFalse()
         // Returned while the capture thread was still inside the read; a wall-clock bound would be flaky.
         assertThat(source.events.count { it == "stop" }).isEqualTo(1)
     }
@@ -396,7 +396,7 @@ class AudioInputTest {
     // ------------------------------------------------------------------ starting twice
 
     /**
-     * Two capture threads on one source would interleave the recorder's frames. `isRecording()`
+     * Two capture threads on one source would interleave the recorder's frames. `isRecording`
      * alone is not enough: it is already false once a join has timed out.
      */
     @Test
@@ -431,7 +431,7 @@ class AudioInputTest {
         val audioInput = start(source, joinTimeoutMs = 50)
         waitUntil("the capture thread is inside a read") { source.reads.get() > 0 }
         assertThat(audioInput.stopRecording()).isFalse()
-        assertThat(audioInput.isRecording()).isFalse()
+        assertThat(audioInput.isRecording).isFalse()
 
         assertThrows(IllegalStateException::class.java) { audioInput.startRecording() }
 

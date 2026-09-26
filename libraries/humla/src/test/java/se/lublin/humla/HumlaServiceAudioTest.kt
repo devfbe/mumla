@@ -86,7 +86,7 @@ class HumlaServiceAudioTest {
         h.synchronize(tcp)
 
         audioUp(h)
-        assertThat(h.service.getConnection()!!.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
+        assertThat(h.service.connection!!.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
         assertThat(h.audioFactory.sessionParams[0].udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
     }
 
@@ -115,7 +115,7 @@ class HumlaServiceAudioTest {
         h.service.setTalkingState(true)
         assertThat(
             (h.audioFactory.sessionParams[0].inputMode as se.lublin.humla.audio.inputmode.ToggleInputMode)
-                .isTalkingOn()
+                .isTalkingOn
         ).isTrue()
     }
 

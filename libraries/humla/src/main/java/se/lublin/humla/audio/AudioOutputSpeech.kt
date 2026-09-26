@@ -29,6 +29,16 @@ import java.util.Arrays
 import kotlin.math.ceil
 import kotlin.math.sin
 
+/** Larger than any voice packet the jitter buffer holds. */
+private const val MAX_PACKET_BYTES = 4096
+
+/** Behind the opus frame in the jitter buffer: the volume adjustment (float bits) and the terminator flag. */
+private const val TRAILER_BYTES = Int.SIZE_BYTES + 1
+
+/** The user data after the stream ended. */
+private const val PASSIVE_FLAGS = 0xFF
+private const val BYTE_MASK = 0xFF
+
 /**
  * Decodes one user's incoming Opus stream through a jitter buffer into float PCM. Each [decode]
  * leaves the next mix in [samples]; it reuses its buffers and allocates nothing per call.
@@ -287,17 +297,5 @@ class AudioOutputSpeech(
     fun destroy() {
         decoder.destroy()
         jitterBuffer.destroy()
-    }
-
-    private companion object {
-        /** Larger than any voice packet the jitter buffer holds. */
-        const val MAX_PACKET_BYTES = 4096
-
-        /** Behind the opus frame in the jitter buffer: the volume adjustment (float bits) and the terminator flag. */
-        const val TRAILER_BYTES = Int.SIZE_BYTES + 1
-
-        /** The user data after the stream ended. */
-        const val PASSIVE_FLAGS = 0xFF
-        const val BYTE_MASK = 0xFF
     }
 }

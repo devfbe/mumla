@@ -73,6 +73,9 @@ import se.lublin.mumla.util.padForSystemBars
 import java.net.MalformedURLException
 import java.security.cert.X509Certificate
 
+private const val TAG = "MumlaActivity"
+private const val FALLBACK_SCREEN = DrawerAdapter.ITEM_FAVOURITES
+
 /**
  * The main screen: a drawer to pick between the server lists and the connected server's
  * screens, which it binds [MumlaService] for while started.
@@ -402,10 +405,5 @@ class MumlaActivity :
             repository.io(save)
             showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
         }
-    }
-
-    companion object {
-        private const val TAG = "MumlaActivity"
-        private const val FALLBACK_SCREEN = DrawerAdapter.ITEM_FAVOURITES
     }
 }

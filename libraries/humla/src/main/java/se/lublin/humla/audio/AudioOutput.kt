@@ -163,7 +163,7 @@ class AudioOutput(
         audioTrack = null
     }
 
-    fun isPlaying(): Boolean = running
+    val isPlaying: Boolean get() = running
 
     @VisibleForTesting
     internal fun playbackTrack(): AudioTrack? = audioTrack

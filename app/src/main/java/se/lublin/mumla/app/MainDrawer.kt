@@ -30,6 +30,8 @@ import androidx.recyclerview.widget.RecyclerView
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.R
 
+private const val HALF_OPEN = 0.5f
+
 /**
  * The navigation drawer of [MumlaActivity]. [onItemSelected] receives the `DrawerAdapter.ITEM_*`
  * id of a tapped row; [serverName] is the connected server's name, or null while not connected.
@@ -127,8 +129,4 @@ class MainDrawer(
     fun onConfigurationChanged(newConfig: Configuration) = toggle.onConfigurationChanged(newConfig)
 
     fun onOptionsItemSelected(item: MenuItem): Boolean = toggle.onOptionsItemSelected(item)
-
-    private companion object {
-        const val HALF_OPEN = 0.5f
-    }
 }

@@ -100,7 +100,7 @@ class MumlaOverlay(private val service: MumlaService) {
         val sessionChannel = service.sessionChannel ?: return
         if (event.user.session == selfSession) {
             // Session user has changed channels
-            adapter.setChannel(sessionChannel)
+            adapter.channel = sessionChannel
         } else if (event.newChannel.id == sessionChannel.id || event.oldChannel?.id == sessionChannel.id) {
             adapter.notifyDataSetChanged()
         }

@@ -48,6 +48,8 @@ import se.lublin.mumla.ui.showMessageDialog
 import se.lublin.mumla.util.Orbot
 import se.lublin.mumla.util.isPortOpen
 
+private const val TOR_PROBE_TIMEOUT_MS = 2000
+
 /**
  * Connects [activity] to servers: gets the permissions a session needs, confirms leaving the
  * current server and checks that Tor is usable if enabled. [service] is the bound service, if any.
@@ -186,9 +188,5 @@ class ConnectFlow(
 
     private fun showMessage(message: String) {
         activity.showMessageDialog(message)
-    }
-
-    private companion object {
-        const val TOR_PROBE_TIMEOUT_MS = 2000
     }
 }

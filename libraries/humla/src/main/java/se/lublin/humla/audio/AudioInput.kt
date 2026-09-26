@@ -130,7 +130,7 @@ class AudioInput(
     }
 
     /** Whether capture is *meant* to be running. A timed-out join leaves this false and a thread alive. */
-    fun isRecording(): Boolean = recording
+    val isRecording: Boolean get() = recording
 
     private fun loop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)

@@ -37,6 +37,10 @@ import se.lublin.mumla.ui.ServiceClient
 import se.lublin.mumla.ui.ServiceViewModel
 import se.lublin.mumla.ui.bindClient
 
+private const val POLL_INTERVAL_MS = 1000L
+private const val MICROS_TO_MILLIS = 1e-3
+private const val KILO = 1000f
+
 /** Displays what is known about the connected server, refreshed every second. */
 class ServerInfoFragment : Fragment(), ServiceClient {
 
@@ -103,11 +107,5 @@ class ServerInfoFragment : Fragment(), ServiceClient {
         // Opus is the only codec; null means the server offers none this client can use.
         val codecName = if (session.codec == HumlaUDPMessageType.UDPVoiceOpus) "Opus" else "<null>"
         codecView.text = getString(R.string.server_info_codec, codecName)
-    }
-
-    private companion object {
-        const val POLL_INTERVAL_MS = 1000L
-        const val MICROS_TO_MILLIS = 1e-3
-        const val KILO = 1000f
     }
 }

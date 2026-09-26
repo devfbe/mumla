@@ -24,6 +24,10 @@ import se.lublin.humla.audio.native.SpeexPreprocessNative
 import se.lublin.humla.audio.native.WebRtcApmApi
 import se.lublin.humla.audio.native.WebRtcApmNative
 
+private const val WEBRTC_APM = "WebRTC APM"
+private const val SPEEX = "Speex noise suppression"
+private const val RNNOISE = "RNNoise noise suppression"
+
 /**
  * One assembled capture chain: the stage the capture thread runs, and the far-end entry point the
  * playback thread feeds (only when the WebRTC canceller is in the chain). On a mode switch, publish
@@ -105,11 +109,5 @@ class CapturePreprocessorFactory(
     } catch (e: IllegalStateException) {
         log("$name is unavailable, continuing without it: ${e.message}")
         null
-    }
-
-    private companion object {
-        const val WEBRTC_APM = "WebRTC APM"
-        const val SPEEX = "Speex noise suppression"
-        const val RNNOISE = "RNNoise noise suppression"
     }
 }

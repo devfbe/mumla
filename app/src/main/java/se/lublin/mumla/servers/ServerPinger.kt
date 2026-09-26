@@ -24,6 +24,11 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.nio.ByteBuffer
 
+private const val TAG = "ServerPinger"
+private const val REQUEST_SIZE = 12
+private const val REPLY_SIZE = 24
+private const val TIMEOUT_MS = 1000
+
 /** Pings Mumble servers over UDP. [ping] blocks for up to a second, so call it off the main thread. */
 class ServerPinger(private val createSocket: () -> DatagramSocket = { DatagramSocket() }) {
 
@@ -47,12 +52,5 @@ class ServerPinger(private val createSocket: () -> DatagramSocket = { DatagramSo
         }
     } catch (e: Exception) {
         ServerInfoResponse()
-    }
-
-    private companion object {
-        const val TAG = "ServerPinger"
-        const val REQUEST_SIZE = 12
-        const val REPLY_SIZE = 24
-        const val TIMEOUT_MS = 1000
     }
 }

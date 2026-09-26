@@ -32,6 +32,8 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.MumlaRepository
 
+private const val TEXT_SIZE_SP = 16f
+
 /** Lets the user pick the default client certificate, or none. */
 class CertificateSelectActivity : AppCompatActivity() {
 
@@ -73,9 +75,5 @@ class CertificateSelectActivity : AppCompatActivity() {
             .setNegativeButton(android.R.string.cancel, null)
             .show()
             .setOnDismissListener { finish() }
-    }
-
-    private companion object {
-        const val TEXT_SIZE_SP = 16f
     }
 }

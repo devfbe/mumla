@@ -91,7 +91,7 @@ class HumlaServiceHarness(
         mainLooper.idle()
         awaitUntil(description = "nothing of the connection left behind") {
             mainLooper.idle()
-            service.getConnection()?.isTerminated != false
+            service.connection?.isTerminated != false
         }
     }
 
@@ -119,7 +119,7 @@ class HumlaServiceHarness(
         // `connected` is set before that callback is posted to the main looper.
         awaitUntil(description = "connection $index established") {
             mainLooper.idle()
-            service.getConnection()?.isConnected == true &&
+            service.connection?.isConnected == true &&
                 tcp.sent.contains(HumlaTCPMessageType.Authenticate)
         }
         return tcp
@@ -167,7 +167,7 @@ class HumlaServiceHarness(
             Mumble.ServerSync.newBuilder().setSession(session).setMaxBandwidth(72_000).build().toByteArray(),
         )
         awaitUntil(description = "server sync parsed") {
-            service.getConnection()?.isSynchronized == true
+            service.connection?.isSynchronized == true
         }
     }
 
@@ -180,7 +180,7 @@ class HumlaServiceHarness(
 
     /** Fails connection [index] the way a dropped socket does, including the late close report. */
     fun failConnection(index: Int, error: HumlaException) {
-        val connection = service.getConnection()
+        val connection = service.connection
         transports.tcps[index].simulateFailure(error)
         awaitUntil(description = "connection $index torn down") {
             mainLooper.idle()

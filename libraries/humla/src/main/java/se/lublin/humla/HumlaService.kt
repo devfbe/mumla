@@ -119,7 +119,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
-    // Written on the main thread, read on the protocol thread (emit() checks it).
+    /**
+     * The connection of the latest attempt, kept after it ends. Written on the main thread, read on
+     * the protocol thread (emit() checks it).
+     */
     @Volatile
     @VisibleForTesting
     internal var connection: HumlaConnection? = null
@@ -217,7 +220,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             override fun onTalkingStateChanged(talking: Boolean) {
                 handler.post {
                     // A leftover from a terminated connection when the session is inactive.
-                    if (!isSynchronized()) return@post
+                    if (!isSynchronized) return@post
                     val modelHandler = modelHandler ?: return@post
                     val connection = connection ?: return@post
                     val currentUser = modelHandler.getUser(connection.getSession()) ?: return@post
@@ -360,13 +363,15 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         connection?.disconnect()
     }
 
-    fun isConnectionEstablished(): Boolean = connection?.isConnected == true
+    val isConnectionEstablished: Boolean
+        get() = connection?.isConnected == true
 
     /**
      * @return true if Humla has received the ServerSync message, indicating synchronization with
      * the server's model and settings. This is the main state of the service.
      */
-    fun isSynchronized(): Boolean = connection?.isSynchronized == true
+    val isSynchronized: Boolean
+        get() = connection?.isSynchronized == true
 
     override fun onConnectionEstablished() {
         val version = MumbleVersion.clientVersion(sessionConfig.clientName, "Android", Build.VERSION.RELEASE)
@@ -514,7 +519,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     /** Publishes [event]; info notices only once synchronized. Any thread. */
     @VisibleForTesting
     internal fun emit(event: HumlaEvent) {
-        if (event is HumlaEvent.Notice && event.level == HumlaEvent.Level.INFO && !isSynchronized()) return
+        if (event is HumlaEvent.Notice && event.level == HumlaEvent.Level.INFO && !isSynchronized) return
         mutableEvents.tryEmit(event)
     }
 
@@ -652,18 +657,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      */
     protected open fun onAudioRouteChanged(type: Int?) = Unit
 
-    /**
-     * The connection of the latest attempt. Set when an attempt starts and kept after it ends, so
-     * the terminated connection can still be inspected.
-     */
-    fun getConnection(): HumlaConnection? = connection
-
     /** The live connection; [IllegalStateException] when no attempt was ever started. */
     private fun conn(): HumlaConnection = checkNotNull(connection) { "Not connected" }
 
     /** The synchronized session's model; [IllegalStateException] outside of one. */
     private fun model(): ModelHandler {
-        check(isSynchronized()) { "Not synchronized with the server" }
+        check(isSynchronized) { "Not synchronized with the server" }
         return checkNotNull(modelHandler) { "No model for the synchronized session" }
     }
 
@@ -812,7 +811,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     override fun selectAutomaticAudioDevice() = router.forgetChoice()
 
     override val isTalking: Boolean
-        get() = toggleInputMode.isTalkingOn()
+        get() = toggleInputMode.isTalkingOn
 
     override fun setTalkingState(talking: Boolean) {
         toggleInputMode.setTalkingOn(talking)

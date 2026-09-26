@@ -164,7 +164,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         // A running preview is rebuilt from the same settings the service reconfigures from.
         val preferences = preferenceManager.sharedPreferences ?: return
         viewLifecycleOwner.lifecycleScope.launch {
-            preferences.changes(SessionSettings.AUDIO_KEYS).collect { if (isTesting()) restartSession() }
+            preferences.changes(SessionSettings.AUDIO_KEYS).collect { if (isTesting) restartSession() }
         }
     }
 
@@ -184,7 +184,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             true
         }
         findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.setOnPreferenceChangeListener { _, newValue ->
-            if (isTesting()) restartSession(loopback = newValue as Boolean)
+            if (isTesting) restartSession(loopback = newValue as Boolean)
             true
         }
         // Nothing runs until asked; this shows the idle hint.
@@ -200,7 +200,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         super.onPause()
     }
 
-    private fun isTesting(): Boolean = findPreference<SwitchPreferenceCompat>(KEY_TEST)?.isChecked ?: false
+    private val isTesting: Boolean get() = findPreference<SwitchPreferenceCompat>(KEY_TEST)?.isChecked ?: false
 
     private fun restartSession(
         loopback: Boolean = findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.isChecked ?: false,

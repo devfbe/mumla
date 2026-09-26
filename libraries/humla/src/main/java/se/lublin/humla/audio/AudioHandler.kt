@@ -140,7 +140,7 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         transmitter.setCodec(codec, ::createEncoder)
         transmitter.muteState = SelfMuteState(self.isMuted || self.isLocalMuted, self.isSelfMuted, self.isSuppressed)
         synchronized(input) {
-            if (input.isRecording()) throw AudioException("Attempted to start recording while recording!")
+            if (input.isRecording) throw AudioException("Attempted to start recording while recording!")
             input.startRecording()
         }
         output.startPlaying(audioStream)
@@ -148,7 +148,7 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
     }
 
     val isPlaying: Boolean
-        get() = synchronized(output) { output.isPlaying() }
+        get() = synchronized(output) { output.isPlaying }
 
     /**
      * The encoder for [codec], or null (input disabled) for one it cannot encode.

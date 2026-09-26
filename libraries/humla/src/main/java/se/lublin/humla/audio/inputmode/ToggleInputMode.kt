@@ -31,7 +31,7 @@ class ToggleInputMode : IInputMode {
 
     fun toggleTalkingOn() = setTalkingOn(!inputOn)
 
-    fun isTalkingOn(): Boolean = inputOn
+    val isTalkingOn: Boolean get() = inputOn
 
     fun setTalkingOn(talking: Boolean) {
         inputOn = talking

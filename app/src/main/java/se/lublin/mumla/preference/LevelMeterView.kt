@@ -24,6 +24,11 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 
+private const val MARK_WIDTH_PX = 4f
+
+/** The level bar is drawn inside the zones so both stay readable. */
+private const val BAR_INSET = 0.25f
+
 /**
  * Maps a level in dBFS onto the meter's horizontal position. Fixed span, not auto-ranging, so the
  * marks stay still enough to compare the threshold with the voice.
@@ -131,12 +136,5 @@ class LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attribut
         floorMark?.let { canvas.drawLine(w * it, 0f, w * it, h, floorPaint) }
         speechMark?.let { canvas.drawLine(w * it, 0f, w * it, h, speechPaint) }
         canvas.drawLine(w * startThreshold, 0f, w * startThreshold, h, thresholdPaint)
-    }
-
-    private companion object {
-        const val MARK_WIDTH_PX = 4f
-
-        /** The level bar is drawn inside the zones so both stay readable. */
-        const val BAR_INSET = 0.25f
     }
 }

@@ -93,10 +93,10 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.isConnected).isFalse()
         assertThat(service.isReconnecting).isFalse()
         assertThat(service.connectionError).isNull()
-        assertThat(service.getConnection()).isNull()
+        assertThat(service.connection).isNull()
         assertThat(service.targetServer).isNull()
-        assertThat(service.isSynchronized()).isFalse()
-        assertThat(service.isConnectionEstablished()).isFalse()
+        assertThat(service.isSynchronized).isFalse()
+        assertThat(service.isConnectionEstablished).isFalse()
         assertThrows(HumlaDisconnectedException::class.java) { service.session }
     }
 
@@ -156,7 +156,7 @@ class HumlaServiceCharacterizationTest {
         for (intent in listOf(null, Intent(), Intent().setAction("se.lublin.humla.CONNECT"))) {
             assertThat(service.onStartCommand(intent, 0, 0)).isEqualTo(Service.START_NOT_STICKY)
         }
-        assertThat(service.getConnection()).isNull()
+        assertThat(service.connection).isNull()
         assertThat(service.targetServer).isNull()
     }
 
@@ -179,7 +179,7 @@ class HumlaServiceCharacterizationTest {
 
         assertThat(stateInsideOnConnecting).containsExactly(HumlaService.ConnectionState.CONNECTING)
         assertThat(serverInsideOnConnecting).containsExactly("127.0.0.1")
-        assertThat(service.getConnection()).isNotNull()
+        assertThat(service.connection).isNotNull()
     }
 
     /** Every audio setting lands in its [AudioConfig] field; the VAD config reaches a live object instead. */
@@ -264,7 +264,7 @@ class HumlaServiceCharacterizationTest {
         service.setTalkingState(true)
 
         val mode = inputMode(service) as ToggleInputMode
-        assertThat(mode.isTalkingOn()).isTrue()
+        assertThat(mode.isTalkingOn).isTrue()
         assertThat(service.isTalking).isTrue()
     }
 

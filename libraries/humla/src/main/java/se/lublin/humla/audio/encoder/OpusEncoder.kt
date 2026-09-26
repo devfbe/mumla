@@ -103,12 +103,6 @@ class OpusEncoder(
         }
     }
 
-    fun getBitrate(): Int {
-        val value = intArrayOf(0)
-        api.ctlGetInt(state, OpusEncoderNative.OPUS_GET_BITRATE_REQUEST, value)
-        return value[0]
-    }
-
     override fun destroy() {
         if (destroyed) return
         destroyed = true

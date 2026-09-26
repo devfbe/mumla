@@ -22,6 +22,8 @@ import se.lublin.mumla.MediaButtonAction
 import se.lublin.mumla.Settings
 import se.lublin.mumla.util.changes
 
+private const val TAG = "MumlaMediaSession"
+
 /**
  * Owns a [MediaSessionCompat] that is active exactly while Mumla is connected and the headset
  * button action is not [MediaButtonAction.NONE], so headset and Bluetooth (AVRCP) media buttons
@@ -140,9 +142,5 @@ class MumlaMediaSession(
         released.release()
         session = null
         target.stopTalking()
-    }
-
-    private companion object {
-        const val TAG = "MumlaMediaSession"
     }
 }

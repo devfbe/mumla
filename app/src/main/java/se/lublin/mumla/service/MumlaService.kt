@@ -213,7 +213,7 @@ class MumlaService : HumlaService(),
 
         val selfStartedTalking = user.session == selfSession && user.talkState == TalkState.TALKING
         val pttClick = pttSoundEnabled && transmitMode == Constants.TRANSMIT_PUSH_TO_TALK
-        if (pttClick && selfStartedTalking && isConnectionEstablished()) {
+        if (pttClick && selfStartedTalking && isConnectionEstablished) {
             keyClickSound()
         }
     }
@@ -416,7 +416,7 @@ class MumlaService : HumlaService(),
                 channelOverlay.setPushToTalkShown(settings.humlaInputMethod == Constants.TRANSMIT_PUSH_TO_TALK)
             Settings.PREF_HOT_CORNER_KEY -> {
                 hotCorner.gravity = settings.hotCornerGravity
-                hotCorner.isShown = isConnectionEstablished() && settings.isHotCornerEnabled
+                hotCorner.isShown = isConnectionEstablished && settings.isHotCornerEnabled
             }
             Settings.PREF_USE_TTS -> applyTextToSpeechPreference()
             Settings.PREF_SHORT_TTS_MESSAGES ->
@@ -430,7 +430,7 @@ class MumlaService : HumlaService(),
             configure(SessionSettings.withAudioSettings(sessionConfig, settings))
         }
 
-        if (key in RECONNECT_KEYS && isConnectionEstablished()) {
+        if (key in RECONNECT_KEYS && isConnectionEstablished) {
             Toast.makeText(this, R.string.change_requires_reconnect, Toast.LENGTH_LONG).show()
         }
     }
@@ -475,7 +475,7 @@ class MumlaService : HumlaService(),
 
     override fun onMuteToggled() {
         val user = sessionUser
-        if (isConnectionEstablished() && user != null) {
+        if (isConnectionEstablished && user != null) {
             val muted = !user.isSelfMuted
             val deafened = user.isSelfDeafened && muted
             setSelfMuteDeafState(muted, deafened)
@@ -484,7 +484,7 @@ class MumlaService : HumlaService(),
 
     override fun onDeafenToggled() {
         val user = sessionUser
-        if (isConnectionEstablished() && user != null) {
+        if (isConnectionEstablished && user != null) {
             setSelfMuteDeafState(!user.isSelfDeafened, !user.isSelfDeafened)
         }
     }
@@ -552,7 +552,7 @@ class MumlaService : HumlaService(),
 
     /** Talk key pressed; a no-op in toggle PTT mode, which acts on key up. */
     override fun onTalkKeyDown() {
-        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == settings.inputMethod) {
+        if (isConnectionEstablished && Settings.ARRAY_INPUT_METHOD_PTT == settings.inputMethod) {
             if (!settings.isPushToTalkToggle) {
                 setTalkingState(true) // Start talking
             }
@@ -561,7 +561,7 @@ class MumlaService : HumlaService(),
 
     /** Talk key released; toggles talking in toggle PTT mode, otherwise stops talking. */
     override fun onTalkKeyUp() {
-        if (isConnectionEstablished() && Settings.ARRAY_INPUT_METHOD_PTT == settings.inputMethod) {
+        if (isConnectionEstablished && Settings.ARRAY_INPUT_METHOD_PTT == settings.inputMethod) {
             if (settings.isPushToTalkToggle) {
                 setTalkingState(!isTalking) // Toggle talk state
             } else {

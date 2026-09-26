@@ -97,13 +97,13 @@ class HumlaServiceSessionTest {
         val h = start()
         h.connectAndSynchronize()
 
-        val connection = h.service.getConnection()
+        val connection = h.service.connection
         h.service.connect()
         h.mainLooper.idle()
 
         // `getConnection()` rather than `transports.tcps.size`: a transport appears on the
         // protocol thread only later, so a size check would pass either way.
-        assertThat(h.service.getConnection()).isSameInstanceAs(connection)
+        assertThat(h.service.connection).isSameInstanceAs(connection)
         assertThat(h.service.sessionState.value).isEqualTo(SessionState.Connected)
         assertThat(h.transports.tcps).hasSize(1)
     }
@@ -184,7 +184,7 @@ class HumlaServiceSessionTest {
 
         h.service.connect()
         h.mainLooper.idle()
-        val connection = h.service.getConnection()!!
+        val connection = h.service.connection!!
 
         assertThat(connection.forceTcp).isEqualTo(true)
         assertThat(connection.useTor).isEqualTo(false)
@@ -204,7 +204,7 @@ class HumlaServiceSessionTest {
         h.service.connect()
         h.mainLooper.idle()
 
-        assertThat(h.service.getConnection()!!.useTor).isEqualTo(true)
+        assertThat(h.service.connection!!.useTor).isEqualTo(true)
     }
 
     // ---------------------------------------------------------------- loss and backoff
@@ -388,12 +388,12 @@ class HumlaServiceSessionTest {
         val h = start(autoReconnect = true)
         h.connectAndSynchronize()
         h.failConnection(0, connectionError())
-        val connection = h.service.getConnection()
+        val connection = h.service.connection
 
         h.service.cancelReconnect()
         h.mainLooper.idleFor(100, TimeUnit.MILLISECONDS) // the post fires in here
 
-        assertThat(h.service.getConnection()).isSameInstanceAs(connection)
+        assertThat(h.service.connection).isSameInstanceAs(connection)
         assertThat(h.service.sessionState.value)
             .isInstanceOf(SessionState.Disconnected::class.java)
         assertThat(h.transports.tcps).hasSize(1)
@@ -674,12 +674,12 @@ class HumlaServiceSessionTest {
 
         h.service.connect() // Connecting, and the callback is still registered
         h.mainLooper.idle()
-        val connection = h.service.getConnection()
+        val connection = h.service.connection
         callback.onAvailable(ShadowNetwork.newInstance(1))
         h.mainLooper.idle()
 
         assertThat(networkCallbacks()).isEmpty()
-        assertThat(h.service.getConnection()).isSameInstanceAs(connection)
+        assertThat(h.service.connection).isSameInstanceAs(connection)
     }
 
     // ---------------------------------------------------------------- the missing server

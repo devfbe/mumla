@@ -48,7 +48,7 @@ class AudioOutputTest {
         val o = AudioOutput(listener, null, factory)
         output = o
         o.startPlaying(AudioManager.STREAM_MUSIC)
-        awaitTrue("the playback thread to start") { o.isPlaying() }
+        awaitTrue("the playback thread to start") { o.isPlaying }
         return o
     }
 
@@ -92,7 +92,7 @@ class AudioOutputTest {
         val thrown = runCatching { o.startPlaying(AudioManager.STREAM_MUSIC) }.exceptionOrNull()
 
         assertThat(thrown).isInstanceOf(se.lublin.humla.exception.AudioInitializationException::class.java)
-        assertThat(o.isPlaying()).isFalse()
+        assertThat(o.isPlaying).isFalse()
     }
 
     // --- track attributes ------------------------------------------------------------------------
@@ -128,7 +128,7 @@ class AudioOutputTest {
             thread.join(TimeUnit.SECONDS.toMillis(5))
 
             assertWithMessage("playback thread alive after stop, round $round").that(thread.isAlive).isFalse()
-            assertThat(o.isPlaying()).isFalse()
+            assertThat(o.isPlaying).isFalse()
             assertThat(o.playbackTrack()).isNull()
         }
     }
@@ -150,7 +150,7 @@ class AudioOutputTest {
         // producer still owns parks it forever.
         runBounded("stopPlaying after the failed packet") { o.stopPlaying() }
         output = null
-        assertThat(o.isPlaying()).isFalse()
+        assertThat(o.isPlaying).isFalse()
     }
 
     @Test

@@ -32,6 +32,8 @@ import androidx.core.content.res.ResourcesCompat
 import se.lublin.mumla.R
 import se.lublin.mumla.util.dp
 
+private const val STROKE_WIDTH_DP = 1f
+
 /** [bitmap] cropped to a circle with a thin outline, e.g. a user's avatar. */
 class CircleDrawable(private val resources: Resources, private val bitmap: Bitmap) : Drawable() {
 
@@ -81,8 +83,4 @@ class CircleDrawable(private val resources: Resources, private val bitmap: Bitma
     override fun getOpacity(): Int = PixelFormat.UNKNOWN
 
     override fun getConstantState(): ConstantState = constantState
-
-    private companion object {
-        const val STROKE_WIDTH_DP = 1f
-    }
 }

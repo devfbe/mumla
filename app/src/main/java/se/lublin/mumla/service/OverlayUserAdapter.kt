@@ -37,7 +37,7 @@ import se.lublin.mumla.util.talkStateDescription
  */
 class OverlayUserAdapter(
     private val context: Context,
-    private var channel: IChannel,
+    channel: IChannel,
 ) : BaseAdapter() {
 
     // Copied: `Channel.users` returns an unmodifiable view of the live list.
@@ -75,10 +75,9 @@ class OverlayUserAdapter(
         return binding.root
     }
 
-    fun setChannel(channel: IChannel) {
-        this.channel = channel
-        notifyDataSetChanged()
-    }
-
-    fun getChannel(): IChannel = channel
+    var channel: IChannel = channel
+        set(value) {
+            field = value
+            notifyDataSetChanged()
+        }
 }

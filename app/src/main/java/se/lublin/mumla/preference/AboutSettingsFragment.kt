@@ -11,6 +11,9 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
+private const val VERSION_KEY = "version"
+private const val SHOW_NEWS_KEY = "showNews"
+
 class AboutSettingsFragment : MumlaPreferenceFragment(R.xml.settings_about) {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         super.onCreatePreferences(savedInstanceState, rootKey)
@@ -39,10 +42,5 @@ class AboutSettingsFragment : MumlaPreferenceFragment(R.xml.settings_about) {
             }
             "donation" -> append("\n*) ${getString(R.string.donation_thanks)}")
         }
-    }
-
-    private companion object {
-        const val VERSION_KEY = "version"
-        const val SHOW_NEWS_KEY = "showNews"
     }
 }

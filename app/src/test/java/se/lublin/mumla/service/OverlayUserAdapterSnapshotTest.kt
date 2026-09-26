@@ -93,9 +93,9 @@ class OverlayUserAdapterSnapshotTest {
         val other = FakeChannel(1)
         other.addUser(FakeUser(9))
 
-        adapter.setChannel(other)
+        adapter.channel = other
 
-        assertThat(adapter.getChannel()).isEqualTo(other)
+        assertThat(adapter.channel).isEqualTo(other)
         assertThat(adapter.count).isEqualTo(1)
         assertThat(adapter.getItem(0)).isEqualTo(other.users[0])
     }
