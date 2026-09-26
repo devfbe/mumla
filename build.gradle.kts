@@ -18,7 +18,14 @@
 import com.android.build.api.dsl.CommonExtension
 import com.android.build.api.dsl.LibraryExtension
 
-// AGP 9 compiles Kotlin itself; never apply org.jetbrains.kotlin.android.
+// AGP 9 compiles Kotlin itself; never apply org.jetbrains.kotlin.android. Putting KGP on the
+// classpath only raises the Kotlin version AGP's built-in Kotlin uses.
+buildscript {
+    dependencies {
+        classpath(libs.kotlin.gradlePlugin)
+    }
+}
+
 // The Android plugins are loaded here, once, so that build-logic and protobuf share them.
 plugins {
     alias(libs.plugins.android.application) apply false

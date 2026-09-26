@@ -149,7 +149,7 @@ class ChatImageLoader(
         val entry = failures.get(key)
         val live = entry != null && entry.expiresAtMillis > nowMillis()
         if (entry != null && !live) failures.remove(key)
-        return if (live) entry?.error else null
+        return if (live) entry.error else null
     }
 
     private fun remember(key: String, result: ImageResult): ImageResult {

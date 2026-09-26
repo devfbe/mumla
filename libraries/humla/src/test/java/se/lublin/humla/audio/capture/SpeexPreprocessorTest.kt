@@ -287,7 +287,7 @@ class SpeexPreprocessorTest {
 
     /** `long`, `java.lang.Long`, or an array of either (an out-parameter is an escape too). */
     private fun mentionsLong(type: Class<*>): Boolean = when {
-        type == Long::class.javaPrimitiveType || type == java.lang.Long::class.java -> true
+        type == Long::class.javaPrimitiveType || type == Long::class.javaObjectType -> true
         type.isArray -> mentionsLong(type.componentType!!)
         else -> false
     }

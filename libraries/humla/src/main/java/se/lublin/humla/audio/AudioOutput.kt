@@ -70,6 +70,7 @@ class AudioOutput @JvmOverloads constructor(
     private var thread: Thread? = null
 
     // Lock that the audio thread waits on when there's no audio to play. Wake when we get a frame.
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN") // wait()/notify()
     private val inactiveLock = Object()
     /** The same talkers as [audioOutputs], in the order they are decoded and mixed. */
     private val mix = PlaybackMix()

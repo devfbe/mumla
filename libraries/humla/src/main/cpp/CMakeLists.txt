@@ -69,7 +69,7 @@ add_library(speexdsp STATIC
 target_include_directories(speexdsp PUBLIC "${THIRD_PARTY}/speexdsp/include" PRIVATE "${SPEEXDSP_DIR}")
 target_compile_definitions(speexdsp PUBLIC __EMX__ PRIVATE FIXED_POINT USE_KISS_FFT EXPORT=)
 
-# ---------------------------------------------------------------- rnnoise + webrtc apm 2.1
+# ---------------------------------------------------------------- rnnoise + webrtc apm
 # Noise suppression (RNNoise) and echo cancellation (WebRTC APM).
 add_subdirectory(rnnoise)
 add_subdirectory(webrtc_apm)

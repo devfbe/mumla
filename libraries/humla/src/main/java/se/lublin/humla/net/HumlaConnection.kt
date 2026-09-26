@@ -415,7 +415,7 @@ class HumlaConnection @JvmOverloads constructor(
 
         scope.launch {
             val socketFactory = try {
-                createSocketFactory(server.host ?: "")
+                createSocketFactory(server.host)
             } catch (e: HumlaException) {
                 handleFatalException(e)
                 return@launch

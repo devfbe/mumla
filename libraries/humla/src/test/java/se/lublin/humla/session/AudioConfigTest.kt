@@ -91,6 +91,6 @@ class AudioConfigTest {
         is Int -> value + 1
         is Float -> value + 1f
         is String -> value + "-other"
-        else -> error("AudioConfig gained a ${value?.javaClass} field; teach this test to vary it")
+        else -> error("AudioConfig gained a ${value.javaClass} field; teach this test to vary it")
     }
 }

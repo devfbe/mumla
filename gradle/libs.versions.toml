@@ -1,17 +1,18 @@
 [versions]
-# No kotlin version here: AGP's built-in Kotlin support brings its own Kotlin Gradle plugin, and
-# declaring one would put a second KGP on the classpath.
 agp = "9.4.1"
+# AGP's built-in Kotlin compiles with whatever KGP is on the build classpath; the root build script
+# puts this one there instead of the older KGP AGP depends on.
+kotlin = "2.4.20"
 coroutines = "1.11.0"
 
 androidx-appcompat = "1.8.0"
 androidx-activity = "1.13.0"
 androidx-annotation = "1.11.0"
 androidx-cardview = "1.0.0"
-androidx-core = "1.18.0"
+androidx-core = "1.19.1"
 androidx-documentfile = "1.1.0"
 androidx-exifinterface = "1.4.2"
-androidx-fragment = "1.9.0"
+androidx-fragment = "1.9.1"
 androidx-media = "1.8.0"
 androidx-lifecycle = "2.11.0"
 androidx-preference = "1.2.1"
@@ -25,8 +26,8 @@ protobuf-plugin = "0.10.0"
 detekt = "1.23.8"
 bouncycastle = "1.86"
 minidns = "1.1.1"
-coil = "3.4.0"
-okhttp = "5.4.0"
+coil = "3.6.3"
+okhttp = "5.5.0"
 
 junit = "4.13.2"
 robolectric = "4.17"
@@ -36,6 +37,7 @@ androidx-test-core = "1.7.0"
 
 [libraries]
 android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 detekt-gradlePlugin = { module = "io.gitlab.arturbosch.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
