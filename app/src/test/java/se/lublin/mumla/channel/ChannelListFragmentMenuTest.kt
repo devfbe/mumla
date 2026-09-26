@@ -17,7 +17,6 @@
 
 package se.lublin.mumla.channel
 
-import android.os.Bundle
 import android.view.Menu
 import android.view.View
 import androidx.appcompat.widget.PopupMenu
@@ -53,8 +52,7 @@ class ChannelListFragmentMenuTest {
         val parent = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(parent, "parent").commitNow()
-        fragment = ChannelListFragment()
-        fragment.arguments = Bundle().apply { putBoolean("pinned", false) }
+        fragment = ChannelListFragment.newInstance(pinned = false)
         parent.childFragmentManager.beginTransaction().add(fragment, "list").commitNow()
     }
 

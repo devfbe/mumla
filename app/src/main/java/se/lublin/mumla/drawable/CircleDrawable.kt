@@ -28,9 +28,9 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
-import android.util.TypedValue
 import androidx.core.content.res.ResourcesCompat
 import se.lublin.mumla.R
+import se.lublin.mumla.util.dp
 
 /** [bitmap] cropped to a circle with a thin outline, e.g. a user's avatar. */
 class CircleDrawable(private val resources: Resources, private val bitmap: Bitmap) : Drawable() {
@@ -45,9 +45,7 @@ class CircleDrawable(private val resources: Resources, private val bitmap: Bitma
         isDither = true
         isAntiAlias = true
         color = ResourcesCompat.getColor(resources, R.color.ripple_talk_state_disabled, null)
-        strokeWidth = TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP, STROKE_WIDTH_DP, resources.displayMetrics,
-        )
+        strokeWidth = resources.dp(STROKE_WIDTH_DP)
         style = Paint.Style.STROKE
     }
 

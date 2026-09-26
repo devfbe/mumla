@@ -36,7 +36,10 @@ import se.lublin.mumla.ui.ServiceViewModel
 import se.lublin.mumla.util.collectEvents
 import se.lublin.mumla.util.configureForUntrustedHtml
 
-/** Shows a comment as HTML and its source; the source can be edited if argument "editing" is set. */
+internal const val ARG_COMMENT = "comment"
+internal const val ARG_EDITING = "editing"
+
+/** Shows a comment as HTML and its source, which can be edited if [isEditing]. */
 abstract class AbstractCommentFragment : DialogFragment() {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
@@ -47,11 +50,11 @@ abstract class AbstractCommentFragment : DialogFragment() {
     /** Waits for the requested comment; see [observeComment]. */
     private var commentUpdates: Job? = null
 
-    val isEditing: Boolean get() = requireArguments().getBoolean("editing")
+    val isEditing: Boolean get() = requireArguments().getBoolean(ARG_EDITING)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        comment = requireArguments().getString("comment")
+        comment = requireArguments().getString(ARG_COMMENT)
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {

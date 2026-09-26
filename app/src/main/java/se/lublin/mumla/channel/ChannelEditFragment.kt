@@ -19,6 +19,7 @@ package se.lublin.mumla.channel
 
 import android.app.Dialog
 import android.os.Bundle
+import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -28,15 +29,15 @@ import se.lublin.mumla.databinding.FragmentChannelEditBinding
 import se.lublin.mumla.ui.ServiceViewModel
 
 /**
- * Creates a channel under the channel in argument "parent" if "adding" is set. Editing an
+ * Creates a channel under the given one when adding. Editing an
  * existing channel is not implemented.
  */
 class ChannelEditFragment : DialogFragment() {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
 
-    private val isAdding get() = requireArguments().getBoolean("adding")
-    private val parent get() = requireArguments().getInt("parent")
+    private val isAdding get() = requireArguments().getBoolean(ARG_ADDING)
+    private val parent get() = requireArguments().getInt(ARG_CHANNEL)
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val binding = FragmentChannelEditBinding.inflate(layoutInflater)
@@ -72,5 +73,15 @@ class ChannelEditFragment : DialogFragment() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .create()
+    }
+
+    companion object {
+        private const val ARG_CHANNEL = "channel"
+        private const val ARG_ADDING = "adding"
+
+        /** Adds a channel under [channelId] if [adding], else edits [channelId]. */
+        fun newInstance(channelId: Int, adding: Boolean) = ChannelEditFragment().apply {
+            arguments = bundleOf(ARG_CHANNEL to channelId, ARG_ADDING to adding)
+        }
     }
 }

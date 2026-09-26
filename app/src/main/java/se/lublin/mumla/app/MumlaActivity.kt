@@ -362,9 +362,8 @@ class MumlaActivity :
     }
 
     private fun drawerFragment(id: Int): Fragment? = when (id) {
-        DrawerAdapter.ITEM_SERVER -> ChannelFragment()
-        DrawerAdapter.ITEM_PINNED_CHANNELS ->
-            ChannelFragment().apply { arguments = Bundle().apply { putBoolean("pinned", true) } }
+        DrawerAdapter.ITEM_SERVER -> ChannelFragment.newInstance()
+        DrawerAdapter.ITEM_PINNED_CHANNELS -> ChannelFragment.newInstance(pinned = true)
         DrawerAdapter.ITEM_INFO -> ServerInfoFragment()
         DrawerAdapter.ITEM_ACCESS_TOKENS -> service?.targetServer?.id?.let(AccessTokenFragment::newInstance)
         DrawerAdapter.ITEM_FAVOURITES -> FavouriteServerListFragment()

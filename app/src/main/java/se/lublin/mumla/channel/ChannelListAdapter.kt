@@ -24,7 +24,6 @@ import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -48,6 +47,7 @@ import se.lublin.mumla.databinding.ChannelRowBinding
 import se.lublin.mumla.databinding.ChannelUserRowBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.drawable.CircleDrawable
+import se.lublin.mumla.util.dp
 import se.lublin.mumla.util.talkStateDescription
 
 /**
@@ -198,16 +198,7 @@ class ChannelListAdapter(
                 cvh.channelUserCount.visibility = View.GONE
             }
 
-            // Pad the view depending on channel's nested level.
-            val metrics = context.resources.displayMetrics
-            val margin = node.depth *
-                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 25f, metrics)
-            cvh.channelHolder.setPadding(
-                margin.toInt(),
-                cvh.channelHolder.paddingTop,
-                cvh.channelHolder.paddingRight,
-                cvh.channelHolder.paddingBottom,
-            )
+            indent(cvh.channelHolder, node.depth)
 
             bindEnterRestriction(cvh, channel)
             cvh.joinButton.setOnClickListener {
@@ -254,16 +245,7 @@ class ChannelListAdapter(
 
             bindTalkState(uvh, user)
 
-            // Pad the view depending on channel's nested level.
-            val metrics = context.resources.displayMetrics
-            val margin = (node.depth + 1) *
-                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 25f, metrics)
-            uvh.userHolder.setPadding(
-                margin.toInt(),
-                uvh.userHolder.paddingTop,
-                uvh.userHolder.paddingRight,
-                uvh.userHolder.paddingBottom,
-            )
+            indent(uvh.userHolder, node.depth + 1)
 
             uvh.moreButton.setOnClickListener { v ->
                 UserMenu(context, user, humlaService, fragmentManager, ::onLocalUserStateUpdated).showPopup(v)
@@ -293,9 +275,17 @@ class ChannelListAdapter(
             val current = humlaService
             if (current.isConnected) current.session.setListening(channel.id, false)
         }
-        val metrics = context.resources.displayMetrics
-        val margin = (node.depth + 1) * TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 25f, metrics)
-        lvh.holder.setPadding(margin.toInt(), lvh.holder.paddingTop, lvh.holder.paddingRight, lvh.holder.paddingBottom)
+        indent(lvh.holder, node.depth + 1)
+    }
+
+    /** Pads [view] by [levels] of the tree's indentation. */
+    private fun indent(view: View, levels: Int) {
+        view.setPadding(
+            context.resources.dp(INDENT_DP * levels).toInt(),
+            view.paddingTop,
+            view.paddingRight,
+            view.paddingBottom,
+        )
     }
 
     override fun getItemCount(): Int = nodes.size
@@ -600,6 +590,7 @@ class ChannelListAdapter(
 
     companion object {
         private val TAG: String = ChannelListAdapter::class.java.name
+        private const val INDENT_DP = 25f
 
         // Set particular bits to make the integer-based model item ids unique.
         const val CHANNEL_ID_MASK = 0x1L shl 32

@@ -33,6 +33,7 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
+import androidx.core.os.bundleOf
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -306,7 +307,7 @@ class ChannelListFragment :
         channelView.scrollToPosition(adapter.getUserPosition(userId))
     }
 
-    private fun isShowingPinnedChannels(): Boolean = requireArguments().getBoolean("pinned")
+    private fun isShowingPinnedChannels(): Boolean = requireArguments().getBoolean(ARG_PINNED)
 
     /** Makes [channel] the chat target, or closes the target if it is [channel] already. */
     fun onChannelClick(channel: IChannel) = toggleTarget(ChatTarget.Channel(channel))
@@ -327,6 +328,10 @@ class ChannelListFragment :
 
     companion object {
         private val TAG: String = ChannelListFragment::class.java.name
+        private const val ARG_PINNED = "pinned"
+
+        /** The whole channel tree, or with [pinned] only the pinned channels. */
+        fun newInstance(pinned: Boolean) = ChannelListFragment().apply { arguments = bundleOf(ARG_PINNED to pinned) }
 
         /** The noise suppression items and the methods they pick. */
         private val NOISE_METHODS = mapOf(

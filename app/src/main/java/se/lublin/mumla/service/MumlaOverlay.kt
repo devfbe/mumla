@@ -37,6 +37,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.OverlayBinding
 import se.lublin.mumla.util.collectEvents
+import se.lublin.mumla.util.dp
 
 /** An onscreen interactive overlay displaying the users in the current channel. */
 class MumlaOverlay(private val service: MumlaService) {
@@ -60,10 +61,9 @@ class MumlaOverlay(private val service: MumlaService) {
         binding.overlayClose.setOnClickListener { hide() }
         setPushToTalkShown(Settings.getInstance(service).inputMethod == Settings.ARRAY_INPUT_METHOD_PTT)
 
-        val density = service.resources.displayMetrics.density
         overlayParams = WindowManager.LayoutParams(
-            (DEFAULT_WIDTH * density).toInt(),
-            (DEFAULT_HEIGHT * density).toInt(),
+            service.resources.dp(DEFAULT_WIDTH_DP).toInt(),
+            service.resources.dp(DEFAULT_HEIGHT_DP).toInt(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
@@ -211,7 +211,7 @@ class MumlaOverlay(private val service: MumlaService) {
 
     companion object {
         private val TAG: String = MumlaOverlay::class.java.name
-        const val DEFAULT_WIDTH = 200
-        const val DEFAULT_HEIGHT = 240
+        private const val DEFAULT_WIDTH_DP = 200f
+        private const val DEFAULT_HEIGHT_DP = 240f
     }
 }

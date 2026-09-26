@@ -27,6 +27,7 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.os.bundleOf
 import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
@@ -82,7 +83,7 @@ class ChannelFragment :
     }
 
     /** True if only the user's pinned channels are shown. */
-    private val isShowingPinnedChannels get() = arguments?.getBoolean("pinned") == true
+    private val isShowingPinnedChannels get() = arguments?.getBoolean(ARG_PINNED) == true
 
     override fun onServiceEvent(event: HumlaEvent) {
         when (event) {
@@ -321,9 +322,7 @@ class ChannelFragment :
         null
     }
 
-    private fun newListFragment() = ChannelListFragment().apply {
-        arguments = Bundle().apply { putBoolean("pinned", isShowingPinnedChannels) }
-    }
+    private fun newListFragment() = ChannelListFragment.newInstance(isShowingPinnedChannels)
 
     private fun tabTitle(position: Int): String =
         getString(if (position == TAB_CHANNEL) R.string.channel else R.string.chat).uppercase(Locale.getDefault())
@@ -333,13 +332,18 @@ class ChannelFragment :
         override fun getItemCount(): Int = 2
 
         override fun createFragment(position: Int): Fragment =
-            if (position == TAB_CHANNEL) newListFragment() else ChannelChatFragment().apply { arguments = Bundle() }
+            if (position == TAB_CHANNEL) newListFragment() else ChannelChatFragment()
     }
 
-    private companion object {
-        val TAG: String = ChannelFragment::class.java.name
-        const val TAB_CHANNEL = 0
-        val INPUT_PREFERENCES = setOf(
+    companion object {
+        /** The channel list and chat, with [pinned] showing only the pinned channels. */
+        fun newInstance(pinned: Boolean = false) =
+            ChannelFragment().apply { arguments = bundleOf(ARG_PINNED to pinned) }
+
+        private val TAG: String = ChannelFragment::class.java.name
+        private const val TAB_CHANNEL = 0
+        private const val ARG_PINNED = "pinned"
+        private val INPUT_PREFERENCES = setOf(
             Settings.PREF_INPUT_METHOD,
             Settings.PREF_PUSH_BUTTON_HIDE_KEY,
             Settings.PREF_PTT_BUTTON_HEIGHT,
