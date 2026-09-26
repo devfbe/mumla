@@ -6,15 +6,15 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.TalkState
+import se.lublin.mumla.R
 import se.lublin.mumla.channel.FakeChannel
 import se.lublin.mumla.channel.FakeUser
-import se.lublin.mumla.R
 import se.lublin.mumla.testing.ThemedActivity
 
 /**

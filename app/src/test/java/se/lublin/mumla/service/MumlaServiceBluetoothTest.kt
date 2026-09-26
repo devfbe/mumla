@@ -1,7 +1,7 @@
 package se.lublin.mumla.service
 
-import android.app.Application
 import android.Manifest
+import android.app.Application
 import android.media.AudioDeviceInfo
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
@@ -9,16 +9,16 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Before
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.testutil.FakeCommunicationDevices
 import se.lublin.humla.testutil.testConnection
 import se.lublin.humla.testutil.testRouter
-import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.Settings
+import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.testing.createMumlaService
 
 /**
@@ -161,7 +161,7 @@ class MumlaServiceBluetoothTest {
         connect()
 
         preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_PTT_SOUND)
+        service.onPreferenceChanged(Settings.PREF_PTT_SOUND)
 
         assertThat(receiver.selectCalls.size).isEqualTo(0)
         assertThat(receiver.clearCalls).isEqualTo(0)

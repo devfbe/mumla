@@ -19,9 +19,8 @@ package se.lublin.mumla.app
 
 import android.content.ComponentName
 import android.content.Intent
-import android.content.res.Configuration
 import android.content.ServiceConnection
-import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.os.IBinder
@@ -31,9 +30,9 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -46,6 +45,9 @@ import se.lublin.humla.model.MumbleURLParser
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.BuildConfig
+import se.lublin.mumla.MainScreen
+import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.AccessTokenFragment
 import se.lublin.mumla.channel.ChannelFragment
 import se.lublin.mumla.channel.ServerInfoFragment
@@ -53,22 +55,20 @@ import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.databinding.ActivityMainBinding
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.MainScreen
-import se.lublin.mumla.preference.generateDefaultCertificate
 import se.lublin.mumla.preference.SettingsActivity
-import se.lublin.mumla.R
+import se.lublin.mumla.preference.generateDefaultCertificate
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
 import se.lublin.mumla.servers.ServerEditFragment
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.service.MumlaService
-import se.lublin.mumla.Settings
-import se.lublin.mumla.ui.bindClient
 import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.ServiceClient
 import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.bindClient
 import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.util.Edge
+import se.lublin.mumla.util.changes
 import se.lublin.mumla.util.padForSystemBars
 import java.net.MalformedURLException
 import java.security.cert.X509Certificate
@@ -81,8 +81,7 @@ import java.security.cert.X509Certificate
 class MumlaActivity :
     AppCompatActivity(),
     ServiceClient,
-    ConnectionDialogs.Listener,
-    SharedPreferences.OnSharedPreferenceChangeListener {
+    ConnectionDialogs.Listener {
 
     private val serviceModel: ServiceViewModel by viewModels()
     private val service: IMumlaService? get() = serviceModel.service.value
@@ -125,7 +124,10 @@ class MumlaActivity :
         onBackPressedDispatcher.addCallback(this, backCallback)
 
         setStayAwake(settings.shouldStayAwake)
-        PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener(this)
+        lifecycleScope.launch {
+            PreferenceManager.getDefaultSharedPreferences(this@MumlaActivity).changes(Settings.PREF_STAY_AWAKE)
+                .collect { setStayAwake(settings.shouldStayAwake) }
+        }
 
         drawer = MainDrawer(
             this, binding.drawerLayout, binding.leftDrawer, binding.toolbar,
@@ -202,11 +204,6 @@ class MumlaActivity :
         batteryPrompt.dismiss()
         serviceModel.attach(null)
         unbindService(connection)
-    }
-
-    override fun onDestroy() {
-        PreferenceManager.getDefaultSharedPreferences(this).unregisterOnSharedPreferenceChangeListener(this)
-        super.onDestroy()
     }
 
     /** Suppresses the service's notifications while the activity is visible, which it is while bound. */
@@ -386,10 +383,6 @@ class MumlaActivity :
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
-        if (key == Settings.PREF_STAY_AWAKE) setStayAwake(settings.shouldStayAwake)
     }
 
     override fun reconnect(server: Server) = connectFlow.connect(server)

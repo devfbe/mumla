@@ -11,19 +11,21 @@ import androidx.preference.PreferenceManager
 import com.google.android.material.color.DynamicColors
 import com.google.android.material.color.DynamicColorsOptions
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.MainScope
-import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.db.MumlaSQLiteDatabase
+import kotlinx.coroutines.launch
 import se.lublin.mumla.Settings
 import se.lublin.mumla.Settings.Companion.PREF_LANGUAGE
 import se.lublin.mumla.Settings.Companion.PREF_THEME
+import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.db.MumlaSQLiteDatabase
 import se.lublin.mumla.util.ApplicationScope
+import se.lublin.mumla.util.changes
 
 class MumlaApplication :
     Application(),
     MumlaRepository.Owner,
-    ApplicationScope.Owner,
-    SharedPreferences.OnSharedPreferenceChangeListener {
+    ApplicationScope.Owner {
 
     override val scope: CoroutineScope = MainScope()
 
@@ -47,7 +49,9 @@ class MumlaApplication :
         DebugStrictMode.install()
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         applyTheme(preferences)
-        preferences.registerOnSharedPreferenceChangeListener(this)
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            preferences.changes(PREF_LANGUAGE, PREF_THEME).collect { key -> onPreferenceChanged(preferences, key) }
+        }
         // Decided per activity creation, so a changed setting applies to recreated activities.
         DynamicColors.applyToActivitiesIfAvailable(
             this,
@@ -57,7 +61,7 @@ class MumlaApplication :
         )
     }
 
-    override fun onSharedPreferenceChanged(preferences: SharedPreferences, key: String?) {
+    private fun onPreferenceChanged(preferences: SharedPreferences, key: String) {
         when (key) {
             PREF_LANGUAGE -> {
                 val language = preferences.getString(PREF_LANGUAGE, "system")

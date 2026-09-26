@@ -18,15 +18,15 @@ import io.mockk.verify
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Before
-import org.junit.runner.RunWith
 import org.junit.Test
-import org.robolectric.android.controller.ServiceController
+import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import org.robolectric.shadows.ShadowToast
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.HumlaService
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.TalkState
@@ -41,11 +41,11 @@ import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.testConnection
 import se.lublin.humla.testutil.testEmit
 import se.lublin.humla.testutil.testModelHandler
+import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.NoticeFormatter
-import se.lublin.mumla.R
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
-import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.createMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.util.HtmlUtils
@@ -425,7 +425,7 @@ class MumlaServiceCharacterizationTest {
         connect()
         val tts = installTts()
         preferences().edit().putBoolean(Settings.PREF_SHORT_TTS_MESSAGES, true).commit()
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_SHORT_TTS_MESSAGES)
+        service.onPreferenceChanged(Settings.PREF_SHORT_TTS_MESSAGES)
 
         service.testEmit(
             HumlaEvent.TextMessage(
@@ -462,13 +462,13 @@ class MumlaServiceCharacterizationTest {
         val tts = installTts()
         preferences().edit().putBoolean(Settings.PREF_USE_TTS, false).commit()
 
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_USE_TTS)
+        service.onPreferenceChanged(Settings.PREF_USE_TTS)
 
         verify(exactly = 1) { tts.shutdown() }
         assertThat(service.mTTS).isNull()
 
         preferences().edit().putBoolean(Settings.PREF_USE_TTS, true).commit()
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_USE_TTS)
+        service.onPreferenceChanged(Settings.PREF_USE_TTS)
 
         assertThat(service.mTTS).isNotNull()
     }
@@ -990,7 +990,7 @@ class MumlaServiceCharacterizationTest {
         verify(exactly = 1) { hotCorner.isShown = false }
 
         connect()
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_HOT_CORNER_KEY)
+        service.onPreferenceChanged(Settings.PREF_HOT_CORNER_KEY)
         verify(exactly = 1) { hotCorner.isShown = true }
 
         preferences().edit().putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_NONE).commit()
@@ -1001,11 +1001,11 @@ class MumlaServiceCharacterizationTest {
     fun aSettingThatNeedsAReconnectSaysSoWhileConnected() {
         for (key in listOf(Settings.PREF_CERT_ID, Settings.PREF_FORCE_TCP, Settings.PREF_USE_TOR)) {
             ShadowToast.reset()
-            service.onSharedPreferenceChanged(preferences(), key)
+            service.onPreferenceChanged(key)
             assertThat(ShadowToast.getLatestToast()).isNull()
 
             connect()
-            service.onSharedPreferenceChanged(preferences(), key)
+            service.onPreferenceChanged(key)
             assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo(app.getString(R.string.change_requires_reconnect))
             service.testConnection = null
         }
@@ -1015,7 +1015,7 @@ class MumlaServiceCharacterizationTest {
     fun anOrdinarySettingSaysNothingAboutReconnecting() {
         connect()
 
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_PTT_SOUND)
+        service.onPreferenceChanged(Settings.PREF_PTT_SOUND)
 
         assertThat(ShadowToast.getLatestToast()).isNull()
     }

@@ -1,6 +1,7 @@
 package se.lublin.mumla.channel
 
 import android.os.Bundle
+import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -178,11 +179,14 @@ class ChannelListFragmentTest {
             PreferenceManager.getDefaultSharedPreferences(controller.get())
         val changes = countChanges()
 
-        fragment.onSharedPreferenceChanged(preferences, "some.other.preference")
+        preferences.edit { putBoolean("some.other.preference", true) }
+        idleMainLooper()
 
         assertThat(changes()).isEqualTo(0)
 
-        fragment.onSharedPreferenceChanged(preferences, Settings.PREF_SHOW_USER_COUNT)
+        val shown = Settings.getInstance(controller.get()).shouldShowUserCount
+        preferences.edit { putBoolean(Settings.PREF_SHOW_USER_COUNT, !shown) }
+        idleMainLooper()
 
         assertThat(changes()).isEqualTo(1)
     }

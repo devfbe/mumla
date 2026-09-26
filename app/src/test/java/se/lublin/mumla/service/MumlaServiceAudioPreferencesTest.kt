@@ -58,7 +58,7 @@ class MumlaServiceAudioPreferencesTest {
 
     private fun vadConfig(): VadConfig = service.testActivityInputMode.vadConfig
 
-    private fun change(key: String) = service.onSharedPreferenceChanged(prefs, key)
+    private fun change(key: String) = service.onPreferenceChanged(key)
 
     // --- the voice gate -----------------------------------------------------------------------
 

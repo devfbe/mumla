@@ -14,17 +14,17 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
 import org.junit.Assert.assertThrows
-import org.junit.runner.RunWith
 import org.junit.Test
-import org.robolectric.android.controller.ServiceController
-import org.robolectric.annotation.Config
+import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.mumla.app.DrawerAdapter
-import se.lublin.mumla.app.MumlaActivity
+import org.robolectric.android.controller.ServiceController
+import org.robolectric.annotation.Config
 import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
+import se.lublin.mumla.app.DrawerAdapter
+import se.lublin.mumla.app.MumlaActivity
 import se.lublin.mumla.testing.idleMainLooper
 
 /**

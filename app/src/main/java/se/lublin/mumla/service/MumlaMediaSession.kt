@@ -2,7 +2,6 @@ package se.lublin.mumla.service
 
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import android.support.v4.media.session.MediaSessionCompat
@@ -21,6 +20,7 @@ import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.MediaButtonAction
 import se.lublin.mumla.Settings
+import se.lublin.mumla.util.changes
 
 /**
  * Owns a [MediaSessionCompat] that is active exactly while Mumla is connected and the headset
@@ -57,11 +57,6 @@ class MumlaMediaSession(
         }
     }
 
-    /** Strong reference: SharedPreferences keeps listeners weakly. Unfiltered; [applyState] is idempotent. */
-    private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        applyState()
-    }
-
     val isActive: Boolean
         get() = session?.isActive == true
 
@@ -75,20 +70,20 @@ class MumlaMediaSession(
     fun attach(service: IHumlaService) {
         stateUpdates?.cancel()
         stateUpdates = CoroutineScope(Dispatchers.Main.immediate).launch(start = CoroutineStart.UNDISPATCHED) {
+            launch(start = CoroutineStart.UNDISPATCHED) {
+                PreferenceManager.getDefaultSharedPreferences(context).changes(Settings.PREF_MEDIA_BUTTON_ACTION)
+                    .collect { applyState() }
+            }
             service.sessionState
                 .map { it == SessionState.Connected }
                 .distinctUntilChanged()
                 .collect { connected -> if (connected) activate() else deactivate() }
         }
-        PreferenceManager.getDefaultSharedPreferences(context)
-            .registerOnSharedPreferenceChangeListener(preferenceListener)
     }
 
     fun detach() {
         stateUpdates?.cancel()
         stateUpdates = null
-        PreferenceManager.getDefaultSharedPreferences(context)
-            .unregisterOnSharedPreferenceChangeListener(preferenceListener)
         deactivate()
     }
 

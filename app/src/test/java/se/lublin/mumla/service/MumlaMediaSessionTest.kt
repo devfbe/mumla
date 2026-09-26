@@ -15,15 +15,15 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.spyk
-import kotlinx.coroutines.flow.MutableStateFlow
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.util.Constants
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.util.Constants
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.idleMainLooper
 

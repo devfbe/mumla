@@ -20,7 +20,6 @@ package se.lublin.mumla.preference
 
 import android.Manifest
 import android.content.Context
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -31,14 +30,17 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import kotlinx.coroutines.launch
 import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
@@ -51,8 +53,9 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.AndroidAudioTrackSink
 import se.lublin.mumla.audio.AudioTestSession
-import se.lublin.mumla.audio.MeterReading
 import se.lublin.mumla.audio.PcmPlaybackSinkFactory
+import se.lublin.mumla.service.SessionSettings
+import se.lublin.mumla.util.changes
 
 /** The audio settings screen; the decisions live in [AudioSettingsPolicy], this is the wiring. */
 open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio) {
@@ -156,19 +159,19 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     private var session: AudioTestSession? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    /**
-     * Restarts a running preview whenever a setting it was built from changes; keyed on
-     * [SessionSettings.AUDIO_KEYS] so it tracks the same settings as the service.
-     */
-    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key != null && key in se.lublin.mumla.service.SessionSettings.AUDIO_KEYS && isTesting()) restartSession()
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // A running preview is rebuilt from the same settings the service reconfigures from.
+        val preferences = preferenceManager.sharedPreferences ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            preferences.changes(SessionSettings.AUDIO_KEYS).collect { if (isTesting()) restartSession() }
+        }
     }
 
     override fun onResume() {
         super.onResume()
         // A headset may have come or gone, or the toolbar chooser saved another device.
         refreshAudioDevices()
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefsListener)
         // The test takes the microphone and may switch to communication mode, which quietens
         // other apps' audio, so it only runs while the user asks for it.
         findPreference<SwitchPreferenceCompat>(KEY_TEST)?.setOnPreferenceChangeListener { _, newValue ->
@@ -189,7 +192,6 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     }
 
     override fun onPause() {
-        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(prefsListener)
         // This session's AudioRecord silences the service's capture, so release it first.
         stopSession()
         // Neither switch is persisted; reset them so they agree with the stopped session.

@@ -18,7 +18,6 @@
 package se.lublin.mumla.channel
 
 import android.annotation.SuppressLint
-import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -28,28 +27,31 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
-import androidx.fragment.app.activityViewModels
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import kotlinx.coroutines.launch
 import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.util.VoiceTargetMode
-import se.lublin.mumla.databinding.FragmentChannelBinding
 import se.lublin.mumla.R
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.Settings
-import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.databinding.FragmentChannelBinding
+import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.ui.ServiceClient
 import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.util.changes
 import java.util.Locale
 
 /**
@@ -60,7 +62,6 @@ import java.util.Locale
 class ChannelFragment :
     Fragment(),
     ServiceClient,
-    SharedPreferences.OnSharedPreferenceChangeListener,
     MenuProvider {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
@@ -221,8 +222,10 @@ class ChannelFragment :
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        PreferenceManager.getDefaultSharedPreferences(requireActivity())
-            .registerOnSharedPreferenceChangeListener(this)
+        viewLifecycleOwner.lifecycleScope.launch {
+            PreferenceManager.getDefaultSharedPreferences(requireContext()).changes(INPUT_PREFERENCES)
+                .collect { configureInput() }
+        }
 
         val binding = requireNotNull(binding)
         val pager = binding.channelViewPager
@@ -275,12 +278,6 @@ class ChannelFragment :
         talkButtonHeld = false
     }
 
-    override fun onDestroy() {
-        PreferenceManager.getDefaultSharedPreferences(requireActivity())
-            .unregisterOnSharedPreferenceChangeListener(this)
-        super.onDestroy()
-    }
-
     private fun configureTargetPanel() {
         val binding = binding ?: return
         val session = service?.takeIf { it.isConnected }?.session ?: return
@@ -322,10 +319,6 @@ class ChannelFragment :
     } catch (e: IllegalStateException) {
         Log.d(TAG, "exception in selfUser: $e")
         null
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
-        if (key in INPUT_PREFERENCES) configureInput()
     }
 
     private fun newListFragment() = ChannelListFragment().apply {

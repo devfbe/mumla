@@ -20,7 +20,6 @@ package se.lublin.mumla.service
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.Uri
@@ -33,14 +32,14 @@ import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.SupervisorJob
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.HumlaService
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.Message
@@ -48,19 +47,19 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.util.Constants
+import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.ChatMessageLog
 import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.chat.outgoingMessageHtml
-import se.lublin.mumla.R
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
-import se.lublin.mumla.Settings
-import se.lublin.mumla.util.collectEvents
 import se.lublin.mumla.util.HtmlUtils
+import se.lublin.mumla.util.changes
+import se.lublin.mumla.util.collectEvents
 
 /** [HumlaService] plus Mumla's notifications, overlay, hot corner, TTS and media session. */
 class MumlaService : HumlaService(),
-    SharedPreferences.OnSharedPreferenceChangeListener,
     MumlaConnectionNotification.OnActionListener,
     MumlaReconnectNotification.OnActionListener,
     IMumlaService {
@@ -226,8 +225,10 @@ class MumlaService : HumlaService(),
         mSettings = Settings.getInstance(this)
         mPTTSoundEnabled = mSettings.isPttSoundEnabled
         mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled
-        val preferences = PreferenceManager.getDefaultSharedPreferences(this)
-        preferences.registerOnSharedPreferenceChangeListener(this)
+        mServiceScope.launch {
+            PreferenceManager.getDefaultSharedPreferences(this@MumlaService).changes(OBSERVED_KEYS)
+                .collect(::onPreferenceChanged)
+        }
         applyBluetoothPreference()
 
         // Overlay views need the theme set manually; the <application> theme does not apply.
@@ -354,9 +355,6 @@ class MumlaService : HumlaService(),
             it.hide()
             mReconnectNotification = null
         }
-
-        val preferences = PreferenceManager.getDefaultSharedPreferences(this)
-        preferences.unregisterOnSharedPreferenceChangeListener(this)
         try {
             unregisterReceiver(mTalkReceiver)
         } catch (e: IllegalArgumentException) {
@@ -412,8 +410,7 @@ class MumlaService : HumlaService(),
         setProximitySensorOn(false)
     }
 
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        var requiresReconnect = false
+    internal fun onPreferenceChanged(key: String) {
         when (key) {
             Settings.PREF_INPUT_METHOD ->
                 mChannelOverlay.setPushToTalkShown(mSettings.humlaInputMethod == Constants.TRANSMIT_PUSH_TO_TALK)
@@ -421,33 +418,30 @@ class MumlaService : HumlaService(),
                 mHotCorner.gravity = mSettings.hotCornerGravity
                 mHotCorner.isShown = isConnectionEstablished() && mSettings.isHotCornerEnabled
             }
-            Settings.PREF_USE_TTS -> {
-                val tts = mTTS
-                if (tts == null && mSettings.isTextToSpeechEnabled) {
-                    mTTS = TextToSpeech(this, mTTSInitListener)
-                } else if (tts != null && !mSettings.isTextToSpeechEnabled) {
-                    tts.shutdown()
-                    mTTS = null
-                }
-            }
+            Settings.PREF_USE_TTS -> applyTextToSpeechPreference()
             Settings.PREF_SHORT_TTS_MESSAGES ->
                 mShortTtsMessagesEnabled = mSettings.isShortTextToSpeechMessagesEnabled
             Settings.PREF_PTT_SOUND ->
                 mPTTSoundEnabled = mSettings.isPttSoundEnabled
             Settings.PREF_BLUETOOTH_SCO -> applyBluetoothPreference()
-            Settings.PREF_CERT_ID,
-            Settings.PREF_FORCE_TCP,
-            Settings.PREF_USE_TOR,
-            ->
-                requiresReconnect = true
         }
         if (key in SessionSettings.AUDIO_KEYS) {
             // The result is ignored: audio settings never require a reconnect.
             configure(SessionSettings.withAudioSettings(sessionConfig, mSettings))
         }
 
-        if (requiresReconnect && isConnectionEstablished()) {
+        if (key in RECONNECT_KEYS && isConnectionEstablished()) {
             Toast.makeText(this, R.string.change_requires_reconnect, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun applyTextToSpeechPreference() {
+        val tts = mTTS
+        if (tts == null && mSettings.isTextToSpeechEnabled) {
+            mTTS = TextToSpeech(this, mTTSInitListener)
+        } else if (tts != null && !mSettings.isTextToSpeechEnabled) {
+            tts.shutdown()
+            mTTS = null
         }
     }
 
@@ -618,5 +612,18 @@ class MumlaService : HumlaService(),
         }
 
         const val TTS_THRESHOLD = 250 // Maximum number of characters to read
+
+        /** The settings a connection is made with; a change applies from the next one. */
+        private val RECONNECT_KEYS = setOf(Settings.PREF_CERT_ID, Settings.PREF_FORCE_TCP, Settings.PREF_USE_TOR)
+
+        /** The preferences [onPreferenceChanged] reacts to. */
+        private val OBSERVED_KEYS = SessionSettings.AUDIO_KEYS + RECONNECT_KEYS + setOf(
+            Settings.PREF_INPUT_METHOD,
+            Settings.PREF_HOT_CORNER_KEY,
+            Settings.PREF_USE_TTS,
+            Settings.PREF_SHORT_TTS_MESSAGES,
+            Settings.PREF_PTT_SOUND,
+            Settings.PREF_BLUETOOTH_SCO,
+        )
     }
 }

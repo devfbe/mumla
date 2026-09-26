@@ -4,7 +4,6 @@
   <CurrentIssues>
     <ID>CyclomaticComplexMethod:ChannelListAdapter.kt$ChannelListAdapter$override fun onBindViewHolder(viewHolder: RecyclerView.ViewHolder, position: Int)</ID>
     <ID>CyclomaticComplexMethod:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase$private fun sealPlainSecrets(db: SQLiteDatabase)</ID>
-    <ID>CyclomaticComplexMethod:MumlaService.kt$MumlaService$override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?)</ID>
     <ID>EmptyCatchBlock:MumlaService.kt$MumlaService${ }</ID>
     <ID>EmptyFunctionBlock:ChannelChatFragment.kt$ChannelChatFragment.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:NotificationPostingTest.kt$NotificationPostingTest.NoopActions${}</ID>
@@ -145,9 +144,9 @@
     <ID>TooManyFunctions:AudioSettingsFragment.kt$AudioSettingsFragment : MumlaPreferenceFragment</ID>
     <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentServiceClientMenuProvider</ID>
     <ID>TooManyFunctions:ChannelListAdapter.kt$ChannelListAdapter : Adapter</ID>
-    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentServiceClientOnSharedPreferenceChangeListenerMenuProvider</ID>
+    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentServiceClientMenuProvider</ID>
     <ID>TooManyFunctions:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase : SQLiteOpenHelperMumlaDatabase</ID>
-    <ID>TooManyFunctions:MumlaService.kt$MumlaService : HumlaServiceOnSharedPreferenceChangeListenerOnActionListenerOnActionListenerIMumlaService</ID>
+    <ID>TooManyFunctions:MumlaService.kt$MumlaService : HumlaServiceOnActionListenerOnActionListenerIMumlaService</ID>
     <ID>TooManyFunctions:PublicServerListFragment.kt$PublicServerListFragment : FragmentPublicServerAdapterMenuListenerMenuProvider</ID>
     <ID>TooManyFunctions:ZoomImageView.kt$ZoomImageView : AppCompatImageView</ID>
     <ID>UnusedParameter:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest$ids: Map&lt;Int, FakeChannel&gt;</ID>

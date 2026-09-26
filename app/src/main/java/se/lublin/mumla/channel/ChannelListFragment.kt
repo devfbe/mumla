@@ -19,7 +19,6 @@ package se.lublin.mumla.channel
 
 import android.app.SearchManager
 import android.content.Context
-import android.content.SharedPreferences
 import android.database.CursorWrapper
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
@@ -35,31 +34,33 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.MenuProvider
-import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import se.lublin.humla.exception.HumlaDisconnectedException
+import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.FragmentChannelListBinding
 import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.service.toggleSelfMute
-import se.lublin.mumla.Settings
-import se.lublin.mumla.ui.bindClient
 import se.lublin.mumla.ui.ServiceClient
 import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.util.changes
 
 class ChannelListFragment :
     Fragment(),
     ServiceClient,
-    SharedPreferences.OnSharedPreferenceChangeListener,
     MenuProvider {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
@@ -124,8 +125,6 @@ class ChannelListFragment :
     override fun onAttach(context: Context) {
         super.onAttach(context)
         settings = Settings.getInstance(context)
-        PreferenceManager.getDefaultSharedPreferences(context)
-            .registerOnSharedPreferenceChangeListener(this)
     }
 
     override fun onCreateView(
@@ -142,16 +141,14 @@ class ChannelListFragment :
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
+        viewLifecycleOwner.lifecycleScope.launch {
+            PreferenceManager.getDefaultSharedPreferences(requireContext()).changes(Settings.PREF_SHOW_USER_COUNT)
+                .collect { channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount) }
+        }
         if (!bound) {
             bound = true
             serviceModel.bindClient(this, this)
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        PreferenceManager.getDefaultSharedPreferences(requireActivity())
-            .unregisterOnSharedPreferenceChangeListener(this)
     }
 
     override fun onServiceBound(service: IMumlaService) {
@@ -325,13 +322,6 @@ class ChannelListFragment :
         } else {
             val callback = ChatTargetActionModeCallback(chatTargets, target) { actionMode = null }
             actionMode = (requireActivity() as AppCompatActivity).startSupportActionMode(callback)
-        }
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
-        when (key) {
-            Settings.PREF_SHOW_USER_COUNT ->
-                channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount)
         }
     }
 
