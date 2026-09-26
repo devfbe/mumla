@@ -27,6 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import se.lublin.humla.session.AndroidCommunicationDevicesTest
 import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.session.PreferredAudioDevice
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
@@ -228,17 +229,42 @@ class HumlaServiceBluetoothTest {
         assertThat(h.service.activeAudioDevice).isNull()
     }
 
-    /** What the handset mode was: the earpiece by the user's standing preference, live. */
+    /** The saved device reaches the router with the config, live. */
     @Test
-    fun theEarpieceIsTheDefaultWhenTheConfigAsksForIt() {
+    fun theSavedDeviceIsTheDefaultWhenTheConfigNamesIt() {
         val h = start()
         h.phone()
-        h.configure { copy(earpieceByDefault = true) }
+        h.configure { copy(preferredAudioDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)) }
         h.connectAndSynchronize()
 
         assertThat(h.service.activeAudioDevice?.id).isEqualTo(1)
 
-        h.configure { copy(earpieceByDefault = false) }
+        h.configure { copy(preferredAudioDevice = null) }
+
+        assertThat(h.devices!!.selectedId).isEqualTo(2)
+    }
+
+    /** Saving a device while disconnected must not touch the platform: that would duck other apps. */
+    @Test
+    fun aSavedDeviceIsNotRoutedWithoutASession() {
+        val h = start()
+        h.phone()
+
+        h.configure { copy(preferredAudioDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)) }
+
+        assertThat(h.devices!!.selectCalls).isEmpty()
+        assertThat(h.devices!!.modeCalls).isEmpty()
+    }
+
+    @Test
+    fun theUserCanGoBackToAutomaticThroughTheSession() {
+        val h = start()
+        h.phone()
+        h.connectAndSynchronize()
+        val session: IHumlaSession = h.service
+        session.selectAudioDevice(1)
+
+        session.selectAutomaticAudioDevice()
 
         assertThat(h.devices!!.selectedId).isEqualTo(2)
     }

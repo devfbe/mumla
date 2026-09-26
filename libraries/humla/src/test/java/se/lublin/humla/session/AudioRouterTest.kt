@@ -29,9 +29,9 @@ import se.lublin.humla.testutil.FakeCommunicationDevices
 
 /**
  * The audio chooser as one router: the user's explicit [AudioRouter.choice], otherwise the
- * automatic default - a connected Bluetooth headset when [AudioRouter.bluetoothAutomatic] allows
- * it, then a plugged-in headset, then the speaker or, by preference, the earpiece. While engaged the
- * router holds the communication mode and routes every one of them explicitly.
+ * automatic default - the saved [AudioRouter.preferred] headset, a connected Bluetooth headset when
+ * [AudioRouter.bluetoothAutomatic] allows it, a plugged-in headset, then the saved built-in device or
+ * the speaker. While engaged the router holds the communication mode and routes every one explicitly.
  */
 class AudioRouterTest {
     private val devices = FakeCommunicationDevices()
@@ -105,26 +105,131 @@ class AudioRouterTest {
         assertThat(routes).containsExactly(TYPE_BUILTIN_SPEAKER)
     }
 
-    /** The earpiece, by the user's standing preference. */
+    /** A saved built-in device replaces the speaker as the default without a headset. */
     @Test
-    fun theEarpieceIsTheDefaultWhenPreferred() {
+    fun aSavedEarpieceIsTheDefaultWithoutAHeadset() {
         phone()
-        router.earpieceByDefault = true
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
 
         engaged()
 
         assertThat(devices.selectedId).isEqualTo(1)
     }
 
-    /** A tablet has no earpiece; preferring one must not leave it silent. */
+    /** ...but a headset that is there still wins over it, as with the phone app. */
     @Test
-    fun withoutAnEarpieceThePreferenceFallsBackToTheSpeaker() {
+    fun aHeadsetWinsOverASavedBuiltInDevice() {
+        phone()
+        devices.available[4] = TYPE_WIRED_HEADSET
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
+
+        engaged()
+
+        assertThat(devices.selectedId).isEqualTo(4)
+    }
+
+    /** A tablet has no earpiece; saving one must not leave it silent. */
+    @Test
+    fun withoutTheSavedEarpieceTheSpeakerIsRouted() {
         devices.available[2] = TYPE_BUILTIN_SPEAKER
-        router.earpieceByDefault = true
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
 
         engaged()
 
         assertThat(devices.selectedId).isEqualTo(2)
+    }
+
+    /** A saved headset is taken whenever it is there, even over another headset. */
+    @Test
+    fun aSavedHeadsetIsTakenWhenTheSessionStarts() {
+        phone()
+        devices.available[4] = TYPE_WIRED_HEADSET
+        devices.available[7] = TYPE_BLUETOOTH_SCO
+        devices.addresses[7] = "AA"
+        router.preferred = PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA")
+
+        engaged(bluetooth = false)
+
+        assertThat(devices.selectedId).isEqualTo(7)
+    }
+
+    /** Bluetooth ids change on every connection, so the address tells two headsets apart. */
+    @Test
+    fun aSavedBluetoothHeadsetIsFoundByItsAddress() {
+        phone()
+        devices.available[7] = TYPE_BLUETOOTH_SCO
+        devices.addresses[7] = "BB"
+        devices.available[9] = TYPE_BLUETOOTH_SCO
+        devices.addresses[9] = "AA"
+        router.preferred = PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA")
+
+        engaged()
+
+        assertThat(devices.selectedId).isEqualTo(9)
+    }
+
+    @Test
+    fun withoutTheSavedHeadsetTheAutomaticDefaultApplies() {
+        phone()
+        devices.available[4] = TYPE_WIRED_HEADSET
+        devices.available[7] = TYPE_BLUETOOTH_SCO
+        devices.addresses[7] = "BB"
+        router.preferred = PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA")
+
+        engaged(bluetooth = false)
+
+        assertThat(devices.selectedId).isEqualTo(4)
+    }
+
+    @Test
+    fun theSavedHeadsetTakesOverWhenItConnects() {
+        phone()
+        router.preferred = PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA")
+        engaged(bluetooth = false)
+        router.choose(1)
+
+        devices.deviceArrives(7, TYPE_BLUETOOTH_SCO, address = "AA")
+
+        assertThat(devices.selectedId).isEqualTo(7)
+    }
+
+    /** The session's pick outlasts nothing: after it is forgotten the saved device is back. */
+    @Test
+    fun theSavedDeviceReturnsWhenTheChoiceIsForgotten() {
+        phone()
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
+        engaged()
+        router.choose(2)
+        assertThat(devices.selectedId).isEqualTo(2)
+
+        router.forgetChoice()
+
+        assertThat(devices.selectedId).isEqualTo(1)
+    }
+
+    /** Choosing the saved device is choosing the default, so the next headset may take over. */
+    @Test
+    fun choosingTheSavedDeviceIsTheDefault() {
+        phone()
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
+        engaged()
+
+        router.choose(1)
+
+        assertThat(router.choice).isNull()
+        assertThat(devices.selectedId).isEqualTo(1)
+    }
+
+    /** Nothing about a saved device reaches the platform without a session. */
+    @Test
+    fun aSavedDeviceIsNotRoutedBeforeTheRouterIsEngaged() {
+        phone()
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
+
+        router.apply()
+
+        assertThat(devices.selectCalls).isEmpty()
+        assertThat(devices.modeCalls).isEmpty()
     }
 
     @Test
@@ -481,12 +586,12 @@ class AudioRouterTest {
     // ---------------------------------------------------------------- what the chooser shows
 
     @Test
-    fun changingTheEarpiecePreferenceMovesTheDefaultAtTheNextApply() {
+    fun changingTheSavedDeviceMovesTheDefaultAtTheNextApply() {
         phone()
         engaged()
         assertThat(router.activeDevice()?.id).isEqualTo(2)
 
-        router.earpieceByDefault = true
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
         router.apply()
 
         assertThat(router.activeDevice()?.id).isEqualTo(1)

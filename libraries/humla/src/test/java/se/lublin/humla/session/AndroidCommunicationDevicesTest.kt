@@ -23,6 +23,8 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -101,6 +103,35 @@ class AndroidCommunicationDevicesTest {
             headset.productName.toString(),
         ).inOrder()
         assertThat(listed.map { it.name }).doesNotContain("")
+    }
+
+    /** The address is what tells one Bluetooth headset from another across reconnects. */
+    @Test
+    fun theAddressIsPassedThrough() {
+        // AudioDeviceInfoBuilder cannot set an address.
+        val headset = mockk<AudioDeviceInfo> {
+            every { id } returns 7
+            every { type } returns AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+            every { productName } returns "Jabra"
+            every { address } returns "00:11:22:33:44:55"
+        }
+        shadowOf(audioManager).setAvailableCommunicationDevices(listOf(headset))
+
+        assertThat(devices.available().single().address).isEqualTo("00:11:22:33:44:55")
+    }
+
+    /** The list a client shows without a session: the same entries, and nothing routed. */
+    @Test
+    fun theDevicesCanBeListedWithoutRouting() {
+        val speaker =
+            AudioDeviceInfoBuilder.newBuilder().setType(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER).build()
+        shadowOf(audioManager).setAvailableCommunicationDevices(listOf(speaker, sco()))
+
+        val listed = listCommunicationDevices(audioManager)
+
+        assertThat(listed).isEqualTo(devices.available())
+        assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
+        assertThat(audioManager.communicationDevice).isNull()
     }
 
     @Test

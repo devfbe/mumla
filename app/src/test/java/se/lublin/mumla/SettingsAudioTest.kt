@@ -18,11 +18,13 @@
 package se.lublin.mumla
 
 import android.content.Context
+import android.media.AudioDeviceInfo
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.session.PreferredAudioDevice
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.AdaptiveVadTracker
@@ -110,45 +112,118 @@ class SettingsAudioTest {
             .contains(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
     }
 
+    // --- the saved audio device --------------------------------------------------------------
+
     @Test
-    fun `the output without a headset is the speaker unless the user picked the earpiece`() {
-        assertThat(settings.isEarpieceDefaultOutput).isFalse()
-        prefs.edit().putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_EARPIECE).commit()
-        assertThat(settings.isEarpieceDefaultOutput).isTrue()
+    fun `no audio device is saved until the user picks one`() {
+        assertThat(settings.preferredAudioDevice).isNull()
     }
 
-    /** Whoever had the handset mode on gets the earpiece as the default output, once. */
     @Test
-    fun `handset mode becomes the earpiece as the default output`() {
-        prefs.edit().putBoolean("handset_mode", true).commit()
+    fun `a saved audio device reads back with its address`() {
+        val headset = PreferredAudioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "00:11:22:33:44:55")
+
+        settings.preferredAudioDevice = headset
+
+        assertThat(Settings.getInstance(context).preferredAudioDevice).isEqualTo(headset)
+    }
+
+    @Test
+    fun `a saved audio device without an address reads back without one`() {
+        settings.preferredAudioDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+
+        assertThat(settings.preferredAudioDevice)
+            .isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER))
+    }
+
+    /** Automatic is the absence of a saved device, not a device of its own. */
+    @Test
+    fun `saving automatic removes the saved device`() {
+        settings.preferredAudioDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+
+        settings.preferredAudioDevice = null
+
+        assertThat(prefs.contains(Settings.PREF_AUDIO_DEVICE)).isFalse()
+        assertThat(settings.preferredAudioDevice).isNull()
+    }
+
+    @Test
+    fun `a garbled saved audio device reads as automatic`() {
+        prefs.edit().putString(Settings.PREF_AUDIO_DEVICE, "speaker").commit()
+
+        assertThat(settings.preferredAudioDevice).isNull()
+    }
+
+    /** The old "output without a headset" becomes the saved device, once. */
+    @Test
+    fun `the earpiece as default output becomes the saved earpiece`() {
+        prefs.edit().putString("default_output", "earpiece").commit()
 
         val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
 
-        assertThat(migrated.isEarpieceDefaultOutput).isTrue()
-        assertThat(prefs.contains("handset_mode")).isFalse()
+        assertThat(migrated.preferredAudioDevice)
+            .isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE))
+        assertThat(prefs.contains("default_output")).isFalse()
     }
 
+    /** The speaker was the automatic default all along, so nothing is saved for it. */
     @Test
-    fun `handset mode switched off leaves the speaker and is removed`() {
-        prefs.edit().putBoolean("handset_mode", false).commit()
+    fun `the speaker as default output becomes automatic`() {
+        prefs.edit().putString("default_output", "speaker").commit()
 
         val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
 
-        assertThat(migrated.isEarpieceDefaultOutput).isFalse()
-        assertThat(prefs.contains("handset_mode")).isFalse()
+        assertThat(migrated.preferredAudioDevice).isNull()
+        assertThat(prefs.contains("default_output")).isFalse()
     }
 
-    /** A default output the user already chose is theirs; a stale handset flag does not win. */
+    /** A device the user saved already is theirs; a stale default output does not win. */
     @Test
-    fun `a chosen default output is not overwritten by the old handset flag`() {
+    fun `a saved audio device is not overwritten by the old default output`() {
         prefs.edit()
-            .putBoolean("handset_mode", true)
-            .putString(Settings.PREF_DEFAULT_OUTPUT, Settings.DEFAULT_OUTPUT_SPEAKER)
+            .putString("default_output", "earpiece")
+            .putString(Settings.PREF_AUDIO_DEVICE, "${AudioDeviceInfo.TYPE_BUILTIN_SPEAKER}")
             .commit()
 
         val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
 
-        assertThat(migrated.isEarpieceDefaultOutput).isFalse()
+        assertThat(migrated.preferredAudioDevice)
+            .isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER))
+    }
+
+    /** Whoever had the handset mode on gets the earpiece saved, once. */
+    @Test
+    fun `handset mode becomes the saved earpiece`() {
+        prefs.edit().putBoolean("handset_mode", true).commit()
+
+        val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
+
+        assertThat(migrated.preferredAudioDevice)
+            .isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE))
+        assertThat(prefs.contains("handset_mode")).isFalse()
+    }
+
+    @Test
+    fun `handset mode switched off leaves automatic and is removed`() {
+        prefs.edit().putBoolean("handset_mode", false).commit()
+
+        val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
+
+        assertThat(migrated.preferredAudioDevice).isNull()
+        assertThat(prefs.contains("handset_mode")).isFalse()
+    }
+
+    /** A default output the user chose after the handset mode is theirs; the stale flag does not win. */
+    @Test
+    fun `a chosen default output is not overwritten by the old handset flag`() {
+        prefs.edit()
+            .putBoolean("handset_mode", true)
+            .putString("default_output", "speaker")
+            .commit()
+
+        val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
+
+        assertThat(migrated.preferredAudioDevice).isNull()
         assertThat(prefs.contains("handset_mode")).isFalse()
     }
 

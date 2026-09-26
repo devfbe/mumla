@@ -140,6 +140,4 @@
     <string name="mediaButtonActionMute">Veksle forstumming</string>
     <string name="bluetoothSco">Bruk Bluetooth-hodesett automatisk</string>
     <string name="bluetoothScoSum">Send og motta tale gjennom et tilkoblet Bluetooth-hodesett mens du er koblet til en tjener, og bytt til et hodesett som kobles til under samtalen. Lydenheten for samtalen kan endres i kanalmenyen. Ber om tilgangen Enheter i nærheten; noen enheter sender ikke lyd til et hodesett uten den.</string>
-    <string name="defaultOutput">Utgang uten hodesett</string>
-    <string name="defaultOutputSum">Hvor tale spilles av når du kobler til og det ikke finnes noe Bluetooth- eller kablet hodesett. Ørehøyttaleren slår også av skjermen ved øret. Du kan bytte enhet under en samtale i kanalmenyen.</string>
 </resources>

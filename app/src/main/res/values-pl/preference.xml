@@ -146,6 +146,4 @@
     <string name="mediaButtonActionMute">Przełącz wyciszenie</string>
     <string name="bluetoothSco">Automatycznie używaj zestawu słuchawkowego Bluetooth</string>
     <string name="bluetoothScoSum">Wysyłaj i odbieraj głos przez połączony zestaw słuchawkowy Bluetooth, gdy jesteś połączony z serwerem, i przełączaj na zestaw, który połączy się w trakcie rozmowy. Urządzenie audio dla rozmowy można zmienić w menu kanału. Wymaga uprawnienia „Urządzenia w pobliżu”; niektóre urządzenia bez niego nie przekierują dźwięku do zestawu.</string>
-    <string name="defaultOutput">Wyjście bez zestawu słuchawkowego</string>
-    <string name="defaultOutputSum">Gdzie odtwarzany jest głos, gdy łączysz się, a nie ma zestawu słuchawkowego Bluetooth ani przewodowego. Słuchawka wyłącza też ekran przy uchu. Urządzenie możesz przełączyć w trakcie rozmowy w menu kanału.</string>
 </resources>

@@ -45,7 +45,7 @@ object SessionSettings {
         Settings.PREF_VAD_HOLD_MS,
         Settings.PREF_VAD_ONSET_FRAMES,
         Settings.PREF_INPUT_METHOD,
-        Settings.PREF_DEFAULT_OUTPUT,
+        Settings.PREF_AUDIO_DEVICE,
         Settings.PREF_AMPLITUDE_BOOST,
         Settings.PREF_HALF_DUPLEX,
         Settings.PREF_NOISE_SUPPRESSION_METHOD,
@@ -74,7 +74,7 @@ object SessionSettings {
             androidNoiseSuppressor = effects.noiseSuppressor,
             androidAgc = effects.automaticGainControl,
             echoCancellationOverrides = settings.echoCancellationOverrides,
-            earpieceByDefault = settings.isEarpieceDefaultOutput,
+            preferredAudioDevice = settings.preferredAudioDevice,
         )
     }
 

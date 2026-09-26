@@ -252,6 +252,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         ) { logWarningOnce(getString(R.string.bluetooth_sco_denied)) }
         communicationDevices = devices
         mRouter = AudioRouter(devices, mRouterListener)
+        mRouter.preferred = mConfig.preferredAudioDevice
         mToggleInputMode = ToggleInputMode()
         mActivityInputMode = ActivityInputMode(VoiceActivityDetector(mConfig.vadConfig))
         mContinuousInputMode = ContinuousInputMode()
@@ -590,9 +591,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         if (config.accessTokens != previous.accessTokens) {
             mConnection?.takeIf { it.isConnected }?.sendAccessTokens(config.accessTokens)
         }
-        if (config.earpieceByDefault != previous.earpieceByDefault) {
+        if (config.preferredAudioDevice != previous.preferredAudioDevice) {
             // Live: the next apply routes it, and a user's explicit choice is left standing.
-            mRouter.earpieceByDefault = config.earpieceByDefault
+            mRouter.preferred = config.preferredAudioDevice
             mRouter.apply()
         }
 
@@ -808,6 +809,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         get() = mRouter.activeDevice()
 
     override fun selectAudioDevice(id: Int) = mRouter.choose(id)
+
+    override fun selectAutomaticAudioDevice() = mRouter.forgetChoice()
 
     override val isTalking: Boolean
         get() = mToggleInputMode.isTalkingOn()

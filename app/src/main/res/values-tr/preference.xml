@@ -143,6 +143,4 @@
     <string name="mediaButtonActionMute">Sesi kapat/aç</string>
     <string name="bluetoothSco">Bluetooth kulaklığı otomatik olarak kullan</string>
     <string name="bluetoothScoSum">Bir sunucuya bağlıyken sesi bağlı bir Bluetooth kulaklık üzerinden gönderir ve alır, görüşme sırasında bağlanan bir kulaklığa geçer. Görüşmenin ses cihazı kanal menüsünden değiştirilebilir. Yakındaki cihazlar iznini ister; bazı cihazlar bu izin olmadan sesi kulaklığa yönlendirmez.</string>
-    <string name="defaultOutput">Kulaklık yokken çıkış</string>
-    <string name="defaultOutputSum">Bağlandığınızda Bluetooth veya kablolu kulaklık yoksa sesin çalındığı yer. Ahize ayrıca kulağınıza yaklaştığında ekranı kapatır. Görüşme sırasında cihazı kanal menüsünden değiştirebilirsiniz.</string>
 </resources>

@@ -122,6 +122,9 @@ interface IHumlaSession {
      */
     fun selectAudioDevice(id: Int)
 
+    /** Drops the choice [selectAudioDevice] made: the saved device or the automatic default applies. */
+    fun selectAutomaticAudioDevice()
+
     fun setTalkingState(talking: Boolean)
 
     fun joinChannel(channel: Int)

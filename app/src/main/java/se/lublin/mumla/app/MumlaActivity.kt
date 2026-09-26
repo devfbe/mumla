@@ -86,6 +86,7 @@ class MumlaActivity :
     private lateinit var drawer: MainDrawer
     private lateinit var dialogs: ConnectionDialogs
     private lateinit var connectFlow: ConnectFlow
+    private lateinit var batteryPrompt: BatteryOptimizationPrompt
 
     /** The dynamic colour setting this activity was themed with. */
     private var themedWithDynamicColors = false
@@ -127,6 +128,8 @@ class MumlaActivity :
         )
         dialogs = ConnectionDialogs(this, settings, this)
         connectFlow = ConnectFlow(this, settings) { service }
+        batteryPrompt = BatteryOptimizationPrompt(this, settings)
+        addMenuProvider(AudioDeviceMenu(this, settings) { service?.takeIf { it.isConnected }?.session })
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setHomeButtonEnabled(true)
 
@@ -190,6 +193,7 @@ class MumlaActivity :
     override fun onPause() {
         super.onPause()
         dialogs.dismiss()
+        batteryPrompt.dismiss()
         serviceModel.attach(null)
         unbindService(connection)
     }
@@ -206,6 +210,7 @@ class MumlaActivity :
         drawer.refresh()
         if (showsConnectedScreen() && !service.isConnected) showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
         dialogs.update(service)
+        if (service.isConnected) offerBatteryExemption()
     }
 
     override fun onServiceUnbound() {
@@ -220,6 +225,7 @@ class MumlaActivity :
                 val pinned = settings.shouldStartUpInPinnedMode
                 showDrawerFragment(if (pinned) DrawerAdapter.ITEM_PINNED_CHANNELS else DrawerAdapter.ITEM_SERVER)
                 onConnectionChanged(service)
+                offerBatteryExemption()
             }
             HumlaEvent.Connecting -> dialogs.update(service)
             is HumlaEvent.Disconnected -> {
@@ -249,6 +255,11 @@ class MumlaActivity :
         drawer.refresh()
         invalidateOptionsMenu()
         dialogs.update(service)
+    }
+
+    /** Offers the battery exemption, unless a connection dialog is up. */
+    private fun offerBatteryExemption() {
+        if (!dialogs.isShowing) batteryPrompt.offerIfNeeded()
     }
 
     /** Whether the content is a screen that needs a connection. */

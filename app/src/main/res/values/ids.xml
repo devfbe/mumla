@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The chooser's "Automatic" entry, added by AudioDeviceMenu. -->
+    <item name="menu_audio_device_automatic" type="id"/>
+</resources>

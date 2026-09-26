@@ -127,6 +127,4 @@
     <string name="mediaButtonActionMute">Dempen aan/uit</string>
     <string name="bluetoothSco">Bluetooth-headset automatisch gebruiken</string>
     <string name="bluetoothScoSum">Verstuur en ontvang spraak via een verbonden Bluetooth-headset terwijl je met een server verbonden bent, en schakel over naar een headset die tijdens het gesprek verbinding maakt. Het audioapparaat voor het gesprek kan worden gewijzigd in het kanaalmenu. Vraagt de toestemming Apparaten in de buurt; sommige toestellen sturen zonder die toestemming geen audio naar een headset.</string>
-    <string name="defaultOutput">Uitvoer zonder headset</string>
-    <string name="defaultOutputSum">Waar spraak klinkt als je verbinding maakt en er geen Bluetooth- of bedrade headset is. De oorspeaker zet ook het scherm uit bij je oor. Je kunt tijdens een gesprek van apparaat wisselen via het kanaalmenu.</string>
 </resources>

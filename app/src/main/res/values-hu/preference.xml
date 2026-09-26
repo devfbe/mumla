@@ -140,6 +140,4 @@
     <string name="mediaButtonActionMute">Némítás váltása</string>
     <string name="bluetoothSco">Bluetooth headset automatikus használata</string>
     <string name="bluetoothScoSum">Hang küldése és fogadása csatlakoztatott Bluetooth headseten keresztül, amíg szerverhez csatlakozol, és váltás a hívás közben csatlakozó headsetre. A hívás hangeszköze a csatorna menüjében módosítható. Kéri a „Közeli eszközök” engedélyt; egyes eszközök nélküle nem irányítják a hangot a headsetre.</string>
-    <string name="defaultOutput">Kimenet headset nélkül</string>
-    <string name="defaultOutputSum">Hol szól a hang, amikor csatlakozol, és nincs Bluetooth- vagy vezetékes headset. A fülhangszóró ráadásul kikapcsolja a képernyőt, amikor a füledhez tartod. Hívás közben az eszközt a csatorna menüjében válthatod.</string>
 </resources>

@@ -58,6 +58,10 @@ class ConnectionDialogs(
 
     private val torSuffix get() = if (settings.isTorEnabled) " (Tor)" else ""
 
+    /** Whether the connecting or error dialog is up. */
+    val isShowing: Boolean
+        get() = connectingDialog?.isShowing == true || errorDialog?.isShowing == true
+
     fun dismiss() {
         connectingDialog?.dismiss()
         errorDialog?.dismiss()

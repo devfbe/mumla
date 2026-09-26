@@ -35,6 +35,9 @@ class FakeCommunicationDevices : CommunicationDevices {
 
     /** device id -> product name; a device without an entry is unnamed, as most built-in ones are. */
     val names = mutableMapOf<Int, String>()
+
+    /** device id -> address; a device without an entry has none, as built-in ones do. */
+    val addresses = mutableMapOf<Int, String>()
     var selectedId: Int? = null
     var selectResult = true
 
@@ -74,7 +77,8 @@ class FakeCommunicationDevices : CommunicationDevices {
     override fun current(): CommunicationDevice? =
         selectedId?.let { id -> available[id]?.let { device(id, it) } }
 
-    private fun device(id: Int, type: Int) = CommunicationDevice(id, type, names[id].orEmpty())
+    private fun device(id: Int, type: Int) =
+        CommunicationDevice(id, type, names[id].orEmpty(), addresses[id].orEmpty())
 
     override fun setOnChangedListener(listener: (() -> Unit)?) {
         listenerRegistrations++
@@ -88,9 +92,10 @@ class FakeCommunicationDevices : CommunicationDevices {
     }
 
     /** A device was switched on or plugged in: the platform raises the device callback. */
-    fun deviceArrives(id: Int, type: Int, name: String = "") {
+    fun deviceArrives(id: Int, type: Int, name: String = "", address: String = "") {
         available[id] = type
         if (name.isNotEmpty()) names[id] = name
+        if (address.isNotEmpty()) addresses[id] = address
         listener?.invoke()
     }
 
@@ -102,6 +107,7 @@ class FakeCommunicationDevices : CommunicationDevices {
     fun deviceLeaves(id: Int) {
         available.remove(id)
         names.remove(id)
+        addresses.remove(id)
         if (selectedId == id) selectedId = null
         listener?.invoke()
     }

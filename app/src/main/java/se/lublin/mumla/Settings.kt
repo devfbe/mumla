@@ -19,6 +19,7 @@ package se.lublin.mumla
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.media.AudioDeviceInfo
 import android.view.Gravity
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
@@ -26,6 +27,7 @@ import se.lublin.humla.Constants
 import se.lublin.humla.audio.capture.AdaptiveVadTracker
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.session.PreferredAudioDevice
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.VadConfig
@@ -45,16 +47,24 @@ class Settings private constructor(private val context: Context) {
 
     /** Rewrites the keys older versions left behind. Runs once per process, on first use. */
     private fun migrateLegacyKeys() {
-        // The first two were replaced by the audio chooser.
-        val legacy = listOf(LEGACY_PREF_ECHO_CANCELLATION_METHOD, LEGACY_PREF_DISABLE_OPUS, LEGACY_PREF_HANDSET_MODE)
-            .filter(preferences::contains)
+        // Obsolete keys, replaced by the audio chooser or dropped.
+        val legacy = listOf(
+            LEGACY_PREF_ECHO_CANCELLATION_METHOD, LEGACY_PREF_DISABLE_OPUS, LEGACY_PREF_HANDSET_MODE,
+            LEGACY_PREF_DEFAULT_OUTPUT,
+        ).filter(preferences::contains)
         if (legacy.isEmpty()) return
-        // The handset mode was the earpiece; a default output the user already picked wins.
-        val earpiece = preferences.getBoolean(LEGACY_PREF_HANDSET_MODE, false) &&
-            !preferences.contains(PREF_DEFAULT_OUTPUT)
+        // Both meant the earpiece; the newer choice wins over the older, a saved device over both.
+        val earpiece = !preferences.contains(PREF_AUDIO_DEVICE) &&
+            if (preferences.contains(LEGACY_PREF_DEFAULT_OUTPUT)) {
+                preferences.getString(LEGACY_PREF_DEFAULT_OUTPUT, null) == LEGACY_DEFAULT_OUTPUT_EARPIECE
+            } else {
+                preferences.getBoolean(LEGACY_PREF_HANDSET_MODE, false)
+            }
         preferences.edit {
             legacy.forEach(::remove)
-            if (earpiece) putString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_EARPIECE)
+            if (earpiece) {
+                putString(PREF_AUDIO_DEVICE, encode(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)))
+            }
         }
     }
 
@@ -173,9 +183,21 @@ class Settings private constructor(private val context: Context) {
 
     val isHalfDuplex: Boolean by booleanPref(PREF_HALF_DUPLEX, DEFAULT_HALF_DUPLEX)
 
-    /** Voice output without a headset: speaker, or the earpiece (with proximity sensor). */
-    val isEarpieceDefaultOutput: Boolean
-        get() = preferences.getString(PREF_DEFAULT_OUTPUT, DEFAULT_OUTPUT_SPEAKER) == DEFAULT_OUTPUT_EARPIECE
+    /** The device picked in the audio chooser; null (nothing stored) routes automatically. */
+    var preferredAudioDevice: PreferredAudioDevice?
+        get() = preferences.getString(PREF_AUDIO_DEVICE, null)?.let(::decode)
+        set(value) = preferences.edit {
+            if (value == null) remove(PREF_AUDIO_DEVICE) else putString(PREF_AUDIO_DEVICE, encode(value))
+        }
+
+    /** `type` or `type:address`; the type has no colon, the address may. */
+    private fun encode(device: PreferredAudioDevice): String =
+        device.address?.let { "${device.type}:$it" } ?: "${device.type}"
+
+    private fun decode(stored: String): PreferredAudioDevice? {
+        val type = stored.substringBefore(':').toIntOrNull() ?: return null
+        return PreferredAudioDevice(type, stored.substringAfter(':', "").ifEmpty { null })
+    }
 
     val isPttSoundEnabled: Boolean by booleanPref(PREF_PTT_SOUND, DEFAULT_PTT_SOUND)
 
@@ -392,12 +414,12 @@ class Settings private constructor(private val context: Context) {
         const val PREF_HALF_DUPLEX = "half_duplex"
         const val DEFAULT_HALF_DUPLEX = false
 
-        /** A ListPreference: [DEFAULT_OUTPUT_SPEAKER] (the default) or [DEFAULT_OUTPUT_EARPIECE]. */
-        const val PREF_DEFAULT_OUTPUT = "default_output"
-        const val DEFAULT_OUTPUT_SPEAKER = "speaker"
-        const val DEFAULT_OUTPUT_EARPIECE = "earpiece"
+        /** Written by the audio chooser; see [preferredAudioDevice]. */
+        const val PREF_AUDIO_DEVICE = "audio_device"
 
-        /** The handset switch the default output replaced; migrated and removed on first read. */
+        /** The speaker/earpiece list and the handset switch before it; migrated and removed on first read. */
+        private const val LEGACY_PREF_DEFAULT_OUTPUT = "default_output"
+        private const val LEGACY_DEFAULT_OUTPUT_EARPIECE = "earpiece"
         private const val LEGACY_PREF_HANDSET_MODE = "handset_mode"
 
         const val PREF_PTT_SOUND = "ptt_sound"
@@ -492,6 +514,9 @@ class Settings private constructor(private val context: Context) {
         /** Headset / AVRCP media button behavior, one of [MediaButtonAction.prefValue]. */
         const val PREF_MEDIA_BUTTON_ACTION = "media_button_action"
         const val DEFAULT_MEDIA_BUTTON_ACTION = "auto"
+
+        /** The general settings row for the battery-optimization exemption; stores nothing. */
+        const val PREF_BATTERY_OPTIMIZATION = "battery_optimization"
 
         /** True once the battery-optimization exemption has been offered. */
         const val PREF_BATTERY_OPTIMIZATION_ASKED = "battery_optimization_asked"

@@ -176,6 +176,4 @@
     <string name="mediaButtonActionMute">Toggle mute</string>
     <string name="bluetoothSco">Use Bluetooth headset automatically</string>
     <string name="bluetoothScoSum">Send and receive voice through a connected Bluetooth headset while you are connected to a server, and switch to a headset that connects during the call. The audio device can be changed for the call from the channel menu. Asks for the Nearby devices permission; some devices will not route audio to a headset without it.</string>
-    <string name="defaultOutput">Output without a headset</string>
-    <string name="defaultOutputSum">Where voice plays when you connect and no Bluetooth or wired headset is there. The earpiece also turns the screen off at your ear. You can switch the device during a call from the channel menu.</string>
 </resources>
