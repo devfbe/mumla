@@ -11,7 +11,6 @@ import androidx.core.app.RemoteInput
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import com.google.protobuf.MessageLite as ProtoMessage
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -19,16 +18,17 @@ import io.mockk.verify
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Before
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
+import org.robolectric.android.controller.ServiceController
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import org.robolectric.shadows.ShadowToast
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.HumlaService
-import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.Channel
+import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaConnection
@@ -41,14 +41,15 @@ import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.testConnection
 import se.lublin.humla.testutil.testEmit
 import se.lublin.humla.testutil.testModelHandler
-import se.lublin.humla.exception.HumlaException
-import se.lublin.mumla.R
-import se.lublin.mumla.Settings
+import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.NoticeFormatter
+import se.lublin.mumla.R
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
+import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.createMumlaService
-import se.lublin.mumla.util.HtmlUtils
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.util.HtmlUtils
+import com.google.protobuf.MessageLite as ProtoMessage
 
 /**
  * Characterizes MumlaService: session events, lifecycle hooks, non-audio preference arms and

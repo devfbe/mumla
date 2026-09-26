@@ -15,10 +15,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.service
+package se.lublin.mumla.chat
 
 import se.lublin.humla.model.IMessage
-import se.lublin.mumla.chat.ChatContent
 
 /** A general chat message, either a text message from a user or an informational notice. */
 interface IChatMessage {

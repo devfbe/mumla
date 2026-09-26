@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.channel
+package se.lublin.mumla.util
 
 import android.content.Context
 import se.lublin.humla.model.IUser

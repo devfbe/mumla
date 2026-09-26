@@ -37,10 +37,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.model.IMessage
-import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ListChatItemBinding
 import se.lublin.mumla.databinding.ListChatItemImageBinding
-import se.lublin.mumla.service.IChatMessage
+import se.lublin.mumla.R
 import java.text.DateFormat
 import java.util.Date
 

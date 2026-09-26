@@ -22,11 +22,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
-import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
@@ -36,11 +36,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.net.Pkcs12Certificates
-import se.lublin.mumla.R
-import se.lublin.mumla.app.showMessageDialog
 import se.lublin.mumla.databinding.DialogExportPasswordBinding
 import se.lublin.mumla.db.DatabaseCertificate
 import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.R
+import se.lublin.mumla.ui.showMessageDialog
 import java.io.FileNotFoundException
 import java.io.IOException
 

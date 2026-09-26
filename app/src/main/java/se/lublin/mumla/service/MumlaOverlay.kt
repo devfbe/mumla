@@ -28,15 +28,14 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.ListView
-import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
+import androidx.core.view.ViewCompat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.mumla.databinding.OverlayBinding
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.channel.ChannelAdapter
-import se.lublin.mumla.databinding.OverlayBinding
 import se.lublin.mumla.util.collectEvents
 
 /** An onscreen interactive overlay displaying the users in the current channel. */
@@ -48,7 +47,7 @@ class MumlaOverlay(private val service: MumlaService) {
     private val overlayList: ListView = binding.overlayList
     private val talkButton: ImageView = binding.overlayTalk
     private val overlayParams: WindowManager.LayoutParams
-    private var channelAdapter: ChannelAdapter? = null
+    private var userAdapter: OverlayUserAdapter? = null
 
     /** Collects the service's events while the overlay is shown. */
     private var events: Job? = null
@@ -77,7 +76,7 @@ class MumlaOverlay(private val service: MumlaService) {
     }
 
     private fun onServiceEvent(event: HumlaEvent) {
-        val adapter = channelAdapter ?: return
+        val adapter = userAdapter ?: return
         when (event) {
             is HumlaEvent.UserTalkStateUpdated -> adapter.notifyDataSetChanged()
             is HumlaEvent.UserStateUpdated -> {
@@ -91,7 +90,7 @@ class MumlaOverlay(private val service: MumlaService) {
         }
     }
 
-    private fun onUserJoinedChannel(adapter: ChannelAdapter, event: HumlaEvent.UserJoinedChannel) {
+    private fun onUserJoinedChannel(adapter: OverlayUserAdapter, event: HumlaEvent.UserJoinedChannel) {
         val selfSession = try {
             service.sessionId
         } catch (e: IllegalStateException) {
@@ -123,7 +122,7 @@ class MumlaOverlay(private val service: MumlaService) {
         if (isShown) return
         val channel = service.sessionChannel ?: return
         isShown = true
-        channelAdapter = ChannelAdapter(service, channel).also { overlayList.adapter = it }
+        userAdapter = OverlayUserAdapter(service, channel).also { overlayList.adapter = it }
         events = collectEvents(MainScope(), service, ::onServiceEvent)
         windowManager.addView(overlayView, overlayParams)
     }
@@ -134,7 +133,7 @@ class MumlaOverlay(private val service: MumlaService) {
         events?.cancel()
         events = null
         overlayList.adapter = null
-        channelAdapter = null
+        userAdapter = null
         try {
             windowManager.removeView(overlayView)
         } catch (e: IllegalArgumentException) {

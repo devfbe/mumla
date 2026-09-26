@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.channel
+package se.lublin.mumla.audio
 
 import android.content.res.Resources
 import android.media.AudioDeviceInfo

@@ -32,10 +32,10 @@ import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.net.Permissions
 import se.lublin.humla.util.VoiceTargetMode
-import se.lublin.mumla.R
-import se.lublin.mumla.app.showConfirmDialog
 import se.lublin.mumla.channel.comment.ChannelDescriptionFragment
 import se.lublin.mumla.db.PinnedChannels
+import se.lublin.mumla.R
+import se.lublin.mumla.ui.showConfirmDialog
 
 /** The popup menu of a channel's row: join, edit, pin, link, shout and so on. */
 class ChannelMenu(

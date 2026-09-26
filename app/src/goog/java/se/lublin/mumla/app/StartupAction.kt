@@ -18,6 +18,7 @@ import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryPurchasesParams
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import se.lublin.mumla.R
+import se.lublin.mumla.ui.maybeShowNewsDialog
 import java.util.concurrent.TimeUnit
 
 /** Shows news, or else now and then asks for an in-app donation, and re-checks a donation made. */

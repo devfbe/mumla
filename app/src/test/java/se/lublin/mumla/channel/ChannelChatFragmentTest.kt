@@ -7,21 +7,23 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.SystemClock
 import android.view.Gravity
+import android.view.inputmethod.EditorInfo
 import android.view.KeyEvent
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
-import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.fragment.app.Fragment
+import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.every
@@ -31,20 +33,18 @@ import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
-import org.junit.Test
-import se.lublin.mumla.Settings
-import androidx.test.core.app.ApplicationProvider
-import androidx.preference.PreferenceManager
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
-import org.robolectric.Shadows.shadowOf
+import org.junit.Test
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.shadows.ShadowDialog
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowToast
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IChannel
@@ -53,29 +53,29 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.User
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.exception.HumlaDisconnectedException
-import se.lublin.mumla.R
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatImageLoader
 import se.lublin.mumla.chat.ChatImageLoaders
+import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.ImageError
 import se.lublin.mumla.chat.ImageFetchException
 import se.lublin.mumla.chat.ImageResult
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.TestImages
-import se.lublin.mumla.service.IChatMessage
+import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ChatTargetParentFragment
-import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
 
 /**
- * Driven through a real host: an `Activity` whose [se.lublin.mumla.app.ServiceViewModel] holds the
+ * Driven through a real host: an `Activity` whose [se.lublin.mumla.ui.ServiceViewModel] holds the
  * service, and a parent `Fragment` that holds the chat target.
  */
 @RunWith(RobolectricTestRunner::class)

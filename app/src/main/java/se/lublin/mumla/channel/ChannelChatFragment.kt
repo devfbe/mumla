@@ -17,15 +17,16 @@
 
 package se.lublin.mumla.channel
 
-import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.Manifest
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
+import android.view.inputmethod.EditorInfo
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.Menu
@@ -33,7 +34,6 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -43,8 +43,8 @@ import androidx.activity.result.contract.ActivityResultContracts.RequestPermissi
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.core.view.MenuProvider
-import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -52,27 +52,27 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.exception.HumlaDisconnectedException
-import se.lublin.mumla.R
-import se.lublin.mumla.Settings
-import se.lublin.mumla.app.ServiceClient
-import se.lublin.mumla.app.ServiceViewModel
-import se.lublin.mumla.app.bindClient
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatContentParser
 import se.lublin.mumla.chat.ChatImageLoaders
+import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImageEncoder
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.outgoingMessageHtml
 import se.lublin.mumla.databinding.FragmentChatBinding
-import se.lublin.mumla.service.IChatMessage
+import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.Settings
+import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.ui.ServiceClient
+import se.lublin.mumla.ui.ServiceViewModel
 
 /**
  * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. Parsing and rendering

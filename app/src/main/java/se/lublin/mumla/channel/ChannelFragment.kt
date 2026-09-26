@@ -28,28 +28,28 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
-import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
-import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.util.VoiceTargetMode
-import se.lublin.mumla.R
-import se.lublin.mumla.Settings
-import se.lublin.mumla.app.ServiceClient
-import se.lublin.mumla.app.ServiceViewModel
-import se.lublin.mumla.app.bindClient
 import se.lublin.mumla.databinding.FragmentChannelBinding
+import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.Settings
+import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.ui.ServiceClient
+import se.lublin.mumla.ui.ServiceViewModel
 import java.util.Locale
 
 /**

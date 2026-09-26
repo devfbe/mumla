@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.channel
+package se.lublin.mumla.service
 
 import android.content.Context
 import android.view.LayoutInflater
@@ -26,15 +26,16 @@ import androidx.core.view.ViewCompat
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
-import se.lublin.mumla.R
 import se.lublin.mumla.databinding.OverlayUserRowBinding
+import se.lublin.mumla.R
+import se.lublin.mumla.util.talkStateDescription
 
 /**
  * Displays the users in a single channel. Holds one snapshot of the users, refreshed in
  * [notifyDataSetChanged], so `getCount()` and `getItem(position)` always describe the same moment
  * even while the protocol thread changes the model.
  */
-class ChannelAdapter(
+class OverlayUserAdapter(
     private val context: Context,
     private var channel: IChannel,
 ) : BaseAdapter() {

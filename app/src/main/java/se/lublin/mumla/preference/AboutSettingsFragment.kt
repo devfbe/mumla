@@ -5,7 +5,7 @@ import androidx.preference.Preference
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.app.showAllNewsDialog
+import se.lublin.mumla.ui.showAllNewsDialog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

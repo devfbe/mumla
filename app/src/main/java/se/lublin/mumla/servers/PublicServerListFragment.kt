@@ -18,6 +18,7 @@
 package se.lublin.mumla.servers
 
 import android.os.Bundle
+import android.view.inputmethod.EditorInfo
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
@@ -25,15 +26,14 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.annotation.VisibleForTesting
-import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
-import androidx.fragment.app.Fragment
+import androidx.core.view.MenuProvider
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -41,15 +41,15 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import se.lublin.mumla.R
-import se.lublin.mumla.app.showConfirmDialog
-import se.lublin.mumla.Settings
-import se.lublin.mumla.app.ServerRequest
-import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.databinding.DialogServerSearchBinding
 import se.lublin.mumla.databinding.FragmentPublicServerListBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
+import se.lublin.mumla.R
+import se.lublin.mumla.Settings
+import se.lublin.mumla.ui.ServerRequest
+import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.showConfirmDialog
 import java.util.Locale
 
 /** Displays the public servers, which can be sorted, filtered, matched, favourited and joined. */

@@ -24,8 +24,8 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowDialog
@@ -35,6 +35,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
+import se.lublin.mumla.ui.ServiceViewModel
 
 /** Back asks before leaving a connected server, and only then: predictive back works otherwise. */
 @RunWith(RobolectricTestRunner::class)

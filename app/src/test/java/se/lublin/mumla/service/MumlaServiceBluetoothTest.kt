@@ -1,22 +1,23 @@
 package se.lublin.mumla.service
 
-import android.Manifest
 import android.app.Application
+import android.Manifest
+import android.media.AudioDeviceInfo
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Before
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import android.media.AudioDeviceInfo
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.testutil.FakeCommunicationDevices
 import se.lublin.humla.testutil.testConnection
 import se.lublin.humla.testutil.testRouter
+import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.createMumlaService
 

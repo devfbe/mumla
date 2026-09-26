@@ -15,11 +15,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.channel
+package se.lublin.mumla.audio
 
-import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.Manifest
 import androidx.core.content.ContextCompat
 import se.lublin.mumla.Settings
 

@@ -26,21 +26,22 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
 import org.junit.Before
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowDialog
+import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
-import se.lublin.mumla.Settings
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.ui.ServiceViewModel
 
 /** MumlaActivity offers the battery optimisation exemption once, after a connection succeeds. */
 @RunWith(RobolectricTestRunner::class)

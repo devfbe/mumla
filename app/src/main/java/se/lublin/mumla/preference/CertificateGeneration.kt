@@ -21,16 +21,16 @@ import android.database.SQLException
 import android.util.Log
 import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import se.lublin.humla.net.HumlaCertificateGenerator
-import se.lublin.mumla.R
-import se.lublin.mumla.Settings
-import se.lublin.mumla.app.MumlaApplication
 import se.lublin.mumla.db.DatabaseCertificate
 import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.R
+import se.lublin.mumla.Settings
+import se.lublin.mumla.util.ApplicationScope
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.security.GeneralSecurityException
@@ -48,8 +48,8 @@ private const val DATE_FORMAT = "yyyy-MM-dd-HH-mm-ss"
  * @return the certificate, or null (after telling the user) if that failed.
  */
 suspend fun Context.generateDefaultCertificate(): DatabaseCertificate? {
-    val app = applicationContext as MumlaApplication
-    val work = app.scope.async { createDefaultCertificate(app) }
+    val app = applicationContext
+    val work = ApplicationScope.of(app).async { createDefaultCertificate(app) }
     val progress = MaterialAlertDialogBuilder(this)
         .setTitle(R.string.generateCertProgress)
         .setView(R.layout.dialog_progress)

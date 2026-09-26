@@ -6,8 +6,8 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.os.Looper
 import android.os.SystemClock
-import android.text.SpannableStringBuilder
 import android.text.method.LinkMovementMethod
+import android.text.SpannableStringBuilder
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -30,15 +30,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.User
 import se.lublin.mumla.R
-import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.testing.idleMainLooper
 import java.util.Collections
 import kotlin.coroutines.CoroutineContext

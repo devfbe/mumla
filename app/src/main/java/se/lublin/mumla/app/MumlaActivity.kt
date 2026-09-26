@@ -19,9 +19,9 @@ package se.lublin.mumla.app
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.ServiceConnection
 import android.content.SharedPreferences
-import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.os.IBinder
@@ -31,9 +31,9 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -42,12 +42,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
+import se.lublin.humla.model.MumbleURLParser
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.model.MumbleURLParser
 import se.lublin.mumla.BuildConfig
-import se.lublin.mumla.R
-import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.AccessTokenFragment
 import se.lublin.mumla.channel.ChannelFragment
 import se.lublin.mumla.channel.ServerInfoFragment
@@ -55,13 +53,21 @@ import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.databinding.ActivityMainBinding
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.MainScreen
 import se.lublin.mumla.preference.generateDefaultCertificate
 import se.lublin.mumla.preference.SettingsActivity
+import se.lublin.mumla.R
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
 import se.lublin.mumla.servers.ServerEditFragment
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.service.MumlaService
+import se.lublin.mumla.Settings
+import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.ui.ServerRequest
+import se.lublin.mumla.ui.ServiceClient
+import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.util.Edge
 import se.lublin.mumla.util.padForSystemBars
 import java.net.MalformedURLException
@@ -148,7 +154,7 @@ class MumlaActivity :
         }
 
         if (savedInstanceState == null) {
-            showDrawerFragment(intent?.getIntExtra(EXTRA_DRAWER_FRAGMENT, FALLBACK_SCREEN) ?: FALLBACK_SCREEN)
+            showDrawerFragment(intent?.getIntExtra(MainScreen.EXTRA_SCREEN, FALLBACK_SCREEN) ?: FALLBACK_SCREEN)
         }
         if (intent?.action == Intent.ACTION_VIEW) offerServerFromUrl(intent.dataString)
 
@@ -414,8 +420,5 @@ class MumlaActivity :
     companion object {
         private const val TAG = "MumlaActivity"
         private const val FALLBACK_SCREEN = DrawerAdapter.ITEM_FAVOURITES
-
-        /** The `DrawerAdapter.ITEM_*` id of the screen to show when the activity is created. */
-        const val EXTRA_DRAWER_FRAGMENT = "drawer_fragment"
     }
 }

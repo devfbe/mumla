@@ -37,7 +37,7 @@ android {
     defaultConfig {
         applicationId = "se.lublin.mumla"
         // Remember: app_news_items_vX_Y_Z in src/main/res/values/strings.xml
-        // and NEWS_ITEMS in src/main/java/se/lublin/mumla/app/DialogUtils.kt
+        // and NEWS_ITEMS in src/main/java/se/lublin/mumla/ui/DialogUtils.kt
         //     code:XYYZZbb (bb for build)
         versionCode = 3070300
         versionName = gitDescribe

@@ -1,4 +1,4 @@
-package se.lublin.mumla.app
+package se.lublin.mumla.ui
 
 import android.content.Context
 import android.util.Log
@@ -8,9 +8,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.text.HtmlCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import se.lublin.mumla.BuildConfig
+import se.lublin.mumla.databinding.DialogNewsBinding
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.databinding.DialogNewsBinding
 
 /** Shows [message] with an OK button; [onDismiss] runs however the dialog is closed. */
 fun Context.showMessageDialog(message: CharSequence, onDismiss: (() -> Unit)? = null): AlertDialog =

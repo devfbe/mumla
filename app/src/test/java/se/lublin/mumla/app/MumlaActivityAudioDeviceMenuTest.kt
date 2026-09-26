@@ -32,26 +32,28 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowDialog
-import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.Server
+import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.audio.routing.PreferredAudioDevice
+import se.lublin.humla.IHumlaSession
+import se.lublin.humla.model.Server
 import se.lublin.humla.session.SessionState
-import se.lublin.mumla.R
-import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.ChannelFragment
+import se.lublin.mumla.MainScreen
+import se.lublin.mumla.R
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.ui.ServiceViewModel
 
 /**
  * The audio chooser is in the toolbar of every main screen, with or without a connection: the
@@ -102,7 +104,7 @@ class MumlaActivityAudioDeviceMenuTest {
 
     /** Starts the activity on the drawer screen [screen], with the service bound unless [bind] is false. */
     private fun launch(screen: Int, bind: Boolean = true) {
-        val intent = Intent(app, MumlaActivity::class.java).putExtra(MumlaActivity.EXTRA_DRAWER_FRAGMENT, screen)
+        val intent = Intent(app, MumlaActivity::class.java).putExtra(MainScreen.EXTRA_SCREEN, screen)
         activity = Robolectric.buildActivity(MumlaActivity::class.java, intent).setup().get()
         idleMainLooper()
         ShadowDialog.getLatestDialog()?.dismiss() // the first-run guide

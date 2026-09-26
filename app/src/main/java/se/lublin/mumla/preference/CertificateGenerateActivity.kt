@@ -23,7 +23,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import se.lublin.mumla.R
-import se.lublin.mumla.app.showMessageDialog
+import se.lublin.mumla.ui.showMessageDialog
 
 /** Generates a certificate, makes it the default and tells the user its name. */
 class CertificateGenerateActivity : AppCompatActivity() {

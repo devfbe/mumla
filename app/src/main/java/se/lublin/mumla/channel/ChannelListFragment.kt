@@ -35,26 +35,26 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.MenuProvider
-import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.exception.HumlaDisconnectedException
-import se.lublin.mumla.R
-import se.lublin.mumla.Settings
-import se.lublin.mumla.app.ServiceClient
-import se.lublin.mumla.app.ServiceViewModel
-import se.lublin.mumla.app.bindClient
 import se.lublin.mumla.databinding.FragmentChannelListBinding
 import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.service.toggleSelfMute
+import se.lublin.mumla.Settings
+import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.ui.ServiceClient
+import se.lublin.mumla.ui.ServiceViewModel
 
 class ChannelListFragment :
     Fragment(),

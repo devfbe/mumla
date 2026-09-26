@@ -17,19 +17,18 @@
 
 package se.lublin.mumla.service
 
-import android.Manifest
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.Manifest
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
+import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
-import se.lublin.mumla.app.DrawerAdapter
-import se.lublin.mumla.app.MumlaActivity
 
 /**
  * Heads-up notification for unread chat messages, augmenting [MumlaConnectionNotification], as a
@@ -87,8 +86,7 @@ class MumlaMessageNotification(private val context: Context) {
             .setGroupConversation(true)
         messages.forEach(style::addMessage)
 
-        val channelListIntent = Intent(context, MumlaActivity::class.java)
-            .putExtra(MumlaActivity.EXTRA_DRAWER_FRAGMENT, DrawerAdapter.ITEM_SERVER)
+        val channelListIntent = MainScreen.intent(context, MainScreen.CHANNELS)
         // FLAG_CANCEL_CURRENT ensures that the extra always gets sent.
         val pendingIntent = PendingIntent.getActivity(
             context, 0, channelListIntent, PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,

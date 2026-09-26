@@ -1,4 +1,4 @@
-package se.lublin.mumla.channel
+package se.lublin.mumla.service
 
 import android.content.Context
 import android.widget.FrameLayout
@@ -6,12 +6,14 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.TalkState
+import se.lublin.mumla.channel.FakeChannel
+import se.lublin.mumla.channel.FakeUser
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ThemedActivity
 
@@ -20,7 +22,7 @@ import se.lublin.mumla.testing.ThemedActivity
  * `getItem(position)` must not see different moments, or a user leaving between them throws.
  */
 @RunWith(RobolectricTestRunner::class)
-class ChannelAdapterSnapshotTest {
+class OverlayUserAdapterSnapshotTest {
     private lateinit var context: Context
     private lateinit var channel: FakeChannel
     private lateinit var users: List<FakeUser>
@@ -35,7 +37,7 @@ class ChannelAdapterSnapshotTest {
 
     @Test
     fun aUserLeavingBetweenTheCountAndTheItemDoesNotBreakTheRow() {
-        val adapter = ChannelAdapter(context, channel)
+        val adapter = OverlayUserAdapter(context, channel)
 
         val count = adapter.count
         channel.removeUser(users[0])
@@ -45,7 +47,7 @@ class ChannelAdapterSnapshotTest {
 
     @Test
     fun aBindReadsTheModelNotAtAll() {
-        val adapter = ChannelAdapter(context, channel)
+        val adapter = OverlayUserAdapter(context, channel)
         channel.counters.reset()
 
         adapter.count
@@ -58,7 +60,7 @@ class ChannelAdapterSnapshotTest {
 
     @Test
     fun notifyDataSetChangedTakesAFreshSnapshot() {
-        val adapter = ChannelAdapter(context, channel)
+        val adapter = OverlayUserAdapter(context, channel)
         val before = adapter.count
 
         channel.addUser(FakeUser(4))
@@ -72,7 +74,7 @@ class ChannelAdapterSnapshotTest {
 
     @Test
     fun aFreshSnapshotIsAnnouncedToTheList() {
-        val adapter = ChannelAdapter(context, channel)
+        val adapter = OverlayUserAdapter(context, channel)
         var changes = 0
         adapter.registerDataSetObserver(object : android.database.DataSetObserver() {
             override fun onChanged() {
@@ -87,7 +89,7 @@ class ChannelAdapterSnapshotTest {
 
     @Test
     fun settingAChannelSwitchesToItsUsers() {
-        val adapter = ChannelAdapter(context, channel)
+        val adapter = OverlayUserAdapter(context, channel)
         val other = FakeChannel(1)
         other.addUser(FakeUser(9))
 
@@ -100,7 +102,7 @@ class ChannelAdapterSnapshotTest {
 
     @Test
     fun theStateIconFollowsTheStatePriority() {
-        val adapter = ChannelAdapter(context, channel)
+        val adapter = OverlayUserAdapter(context, channel)
         val user = users[0]
 
         assertThat(stateIcon(adapter)).isEqualTo(R.drawable.outline_circle_talking_off)
@@ -127,14 +129,14 @@ class ChannelAdapterSnapshotTest {
 
     @Test
     fun theRowShowsTheUsersName() {
-        val adapter = ChannelAdapter(context, channel)
+        val adapter = OverlayUserAdapter(context, channel)
         val view = adapter.getView(1, null, FrameLayout(context))
 
         assertThat(view.findViewById<TextView>(R.id.user_row_name).text.toString())
             .isEqualTo(users[1].name)
     }
 
-    private fun stateIcon(adapter: ChannelAdapter): Int {
+    private fun stateIcon(adapter: OverlayUserAdapter): Int {
         val view = adapter.getView(0, null, FrameLayout(context))
         return shadowOf(view.findViewById<ImageView>(R.id.user_row_state).drawable).createdFromResId
     }

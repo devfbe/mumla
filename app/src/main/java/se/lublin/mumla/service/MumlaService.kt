@@ -33,7 +33,13 @@ import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
-import se.lublin.humla.util.Constants
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.HumlaService
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
@@ -41,20 +47,16 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.exception.HumlaException
-import se.lublin.mumla.R
-import se.lublin.mumla.Settings
+import se.lublin.humla.util.Constants
+import se.lublin.mumla.chat.ChatMessageLog
+import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.chat.outgoingMessageHtml
+import se.lublin.mumla.R
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
-import se.lublin.mumla.util.HtmlUtils
+import se.lublin.mumla.Settings
 import se.lublin.mumla.util.collectEvents
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
+import se.lublin.mumla.util.HtmlUtils
 
 /** [HumlaService] plus Mumla's notifications, overlay, hot corner, TTS and media session. */
 class MumlaService : HumlaService(),

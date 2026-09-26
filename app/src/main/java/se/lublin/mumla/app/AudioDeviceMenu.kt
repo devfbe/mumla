@@ -22,14 +22,14 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import androidx.activity.ComponentActivity
 import androidx.core.view.MenuProvider
-import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.CommunicationDevice
-import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.audio.routing.listCommunicationDevices
+import se.lublin.humla.audio.routing.PreferredAudioDevice
+import se.lublin.humla.IHumlaSession
+import se.lublin.mumla.audio.AudioDeviceLabels
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.channel.AudioDeviceLabels
 
 /**
  * The toolbar's audio chooser: "Automatic", the devices on offer and the echo switch. [session] is

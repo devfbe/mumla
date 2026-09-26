@@ -25,21 +25,21 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
-import androidx.fragment.app.Fragment
+import androidx.core.view.MenuProvider
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
-import se.lublin.mumla.R
-import se.lublin.mumla.app.showConfirmDialog
-import se.lublin.mumla.app.ServerRequest
-import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.databinding.FragmentServerListBinding
 import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.R
+import se.lublin.mumla.ui.ServerRequest
+import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.showConfirmDialog
 
 /** Displays the favourite servers, and lets the user connect to and edit them. */
 @Suppress("TooManyFunctions") // Fragment, menu and card menu callbacks.

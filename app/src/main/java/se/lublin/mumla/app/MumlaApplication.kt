@@ -12,22 +12,26 @@ import com.google.android.material.color.DynamicColors
 import com.google.android.material.color.DynamicColorsOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
+import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.db.MumlaSQLiteDatabase
 import se.lublin.mumla.Settings
 import se.lublin.mumla.Settings.Companion.PREF_LANGUAGE
 import se.lublin.mumla.Settings.Companion.PREF_THEME
-import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.db.MumlaSQLiteDatabase
+import se.lublin.mumla.util.ApplicationScope
 
-class MumlaApplication : Application(), SharedPreferences.OnSharedPreferenceChangeListener {
+class MumlaApplication :
+    Application(),
+    MumlaRepository.Owner,
+    ApplicationScope.Owner,
+    SharedPreferences.OnSharedPreferenceChangeListener {
 
-    /** For work that must outlive the screen that started it. */
-    val scope: CoroutineScope = MainScope()
+    override val scope: CoroutineScope = MainScope()
 
     @Volatile
     private var installedRepository: MumlaRepository? = null
 
     /** The single database of the process, opened on first use and never closed. */
-    val repository: MumlaRepository
+    override val repository: MumlaRepository
         get() = installedRepository ?: synchronized(this) {
             installedRepository ?: MumlaRepository(MumlaSQLiteDatabase(this)).also { installedRepository = it }
         }

@@ -14,16 +14,17 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
 import org.junit.Assert.assertThrows
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
+import org.robolectric.android.controller.ServiceController
+import org.robolectric.annotation.Config
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.android.controller.ServiceController
-import org.robolectric.annotation.Config
-import se.lublin.mumla.R
 import se.lublin.mumla.app.DrawerAdapter
 import se.lublin.mumla.app.MumlaActivity
+import se.lublin.mumla.MainScreen
+import se.lublin.mumla.R
 import se.lublin.mumla.testing.idleMainLooper
 
 /**
@@ -148,7 +149,7 @@ class MumlaConnectionNotificationTest {
         val content = shadowOf(shadowOf(service).lastForegroundNotification.contentIntent)
         assertThat(content.isActivity).isTrue()
         assertThat(content.savedIntent.component?.className).isEqualTo(MumlaActivity::class.java.name)
-        assertThat(content.savedIntent.getIntExtra(MumlaActivity.EXTRA_DRAWER_FRAGMENT, -1))
+        assertThat(content.savedIntent.getIntExtra(MainScreen.EXTRA_SCREEN, -1))
             .isEqualTo(DrawerAdapter.ITEM_SERVER)
         assertThat(content.isImmutable).isTrue()
     }

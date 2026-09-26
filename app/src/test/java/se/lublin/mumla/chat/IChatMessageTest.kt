@@ -1,4 +1,4 @@
-package se.lublin.mumla.service
+package se.lublin.mumla.chat
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
