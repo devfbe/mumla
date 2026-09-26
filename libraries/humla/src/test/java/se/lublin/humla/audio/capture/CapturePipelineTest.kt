@@ -388,7 +388,7 @@ class CapturePipelineTest {
             return n
         }
 
-        override fun release() = Unit
+        override fun close() = Unit
     }
 
     /** Always transmits and records the length, and the level, it was asked to judge. */

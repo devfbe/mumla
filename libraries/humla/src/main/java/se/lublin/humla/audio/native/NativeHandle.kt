@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Andrew Comminos
+ * Copyright (C) 2026 The Mumla Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,17 +14,22 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package se.lublin.humla.audio
+package se.lublin.humla.audio.native
 
-import se.lublin.humla.exception.NativeAudioException
+/**
+ * Owns one native object: [create] runs on construction, [destroy] at most once, on [close], after
+ * which [value] is 0. Not thread-safe: the owner confines it to one thread or locks around it.
+ * Reading [value] allocates nothing, so it is fit for the audio threads.
+ */
+class NativeHandle(create: () -> Long, private val destroy: (Long) -> Unit) : AutoCloseable {
+    var value: Long = create()
+        private set
 
-/** A native voice decoder producing float PCM. */
-interface IDecoder : AutoCloseable {
-    /**
-     * Decodes [length] bytes of [input] from [offset] into [output], which holds at least
-     * [frameSize] samples. A null [input] asks for loss concealment.
-     * @return the number of decoded samples.
-     * @throws NativeAudioException if decoding failed.
-     */
-    fun decodeFloat(input: ByteArray?, offset: Int, length: Int, output: FloatArray, frameSize: Int): Int
+    override fun close() {
+        val handle = value
+        if (handle != 0L) {
+            value = 0L
+            destroy(handle)
+        }
+    }
 }

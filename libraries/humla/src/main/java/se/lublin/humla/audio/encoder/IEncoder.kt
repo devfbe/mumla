@@ -20,7 +20,7 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.PacketBuffer
 
 /** A native audio encoder that buffers frames and serves encoded packets. */
-interface IEncoder {
+interface IEncoder : AutoCloseable {
     /** The number of frames buffered for the next packet. */
     val bufferedFrames: Int
 
@@ -52,7 +52,4 @@ interface IEncoder {
      * @throws NativeAudioException if encoding failed.
      */
     fun terminate()
-
-    /** Frees native resources. */
-    fun destroy()
 }

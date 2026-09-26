@@ -33,8 +33,8 @@ class OpusDecoderTest {
         val fake = FakeOpusDecoder()
         val decoder = OpusDecoder(48000, 1, fake)
 
-        decoder.destroy()
-        decoder.destroy()
+        decoder.close()
+        decoder.close()
 
         // A second opus_decoder_destroy on the same raw pointer is a native double free.
         assertThat(fake.destroys).isEqualTo(1)

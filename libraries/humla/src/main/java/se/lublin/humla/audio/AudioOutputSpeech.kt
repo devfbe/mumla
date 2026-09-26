@@ -52,7 +52,7 @@ class AudioOutputSpeech(
     private val talkStateListener: TalkStateListener,
     private val opusApi: OpusDecoderApi = OpusDecoderNative,
     jitterApi: SpeexJitterApi = SpeexJitterNative,
-) : IAudioMixerSource<FloatArray> {
+) : IAudioMixerSource<FloatArray>, AutoCloseable {
 
     fun interface TalkStateListener {
         fun onTalkStateUpdated(session: Int, state: TalkState)
@@ -293,9 +293,9 @@ class AudioOutputSpeech(
     val session: Int
         get() = user.session
 
-    /** Cleans up all native resources linked to this instance. MUST be called eventually. */
-    fun destroy() {
-        decoder.destroy()
-        jitterBuffer.destroy()
+    /** Frees the native decoder and jitter buffer. Must be called eventually. */
+    override fun close() {
+        decoder.close()
+        jitterBuffer.close()
     }
 }

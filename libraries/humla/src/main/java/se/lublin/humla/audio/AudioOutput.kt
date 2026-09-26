@@ -90,7 +90,7 @@ class AudioOutput(
     private val onEnded: (AudioOutputSpeech) -> Unit = { speech ->
         Log.v(TAG, "Deleted audio user " + speech.user.name)
         audioOutputs.remove(speech.session)
-        speech.destroy()
+        speech.close()
     }
 
     fun startPlaying(audioStream: Int): Thread? {
@@ -156,7 +156,7 @@ class AudioOutput(
         thread = null
 
         packetLock.withLock {
-            mix.clear { it.destroy() }
+            mix.clear { it.close() }
             audioOutputs.clear()
         }
         audioTrack?.release()

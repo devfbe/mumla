@@ -77,7 +77,7 @@ internal class VoiceTransmitter(
     fun setCodec(codec: HumlaUDPMessageType?, create: (HumlaUDPMessageType) -> IEncoder?) {
         synchronized(encoderLock) {
             this.codec = codec
-            encoder?.destroy()
+            encoder?.close()
             encoder = null
             if (codec != null) encoder = create(codec) else Log.w(TAG, "No codec, input disabled.")
         }
@@ -94,7 +94,7 @@ internal class VoiceTransmitter(
 
     fun releaseEncoder() {
         synchronized(encoderLock) {
-            encoder?.destroy()
+            encoder?.close()
             encoder = null
         }
     }

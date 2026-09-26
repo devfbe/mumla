@@ -184,8 +184,8 @@ class AudioOutputSpeechTest {
             jitter,
         )
 
-        speech.destroy()
-        speech.destroy()
+        speech.close()
+        speech.close()
 
         // AudioOutputSpeech has no guard of its own: it relies on the ones in OpusDecoder and
         // SpeexJitterBuffer, so it is the pair that has to stay idempotent.

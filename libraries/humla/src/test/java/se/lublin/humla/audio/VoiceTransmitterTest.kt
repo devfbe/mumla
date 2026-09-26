@@ -54,7 +54,7 @@ class VoiceTransmitterTest {
         }
 
         override fun terminate() = Unit
-        override fun destroy() = Unit
+        override fun close() = Unit
     }
 
     /** Copies what it is handed, as the network layer must, since the buffer is reused. */

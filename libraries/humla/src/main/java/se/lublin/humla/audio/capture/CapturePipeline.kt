@@ -97,11 +97,11 @@ class CapturePipeline(
         val old = this.resampler
         this.resampler = resampler
         shortFrameLogged = false
-        if (old !== resampler) old?.release()
+        if (old !== resampler) old?.close()
     }
 
     fun release() {
-        resampler?.release()
+        resampler?.close()
         resampler = null
         preprocessor.release()
     }

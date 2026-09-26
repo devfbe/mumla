@@ -17,6 +17,7 @@
 
 package se.lublin.humla.audio
 
+import se.lublin.humla.audio.native.NativeHandle
 import se.lublin.humla.audio.native.SpeexJitterApi
 import se.lublin.humla.audio.native.SpeexJitterNative
 
@@ -24,17 +25,16 @@ import se.lublin.humla.audio.native.SpeexJitterNative
 class SpeexJitterBuffer(
     stepSize: Int,
     private val api: SpeexJitterApi = SpeexJitterNative,
-) {
-    private var handle: Long = api.init(stepSize)
-    private var destroyed = false
+) : AutoCloseable {
+    private val handle = NativeHandle({ api.init(stepSize) }, api::destroy)
     private val meta = IntArray(5)
     private val scratch = IntArray(1)
 
     fun put(data: ByteArray, length: Int, timestamp: Int, span: Int, sequence: Int, userData: Int) =
-        api.put(handle, data, length, timestamp, span, sequence, userData)
+        api.put(handle.value, data, length, timestamp, span, sequence, userData)
 
     /** Takes the next packet into [out]; returns a `JITTER_BUFFER_*` status. */
-    fun get(out: ByteArray, desiredSpan: Int): Int = api.get(handle, out, desiredSpan, meta)
+    fun get(out: ByteArray, desiredSpan: Int): Int = api.get(handle.value, out, desiredSpan, meta)
 
     /** The length of the packet the last [get] delivered. */
     val packetLength: Int get() = meta[0]
@@ -43,23 +43,18 @@ class SpeexJitterBuffer(
     val packetUserData: Int get() = meta[4]
 
     val pointerTimestamp: Int
-        get() = api.pointerTimestamp(handle)
+        get() = api.pointerTimestamp(handle.value)
 
     /** Runs `jitter_buffer_ctl` with an int argument and returns the (possibly updated) argument. */
     fun control(request: Int, value: Int): Int {
         scratch[0] = value
-        api.ctl(handle, request, scratch)
+        api.ctl(handle.value, request, scratch)
         return scratch[0]
     }
 
-    fun updateDelay(): Int = api.updateDelay(handle)
+    fun updateDelay(): Int = api.updateDelay(handle.value)
 
-    fun tick() = api.tick(handle)
+    fun tick() = api.tick(handle.value)
 
-    fun destroy() {
-        if (destroyed) return
-        destroyed = true
-        api.destroy(handle)
-        handle = 0L
-    }
+    override fun close() = handle.close()
 }

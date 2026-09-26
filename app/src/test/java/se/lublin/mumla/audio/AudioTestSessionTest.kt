@@ -350,7 +350,7 @@ class AudioTestSessionTest {
                         return output.size
                     }
 
-                    override fun release() = Unit
+                    override fun close() = Unit
                 }
             },
         )
