@@ -119,8 +119,7 @@ if(HUMLA_HAVE_SANITIZERS)
   # Same INTERFACE target as the real library, so flags and dependencies cannot drift.
   target_link_libraries(humla_apm_asan PRIVATE humla_apm_buildflags)
   target_include_directories(humla_apm_asan PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../webrtc_apm)
-  target_compile_options(humla_apm_asan PRIVATE
-      ${HUMLA_SAN_FLAGS} -fvisibility=hidden -Wno-deprecated-declarations)
+  target_compile_options(humla_apm_asan PRIVATE ${HUMLA_SAN_FLAGS} -fvisibility=hidden)
   target_link_options(humla_apm_asan PUBLIC -fsanitize=address,undefined)
   if(NOT HUMLA_SANITIZE_WEBRTC)
     # The uninstrumented upstream objects come from humla_apm. humla_apm.cpp is in both archives;

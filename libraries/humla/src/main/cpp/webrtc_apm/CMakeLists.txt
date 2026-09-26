@@ -1,5 +1,6 @@
-# webrtc-audio-processing v2.1 (BSD-3) plus abseil-cpp 20240722.0 (Apache-2.0), built as one
-# static library with the C wrapper in humla_apm.cpp.
+# webrtc-audio-processing v2.1 plus upstream's fixes up to d0569cf (BSD-3; the abseil >= 202508
+# build fix is in no release tag yet) and abseil-cpp 20260817.0 (Apache-2.0), built as one static
+# library with the C wrapper in humla_apm.cpp.
 #
 # Upstream builds with meson, which Gradle's externalNativeBuild cannot drive, so the meson file
 # lists are transcribed here in upstream's order and grouping, so the result can be diffed against
@@ -68,12 +69,6 @@ else()
   message(FATAL_ERROR "webrtc_apm: no platform defines transcribed for ${CMAKE_SYSTEM_NAME}; "
                       "see meson.build:74-109 before adding them.")
 endif()
-
-# v2.1 does not build with GCC 15 (libstdc++ no longer pulls in <cstdint> transitively). Upstream
-# fixed that in e9c78dc, which is in no release tag yet. Force-including <cstdint> into the C++
-# units has the same effect; it could also hide a different missing include, so drop this line
-# first when the submodule moves past e9c78dc.
-set(WAP_CSTDINT_FIX $<$<COMPILE_LANGUAGE:CXX>:-include$<SEMICOLON>cstdint>)
 
 set(WAP_ARCH_ARM32 OFF)
 set(WAP_ARCH_ARM64 OFF)
@@ -286,7 +281,10 @@ list(TRANSFORM WAP_ALL_SOURCES PREPEND ${WEBRTC_DIR}/)
 add_library(humla_apm_buildflags INTERFACE)
 target_include_directories(humla_apm_buildflags INTERFACE ${WEBRTC_DIR} ${WAP_DIR})
 target_compile_definitions(humla_apm_buildflags INTERFACE ${WAP_DEFS})
-target_compile_options(humla_apm_buildflags INTERFACE ${WAP_ARCH_FLAGS} ${WAP_CSTDINT_FIX})
+# abseil deprecates aliases webrtc still uses, and its clang nullability macros leave webrtc's
+# partially annotated headers "incomplete"; neither is ours to fix.
+target_compile_options(humla_apm_buildflags INTERFACE ${WAP_ARCH_FLAGS} -Wno-deprecated-declarations
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nullability-completeness>)
 # meson.build:49-56 absl_dep, narrowed to the abseil headers this tree actually includes.
 # absl_synchronization and absl_bad_optional_access are not named: nothing includes them directly
 # and abseil's own dependencies bring them in.
@@ -296,7 +294,7 @@ target_link_libraries(humla_apm_buildflags INTERFACE
 
 add_library(humla_apm STATIC ${WAP_ALL_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/humla_apm.cpp)
 target_include_directories(humla_apm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(humla_apm PRIVATE -O2 -fvisibility=hidden -Wno-deprecated-declarations)
+target_compile_options(humla_apm PRIVATE -O2 -fvisibility=hidden)
 # PRIVATE: humla_apm.h exposes neither webrtc nor abseil, so no consumer needs their headers.
 target_link_libraries(humla_apm PRIVATE humla_apm_buildflags)
 # third_party/pffft/meson.build:5 pffft_cflags.
