@@ -67,13 +67,13 @@ class HumlaServiceBluetoothTest {
 
         h.service.enableBluetoothSco()
 
-        assertThat(h.devices!!.selectCalls).containsExactly(7)
+        assertThat(h.devices.selectCalls).containsExactly(7)
         assertThat(h.service.usingBluetoothSco()).isTrue()
         assertThat(h.service.isBluetoothScoActive).isTrue()
 
         h.service.disableBluetoothSco()
 
-        assertThat(h.devices!!.clearCalls).isEqualTo(1)
+        assertThat(h.devices.clearCalls).isEqualTo(1)
         assertThat(h.service.usingBluetoothSco()).isFalse()
         assertThat(h.service.isBluetoothScoActive).isFalse()
     }
@@ -86,7 +86,7 @@ class HumlaServiceBluetoothTest {
     fun aRefusedRouteIsOneChatLine() {
         val h = start()
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-        h.devices!!.selectResult = false
+        h.devices.selectResult = false
         h.connectAndSynchronize()
 
         h.service.enableBluetoothSco()
@@ -124,7 +124,7 @@ class HumlaServiceBluetoothTest {
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
         h.service.enableBluetoothSco()
-        assertThat(h.devices!!.selectCalls).containsExactly(7)
+        assertThat(h.devices.selectCalls).containsExactly(7)
         assertThat(h.service.isBluetoothScoActive).isTrue()
 
         h.failConnection(0, connectionError())
@@ -137,7 +137,7 @@ class HumlaServiceBluetoothTest {
         h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS) // backoff timer
         h.synchronize(h.openSocket(1))
 
-        assertThat(h.devices!!.selectCalls).containsExactly(7, 7).inOrder()
+        assertThat(h.devices.selectCalls).containsExactly(7, 7).inOrder()
         assertThat(h.service.isBluetoothScoActive).isTrue()
     }
 
@@ -152,7 +152,7 @@ class HumlaServiceBluetoothTest {
         h.mainLooper.idle()
 
         assertThat(h.service.sessionState.value).isEqualTo(SessionState.Disconnected())
-        assertThat(h.devices!!.clearCalls).isEqualTo(1)
+        assertThat(h.devices.clearCalls).isEqualTo(1)
         // The wish is not a session resource: it is the user's setting until they change it.
         assertThat(h.service.usingBluetoothSco()).isTrue()
     }
@@ -164,13 +164,13 @@ class HumlaServiceBluetoothTest {
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
         h.service.enableBluetoothSco()
-        assertThat(h.devices!!.listener).isNotNull()
+        assertThat(h.devices.listener).isNotNull()
 
         h.destroy()
         harnesses.remove(h)
 
-        assertThat(h.devices!!.clearCalls).isEqualTo(1)
-        assertThat(h.devices!!.listener).isNull()
+        assertThat(h.devices.clearCalls).isEqualTo(1)
+        assertThat(h.devices.listener).isNull()
     }
 
     /**
@@ -183,22 +183,22 @@ class HumlaServiceBluetoothTest {
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
 
         h.service.enableBluetoothSco()
-        h.devices!!.deviceArrives(9, AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
+        h.devices.deviceArrives(9, AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
 
-        assertThat(h.devices!!.selectCalls).isEmpty()
+        assertThat(h.devices.selectCalls).isEmpty()
         assertThat(h.service.usingBluetoothSco()).isTrue()
 
         h.destroy()
         harnesses.remove(h)
 
-        assertThat(h.devices!!.clearCalls).isEqualTo(0)
+        assertThat(h.devices.clearCalls).isEqualTo(0)
     }
 
     // ---------------------------------------------------------------- the chooser
 
     private fun HumlaServiceHarness.phone() {
         devices!!.available[1] = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-        devices!!.available[2] = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+        devices.available[2] = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
     }
 
     /** The chooser's three calls, through the session interface the UI holds. */
@@ -207,7 +207,7 @@ class HumlaServiceBluetoothTest {
         val h = start()
         h.phone()
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-        h.devices!!.names[7] = "Jabra"
+        h.devices.names[7] = "Jabra"
         h.connectAndSynchronize()
         val session: IHumlaSession = h.service
 
@@ -216,7 +216,7 @@ class HumlaServiceBluetoothTest {
 
         session.selectAudioDevice(1)
 
-        assertThat(h.devices!!.selectedId).isEqualTo(1)
+        assertThat(h.devices.selectedId).isEqualTo(1)
         assertThat(session.activeAudioDevice?.id).isEqualTo(1)
     }
 
@@ -253,7 +253,7 @@ class HumlaServiceBluetoothTest {
         h.configure { copy(preferredAudioDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)) }
 
         assertThat(h.devices!!.selectCalls).isEmpty()
-        assertThat(h.devices!!.modeCalls).isEmpty()
+        assertThat(h.devices.modeCalls).isEmpty()
     }
 
     @Test
@@ -283,7 +283,7 @@ class HumlaServiceBluetoothTest {
         h.service.disconnect()
         h.mainLooper.idle()
 
-        assertThat(h.devices!!.inCommunicationMode).isFalse()
+        assertThat(h.devices.inCommunicationMode).isFalse()
     }
 
     /** The choice is the wish, and like the headset wish it outlives a dropped connection. */
@@ -299,7 +299,7 @@ class HumlaServiceBluetoothTest {
         h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS) // backoff timer
         h.synchronize(h.openSocket(1))
 
-        assertThat(h.devices!!.selectedId).isEqualTo(1)
+        assertThat(h.devices.selectedId).isEqualTo(1)
     }
 
     /** ...but not the end of the session: the next call starts from the default, as on a phone. */
@@ -369,7 +369,7 @@ class HumlaServiceBluetoothTest {
         h.service.enableBluetoothSco()
         awaitUntil(description = "audio rebuilt for sco") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
 
-        h.devices!!.systemSelects(null) // the headset walked away
+        h.devices.systemSelects(null) // the headset walked away
 
         awaitUntil(description = "audio rebuilt without sco") { h.mainLooper.idle(); h.audioFactory.created.size == 3 }
         assertThat(h.audioFactory.configs[2].routedDeviceType).isNull()

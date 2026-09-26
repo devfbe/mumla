@@ -5,7 +5,7 @@ following third-party components. Every entry is GPLv3-compatible.
 
 | Component | Version | License | Source |
 |---|---|---|---|
-| Kotlin standard library and compiler | bundled with AGP 9.4.1 (built-in Kotlin; `agp` in `gradle/libs.versions.toml`) | Apache-2.0 | https://github.com/JetBrains/kotlin |
+| Kotlin standard library and compiler | 2.4.20 (`kotlin` in `gradle/libs.versions.toml`) | Apache-2.0 | https://github.com/JetBrains/kotlin |
 | kotlinx-coroutines | 1.11.0 | Apache-2.0 | https://github.com/Kotlin/kotlinx.coroutines |
 | AndroidX (appcompat, activity, core, fragment, preference, recyclerview, cardview, documentfile, exifinterface) | see `gradle/libs.versions.toml` | Apache-2.0 | https://developer.android.com/jetpack |
 | Material Components for Android | 1.14.0 | Apache-2.0 | https://github.com/material-components/material-components-android |

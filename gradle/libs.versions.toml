@@ -1,7 +1,8 @@
 [versions]
-# No kotlin version here: AGP's built-in Kotlin support brings its own Kotlin Gradle plugin, and
-# declaring one would put a second KGP on the classpath.
 agp = "9.4.1"
+# AGP's built-in Kotlin compiles with whatever KGP is on the build classpath; the root build script
+# puts this one there instead of the older KGP AGP depends on.
+kotlin = "2.4.20"
 coroutines = "1.11.0"
 
 androidx-appcompat = "1.8.0"
@@ -36,6 +37,7 @@ androidx-test-core = "1.7.0"
 
 [libraries]
 android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 detekt-gradlePlugin = { module = "io.gitlab.arturbosch.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
