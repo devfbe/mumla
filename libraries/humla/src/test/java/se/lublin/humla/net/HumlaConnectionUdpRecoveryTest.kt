@@ -56,7 +56,9 @@ class HumlaConnectionUdpRecoveryTest {
     private fun HumlaConnection.establish(forceTcp: Boolean = false): FakeTcpTransport {
         setForceTCP(forceTcp)
         connect(server)
-        awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null }
+        awaitUntil(description = "tcp connect") {
+            transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null
+        }
         val tcp = transports.tcps[0]
         tcp.simulateConnected()
         awaitUntil(description = "connection established") { isConnected }
@@ -65,7 +67,9 @@ class HumlaConnectionUdpRecoveryTest {
     }
 
     private fun HumlaConnection.firstUdp(): FakeUdpTransport {
-        awaitUntil(description = "udp started") { transports.udps.isNotEmpty() && transports.udps[0].connectCalls.get() == 1 }
+        awaitUntil(description = "udp started") {
+            transports.udps.isNotEmpty() && transports.udps[0].connectCalls.get() == 1
+        }
         return transports.udps[0]
     }
 
@@ -110,7 +114,9 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(transports.udps).hasSize(1)
 
         shadowOf(connection.protocolLooper).idleFor(Duration.ofSeconds(1)) // first restart after 1 s
-        awaitUntil(description = "udp restarted") { transports.udps.size == 2 && transports.udps[1].connectCalls.get() == 1 }
+        awaitUntil(description = "udp restarted") {
+            transports.udps.size == 2 && transports.udps[1].connectCalls.get() == 1
+        }
 
         transports.udps[1].simulateError(IOException("still down"))
         connection.drainProtocolQueue("second failure handled")
@@ -375,7 +381,9 @@ class HumlaConnectionUdpRecoveryTest {
         val connection = newConnection()
         connection.setUseTor(true)
         connection.connect(server)
-        awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null }
+        awaitUntil(description = "tcp connect") {
+            transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null
+        }
         val tcp = transports.tcps[0]
         tcp.simulateConnected()
         awaitUntil(description = "connection established") { connection.isConnected }

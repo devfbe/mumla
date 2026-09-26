@@ -20,6 +20,10 @@ package se.lublin.humla.net
 import se.lublin.humla.protobuf.MumbleUDP
 import java.nio.BufferUnderflowException
 
+/** The legacy header keeps the message type in its top three bits. */
+private const val TYPE_SHIFT = 5
+private const val BYTE_MASK = 0xFF
+
 /**
  * The UDP connectivity ping, in the connection's [UdpProtocol].
  *
@@ -33,7 +37,7 @@ import java.nio.BufferUnderflowException
  * legacy ping from a client that announced 1.5, so the format must match the voice format.
  */
 internal object UdpPing {
-    private val HEADER = ((HumlaUDPMessageType.UDPPing.ordinal shl 5) and 0xFF).toByte()
+    private val HEADER = ((HumlaUDPMessageType.UDPPing.ordinal shl TYPE_SHIFT) and BYTE_MASK).toByte()
 
     /** Header plus the longest varint (0xF4 and eight bytes). */
     const val MAX_SIZE = 1 + 9

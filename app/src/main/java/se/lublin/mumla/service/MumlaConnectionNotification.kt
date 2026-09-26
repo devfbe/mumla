@@ -133,9 +133,21 @@ class MumlaConnectionNotification private constructor(
             .setOnlyAlertOnce(true)
 
         if (actionsShown) {
-            builder.addAction(R.drawable.ic_action_microphone, service.getString(R.string.mute), broadcast(BROADCAST_MUTE))
-            builder.addAction(R.drawable.ic_action_audio, service.getString(R.string.deafen), broadcast(BROADCAST_DEAFEN))
-            builder.addAction(R.drawable.ic_action_channels, service.getString(R.string.overlay), broadcast(BROADCAST_OVERLAY))
+            builder.addAction(
+                R.drawable.ic_action_microphone,
+                service.getString(R.string.mute),
+                broadcast(BROADCAST_MUTE),
+            )
+            builder.addAction(
+                R.drawable.ic_action_audio,
+                service.getString(R.string.deafen),
+                broadcast(BROADCAST_DEAFEN),
+            )
+            builder.addAction(
+                R.drawable.ic_action_channels,
+                service.getString(R.string.overlay),
+                broadcast(BROADCAST_OVERLAY),
+            )
         }
         if (cancelReconnectShown) {
             builder.addAction(

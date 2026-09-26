@@ -33,6 +33,12 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.security.GeneralSecurityException
 
+/** The encryption header alone is four bytes; anything this short carries no voice. */
+private const val MIN_DATAGRAM_BYTES = 5
+
+/** How long decryption may fail before a crypt resync is requested, and how often. */
+private const val RESYNC_AFTER_MICROS = 5_000_000
+
 /**
  * Receives and sends OCB-AES encrypted voice datagrams over the UDP connection to a Mumble server.
  *
@@ -118,7 +124,7 @@ class HumlaUDP(
             Log.d(TAG, "CryptState invalid, discarding packet")
             return
         }
-        if (length < 5) {
+        if (length < MIN_DATAGRAM_BYTES) {
             Log.d(TAG, "Packet too short, discarding")
             return
         }
@@ -126,7 +132,10 @@ class HumlaUDP(
             val buffer = cryptState.decrypt(data, length)
             if (buffer != null) {
                 post { listener.onUDPDataReceived(buffer) }
-            } else if (cryptState.lastGoodElapsed > 5000000 && cryptState.lastRequestElapsed > 5000000) {
+            } else if (
+                cryptState.lastGoodElapsed > RESYNC_AFTER_MICROS &&
+                cryptState.lastRequestElapsed > RESYNC_AFTER_MICROS
+            ) {
                 cryptState.resetLastRequestTime()
                 post { listener.resyncCryptState() }
                 Log.d(TAG, "Packet failed to decrypt, discarding and requesting crypt state resync")

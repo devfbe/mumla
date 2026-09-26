@@ -55,7 +55,9 @@ class MumlaSQLiteDatabaseSecretsTest {
 
     private fun raw(sql: String): List<Any?> = open().readableDatabase.rawQuery(sql, null).use { c ->
         buildList {
-            while (c.moveToNext()) add(if (c.getType(0) == android.database.Cursor.FIELD_TYPE_BLOB) c.getBlob(0) else c.getString(0))
+            while (c.moveToNext()) {
+                add(if (c.getType(0) == android.database.Cursor.FIELD_TYPE_BLOB) c.getBlob(0) else c.getString(0))
+            }
         }
     }
 
@@ -105,7 +107,8 @@ class MumlaSQLiteDatabaseSecretsTest {
         val db = open()
         val w = db.writableDatabase
         w.insert("server", null, ContentValues().apply {
-            put("name", "old"); put("host", "old.example"); put("port", 64738); put("username", "me"); put("password", "legacy")
+            put("name", "old"); put("host", "old.example"); put("port", 64738)
+            put("username", "me"); put("password", "legacy")
         })
         w.insert("tokens", null, ContentValues().apply { put("server", 1); put("value", "oldtok") })
         val id = w.insert("certificates", null, ContentValues().apply { put("name", "old.p12"); put("data", p12) })
@@ -130,7 +133,8 @@ class MumlaSQLiteDatabaseSecretsTest {
                 db.execSQL(MumlaSQLiteDatabase.TABLE_LOCAL_MUTE_CREATE_SQL)
                 db.execSQL(MumlaSQLiteDatabase.TABLE_LOCAL_IGNORE_CREATE_SQL)
                 db.insert("server", null, ContentValues().apply {
-                    put("name", "old"); put("host", "old.example"); put("port", 64738); put("username", "me"); put("password", "legacy")
+                    put("name", "old"); put("host", "old.example"); put("port", 64738)
+                    put("username", "me"); put("password", "legacy")
                 })
                 db.insert("server", null, ContentValues().apply {
                     put("name", "nopw"); put("host", "n.example"); put("port", 64738); put("username", "me")
@@ -146,8 +150,9 @@ class MumlaSQLiteDatabaseSecretsTest {
         assertThat(db.getServers().map { it.password }).containsExactly("legacy", null)
         assertThat(db.getAccessTokens(1)).containsExactly("oldtok")
         assertThat(db.getCertificateData(db.getCertificates().single().id)).isEqualTo(p12)
-        assertThat(raw("SELECT password FROM server WHERE password IS NOT NULL").map { SecretCodec.isSealed(it as String) })
-            .containsExactly(true)
+        val sealedPasswords = raw("SELECT password FROM server WHERE password IS NOT NULL")
+            .map { SecretCodec.isSealed(it as String) }
+        assertThat(sealedPasswords).containsExactly(true)
         assertThat(SecretCodec.isSealed(raw("SELECT value FROM tokens").single() as String)).isTrue()
         assertThat(SecretCodec.isSealed(raw("SELECT data FROM certificates").single() as ByteArray)).isTrue()
     }

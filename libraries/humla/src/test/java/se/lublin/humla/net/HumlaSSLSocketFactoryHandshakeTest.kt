@@ -39,9 +39,11 @@ class HumlaSSLSocketFactoryHandshakeTest {
             load(null, null)
             setKeyEntry("server", server.keyPair.private, CharArray(0), server.chain)
         }
-        val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply { init(keyStore, CharArray(0)) }
+        val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
+            .apply { init(keyStore, CharArray(0)) }
         val context = SSLContext.getInstance("TLS").apply { init(kmf.keyManagers, null, null) }
-        val socket = context.serverSocketFactory.createServerSocket(0, 5, InetAddress.getLoopbackAddress()) as SSLServerSocket
+        val socket = context.serverSocketFactory
+            .createServerSocket(0, 5, InetAddress.getLoopbackAddress()) as SSLServerSocket
         closeables += socket
         pool.execute {
             while (!socket.isClosed) {
@@ -130,10 +132,13 @@ class HumlaSSLSocketFactoryHandshakeTest {
         val goodPort = tlsServer(pinned)
         val badPort = tlsServer(TestCertificates.leaf(selfSigned = true))
 
-        assertThat(factory("mumble.example.org", pins).createSocket("127.0.0.1", goodPort).handshakeAndRead()).isEqualTo(1)
+        assertThat(factory("mumble.example.org", pins).createSocket("127.0.0.1", goodPort).handshakeAndRead())
+            .isEqualTo(1)
 
         val factory = factory("mumble.example.org", pins)
-        assertThrows(SSLHandshakeException::class.java) { factory.createSocket("127.0.0.1", badPort).handshakeAndRead() }
+        assertThrows(SSLHandshakeException::class.java) {
+            factory.createSocket("127.0.0.1", badPort).handshakeAndRead()
+        }
         assertThat(factory.trustFailure).isEqualTo(TrustFailure.CHANGED)
     }
 
@@ -143,7 +148,8 @@ class HumlaSSLSocketFactoryHandshakeTest {
         val wrongHost = tlsServer(TestCertificates.leaf(dnsNames = listOf("other.example.org")))
 
         val ok = factory("mumble.example.org")
-        assertThat(ok.createTorSocket("localhost-tls", 64738, "127.0.0.1", socksProxy(good)).handshakeAndRead()).isEqualTo(1)
+        assertThat(ok.createTorSocket("localhost-tls", 64738, "127.0.0.1", socksProxy(good)).handshakeAndRead())
+            .isEqualTo(1)
         assertThat(requestedSni).containsExactly("mumble.example.org")
 
         val rejected = factory("mumble.example.org")

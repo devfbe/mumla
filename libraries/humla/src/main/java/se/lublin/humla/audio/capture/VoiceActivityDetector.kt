@@ -104,7 +104,7 @@ class VoiceActivityDetector(
         consecutive = if (detected) consecutive + 1 else 0
         val accepted = detected && (talking || consecutive >= c.onsetFrames)
         val now = clock.nanoTime()
-        if (accepted) holdUntilNanos = now + c.holdTimeMs * 1_000_000L
+        if (accepted) holdUntilNanos = now + c.holdTimeMs * NANOS_PER_MILLI
         talking = accepted || now - holdUntilNanos < 0L
         // After the decision, so this frame was judged against the previous frames' threshold.
         tracker.update(levelDbfs, talking, frameMs, learnFloor = c.adaptiveFloor)
@@ -112,6 +112,9 @@ class VoiceActivityDetector(
     }
 
     companion object {
+        /** The dB span [amplitudeScore] maps onto 0..1. */
+        const val SCORE_RANGE_DB = 96.0
+
         /**
          * `1 + 20*log10(rms/32768)/96`: full scale 1.0, -96 dBFS 0.0. The user's threshold slider is
          * calibrated against this curve. An empty frame returns [NO_SIGNAL].
@@ -121,7 +124,7 @@ class VoiceActivityDetector(
             var sum = 1.0
             for (i in 0 until length) sum += pcm[i].toDouble() * pcm[i].toDouble()
             val rms = sqrt(sum / length)
-            return (1.0 + 20.0 * log10(rms / 32768.0) / 96.0).toFloat()
+            return (1.0 + DB_PER_DECADE * log10(rms / FULL_SCALE) / SCORE_RANGE_DB).toFloat()
         }
 
         /** Below every [0, 1] threshold, and finite for the meter. */
@@ -130,10 +133,15 @@ class VoiceActivityDetector(
         /** [amplitudeScore] in dBFS. */
         fun levelDbfs(pcm: ShortArray, length: Int): Float = scoreToDbfs(amplitudeScore(pcm, length))
 
-        private fun scoreToDbfs(score: Float): Float = (score - 1f) * 96f
+        /** An [amplitudeScore] in dBFS. */
+        fun scoreToDbfs(score: Float): Float = (score - 1f) * SCORE_RANGE_DB.toFloat()
 
         /** [NO_SIGNAL] in dBFS (-192): finite and below [AdaptiveVadTracker.MIN_FLOOR_DBFS]. */
-        const val NO_SIGNAL_DBFS = (NO_SIGNAL - 1f) * 96f
+        const val NO_SIGNAL_DBFS = (NO_SIGNAL - 1f) * SCORE_RANGE_DB.toFloat()
+
+        private const val DB_PER_DECADE = 20.0
+        private const val FULL_SCALE = 32768.0
+        private const val NANOS_PER_MILLI = 1_000_000L
 
         const val DEFAULT_FRAME_MS = 10f
     }

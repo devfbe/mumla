@@ -122,7 +122,8 @@ class UdpHealthMonitorTest {
         monitor.onUdpPingReply(seconds(1))
         assertThat(monitor.onTcpPing(seconds(15), 30, 0, usingUdp = true)).isEqualTo(Decision.KEEP)
 
-        assertThat(monitor.onTcpPing(seconds(17), 34, 0, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
+        assertThat(monitor.onTcpPing(seconds(17), 34, 0, usingUdp = true))
+            .isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
     }
 
     /**
@@ -135,7 +136,8 @@ class UdpHealthMonitorTest {
         monitor.onUdpPingReply(seconds(1))
         assertThat(monitor.onTcpPing(seconds(15), 0, 30, usingUdp = true)).isEqualTo(Decision.KEEP)
 
-        assertThat(monitor.onTcpPing(seconds(17), 0, 34, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
+        assertThat(monitor.onTcpPing(seconds(17), 0, 34, usingUdp = true))
+            .isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
     }
 
     /**
@@ -239,7 +241,8 @@ class UdpHealthMonitorTest {
         monitor.onUdpPingSent(seconds(100)) // a handshake that took a minute and a half
 
         assertThat(monitor.onTcpPing(seconds(110), 0, 0, usingUdp = true)).isEqualTo(Decision.KEEP)
-        assertThat(monitor.onTcpPing(seconds(116), 0, 0, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
+        assertThat(monitor.onTcpPing(seconds(116), 0, 0, usingUdp = true))
+            .isEqualTo(Decision.SWITCH_TO_TCP_PING_TIMEOUT)
     }
 
     @Test

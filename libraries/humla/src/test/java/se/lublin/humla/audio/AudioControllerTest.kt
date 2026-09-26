@@ -121,7 +121,9 @@ class AudioControllerTest {
         override fun getUser(session: Int): User? = null
     }
     private val controller = newController()
-    private val params = AudioSessionParams(User(1, "me"), -1, HumlaUDPMessageType.UDPVoiceOpus, 0, ContinuousInputMode())
+    private val params = AudioSessionParams(
+        User(1, "me"), -1, HumlaUDPMessageType.UDPVoiceOpus, 0, ContinuousInputMode(),
+    )
 
     private fun newController(mainHandler: Handler = Handler(Looper.getMainLooper())) = AudioController(
         AudioHost(context, SilentLogger, encodeListener, outputListener), { factory }, listener, mainHandler,

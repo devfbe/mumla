@@ -239,7 +239,8 @@ class VoiceActivityDetectorTest {
     fun `probability mode falls back to the level when no stage gives a probability`() {
         val d = detector(VadConfig.probability(start = 0.7f, stop = 0.5f))
         assertThat(d.isVoice(constant(3277), 480, null)).isTrue()   // 0.792 >= 0.7
-        assertThat(detector(VadConfig.probability(start = 0.85f, stop = 0.5f)).isVoice(constant(3277), 480, null)).isFalse()
+        assertThat(detector(VadConfig.probability(start = 0.85f, stop = 0.5f)).isVoice(constant(3277), 480, null))
+            .isFalse()
     }
 
     /**

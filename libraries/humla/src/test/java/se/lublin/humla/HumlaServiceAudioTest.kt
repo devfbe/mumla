@@ -31,6 +31,7 @@ import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.testutil.FAKE_BANDWIDTH
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.Constants
@@ -72,7 +73,7 @@ class HumlaServiceAudioTest {
         assertThat(h.audioFactory.createThreads.single()).isEqualTo(AudioController.THREAD_NAME)
         assertThat(h.audioFactory.sessionParams[0].self.name).isEqualTo("me")
         assertThat(h.audioFactory.sessionParams[0].maxBandwidth).isEqualTo(72_000)
-        assertThat(h.service.currentBandwidth).isEqualTo(12_345)
+        assertThat(h.service.currentBandwidth).isEqualTo(FAKE_BANDWIDTH)
     }
 
     /** The voice format the server's Version picked reaches the pipeline, before any voice is sent. */
@@ -346,7 +347,7 @@ class HumlaServiceAudioTest {
         val sourceInUse = h.audioFactory.configs[0].audioSource
 
         h.configure { copy(audioSource = sourceInUse) }
-        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == 12_345 }
+        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == FAKE_BANDWIDTH }
 
         assertThat(h.audioFactory.created).hasSize(1)
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
@@ -363,7 +364,7 @@ class HumlaServiceAudioTest {
         audioUp(h)
 
         h.configure { copy(vadConfig = VadConfig.amplitude(0.8f, 120L)) }
-        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == 12_345 }
+        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == FAKE_BANDWIDTH }
 
         assertThat(h.audioFactory.created).hasSize(1)
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)

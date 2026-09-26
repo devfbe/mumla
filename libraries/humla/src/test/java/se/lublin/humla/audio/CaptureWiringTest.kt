@@ -86,7 +86,8 @@ class CaptureWiringTest {
     fun `a chain that cannot be built leaves capture running and says so`() {
         val pipeline = CaptureWiring.wire(
             48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.RNNOISE,
-            EchoCancellationMode.NONE, logger = logger, factory = factory { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumla_native.so")) },
+            EchoCancellationMode.NONE, logger = logger,
+            factory = factory { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumla_native.so")) },
         ).pipeline
 
         val frame = pipeline.process(ShortArray(FRAME) { 1234 }, FRAME)
@@ -102,7 +103,8 @@ class CaptureWiringTest {
     fun `no noise suppression builds no stage and warns about nothing`() {
         val pipeline = CaptureWiring.wire(
             48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE,
-            EchoCancellationMode.NONE, logger = logger, factory = factory { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumla_native.so")) },
+            EchoCancellationMode.NONE, logger = logger,
+            factory = factory { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumla_native.so")) },
         ).pipeline
 
         assertThat(pipeline.process(ShortArray(FRAME) { 7 }, FRAME).probability).isNull()

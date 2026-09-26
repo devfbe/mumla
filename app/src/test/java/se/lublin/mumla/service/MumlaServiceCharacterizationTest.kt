@@ -880,7 +880,8 @@ class MumlaServiceCharacterizationTest {
         connect(muted = true, deafened = true)
         service.onDeafenToggled()
 
-        assertThat(userStates().map { it.selfMute to it.selfDeaf }).containsExactly(true to true, false to false).inOrder()
+        assertThat(userStates().map { it.selfMute to it.selfDeaf })
+            .containsExactly(true to true, false to false).inOrder()
     }
 
     /** Characterized, not endorsed: the buttons only exist while connected, so nothing reaches this. */
@@ -1191,12 +1192,15 @@ class MumlaServiceCharacterizationTest {
         assertThat(reconnectPrompt()!!.extras.getString(Notification.EXTRA_TEXT)).isEqualTo("socket reset (Tor)")
     }
 
-    private fun promptReceivers() = shadowOf(app).registeredReceivers.filter { it.intentFilter.hasAction("b_reconnect") }
+    private fun promptReceivers() =
+        shadowOf(app).registeredReceivers.filter { it.intentFilter.hasAction("b_reconnect") }
 
     @Test
     fun aNewPromptReplacesTheOldOneIncludingItsReceiver() {
         service.renderSessionState(SessionState.Disconnected(error()))
-        service.renderSessionState(SessionState.Disconnected(HumlaException("again", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)))
+        service.renderSessionState(
+            SessionState.Disconnected(HumlaException("again", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)),
+        )
 
         assertThat(promptReceivers()).hasSize(1)
     }

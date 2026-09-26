@@ -28,9 +28,9 @@ import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.operator.OperatorCreationException
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
+import org.bouncycastle.pkcs.PKCS12PfxPduBuilder
 import org.bouncycastle.pkcs.PKCS12SafeBag
 import org.bouncycastle.pkcs.PKCS12SafeBagBuilder
-import org.bouncycastle.pkcs.PKCS12PfxPduBuilder
 import org.bouncycastle.pkcs.jcajce.JcaPKCS12SafeBagBuilder
 import org.bouncycastle.pkcs.jcajce.JcePKCS12MacCalculatorBuilder
 import java.io.OutputStream
@@ -42,6 +42,8 @@ import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.Calendar
 import java.util.Date
+
+private const val RSA_KEY_BITS = 2048
 
 object HumlaCertificateGenerator {
     private const val ISSUER = "CN=Humla Client"
@@ -59,7 +61,7 @@ object HumlaCertificateGenerator {
         // BouncyCastle provider instance: supports creating X509 certs and PKCS#12 stores.
         val provider = BouncyCastleProvider()
         val generator = KeyPairGenerator.getInstance("RSA")
-        generator.initialize(2048, SecureRandom())
+        generator.initialize(RSA_KEY_BITS, SecureRandom())
 
         val keyPair = generator.generateKeyPair()
 

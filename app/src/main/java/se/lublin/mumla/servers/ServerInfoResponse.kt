@@ -20,6 +20,17 @@ package se.lublin.mumla.servers
 import se.lublin.humla.model.Server
 import java.nio.ByteBuffer
 
+/* The ping reply: version, the request's identifier, users, maximum users, bandwidth. */
+private const val VERSION_OFFSET = 0
+private const val IDENTIFIER_OFFSET = 4
+private const val CURRENT_USERS_OFFSET = 12
+private const val MAXIMUM_USERS_OFFSET = 16
+private const val BANDWIDTH_OFFSET = 20
+
+/** The version is `major.minor.patch`, a byte each, in the low three bytes. */
+private const val MAJOR_SHIFT = 16
+private const val MINOR_SHIFT = 8
+
 /** A server's answer to a UDP ping. A [isDummy] response stands for a ping that got no answer. */
 class ServerInfoResponse private constructor(
     val server: Server?,
@@ -34,11 +45,11 @@ class ServerInfoResponse private constructor(
     /** Parses the 24-byte ping reply [response] from [server]. */
     constructor(server: Server, response: ByteArray, latency: Int) : this(
         server = server,
-        version = ByteBuffer.wrap(response).getInt(0),
-        identifier = ByteBuffer.wrap(response).getLong(4),
-        currentUsers = ByteBuffer.wrap(response).getInt(12),
-        maximumUsers = ByteBuffer.wrap(response).getInt(16),
-        allowedBandwidth = ByteBuffer.wrap(response).getInt(20),
+        version = ByteBuffer.wrap(response).getInt(VERSION_OFFSET),
+        identifier = ByteBuffer.wrap(response).getLong(IDENTIFIER_OFFSET),
+        currentUsers = ByteBuffer.wrap(response).getInt(CURRENT_USERS_OFFSET),
+        maximumUsers = ByteBuffer.wrap(response).getInt(MAXIMUM_USERS_OFFSET),
+        allowedBandwidth = ByteBuffer.wrap(response).getInt(BANDWIDTH_OFFSET),
         latency = latency,
         isDummy = false,
     )
@@ -48,8 +59,8 @@ class ServerInfoResponse private constructor(
 
     val versionString: String
         get() = "%d.%d.%d".format(
-            (version shr 16).toByte().toInt(),
-            (version shr 8).toByte().toInt(),
+            (version shr MAJOR_SHIFT).toByte().toInt(),
+            (version shr MINOR_SHIFT).toByte().toInt(),
             version.toByte().toInt(),
         )
 }

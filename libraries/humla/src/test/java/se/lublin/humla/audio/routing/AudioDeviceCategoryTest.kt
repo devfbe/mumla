@@ -29,7 +29,8 @@ class AudioDeviceCategoryTest {
     @Test
     fun everyDeviceTheChooserOffersHasItsCategory() {
         assertThat(AudioDeviceCategory.of(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)).isEqualTo(AudioDeviceCategory.SPEAKER)
-        assertThat(AudioDeviceCategory.of(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)).isEqualTo(AudioDeviceCategory.EARPIECE)
+        assertThat(AudioDeviceCategory.of(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE))
+            .isEqualTo(AudioDeviceCategory.EARPIECE)
         for (type in AudioRouter.BLUETOOTH) {
             assertThat(AudioDeviceCategory.of(type)).isEqualTo(AudioDeviceCategory.BLUETOOTH)
         }

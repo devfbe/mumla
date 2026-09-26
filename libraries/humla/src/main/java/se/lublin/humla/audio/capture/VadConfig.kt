@@ -58,10 +58,14 @@ data class VadConfig(
 ) {
     init {
         require(startThreshold in 0f..1f) { "startThreshold out of range: $startThreshold" }
-        require(stopThreshold in 0f..startThreshold) { "stopThreshold must be within [0, startThreshold]: $stopThreshold" }
+        require(stopThreshold in 0f..startThreshold) {
+            "stopThreshold must be within [0, startThreshold]: $stopThreshold"
+        }
         require(holdTimeMs in 0L..MAX_HOLD_MS) { "holdTimeMs must be within [0, $MAX_HOLD_MS]: $holdTimeMs" }
         require(snrFraction in 0f..1f) { "snrFraction out of range: $snrFraction" }
-        require(hysteresisDb in 0f..96f) { "hysteresisDb out of range: $hysteresisDb" }
+        require(hysteresisDb in 0f..VoiceActivityDetector.SCORE_RANGE_DB.toFloat()) {
+            "hysteresisDb out of range: $hysteresisDb"
+        }
         require(onsetFrames >= 1) { "onsetFrames must be at least one: $onsetFrames" }
         require(manualFloorDbfs in AdaptiveVadTracker.MIN_FLOOR_DBFS..AdaptiveVadTracker.MAX_FLOOR_DBFS) {
             "manualFloorDbfs out of range: $manualFloorDbfs"

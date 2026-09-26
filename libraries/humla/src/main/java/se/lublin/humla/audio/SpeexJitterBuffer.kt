@@ -21,13 +21,18 @@ import se.lublin.humla.audio.native.NativeHandle
 import se.lublin.humla.audio.native.SpeexJitterApi
 import se.lublin.humla.audio.native.SpeexJitterNative
 
+/** The bridge's `get` metadata: length, timestamp, span, sequence, user data. */
+private const val META_SIZE = 5
+private const val META_LENGTH = 0
+private const val META_USER_DATA = 4
+
 /** Object wrapper around the speexdsp jitter buffer. */
 class SpeexJitterBuffer(
     stepSize: Int,
     private val api: SpeexJitterApi = SpeexJitterNative,
 ) : AutoCloseable {
     private val handle = NativeHandle({ api.init(stepSize) }, api::destroy)
-    private val meta = IntArray(5)
+    private val meta = IntArray(META_SIZE)
     private val scratch = IntArray(1)
 
     fun put(data: ByteArray, length: Int, timestamp: Int, span: Int, sequence: Int, userData: Int) =
@@ -37,10 +42,10 @@ class SpeexJitterBuffer(
     fun get(out: ByteArray, desiredSpan: Int): Int = api.get(handle.value, out, desiredSpan, meta)
 
     /** The length of the packet the last [get] delivered. */
-    val packetLength: Int get() = meta[0]
+    val packetLength: Int get() = meta[META_LENGTH]
 
     /** The user data of the packet the last [get] delivered. */
-    val packetUserData: Int get() = meta[4]
+    val packetUserData: Int get() = meta[META_USER_DATA]
 
     val pointerTimestamp: Int
         get() = api.pointerTimestamp(handle.value)

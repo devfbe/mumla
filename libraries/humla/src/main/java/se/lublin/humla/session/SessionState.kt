@@ -25,7 +25,11 @@ sealed class SessionState {
     }
 
     /** The session dropped; an automatic reconnect fires in [reconnectInMillis]. */
-    data class ConnectionLost(val reconnectInMillis: Long, val attempt: Int, val error: HumlaException?) : SessionState()
+    data class ConnectionLost(
+        val reconnectInMillis: Long,
+        val attempt: Int,
+        val error: HumlaException?,
+    ) : SessionState()
 
     /**
      * An automatic reconnect attempt is in progress. [error] is carried forward from the

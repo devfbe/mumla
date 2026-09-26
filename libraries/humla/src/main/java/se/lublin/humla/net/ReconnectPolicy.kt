@@ -1,5 +1,8 @@
 package se.lublin.humla.net
 
+/** Beyond this the shifted base delay would overflow; it is capped far below anyway. */
+private const val MAX_SHIFT = 30
+
 /**
  * Exponential backoff for automatic reconnects: 2 s, 4 s, 8 s, 16 s, then 30 s,
  * plus up to [maxJitterFraction] of the delay as jitter, for at most [maxAttempts] attempts.
@@ -20,7 +23,7 @@ class ReconnectPolicy(
         require(attempt >= 1) { "attempt must be >= 1, was $attempt" }
         require(jitterUnit >= 0.0 && jitterUnit < 1.0) { "jitterUnit must be in [0, 1), was $jitterUnit" }
         if (attempt > maxAttempts) return null
-        val shift = (attempt - 1).coerceAtMost(30)
+        val shift = (attempt - 1).coerceAtMost(MAX_SHIFT)
         val exponential = (baseDelayMillis shl shift).coerceAtMost(maxDelayMillis)
         val jitter = (exponential * maxJitterFraction * jitterUnit).toLong()
         return exponential + jitter

@@ -96,9 +96,9 @@ class Settings private constructor(private val context: Context) {
     val inputQuality: Int by pref(INPUT_QUALITY)
 
     val amplitudeBoostMultiplier: Float
-        get() = preferences.read(AMPLITUDE_BOOST).toFloat() / 100
+        get() = preferences.read(AMPLITUDE_BOOST).toFloat() / PERCENT
 
-    val detectionThreshold: Float get() = preferences.read(THRESHOLD).toFloat() / 100
+    val detectionThreshold: Float get() = preferences.read(THRESHOLD).toFloat() / PERCENT
 
     val pushToTalkKey: Int by pref(TALK_KEY)
 
@@ -246,7 +246,7 @@ class Settings private constructor(private val context: Context) {
         }
 
     /** A 0..100 slider as a fraction. */
-    private fun percent(pref: Pref<Int>): Float = preferences.read(pref).coerceIn(0, 100) / 100f
+    private fun percent(pref: Pref<Int>): Float = preferences.read(pref).coerceIn(0, PERCENT) / PERCENT.toFloat()
 
     /** The two `android.media.audiofx` effects attached to the recorder's session. */
     val androidAudioEffects: AndroidAudioEffects
@@ -474,6 +474,7 @@ class Settings private constructor(private val context: Context) {
         val NOTIFICATION_PERMISSION_ASKED = Pref("notification_permission_asked", false)
 
         private const val NO_CERTIFICATE = -1L
+        private const val PERCENT = 100
 
         @Volatile
         private var instance: Settings? = null

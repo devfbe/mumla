@@ -311,6 +311,9 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
         const val FRAME_SIZE = SAMPLE_RATE / 100
         const val MAX_BUFFER_SIZE = 960
 
+        /** The longest Opus packet, 120 ms, in frames. */
+        const val MAX_PACKET_FRAMES = 12
+
         private const val BPS_PER_KBPS = 1000
         private const val MS_PER_FRAME = 10
     }

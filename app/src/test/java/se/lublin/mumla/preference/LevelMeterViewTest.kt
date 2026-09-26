@@ -115,7 +115,8 @@ class LevelMeterViewTest {
             android.view.View.MeasureSpec.makeMeasureSpec(20, android.view.View.MeasureSpec.EXACTLY),
         )
         view.layout(0, 0, 200, 20)
-        view.draw(android.graphics.Canvas(android.graphics.Bitmap.createBitmap(200, 20, android.graphics.Bitmap.Config.ARGB_8888)))
+        val bitmap = android.graphics.Bitmap.createBitmap(200, 20, android.graphics.Bitmap.Config.ARGB_8888)
+        view.draw(android.graphics.Canvas(bitmap))
         assertThat(view.level).isEqualTo(0.5f)
         assertThat(view.floorMark).isEqualTo(0.3f)
     }

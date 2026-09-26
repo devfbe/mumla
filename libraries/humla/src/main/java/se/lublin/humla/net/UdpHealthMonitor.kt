@@ -31,7 +31,14 @@ class UdpHealthMonitor(
     private val pingTimeoutMicros: Long = 15_000_000L,
     private val restoreThreshold: Int = 1,
 ) {
-    enum class Decision { KEEP, SWITCH_TO_TCP_BOTH, SWITCH_TO_TCP_SEND, SWITCH_TO_TCP_RECEIVE, SWITCH_TO_TCP_PING_TIMEOUT, RESTORE_UDP }
+    enum class Decision {
+        KEEP,
+        SWITCH_TO_TCP_BOTH,
+        SWITCH_TO_TCP_SEND,
+        SWITCH_TO_TCP_RECEIVE,
+        SWITCH_TO_TCP_PING_TIMEOUT,
+        RESTORE_UDP,
+    }
 
     private class Sample(val atMicros: Long, val localGood: Int, val remoteGood: Int)
 

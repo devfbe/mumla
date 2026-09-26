@@ -121,7 +121,9 @@ class CapturePipelineTest {
         pipeline.process(constant(300, 300), 300)
 
         assertThat(mode.lengths).containsExactly(480, 300).inOrder()
-        assertWithMessage("0.55409 would be the padding dragging the level down, 0.91097 the previous frame's tail holding it up")
+        assertWithMessage(
+            "0.55409 would be the padding dragging the level down, 0.91097 the previous frame's tail holding it up",
+        )
             .that(mode.scores[1]).isWithin(1e-4f).of(0.57535f)
     }
 
@@ -161,7 +163,9 @@ class CapturePipelineTest {
     @Test
     fun `a swapped resampler gets its own short-frame log`() {
         val logs = mutableListOf<String>()
-        val pipeline = CapturePipeline(FakeResampler(1), FakePreprocessor(), ContinuousInputMode(), log = { logs += it })
+        val pipeline = CapturePipeline(
+            FakeResampler(1), FakePreprocessor(), ContinuousInputMode(), log = { logs += it },
+        )
 
         pipeline.process(constant(7, 100), 100)
         pipeline.process(constant(7, 100), 100)

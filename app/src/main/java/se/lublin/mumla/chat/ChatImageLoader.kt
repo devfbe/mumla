@@ -33,6 +33,7 @@ import okhttp3.Request
 import okio.Buffer
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.Settings
+import se.lublin.mumla.util.toHex
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.security.MessageDigest
@@ -193,7 +194,6 @@ class ChatImageLoader(
         private const val MAX_REMEMBERED_FAILURES = 256
         private const val HEAP_FRACTION_FOR_CACHE = 8
         private const val DATA_PREFIX = "data:"
-        private const val HEX = "0123456789abcdef"
 
         /** How much of a source is turned into bytes at once; see [cacheKey]. */
         private const val HASH_CHUNK_CHARS = 8 * 1024
@@ -250,14 +250,7 @@ class ChatImageLoader(
                 digest.update(source.substring(start, end).toByteArray(Charsets.UTF_8))
                 start = end
             }
-            val bytes = digest.digest()
-            val hex = CharArray(bytes.size * 2)
-            for (i in bytes.indices) {
-                val b = bytes[i].toInt() and 0xFF
-                hex[i * 2] = HEX[b ushr 4]
-                hex[i * 2 + 1] = HEX[b and 0x0F]
-            }
-            return String(hex)
+            return digest.digest().toHex()
         }
     }
 }

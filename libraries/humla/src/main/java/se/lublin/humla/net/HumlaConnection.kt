@@ -51,6 +51,11 @@ import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** A tunnelled dummy packet; its arrival tells the server to tunnel voice over TCP from now on. */
+private const val FORCE_TCP_PACKET_BYTES = 3
+
+private const val NANOS_PER_MICRO = 1000
+
 /**
  * One connection to a Mumble server. Single-use.
  *
@@ -447,7 +452,7 @@ class HumlaConnection(
     val isUsingUdp: Boolean get() = usingUdp
 
     /** Microseconds since connect(). */
-    val elapsed: Long get() = (nanoClock() - startTimestamp) / 1000
+    val elapsed: Long get() = (nanoClock() - startTimestamp) / NANOS_PER_MICRO
 
     override fun addTcpHandler(handler: TcpMessageHandler) {
         tcpHandlers.add(handler)
@@ -581,6 +586,9 @@ class HumlaConnection(
         mainHandler.post { if (!disconnectReported) listener.callback() }
     }
 
+    private fun certificateError(message: String, cause: Exception) =
+        HumlaException(message, cause, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+
     /** [peerHost] is the host the user entered, which the server certificate must match. */
     private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory {
         try {
@@ -593,15 +601,15 @@ class HumlaConnection(
                 keyStore, certificatePassword, trustStorePath, trustStorePassword, trustStoreFormat, peerHost
             )
         } catch (e: KeyManagementException) {
-            throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not recover keys from certificate", e)
         } catch (e: KeyStoreException) {
-            throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not recover keys from certificate", e)
         } catch (e: UnrecoverableKeyException) {
-            throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not recover keys from certificate", e)
         } catch (e: IOException) {
-            throw HumlaException("Could not read certificate file", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not read certificate file", e)
         } catch (e: CertificateException) {
-            throw HumlaException("Could not read certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not read certificate", e)
         } catch (e: NoSuchAlgorithmException) {
             // Never happens: BouncyCastle ships with the app and provides every algorithm used here.
             throw RuntimeException("We use BouncyCastle- what? ", e)
@@ -636,7 +644,7 @@ class HumlaConnection(
     /** Asks the server to tunnel future voice packets over TCP. */
     private fun enableForceTCP() {
         val utb = Mumble.UDPTunnel.newBuilder()
-        utb.packet = ByteString.copyFrom(ByteArray(3))
+        utb.packet = ByteString.copyFrom(ByteArray(FORCE_TCP_PACKET_BYTES))
         sendTCPMessage(utb.build(), HumlaTCPMessageType.UDPTunnel)
     }
 
@@ -803,9 +811,13 @@ class HumlaConnection(
         /** Bandwidth in bps for audio with these parameters, including packet overhead. */
         fun calculateAudioBandwidth(bitrate: Int, framesPerPacket: Int): Int {
             // FIXME: assumes worst-case using TCP
-            var overhead = 20 + 8 + 4 + 1 + 2 + 12 + framesPerPacket
-            overhead *= (800 / framesPerPacket)
-            return overhead + bitrate
+            val overheadBytes = PACKET_OVERHEAD_BYTES + framesPerPacket
+            return overheadBytes * (BITS_PER_BYTE * FRAMES_PER_SECOND / framesPerPacket) + bitrate
         }
+
+        /** As desktop Mumble counts it: IP 20, UDP 8, crypt 4, header 1, sequence 2, TCP 12. */
+        private const val PACKET_OVERHEAD_BYTES = 20 + 8 + 4 + 1 + 2 + 12
+        private const val BITS_PER_BYTE = 8
+        private const val FRAMES_PER_SECOND = 100
     }
 }

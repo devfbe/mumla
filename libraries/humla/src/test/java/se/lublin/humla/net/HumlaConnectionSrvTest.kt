@@ -45,7 +45,9 @@ class HumlaConnectionSrvTest {
         connection = c
         c.setUseTor(useTor)
         c.connect(Server(-1, "test", "mumble.example", 0, "user", ""))
-        awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null }
+        awaitUntil(description = "tcp connect") {
+            transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null
+        }
         return transports.tcps[0]
     }
 

@@ -240,7 +240,8 @@ class OutgoingImagePreparerTest {
             val bytes = TestImages.withExifOrientation(TestImages.jpeg(1200, 800), orientation)
             // ExifInterface must read back a rotation for the four that have one.
             val exif = ExifInterface(ByteArrayInputStream(bytes))
-            assertThat(exif.rotationDegrees != 0 || exif.isFlipped).isEqualTo(orientation != ExifInterface.ORIENTATION_NORMAL)
+            assertThat(exif.rotationDegrees != 0 || exif.isFlipped)
+                .isEqualTo(orientation != ExifInterface.ORIENTATION_NORMAL)
 
             val bitmap = preparer.decode(bytes)!!
             val expected = if (orientation in quarterTurned) "266x400" else "600x400"
@@ -264,7 +265,11 @@ class OutgoingImagePreparerTest {
      */
     @Test
     fun aPngsExifOrientationIsIgnoredByTheDecoderAndThereforeByUs() {
-        val bytes = TestImages.withExifOrientation(TestImages.png(1200, 800), ExifInterface.ORIENTATION_ROTATE_90, ".png")
+        val bytes = TestImages.withExifOrientation(
+            TestImages.png(1200, 800),
+            ExifInterface.ORIENTATION_ROTATE_90,
+            ".png",
+        )
         assertThat(ExifInterface(ByteArrayInputStream(bytes)).rotationDegrees).isEqualTo(90)
 
         val bitmap = preparer.decode(bytes)!!

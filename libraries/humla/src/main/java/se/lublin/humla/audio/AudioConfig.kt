@@ -21,6 +21,7 @@ package se.lublin.humla.audio
 
 import android.media.AudioManager
 import android.media.MediaRecorder
+import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.util.Constants
 
 /**
@@ -47,7 +48,7 @@ data class AudioConfig(
     val routedDeviceType: Int? = null,
     val noiseSuppression: String = "none",
     /** How deep the Speex denoiser may cut, in dB. One of the three supported steps. */
-    val speexNoiseSuppressDb: Int = -25,
+    val speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB,
     val vadMode: String = "amplitude",
     val vadStart: Float = 0.6f,
     val vadStop: Float = 0.3f,

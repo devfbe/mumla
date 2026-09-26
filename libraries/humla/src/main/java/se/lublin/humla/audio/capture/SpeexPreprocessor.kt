@@ -20,6 +20,8 @@ package se.lublin.humla.audio.capture
 import se.lublin.humla.audio.native.SpeexPreprocessApi
 import se.lublin.humla.audio.native.SpeexPreprocessNative
 
+private const val MAX_PROBABILITY_PERCENT = 100
+
 /**
  * The Speex denoiser as a capture stage: denoise on, configurable suppression depth. AGC is compiled
  * out in the `FIXED_POINT` build; the stage reports `GET_PROB` and ignores Speex's own VAD verdict.
@@ -50,7 +52,7 @@ class SpeexPreprocessor(
         if (api.ctlInt(handle, SpeexPreprocessNative.SPEEX_PREPROCESS_GET_PROB, ctlValue) != 0) {
             return null
         }
-        return PROBABILITIES[ctlValue[0].coerceIn(0, 100)]
+        return PROBABILITIES[ctlValue[0].coerceIn(0, MAX_PROBABILITY_PERCENT)]
     }
 
     override fun onReleaseHandle(handle: Long) = api.destroy(handle)

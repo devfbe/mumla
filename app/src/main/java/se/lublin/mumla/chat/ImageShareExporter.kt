@@ -48,16 +48,23 @@ class ImageShareExporter(
          * unrecognised is `application/octet-stream`.
          */
         fun typeOf(bytes: ByteArray): Pair<String, String> = when {
-            bytes.startsWith(0x89, 0x50, 0x4E, 0x47) -> "png" to "image/png"
-            bytes.startsWith(0xFF, 0xD8) -> "jpg" to "image/jpeg"
-            bytes.startsWith('G'.code, 'I'.code, 'F'.code) -> "gif" to "image/gif"
-            bytes.startsWith('R'.code, 'I'.code, 'F'.code, 'F'.code) && bytes.size >= 12 &&
-                bytes[8] == 'W'.code.toByte() && bytes[9] == 'E'.code.toByte() &&
-                bytes[10] == 'B'.code.toByte() && bytes[11] == 'P'.code.toByte() -> "webp" to "image/webp"
+            bytes.hasAt(0, PNG_MAGIC) -> "png" to "image/png"
+            bytes.hasAt(0, JPEG_MAGIC) -> "jpg" to "image/jpeg"
+            bytes.hasAt(0, GIF_MAGIC) -> "gif" to "image/gif"
+            bytes.hasAt(0, RIFF_MAGIC) && bytes.hasAt(WEBP_OFFSET, WEBP_MAGIC) -> "webp" to "image/webp"
             else -> "bin" to "application/octet-stream"
         }
 
-        private fun ByteArray.startsWith(vararg prefix: Int): Boolean =
-            size >= prefix.size && prefix.indices.all { this[it] == prefix[it].toByte() }
+        private val PNG_MAGIC = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte())
+        private val JPEG_MAGIC = byteArrayOf(0xFF.toByte(), 0xD8.toByte())
+        private val GIF_MAGIC = "GIF".toByteArray(Charsets.US_ASCII)
+        private val RIFF_MAGIC = "RIFF".toByteArray(Charsets.US_ASCII)
+        private val WEBP_MAGIC = "WEBP".toByteArray(Charsets.US_ASCII)
+
+        /** A RIFF file's form type follows the "RIFF" tag and the chunk size. */
+        private const val WEBP_OFFSET = 8
+
+        private fun ByteArray.hasAt(offset: Int, magic: ByteArray): Boolean =
+            size >= offset + magic.size && magic.indices.all { this[offset + it] == magic[it] }
     }
 }

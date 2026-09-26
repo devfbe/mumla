@@ -107,7 +107,9 @@ class MumlaTrustStoreTest {
         MumlaTrustStore.pinCertificate(context, "mumble.example.org", new)
 
         val store = MumlaTrustStore.getTrustStore(context)
-        assertThat(CertificatePins.forHost(store, "Mumble.Example.org")).containsExactly(CertificatePins.fingerprint(new))
-        assertThat(CertificatePins.forHost(store, "other.example.org")).containsExactly(CertificatePins.fingerprint(other))
+        assertThat(CertificatePins.forHost(store, "Mumble.Example.org"))
+            .containsExactly(CertificatePins.fingerprint(new))
+        assertThat(CertificatePins.forHost(store, "other.example.org"))
+            .containsExactly(CertificatePins.fingerprint(other))
     }
 }

@@ -74,6 +74,9 @@ import se.lublin.mumla.ui.ServiceClient
 import se.lublin.mumla.ui.ServiceViewModel
 import se.lublin.mumla.ui.bindClient
 
+/** The image preview takes at most a third of the screen height. */
+private const val PREVIEW_SCREEN_FRACTION = 3
+
 /**
  * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. Parsing and rendering
  * live in [ChatAdapter], images in `ChatImageLoader`/[OutgoingImagePreparer]. [openImageViewer]
@@ -303,7 +306,7 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
             setImageBitmap(bitmap)
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
-            maxHeight = resources.displayMetrics.heightPixels / 3
+            maxHeight = resources.displayMetrics.heightPixels / PREVIEW_SCREEN_FRACTION
             contentDescription = getString(R.string.image_confirm_send)
         }
         MaterialAlertDialogBuilder(requireContext())

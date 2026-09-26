@@ -33,7 +33,8 @@ object MumbleLegacyPingDecoder {
             v and 0xC0 == 0x80L -> ((v and 0x3F) shl 8) or (at(1) ?: return null)
             v and 0xE0 == 0xC0L -> ((v and 0x1F) shl 16) or ((at(1) ?: return null) shl 8) or (at(2) ?: return null)
             v and 0xF0 == 0xE0L ->
-                ((v and 0x0F) shl 24) or ((at(1) ?: return null) shl 16) or ((at(2) ?: return null) shl 8) or (at(3) ?: return null)
+                ((v and 0x0F) shl 24) or ((at(1) ?: return null) shl 16) or
+                    ((at(2) ?: return null) shl 8) or (at(3) ?: return null)
             v and 0xFC == 0xF0L -> (1..4).fold(0L) { acc, i -> (acc shl 8) or (at(i) ?: return null) }
             v and 0xFC == 0xF4L -> (1..8).fold(0L) { acc, i -> (acc shl 8) or (at(i) ?: return null) }
             else -> null // the negative forms: a timestamp is never negative

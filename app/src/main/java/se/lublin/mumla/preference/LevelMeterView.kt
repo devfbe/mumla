@@ -19,15 +19,20 @@ package se.lublin.mumla.preference
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
+import androidx.annotation.ColorRes
+import androidx.core.content.ContextCompat
+import se.lublin.mumla.R
 
 private const val MARK_WIDTH_PX = 4f
 
 /** The level bar is drawn inside the zones so both stay readable. */
 private const val BAR_INSET = 0.25f
+
+private const val DEFAULT_START = 0.5f
+private const val DEFAULT_STOP = 0.4f
 
 /**
  * Maps a level in dBFS onto the meter's horizontal position. Fixed span, not auto-ranging, so the
@@ -57,14 +62,14 @@ class LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attribut
         }
 
     /** Where the gate opens. Everything above it is the "speech" zone. */
-    var startThreshold: Float = 0.5f
+    var startThreshold: Float = DEFAULT_START
         set(value) {
             field = value.coerceIn(0f, 1f)
             invalidate()
         }
 
     /** Where the gate closes again. Between it and [startThreshold] is the "stays open" zone. */
-    var stopThreshold: Float = 0.4f
+    var stopThreshold: Float = DEFAULT_STOP
         set(value) {
             field = value.coerceIn(0f, 1f)
             invalidate()
@@ -97,24 +102,20 @@ class LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attribut
             invalidate()
         }
 
-    private val silentZonePaint = Paint().apply { color = Color.argb(48, 128, 128, 128) }
-    private val holdZonePaint = Paint().apply { color = Color.argb(64, 255, 152, 0) }
-    private val voiceZonePaint = Paint().apply { color = Color.argb(64, 76, 175, 80) }
-    private val idleLevelPaint = Paint().apply { color = Color.rgb(96, 125, 139) }
-    private val holdLevelPaint = Paint().apply { color = Color.rgb(255, 152, 0) }
-    private val voiceLevelPaint = Paint().apply { color = Color.rgb(76, 175, 80) }
-    private val floorPaint = Paint().apply {
-        color = Color.rgb(120, 144, 156)
-        strokeWidth = MARK_WIDTH_PX
+    private fun paint(@ColorRes color: Int, strokeWidth: Float = 0f) = Paint().apply {
+        this.color = ContextCompat.getColor(context, color)
+        this.strokeWidth = strokeWidth
     }
-    private val speechPaint = Paint().apply {
-        color = Color.rgb(3, 155, 229)
-        strokeWidth = MARK_WIDTH_PX
-    }
-    private val thresholdPaint = Paint().apply {
-        color = Color.rgb(46, 125, 50)
-        strokeWidth = MARK_WIDTH_PX
-    }
+
+    private val silentZonePaint = paint(R.color.level_meter_silent_zone)
+    private val holdZonePaint = paint(R.color.level_meter_hold_zone)
+    private val voiceZonePaint = paint(R.color.level_meter_voice_zone)
+    private val idleLevelPaint = paint(R.color.level_meter_idle_level)
+    private val holdLevelPaint = paint(R.color.level_meter_hold_level)
+    private val voiceLevelPaint = paint(R.color.level_meter_voice_level)
+    private val floorPaint = paint(R.color.level_meter_floor, MARK_WIDTH_PX)
+    private val speechPaint = paint(R.color.level_meter_speech, MARK_WIDTH_PX)
+    private val thresholdPaint = paint(R.color.level_meter_threshold, MARK_WIDTH_PX)
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)

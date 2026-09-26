@@ -26,6 +26,8 @@ import java.security.cert.X509Certificate
 import java.util.Locale
 import javax.net.ssl.X509TrustManager
 
+private const val BYTE_MASK = 0xFF
+
 /** Thrown when a host with a pinned certificate presents a different, not system-trusted one. */
 class CertificateChangedException(val host: String) :
     CertificateException("The certificate of $host differs from the one trusted before")
@@ -42,7 +44,7 @@ object CertificatePins {
     /** Lower-case hex SHA-256 of the DER encoding. */
     fun fingerprint(certificate: X509Certificate): String =
         MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
-            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+            .joinToString("") { "%02x".format(it.toInt() and BYTE_MASK) }
 
     /** The trust store alias for [host]: lower case, without a trailing dot. */
     fun aliasFor(host: String): String = HostnameMatcher.normalize(host)

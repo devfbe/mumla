@@ -336,7 +336,10 @@ class HumlaServiceBluetoothTest {
 
         h.service.selectAudioDevice(1)
 
-        awaitUntil(description = "audio rebuilt for the earpiece") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
+        awaitUntil(description = "audio rebuilt for the earpiece") {
+            h.mainLooper.idle()
+            h.audioFactory.created.size == 2
+        }
         assertThat(h.audioFactory.configs[1].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
         assertThat(h.audioFactory.configs[1].playbackStream).isEqualTo(AudioManager.STREAM_VOICE_CALL)
     }

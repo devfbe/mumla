@@ -29,6 +29,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
+const val FAKE_BANDWIDTH = 12_345
+
 /** A pipeline that opens no device; shared by the service tests. */
 class FakeAudio : ManagedAudio {
     val shutdownCalls = AtomicInteger()
@@ -45,7 +47,7 @@ class FakeAudio : ManagedAudio {
 
     override val tcpHandler = TcpMessageHandler {}
     override val voiceHandler = VoicePacketHandler { }
-    override val currentBandwidth: Int = 12_345
+    override val currentBandwidth: Int = FAKE_BANDWIDTH
     override fun setVoiceTargetId(id: Byte) { targetIds += id }
     override fun setWarningListener(listener: ((String) -> Unit)?) { warningListenerField = listener }
 

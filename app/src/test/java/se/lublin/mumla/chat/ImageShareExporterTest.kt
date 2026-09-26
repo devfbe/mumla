@@ -52,9 +52,11 @@ class ImageShareExporterTest {
 
     @Test
     fun detectsCommonImageTypesByMagicBytes() {
-        assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()))).isEqualTo("jpg" to "image/jpeg")
+        assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())))
+            .isEqualTo("jpg" to "image/jpeg")
         assertThat(ImageShareExporter.typeOf("GIF89a".toByteArray())).isEqualTo("gif" to "image/gif")
-        assertThat(ImageShareExporter.typeOf("RIFF    WEBPVP8 ".toByteArray(Charsets.ISO_8859_1))).isEqualTo("webp" to "image/webp")
+        assertThat(ImageShareExporter.typeOf("RIFF    WEBPVP8 ".toByteArray(Charsets.ISO_8859_1)))
+            .isEqualTo("webp" to "image/webp")
         assertThat(ImageShareExporter.typeOf("hello".toByteArray())).isEqualTo("bin" to "application/octet-stream")
     }
 
@@ -81,14 +83,16 @@ class ImageShareExporterTest {
     fun typesShorterThanTheirMagicAreNotImages() {
         assertThat(ImageShareExporter.typeOf(ByteArray(0))).isEqualTo("bin" to "application/octet-stream")
         assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte()))).isEqualTo("bin" to "application/octet-stream")
-        assertThat(ImageShareExporter.typeOf(byteArrayOf(0x89.toByte(), 0x50, 0x4E))).isEqualTo("bin" to "application/octet-stream")
+        assertThat(ImageShareExporter.typeOf(byteArrayOf(0x89.toByte(), 0x50, 0x4E)))
+            .isEqualTo("bin" to "application/octet-stream")
         assertThat(ImageShareExporter.typeOf("GI".toByteArray())).isEqualTo("bin" to "application/octet-stream")
     }
 
     /** Exactly as long as its magic, i.e. the `size >= prefix.size` boundary from below. */
     @Test
     fun typesExactlyAsLongAsTheirMagicAreRecognised() {
-        assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte(), 0xD8.toByte()))).isEqualTo("jpg" to "image/jpeg")
+        assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte(), 0xD8.toByte())))
+            .isEqualTo("jpg" to "image/jpeg")
         assertThat(ImageShareExporter.typeOf("GIF".toByteArray())).isEqualTo("gif" to "image/gif")
         assertThat(ImageShareExporter.typeOf(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)))
             .isEqualTo("png" to "image/png")

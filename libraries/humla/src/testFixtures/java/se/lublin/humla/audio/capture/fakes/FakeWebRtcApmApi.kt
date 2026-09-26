@@ -20,6 +20,10 @@ package se.lublin.humla.audio.capture.fakes
 import se.lublin.humla.audio.capture.WebRtcApmConfig
 import se.lublin.humla.audio.native.WebRtcApmApi
 
+/** What the real bridge reports for silence. */
+private const val SILENCE_DBFS = -100f
+private const val FRAMES_PER_SECOND = 100
+
 /**
  * A [WebRtcApmApi] that behaves like `jni_webrtc_apm.cpp`:
  * - an unsupported sample rate answers 0 from [create]; [failCreate] covers allocation failure.
@@ -31,7 +35,7 @@ import se.lublin.humla.audio.native.WebRtcApmApi
  * `WebRtcApmPreprocessorTest` for how swapped booleans are still caught.
  */
 class FakeWebRtcApmApi(
-    var levelDbfs: Float = -100f,
+    var levelDbfs: Float = SILENCE_DBFS,
     var captureError: Int = 0,
     var renderError: Int = 0,
     private val onCapture: (ShortArray) -> Unit = {},
@@ -72,7 +76,7 @@ class FakeWebRtcApmApi(
             echoCancellation, noiseSuppression, gainControl, highPass,
         )
         if (failCreate || sampleRate !in SUPPORTED_RATES) return 0L
-        frameSize = sampleRate / 100
+        frameSize = sampleRate / FRAMES_PER_SECOND
         return HANDLE
     }
 

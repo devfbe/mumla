@@ -43,7 +43,12 @@ object TestCertificates {
     }
 
     /** A leaf signed by [ca] (or self-signed) carrying the given subjectAltNames. */
-    fun leaf(dnsNames: List<String> = emptyList(), ipAddresses: List<String> = emptyList(), selfSigned: Boolean = false, cn: String = "server"): Issued {
+    fun leaf(
+        dnsNames: List<String> = emptyList(),
+        ipAddresses: List<String> = emptyList(),
+        selfSigned: Boolean = false,
+        cn: String = "server",
+    ): Issued {
         val kp = keyPair()
         val subject = X500Name("CN=$cn")
         val issuer = if (selfSigned) subject else X500Name(ca.certificate.subjectX500Principal.name)

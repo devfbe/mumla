@@ -38,6 +38,8 @@ import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
+private const val MS_PER_SECOND = 1000L
+
 /**
  * Decodes and mixes all users' voice streams on one playback thread, inline and without allocating
  * per mix.
@@ -195,7 +197,7 @@ class AudioOutput(
                             // silence at the real-time rate. `woken` tells a real frame from the
                             // timeout and keeps a notify() sent before this block from being lost.
                             Arrays.fill(pcm, 0.toShort())
-                            val tickMs = maxOf(1L, (bufferSize * 1000L) / AudioHandler.SAMPLE_RATE)
+                            val tickMs = maxOf(1L, (bufferSize * MS_PER_SECOND) / AudioHandler.SAMPLE_RATE)
                             woken = false
                             while (running && !woken) {
                                 inactiveLock.wait(tickMs)
@@ -333,7 +335,8 @@ class AudioOutput(
             }
 
         fun playbackBuffer(minBufferBytes: Int): PlaybackBuffer {
-            val mixSamples = minOf(minBufferBytes / BYTES_PER_SAMPLE, AudioHandler.FRAME_SIZE * 12)
+            val maxMix = AudioHandler.FRAME_SIZE * AudioHandler.MAX_PACKET_FRAMES
+            val mixSamples = minOf(minBufferBytes / BYTES_PER_SAMPLE, maxMix)
             return PlaybackBuffer(mixSamples = mixSamples, trackBytes = minBufferBytes)
         }
     }

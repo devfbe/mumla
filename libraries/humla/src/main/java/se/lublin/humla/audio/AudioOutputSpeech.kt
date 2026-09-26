@@ -29,6 +29,17 @@ import java.util.Arrays
 import kotlin.math.ceil
 import kotlin.math.sin
 
+private const val JITTER_MARGIN_FRAMES = 10
+
+/** How many frames of silence may be played while the jitter buffer fills at the start of a talk spurt. */
+private const val MAX_PREBUFFER_MISSES = 20
+
+/** Consecutive frames without a packet after which the stream counts as ended. */
+private const val MAX_MISSES_ALIVE = 10
+
+/** Per packet, the decay of the average packet count the prebuffering aims for. */
+private const val AVAILABLE_DECAY = 0.99f
+
 /** Larger than any voice packet the jitter buffer holds. */
 private const val MAX_PACKET_BYTES = 4096
 
@@ -61,7 +72,7 @@ class AudioOutputSpeech(
     private val decoder: IDecoder = OpusDecoder(AudioHandler.SAMPLE_RATE, 1, opusApi)
     private val jitterBuffer: SpeexJitterBuffer
     private val jitterLock = Any()
-    private val audioBufferSize = AudioHandler.FRAME_SIZE * 12
+    private val audioBufferSize = AudioHandler.FRAME_SIZE * AudioHandler.MAX_PACKET_FRAMES
 
     // State-specific
     private var buffer: FloatArray
@@ -109,7 +120,7 @@ class AudioOutputSpeech(
         }
 
         jitterBuffer = SpeexJitterBuffer(AudioHandler.FRAME_SIZE, jitterApi)
-        jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_SET_MARGIN, 10 * AudioHandler.FRAME_SIZE)
+        jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_SET_MARGIN, JITTER_MARGIN_FRAMES * AudioHandler.FRAME_SIZE)
     }
 
     /**
@@ -192,7 +203,7 @@ class AudioOutputSpeech(
         // same technique.
         if (ts == 0 && availPackets < ceil(user.averageAvailable.toDouble()).toInt()) {
             missCount++
-            if (missCount < 20) {
+            if (missCount < MAX_PREBUFFER_MISSES) {
                 Arrays.fill(out, 0f)
                 return AudioHandler.FRAME_SIZE
             }
@@ -243,12 +254,12 @@ class AudioOutputSpeech(
             if (availPackets >= user.averageAvailable) {
                 user.averageAvailable = availPackets
             } else {
-                user.averageAvailable = user.averageAvailable * 0.99f
+                user.averageAvailable = user.averageAvailable * AVAILABLE_DECAY
             }
         } else {
             synchronized(jitterLock) { jitterBuffer.updateDelay() }
             missCount++
-            if (missCount > 10) nextAlive = false
+            if (missCount > MAX_MISSES_ALIVE) nextAlive = false
         }
     }
 

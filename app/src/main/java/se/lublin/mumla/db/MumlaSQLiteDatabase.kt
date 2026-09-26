@@ -66,7 +66,8 @@ class MumlaSQLiteDatabase(
 
     /** Encrypts every secret still stored in plain text. Values that cannot be sealed stay as they are. */
     private fun sealPlainSecrets(db: SQLiteDatabase) {
-        db.query(TABLE_SERVER, arrayOf(SERVER_ID, SERVER_PASSWORD), "$SERVER_PASSWORD IS NOT NULL", null, null, null, null)
+        val passwords = arrayOf(SERVER_ID, SERVER_PASSWORD)
+        db.query(TABLE_SERVER, passwords, "$SERVER_PASSWORD IS NOT NULL", null, null, null, null)
             .use { c ->
                 while (c.moveToNext()) {
                     val plain = c.getString(1)
@@ -83,7 +84,8 @@ class MumlaSQLiteDatabase(
                 db.update(TABLE_TOKENS, values, "$TOKENS_ID=?", arrayOf(c.getLong(0).toString()))
             }
         }
-        db.query(TABLE_CERTIFICATES, arrayOf(COLUMN_CERTIFICATES_ID, COLUMN_CERTIFICATES_DATA), null, null, null, null, null)
+        val certificates = arrayOf(COLUMN_CERTIFICATES_ID, COLUMN_CERTIFICATES_DATA)
+        db.query(TABLE_CERTIFICATES, certificates, null, null, null, null, null)
             .use { c ->
                 while (c.moveToNext()) {
                     val plain = c.getBlob(1)
