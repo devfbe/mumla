@@ -182,24 +182,20 @@ class PublicServerListFragment :
     private fun showMatchResult(response: ServerInfoResponse?) {
         val server = response?.server as PublicServer?
         if (response != null && server != null) {
-            MaterialAlertDialogBuilder(requireActivity())
-                .setTitle(R.string.server_match_found)
-                .setMessage(
-                    getString(
-                        R.string.server_match_info,
-                        server.name,
-                        server.host,
-                        server.port,
-                        response.currentUsers,
-                        response.maximumUsers,
-                        response.versionString,
-                        server.country,
-                        response.latency,
-                    ),
-                )
-                .setPositiveButton(R.string.connect) { _, _ -> connect(server) }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+            val info = getString(
+                R.string.server_match_info,
+                server.name,
+                server.host,
+                server.port,
+                response.currentUsers,
+                response.maximumUsers,
+                response.versionString,
+                server.country,
+                response.latency,
+            )
+            requireActivity().showConfirmDialog(info, R.string.connect, getString(R.string.server_match_found)) {
+                connect(server)
+            }
         } else {
             requireActivity().showConfirmDialog(
                 getString(R.string.server_match_expand_country),

@@ -16,34 +16,35 @@
  */
 package se.lublin.mumla.app
 
-import android.text.InputType
 import android.util.Log
-import android.view.View
-import android.widget.EditText
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import androidx.fragment.app.DialogFragment
 import se.lublin.humla.HumlaService.ConnectionState
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.databinding.CertificateInfoBinding
+import se.lublin.mumla.app.ConnectionErrorDialogFragment.Action
+import se.lublin.mumla.app.ConnectionErrorDialogFragment.Kind
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.ui.MessageDialogFragment
 import se.lublin.mumla.util.MumlaTrustStore
-import se.lublin.mumla.util.toHex
 import java.io.IOException
 import java.security.GeneralSecurityException
-import java.security.MessageDigest
 import java.security.cert.X509Certificate
 
-/** The dialogs that tell the user how a connection goes. Main thread only. */
+/**
+ * The dialogs that tell the user how a connection goes, as fragments of [activity] so that they
+ * survive configuration changes. Create it in `onCreate`: it registers for the dialogs' results.
+ * Main thread only.
+ */
 class ConnectionDialogs(
     private val activity: AppCompatActivity,
     private val settings: Settings,
     private val listener: Listener,
+    private val service: () -> IMumlaService?,
 ) {
     interface Listener {
         /** Connects to [server] again, e.g. after its certificate was trusted. */
@@ -53,131 +54,122 @@ class ConnectionDialogs(
         fun reconnectWithPassword(server: Server)
     }
 
-    private var connectingDialog: AlertDialog? = null
-    private var errorDialog: AlertDialog? = null
+    private val fragments get() = activity.supportFragmentManager
 
     private val torSuffix get() = if (settings.isTorEnabled) " (Tor)" else ""
 
-    /** Whether the connecting or error dialog is up. */
-    val isShowing: Boolean
-        get() = connectingDialog?.isShowing == true || errorDialog?.isShowing == true
-
-    fun dismiss() {
-        connectingDialog?.dismiss()
-        errorDialog?.dismiss()
-    }
-
-    /** Shows the connecting or error dialog [service]'s state calls for, and dismisses the others. */
-    fun update(service: IMumlaService) {
-        dismiss()
-        when (service.connectionState) {
-            ConnectionState.CONNECTING -> showConnecting(service)
-            // Only bother the user if the error hasn't already been shown.
-            ConnectionState.CONNECTION_LOST -> if (!service.isErrorShown) showError(service)
-            else -> Unit
+    init {
+        fragments.setFragmentResultListener(ConnectingDialogFragment.REQUEST_CANCELLED, activity) { _, _ ->
+            service()?.disconnect()
+            Toast.makeText(activity, R.string.cancelled, Toast.LENGTH_SHORT).show()
+        }
+        fragments.setFragmentResultListener(ConnectionErrorDialogFragment.REQUEST_KEY, activity) { _, result ->
+            onErrorAction(
+                Action.valueOf(requireNotNull(result.getString(ConnectionErrorDialogFragment.RESULT_ACTION))),
+                result.getString(ConnectionErrorDialogFragment.RESULT_PASSWORD).orEmpty(),
+            )
+        }
+        fragments.setFragmentResultListener(CertificateTrustDialogFragment.REQUEST_KEY, activity) { _, result ->
+            val (server, certificate) = CertificateTrustDialogFragment.parseResult(result)
+            trustAndReconnect(server, certificate)
         }
     }
 
-    private fun showConnecting(service: IMumlaService) {
-        // The port is left out: the SRV lookup that may change it comes later.
-        val host = service.targetServer?.host
-        connectingDialog = MaterialAlertDialogBuilder(activity)
-            .setTitle(activity.getString(R.string.connecting_to_server, host) + torSuffix)
-            .setView(R.layout.dialog_progress)
-            .setCancelable(true)
-            .setOnCancelListener {
-                service.disconnect()
-                Toast.makeText(activity, R.string.cancelled, Toast.LENGTH_SHORT).show()
+    /** Whether the connecting or error dialog is up. */
+    val isShowing: Boolean
+        get() = fragments.findFragmentByTag(TAG_CONNECTING) != null || fragments.findFragmentByTag(TAG_ERROR) != null
+
+    /**
+     * Shows the connecting or error dialog [service]'s state calls for, and dismisses the other. A
+     * dialog that is up already and would look the same stays, e.g. one restored after rotation.
+     */
+    fun update(service: IMumlaService) {
+        if (fragments.isStateSaved) return
+        when (service.connectionState) {
+            ConnectionState.CONNECTING -> {
+                dismiss(TAG_ERROR)
+                if (fragments.findFragmentByTag(TAG_CONNECTING) == null) {
+                    // The port is left out: the SRV lookup that may change it comes later.
+                    val host = service.targetServer?.host
+                    val title = activity.getString(R.string.connecting_to_server, host) + torSuffix
+                    ConnectingDialogFragment.newInstance(title).showNow(fragments, TAG_CONNECTING)
+                }
             }
-            .show()
+            // Only bother the user if the error hasn't already been shown.
+            ConnectionState.CONNECTION_LOST -> {
+                dismiss(TAG_CONNECTING)
+                if (service.isErrorShown) dismiss(TAG_ERROR) else showError(service)
+            }
+            else -> {
+                dismiss(TAG_CONNECTING)
+                dismiss(TAG_ERROR)
+            }
+        }
+    }
+
+    private fun dismiss(tag: String) {
+        (fragments.findFragmentByTag(tag) as? DialogFragment)?.dismissNow()
     }
 
     private fun showError(service: IMumlaService) {
-        val builder = MaterialAlertDialogBuilder(activity)
-            .setTitle(activity.getString(R.string.connectionRefused) + torSuffix)
-            .setCancelable(false)
         val error = service.connectionError
-        when {
-            error != null && service.isReconnecting -> builder
-                .setMessage(
-                    error.message + "\n\n" +
-                        activity.getString(R.string.attempting_reconnect, error.cause?.message ?: "unknown"),
-                )
-                .setPositiveButton(R.string.cancel_reconnect) { _, _ ->
-                    service.cancelReconnect()
-                    service.markErrorShown()
-                }
-            error != null && error.isWrongPassword -> {
-                val passwordField = EditText(activity).apply {
-                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                    setHint(R.string.password)
-                }
-                builder.setTitle(R.string.invalid_password)
-                    .setMessage(error.message)
-                    .setView(passwordField)
-                    .setPositiveButton(R.string.reconnect) { _, _ ->
-                        val server = service.targetServer ?: return@setPositiveButton
-                        server.password = passwordField.text.toString()
-                        listener.reconnectWithPassword(server)
-                    }
-                    .setNegativeButton(android.R.string.cancel) { _, _ -> service.markErrorShown() }
-            }
-            else -> builder
-                .setMessage(error?.message ?: activity.getString(R.string.unknown))
-                .setPositiveButton(android.R.string.ok) { _, _ -> service.markErrorShown() }
+        val title = activity.getString(R.string.connectionRefused) + torSuffix
+        val dialog = when {
+            error != null && service.isReconnecting -> ConnectionErrorDialogFragment.newInstance(
+                Kind.RECONNECTING,
+                title,
+                error.message + "\n\n" +
+                    activity.getString(R.string.attempting_reconnect, error.cause?.message ?: "unknown"),
+            )
+            error != null && error.isWrongPassword -> ConnectionErrorDialogFragment.newInstance(
+                Kind.WRONG_PASSWORD,
+                activity.getString(R.string.invalid_password),
+                error.message.orEmpty(),
+            )
+            else -> ConnectionErrorDialogFragment.newInstance(
+                Kind.OTHER,
+                title,
+                error?.message ?: activity.getString(R.string.unknown),
+            )
         }
-        errorDialog = builder.show()
+        val shown = fragments.findFragmentByTag(TAG_ERROR) as? ConnectionErrorDialogFragment
+        if (shown?.content == dialog.content) return
+        shown?.dismissNow()
+        dialog.showNow(fragments, TAG_ERROR)
     }
 
-    /** Offers to trust the unknown [certificate] of [server]. */
-    fun showUntrustedCertificate(server: Server, certificate: X509Certificate) {
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.untrusted_certificate)
-            .setView(certificateInfoView(certificate))
-            .setPositiveButton(R.string.allow) { _, _ -> trustAndReconnect(server, certificate) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+    private fun onErrorAction(action: Action, password: String) {
+        val service = service() ?: return
+        when (action) {
+            Action.CANCEL_RECONNECT -> {
+                service.cancelReconnect()
+                service.markErrorShown()
+            }
+            Action.RECONNECT_WITH_PASSWORD -> {
+                val server = service.targetServer ?: return
+                server.password = password
+                listener.reconnectWithPassword(server)
+            }
+            Action.ACKNOWLEDGE -> service.markErrorShown()
+        }
     }
 
-    /** Warns that [server] presents a [certificate] other than the one trusted before. */
-    fun showCertificateChanged(server: Server, certificate: X509Certificate) {
-        // Cancel is the positive, default-looking choice: replacing the pin is what an attacker wants.
-        MaterialAlertDialogBuilder(activity)
-            .setIcon(android.R.drawable.ic_dialog_alert)
-            .setTitle(R.string.certificate_changed_title)
-            .setMessage(activity.getString(R.string.certificate_changed_message, server.host))
-            .setView(certificateInfoView(certificate))
-            .setPositiveButton(android.R.string.cancel, null)
-            .setNegativeButton(R.string.certificate_changed_accept) { _, _ -> trustAndReconnect(server, certificate) }
-            .show()
+    /** Offers to trust the [certificate] of [server], which is unknown or, if [changed], not the pinned one. */
+    fun showUntrustedCertificate(server: Server, certificate: X509Certificate, changed: Boolean) {
+        if (fragments.isStateSaved) return
+        val dialog = try {
+            CertificateTrustDialogFragment.newInstance(server, certificate, changed)
+        } catch (e: GeneralSecurityException) {
+            onTrustFailed(e)
+            return
+        }
+        dialog.show(fragments, TAG_CERTIFICATE)
     }
 
     fun showPermissionDenied(reason: String) {
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.perm_denied)
-            .setMessage(reason)
-            .show()
-    }
-
-    private fun certificateInfoView(certificate: X509Certificate): View {
-        val binding = CertificateInfoBinding.inflate(activity.layoutInflater)
-        val layout = binding.root
-        val textView = binding.certificateInfoText
-        textView.text = try {
-            val encoded = certificate.encoded
-            activity.getString(
-                R.string.certificate_info,
-                certificate.subjectDN.name,
-                certificate.notBefore.toString(),
-                certificate.notAfter.toString(),
-                fingerprint("SHA-1", encoded),
-                fingerprint("SHA-256", encoded),
-            )
-        } catch (e: GeneralSecurityException) {
-            Log.w(TAG, "Could not fingerprint the certificate", e)
-            certificate.toString()
-        }
-        return layout
+        if (fragments.isStateSaved) return
+        MessageDialogFragment.newInstance(activity.getString(R.string.perm_denied), reason)
+            .show(fragments, TAG_PERMISSION_DENIED)
     }
 
     private fun trustAndReconnect(server: Server, certificate: X509Certificate) {
@@ -201,10 +193,10 @@ class ConnectionDialogs(
 
     private companion object {
         const val TAG = "ConnectionDialogs"
-
-        /** The [algorithm] digest of [data] as colon-separated hex, e.g. "ab:cd:...". */
-        fun fingerprint(algorithm: String, data: ByteArray): String =
-            MessageDigest.getInstance(algorithm).digest(data).toHex().chunked(2).joinToString(":")
+        const val TAG_CONNECTING = "connecting"
+        const val TAG_ERROR = "connection_error"
+        const val TAG_CERTIFICATE = "certificate"
+        const val TAG_PERMISSION_DENIED = "permission_denied"
 
         val HumlaException.isWrongPassword: Boolean
             get() = reason == HumlaException.HumlaDisconnectReason.REJECT &&

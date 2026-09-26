@@ -134,7 +134,7 @@ class MumlaActivity :
             serverName = ::connectedServerName,
             onItemSelected = ::showDrawerFragment,
         )
-        dialogs = ConnectionDialogs(this, settings, this)
+        dialogs = ConnectionDialogs(this, settings, this) { service }
         connectFlow = ConnectFlow(this, settings) { service }
         batteryPrompt = BatteryOptimizationPrompt(this, settings)
         addMenuProvider(AudioDeviceMenu(this, settings) { service?.takeIf { it.isConnected }?.session })
@@ -200,7 +200,6 @@ class MumlaActivity :
 
     override fun onStop() {
         super.onStop()
-        dialogs.dismiss()
         batteryPrompt.dismiss()
         serviceModel.attach(null)
         unbindService(connection)
@@ -248,11 +247,7 @@ class MumlaActivity :
         val server = service.targetServer
         val certificate = chain.firstOrNull()
         if (server == null || certificate == null) return
-        if (changed) {
-            dialogs.showCertificateChanged(server, certificate)
-        } else {
-            dialogs.showUntrustedCertificate(server, certificate)
-        }
+        dialogs.showUntrustedCertificate(server, certificate, changed)
     }
 
     private fun onConnectionChanged(service: IMumlaService) {
