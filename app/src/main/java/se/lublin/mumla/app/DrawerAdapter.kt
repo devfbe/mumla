@@ -26,10 +26,10 @@ import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import se.lublin.mumla.databinding.ListDrawerHeaderBinding
-import se.lublin.mumla.databinding.ListDrawerItemBinding
 import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.ListDrawerHeaderBinding
+import se.lublin.mumla.databinding.ListDrawerItemBinding
 
 /** The rows of the navigation drawer; a tap on an enabled item or the donation row goes to [onClick]. */
 class DrawerAdapter(private val onClick: (DrawerRow) -> Unit) :

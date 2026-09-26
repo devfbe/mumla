@@ -1,13 +1,13 @@
 package se.lublin.mumla.audio
 
-import android.app.Application
 import android.Manifest
+import android.app.Application
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.mumla.Settings

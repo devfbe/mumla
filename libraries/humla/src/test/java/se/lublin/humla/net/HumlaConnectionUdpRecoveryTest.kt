@@ -4,20 +4,20 @@ import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.shadows.ShadowLog
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowLog
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.testutil.awaitUntil
 import java.io.IOException
 import java.time.Duration
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * What the decisions of [UdpHealthMonitor] do to the voice route, and what happens to the UDP

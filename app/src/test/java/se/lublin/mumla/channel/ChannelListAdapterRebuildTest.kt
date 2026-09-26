@@ -25,9 +25,9 @@ import org.robolectric.annotation.GraphicsMode
 import se.lublin.humla.HumlaService
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository

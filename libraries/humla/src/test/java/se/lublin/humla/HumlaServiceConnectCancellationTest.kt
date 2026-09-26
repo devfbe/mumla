@@ -5,11 +5,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.onEvents
-import se.lublin.humla.exception.HumlaException
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**

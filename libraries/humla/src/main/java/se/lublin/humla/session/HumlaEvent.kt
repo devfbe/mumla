@@ -16,11 +16,11 @@
  */
 package se.lublin.humla.session
 
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.UserStats
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
 

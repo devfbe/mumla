@@ -29,8 +29,8 @@ import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IUser
 import se.lublin.humla.net.Permissions
-import se.lublin.mumla.channel.comment.UserCommentFragment
 import se.lublin.mumla.R
+import se.lublin.mumla.channel.comment.UserCommentFragment
 import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.util.flattenChannels
 

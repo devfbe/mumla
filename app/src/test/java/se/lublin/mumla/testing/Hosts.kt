@@ -27,9 +27,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import io.mockk.mockk
+import se.lublin.mumla.R
 import se.lublin.mumla.channel.ChatTargetViewModel
 import se.lublin.mumla.db.MumlaDatabase
-import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.ui.ServiceViewModel
 

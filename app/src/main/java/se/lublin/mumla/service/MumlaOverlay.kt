@@ -28,14 +28,14 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.ListView
-import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.mumla.databinding.OverlayBinding
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.databinding.OverlayBinding
 import se.lublin.mumla.util.collectEvents
 
 /** An onscreen interactive overlay displaying the users in the current channel. */

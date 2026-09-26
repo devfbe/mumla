@@ -25,13 +25,13 @@ import android.net.ConnectivityManager
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
-import org.junit.runner.RunWith
 import org.junit.Test
-import org.robolectric.android.controller.ServiceController
+import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import se.lublin.humla.audio.AudioConfig
 import se.lublin.humla.audio.inputmode.ActivityInputMode

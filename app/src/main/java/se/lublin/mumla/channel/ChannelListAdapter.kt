@@ -19,8 +19,8 @@ package se.lublin.mumla.channel
 
 import android.content.Context
 import android.graphics.BitmapFactory
-import android.graphics.drawable.Drawable
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -35,19 +35,19 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.RecyclerView
-import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.HumlaService
 import se.lublin.humla.IHumlaService
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.TalkState
+import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ChannelListenerRowBinding
 import se.lublin.mumla.databinding.ChannelRowBinding
 import se.lublin.mumla.databinding.ChannelUserRowBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.drawable.CircleDrawable
-import se.lublin.mumla.R
 import se.lublin.mumla.util.talkStateDescription
 
 /**

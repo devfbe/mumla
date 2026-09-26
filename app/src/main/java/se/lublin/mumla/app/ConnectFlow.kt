@@ -16,9 +16,9 @@
  */
 package se.lublin.mumla.app
 
+import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.Manifest
 import android.net.Uri
 import android.os.Build
 import android.widget.EditText
@@ -32,21 +32,21 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.inMainThreadSlices
-import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.R
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.Settings
+import se.lublin.mumla.db.PublicServer
+import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.ui.showMessageDialog
-import se.lublin.mumla.util.isPortOpen
 import se.lublin.mumla.util.Orbot
+import se.lublin.mumla.util.isPortOpen
 
 /**
  * Connects [activity] to servers: gets the permissions a session needs, confirms leaving the

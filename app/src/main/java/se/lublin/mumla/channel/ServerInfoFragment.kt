@@ -22,20 +22,20 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import se.lublin.humla.net.HumlaUDPMessageType
-import se.lublin.mumla.databinding.FragmentServerInfoBinding
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.FragmentServerInfoBinding
 import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.ui.bindClient
 import se.lublin.mumla.ui.ServiceClient
 import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.bindClient
 
 /** Displays what is known about the connected server, refreshed every second. */
 class ServerInfoFragment : Fragment(), ServiceClient {

@@ -25,12 +25,12 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.shadows.ShadowDialog
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowDialog
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.idleMainLooper

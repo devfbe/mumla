@@ -21,8 +21,8 @@ import android.app.Application
 import android.media.AudioDeviceInfo
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.mumla.R

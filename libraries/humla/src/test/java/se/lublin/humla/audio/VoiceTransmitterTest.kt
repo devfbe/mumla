@@ -19,17 +19,17 @@ package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import java.lang.management.ManagementFactory
 import org.junit.Test
 import se.lublin.humla.audio.capture.CapturePipeline
+import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.capture.NoopPreprocessor
 import se.lublin.humla.audio.encoder.IEncoder
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
-import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.net.UdpProtocol
+import java.lang.management.ManagementFactory
 
 class VoiceTransmitterTest {
     /** One frame per packet; the payload is the frame's first sample. Allocation-free. */

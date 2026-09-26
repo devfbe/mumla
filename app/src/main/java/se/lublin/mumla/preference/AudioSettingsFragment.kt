@@ -44,9 +44,9 @@ import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.PcmCaptureSourceFactory
 import se.lublin.humla.audio.capture.VadMode
-import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.listCommunicationDevices
+import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.AndroidAudioTrackSink

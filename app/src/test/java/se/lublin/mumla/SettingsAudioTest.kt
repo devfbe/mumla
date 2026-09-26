@@ -23,14 +23,14 @@ import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import se.lublin.humla.audio.routing.AudioDeviceCategory
-import se.lublin.humla.audio.routing.PreferredAudioDevice
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.AdaptiveVadTracker
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsAudioTest {

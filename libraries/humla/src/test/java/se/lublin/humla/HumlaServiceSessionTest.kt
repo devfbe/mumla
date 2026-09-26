@@ -28,6 +28,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowNetwork
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.model.WhisperTargetList
 import se.lublin.humla.protobuf.Mumble
@@ -35,7 +36,6 @@ import se.lublin.humla.session.ClientCertificate
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.exception.HumlaException
 import java.util.concurrent.TimeUnit
 
 /**

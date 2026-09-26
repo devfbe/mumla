@@ -29,18 +29,18 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import org.junit.Before
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.TalkState
-import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.R
+import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.service.OverlayUserAdapter
-import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.stubConnected
 
 /** What the channel list and the overlay tell accessibility services about their rows. */
 @RunWith(RobolectricTestRunner::class)

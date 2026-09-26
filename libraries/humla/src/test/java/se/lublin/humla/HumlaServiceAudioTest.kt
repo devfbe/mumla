@@ -22,8 +22,8 @@ import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.AudioController
 import se.lublin.humla.audio.capture.VadConfig
@@ -31,13 +31,13 @@ import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.testutil.HumlaServiceHarness
+import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.Constants
 import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The audio pipeline is built and torn down on `humla-audio-control`, never on the main thread,

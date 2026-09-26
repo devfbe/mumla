@@ -16,12 +16,13 @@
  */
 package se.lublin.humla.audio
 
+import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.Manifest
 import android.media.AudioManager
 import android.util.Log
 import com.google.protobuf.MessageLite
+import se.lublin.humla.R
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.AudioSourcePolicy
 import se.lublin.humla.audio.capture.CapturePipeline
@@ -42,7 +43,6 @@ import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.net.VoicePacketHandler
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.R
 import se.lublin.humla.util.HumlaLogger
 
 /**

@@ -25,22 +25,20 @@ import androidx.annotation.VisibleForTesting
 import com.google.protobuf.ByteString
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.MessageLite
-import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
 import java.net.ConnectException
-import java.security.cert.CertificateException
-import java.security.cert.X509Certificate
 import java.security.InvalidKeyException
 import java.security.KeyManagementException
 import java.security.KeyStore
@@ -48,8 +46,10 @@ import java.security.KeyStoreException
 import java.security.NoSuchAlgorithmException
 import java.security.NoSuchProviderException
 import java.security.UnrecoverableKeyException
-import java.util.concurrent.atomic.AtomicBoolean
+import java.security.cert.CertificateException
+import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * One connection to a Mumble server. Single-use.

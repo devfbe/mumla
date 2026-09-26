@@ -24,10 +24,10 @@ import android.os.IBinder
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
+import se.lublin.mumla.Settings
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.service.MumlaService
 import se.lublin.mumla.service.SessionSettings
-import se.lublin.mumla.Settings
 import se.lublin.mumla.util.ApplicationScope
 
 /**

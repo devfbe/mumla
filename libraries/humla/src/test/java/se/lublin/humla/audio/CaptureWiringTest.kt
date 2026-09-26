@@ -22,11 +22,11 @@ import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import se.lublin.humla.audio.capture.CapturePreprocessorFactory
 import se.lublin.humla.audio.capture.EchoCancellationMode
+import se.lublin.humla.audio.capture.NoiseSuppressionMode
+import se.lublin.humla.audio.capture.WebRtcApmConfig
 import se.lublin.humla.audio.capture.fakes.FakeResampler
 import se.lublin.humla.audio.capture.fakes.FakeRnnoiseApi
 import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
-import se.lublin.humla.audio.capture.NoiseSuppressionMode
-import se.lublin.humla.audio.capture.WebRtcApmConfig
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.util.HumlaLogger
 

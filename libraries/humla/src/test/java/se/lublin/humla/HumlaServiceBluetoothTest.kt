@@ -28,10 +28,10 @@ import org.robolectric.annotation.Config
 import se.lublin.humla.audio.routing.AndroidCommunicationDevicesTest
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.exception.HumlaException
 import java.util.concurrent.TimeUnit
 
 /**

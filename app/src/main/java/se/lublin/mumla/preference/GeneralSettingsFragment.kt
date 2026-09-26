@@ -7,9 +7,9 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.preference.CheckBoxPreference
 import androidx.preference.Preference
-import se.lublin.mumla.audio.BluetoothScoToggle
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.audio.BluetoothScoToggle
 import se.lublin.mumla.util.BatteryOptimization
 import se.lublin.mumla.util.Orbot
 

@@ -19,9 +19,9 @@ package se.lublin.humla.session
 
 import android.media.AudioDeviceInfo
 import com.google.common.truth.Truth.assertThat
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
-import org.junit.Test
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice

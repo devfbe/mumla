@@ -13,15 +13,15 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.HumlaService
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.MAX_EVENTS_PER_SLICE
 import se.lublin.humla.session.inMainThreadSlices
-import se.lublin.humla.testutil.collectOnMain
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.exception.HumlaException
+import se.lublin.humla.testutil.collectOnMain
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.security.cert.X509Certificate

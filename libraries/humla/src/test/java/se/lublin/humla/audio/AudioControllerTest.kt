@@ -6,12 +6,12 @@ import android.os.HandlerThread
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
-import org.robolectric.shadows.ShadowLog
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowLog
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.model.User
@@ -19,13 +19,13 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.MessageHandlerRegistry
 import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.VoicePacketHandler
-import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.testutil.SilentLogger
+import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.HumlaLogger
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /**

@@ -19,12 +19,12 @@ package se.lublin.mumla.channel
 
 import android.app.Dialog
 import android.os.Bundle
-import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.activityViewModels
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import se.lublin.humla.net.Permissions
-import se.lublin.mumla.databinding.FragmentChannelEditBinding
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.FragmentChannelEditBinding
 import se.lublin.mumla.ui.ServiceViewModel
 
 /**

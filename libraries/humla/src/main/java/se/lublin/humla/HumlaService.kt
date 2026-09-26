@@ -32,10 +32,10 @@ import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.google.protobuf.MessageLite
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import org.minidns.dnsserverlookup.android21.AndroidUsingLinkProperties
 import se.lublin.humla.audio.AudioConfig
 import se.lublin.humla.audio.AudioController
@@ -43,9 +43,9 @@ import se.lublin.humla.audio.AudioHandler
 import se.lublin.humla.audio.AudioHandlerFactory
 import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.AudioSessionParams
+import se.lublin.humla.audio.DefaultAudioHandlerFactory
 import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
-import se.lublin.humla.audio.DefaultAudioHandlerFactory
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode

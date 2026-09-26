@@ -19,9 +19,9 @@ package se.lublin.humla.testutil
 
 import se.lublin.humla.HumlaService
 import se.lublin.humla.audio.inputmode.ActivityInputMode
+import se.lublin.humla.audio.routing.AudioRouter
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.protocol.ModelHandler
-import se.lublin.humla.audio.routing.AudioRouter
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionStateMachine
 

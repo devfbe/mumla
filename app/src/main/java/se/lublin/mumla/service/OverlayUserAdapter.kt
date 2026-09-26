@@ -26,8 +26,8 @@ import androidx.core.view.ViewCompat
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
-import se.lublin.mumla.databinding.OverlayUserRowBinding
 import se.lublin.mumla.R
+import se.lublin.mumla.databinding.OverlayUserRowBinding
 import se.lublin.mumla.util.talkStateDescription
 
 /**

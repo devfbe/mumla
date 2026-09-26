@@ -9,8 +9,8 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Assert.assertThrows
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode

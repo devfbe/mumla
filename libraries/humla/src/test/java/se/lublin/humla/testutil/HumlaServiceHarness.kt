@@ -24,16 +24,16 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowLooper
 import se.lublin.humla.HumlaService
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.FakeTcpTransport
 import se.lublin.humla.net.FakeTransports
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaTCPMessageType
-import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.net.ReconnectPolicy
-import se.lublin.humla.session.SessionConfig
-import se.lublin.humla.exception.HumlaException
+import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionConfig
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
