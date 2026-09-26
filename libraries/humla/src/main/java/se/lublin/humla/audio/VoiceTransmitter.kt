@@ -25,7 +25,6 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.net.UdpAudioEncoder
 import se.lublin.humla.net.UdpProtocol
-import se.lublin.humla.protocol.SelfMuteState
 
 /**
  * Turns captured frames into voice packets: runs [pipeline] on every frame, tracks the talking

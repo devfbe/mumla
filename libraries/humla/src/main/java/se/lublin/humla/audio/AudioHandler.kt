@@ -42,7 +42,6 @@ import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.net.VoicePacketHandler
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.protocol.SelfMuteState
 import se.lublin.humla.R
 import se.lublin.humla.util.HumlaLogger
 

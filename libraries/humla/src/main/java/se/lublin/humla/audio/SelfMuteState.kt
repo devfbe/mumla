@@ -1,4 +1,4 @@
-package se.lublin.humla.protocol
+package se.lublin.humla.audio
 
 import se.lublin.humla.protobuf.Mumble
 
