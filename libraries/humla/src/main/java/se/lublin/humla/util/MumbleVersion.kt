@@ -16,7 +16,6 @@
  */
 package se.lublin.humla.util
 
-import se.lublin.humla.Constants
 import se.lublin.humla.protobuf.Mumble
 
 /**

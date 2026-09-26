@@ -15,19 +15,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.session
+package se.lublin.humla.audio
 
 import android.content.Context
-import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.capture.EchoCancellationMode
-import se.lublin.humla.audio.inputmode.IInputMode
+import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.UdpProtocol
-import se.lublin.humla.protocol.AudioHandler
-import se.lublin.humla.protocol.TcpMessageHandler
-import se.lublin.humla.protocol.VoicePacketHandler
+import se.lublin.humla.net.VoicePacketHandler
 import se.lublin.humla.util.HumlaLogger
 
 /** A running audio pipeline as [AudioController] sees it (real: AudioHandler; tests: fakes). */

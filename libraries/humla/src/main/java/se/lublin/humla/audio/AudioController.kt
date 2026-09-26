@@ -15,17 +15,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.session
+package se.lublin.humla.audio
 
 import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
-import se.lublin.humla.audio.AudioOutput
-import se.lublin.humla.audio.inputmode.IInputMode
+import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.net.MessageHandlerRegistry
-import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.util.HumlaLogger
 
 /**

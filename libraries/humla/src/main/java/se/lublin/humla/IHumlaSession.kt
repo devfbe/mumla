@@ -6,7 +6,7 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.net.HumlaUDPMessageType
-import se.lublin.humla.session.CommunicationDevice
+import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.util.VoiceTargetMode
 
 /**

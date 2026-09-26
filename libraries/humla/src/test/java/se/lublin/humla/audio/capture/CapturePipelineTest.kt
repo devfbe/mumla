@@ -25,7 +25,6 @@ import se.lublin.humla.audio.capture.fakes.FakePreprocessor
 import se.lublin.humla.audio.capture.fakes.FakeResampler
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
-import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
 
 class CapturePipelineTest {

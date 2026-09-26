@@ -45,7 +45,7 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.HumlaDisconnectedException
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ServiceClient

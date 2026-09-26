@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.session
+package se.lublin.humla.audio.routing
 
 import android.media.AudioDeviceInfo
 import com.google.common.truth.Truth.assertThat

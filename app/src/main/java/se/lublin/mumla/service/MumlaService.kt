@@ -33,7 +33,7 @@ import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 import se.lublin.humla.HumlaService
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
@@ -41,7 +41,7 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.NoticeFormatter

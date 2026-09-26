@@ -41,7 +41,7 @@ import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.testConnection
 import se.lublin.humla.testutil.testEmit
 import se.lublin.humla.testutil.testModelHandler
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.NoticeFormatter
@@ -1075,7 +1075,7 @@ class MumlaServiceCharacterizationTest {
     /** All five clauses true; each test below turns exactly one of them false. */
     private fun clickReady(): User {
         service.keyClickSound = { clicks++ }
-        service.configure(SessionConfig(transmitMode = se.lublin.humla.Constants.TRANSMIT_PUSH_TO_TALK))
+        service.configure(SessionConfig(transmitMode = se.lublin.humla.util.Constants.TRANSMIT_PUSH_TO_TALK))
         preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()
         connect()
         val talking = user(SELF)
@@ -1114,7 +1114,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun noClickOutsidePushToTalk() {
         val u = clickReady()
-        service.configure(SessionConfig(transmitMode = se.lublin.humla.Constants.TRANSMIT_VOICE_ACTIVITY))
+        service.configure(SessionConfig(transmitMode = se.lublin.humla.util.Constants.TRANSMIT_VOICE_ACTIVITY))
         talk(u)
         assertThat(clicks).isEqualTo(0)
     }

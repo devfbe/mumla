@@ -40,8 +40,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowDialog
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Server
-import se.lublin.humla.session.CommunicationDevice
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.CommunicationDevice
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings

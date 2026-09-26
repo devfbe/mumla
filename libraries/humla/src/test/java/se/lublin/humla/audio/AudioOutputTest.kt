@@ -4,11 +4,10 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Before
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowAudioTrack
 import org.robolectric.shadows.ShadowLog
@@ -17,8 +16,8 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
-import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.testutil.awaitUntil
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class AudioOutputTest {

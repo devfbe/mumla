@@ -2,7 +2,7 @@ package se.lublin.humla.session
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 
 class SessionStateMachineTest {
     private val error = HumlaException("socket closed", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)

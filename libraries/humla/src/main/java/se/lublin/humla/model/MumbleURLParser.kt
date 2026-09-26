@@ -14,10 +14,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package se.lublin.humla.util
+package se.lublin.humla.model
 
-import se.lublin.humla.Constants
-import se.lublin.humla.model.Server
+import se.lublin.humla.util.Constants
 import java.net.MalformedURLException
 
 /** Parses `mumble://` URLs (https://wiki.mumble.info/wiki/Mumble_URL). */

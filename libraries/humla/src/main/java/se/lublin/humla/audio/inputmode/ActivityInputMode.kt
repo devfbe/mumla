@@ -17,6 +17,7 @@
 
 package se.lublin.humla.audio.inputmode
 
+import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector

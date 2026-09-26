@@ -1,5 +1,6 @@
-package se.lublin.humla.session
+package se.lublin.humla.audio
 
+import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaRecorder
@@ -8,20 +9,17 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Assert.assertThrows
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.audio.AudioOutput
+import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.UdpProtocol
-import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.testutil.SilentLogger
-import android.content.Context
-import se.lublin.humla.Constants
-import se.lublin.humla.audio.inputmode.IInputMode
+import se.lublin.humla.util.Constants
 import se.lublin.humla.util.HumlaLogger
 
 /**

@@ -15,11 +15,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.audio.capture
+package se.lublin.humla.audio
 
 import android.util.Log
-import se.lublin.humla.audio.inputmode.IInputMode
-import se.lublin.humla.protocol.AudioHandler
+import se.lublin.humla.audio.capture.CapturePipeline
+import se.lublin.humla.audio.capture.CapturePreprocessorFactory
+import se.lublin.humla.audio.capture.EchoCancellationMode
+import se.lublin.humla.audio.capture.FarEndFrameChunker
+import se.lublin.humla.audio.capture.IInputMode
+import se.lublin.humla.audio.capture.NoiseSuppressionMode
+import se.lublin.humla.audio.capture.NoopPreprocessor
+import se.lublin.humla.audio.capture.Resampler
+import se.lublin.humla.audio.capture.SpeexPreprocessor
+import se.lublin.humla.audio.capture.SpeexResampler
 import se.lublin.humla.util.HumlaLogger
 
 /**

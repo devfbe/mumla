@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package se.lublin.humla.util
+package se.lublin.humla.exception
 
 import se.lublin.humla.protobuf.Mumble
 

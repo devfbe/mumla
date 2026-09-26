@@ -37,9 +37,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.CommunicationDevice
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.CommunicationDevice
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.service.IMumlaService

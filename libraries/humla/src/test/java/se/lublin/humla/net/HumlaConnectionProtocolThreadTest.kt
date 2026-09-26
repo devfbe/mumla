@@ -21,7 +21,7 @@ import se.lublin.humla.session.MAX_EVENTS_PER_SLICE
 import se.lublin.humla.session.inMainThreadSlices
 import se.lublin.humla.testutil.collectOnMain
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.security.cert.X509Certificate

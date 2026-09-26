@@ -23,11 +23,11 @@ import android.media.AudioDeviceInfo
 import android.view.Gravity
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 import se.lublin.humla.audio.capture.AdaptiveVadTracker
 import se.lublin.humla.audio.capture.AndroidAudioEffects
-import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.VadConfig

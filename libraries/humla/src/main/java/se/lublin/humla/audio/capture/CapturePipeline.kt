@@ -17,7 +17,6 @@
 
 package se.lublin.humla.audio.capture
 
-import se.lublin.humla.audio.inputmode.IInputMode
 
 /**
  * Result of one pipeline pass. Owned and reused by the pipeline (as is [samples]), so every field is

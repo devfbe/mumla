@@ -15,13 +15,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-@file:Suppress("DEPRECATION") // se.lublin.humla.Constants is deprecated; TRANSMIT_* has no successor yet.
+@file:Suppress("DEPRECATION") // se.lublin.humla.util.Constants is deprecated; TRANSMIT_* has no successor yet.
 
-package se.lublin.humla.session
+package se.lublin.humla.audio
 
 import android.media.AudioManager
 import android.media.MediaRecorder
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 
 /**
  * Everything the audio pipeline is configured with. Immutable; [AudioController] rebuilds the

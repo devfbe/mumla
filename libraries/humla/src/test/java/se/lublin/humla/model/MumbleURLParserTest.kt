@@ -1,9 +1,9 @@
-package se.lublin.humla.util
+package se.lublin.humla.model
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 import java.net.MalformedURLException
 
 class MumbleURLParserTest {

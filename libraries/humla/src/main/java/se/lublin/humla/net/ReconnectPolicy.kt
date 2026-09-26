@@ -1,4 +1,4 @@
-package se.lublin.humla.session
+package se.lublin.humla.net
 
 /**
  * Exponential backoff for automatic reconnects: 2 s, 4 s, 8 s, 16 s, then 30 s,

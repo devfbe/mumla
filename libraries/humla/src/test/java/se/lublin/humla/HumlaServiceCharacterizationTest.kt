@@ -25,27 +25,28 @@ import android.net.ConnectivityManager
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
+import org.robolectric.android.controller.ServiceController
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
+import se.lublin.humla.audio.AudioConfig
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
+import se.lublin.humla.exception.HumlaDisconnectedException
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ConnectionWarning
-import se.lublin.humla.session.AudioConfig
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.onEvents
-import se.lublin.humla.util.HumlaDisconnectedException
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.util.Constants
 import java.util.concurrent.TimeUnit
 
 /**

@@ -1,4 +1,4 @@
-package se.lublin.humla.util
+package se.lublin.humla.exception
 
 /** Thrown when the session is requested while the service is not connected. */
 class HumlaDisconnectedException @JvmOverloads constructor(

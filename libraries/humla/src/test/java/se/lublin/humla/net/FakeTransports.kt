@@ -4,7 +4,7 @@ import android.os.Looper
 import com.google.protobuf.MessageLite
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import java.security.cert.X509Certificate
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean

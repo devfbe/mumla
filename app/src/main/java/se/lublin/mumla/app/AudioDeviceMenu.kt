@@ -23,10 +23,10 @@ import android.view.MenuItem
 import androidx.activity.ComponentActivity
 import androidx.core.view.MenuProvider
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.CommunicationDevice
-import se.lublin.humla.session.PreferredAudioDevice
-import se.lublin.humla.session.listCommunicationDevices
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.CommunicationDevice
+import se.lublin.humla.audio.routing.PreferredAudioDevice
+import se.lublin.humla.audio.routing.listCommunicationDevices
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.AudioDeviceLabels

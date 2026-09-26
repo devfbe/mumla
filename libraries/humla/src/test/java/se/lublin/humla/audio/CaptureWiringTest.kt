@@ -15,14 +15,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.audio.capture
+package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
+import se.lublin.humla.audio.capture.CapturePreprocessorFactory
+import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.fakes.FakeResampler
 import se.lublin.humla.audio.capture.fakes.FakeRnnoiseApi
 import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
+import se.lublin.humla.audio.capture.NoiseSuppressionMode
+import se.lublin.humla.audio.capture.WebRtcApmConfig
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.util.HumlaLogger
 

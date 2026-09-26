@@ -29,8 +29,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
-import se.lublin.humla.session.AudioRouter
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.AudioRouter
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.FakeCommunicationDevices
 import se.lublin.humla.testutil.testRouter

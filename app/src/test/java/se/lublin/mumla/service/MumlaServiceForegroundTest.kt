@@ -16,9 +16,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.HumlaConnection
-import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.session.SessionConfig
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.createMumlaService
 import java.time.Duration

@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.protocol
+package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -25,7 +25,7 @@ import se.lublin.humla.audio.capture.CapturePipeline
 import se.lublin.humla.audio.capture.NoopPreprocessor
 import se.lublin.humla.audio.encoder.IEncoder
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
-import se.lublin.humla.audio.inputmode.IInputMode
+import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer

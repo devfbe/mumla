@@ -30,9 +30,9 @@ import se.lublin.humla.net.FakeTransports
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.session.SessionConfig
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.session.HumlaEvent
 import java.util.concurrent.CopyOnWriteArrayList
 

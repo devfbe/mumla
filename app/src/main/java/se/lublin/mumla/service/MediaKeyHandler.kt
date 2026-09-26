@@ -1,7 +1,7 @@
 package se.lublin.mumla.service
 
 import android.view.KeyEvent
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 import se.lublin.mumla.MediaButtonAction
 import se.lublin.mumla.Settings
 

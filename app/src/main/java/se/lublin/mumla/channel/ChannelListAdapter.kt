@@ -41,7 +41,7 @@ import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.util.HumlaDisconnectedException
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ChannelListenerRowBinding
 import se.lublin.mumla.databinding.ChannelRowBinding

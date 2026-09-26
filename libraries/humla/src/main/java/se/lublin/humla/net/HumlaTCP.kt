@@ -29,7 +29,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException

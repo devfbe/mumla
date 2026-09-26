@@ -1,4 +1,4 @@
-package se.lublin.humla.session
+package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import io.mockk.confirmVerified
@@ -6,7 +6,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Test
-import se.lublin.humla.protocol.AudioHandler
 
 /**
  * [AudioHandlerAdapter] dresses the real [AudioHandler] as a [ManagedAudio]. Each delegation must

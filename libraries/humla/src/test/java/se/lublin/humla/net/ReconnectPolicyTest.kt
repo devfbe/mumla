@@ -1,4 +1,4 @@
-package se.lublin.humla.session
+package se.lublin.humla.net
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows

@@ -19,7 +19,7 @@ package se.lublin.mumla.channel
 
 import android.content.res.Resources
 import android.media.AudioDeviceInfo
-import se.lublin.humla.session.CommunicationDevice
+import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.mumla.R
 
 /**

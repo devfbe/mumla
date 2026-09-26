@@ -29,8 +29,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
 import se.lublin.humla.audio.capture.VadConfig
-import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.testutil.testActivityInputMode
 import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.R
@@ -53,7 +53,7 @@ class MumlaServiceAudioPreferencesTest {
         service = createMumlaService().get()
     }
 
-    /** Preferences land in an immutable [se.lublin.humla.session.AudioConfig]. */
+    /** Preferences land in an immutable [se.lublin.humla.audio.AudioConfig]. */
     private fun audioConfig() = service.getAudioConfigForTest()
 
     private fun vadConfig(): VadConfig = service.testActivityInputMode.vadConfig

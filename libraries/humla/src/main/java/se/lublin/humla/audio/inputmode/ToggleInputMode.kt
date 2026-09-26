@@ -17,6 +17,8 @@
 
 package se.lublin.humla.audio.inputmode
 
+import se.lublin.humla.audio.capture.IInputMode
+
 /**
  * An input mode that depends on a toggle, such as push to talk. The capture thread keeps running
  * while the toggle is off, so no stale audio is queued up for the next key press.

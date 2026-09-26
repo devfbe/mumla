@@ -23,7 +23,7 @@ import android.util.Log
 import androidx.annotation.VisibleForTesting
 import org.minidns.hla.ResolverApi
 import org.minidns.util.SrvUtil
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicReference

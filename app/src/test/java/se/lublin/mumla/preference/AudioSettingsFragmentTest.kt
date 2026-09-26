@@ -34,7 +34,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.TestCaptureSource

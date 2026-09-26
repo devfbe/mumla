@@ -14,36 +14,36 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package se.lublin.humla.protocol
+package se.lublin.humla.audio
 
-import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.Manifest
 import android.media.AudioManager
 import android.util.Log
 import com.google.protobuf.MessageLite
-import se.lublin.humla.R
-import se.lublin.humla.audio.AudioInput
-import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.AudioSourcePolicy
 import se.lublin.humla.audio.capture.CapturePipeline
-import se.lublin.humla.audio.capture.CaptureWiring
 import se.lublin.humla.audio.capture.EchoCancellationMode
+import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.encoder.IEncoder
 import se.lublin.humla.audio.encoder.OpusEncoder
-import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.net.VoicePacket
+import se.lublin.humla.net.VoicePacketHandler
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.protocol.SelfMuteState
+import se.lublin.humla.R
 import se.lublin.humla.util.HumlaLogger
 
 /**

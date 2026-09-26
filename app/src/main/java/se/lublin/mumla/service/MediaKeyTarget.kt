@@ -5,7 +5,7 @@ interface MediaKeyTarget {
     /** True while the server session is synchronized (IHumlaService.isConnected). */
     val isConnected: Boolean
 
-    /** One of se.lublin.humla.Constants.TRANSMIT_*. */
+    /** One of se.lublin.humla.util.Constants.TRANSMIT_*. */
     val transmitMode: Int
 
     val isTalking: Boolean

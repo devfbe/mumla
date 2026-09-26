@@ -23,7 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 import se.lublin.mumla.db.PublicServer
 import java.io.IOException
 import java.net.HttpURLConnection

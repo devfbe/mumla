@@ -9,7 +9,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 import se.lublin.mumla.Settings
 
 @RunWith(RobolectricTestRunner::class)

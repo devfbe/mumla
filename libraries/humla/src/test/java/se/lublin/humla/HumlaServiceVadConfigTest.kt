@@ -24,7 +24,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
-import se.lublin.humla.session.AudioConfig
+import se.lublin.humla.audio.AudioConfig
 import se.lublin.humla.session.SessionConfig
 
 /** The configured VAD settings reach the running microphone configuration. */

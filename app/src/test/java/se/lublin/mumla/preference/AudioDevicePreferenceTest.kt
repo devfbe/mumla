@@ -32,7 +32,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 

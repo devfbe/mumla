@@ -26,10 +26,6 @@ import android.os.Looper
 import android.os.Process
 import android.util.Log
 import androidx.annotation.VisibleForTesting
-import java.util.Arrays
-import java.util.concurrent.locks.Lock
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
 import se.lublin.humla.audio.capture.FarEndFrameChunker
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.exception.NativeAudioException
@@ -37,7 +33,10 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
-import se.lublin.humla.protocol.AudioHandler
+import java.util.Arrays
+import java.util.concurrent.locks.Lock
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * Decodes and mixes all users' voice streams on one playback thread, inline and without allocating

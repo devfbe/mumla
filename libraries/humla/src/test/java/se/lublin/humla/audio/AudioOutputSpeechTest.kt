@@ -2,13 +2,12 @@ package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import java.nio.ByteBuffer
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
 import se.lublin.humla.net.VoicePacket
-import se.lublin.humla.protocol.AudioHandler
+import java.nio.ByteBuffer
 
 class AudioOutputSpeechTest {
 

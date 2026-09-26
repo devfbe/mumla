@@ -1,4 +1,4 @@
-package se.lublin.humla.protocol
+package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test

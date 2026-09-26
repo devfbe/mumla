@@ -1,12 +1,12 @@
 @file:Suppress("DEPRECATION") // see AudioConfig.kt
 
-package se.lublin.humla.session
+package se.lublin.humla.audio
 
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 
 /**
  * [AudioConfig] carries two decisions of its own: the half-duplex rule and, because HumlaService

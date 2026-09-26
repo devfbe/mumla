@@ -37,7 +37,7 @@ import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.exception.AudioInitializationException
-import se.lublin.humla.protocol.AudioHandler
+import se.lublin.humla.audio.AudioHandler
 
 /**
  * One frame's worth of everything the level meter draws. Levels are dBFS; `null` means the mode

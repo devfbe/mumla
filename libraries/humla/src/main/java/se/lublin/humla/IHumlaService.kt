@@ -6,8 +6,8 @@ import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.util.HumlaDisconnectedException
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaDisconnectedException
+import se.lublin.humla.exception.HumlaException
 
 /**
  * What clients of a [HumlaService] use. Not thread-safe: call it from the main thread. Unless

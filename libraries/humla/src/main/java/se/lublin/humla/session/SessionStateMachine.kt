@@ -1,9 +1,10 @@
 package se.lublin.humla.session
 
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
+import se.lublin.humla.net.ReconnectPolicy
 import kotlin.random.Random
 
 /**

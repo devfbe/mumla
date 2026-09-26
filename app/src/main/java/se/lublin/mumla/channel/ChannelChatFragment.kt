@@ -57,7 +57,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.HumlaDisconnectedException
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ServiceClient

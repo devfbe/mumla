@@ -17,9 +17,6 @@
 
 package se.lublin.humla.audio
 
-import java.util.Arrays
-import kotlin.math.ceil
-import kotlin.math.sin
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.OpusDecoderNative
 import se.lublin.humla.audio.native.SpeexJitterApi
@@ -28,7 +25,9 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
 import se.lublin.humla.net.VoicePacket
-import se.lublin.humla.protocol.AudioHandler
+import java.util.Arrays
+import kotlin.math.ceil
+import kotlin.math.sin
 
 /**
  * Decodes one user's incoming Opus stream through a jitter buffer into float PCM. Each [decode]

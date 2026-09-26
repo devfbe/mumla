@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.FilterInputStream

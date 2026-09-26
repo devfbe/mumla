@@ -41,7 +41,7 @@ import com.google.android.material.tabs.TabLayoutMediator
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.HumlaDisconnectedException
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings

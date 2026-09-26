@@ -15,10 +15,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.protocol
+package se.lublin.humla.audio
 
 import android.util.Log
-import se.lublin.humla.audio.AudioInput
 import se.lublin.humla.audio.capture.CapturePipeline
 import se.lublin.humla.audio.encoder.IEncoder
 import se.lublin.humla.exception.NativeAudioException
@@ -26,6 +25,7 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.net.UdpAudioEncoder
 import se.lublin.humla.net.UdpProtocol
+import se.lublin.humla.protocol.SelfMuteState
 
 /**
  * Turns captured frames into voice packets: runs [pipeline] on every frame, tracks the talking

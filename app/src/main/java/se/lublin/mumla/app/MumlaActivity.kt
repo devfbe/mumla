@@ -44,7 +44,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.MumbleURLParser
+import se.lublin.humla.model.MumbleURLParser
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings

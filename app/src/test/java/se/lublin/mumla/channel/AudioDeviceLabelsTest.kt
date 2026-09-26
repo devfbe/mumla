@@ -24,7 +24,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.session.CommunicationDevice
+import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.mumla.R
 
 /**

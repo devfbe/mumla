@@ -53,7 +53,7 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.User
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.HumlaDisconnectedException
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatImageLoader

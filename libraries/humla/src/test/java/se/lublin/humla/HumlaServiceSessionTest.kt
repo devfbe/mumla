@@ -35,7 +35,7 @@ import se.lublin.humla.session.ClientCertificate
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import java.util.concurrent.TimeUnit
 
 /**
