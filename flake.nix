@@ -22,13 +22,13 @@
         # build-logic and libraries/humla/build.gradle.kts) must be kept in sync by hand. Every
         # other flake.nix reference to these versions goes through these bindings.
         ndkVersion = "29.0.14206865";
-        buildToolsVersion = "36.1.0";
+        buildToolsVersion = "37.0.0";
         cmakeVersion = "4.1.2";
 
         # Android SDK configuration
         androidSdk = pkgs.androidenv.composeAndroidPackages {
           buildToolsVersions = [ buildToolsVersion ];
-          platformVersions = [ "36" ];
+          platformVersions = [ "37.0" ];
           includeEmulator = false;
           includeSystemImages = false;
           includeSources = false;

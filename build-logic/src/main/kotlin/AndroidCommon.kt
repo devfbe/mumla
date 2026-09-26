@@ -18,7 +18,7 @@ internal fun Project.configureAndroidCommon(android: CommonExtension) {
     }
 
     android.apply {
-        compileSdk = 36
+        compileSdk = 37
         // Single-sourced from gradle.properties; the root build script checks nothing overrides them.
         buildToolsVersion = providers.gradleProperty("buildToolsVersion").get()
         ndkVersion = providers.gradleProperty("ndkVersion").get()

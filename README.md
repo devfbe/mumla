@@ -45,7 +45,7 @@ With [Nix](https://nixos.org/) installed and flakes enabled:
     cd mumla
     nix develop
 
-The shell provides JDK 21, the Android SDK (platform 36, build-tools 36.1.0),
+The shell provides JDK 21, the Android SDK (platform 37.0, build-tools 37.0.0),
 NDK 29.0.14206865, SDK CMake 4.1.2, meson/ninja and `git`. Inside it:
 
     ./gradlew assembleFossDebug      # F-Droid flavor
