@@ -297,7 +297,7 @@ class ChannelChatFragmentTest {
     @Test
     fun withoutMarkdownTheTextIsSentAsBefore() {
         PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
-            .edit().putBoolean(Settings.PREF_MARKDOWN, false).commit()
+            .edit().putBoolean(Settings.MARKDOWN.key, false).commit()
         every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
         launch()
         editor.setText("**hi** <b>there</b>")

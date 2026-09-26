@@ -143,7 +143,7 @@ class ChannelListFragment :
         super.onViewCreated(view, savedInstanceState)
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         viewLifecycleOwner.lifecycleScope.launch {
-            PreferenceManager.getDefaultSharedPreferences(requireContext()).changes(Settings.PREF_SHOW_USER_COUNT)
+            PreferenceManager.getDefaultSharedPreferences(requireContext()).changes(Settings.SHOW_USER_COUNT.key)
                 .collect { channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount) }
         }
         if (!bound) {

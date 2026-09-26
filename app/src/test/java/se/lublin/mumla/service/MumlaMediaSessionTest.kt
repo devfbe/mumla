@@ -63,7 +63,7 @@ class MumlaMediaSessionTest {
 
     private fun setAction(prefValue: String) {
         PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putString(Settings.PREF_MEDIA_BUTTON_ACTION, prefValue).commit()
+            .edit().putString(Settings.MEDIA_BUTTON_ACTION.key, prefValue).commit()
     }
 
     private val state = MutableStateFlow<SessionState>(SessionState.Disconnected())
@@ -309,7 +309,7 @@ class MumlaMediaSessionTest {
         target.setTalking(true)
 
         PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putBoolean(Settings.PREF_BLUETOOTH_SCO, true).commit()
+            .edit().putBoolean(Settings.BLUETOOTH_SCO.key, true).commit()
 
         assertThat(mediaSession.isActive).isTrue()
         assertThat(mediaSession.sessionToken).isEqualTo(token)

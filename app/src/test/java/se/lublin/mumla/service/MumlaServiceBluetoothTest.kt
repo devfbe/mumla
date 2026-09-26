@@ -160,8 +160,8 @@ class MumlaServiceBluetoothTest {
         settings.isBluetoothScoEnabled = false
         connect()
 
-        preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()
-        service.onPreferenceChanged(Settings.PREF_PTT_SOUND)
+        preferences().edit().putBoolean(Settings.PTT_SOUND.key, true).commit()
+        service.onPreferenceChanged(Settings.PTT_SOUND.key)
 
         assertThat(receiver.selectCalls.size).isEqualTo(0)
         assertThat(receiver.clearCalls).isEqualTo(0)

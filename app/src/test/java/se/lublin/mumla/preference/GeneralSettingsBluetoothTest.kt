@@ -58,10 +58,10 @@ class GeneralSettingsBluetoothTest {
 
     private fun checkBox(): CheckBoxPreference {
         val preference = fragment.preferenceScreen
-            .findPreference<Preference>(Settings.PREF_BLUETOOTH_SCO)
+            .findPreference<Preference>(Settings.BLUETOOTH_SCO.key)
         assertWithMessage(
             "no preference with key '%s' on the general settings screen",
-            Settings.PREF_BLUETOOTH_SCO,
+            Settings.BLUETOOTH_SCO.key,
         ).that(preference).isNotNull()
         assertThat(preference).isInstanceOf(CheckBoxPreference::class.java)
         return preference as CheckBoxPreference
@@ -94,13 +94,13 @@ class GeneralSettingsBluetoothTest {
         assertWithMessage("no PreferenceCategory with key 'controls_settings'")
             .that(category).isNotNull()
         assertThat(category).isInstanceOf(PreferenceCategory::class.java)
-        assertThat((category as PreferenceGroup).findPreference<Preference>(Settings.PREF_BLUETOOTH_SCO))
+        assertThat((category as PreferenceGroup).findPreference<Preference>(Settings.BLUETOOTH_SCO.key))
             .isNotNull()
 
         // Two sources for one default: android:defaultValue on this screen, and
-        // Settings.DEFAULT_BLUETOOTH_SCO, which every other reader gets.
-        assertThat(checkBox().isChecked).isEqualTo(Settings.DEFAULT_BLUETOOTH_SCO)
-        assertThat(settings.isBluetoothScoEnabled).isEqualTo(Settings.DEFAULT_BLUETOOTH_SCO)
+        // Settings.BLUETOOTH_SCO.default, which every other reader gets.
+        assertThat(checkBox().isChecked).isEqualTo(Settings.BLUETOOTH_SCO.default)
+        assertThat(settings.isBluetoothScoEnabled).isEqualTo(Settings.BLUETOOTH_SCO.default)
     }
 
     @Test

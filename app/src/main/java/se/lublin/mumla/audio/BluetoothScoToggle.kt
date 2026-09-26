@@ -25,7 +25,7 @@ import se.lublin.mumla.Settings
 
 /**
  * The decision behind the "Use Bluetooth headset automatically" setting. It writes only
- * [Settings.PREF_BLUETOOTH_SCO]; the service reads it and does the routing.
+ * [Settings.BLUETOOTH_SCO.key]; the service reads it and does the routing.
  *
  * The preference is the single source of truth for the user's wish, because the SCO link itself is
  * torn down on every disconnect (auto-reconnect included); `MumlaService` re-reads it on every

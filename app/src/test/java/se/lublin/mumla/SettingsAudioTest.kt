@@ -43,17 +43,17 @@ class SettingsAudioTest {
     @Test
     fun `noise suppression is read from the one key the quick menu also writes`() {
         assertThat(settings.noiseSuppressionMode).isEqualTo(NoiseSuppressionMode.RNNOISE)
-        prefs.edit().putString(Settings.PREF_NOISE_SUPPRESSION_METHOD, "speex").commit()
+        prefs.edit().putString(Settings.NOISE_SUPPRESSION_METHOD.key, "speex").commit()
         assertThat(settings.noiseSuppressionMode).isEqualTo(NoiseSuppressionMode.SPEEX)
-        prefs.edit().putString(Settings.PREF_NOISE_SUPPRESSION_METHOD, "none").commit()
+        prefs.edit().putString(Settings.NOISE_SUPPRESSION_METHOD.key, "none").commit()
         assertThat(settings.noiseSuppressionMode).isEqualTo(NoiseSuppressionMode.NONE)
     }
 
     @Test
     fun `an installation that had switched the old preprocessor off keeps it off`() {
-        prefs.edit().putBoolean(Settings.PREF_PREPROCESSOR_ENABLED, false).commit()
+        prefs.edit().putBoolean(Settings.PREPROCESSOR_ENABLED.key, false).commit()
         assertThat(settings.noiseSuppressionMode).isEqualTo(NoiseSuppressionMode.NONE)
-        prefs.edit().putString(Settings.PREF_NOISE_SUPPRESSION_METHOD, "rnnoise").commit()
+        prefs.edit().putString(Settings.NOISE_SUPPRESSION_METHOD.key, "rnnoise").commit()
         assertThat(settings.noiseSuppressionMode).isEqualTo(NoiseSuppressionMode.RNNOISE)
     }
 
@@ -69,19 +69,19 @@ class SettingsAudioTest {
         } finally {
             prefs.unregisterOnSharedPreferenceChangeListener(listener)
         }
-        assertThat(written).containsExactly(Settings.PREF_NOISE_SUPPRESSION_METHOD)
+        assertThat(written).containsExactly(Settings.NOISE_SUPPRESSION_METHOD.key)
     }
 
     @Test
     fun `speex noise suppression defaults to -25 dB and only accepts the supported steps`() {
         assertThat(settings.speexNoiseSuppressDb).isEqualTo(-25)
-        prefs.edit().putString(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB, "-35").commit()
+        prefs.edit().putString(Settings.SPEEX_NOISE_SUPPRESS_DB.key, "-35").commit()
         assertThat(settings.speexNoiseSuppressDb).isEqualTo(-35)
-        prefs.edit().putString(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB, "-15").commit()
+        prefs.edit().putString(Settings.SPEEX_NOISE_SUPPRESS_DB.key, "-15").commit()
         assertThat(settings.speexNoiseSuppressDb).isEqualTo(-15)
-        prefs.edit().putString(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB, "-20").commit()
+        prefs.edit().putString(Settings.SPEEX_NOISE_SUPPRESS_DB.key, "-20").commit()
         assertThat(settings.speexNoiseSuppressDb).isEqualTo(-25)
-        prefs.edit().putString(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB, "loud").commit()
+        prefs.edit().putString(Settings.SPEEX_NOISE_SUPPRESS_DB.key, "loud").commit()
         assertThat(settings.speexNoiseSuppressDb).isEqualTo(-25)
     }
 
@@ -143,13 +143,13 @@ class SettingsAudioTest {
 
         settings.preferredAudioDevice = null
 
-        assertThat(prefs.contains(Settings.PREF_AUDIO_DEVICE)).isFalse()
+        assertThat(prefs.contains(Settings.AUDIO_DEVICE.key)).isFalse()
         assertThat(settings.preferredAudioDevice).isNull()
     }
 
     @Test
     fun `a garbled saved audio device reads as automatic`() {
-        prefs.edit().putString(Settings.PREF_AUDIO_DEVICE, "speaker").commit()
+        prefs.edit().putString(Settings.AUDIO_DEVICE.key, "speaker").commit()
 
         assertThat(settings.preferredAudioDevice).isNull()
     }
@@ -182,7 +182,7 @@ class SettingsAudioTest {
     fun `a saved audio device is not overwritten by the old default output`() {
         prefs.edit()
             .putString("default_output", "earpiece")
-            .putString(Settings.PREF_AUDIO_DEVICE, "${AudioDeviceInfo.TYPE_BUILTIN_SPEAKER}")
+            .putString(Settings.AUDIO_DEVICE.key, "${AudioDeviceInfo.TYPE_BUILTIN_SPEAKER}")
             .commit()
 
         val migrated = Settings.getInstance(ApplicationProvider.getApplicationContext())
@@ -272,19 +272,19 @@ class SettingsAudioTest {
 
     @Test
     fun `the sensitivity slider is read as a fraction of the measured gap`() {
-        prefs.edit().putInt(Settings.PREF_VAD_SENSITIVITY, 30).commit()
+        prefs.edit().putInt(Settings.VAD_SENSITIVITY.key, 30).commit()
         assertThat(settings.vadConfig.snrFraction).isWithin(0.001f).of(0.3f)
-        prefs.edit().putInt(Settings.PREF_VAD_SENSITIVITY, 140).commit()
+        prefs.edit().putInt(Settings.VAD_SENSITIVITY.key, 140).commit()
         assertThat(settings.vadConfig.snrFraction).isWithin(0.001f).of(1f)
-        prefs.edit().putInt(Settings.PREF_VAD_SENSITIVITY, -20).commit()
+        prefs.edit().putInt(Settings.VAD_SENSITIVITY.key, -20).commit()
         assertThat(settings.vadConfig.snrFraction).isWithin(0.001f).of(0f)
     }
 
     @Test
     fun `the hand-set floor is stored as dB below full scale and read back negative`() {
         prefs.edit()
-            .putBoolean(Settings.PREF_VAD_ADAPTIVE_FLOOR, false)
-            .putInt(Settings.PREF_VAD_FLOOR_DB, 60)
+            .putBoolean(Settings.VAD_ADAPTIVE_FLOOR.key, false)
+            .putInt(Settings.VAD_FLOOR_DB.key, 60)
             .commit()
         val config = settings.vadConfig
         assertThat(config.adaptiveFloor).isFalse()
@@ -293,30 +293,30 @@ class SettingsAudioTest {
 
     @Test
     fun `a hand-set floor outside what a microphone can produce is clamped, not thrown`() {
-        prefs.edit().putBoolean(Settings.PREF_VAD_ADAPTIVE_FLOOR, false).putInt(Settings.PREF_VAD_FLOOR_DB, 5).commit()
+        prefs.edit().putBoolean(Settings.VAD_ADAPTIVE_FLOOR.key, false).putInt(Settings.VAD_FLOOR_DB.key, 5).commit()
         assertThat(settings.vadConfig.manualFloorDbfs).isEqualTo(AdaptiveVadTracker.MAX_FLOOR_DBFS)
-        prefs.edit().putInt(Settings.PREF_VAD_FLOOR_DB, 400).commit()
+        prefs.edit().putInt(Settings.VAD_FLOOR_DB.key, 400).commit()
         assertThat(settings.vadConfig.manualFloorDbfs).isEqualTo(AdaptiveVadTracker.MIN_FLOOR_DBFS)
     }
 
     @Test
     fun `amplitude mode is still driven by the legacy threshold slider`() {
         prefs.edit()
-            .putString(Settings.PREF_VAD_MODE, "amplitude")
-            .putInt(Settings.PREF_THRESHOLD, 70)
-            .putInt(Settings.PREF_VAD_HOLD_MS, 400)
+            .putString(Settings.VAD_MODE.key, "amplitude")
+            .putInt(Settings.THRESHOLD.key, 70)
+            .putInt(Settings.VAD_HOLD_MS.key, 400)
             .commit()
         assertThat(settings.vadConfig)
-            .isEqualTo(VadConfig.amplitude(0.7f, 400, Settings.DEFAULT_VAD_ONSET_FRAMES))
+            .isEqualTo(VadConfig.amplitude(0.7f, 400, Settings.VAD_ONSET_FRAMES.default))
     }
 
     @Test
     fun `probability sliders are read in percent and stop never exceeds start`() {
         prefs.edit()
-            .putString(Settings.PREF_VAD_MODE, "probability")
-            .putInt(Settings.PREF_VAD_START, 40)
-            .putInt(Settings.PREF_VAD_STOP, 55)
-            .putInt(Settings.PREF_VAD_HOLD_MS, 100)
+            .putString(Settings.VAD_MODE.key, "probability")
+            .putInt(Settings.VAD_START.key, 40)
+            .putInt(Settings.VAD_STOP.key, 55)
+            .putInt(Settings.VAD_HOLD_MS.key, 100)
             .commit()
         val config = settings.vadConfig
         assertThat(config.startThreshold).isWithin(0.001f).of(0.4f)
@@ -326,23 +326,23 @@ class SettingsAudioTest {
 
     @Test
     fun `a hold longer than the detector can convert is clamped rather than wrapping negative`() {
-        prefs.edit().putInt(Settings.PREF_VAD_HOLD_MS, -50).commit()
+        prefs.edit().putInt(Settings.VAD_HOLD_MS.key, -50).commit()
         assertThat(settings.vadConfig.holdTimeMs).isEqualTo(0L)
     }
 
     @Test
     fun `an onset of zero frames would be a gate that never opens and is clamped away`() {
-        prefs.edit().putString(Settings.PREF_VAD_ONSET_FRAMES, "0").commit()
+        prefs.edit().putString(Settings.VAD_ONSET_FRAMES.key, "0").commit()
         assertThat(settings.vadConfig.onsetFrames).isEqualTo(1)
-        prefs.edit().putString(Settings.PREF_VAD_ONSET_FRAMES, "99").commit()
+        prefs.edit().putString(Settings.VAD_ONSET_FRAMES.key, "99").commit()
         assertThat(settings.vadConfig.onsetFrames).isEqualTo(Settings.MAX_VAD_ONSET_FRAMES)
-        prefs.edit().putString(Settings.PREF_VAD_ONSET_FRAMES, "many").commit()
-        assertThat(settings.vadConfig.onsetFrames).isEqualTo(Settings.DEFAULT_VAD_ONSET_FRAMES)
+        prefs.edit().putString(Settings.VAD_ONSET_FRAMES.key, "many").commit()
+        assertThat(settings.vadConfig.onsetFrames).isEqualTo(Settings.VAD_ONSET_FRAMES.default)
     }
 
     @Test
     fun `an unknown stored mode falls back to the amplitude detector everyone has been running`() {
-        prefs.edit().putString(Settings.PREF_VAD_MODE, "telepathy").commit()
+        prefs.edit().putString(Settings.VAD_MODE.key, "telepathy").commit()
         assertThat(settings.vadMode).isEqualTo(VadMode.AMPLITUDE)
     }
 
@@ -353,8 +353,8 @@ class SettingsAudioTest {
         assertThat(settings.androidAudioEffects.noiseSuppressor).isFalse()
         assertThat(settings.androidAudioEffects.automaticGainControl).isFalse()
         prefs.edit()
-            .putBoolean(Settings.PREF_ANDROID_NOISE_SUPPRESSOR, true)
-            .putBoolean(Settings.PREF_ANDROID_AGC, true)
+            .putBoolean(Settings.ANDROID_NOISE_SUPPRESSOR.key, true)
+            .putBoolean(Settings.ANDROID_AGC.key, true)
             .commit()
         assertThat(settings.androidAudioEffects.noiseSuppressor).isTrue()
         assertThat(settings.androidAudioEffects.automaticGainControl).isTrue()
@@ -366,8 +366,8 @@ class SettingsAudioTest {
         for (ns in listOf(false, true)) {
             for (agc in listOf(false, true)) {
                 prefs.edit()
-                    .putBoolean(Settings.PREF_ANDROID_NOISE_SUPPRESSOR, ns)
-                    .putBoolean(Settings.PREF_ANDROID_AGC, agc)
+                    .putBoolean(Settings.ANDROID_NOISE_SUPPRESSOR.key, ns)
+                    .putBoolean(Settings.ANDROID_AGC.key, agc)
                     .commit()
                 val effects = settings.androidAudioEffects
                 assertThat(effects.noiseSuppressor).isEqualTo(ns)

@@ -339,13 +339,13 @@ class MumlaServiceForegroundTest {
     fun aHalfDuplexPreferenceChangeTakesEffectInPushToTalk() {
         val preferences = PreferenceManager.getDefaultSharedPreferences(service)
         preferences.edit()
-            .putString(se.lublin.mumla.Settings.PREF_INPUT_METHOD, se.lublin.mumla.Settings.ARRAY_INPUT_METHOD_PTT)
+            .putString(se.lublin.mumla.Settings.INPUT_METHOD.key, se.lublin.mumla.Settings.ARRAY_INPUT_METHOD_PTT)
             .commit()
 
-        preferences.edit().putBoolean(se.lublin.mumla.Settings.PREF_HALF_DUPLEX, true).commit()
+        preferences.edit().putBoolean(se.lublin.mumla.Settings.HALF_DUPLEX.key, true).commit()
         assertThat(service.getAudioConfigForTest().halfDuplex).isTrue()
 
-        preferences.edit().putBoolean(se.lublin.mumla.Settings.PREF_HALF_DUPLEX, false).commit()
+        preferences.edit().putBoolean(se.lublin.mumla.Settings.HALF_DUPLEX.key, false).commit()
         assertThat(service.getAudioConfigForTest().halfDuplex).isFalse()
     }
 
@@ -364,9 +364,9 @@ class MumlaServiceForegroundTest {
     fun theSettingsInForceAtStartAreTheOnesUsed() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
         prefs.edit()
-            .putBoolean(se.lublin.mumla.Settings.PREF_USE_TTS, true)
-            .putBoolean(se.lublin.mumla.Settings.PREF_PTT_SOUND, true)
-            .putBoolean(se.lublin.mumla.Settings.PREF_SHORT_TTS_MESSAGES, true)
+            .putBoolean(se.lublin.mumla.Settings.USE_TTS.key, true)
+            .putBoolean(se.lublin.mumla.Settings.PTT_SOUND.key, true)
+            .putBoolean(se.lublin.mumla.Settings.SHORT_TTS_MESSAGES.key, true)
             .commit()
         val fresh = createMumlaService().get()
         assertThat(fresh.tts).isNotNull()

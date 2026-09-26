@@ -12,13 +12,13 @@ class AppearanceSettingsFragment : MumlaPreferenceFragment(R.xml.settings_appear
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         super.onCreatePreferences(savedInstanceState, rootKey)
         // Each language named in itself, after the system default.
-        findPreference<ListPreference>(Settings.PREF_LANGUAGE)?.let { language ->
+        findPreference<ListPreference>(Settings.LANGUAGE.key)?.let { language ->
             val codes = resources.getStringArray(R.array.languageValues)
             language.entries = arrayOf(getString(R.string.language_system)) +
                 codes.map { Locale.forLanguageTag(it).let { locale -> locale.getDisplayName(locale) } }
             language.entryValues = arrayOf("system") + codes
         }
-        findPreference<Preference>(Settings.PREF_DYNAMIC_COLORS)?.let { dynamic ->
+        findPreference<Preference>(Settings.DYNAMIC_COLORS.key)?.let { dynamic ->
             dynamic.isVisible = DynamicColors.isDynamicColorAvailable()
             dynamic.setOnPreferenceChangeListener { _, _ ->
                 // Posted: the new value is stored only after this listener returns.

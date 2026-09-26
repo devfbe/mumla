@@ -40,7 +40,7 @@ class ChannelFragmentTalkStateTest {
             .edit()
             // Voice activity (the default) hides the talk view, and `touch` dispatches straight at
             // the view regardless, so push-to-talk must be set explicitly.
-            .putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_PTT)
+            .putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT)
             .commit()
         session = mockk(relaxed = true)
         service = mockk<IMumlaService>(relaxed = true).stubConnected(session)
@@ -61,7 +61,7 @@ class ChannelFragmentTalkStateTest {
     private fun setPushToTalkToggle(toggle: Boolean) {
         PreferenceManager
             .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
-            .edit().putBoolean(Settings.PREF_PTT_TOGGLE, toggle).commit()
+            .edit().putBoolean(Settings.PTT_TOGGLE.key, toggle).commit()
     }
 
     private fun touch(action: Int) {
@@ -161,7 +161,7 @@ class ChannelFragmentTalkStateTest {
 
         PreferenceManager
             .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
-            .edit().putBoolean(Settings.PREF_PUSH_BUTTON_HIDE_KEY, true).commit()
+            .edit().putBoolean(Settings.PUSH_BUTTON_HIDE.key, true).commit()
 
         assertThat(talkView.visibility).isEqualTo(View.GONE)
     }

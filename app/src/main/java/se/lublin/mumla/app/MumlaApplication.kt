@@ -15,8 +15,6 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import se.lublin.mumla.Settings
-import se.lublin.mumla.Settings.Companion.PREF_LANGUAGE
-import se.lublin.mumla.Settings.Companion.PREF_THEME
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.MumlaSQLiteDatabase
 import se.lublin.mumla.util.ApplicationScope
@@ -50,7 +48,8 @@ class MumlaApplication :
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         applyTheme(preferences)
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            preferences.changes(PREF_LANGUAGE, PREF_THEME).collect { key -> onPreferenceChanged(preferences, key) }
+            preferences.changes(Settings.LANGUAGE.key, Settings.THEME.key)
+                .collect { key -> onPreferenceChanged(preferences, key) }
         }
         // Decided per activity creation, so a changed setting applies to recreated activities.
         DynamicColors.applyToActivitiesIfAvailable(
@@ -63,27 +62,27 @@ class MumlaApplication :
 
     private fun onPreferenceChanged(preferences: SharedPreferences, key: String) {
         when (key) {
-            PREF_LANGUAGE -> {
-                val language = preferences.getString(PREF_LANGUAGE, "system")
+            Settings.LANGUAGE.key -> {
+                val language = preferences.getString(Settings.LANGUAGE.key, "system")
                 setApplicationLocales(
                     if (language == "system") LocaleListCompat.getEmptyLocaleList()
                     else LocaleListCompat.forLanguageTags(language),
                 )
             }
-            PREF_THEME -> applyTheme(preferences)
+            Settings.THEME.key -> applyTheme(preferences)
         }
     }
 
     private companion object {
         /** Unknown (older) values fall back to the system theme, which is written back. */
         fun applyTheme(preferences: SharedPreferences) {
-            when (preferences.getString(PREF_THEME, "system")) {
+            when (preferences.getString(Settings.THEME.key, "system")) {
                 "forceLight" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
                 "forceDark" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
                 "system" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
                 else -> {
                     AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-                    preferences.edit { putString(PREF_THEME, "system") }
+                    preferences.edit { putString(Settings.THEME.key, "system") }
                 }
             }
         }

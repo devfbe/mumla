@@ -53,7 +53,7 @@ class MumlaServiceAudioRouteTest {
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
         PreferenceManager.getDefaultSharedPreferences(app).edit()
-            .putBoolean(Settings.PREF_BLUETOOTH_SCO, false).commit()
+            .putBoolean(Settings.BLUETOOTH_SCO.key, false).commit()
     }
 
     private fun create() {

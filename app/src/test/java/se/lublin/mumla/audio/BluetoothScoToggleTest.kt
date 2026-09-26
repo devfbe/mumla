@@ -28,7 +28,7 @@ class BluetoothScoToggleTest {
         app = ApplicationProvider.getApplicationContext()
         // Switched off explicitly: the default is on.
         PreferenceManager.getDefaultSharedPreferences(app).edit()
-            .putBoolean(Settings.PREF_BLUETOOTH_SCO, false).commit()
+            .putBoolean(Settings.BLUETOOTH_SCO.key, false).commit()
         settings = Settings.getInstance(app)
         toggle = BluetoothScoToggle(app, settings)
     }

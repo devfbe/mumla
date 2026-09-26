@@ -82,7 +82,7 @@ class AudioDevicePreferenceTest {
     }
 
     private fun AudioSettingsFragment.device() =
-        requireNotNull(findPreference<ListPreference>(Settings.PREF_AUDIO_DEVICE))
+        requireNotNull(findPreference<ListPreference>(Settings.AUDIO_DEVICE.key))
 
     private fun ListPreference.labels() = entries.map { it.toString() }
 

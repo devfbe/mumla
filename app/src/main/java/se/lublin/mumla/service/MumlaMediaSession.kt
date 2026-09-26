@@ -73,7 +73,7 @@ class MumlaMediaSession(
         stateUpdates?.cancel()
         stateUpdates = CoroutineScope(Dispatchers.Main.immediate).launch(start = CoroutineStart.UNDISPATCHED) {
             launch(start = CoroutineStart.UNDISPATCHED) {
-                PreferenceManager.getDefaultSharedPreferences(context).changes(Settings.PREF_MEDIA_BUTTON_ACTION)
+                PreferenceManager.getDefaultSharedPreferences(context).changes(Settings.MEDIA_BUTTON_ACTION.key)
                     .collect { applyState() }
             }
             service.sessionState

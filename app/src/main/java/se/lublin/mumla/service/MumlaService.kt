@@ -412,18 +412,18 @@ class MumlaService : HumlaService(),
 
     internal fun onPreferenceChanged(key: String) {
         when (key) {
-            Settings.PREF_INPUT_METHOD ->
+            Settings.INPUT_METHOD.key ->
                 channelOverlay.setPushToTalkShown(settings.humlaInputMethod == Constants.TRANSMIT_PUSH_TO_TALK)
-            Settings.PREF_HOT_CORNER_KEY -> {
+            Settings.HOT_CORNER.key -> {
                 hotCorner.gravity = settings.hotCornerGravity
                 hotCorner.isShown = isConnectionEstablished && settings.isHotCornerEnabled
             }
-            Settings.PREF_USE_TTS -> applyTextToSpeechPreference()
-            Settings.PREF_SHORT_TTS_MESSAGES ->
+            Settings.USE_TTS.key -> applyTextToSpeechPreference()
+            Settings.SHORT_TTS_MESSAGES.key ->
                 shortTtsMessagesEnabled = settings.isShortTextToSpeechMessagesEnabled
-            Settings.PREF_PTT_SOUND ->
+            Settings.PTT_SOUND.key ->
                 pttSoundEnabled = settings.isPttSoundEnabled
-            Settings.PREF_BLUETOOTH_SCO -> applyBluetoothPreference()
+            Settings.BLUETOOTH_SCO.key -> applyBluetoothPreference()
         }
         if (key in SessionSettings.AUDIO_KEYS) {
             // The result is ignored: audio settings never require a reconnect.
@@ -612,16 +612,16 @@ class MumlaService : HumlaService(),
         const val TTS_THRESHOLD = 250 // Maximum number of characters to read
 
         /** The settings a connection is made with; a change applies from the next one. */
-        private val RECONNECT_KEYS = setOf(Settings.PREF_CERT_ID, Settings.PREF_FORCE_TCP, Settings.PREF_USE_TOR)
+        private val RECONNECT_KEYS = setOf(Settings.CERT_ID.key, Settings.FORCE_TCP.key, Settings.USE_TOR.key)
 
         /** The preferences [onPreferenceChanged] reacts to. */
         private val OBSERVED_KEYS = SessionSettings.AUDIO_KEYS + RECONNECT_KEYS + setOf(
-            Settings.PREF_INPUT_METHOD,
-            Settings.PREF_HOT_CORNER_KEY,
-            Settings.PREF_USE_TTS,
-            Settings.PREF_SHORT_TTS_MESSAGES,
-            Settings.PREF_PTT_SOUND,
-            Settings.PREF_BLUETOOTH_SCO,
+            Settings.INPUT_METHOD.key,
+            Settings.HOT_CORNER.key,
+            Settings.USE_TTS.key,
+            Settings.SHORT_TTS_MESSAGES.key,
+            Settings.PTT_SOUND.key,
+            Settings.BLUETOOTH_SCO.key,
         )
     }
 }

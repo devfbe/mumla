@@ -53,7 +53,7 @@ class MediaKeyHandlerTest {
 
     private fun setAction(prefValue: String) {
         PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putString(Settings.PREF_MEDIA_BUTTON_ACTION, prefValue).commit()
+            .edit().putString(Settings.MEDIA_BUTTON_ACTION.key, prefValue).commit()
     }
 
     private fun press(keyCode: Int): Boolean {

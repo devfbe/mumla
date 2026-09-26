@@ -344,9 +344,9 @@ class ChannelFragment :
         private const val TAB_CHANNEL = 0
         private const val ARG_PINNED = "pinned"
         private val INPUT_PREFERENCES = setOf(
-            Settings.PREF_INPUT_METHOD,
-            Settings.PREF_PUSH_BUTTON_HIDE_KEY,
-            Settings.PREF_PTT_BUTTON_HEIGHT,
+            Settings.INPUT_METHOD.key,
+            Settings.PUSH_BUTTON_HIDE.key,
+            Settings.PTT_BUTTON_HEIGHT.key,
         )
     }
 }

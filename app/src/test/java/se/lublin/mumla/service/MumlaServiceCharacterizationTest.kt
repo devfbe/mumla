@@ -224,7 +224,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aMessageFromTheServerIsNotifiedAsFromTheServer() {
         connect()
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
 
         service.testEmit(HumlaEvent.TextMessage(textMessage("motd", actor = null)))
         idleMainLooper()
@@ -253,7 +253,7 @@ class MumlaServiceCharacterizationTest {
         val channel = mockk<Channel>(relaxed = true)
         every { channel.id } returns 4
         every { self.channel } returns channel
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
         service.testEmit(HumlaEvent.TextMessage(textMessage("coming?", actor = null)))
         idleMainLooper()
 
@@ -267,7 +267,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun anInlineReplyWithoutASessionSendsNothingAndRemovesTheNotification() {
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
 
         service.onStartCommand(replyIntent("hello"), 0, 1)
 
@@ -313,7 +313,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aReceivedMessageIsNotifiedWhenChatNotificationsAreOn() {
         connect()
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
 
         service.testEmit(HumlaEvent.TextMessage(textMessage("ping")))
         idleMainLooper()
@@ -324,7 +324,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aReceivedMessageIsNotNotifiedWhenChatNotificationsAreOff() {
         connect()
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, false).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, false).commit()
 
         service.testEmit(HumlaEvent.TextMessage(textMessage("ping")))
         idleMainLooper()
@@ -335,7 +335,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun aNotifiedMessageShowsItsTextWithoutMarkup() {
         connect()
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
 
         service.testEmit(HumlaEvent.TextMessage(textMessage("<b>hi</b> <a href=\"https://x.example\">there</a>")))
         idleMainLooper()
@@ -348,7 +348,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun clearChatNotificationsDismissesThem() {
         connect()
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
         service.testEmit(HumlaEvent.TextMessage(textMessage("ping")))
         idleMainLooper()
 
@@ -360,7 +360,7 @@ class MumlaServiceCharacterizationTest {
     private fun installTts(): TextToSpeech {
         val tts = mockk<TextToSpeech>(relaxed = true)
         service.tts = tts
-        preferences().edit().putBoolean(Settings.PREF_USE_TTS, true).commit()
+        preferences().edit().putBoolean(Settings.USE_TTS.key, true).commit()
         return tts
     }
 
@@ -387,7 +387,7 @@ class MumlaServiceCharacterizationTest {
     fun nothingIsSpokenWhenTextToSpeechIsOff() {
         connect()
         val tts = installTts()
-        preferences().edit().putBoolean(Settings.PREF_USE_TTS, false).commit()
+        preferences().edit().putBoolean(Settings.USE_TTS.key, false).commit()
 
         service.testEmit(HumlaEvent.TextMessage(textMessage("hi")))
         idleMainLooper()
@@ -424,8 +424,8 @@ class MumlaServiceCharacterizationTest {
     fun shortMessagesSpeakOnlyTheHostOfABareLink() {
         connect()
         val tts = installTts()
-        preferences().edit().putBoolean(Settings.PREF_SHORT_TTS_MESSAGES, true).commit()
-        service.onPreferenceChanged(Settings.PREF_SHORT_TTS_MESSAGES)
+        preferences().edit().putBoolean(Settings.SHORT_TTS_MESSAGES.key, true).commit()
+        service.onPreferenceChanged(Settings.SHORT_TTS_MESSAGES.key)
 
         service.testEmit(
             HumlaEvent.TextMessage(
@@ -460,15 +460,15 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun turningTextToSpeechOffShutsItDownAndOnCreatesIt() {
         val tts = installTts()
-        preferences().edit().putBoolean(Settings.PREF_USE_TTS, false).commit()
+        preferences().edit().putBoolean(Settings.USE_TTS.key, false).commit()
 
-        service.onPreferenceChanged(Settings.PREF_USE_TTS)
+        service.onPreferenceChanged(Settings.USE_TTS.key)
 
         verify(exactly = 1) { tts.shutdown() }
         assertThat(service.tts).isNull()
 
-        preferences().edit().putBoolean(Settings.PREF_USE_TTS, true).commit()
-        service.onPreferenceChanged(Settings.PREF_USE_TTS)
+        preferences().edit().putBoolean(Settings.USE_TTS.key, true).commit()
+        service.onPreferenceChanged(Settings.USE_TTS.key)
 
         assertThat(service.tts).isNotNull()
     }
@@ -486,7 +486,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun withTorTheTextSaysSo() {
-        preferences().edit().putBoolean(Settings.PREF_USE_TOR, true).commit()
+        preferences().edit().putBoolean(Settings.USE_TOR.key, true).commit()
 
         service.renderSessionState(SessionState.Connecting)
         idleMainLooper()
@@ -680,7 +680,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun synchronizingRestoresTheStoredMuteAndDeafenState() {
-        preferences().edit().putBoolean(Settings.PREF_MUTED, true).putBoolean(Settings.PREF_DEAFENED, true).commit()
+        preferences().edit().putBoolean(Settings.MUTED.key, true).putBoolean(Settings.DEAFENED.key, true).commit()
         connect()
 
         synchronize()
@@ -724,7 +724,7 @@ class MumlaServiceCharacterizationTest {
     fun synchronizingShowsTheHotCornerWhenAskedFor() {
         // Written while disconnected: the preference listener sees it and shows nothing yet.
         preferences().edit()
-            .putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_TOP_LEFT)
+            .putString(Settings.HOT_CORNER.key, Settings.ARRAY_HOT_CORNER_TOP_LEFT)
             .commit()
         verify(exactly = 0) { hotCorner.isShown = true }
         connect()
@@ -743,7 +743,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun aDisconnectTearsDownWhatTheSessionShowed() {
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
         connect()
         service.logWarning("old")
         service.testEmit(HumlaEvent.TextMessage(textMessage("ping")))
@@ -763,7 +763,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun theDisconnectedStateClearsTheChatLogAndTheChatNotification() {
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
         connect()
         service.logWarning("old")
         service.testEmit(HumlaEvent.TextMessage(textMessage("ping")))
@@ -780,8 +780,8 @@ class MumlaServiceCharacterizationTest {
 
     private fun pushToTalk(toggle: Boolean) {
         preferences().edit()
-            .putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_PTT)
-            .putBoolean(Settings.PREF_PTT_TOGGLE, toggle)
+            .putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT)
+            .putBoolean(Settings.PTT_TOGGLE.key, toggle)
             .commit()
     }
 
@@ -814,7 +814,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun theTalkKeysDoNothingOutsidePushToTalk() {
         connect()
-        preferences().edit().putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_VOICE).commit()
+        preferences().edit().putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_VOICE).commit()
 
         service.onTalkKeyDown()
         assertThat(service.isTalking).isFalse()
@@ -977,7 +977,7 @@ class MumlaServiceCharacterizationTest {
     fun switchingToPushToTalkShowsTheOverlayButton() {
         // The commits alone: the service is registered as the preference listener.
         pushToTalk(toggle = false)
-        preferences().edit().putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_VOICE).commit()
+        preferences().edit().putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_VOICE).commit()
 
         verify(exactly = 1) { overlay.setPushToTalkShown(true) }
         verify(exactly = 1) { overlay.setPushToTalkShown(false) }
@@ -985,21 +985,21 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun theHotCornerPreferenceMovesItAndShowsItOnlyWhileConnected() {
-        preferences().edit().putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_TOP_LEFT).commit()
+        preferences().edit().putString(Settings.HOT_CORNER.key, Settings.ARRAY_HOT_CORNER_TOP_LEFT).commit()
         verify { hotCorner.gravity = Settings.getInstance(app).hotCornerGravity }
         verify(exactly = 1) { hotCorner.isShown = false }
 
         connect()
-        service.onPreferenceChanged(Settings.PREF_HOT_CORNER_KEY)
+        service.onPreferenceChanged(Settings.HOT_CORNER.key)
         verify(exactly = 1) { hotCorner.isShown = true }
 
-        preferences().edit().putString(Settings.PREF_HOT_CORNER_KEY, Settings.ARRAY_HOT_CORNER_NONE).commit()
+        preferences().edit().putString(Settings.HOT_CORNER.key, Settings.ARRAY_HOT_CORNER_NONE).commit()
         verify(exactly = 2) { hotCorner.isShown = false }
     }
 
     @Test
     fun aSettingThatNeedsAReconnectSaysSoWhileConnected() {
-        for (key in listOf(Settings.PREF_CERT_ID, Settings.PREF_FORCE_TCP, Settings.PREF_USE_TOR)) {
+        for (key in listOf(Settings.CERT_ID.key, Settings.FORCE_TCP.key, Settings.USE_TOR.key)) {
             ShadowToast.reset()
             service.onPreferenceChanged(key)
             assertThat(ShadowToast.getLatestToast()).isNull()
@@ -1015,7 +1015,7 @@ class MumlaServiceCharacterizationTest {
     fun anOrdinarySettingSaysNothingAboutReconnecting() {
         connect()
 
-        service.onPreferenceChanged(Settings.PREF_PTT_SOUND)
+        service.onPreferenceChanged(Settings.PTT_SOUND.key)
 
         assertThat(ShadowToast.getLatestToast()).isNull()
     }
@@ -1050,7 +1050,7 @@ class MumlaServiceCharacterizationTest {
         service.renderSessionState(SessionState.Connecting)
         idleMainLooper()
 
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
 
         controller.destroy()
         destroyed = true
@@ -1065,7 +1065,7 @@ class MumlaServiceCharacterizationTest {
         service.testEmit(HumlaEvent.TextMessage(textMessage("after")))
         idleMainLooper()
         assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
-        preferences().edit().putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_PTT).commit()
+        preferences().edit().putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT).commit()
         verify(exactly = 0) { overlay.setPushToTalkShown(any()) }
     }
 
@@ -1077,7 +1077,7 @@ class MumlaServiceCharacterizationTest {
     private fun clickReady(): User {
         service.keyClickSound = { clicks++ }
         service.configure(SessionConfig(transmitMode = se.lublin.humla.util.Constants.TRANSMIT_PUSH_TO_TALK))
-        preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()
+        preferences().edit().putBoolean(Settings.PTT_SOUND.key, true).commit()
         connect()
         val talking = user(SELF)
         every { talking.talkState } returns TalkState.TALKING
@@ -1131,7 +1131,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun noClickWhenTheSoundIsOff() {
         val u = clickReady()
-        preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, false).commit()
+        preferences().edit().putBoolean(Settings.PTT_SOUND.key, false).commit()
         talk(u)
         assertThat(clicks).isEqualTo(0)
     }
@@ -1181,7 +1181,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun withTorTheConnectedTextAndThePromptSaySo() {
-        preferences().edit().putBoolean(Settings.PREF_USE_TOR, true).commit()
+        preferences().edit().putBoolean(Settings.USE_TOR.key, true).commit()
 
         service.renderSessionState(SessionState.Connecting)
         service.renderSessionState(SessionState.Connected)
@@ -1237,7 +1237,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun synchronizingRestoresADeafenStoredWithoutMute() {
-        preferences().edit().putBoolean(Settings.PREF_DEAFENED, true).commit()
+        preferences().edit().putBoolean(Settings.DEAFENED.key, true).commit()
         connect()
 
         synchronize()
@@ -1257,7 +1257,7 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun aSynchronizationTheSuperclassRejectsGoesNoFurther() {
-        preferences().edit().putBoolean(Settings.PREF_MUTED, true).commit()
+        preferences().edit().putBoolean(Settings.MUTED.key, true).commit()
         service.testConnection = null // super refuses it: IllegalStateException
 
         service.onConnectionSynchronized()
@@ -1268,7 +1268,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun destroyingTheServiceRemovesThePromptAndTheChatNotification() {
         connect()
-        preferences().edit().putBoolean(Settings.PREF_CHAT_NOTIFY, true).commit()
+        preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
         service.renderSessionState(SessionState.Disconnected(error()))
         service.testEmit(HumlaEvent.TextMessage(textMessage("ping")))
         idleMainLooper()

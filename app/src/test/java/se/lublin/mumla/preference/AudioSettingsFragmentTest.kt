@@ -149,7 +149,7 @@ class AudioSettingsFragmentTest {
         openAudio()
 
         PreferenceManager.getDefaultSharedPreferences(app).edit()
-            .putString(Settings.PREF_VAD_MODE, "amplitude").commit()
+            .putString(Settings.VAD_MODE.key, "amplitude").commit()
         idle()
 
         assertThat(capture.request).isNull()
@@ -164,7 +164,7 @@ class AudioSettingsFragmentTest {
         val first = capture.request
 
         PreferenceManager.getDefaultSharedPreferences(app).edit()
-            .putString(Settings.PREF_VAD_MODE, "amplitude").commit()
+            .putString(Settings.VAD_MODE.key, "amplitude").commit()
         idle()
 
         assertThat(capture.request).isNotSameInstanceAs(first)

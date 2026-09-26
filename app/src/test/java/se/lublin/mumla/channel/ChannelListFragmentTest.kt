@@ -182,7 +182,7 @@ class ChannelListFragmentTest {
         assertThat(changes()).isEqualTo(0)
 
         val shown = Settings.getInstance(controller.get()).shouldShowUserCount
-        preferences.edit { putBoolean(Settings.PREF_SHOW_USER_COUNT, !shown) }
+        preferences.edit { putBoolean(Settings.SHOW_USER_COUNT.key, !shown) }
         idleMainLooper()
 
         assertThat(changes()).isEqualTo(1)

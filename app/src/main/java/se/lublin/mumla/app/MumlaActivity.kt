@@ -128,7 +128,7 @@ class MumlaActivity :
 
         setStayAwake(settings.shouldStayAwake)
         lifecycleScope.launch {
-            PreferenceManager.getDefaultSharedPreferences(this@MumlaActivity).changes(Settings.PREF_STAY_AWAKE)
+            PreferenceManager.getDefaultSharedPreferences(this@MumlaActivity).changes(Settings.STAY_AWAKE.key)
                 .collect { setStayAwake(settings.shouldStayAwake) }
         }
 
