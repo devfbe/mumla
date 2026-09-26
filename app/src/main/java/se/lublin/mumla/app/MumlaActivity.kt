@@ -69,7 +69,7 @@ import java.security.cert.X509Certificate
 
 /**
  * The main screen: a drawer to pick between the server lists and the connected server's
- * screens, which it binds [MumlaService] for while resumed.
+ * screens, which it binds [MumlaService] for while started.
  */
 @Suppress("TooManyFunctions") // Framework callbacks, each delegating to the classes that do the work.
 class MumlaActivity :
@@ -183,15 +183,15 @@ class MumlaActivity :
         drawer.syncState()
     }
 
-    override fun onResume() {
-        super.onResume()
+    override fun onStart() {
+        super.onStart()
         // Changed in the settings screen, which recreates only itself.
         if (settings.isDynamicColorEnabled != themedWithDynamicColors) recreate()
         bindService(Intent(this, MumlaService::class.java), connection, 0)
     }
 
-    override fun onPause() {
-        super.onPause()
+    override fun onStop() {
+        super.onStop()
         dialogs.dismiss()
         batteryPrompt.dismiss()
         serviceModel.attach(null)
@@ -203,6 +203,7 @@ class MumlaActivity :
         super.onDestroy()
     }
 
+    /** Suppresses the service's notifications while the activity is visible, which it is while bound. */
     override fun onServiceBound(service: IMumlaService) {
         boundService = service
         service.setSuppressNotifications(true)
