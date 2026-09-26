@@ -29,7 +29,7 @@ import java.util.Collections
  * arriving. The UI redraws on the next `ChannelAdded` event, so a half-built subtree is only a frame
  * late.
  */
-class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false) : IChannel, Comparable<Channel> {
+class Channel(id: Int = 0, temporary: Boolean = false) : IChannel, Comparable<Channel> {
     override val id: Int = id
     @Volatile override var position = 0
     @Volatile override var isTemporary = temporary

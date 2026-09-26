@@ -46,7 +46,7 @@ class CaptureFrame internal constructor(val samples: ShortArray) {
  * tail, and the detector gets the resampler's actual count (0 is legal and yields
  * [VoiceActivityDetector.NO_SIGNAL]).
  */
-class CapturePipeline @JvmOverloads constructor(
+class CapturePipeline(
     resampler: Resampler?,
     private val preprocessor: CapturePreprocessor,
     private val inputMode: IInputMode,

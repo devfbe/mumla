@@ -357,12 +357,10 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
     }
 
     /** Sends what the user typed, formatted as the settings say. */
-    @Throws(HumlaDisconnectedException::class)
     private fun sendMessage(message: String) {
         sendHtml(outgoingMessageHtml(message, Settings.getInstance(requireContext()).isMarkdownEnabled))
     }
 
-    @Throws(HumlaDisconnectedException::class)
     private fun sendHtml(html: String) {
         val service = service
         if (service == null) {

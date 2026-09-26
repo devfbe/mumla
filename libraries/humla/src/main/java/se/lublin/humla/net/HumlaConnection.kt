@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [sendUDPMessage] may be called from any thread. State flags are only ever set, never cleared;
  * the cancelled scope closes [isConnected]/[isSynchronized].
  */
-class HumlaConnection @JvmOverloads constructor(
+class HumlaConnection(
     private val listener: HumlaConnectionListener,
     private val transports: TransportFactory = DefaultTransportFactory(),
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
@@ -582,7 +582,6 @@ class HumlaConnection @JvmOverloads constructor(
     }
 
     /** [peerHost] is the host the user entered, which the server certificate must match. */
-    @Throws(HumlaException::class)
     private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory {
         try {
             var keyStore: KeyStore? = null
@@ -794,7 +793,6 @@ class HumlaConnection @JvmOverloads constructor(
         }
 
         /** Message types that aren't shown in logcat, for annoying types like UDPTunnel. */
-        @JvmField
         val UNLOGGED_MESSAGES: Set<HumlaTCPMessageType> =
             setOf(HumlaTCPMessageType.UDPTunnel, HumlaTCPMessageType.Ping)
 
@@ -803,7 +801,6 @@ class HumlaConnection @JvmOverloads constructor(
         const val TOR_PORT = 9050
 
         /** Bandwidth in bps for audio with these parameters, including packet overhead. */
-        @JvmStatic
         fun calculateAudioBandwidth(bitrate: Int, framesPerPacket: Int): Int {
             // FIXME: assumes worst-case using TCP
             var overhead = 20 + 8 + 4 + 1 + 2 + 12 + framesPerPacket

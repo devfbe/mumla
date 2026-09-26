@@ -32,7 +32,6 @@ enum class VadMode(val preferenceValue: String) {
     ADAPTIVE("adaptive");
 
     companion object {
-        @JvmStatic
         fun fromPreferenceValue(value: String?): VadMode =
             entries.firstOrNull { it.preferenceValue == value } ?: AMPLITUDE
     }
@@ -80,8 +79,6 @@ data class VadConfig(
         const val MAX_HOLD_MS = Long.MAX_VALUE / 1_000_000L
 
         /** Legacy single slider: stop = start - 0.15. */
-        @JvmStatic
-        @JvmOverloads
         fun amplitude(
             threshold: Float,
             holdTimeMs: Long = DEFAULT_HOLD_MS,
@@ -94,8 +91,6 @@ data class VadConfig(
             )
         }
 
-        @JvmStatic
-        @JvmOverloads
         fun probability(
             start: Float = 0.6f,
             stop: Float = 0.3f,
@@ -103,8 +98,6 @@ data class VadConfig(
             onsetFrames: Int = DEFAULT_ONSET_FRAMES,
         ): VadConfig = VadConfig(VadMode.PROBABILITY, start, stop, holdTimeMs, onsetFrames = onsetFrames)
 
-        @JvmStatic
-        @JvmOverloads
         fun adaptive(
             snrFraction: Float = AdaptiveVadTracker.DEFAULT_FRACTION,
             holdTimeMs: Long = DEFAULT_HOLD_MS,
@@ -121,7 +114,6 @@ data class VadConfig(
             manualFloorDbfs = manualFloorDbfs,
         )
 
-        @JvmField
         val DEFAULT: VadConfig = probability()
     }
 }

@@ -46,7 +46,7 @@ import java.security.GeneralSecurityException
  * @param scope The connection's scope; its dispatcher delivers the callbacks.
  * @param socketFactory Creates the datagram socket the loops run on.
  */
-class HumlaUDP @JvmOverloads constructor(
+class HumlaUDP(
     private val cryptState: CryptState,
     private val listener: UDPConnectionListener,
     private val scope: CoroutineScope,

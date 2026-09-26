@@ -20,7 +20,6 @@ package se.lublin.humla.audio
 import android.content.Context
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.IInputMode
-import se.lublin.humla.exception.AudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.TcpMessageHandler
@@ -57,7 +56,6 @@ data class AudioSessionParams(
 )
 
 interface AudioHandlerFactory {
-    @Throws(AudioException::class)
     fun create(
         context: Context,
         logger: HumlaLogger,
@@ -76,7 +74,6 @@ class DefaultAudioHandlerFactory(
     /** The builder [builder] fills; tests pass one that records the setter calls. */
     private val newBuilder: () -> AudioHandler.Builder = { AudioHandler.Builder() },
 ) : AudioHandlerFactory {
-    @Throws(AudioException::class)
     override fun create(
         context: Context,
         logger: HumlaLogger,
@@ -92,7 +89,6 @@ class DefaultAudioHandlerFactory(
      * The per-session arguments. `self` carries the session id stamped on every voice packet, so a
      * wrong one means sending as somebody else.
      */
-    @Throws(AudioException::class)
     internal fun initialize(builder: AudioHandler.Builder, params: AudioSessionParams): AudioHandler =
         builder.initialize(params.self, params.maxBandwidth, params.codec, params.targetId)
 

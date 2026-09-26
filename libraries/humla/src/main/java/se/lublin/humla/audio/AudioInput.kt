@@ -27,7 +27,6 @@ import se.lublin.humla.audio.capture.CaptureRequest
 import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.PcmCaptureSource
-import se.lublin.humla.exception.AudioInitializationException
 
 /**
  * Owns the capture thread and pumps 10 ms frames from a [PcmCaptureSource] to [listener].
@@ -44,7 +43,6 @@ class AudioInput(
 ) {
     /** Opens an [AndroidAudioRecordSource] for [audioSource] at [targetSampleRate]. */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    @Throws(AudioInitializationException::class)
     constructor(
         listener: AudioInputListener,
         audioSource: Int,

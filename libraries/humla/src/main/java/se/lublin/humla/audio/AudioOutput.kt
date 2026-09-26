@@ -45,7 +45,7 @@ import kotlin.concurrent.withLock
  * @param farEnd receives every mixed buffer as the AEC3 far-end reference, or null when the
  *               WebRTC canceller is not in the capture chain. Used only by the playback thread.
  */
-class AudioOutput @JvmOverloads constructor(
+class AudioOutput(
     private val listener: AudioOutputListener,
     private val farEnd: FarEndFrameChunker?,
     /** Builds one user's decoder chain; the seam JVM tests use to run without native codecs. */
@@ -55,7 +55,6 @@ class AudioOutput @JvmOverloads constructor(
 ) : Runnable, AudioOutputSpeech.TalkStateListener {
 
     fun interface SpeechFactory {
-        @Throws(NativeAudioException::class)
         fun create(
             user: User,
             requestedSamples: Int,
@@ -94,7 +93,6 @@ class AudioOutput @JvmOverloads constructor(
         speech.destroy()
     }
 
-    @Throws(AudioInitializationException::class)
     fun startPlaying(audioStream: Int): Thread? {
         if (thread != null || running) return null
 
@@ -122,7 +120,6 @@ class AudioOutput @JvmOverloads constructor(
         return t
     }
 
-    @Throws(AudioInitializationException::class)
     private fun buildTrack(audioStream: Int, bytes: Int): AudioTrack = try {
         AudioTrack.Builder()
             .setAudioAttributes(playbackAttributes(audioStream))

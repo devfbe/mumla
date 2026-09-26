@@ -37,7 +37,6 @@ import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.inputmode.ActivityInputMode
-import se.lublin.humla.exception.AudioInitializationException
 
 /**
  * One frame's worth of everything the level meter draws. Levels are dBFS; `null` means the mode
@@ -99,7 +98,6 @@ class AudioTestSession(
     /** Forgets what the tracker has learned, which is the screen's "measure again". */
     fun recalibrate() = detector.recalibrate()
 
-    @Throws(AudioInitializationException::class)
     fun start() {
         check(thread == null) { "already started" }
         // Route capture exactly like the service will, or the preview calibrates a different setup.

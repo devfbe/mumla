@@ -44,8 +44,6 @@ object CaptureWiring {
      * @param inputSampleRate a resampler is inserted when it differs from [AudioHandler.SAMPLE_RATE].
      * @param logger receives a user-visible line for each stage that could not be built.
      */
-    @JvmStatic
-    @JvmOverloads
     fun wire(
         inputSampleRate: Int,
         inputMode: IInputMode,

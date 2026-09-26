@@ -128,7 +128,6 @@ class VoiceActivityDetector(
         const val NO_SIGNAL = -1f
 
         /** [amplitudeScore] in dBFS. */
-        @JvmStatic
         fun levelDbfs(pcm: ShortArray, length: Int): Float = scoreToDbfs(amplitudeScore(pcm, length))
 
         private fun scoreToDbfs(score: Float): Float = (score - 1f) * 96f

@@ -56,7 +56,6 @@ enum class HumlaTCPMessageType(private val parser: Parser<out MessageLite>?) {
     PluginDataTransmission(Mumble.PluginDataTransmission.parser());
 
     /** Parses a received payload of this type. */
-    @Throws(InvalidProtocolBufferException::class)
     fun parse(data: ByteArray): MessageLite =
         parser?.parseFrom(data) ?: throw InvalidProtocolBufferException("$name is never sent by a server")
 }

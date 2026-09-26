@@ -29,8 +29,6 @@ object MumbleURLParser {
      * @return a server with the user, password, host and port of [url].
      * @throws MalformedURLException if the URL is null, cannot be parsed or has a port outside 1..65535.
      */
-    @JvmStatic
-    @Throws(MalformedURLException::class)
     fun parseURL(url: String?): Server {
         if (url == null) throw MalformedURLException("null URL")
         val groups = (URL_PATTERN.find(url) ?: throw MalformedURLException()).groups

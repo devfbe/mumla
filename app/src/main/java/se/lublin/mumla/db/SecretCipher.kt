@@ -30,10 +30,8 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Authenticated encryption of small secrets. Both calls throw when the key is unusable. */
 interface SecretCipher {
-    @Throws(GeneralSecurityException::class)
     fun encrypt(plain: ByteArray): ByteArray
 
-    @Throws(GeneralSecurityException::class)
     fun decrypt(sealed: ByteArray): ByteArray
 }
 

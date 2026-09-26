@@ -29,12 +29,10 @@ import android.media.MediaRecorder
  * runs in front of ours.
  */
 object AudioSourcePolicy {
-    @JvmStatic
     fun needsCommunicationMode(effects: AndroidAudioEffects, echo: EchoCancellationMode): Boolean =
         effects.any || echo != EchoCancellationMode.NONE
 
     /** @return [requested] untouched, or `VOICE_COMMUNICATION` when [needsCommunicationMode]. */
-    @JvmStatic
     fun resolve(requested: Int, effects: AndroidAudioEffects, echo: EchoCancellationMode): Int =
         if (needsCommunicationMode(effects, echo)) MediaRecorder.AudioSource.VOICE_COMMUNICATION else requested
 }

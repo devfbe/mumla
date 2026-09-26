@@ -121,7 +121,7 @@
     <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$fun decodeAsServer(packet: ByteArray): Long?</ID>
     <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
     <ID>ReturnCount:PcmCaptureSource.kt$AndroidAudioRecordSource.Factory$@SuppressLint("MissingPermission") private fun tryOpen(source: Int, rate: Int): AudioRecord?</ID>
-    <ID>ReturnCount:ServerTrust.kt$HostnameMatcher$@JvmStatic fun matches(host: String, certificate: X509Certificate): Boolean</ID>
+    <ID>ReturnCount:ServerTrust.kt$HostnameMatcher$fun matches(host: String, certificate: X509Certificate): Boolean</ID>
     <ID>ReturnCount:ServerTrust.kt$HostnameMatcher$private fun matchesDnsName(host: String, pattern: String?): Boolean</ID>
     <ID>ReturnCount:SpeexPreprocessor.kt$SpeexPreprocessor$override fun onCaptureFrame(handle: Long, frame: ShortArray): Float?</ID>
     <ID>ReturnCount:UdpHealthMonitor.kt$UdpHealthMonitor$fun onTcpPing(nowMicros: Long, localGood: Int, remoteGood: Int, usingUdp: Boolean): Decision</ID>
@@ -134,7 +134,7 @@
     <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: CertificateParsingException</ID>
     <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
     <ID>SwallowedException:UdpPing.kt$UdpPing$e: BufferUnderflowException</ID>
-    <ID>ThrowsCount:HumlaConnection.kt$HumlaConnection$@Throws(HumlaException::class) private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory</ID>
+    <ID>ThrowsCount:HumlaConnection.kt$HumlaConnection$private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory</ID>
     <ID>TooGenericExceptionCaught:AudioController.kt$AudioController$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CapturePreprocessorFactory.kt$CapturePreprocessorFactory$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:CommunicationDevices.kt$AndroidCommunicationDevices$e: RuntimeException</ID>

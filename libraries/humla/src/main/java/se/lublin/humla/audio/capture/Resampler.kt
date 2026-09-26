@@ -42,7 +42,7 @@ interface Resampler {
  * `outLen`, so the preset `outLen[0] = output.size` would otherwise report a full frame and resend
  * the previous frame's stale buffer contents.
  */
-class SpeexResampler @JvmOverloads constructor(
+class SpeexResampler(
     inputRate: Int,
     outputRate: Int,
     quality: Int = DEFAULT_QUALITY,

@@ -38,7 +38,6 @@ enum class AudioDeviceCategory(
     OTHER(false);
 
     companion object {
-        @JvmStatic
         fun of(type: Int): AudioDeviceCategory = when (type) {
             AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> SPEAKER
             AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> EARPIECE

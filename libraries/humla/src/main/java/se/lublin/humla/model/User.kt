@@ -22,7 +22,7 @@ import com.google.protobuf.ByteString
  * A user of the server tree. Mutated on the protocol and audio threads and read from the main
  * thread, so every field is volatile. The list a user appears in belongs to its [Channel].
  */
-class User @JvmOverloads constructor(session: Int = 0, name: String? = null) : IUser, Comparable<User> {
+class User(session: Int = 0, name: String? = null) : IUser, Comparable<User> {
     override val session: Int = session
 
     /** Setting it moves the user out of their last channel's list and into the new one's. */

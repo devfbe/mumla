@@ -79,7 +79,6 @@ class HumlaTCP(
         this.listener = listener
     }
 
-    @Throws(ConnectException::class)
     override fun connect(host: String, port: Int, useTor: Boolean) {
         if (!connectCalled.compareAndSet(false, true)) throw ConnectException("HumlaTCP is single-use")
         running = true
@@ -272,8 +271,6 @@ class HumlaTCP(
          * Reads one frame: int16 type, int32 length, payload. Returns null (payload consumed) for
          * a type this client does not know, so the stream stays in sync.
          */
-        @JvmStatic
-        @Throws(IOException::class)
         fun readFrame(input: DataInputStream): TcpFrame? {
             val messageType = input.readShort().toInt()
             val length = input.readInt()

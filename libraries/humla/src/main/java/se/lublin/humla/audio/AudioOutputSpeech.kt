@@ -36,7 +36,7 @@ import kotlin.math.sin
  * [opusApi] and [jitterApi] are the seams JVM tests use to run without native libraries; they
  * default to the `*Native` objects, which load the native library on first touch.
  */
-class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) constructor(
+class AudioOutputSpeech(
     val user: User,
     private var requestedSamples: Int,
     private val talkStateListener: TalkStateListener,

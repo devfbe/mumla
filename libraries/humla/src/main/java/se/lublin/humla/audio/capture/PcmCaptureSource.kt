@@ -73,7 +73,6 @@ data class CaptureRequest(
 )
 
 fun interface PcmCaptureSourceFactory {
-    @Throws(AudioInitializationException::class)
     fun open(request: CaptureRequest): PcmCaptureSource
 }
 
@@ -137,7 +136,6 @@ class AndroidAudioRecordSource internal constructor(
     class Factory : PcmCaptureSourceFactory {
         // RECORD_AUDIO is requested by the app; AudioHandler's constructor checks it before this.
         @SuppressLint("MissingPermission")
-        @Throws(AudioInitializationException::class)
         override fun open(request: CaptureRequest): PcmCaptureSource {
             val source = AudioSourcePolicy.resolve(request.audioSource, request.effects, request.echo)
             val rates = listOf(request.targetSampleRate) + SAMPLE_RATES.filter { it != request.targetSampleRate }
@@ -218,7 +216,6 @@ class AndroidAudioRecordSource internal constructor(
         const val ERROR_RELEASED = -100
 
         /** Probed in order after the requested rate, which is tried first. */
-        @JvmField
         val SAMPLE_RATES = intArrayOf(48000, 44100, 16000, 8000)
     }
 }

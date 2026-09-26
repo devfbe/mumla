@@ -21,7 +21,7 @@ import se.lublin.humla.audio.native.SpeexJitterApi
 import se.lublin.humla.audio.native.SpeexJitterNative
 
 /** Object wrapper around the speexdsp jitter buffer. */
-class SpeexJitterBuffer @JvmOverloads constructor(
+class SpeexJitterBuffer(
     stepSize: Int,
     private val api: SpeexJitterApi = SpeexJitterNative,
 ) {

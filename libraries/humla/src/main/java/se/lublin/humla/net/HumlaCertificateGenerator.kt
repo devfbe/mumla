@@ -33,17 +33,12 @@ import org.bouncycastle.pkcs.PKCS12SafeBagBuilder
 import org.bouncycastle.pkcs.PKCS12PfxPduBuilder
 import org.bouncycastle.pkcs.jcajce.JcaPKCS12SafeBagBuilder
 import org.bouncycastle.pkcs.jcajce.JcePKCS12MacCalculatorBuilder
-import java.io.IOException
 import java.io.OutputStream
 import java.math.BigInteger
 import java.security.GeneralSecurityException
 import java.security.KeyPairGenerator
-import java.security.KeyStoreException
 import java.security.MessageDigest
-import java.security.NoSuchAlgorithmException
-import java.security.NoSuchProviderException
 import java.security.SecureRandom
-import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import java.util.Calendar
 import java.util.Date
@@ -60,15 +55,6 @@ object HumlaCertificateGenerator {
      */
     private const val MAC_ITERATIONS = 2048
 
-    @JvmStatic
-    @Throws(
-        NoSuchAlgorithmException::class,
-        GeneralSecurityException::class,
-        CertificateException::class,
-        KeyStoreException::class,
-        NoSuchProviderException::class,
-        IOException::class,
-    )
     fun generateCertificate(output: OutputStream): X509Certificate {
         // BouncyCastle provider instance: supports creating X509 certs and PKCS#12 stores.
         val provider = BouncyCastleProvider()
