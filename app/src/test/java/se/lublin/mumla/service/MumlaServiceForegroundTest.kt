@@ -369,9 +369,9 @@ class MumlaServiceForegroundTest {
             .putBoolean(se.lublin.mumla.Settings.PREF_SHORT_TTS_MESSAGES, true)
             .commit()
         val fresh = createMumlaService().get()
-        assertThat(fresh.mTTS).isNotNull()
-        assertThat(fresh.mPTTSoundEnabled).isTrue()
-        assertThat(fresh.mShortTtsMessagesEnabled).isTrue()
+        assertThat(fresh.tts).isNotNull()
+        assertThat(fresh.pttSoundEnabled).isTrue()
+        assertThat(fresh.shortTtsMessagesEnabled).isTrue()
         fresh.onDestroy()
     }
 }

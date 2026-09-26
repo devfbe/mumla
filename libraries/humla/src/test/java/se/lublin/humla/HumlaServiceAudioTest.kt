@@ -119,7 +119,7 @@ class HumlaServiceAudioTest {
         ).isTrue()
     }
 
-    private fun inputModeOf(h: HumlaServiceHarness): Any = h.service.mInputMode
+    private fun inputModeOf(h: HumlaServiceHarness): Any = h.service.inputMode
 
     /**
      * A voice target set while the socket is up but before synchronization reaches the pipeline
@@ -252,7 +252,7 @@ class HumlaServiceAudioTest {
         awaitUntil(description = "the control thread ended") { !controller.thread.isAlive }
     }
 
-    private fun controllerOf(h: HumlaServiceHarness): AudioController = h.service.mAudioController
+    private fun controllerOf(h: HumlaServiceHarness): AudioController = h.service.audioController
 
     /**
      * A disconnect between the server's sync and its delivery on the main looper: no pipeline is

@@ -69,7 +69,7 @@ class HumlaServiceCharacterizationTest {
     }
 
     /** The input mode in force. */
-    private fun inputMode(service: HumlaService): Any = service.mInputMode
+    private fun inputMode(service: HumlaService): Any = service.inputMode
 
     /**
      * A service that cancels every connection attempt on `Connecting`, which a main-thread
@@ -143,7 +143,7 @@ class HumlaServiceCharacterizationTest {
 
         val binder = service.onBind(Intent()) as HumlaService.HumlaBinder
 
-        assertThat(binder.getService()).isSameInstanceAs(service)
+        assertThat(binder.service).isSameInstanceAs(service)
     }
 
     // ---------------------------------------------------------------- start and configure

@@ -46,7 +46,7 @@ fun startServerConnect(context: Context, server: Server): Job {
             intent,
             object : ServiceConnection {
                 override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                    (binder as? MumlaService.MumlaBinder)?.getService()?.run {
+                    (binder as? MumlaService.MumlaBinder)?.service?.run {
                         configure(config)
                         connect()
                     }

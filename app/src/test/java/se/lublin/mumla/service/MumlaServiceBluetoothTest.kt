@@ -50,7 +50,7 @@ class MumlaServiceBluetoothTest {
     }
 
     /**
-     * A synchronized connection. mModelHandler stays null, so the superclass hook returns before
+     * A synchronized connection. modelHandler stays null, so the superclass hook returns before
      * building an AudioHandler and skips engaging the router; that is done here instead.
      */
     private fun connect() {

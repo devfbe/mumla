@@ -38,24 +38,24 @@ class User(session: Int = 0, name: String? = null) : IUser, Comparable<User> {
     @Volatile override var comment: String? = null
     @Volatile override var hash: String? = null
 
-    @Volatile private var mCommentHash: ByteString? = null
-    @Volatile private var mTexture: ByteString? = null
-    @Volatile private var mTextureHash: ByteString? = null
+    @Volatile private var _commentHash: ByteString? = null
+    @Volatile private var _texture: ByteString? = null
+    @Volatile private var _textureHash: ByteString? = null
 
-    override val commentHash: ByteArray? get() = mCommentHash?.toByteArray()
-    override val texture: ByteArray? get() = mTexture?.toByteArray()
-    override val textureHash: ByteArray? get() = mTextureHash?.toByteArray()
+    override val commentHash: ByteArray? get() = _commentHash?.toByteArray()
+    override val texture: ByteArray? get() = _texture?.toByteArray()
+    override val textureHash: ByteArray? get() = _textureHash?.toByteArray()
 
     fun setCommentHash(commentHash: ByteString?) {
-        mCommentHash = commentHash
+        _commentHash = commentHash
     }
 
     fun setTexture(texture: ByteString?) {
-        mTexture = texture
+        _texture = texture
     }
 
     fun setTextureHash(textureHash: ByteString?) {
-        mTextureHash = textureHash
+        _textureHash = textureHash
     }
 
     @Volatile override var isMuted = false

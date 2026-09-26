@@ -83,8 +83,8 @@ class MumlaServiceCharacterizationTest {
         service = controller.get()
         overlay = mockk(relaxed = true)
         hotCorner = mockk(relaxed = true)
-        service.mChannelOverlay = overlay
-        service.mHotCorner = hotCorner
+        service.channelOverlay = overlay
+        service.hotCorner = hotCorner
     }
 
     private var destroyed = false
@@ -359,7 +359,7 @@ class MumlaServiceCharacterizationTest {
 
     private fun installTts(): TextToSpeech {
         val tts = mockk<TextToSpeech>(relaxed = true)
-        service.mTTS = tts
+        service.tts = tts
         preferences().edit().putBoolean(Settings.PREF_USE_TTS, true).commit()
         return tts
     }
@@ -465,12 +465,12 @@ class MumlaServiceCharacterizationTest {
         service.onPreferenceChanged(Settings.PREF_USE_TTS)
 
         verify(exactly = 1) { tts.shutdown() }
-        assertThat(service.mTTS).isNull()
+        assertThat(service.tts).isNull()
 
         preferences().edit().putBoolean(Settings.PREF_USE_TTS, true).commit()
         service.onPreferenceChanged(Settings.PREF_USE_TTS)
 
-        assertThat(service.mTTS).isNotNull()
+        assertThat(service.tts).isNotNull()
     }
 
     // ---- the foreground notification ------------------------------------------------------------
@@ -735,7 +735,7 @@ class MumlaServiceCharacterizationTest {
     }
 
     private fun proximityLockHeld(): Boolean {
-        val lock = service.mProximityLock
+        val lock = service.proximityLock
         return lock != null && lock.isHeld &&
             shadowOf(lock).tag == "Mumla:Proximity" &&
             ShadowPowerManager.getLatestWakeLock() === lock
@@ -756,7 +756,7 @@ class MumlaServiceCharacterizationTest {
         assertThat(talkReceivers()).isEmpty()
         verify { overlay.hide() }
         verify { hotCorner.isShown = false }
-        assertThat(service.mProximityLock).isNull()
+        assertThat(service.proximityLock).isNull()
         // The chat log and the chat notification survive a loss; only Disconnected clears them.
         assertThat(service.messageLog.value).isNotEmpty()
     }
@@ -963,7 +963,7 @@ class MumlaServiceCharacterizationTest {
     fun theHotCornerDrivesTheTalkKeys() {
         connect()
         pushToTalk(toggle = false)
-        val listener = service.mHotCornerListener
+        val listener = service.hotCornerListener
 
         listener.onHotCornerDown()
         assertThat(service.isTalking).isTrue()
@@ -1026,7 +1026,7 @@ class MumlaServiceCharacterizationTest {
     fun theBinderHandsOutThisService() {
         val binder = service.onBind(Intent()) as MumlaService.MumlaBinder
 
-        assertThat(binder.getService()).isSameInstanceAs(service)
+        assertThat(binder.service).isSameInstanceAs(service)
     }
 
     @Test

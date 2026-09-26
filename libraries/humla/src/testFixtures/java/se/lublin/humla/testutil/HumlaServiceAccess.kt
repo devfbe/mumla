@@ -30,24 +30,24 @@ import se.lublin.humla.session.SessionStateMachine
 
 /** Publishes [event] as the service would, bypassing the service's own filtering. */
 fun HumlaService.testEmit(event: HumlaEvent) {
-    check(mEvents.tryEmit(event)) { "event not accepted: $event" }
+    check(mutableEvents.tryEmit(event)) { "event not accepted: $event" }
 }
 
-val HumlaService.testStateMachine: SessionStateMachine get() = mStateMachine
+val HumlaService.testStateMachine: SessionStateMachine get() = stateMachine
 
-val HumlaService.testRouter: AudioRouter get() = mRouter
+val HumlaService.testRouter: AudioRouter get() = router
 
-val HumlaService.testActivityInputMode: ActivityInputMode get() = mActivityInputMode
+val HumlaService.testActivityInputMode: ActivityInputMode get() = activityInputMode
 
 /** Replaces the live connection, e.g. with a mock, to reach a session state without a server. */
 var HumlaService.testConnection: HumlaConnection?
-    get() = mConnection
+    get() = connection
     set(value) {
-        mConnection = value
+        connection = value
     }
 
 var HumlaService.testModelHandler: ModelHandler?
-    get() = mModelHandler
+    get() = modelHandler
     set(value) {
-        mModelHandler = value
+        modelHandler = value
     }

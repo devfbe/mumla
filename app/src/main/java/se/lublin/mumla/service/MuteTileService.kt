@@ -45,7 +45,7 @@ class MuteTileService : TileService() {
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            val service = (binder as? MumlaService.MumlaBinder)?.getService() ?: return
+            val service = (binder as? MumlaService.MumlaBinder)?.service ?: return
             this@MuteTileService.service = service
             val scope = scope ?: return
             scope.launch { service.sessionState.collect { render() } }

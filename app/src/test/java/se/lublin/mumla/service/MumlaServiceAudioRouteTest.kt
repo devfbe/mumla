@@ -67,7 +67,7 @@ class MumlaServiceAudioRouteTest {
 
     private fun router(): AudioRouter = service.testRouter
 
-    private fun proximityLock(): PowerManager.WakeLock? = service.mProximityLock
+    private fun proximityLock(): PowerManager.WakeLock? = service.proximityLock
 
     private fun proximityLockHeld(): Boolean {
         val lock = proximityLock()

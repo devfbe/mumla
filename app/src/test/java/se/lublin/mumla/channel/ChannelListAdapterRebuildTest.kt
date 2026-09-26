@@ -522,7 +522,7 @@ class ChannelListAdapterRebuildTest {
 
     /**
      * A null in `getUsers()` gets no row but is still counted, matching
-     * `Channel.subchannelUserCount` (`mUsers.size()`).
+     * `Channel.subchannelUserCount` (`_users.size()`).
      */
     @Test
     fun aUserTheModelHasNotFilledInYetIsCountedButGetsNoRow() {

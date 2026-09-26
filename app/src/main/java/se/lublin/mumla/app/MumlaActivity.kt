@@ -101,7 +101,7 @@ class MumlaActivity :
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            serviceModel.attach((binder as? MumlaService.MumlaBinder)?.getService())
+            serviceModel.attach((binder as? MumlaService.MumlaBinder)?.service)
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
