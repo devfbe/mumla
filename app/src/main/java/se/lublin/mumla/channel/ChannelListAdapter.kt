@@ -129,132 +129,106 @@ class ChannelListAdapter(
         val channel = node.channel
         val user = node.user
         val listener = node.listener
-        if (listener != null) {
-            bindListener(viewHolder as ListenerViewHolder, node, listener)
-        } else if (channel != null) {
-            val cvh = viewHolder as ChannelViewHolder
-            cvh.itemView.setOnClickListener {
-                onChannelClick?.invoke(channel)
-            }
+        when {
+            listener != null -> bindListener(viewHolder as ListenerViewHolder, node, listener)
+            channel != null -> bindChannel(viewHolder as ChannelViewHolder, node, channel)
+            user != null -> bindUser(viewHolder as UserViewHolder, node, user)
+        }
+    }
 
-            val expandUsable = node.hasSubchannels || node.subtreeUserCount > 0 || node.subtreeListenerCount > 0
-            cvh.channelExpandToggle.setImageResource(
-                if (node.isExpanded) R.drawable.ic_action_expanded
-                else R.drawable.ic_action_collapsed
-            )
-            cvh.channelExpandToggle.contentDescription =
-                context.getString(if (node.isExpanded) R.string.a11y_collapse else R.string.expand)
-            cvh.channelExpandToggle.setOnClickListener {
-                expandedChannels[channel.id] = !node.isExpanded
-                updateChannels()
-            }
-            // Dim channel expand toggle when no subchannels exist
-            cvh.channelExpandToggle.isEnabled = expandUsable
-            cvh.channelExpandToggle.visibility = if (expandUsable) View.VISIBLE else View.INVISIBLE
+    private fun bindChannel(cvh: ChannelViewHolder, node: Node, channel: IChannel) {
+        cvh.itemView.setOnClickListener { onChannelClick?.invoke(channel) }
 
-            cvh.channelName.text = channel.name
+        val expandUsable = node.hasSubchannels || node.subtreeUserCount > 0 || node.subtreeListenerCount > 0
+        cvh.channelExpandToggle.setImageResource(
+            if (node.isExpanded) R.drawable.ic_action_expanded else R.drawable.ic_action_collapsed,
+        )
+        cvh.channelExpandToggle.contentDescription =
+            context.getString(if (node.isExpanded) R.string.a11y_collapse else R.string.expand)
+        cvh.channelExpandToggle.setOnClickListener {
+            expandedChannels[channel.id] = !node.isExpanded
+            updateChannels()
+        }
+        cvh.channelExpandToggle.isEnabled = expandUsable
+        cvh.channelExpandToggle.visibility = if (expandUsable) View.VISIBLE else View.INVISIBLE
 
-            // Named flags rather than `or`: lint refuses combined Typeface @IntDef styles.
-            var bold = false
-            var italic = false
-            val service = humlaService
-            if (service.isConnected) {
-                val session = service.session
-                var ourChan: IChannel? = null
-                try {
-                    ourChan = session.sessionChannel
-                } catch (e: IllegalStateException) {
-                    Log.d(TAG, "exception in onBindViewHolder: $e")
-                }
-                if (ourChan != null) {
-                    val links = channel.links
-                    if (channel == ourChan) {
-                        bold = true
-                        // Always italicize our current channel if it has a link.
-                        if (links.isNotEmpty()) {
-                            italic = true
-                        }
-                    }
-                    // Italicize channels in a link with our current channel.
-                    if (links.contains(ourChan)) {
-                        italic = true
-                    }
-                }
-            }
-            cvh.channelName.setTypeface(
-                null,
-                when {
-                    bold && italic -> Typeface.BOLD_ITALIC
-                    bold -> Typeface.BOLD
-                    italic -> Typeface.ITALIC
-                    else -> Typeface.NORMAL
-                },
-            )
+        cvh.channelName.text = channel.name
+        cvh.channelName.setTypeface(null, channelTypeface(channel))
 
-            if (showChannelUserCount) {
-                cvh.channelUserCount.visibility = View.VISIBLE
-                cvh.channelUserCount.text = String.format("%d", node.subtreeUserCount)
-            } else {
-                cvh.channelUserCount.visibility = View.GONE
-            }
+        if (showChannelUserCount) {
+            cvh.channelUserCount.visibility = View.VISIBLE
+            cvh.channelUserCount.text = String.format("%d", node.subtreeUserCount)
+        } else {
+            cvh.channelUserCount.visibility = View.GONE
+        }
 
-            indent(cvh.channelHolder, node.depth)
+        indent(cvh.channelHolder, node.depth)
 
-            bindEnterRestriction(cvh, channel)
-            cvh.joinButton.setOnClickListener {
-                val current = humlaService
-                if (current.isConnected) {
-                    current.session.joinOrExplain(context, channel)
-                }
-            }
+        bindEnterRestriction(cvh, channel)
+        cvh.joinButton.setOnClickListener {
+            val current = humlaService
+            if (current.isConnected) current.session.joinOrExplain(context, channel)
+        }
+        cvh.moreButton.setOnClickListener { v ->
+            ChannelMenu(context, channel, humlaService, repository.pinnedChannels, fragmentManager).showPopup(v)
+        }
+        cvh.itemView.setOnLongClickListener {
+            cvh.moreButton.performClick()
+            true
+        }
+    }
 
-            cvh.moreButton.setOnClickListener { v ->
-                ChannelMenu(context, channel, humlaService, repository.pinnedChannels, fragmentManager).showPopup(v)
-            }
-
-            cvh.itemView.setOnLongClickListener {
-                cvh.moreButton.performClick()
-                true
-            }
-        } else if (user != null) {
-            val uvh = viewHolder as UserViewHolder
-            uvh.itemView.setOnClickListener {
-                onUserClick?.invoke(user)
-            }
-
-            uvh.userName.text = user.name
-
-            var selfSession = -1
-            val service = humlaService
+    /** Bold for our channel, italic for a channel linked with it (and for ours if it has links). */
+    private fun channelTypeface(channel: IChannel): Int {
+        val service = humlaService
+        val ourChannel = if (service.isConnected) {
             try {
-                selfSession = service.session.sessionId
-            } catch (e: HumlaDisconnectedException) {
-                Log.d(TAG, "exception in onBindViewHolder: $e")
+                service.session.sessionChannel
             } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in onBindViewHolder: $e")
+                Log.d(TAG, "exception in channelTypeface: $e")
+                null
             }
+        } else {
+            null
+        }
+        if (ourChannel == null) return Typeface.NORMAL
+        val ours = channel == ourChannel
+        val linked = channel.links.contains(ourChannel) || (ours && channel.links.isNotEmpty())
+        // Separate constants rather than `or`: lint refuses combined Typeface @IntDef styles.
+        return when {
+            ours && linked -> Typeface.BOLD_ITALIC
+            ours -> Typeface.BOLD
+            linked -> Typeface.ITALIC
+            else -> Typeface.NORMAL
+        }
+    }
 
-            uvh.userName.setTypeface(
-                null,
-                if (service.isConnected && user.session == selfSession) {
-                    Typeface.BOLD
-                } else {
-                    Typeface.NORMAL
-                },
-            )
+    private fun bindUser(uvh: UserViewHolder, node: Node, user: IUser) {
+        uvh.itemView.setOnClickListener { onUserClick?.invoke(user) }
+        uvh.userName.text = user.name
 
-            bindTalkState(uvh, user)
+        val service = humlaService
+        val selfSession = try {
+            service.session.sessionId
+        } catch (e: HumlaDisconnectedException) {
+            Log.d(TAG, "exception in bindUser: $e")
+            -1
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "exception in bindUser: $e")
+            -1
+        }
+        val isSelf = service.isConnected && user.session == selfSession
+        uvh.userName.setTypeface(null, if (isSelf) Typeface.BOLD else Typeface.NORMAL)
 
-            indent(uvh.userHolder, node.depth + 1)
+        bindTalkState(uvh, user)
+        indent(uvh.userHolder, node.depth + 1)
 
-            uvh.moreButton.setOnClickListener { v ->
-                UserMenu(context, user, humlaService, fragmentManager, ::onLocalUserStateUpdated).showPopup(v)
-            }
-
-            uvh.itemView.setOnLongClickListener {
-                uvh.moreButton.performClick()
-                true
-            }
+        uvh.moreButton.setOnClickListener { v ->
+            UserMenu(context, user, humlaService, fragmentManager, ::onLocalUserStateUpdated).showPopup(v)
+        }
+        uvh.itemView.setOnLongClickListener {
+            uvh.moreButton.performClick()
+            true
         }
     }
 

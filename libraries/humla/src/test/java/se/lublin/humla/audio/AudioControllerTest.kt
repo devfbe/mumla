@@ -76,17 +76,14 @@ class AudioControllerTest {
         val outputListeners = CopyOnWriteArrayList<AudioOutput.AudioOutputListener>()
         @Volatile var failWith: Exception? = null
 
-        override fun create(
-            context: Context, logger: HumlaLogger, config: AudioConfig, params: AudioSessionParams,
-            encodeListener: AudioHandler.AudioEncodeListener, outputListener: AudioOutput.AudioOutputListener,
-        ): ManagedAudio {
+        override fun create(host: AudioHost, config: AudioConfig, params: AudioSessionParams): ManagedAudio {
             createThreads += Thread.currentThread()
-            contexts += context
-            loggers += logger
+            contexts += host.context
+            loggers += host.logger
             configs += config
             sessionParams += params
-            encodeListeners += encodeListener
-            outputListeners += outputListener
+            encodeListeners += host.encodeListener
+            outputListeners += host.outputListener
             failWith?.let { throw it }
             return FakeAudio().also { created += it }
         }
@@ -127,7 +124,7 @@ class AudioControllerTest {
     private val params = AudioSessionParams(User(1, "me"), -1, HumlaUDPMessageType.UDPVoiceOpus, 0, ContinuousInputMode())
 
     private fun newController(mainHandler: Handler = Handler(Looper.getMainLooper())) = AudioController(
-        context, SilentLogger, { factory }, encodeListener, outputListener, listener, mainHandler,
+        AudioHost(context, SilentLogger, encodeListener, outputListener), { factory }, listener, mainHandler,
     )
 
     @After

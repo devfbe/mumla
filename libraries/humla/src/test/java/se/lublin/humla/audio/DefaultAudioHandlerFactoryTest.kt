@@ -43,14 +43,16 @@ class DefaultAudioHandlerFactoryTest {
         override fun getUser(session: Int): User? = null
     }
 
+    private val host get() = AudioHost(context, SilentLogger, encodeListener, outputListener)
+
     private fun create(config: AudioConfig) =
-        factory.create(context, SilentLogger, config, params, encodeListener, outputListener)
+        factory.create(host, config, params)
 
     /** What the factory hands the builder, keyed by setter name. */
     private fun built(config: AudioConfig, session: AudioSessionParams = params): Map<String, Any?> =
         RecordingBuilder().also { recording ->
             DefaultAudioHandlerFactory { recording }
-                .builder(context, SilentLogger, config, session, encodeListener, outputListener)
+                .builder(host, config, session)
         }.values
 
     /** Records every setter call; each setter is overridden, which the field-completeness test relies on. */

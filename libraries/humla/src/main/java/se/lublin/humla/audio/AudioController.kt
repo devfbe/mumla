@@ -17,14 +17,12 @@
 
 package se.lublin.humla.audio
 
-import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
 import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.net.MessageHandlerRegistry
-import se.lublin.humla.util.HumlaLogger
 
 /**
  * Owns the audio pipeline's lifecycle on the [THREAD_NAME] HandlerThread.
@@ -35,11 +33,8 @@ import se.lublin.humla.util.HumlaLogger
  * [currentBandwidth] may be read from any thread.
  */
 class AudioController(
-    private val context: Context,
-    private val logger: HumlaLogger,
+    private val host: AudioHost,
     private val factory: () -> AudioHandlerFactory,
-    private val encodeListener: AudioHandler.AudioEncodeListener,
-    private val outputListener: AudioOutput.AudioOutputListener,
     private val listener: Listener,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
 ) {
@@ -134,7 +129,7 @@ class AudioController(
 
     private fun create(s: Session) {
         try {
-            val audio = factory().create(context, logger, s.config, s.params, encodeListener, outputListener)
+            val audio = factory().create(host, s.config, s.params)
             audio.setWarningListener { message -> mainHandler.post { listener.onAudioWarning(message) } }
             s.registry.addTcpHandler(audio.tcpHandler)
             s.registry.addVoiceHandler(audio.voiceHandler)

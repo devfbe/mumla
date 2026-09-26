@@ -18,7 +18,6 @@
 package se.lublin.humla
 
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.net.ConnectivityManager
@@ -41,6 +40,7 @@ import se.lublin.humla.audio.AudioConfig
 import se.lublin.humla.audio.AudioController
 import se.lublin.humla.audio.AudioHandler
 import se.lublin.humla.audio.AudioHandlerFactory
+import se.lublin.humla.audio.AudioHost
 import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.AudioSessionParams
 import se.lublin.humla.audio.DefaultAudioHandlerFactory
@@ -56,7 +56,6 @@ import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.audio.routing.CommunicationDevices
 import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.exception.HumlaException
-import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.LocalVolumes
@@ -266,8 +265,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // Eagerly, and for the life of the service: one controller, one thread, quit in onDestroy.
         // `{ audioFactory }` and not `audioFactory`, so a factory set after onCreate still takes.
         audioController = AudioController(
-            this, this, { audioFactory }, audioInputListener, audioOutputListener,
-            audioControllerListener, handler,
+            AudioHost(this, this, audioInputListener, audioOutputListener),
+            { audioFactory },
+            audioControllerListener,
+            handler,
         )
 
         // initialize minidns dns lookup mechanisms

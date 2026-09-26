@@ -26,6 +26,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.annotation.LayoutRes
 import androidx.appcompat.widget.PopupMenu
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
@@ -60,10 +61,11 @@ abstract class ServerAdapter<E : Server>(
     private val inFlight = HashSet<Address>()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ServerViewHolder =
-        createHolder(LayoutInflater.from(parent.context), parent)
+        ServerViewHolder(LayoutInflater.from(parent.context).inflate(rowLayout, parent, false))
 
-    /** Inflates a card into [parent] (without attaching it). */
-    protected abstract fun createHolder(inflater: LayoutInflater, parent: ViewGroup): ServerViewHolder
+    /** The card layout, with the `server_row_*` views [ServerViewHolder] looks up. */
+    @get:LayoutRes
+    protected abstract val rowLayout: Int
 
     override fun onBindViewHolder(holder: ServerViewHolder, position: Int) {
         val server = getItem(position)
@@ -122,19 +124,17 @@ abstract class ServerAdapter<E : Server>(
     abstract fun onPopupItemClick(server: E, menuItem: MenuItem): Boolean
 
     /** The views of a server card; those only some cards have are null. */
-    @Suppress("LongParameterList") // One per view.
-    class ServerViewHolder(
-        view: View,
-        val name: TextView,
-        val version: TextView,
-        val users: TextView,
-        val latency: TextView,
-        val progress: ProgressBar,
-        val more: ImageView,
-        val user: TextView? = null,
-        val address: TextView? = null,
-        val location: TextView? = null,
-    ) : RecyclerView.ViewHolder(view) {
+    class ServerViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val name: TextView = view.findViewById(R.id.server_row_name)
+        val version: TextView = view.findViewById(R.id.server_row_version_status)
+        val users: TextView = view.findViewById(R.id.server_row_usercount)
+        val latency: TextView = view.findViewById(R.id.server_row_latency)
+        val progress: ProgressBar = view.findViewById(R.id.server_row_ping_progress)
+        val more: ImageView = view.findViewById(R.id.server_row_more)
+        val user: TextView? = view.findViewById(R.id.server_row_user)
+        val address: TextView? = view.findViewById(R.id.server_row_address)
+        val location: TextView? = view.findViewById(R.id.server_row_location)
+
         fun showStatus(status: String) {
             version.text = status
             users.text = ""

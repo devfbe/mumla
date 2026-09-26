@@ -55,14 +55,19 @@ data class AudioSessionParams(
     val udpProtocol: UdpProtocol = UdpProtocol.LEGACY,
 )
 
+/** What every pipeline of a service is built with: the same for each session. */
+class AudioHost(
+    val context: Context,
+    val logger: HumlaLogger,
+    val encodeListener: AudioHandler.AudioEncodeListener,
+    val outputListener: AudioOutput.AudioOutputListener,
+)
+
 interface AudioHandlerFactory {
     fun create(
-        context: Context,
-        logger: HumlaLogger,
+        host: AudioHost,
         config: AudioConfig,
         params: AudioSessionParams,
-        encodeListener: AudioHandler.AudioEncodeListener,
-        outputListener: AudioOutput.AudioOutputListener,
     ): ManagedAudio
 }
 
@@ -75,14 +80,11 @@ class DefaultAudioHandlerFactory(
     private val newBuilder: () -> AudioHandler.Builder = { AudioHandler.Builder() },
 ) : AudioHandlerFactory {
     override fun create(
-        context: Context,
-        logger: HumlaLogger,
+        host: AudioHost,
         config: AudioConfig,
         params: AudioSessionParams,
-        encodeListener: AudioHandler.AudioEncodeListener,
-        outputListener: AudioOutput.AudioOutputListener,
     ): ManagedAudio = AudioHandlerAdapter(
-        initialize(builder(context, logger, config, params, encodeListener, outputListener), params),
+        initialize(builder(host, config, params), params),
     )
 
     /**
@@ -94,16 +96,13 @@ class DefaultAudioHandlerFactory(
 
     /** The config-to-builder mapping, split from `initialize` so JVM tests can inspect it. */
     internal fun builder(
-        context: Context,
-        logger: HumlaLogger,
+        host: AudioHost,
         config: AudioConfig,
         params: AudioSessionParams,
-        encodeListener: AudioHandler.AudioEncodeListener,
-        outputListener: AudioOutput.AudioOutputListener,
     ): AudioHandler.Builder =
         newBuilder()
-            .setContext(context)
-            .setLogger(logger)
+            .setContext(host.context)
+            .setLogger(host.logger)
             .setAudioStream(config.playbackStream)
             .setAudioSource(config.audioSource)
             .setInputSampleRate(config.inputSampleRate)
@@ -118,8 +117,8 @@ class DefaultAudioHandlerFactory(
             )
             .setInputMode(params.inputMode)
             .setUdpProtocol(params.udpProtocol)
-            .setEncodeListener(encodeListener)
-            .setTalkingListener(outputListener)
+            .setEncodeListener(host.encodeListener)
+            .setTalkingListener(host.outputListener)
             .setNoiseSuppressionMethod(config.noiseSuppression)
             .setSpeexNoiseSuppressDb(config.speexNoiseSuppressDb)
             .setAndroidNoiseSuppressor(config.androidNoiseSuppressor)
