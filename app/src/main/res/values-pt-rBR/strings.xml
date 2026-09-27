@@ -12,7 +12,6 @@
 \nVocê está conectado à Internet\?</string>
     <string name="clearChat">Limpar Conversa</string>
     <string name="delete">Excluir</string>
-    <string name="quickConnect">Conexão Rápida</string>
     <string name="generateCertSuccess">Seu certificado foi configurado e salvo como %s</string>
     <string name="user_menu_kick">Expulsar</string>
     <string name="confirm_delete_channel">Tem certeza de que deseja excluir este canal\?</string>
@@ -117,7 +116,6 @@
     <string name="server_port">Porta</string>
     <string name="server_username">Nome de usuário</string>
     <string name="server_password">Senha</string>
-    <string name="no_servers">Pressione \'Adicionar\' na barra de ação para adicionar um servidor primeiro.</string>
     <string name="server_match_description">O Mumla pode encontrar automaticamente um servidor vazio para você, otimizando por localização, versão e latência.</string>
     <string name="server_match_expand_country">Não foi possível encontrar nenhum servidor ideal em seu país. Pesquisar em todo o mundo\?</string>
     <string name="server_match_not_found">Servidor não encontrado</string>

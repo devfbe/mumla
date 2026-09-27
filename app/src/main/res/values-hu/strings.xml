@@ -20,7 +20,6 @@
 \nVerzió: %6$s
 \nOrszág: %7$s
 \nKésleltetés: %8$d ms</string>
-    <string name="no_servers">Nyomd meg a \'Hozzáad\' gombot (+) , egy kiszolgáló hozzáadásához.</string>
     <string name="server_host">Cím</string>
     <string name="accessAdd">Hozzáférési token hozzáadása</string>
     <string name="mute">Némít</string>
@@ -85,7 +84,6 @@
     <string name="generateCertProgress">Tanúsítvány létrehozása…</string>
     <string name="search">Keresés</string>
     <string name="searchHint">Csatorna és felhasználó keresés</string>
-    <string name="quickConnect">Gyors csatlakozás</string>
     <string name="connect">Csatlakozás</string>
     <string name="connectToServer">Kapcsolódás szerverhez</string>
     <string name="edit">Szerkesztés</string>

@@ -35,7 +35,6 @@
 \nΧώρα: %7$s
 \nΚαθυστέρηση: %8$d ms</string>
     <string name="server_match_description">Το Mumla μπορεί να βρει αυτόματα έναν κενό διακομιστή, βελτιστοποιώντας την τοποθεσία, την έκδοση και την καθυστέρηση.</string>
-    <string name="no_servers">Πατήστε \'Προσθήκη\' από τη γραμμή δράσης για να προσθέσετε πρώτα ένα διακομιστή.</string>
     <string name="server_password">Κωδικός πρόσβασης</string>
     <string name="server_username">Όνομα χρήστη</string>
     <string name="server_port">Θύρα</string>
@@ -56,7 +55,6 @@
     <string name="generateCertFailure">Δεν ήταν δυνατή η δημιουργία πιστοποιητικού.</string>
     <string name="generateCertProgress">Γίνεται δημιουργία πιστοποιητικού…</string>
     <string name="search">Αναζήτηση</string>
-    <string name="quickConnect">Γρήγορη σύνδεση</string>
     <string name="connect">Σύνδεση</string>
     <string name="connectToServer">Σύνδεση στο διακομιστή</string>
     <string name="edit">Επεξεργασία</string>

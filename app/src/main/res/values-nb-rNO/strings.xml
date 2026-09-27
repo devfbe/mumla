@@ -4,7 +4,6 @@
     <string name="edit">Rediger</string>
     <string name="connectToServer">Koble til tjener</string>
     <string name="connect">Koble til</string>
-    <string name="quickConnect">Hurtigtilkobling</string>
     <string name="searchHint">Søk i kanaler og brukere</string>
     <string name="search">Søk</string>
     <string name="generateCertProgress">Genererer sertifikat …</string>
@@ -33,7 +32,6 @@
     <string name="server_port">Port</string>
     <string name="server_username">Brukernavn</string>
     <string name="server_password">Passord</string>
-    <string name="no_servers">Trykk «Legg til» fra handlingsfeltet for å legge til en tjener først.</string>
     <string name="server_match_description">Mumla kan automatisk finne deg en tom tjener, optimalisere for plassering, versjon, og latens.</string>
     <string name="server_match_info">Navn: %1$s
 \nVert: %2$s:%3$d

@@ -56,7 +56,6 @@
     <string name="server_info_max_bandwidth">Max %.1f kbit/s</string>
     <string name="server_match_found">Servern hittades</string>
     <string name="server_match_expand_country">Kunde inte hitta några optimala servrar i ditt land. Sök över hela världen?</string>
-    <string name="no_servers">Tryck på \"Lägg till\" från åtgärdsfältet för att lägga till en server först.</string>
     <string name="server_password">Lösenord</string>
     <string name="server_port">Port</string>
     <string name="server_host">Adress</string>
@@ -130,7 +129,6 @@
     <string name="generateCertFailure">Kunde inte generera certifikat.</string>
     <string name="generateCertProgress">Genererar certifikat…</string>
     <string name="search">Sök</string>
-    <string name="quickConnect">Snabbanslutning</string>
     <string name="connect">Anslut</string>
     <string name="edit">Redigera</string>
     <string name="delete">Ta bort</string>

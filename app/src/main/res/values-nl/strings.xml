@@ -53,7 +53,6 @@
     <string name="server_match_info">Naam: %1$s\nHost: %2$s:%3$d\nGebruikers: %4$d / %5$d\nVersie: %6$s \nLand: %7$s \nLatency: %8$d ms</string>
     <string name="server_match_description">Mumla kan automatisch een lege server zoeken, geoptimaliseerd aan de hand van locatie, versie en latency.</string>
     <!--Common-->
-    <string name="no_servers">Geen servers toegevoegd. Druk op \'toevoegen\' in the taakbalk om te beginnen.</string>
     <string name="server_password">Wachtwoord</string>
     <string name="server_username">Gebruikersnaam</string>
     <string name="server_port">Poort</string>
@@ -82,7 +81,6 @@
     <string name="generateCertProgress">Certificaat genereren…</string>
     <string name="search">Zoeken</string>
     <string name="searchHint">Zoeken in kanalen en gebruikers</string>
-    <string name="quickConnect">Snel Verbinden</string>
     <string name="connect">Verbinden</string>
     <string name="connectToServer">Verbinden met Server</string>
     <string name="edit">Bewerk</string>

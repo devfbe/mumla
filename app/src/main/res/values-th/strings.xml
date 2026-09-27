@@ -86,7 +86,6 @@
     <string name="edit">แก้ไข</string>
     <string name="connectToServer">เชื่อมต่อเซิฟเวอร์</string>
     <string name="connect">เชื่อมต่อ</string>
-    <string name="quickConnect">เชื่อมต่อแบบรวดเร็ว</string>
     <string name="searchHint">ค้นหาแชนเนลและผู้ใช้</string>
     <string name="search">ค้นหา</string>
     <string name="generateCertProgress">กำลังสร้างใบรับรอง…</string>
@@ -115,7 +114,6 @@
     <string name="server_port">พอร์ต</string>
     <string name="server_username">ชื่อผู้ใช้</string>
     <string name="server_password">รหัสผ่าน</string>
-    <string name="no_servers">กด \"Add\" จาก action bar เพื่อเพิ่มเซิฟเวอร์ก่อน</string>
     <string name="server_match_description">Mumla สามารถค้นหาเซิร์ฟเวอร์ที่ว่างให้คุณโดยอัตโนมัติ, ปรับแต่งตำแหน่ง, เวอร์ชัน, และเวลาในการตอบสนอง</string>
     <string name="server_match_info">ชื่อ: %1$s
 \nที่อยู่: %2$s:%3$d

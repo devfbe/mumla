@@ -58,7 +58,6 @@
 \nLatence : %8$d ms</string>
     <string name="server_match_description">Mumla peut vous trouver automatiquement un serveur vide, en optimisant en se basant sur la position du serveur, sa version, et sa latence.</string>
     <!--Common-->
-    <string name="no_servers">Appuyez sur le bouton « Ajouter » dans la barre d\'action pour commencer.</string>
     <string name="server_password">Mot de passe</string>
     <string name="server_username">Nom d\'utilisateur</string>
     <string name="server_port">Port</string>
@@ -87,7 +86,6 @@
     <string name="generateCertProgress">Génération d\'un certificat…</string>
     <string name="search">Rechercher</string>
     <string name="searchHint">Rechercher des salons et des utilisateurs</string>
-    <string name="quickConnect">Connexion rapide</string>
     <string name="connect">Connexion</string>
     <string name="connectToServer">Connexion au serveur</string>
     <string name="edit">Modifier</string>

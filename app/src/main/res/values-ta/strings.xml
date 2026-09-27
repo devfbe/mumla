@@ -45,7 +45,6 @@
     <string name="server_match_expand_country">உங்கள் நாட்டில் எந்த உகந்த சேவையகங்களையும் கண்டுபிடிக்க முடியவில்லை. உலகளவில் தேடவா?</string>
     <string name="server_match_info">பெயர்: %1$s\nபுரவலன்: %2$s: %3$d\nபயனர்கள்: %4$d / %5$d\nபதிப்பு: %6$s\nநாடு: %7$s\nதாமதம்: %8$d மிநொ</string>
     <string name="server_match_description">மும்லா தானாகவே ஒரு வெற்று சேவையகத்தைக் கண்டுபிடித்து, இருப்பிடம், பதிப்பு மற்றும் தாமதத்தை மேம்படுத்தலாம்.</string>
-    <string name="no_servers">முதலில் ஒரு சேவையகத்தைச் சேர்க்க செயல் பட்டியிலிருந்து \'சேர்\' என்பதை அழுத்தவும்.</string>
     <string name="server_password">கடவுச்சொல்</string>
     <string name="server_username">பயனர்பெயர்</string>
     <string name="server_port">துறைமுகம்</string>
@@ -73,7 +72,6 @@
     <string name="generateCertProgress">சான்றிதழ் உருவாக்குதல்…</string>
     <string name="search">தேடல்</string>
     <string name="searchHint">தடங்கள் மற்றும் பயனர்களைத் தேடுங்கள்</string>
-    <string name="quickConnect">விரைவான இணைப்பு</string>
     <string name="connect">இணை</string>
     <string name="connectToServer">சேவையகத்துடன் இணைக்கவும்</string>
     <string name="edit">தொகு</string>

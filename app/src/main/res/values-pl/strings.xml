@@ -54,7 +54,6 @@
     <string name="server_match_info">Nazwa: %1$s\nHost: %2$s:%3$d\nUżytkownicy: %4$d / %5$d\nWersja: %6$s \nKraj: %7$s \nOpóźnienie: %8$d ms</string>
     <string name="server_match_description">Mumla może automatycznie znaleźć Ci pusty serwer, optymalizując lokalizację, wersję i opóźnienie.</string>
     <!-- Common -->
-    <string name="no_servers">Naciśnij „Dodaj” z paska akcji, aby najpierw dodać serwer.</string>
     <string name="server_password">Hasło</string>
     <string name="server_username">Nazwa użytkownika</string>
     <string name="server_port">Port</string>
@@ -83,7 +82,6 @@
     <string name="generateCertProgress">Generowanie certyfikatu…</string>
     <string name="search">Wyszukaj</string>
     <string name="searchHint">Wyszukaj kanały i użytkowników</string>
-    <string name="quickConnect">Szybkie połączenie</string>
     <string name="connect">Połącz</string>
     <string name="connectToServer">Połącz z serwerem</string>
     <string name="edit">Edytuj</string>

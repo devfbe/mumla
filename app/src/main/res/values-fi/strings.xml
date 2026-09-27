@@ -101,7 +101,6 @@
     <string name="edit">Muokkaa</string>
     <string name="connectToServer">Yhdistä palvelimeen</string>
     <string name="connect">Yhdistä</string>
-    <string name="quickConnect">Pikayhteys</string>
     <string name="searchHint">Hae kanavia ja käyttäjiä</string>
     <string name="search">Haku</string>
     <string name="generateCertProgress">Luodaan sertifikaattia…</string>
@@ -129,7 +128,6 @@
     <string name="server_port">Portti</string>
     <string name="server_username">Käyttäjänimi</string>
     <string name="server_password">Salasana</string>
-    <string name="no_servers">Lisää palvelin ensin painamalla toimintopalkista Lisää.</string>
     <string name="server_match_description">Mumla löytää automaattisesti tyhjän palvelimen, joka optimoi sijainnin, version ja viiveen.</string>
     <string name="server_match_info">Nimi: %1$s
 \nIsäntä: %2$s: %3$d

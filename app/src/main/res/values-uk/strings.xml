@@ -54,7 +54,6 @@
 \nВерсія: %6$s
 \nКраїна: %7$s
 \nЗатримка: %8$d мс</string>
-    <string name="no_servers">Спочатку додайте сервер, натиснувши \'Додати\' в панелі керування.</string>
     <string name="server_host">Адреса</string>
     <string name="server_label">Позначка</string>
     <string name="connecting_to_server">Підключення до %s…</string>
@@ -162,7 +161,6 @@
     <string name="generateCertProgress">Генерація сертифіката…</string>
     <string name="search">Пошук</string>
     <string name="searchHint">Пошук каналів і користувачів</string>
-    <string name="quickConnect">Швидке підключення</string>
     <string name="connect">Підключитися</string>
     <string name="connectToServer">Підключитися до сервера</string>
     <string name="edit">Редагувати</string>

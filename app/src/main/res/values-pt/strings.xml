@@ -14,7 +14,6 @@
     <string name="edit">Editar</string>
     <string name="connectToServer">Conectar-se ao servidor</string>
     <string name="connect">Conectar</string>
-    <string name="quickConnect">Conexão rápida</string>
     <string name="searchHint">Procurar canais e usuários</string>
     <string name="search">Procurar</string>
     <string name="generateCertProgress">Gerando certificado…</string>
@@ -43,7 +42,6 @@
     <string name="server_port">Porta</string>
     <string name="server_username">Nome de usuário</string>
     <string name="server_password">Senha</string>
-    <string name="no_servers">Você ainda não adicionou servidores. Pressione o botão \"Adicionar\" na barra de ações para começar.</string>
     <string name="server_match_description">Mumla pode procurar automaticamente um servidor vazio, otimizado para sua localização, versão e latência.</string>
     <string name="server_match_info">Nome: %1$s
 \nHost: %2$s:%3$d

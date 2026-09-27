@@ -107,7 +107,6 @@
     <string name="edit">Düzenle</string>
     <string name="connectToServer">Sunucuya Bağlan</string>
     <string name="connect">Bağlan</string>
-    <string name="quickConnect">Hızlı Bağlan</string>
     <string name="searchHint">Kanalları ve kullanıcıları arayın</string>
     <string name="search">Ara</string>
     <string name="generateCertProgress">Sertifika oluşturuluyor…</string>
@@ -135,7 +134,6 @@
     <string name="server_port">Bağlantı Noktası</string>
     <string name="server_username">Kullanıcı Adı</string>
     <string name="server_password">Parola</string>
-    <string name="no_servers">Önce bir sunucu eklemek için eylem çubuğundan \'Ekle\' düğmesine basın.</string>
     <string name="server_match_description">Mumla konuma, sürüme ve gecikmeye göre sizin için en iyi boş sunucuyu otomatik olarak bulabilir.</string>
     <string name="chat_message_tts_short_link">(%1$s için bağlantı)</string>
     <string name="perm_denied">İzin reddedildi.</string>

@@ -53,7 +53,6 @@
     <string name="server_match_info">名前: %1$s\nホスト: %2$s:%3$d\nユーザー: %4$d / %5$d\nバージョン: %6$s \n国: %7$s \n遅延時間: %8$d ms</string>
     <string name="server_match_description">Mumla は、サーバの場所、バージョン、および遅延時間に基づいて最適な空のサーバーを自動的に見つけることができます。</string>
     <!--Common-->
-    <string name="no_servers">サーバーが追加されていません。\nアクションバーにある \'追加\' ボタンを押して開始ししてください。</string>
     <string name="server_password">パスワード</string>
     <string name="server_username">ユーザー名</string>
     <string name="server_port">ポート</string>
@@ -82,7 +81,6 @@
     <string name="generateCertProgress">証明書の生成中…</string>
     <string name="search">検索</string>
     <string name="searchHint">チャンネルとユーザーを検索</string>
-    <string name="quickConnect">クイック接続</string>
     <string name="connect">接続</string>
     <string name="connectToServer">サーバーに接続</string>
     <string name="edit">編集</string>

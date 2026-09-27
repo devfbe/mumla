@@ -59,7 +59,6 @@
 \n延迟：%8$d 毫秒</string>
     <string name="server_match_description">Mumla 可以根据区域、版本与延迟自动为您寻找最佳的空服务器。</string>
     <!-- Common -->
-    <string name="no_servers">请先点击操作栏上的“添加”按钮添加一个服务器。</string>
     <string name="server_password">密码</string>
     <string name="server_username">用户名</string>
     <string name="server_port">端口</string>
@@ -88,7 +87,6 @@
     <string name="generateCertProgress">正在生成证书…</string>
     <string name="search">搜索</string>
     <string name="searchHint">搜索频道与用户</string>
-    <string name="quickConnect">快速连接</string>
     <string name="connect">连接</string>
     <string name="connectToServer">连接服务器</string>
     <string name="edit">编辑</string>

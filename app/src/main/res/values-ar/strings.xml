@@ -41,7 +41,6 @@
     <string name="server_port">منفذ</string>
     <string name="server_username">اسم المستخدم</string>
     <string name="server_password">كلمة المرور</string>
-    <string name="no_servers">أولا أضف خادما عن طريق \'أضف\' من شريط الإجراءات.</string>
     <string name="server_match_info">الاسم: %1$s
 \nالمضيف: %2$s:%3$d
 \nالمستخدمون: %4$d \\ %5$d
@@ -78,7 +77,6 @@
     <string name="generateCertProgress">يولد الشهادة…</string>
     <string name="search">ابحث</string>
     <string name="searchHint">ابحث عن قنوات أو مستخدمين</string>
-    <string name="quickConnect">الاتصال السريع</string>
     <string name="edit">عدّل</string>
     <string name="messageToUser">اكتب رسالة لـ \'%s\'</string>
     <string name="messageToChannel">اكتب رسال في \'%s\'</string>

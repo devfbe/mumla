@@ -41,7 +41,6 @@
     <string name="server_info_version">%1$s (%2$s)</string>
     <string name="server_match_not_found">Server tidak dapat ditemukan</string>
     <string name="server_match_info">Nama: %1$s\nHost: %2$s:%3$d\nJumlah User: %4$d / %5$d\nVersi: %6$s \nNegara: %7$s \nLatensi: %8$d ms</string>
-    <string name="no_servers">Tekan tombol \'Tambah\' pada action bar untuk menambahkan server terlebih dahulu.</string>
     <string name="server_password">Password</string>
     <string name="server_username">Username</string>
     <string name="server_port">Port</string>
@@ -67,7 +66,6 @@
     <string name="generateCertFailure">Tidak dapat membuat sertifikat keamanan.</string>
     <string name="search">Pencarian</string>
     <string name="searchHint">Cari channel dan user</string>
-    <string name="quickConnect">Sambung Cepat</string>
     <string name="connectToServer">Sambung ke Server</string>
     <string name="edit">Edit</string>
     <string name="delete">Hapus Permanen</string>

@@ -48,7 +48,6 @@
     <string name="generateCertProgress">Generazione certificato…</string>
     <string name="search">Cerca</string>
     <string name="searchHint">Cerca canali e utenti</string>
-    <string name="quickConnect">Connessione rapida</string>
     <string name="connect">Connetti</string>
     <string name="connectToServer">Connetti al server</string>
     <string name="edit">Modifica</string>
@@ -166,7 +165,6 @@
     <string name="externalStorageUnavailable">Archiviazione esterna non disponibile, impossibile caricare il certificato</string>
     <string name="ptt">Premi per parlare</string>
     <string name="server_label">Etichetta</string>
-    <string name="no_servers">Aggiungere un server premendo «Aggiungi» dalla barra delle azioni.</string>
     <string name="server_match_description">Mumla può trovare automaticamente un server vuoto, con posizione, versione e latenza ideali.</string>
     <string name="server_match_info">Nome: %1$s
 \nHost: %2$s:%3$d

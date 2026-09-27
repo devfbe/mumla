@@ -74,7 +74,6 @@
     <string name="deafen">Ensordeix</string>
     <string name="server_port">Port</string>
     <string name="server_password">Contrasenya</string>
-    <string name="no_servers">Premeu «Afegeix» des de la barra d\'acció per afegir un servidor per començar.</string>
     <string name="server_match_info">Nom: %1$s
 \nAmfitrió: %2$s:%3$d
 \nUsuaris: %4$d / %5$d
@@ -98,7 +97,6 @@
     <string name="chat_message_tts_short_link">(Enllaç a %1$s)</string>
     <string name="chat_message_to">%1$s → %2$s</string>
     <string name="connectToServer">Connecta al servidor</string>
-    <string name="quickConnect">Connecta ràpidament</string>
     <string name="messageToChannel">Escriviu un missatge al canal \'%s\'</string>
     <string name="messageToUser">Escriviu un missatge a \'%s\'</string>
     <string name="offline">Fora de línia</string>

@@ -103,7 +103,6 @@
     <string name="edit">Upravit</string>
     <string name="connectToServer">Připojit k serveru</string>
     <string name="connect">Připojit</string>
-    <string name="quickConnect">Rychlé připojení</string>
     <string name="searchHint">Prohledat kanály a uživatele</string>
     <string name="search">Hledat</string>
     <string name="generateCertProgress">Generování certifikátu…</string>
@@ -132,7 +131,6 @@
     <string name="server_port">Port</string>
     <string name="server_username">Uživatelské jméno</string>
     <string name="server_password">Heslo</string>
-    <string name="no_servers">Stiskněte „Přidat“ v horním panelu pro přidání serveru.</string>
     <string name="server_match_description">Mumla pro vás automaticky může najít prázdný server s optimální lokací, verzí a latencí.</string>
     <string name="server_match_info">Jméno: %1$s
 \nHost: %2$s:%3$d

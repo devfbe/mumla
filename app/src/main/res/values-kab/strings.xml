@@ -55,7 +55,6 @@
     <string name="server_match">Af-d aqeddac</string>
     <string name="messageReceived">Izen amaynut</string>
     <string name="generateCertProgress">Asarew n uselkin…</string>
-    <string name="quickConnect">Tuqqna taruradt</string>
     <string name="clearChat">Sfeḍ adiwenni</string>
     <string name="mumlaConnecting">Mumla iteqqen…</string>
     <string name="sortBy">Semyizzwer s…</string>
@@ -110,7 +109,6 @@
     <string name="disconnectSure">S tidet tebɣiḍ ad tgzemeḍ tuqqna seg %s?</string>
     <string name="confirm_delete_server">S tidet tebɣiḍ ad tekkseḍ aqeddac-a?</string>
     <string name="confirm_delete_channel">S tidet tebɣiḍ ad tekkseḍ abadu-a?</string>
-    <string name="no_servers">Tekki ɣef tqeffalt n « Rnu » s ufella n tfeggagt n tigawin akken ara ternuḍ aqeddac.</string>
     <string name="deafen">D aɛeẓẓug</string>
     <string name="channel_menu_pin">Senteḍ</string>
     <string name="user_menu_deafen">D aɛeẓẓug</string>

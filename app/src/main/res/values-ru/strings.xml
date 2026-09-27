@@ -59,7 +59,6 @@
 \nЗадержка: %8$d мс</string>
     <string name="server_match_description">Mumla может автоматически найти пустой сервер, основываясь на местоположении, версии, и задержке.</string>
     <!-- Common -->
-    <string name="no_servers">Для начала добавьте сервер, нажав \'Добавить\' в панели управления.</string>
     <string name="server_password">Пароль</string>
     <string name="server_username">Имя пользователя</string>
     <string name="server_port">Порт</string>
@@ -88,7 +87,6 @@
     <string name="generateCertProgress">Создание сертификата…</string>
     <string name="search">Поиск</string>
     <string name="searchHint">Поиск каналов и пользователей</string>
-    <string name="quickConnect">Быстрое подключение</string>
     <string name="connect">Подключиться</string>
     <string name="connectToServer">Подключиться к серверу</string>
     <string name="edit">Редактировать</string>
