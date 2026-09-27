@@ -5,14 +5,10 @@
     <ID>CyclomaticComplexMethod:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase$private fun sealPlainSecrets(db: SQLiteDatabase)</ID>
     <ID>EmptyFunctionBlock:ChannelChatFragment.kt$ChannelChatFragment.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:NotificationPostingTest.kt$NotificationPostingTest.NoopActions${}</ID>
-    <ID>ForbiddenComment:ChannelListAdapter.kt$ChannelListAdapter$// FIXME: cache bitmaps</ID>
-    <ID>ImplicitDefaultLocale:ChannelListAdapter.kt$ChannelListAdapter$String.format("%d", node.subtreeUserCount)</ID>
     <ID>LargeClass:ChannelChatFragmentTest.kt$ChannelChatFragmentTest</ID>
-    <ID>LargeClass:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest</ID>
     <ID>LargeClass:MumlaServiceTest.kt$MumlaServiceTest</ID>
     <ID>LongParameterList:AudioTestSession.kt$AudioTestSession$( private val audioManager: AudioManager, private val vadConfig: VadConfig, private val noiseSuppression: NoiseSuppressionMode, private val speexNoiseSuppressDb: Int, private val echoCancellation: EchoCancellationMode, private val effects: AndroidAudioEffects, private val loopback: Boolean, private val onReading: (MeterReading) -&gt; Unit, private val readingIntervalFrames: Int = DEFAULT_READING_INTERVAL_FRAMES, private val captureFactory: PcmCaptureSourceFactory = AndroidAudioRecordSource.Factory(), private val sinkFactory: PcmPlaybackSinkFactory = AndroidAudioTrackSink.Factory(), private val preprocessorFactory: CapturePreprocessorFactory = CapturePreprocessorFactory(log = { Log.w(TAG, it) }), private val resamplerFactory: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
     <ID>LongParameterList:AudioTestSessionTest.kt$AudioTestSessionTest$( source: TestCaptureSource, sink: TestPlaybackSink = TestPlaybackSink(), vad: VadConfig = VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1), noise: NoiseSuppressionMode = NoiseSuppressionMode.NONE, loopback: Boolean = false, effects: AndroidAudioEffects = AndroidAudioEffects(), echo: EchoCancellationMode = EchoCancellationMode.NONE, speexGain: Float = 1f, speexProbability: Int = 0, sinkFactory: TestPlaybackSink.Factory = TestPlaybackSink.Factory(sink), captureFactory: TestCaptureSource.Factory = TestCaptureSource.Factory(source), resamplerFactory: (Int, Int) -&gt; Resampler = { _, _ -&gt; error("no resampler expected at 48 kHz") }, )</ID>
-    <ID>LongParameterList:ChannelTreeFixture.kt$FakeUser$( override val session: Int, override val name: String = "user-$session", var selfDeafened: Boolean = false, var deafened: Boolean = false, var selfMuted: Boolean = false, var muted: Boolean = false, var suppressed: Boolean = false, var state: TalkState = TalkState.PASSIVE, /** Negative for an unregistered user. */ override val userId: Int = -1, /** Raw avatar bytes that may or may not decode. */ override val texture: ByteArray? = null, )</ID>
     <ID>LongParameterList:ChatAdapter.kt$ChatAdapter$( private val parser: ChatContentParser, private val loader: ChatImageLoader, private val thumbnailPx: Int, private val selfSessionId: () -&gt; Int, private val onImageClicked: (String) -&gt; Unit, private val scope: CoroutineScope, private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default, differConfig: AsyncDifferConfig&lt;IChatMessage&gt; = AsyncDifferConfig.Builder(DIFF).build(), )</ID>
     <ID>LongParameterList:ChatAdapterTest.kt$ChatAdapterTest$( actor: Int = 7, actorName: String? = "alice", channels: List&lt;ChannelState&gt; = emptyList(), trees: List&lt;ChannelState&gt; = emptyList(), users: List&lt;UserState&gt; = emptyList(), body: String = "hi", )</ID>
     <ID>LongParameterList:ChatAdapterTest.kt$ChatAdapterTest$( parser: ChatContentParser = ChatContentParser("[image]"), scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined), thumbnailPx: Int = 240, parseDispatcher: CoroutineDispatcher = Dispatchers.Default, selfSessionId: () -&gt; Int = { 42 }, decodeDispatcher: CoroutineDispatcher = Dispatchers.Unconfined, diff: DiffUtil.ItemCallback&lt;IChatMessage&gt; = ChatAdapter.DIFF, )</ID>
@@ -24,7 +20,6 @@
     <ID>LoopWithTooManyJumpStatements:TestAudioFakes.kt$TestCaptureSource$while</ID>
     <ID>NestedBlockDepth:ManifestAuditTest.kt$ManifestAuditTest$@Test fun theBackupRulesFileExcludesCloudBackupButNotDeviceTransfer()</ID>
     <ID>PrintStackTrace:CertificateImportActivity.kt$CertificateImportActivity$e</ID>
-    <ID>PrintStackTrace:MumlaReconnectNotification.kt$MumlaReconnectNotification$e</ID>
     <ID>PrintStackTrace:PublicServerFetcher.kt$PublicServerFetcher$e</ID>
     <ID>ReturnCount:AudioSettingsFragment.kt$AudioSettingsFragment$private fun restartSession( loopback: Boolean = findPreference&lt;SwitchPreferenceCompat&gt;(KEY_LOOPBACK)?.isChecked ?: false, )</ID>
     <ID>ReturnCount:BluetoothScoToggle.kt$BluetoothScoToggle$fun request(enabled: Boolean): Result</ID>
@@ -52,7 +47,6 @@
     <ID>TooGenericExceptionCaught:ServerPinger.kt$ServerPinger$e: Exception</ID>
     <ID>TooManyFunctions:AudioSettingsFragment.kt$AudioSettingsFragment : MumlaPreferenceFragment</ID>
     <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentMenuProvider</ID>
-    <ID>TooManyFunctions:ChannelListAdapter.kt$ChannelListAdapter : Adapter</ID>
     <ID>TooManyFunctions:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase : SQLiteOpenHelperMumlaDatabase</ID>
     <ID>TooManyFunctions:PublicServerListFragment.kt$PublicServerListFragment : FragmentPublicServerAdapterMenuListenerMenuProvider</ID>
     <ID>TooManyFunctions:ZoomImageView.kt$ZoomImageView : AppCompatImageView</ID>

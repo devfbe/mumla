@@ -674,6 +674,6 @@ class HumlaSession(
         private val dnsLookupInstalled = AtomicBoolean()
 
         /** Events a collector may fall behind before the oldest are dropped. */
-        const val EVENT_BUFFER = 8_192
+        private const val EVENT_BUFFER = 8_192
     }
 }

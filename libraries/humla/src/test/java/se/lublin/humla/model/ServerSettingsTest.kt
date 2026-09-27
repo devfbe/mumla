@@ -23,10 +23,10 @@ import se.lublin.humla.protobuf.Mumble
 class ServerSettingsTest {
     @Test
     fun recordingIsAllowedUnlessTheServerSaysOtherwise() {
-        assertThat(ServerSettings(Mumble.ServerConfig.getDefaultInstance()).recordingAllowed).isTrue()
-        assertThat(ServerSettings(Mumble.ServerConfig.newBuilder().setRecordingAllowed(true).build()).recordingAllowed)
-            .isTrue()
-        assertThat(ServerSettings(Mumble.ServerConfig.newBuilder().setRecordingAllowed(false).build()).recordingAllowed)
-            .isFalse()
+        assertThat(ServerSettings.from(Mumble.ServerConfig.getDefaultInstance()).recordingAllowed).isTrue()
+        val allowing = Mumble.ServerConfig.newBuilder().setRecordingAllowed(true).build()
+        val refusing = Mumble.ServerConfig.newBuilder().setRecordingAllowed(false).build()
+        assertThat(ServerSettings.from(allowing).recordingAllowed).isTrue()
+        assertThat(ServerSettings.from(refusing).recordingAllowed).isFalse()
     }
 }

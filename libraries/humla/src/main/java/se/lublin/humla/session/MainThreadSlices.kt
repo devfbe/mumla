@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.yield
 
 /** Items one main-looper task may deliver before [inMainThreadSlices] hands the looper back. */
-const val MAX_EVENTS_PER_SLICE = 64
+private const val MAX_EVENTS_PER_SLICE = 64
 
 /**
  * Hands the main looper back after [maxPerSlice] items delivered within one looper task, so a

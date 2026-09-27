@@ -84,7 +84,7 @@ internal class ServerWriter(private var published: ServerState) {
                 emit(HumlaEvent.LogMessage(HumlaEvent.Level.INFO, msg.welcomeText))
                 selfSession = msg.session
             }
-            is Mumble.ServerConfig -> serverSettings = ServerSettings(msg)
+            is Mumble.ServerConfig -> serverSettings = ServerSettings.from(msg)
         }
     }
 
