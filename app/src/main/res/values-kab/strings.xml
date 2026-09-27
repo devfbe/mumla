@@ -16,7 +16,6 @@
     <string name="search">Nadi</string>
     <string name="connect">Tuqqna</string>
     <string name="edit">Ẓreg</string>
-    <string name="remove">Kkes</string>
     <string name="delete">Kkes</string>
     <string name="online">Uqqin</string>
     <string name="offline">Beṛṛa n tuqqna</string>
@@ -28,7 +27,6 @@
     <string name="country">Tamurt</string>
     <string name="share">Bḍu</string>
     <string name="description">Aglam</string>
-    <string name="status_notify_muted">Asusam.</string>
     <string name="close">Mdel</string>
     <string name="search_name">Isem</string>
     <string name="search_country">Tamurt</string>

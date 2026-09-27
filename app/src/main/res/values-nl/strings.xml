@@ -86,7 +86,6 @@
     <string name="connect">Verbinden</string>
     <string name="connectToServer">Verbinden met Server</string>
     <string name="edit">Bewerk</string>
-    <string name="remove">Verwijder</string>
     <string name="delete">Delete</string>
     <string name="messageToUser">Typ bericht naar gebruiker \'%s\'</string>
     <string name="messageToChannel">Typ bericht naar kanaal \'%s\' hier</string>
@@ -106,8 +105,6 @@
     <string name="share">Delen</string>
     <string name="description">Beschrijving</string>
     <string name="shareMessage">Verbind met deze Mumble server met Mumla. %s</string>
-    <string name="status_notify_muted_and_deafened">Gedempt en doof gemaakt.</string>
-    <string name="status_notify_muted">Gedempt.</string>
     <string name="close">Sluit</string>
     <string name="search_name">Naam</string>
     <string name="search_country">Land</string>

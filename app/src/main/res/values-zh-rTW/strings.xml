@@ -69,7 +69,6 @@
     <string name="error_fetching_servers">無法接通伺服器\n請確認網際網路連線是否正常？</string>
     <string name="drawer_favorites">收藏</string>
     <string name="server_info_protocol">協定版本 %s。</string>
-    <string name="remove">移除</string>
     <string name="server_info_max_bandwidth">最大 %.1f kbit/s</string>
     <string name="server_info_current_bandwidth">現在 %.1f kbit/s</string>
     <string name="server_info_codec">編解碼器: %s</string>
@@ -165,8 +164,6 @@
     <string name="trust_add_failed">憑證無法新增至信任憑證存放區。</string>
     <string name="trust_cleared">信任資料庫已清空</string>
     <string name="overlay">顯示圖層</string>
-    <string name="status_notify_muted">已靜音 (發話)。</string>
-    <string name="status_notify_muted_and_deafened">已靜音 (發話和收話)。</string>
     <string name="no_ptt_key">沒有金鑰</string>
     <string name="reset_key">重設金鑰</string>
     <string name="accessAdd">新增存取代碼</string>

@@ -92,7 +92,6 @@
     <string name="connect">连接</string>
     <string name="connectToServer">连接服务器</string>
     <string name="edit">编辑</string>
-    <string name="remove">删除</string>
     <string name="delete">删除</string>
     <string name="messageToUser">向“%s”发送消息</string>
     <string name="messageToChannel">向频道“%s”发送消息</string>
@@ -112,8 +111,6 @@
     <string name="share">分享</string>
     <string name="description">描述</string>
     <string name="shareMessage">用 Mumla 加入这个 Mumble 服务器。%s</string>
-    <string name="status_notify_muted_and_deafened">已关闭麦克风和扬声器。</string>
-    <string name="status_notify_muted">已关闭麦克风。</string>
     <string name="close">关闭</string>
     <string name="search_name">名称</string>
     <string name="search_country">区域</string>

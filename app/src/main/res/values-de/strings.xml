@@ -94,7 +94,6 @@
     <string name="connect">Verbinden</string>
     <string name="connectToServer">Verbinde zum Server</string>
     <string name="edit">Bearbeiten</string>
-    <string name="remove">Entfernen</string>
     <string name="delete">Löschen</string>
     <string name="messageToUser">Schreibe Nachricht an „%s“</string>
     <string name="messageToChannel">Schreibe Nachricht an Kanal „%s“</string>
@@ -114,8 +113,6 @@
     <string name="share">Teilen</string>
     <string name="description">Beschreibung</string>
     <string name="shareMessage">Treten Sie diesem Server mit Mumla bei. %s</string>
-    <string name="status_notify_muted_and_deafened">Stumm und taub.</string>
-    <string name="status_notify_muted">Stumm.</string>
     <string name="close">Schließen</string>
     <string name="search_name">Name</string>
     <string name="search_country">Land</string>

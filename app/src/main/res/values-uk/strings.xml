@@ -172,7 +172,6 @@
     <string name="connectToServer">Підключитися до сервера</string>
     <string name="edit">Редагувати</string>
     <string name="delete">Видалити</string>
-    <string name="remove">Вилучити</string>
     <string name="messageToUser">Введіть повідомлення для користувача \"%s\"</string>
     <string name="messageToChannel">Введіть повідомлення для каналу \"%s\"</string>
     <string name="online">В мережі</string>
@@ -191,8 +190,6 @@
     <string name="share">Поділитися</string>
     <string name="description">Опис</string>
     <string name="shareMessage">Приєднайтеся до цього Mumble-сервера за допомогою Mumla. %s</string>
-    <string name="status_notify_muted_and_deafened">Звук та мікрофон вимкнені.</string>
-    <string name="status_notify_muted">Мікрофон вимкнено.</string>
     <string name="no_ptt_key">Кнопка не обрана</string>
     <string name="connection_lost_reconnecting">З’єднання втрачено – повторне під’єднання…</string>
     <string name="foreground_start_failed">Не вдалося залишити Mumla працювати у фоні. Звук може зникнути, коли екран вимкнеться.</string>

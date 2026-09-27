@@ -86,7 +86,6 @@
     <string name="connect">接続</string>
     <string name="connectToServer">サーバーに接続</string>
     <string name="edit">編集</string>
-    <string name="remove">削除</string>
     <string name="delete">削除</string>
     <string name="messageToUser">ユーザー \'%s\' にメッセージを入力</string>
     <string name="messageToChannel">ここにチャンネル \'%s\' へのメッセージを入力</string>
@@ -106,8 +105,6 @@
     <string name="share">共有</string>
     <string name="description">説明</string>
     <string name="shareMessage">Mumla で、この Mumble サーバーに参加してください! %s</string>
-    <string name="status_notify_muted_and_deafened">ミュートおよび防音しました。</string>
-    <string name="status_notify_muted">ミュートしました。</string>
     <string name="close">閉じる</string>
     <string name="search_name">名前</string>
     <string name="search_country">国</string>

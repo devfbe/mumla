@@ -127,7 +127,6 @@
     <string name="connect">Connect</string>
     <string name="connectToServer">Connect to Server</string>
     <string name="edit">Edit</string>
-    <string name="remove">Remove</string>
     <string name="delete">Delete</string>
     <string name="messageToUser">Type a message to user \'%s\'</string>
     <string name="messageToChannel">Type message to channel \'%s\'</string>
@@ -149,8 +148,6 @@
     <string name="share">Share</string>
     <string name="description">Description</string>
     <string name="shareMessage">Join this Mumble server with Mumla. %s</string>
-    <string name="status_notify_muted_and_deafened">Muted and deafened.</string>
-    <string name="status_notify_muted">Muted.</string>
     <string name="self_status_muted">Muted</string>
     <string name="self_status_deafened">Deafened</string>
     <string name="self_status_muted_deafened">Muted and deafened</string>

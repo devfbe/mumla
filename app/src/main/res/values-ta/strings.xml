@@ -77,7 +77,6 @@
     <string name="connect">இணை</string>
     <string name="connectToServer">சேவையகத்துடன் இணைக்கவும்</string>
     <string name="edit">தொகு</string>
-    <string name="remove">அகற்று</string>
     <string name="delete">நீக்கு</string>
     <string name="messageToUser">பயனருக்கு \'%s\' என்ற செய்தியைத் தட்டச்சு செய்க</string>
     <string name="messageToChannel">\'%s\' தடத்திற்கு செய்தியைத் தட்டச்சு செய்க</string>
@@ -97,8 +96,6 @@
     <string name="share">பங்கு</string>
     <string name="description">விவரம்</string>
     <string name="shareMessage">மும்லாவுடன் இந்த முணுமுணுப்பு சேவையகத்தில் சேரவும். %s</string>
-    <string name="status_notify_muted_and_deafened">முடக்கிய மற்றும் காது கேளாதது.</string>
-    <string name="status_notify_muted">முடக்கிய.</string>
     <string name="close">மூடு</string>
     <string name="search_name">பெயர்</string>
     <string name="search_country">நாடு</string>

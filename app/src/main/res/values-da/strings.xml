@@ -87,7 +87,6 @@
     <string name="chat">Chat</string>
     <string name="generateCertFailure">Kunne ikke generére certifikat.</string>
     <string name="addFavorite">Tilføj favorit</string>
-    <string name="remove">Fjern</string>
     <string name="unknown">Ukendt</string>
     <string name="description">Beskrivelse</string>
     <string name="channel_add">Tilføj kanal</string>

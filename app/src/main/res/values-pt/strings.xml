@@ -11,7 +11,6 @@
     <string name="messageToChannel">Enviar mensagem ao canal \'%s\'</string>
     <string name="messageToUser">Enviar mensagem ao usuário \'%s\'</string>
     <string name="delete">Excluir</string>
-    <string name="remove">Excluir</string>
     <string name="edit">Editar</string>
     <string name="connectToServer">Conectar-se ao servidor</string>
     <string name="connect">Conectar</string>
@@ -179,8 +178,6 @@
     <string name="search_country">País</string>
     <string name="search_name">Nome</string>
     <string name="close">Fechar</string>
-    <string name="status_notify_muted">Silenciado.</string>
-    <string name="status_notify_muted_and_deafened">Silenciado e áudio desativado.</string>
     <string name="shareMessage">Entre nesse servidor Mumble com o Mumla. %s</string>
     <string name="description">Descrição</string>
     <string name="share">Compartilhar</string>

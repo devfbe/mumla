@@ -22,7 +22,6 @@
     <string name="connected">Connectat</string>
     <string name="clearChat">Neteja el xat</string>
     <string name="online">En línia</string>
-    <string name="remove">Neteja</string>
     <string name="edit">Edita</string>
     <string name="connect">Connecta</string>
     <string name="searchHint">Cerca canals i usuaris</string>
@@ -113,8 +112,6 @@
     <string name="disconnectSure">Segur que voleu desconnectar-vos de %s?</string>
     <string name="error_fetching_servers">Error a l\'accedir al servidor.
 \nEsteu connectat a Internet\?</string>
-    <string name="status_notify_muted">Silenciat.</string>
-    <string name="status_notify_muted_and_deafened">Silenciat i ensordit.</string>
     <string name="shareMessage">Accediu a aquest servidor amb el Mumla. %s</string>
     <string name="share">Comparteix</string>
     <string name="generateCertSuccess">El vostre certificat s\'ha generat y s\'ha guardar com a %s!</string>

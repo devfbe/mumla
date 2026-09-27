@@ -138,7 +138,6 @@
     <string name="quickConnect">Snabbanslutning</string>
     <string name="connect">Anslut</string>
     <string name="edit">Redigera</string>
-    <string name="remove">Ta bort</string>
     <string name="delete">Ta bort</string>
     <string name="messageToUser">Skriv ett meddelande till användaren \'%s\'</string>
     <string name="messageToChannel">Skriv ett meddelande till kanalen \'%s\'</string>
@@ -147,8 +146,6 @@
     <string name="mumlaConnecting">Mumla ansluter…</string>
     <string name="mumlaDisconnected">Mumla nedkopplad</string>
     <string name="shareMessage">Anslut till denna Mumble-server med Mumla. %s</string>
-    <string name="status_notify_muted_and_deafened">Tystad och dövad.</string>
-    <string name="status_notify_muted">Tystad.</string>
     <string name="close">Stäng</string>
     <string name="search_name">Namn</string>
     <string name="search_country">Land</string>
