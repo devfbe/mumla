@@ -22,13 +22,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import androidx.core.os.bundleOf
+import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.slider.Slider
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.ChannelState
@@ -39,7 +43,6 @@ import se.lublin.mumla.databinding.ItemUserActionBinding
 import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.util.HtmlUtils
 import se.lublin.mumla.util.UserStatus
-import se.lublin.mumla.util.parentViewModels
 import kotlin.math.roundToInt
 
 /** The slider's range in percent; 100 is unchanged. */
@@ -49,15 +52,21 @@ private const val PERCENT = 100f
 /**
  * The bottom sheet of a user's row: their name, status and comment, an inline local-volume slider
  * for other users, and the moderation, comment and local actions the popup menu it replaces used
- * to offer. Only the session id is kept across rotation; everything else comes live from the
- * [ChannelTreeViewModel] its parent fragment (the [Actions] implementation) already holds.
+ * to offer. Only the session id is kept across rotation; the user's live state and every action go
+ * through [Actions], which its parent fragment implements off its own view model — the sheet never
+ * touches a view model of its own, so it cannot outlive the one it would have read from.
  */
 @Suppress("TooManyFunctions") // One rendering step or action mapping per function.
 class UserActionsSheet : BottomSheetDialogFragment() {
 
-    /** What the sheet's rows do, for the user it was opened on. */
-    @Suppress("TooManyFunctions") // One per action.
+    /** What the sheet reads and does, for the user it was opened on. */
+    @Suppress("TooManyFunctions") // One per action, plus the two state reads.
     interface Actions : MenuPermissions {
+        fun userMenuState(session: Int): UserMenuState?
+
+        /** [session]'s menu state, live; null once they are gone from the model. */
+        fun userMenuStates(session: Int): Flow<UserMenuState?>
+
         fun kickBan(session: Int, reason: String, ban: Boolean)
         fun setMuteDeaf(session: Int, mute: Boolean, deaf: Boolean)
         fun setPrioritySpeaker(session: Int, priority: Boolean)
@@ -70,16 +79,26 @@ class UserActionsSheet : BottomSheetDialogFragment() {
         fun register(session: Int)
         fun setLocalMuted(session: Int, muted: Boolean)
         fun setLocalIgnored(session: Int, ignored: Boolean)
+
+        /** Live preview while dragging the local-volume slider; not stored. */
+        fun previewLocalVolume(session: Int, volume: Float)
+
+        /** Plays [volume] live like [previewLocalVolume], and stores it. */
         fun setLocalVolume(session: Int, volume: Float)
         fun showInfo(session: Int, name: String?)
     }
 
     private val session: Int get() = requireArguments().getInt(ARG_SESSION)
-    private val tree: ChannelTreeViewModel by parentViewModels()
     private val actions: Actions get() = requireParentFragment() as Actions
 
-    /** Guards the moments the sheet moves the slider itself, so only a real drag calls back. */
+    /** Guards the moments the sheet moves the slider itself, so only a real change calls back. */
     private var applyingModel = false
+
+    /** Whether the slider is mid-drag: a drag only previews, release keeps the value once. */
+    private var trackingTouch = false
+
+    /** The rows currently bound, to rebuild them only when which actions show changed. */
+    private var boundRows: List<UserMenuRow>? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         BottomSheetUserActionsBinding.inflate(inflater, container, false).root
@@ -90,7 +109,7 @@ class UserActionsSheet : BottomSheetDialogFragment() {
         ViewCompat.setAccessibilityHeading(binding.userActionsName, true)
         bindVolumeSlider(binding)
 
-        val channel = tree.userMenuState(session)?.user?.channel
+        val channel = actions.userMenuState(session)?.user?.channel
         if (channel == null) {
             dismissAllowingStateLoss()
             return
@@ -99,10 +118,26 @@ class UserActionsSheet : BottomSheetDialogFragment() {
     }
 
     private fun bindVolumeSlider(binding: BottomSheetUserActionsBinding) {
-        binding.userActionsVolumeSlider.addOnChangeListener { _, value, _ ->
+        binding.userActionsVolumeSlider.addOnChangeListener { _, value, fromUser ->
             setVolumeLabel(binding, value.roundToInt())
-            if (!applyingModel) actions.setLocalVolume(session, value / PERCENT)
+            if (applyingModel || !fromUser) return@addOnChangeListener
+            if (trackingTouch) {
+                actions.previewLocalVolume(session, value / PERCENT)
+            } else {
+                // A keyboard or accessibility move: no touch release will follow to keep it.
+                actions.setLocalVolume(session, value / PERCENT)
+            }
         }
+        binding.userActionsVolumeSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(slider: Slider) {
+                trackingTouch = true
+            }
+
+            override fun onStopTrackingTouch(slider: Slider) {
+                trackingTouch = false
+                actions.setLocalVolume(session, slider.value / PERCENT)
+            }
+        })
         binding.userActionsVolumeReset.setOnClickListener {
             updateVolume(binding, 1f)
             actions.setLocalVolume(session, 1f)
@@ -124,11 +159,11 @@ class UserActionsSheet : BottomSheetDialogFragment() {
         setVolumeLabel(binding, percent)
     }
 
-    /** Renders every state change, and asks once for the channel permissions if not known yet. */
+    /** Renders every real state change, and asks once for the channel permissions if not known yet. */
     private fun observeState(binding: BottomSheetUserActionsBinding, channel: Int) {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { tree.userMenuStateFlow(session).collect { render(binding, it) } }
+                launch { actions.userMenuStates(session).distinctUntilChanged().collect { render(binding, it) } }
                 launch { requestPermissionsIfUnknown(channel) }
             }
         }
@@ -160,23 +195,47 @@ class UserActionsSheet : BottomSheetDialogFragment() {
         bindRows(binding, userMenuRows(state))
     }
 
+    /** Rebuilds the rows only when which actions show changed; otherwise just updates their state. */
     private fun bindRows(binding: BottomSheetUserActionsBinding, rows: List<UserMenuRow>) {
+        val previous = boundRows
         val container = binding.userActionsRows
-        container.removeAllViews()
-        for (row in rows) {
-            val item = ItemUserActionBinding.inflate(layoutInflater, container, false)
-            item.userActionIcon.setImageResource(iconOf(row.action))
-            item.userActionTitle.setText(titleOf(row.action))
-            item.userActionSwitch.isVisible = row.action.checkable
-            item.userActionSwitch.isChecked = row.checked
-            item.root.setOnClickListener { onAction(row.action) }
-            container.addView(item.root)
+        if (previous == null || previous.map { it.action } != rows.map { it.action }) {
+            container.removeAllViews()
+            for (row in rows) {
+                val item = ItemUserActionBinding.inflate(layoutInflater, container, false)
+                item.userActionIcon.setImageResource(iconOf(row.action))
+                item.userActionTitle.setText(titleOf(row.action))
+                item.root.setOnClickListener { onAction(row.action) }
+                bindRowState(item, row)
+                container.addView(item.root)
+            }
+        } else if (previous != rows) {
+            for (index in rows.indices) {
+                bindRowState(ItemUserActionBinding.bind(container.getChildAt(index)), rows[index])
+            }
+        }
+        boundRows = rows
+    }
+
+    /** The row's switch, and for TalkBack its state as one node: e.g. "Mute, switch, on". */
+    private fun bindRowState(item: ItemUserActionBinding, row: UserMenuRow) {
+        item.userActionSwitch.isVisible = row.action.checkable
+        item.userActionSwitch.isChecked = row.checked
+        if (row.action.checkable) ViewCompat.setAccessibilityDelegate(item.root, switchDelegate(row.checked))
+    }
+
+    private fun switchDelegate(checked: Boolean) = object : AccessibilityDelegateCompat() {
+        override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfoCompat) {
+            super.onInitializeAccessibilityNodeInfo(host, info)
+            info.className = SWITCH_CLASS_NAME
+            info.isCheckable = true
+            info.isChecked = checked
         }
     }
 
     @Suppress("CyclomaticComplexMethod") // One branch per action.
     private fun onAction(action: UserAction) {
-        val user = tree.userMenuState(session)?.user ?: return
+        val user = actions.userMenuState(session)?.user ?: return
         when (action) {
             UserAction.KICK -> showKickDialog(ban = false)
             UserAction.BAN -> showKickDialog(ban = true)
@@ -266,6 +325,7 @@ class UserActionsSheet : BottomSheetDialogFragment() {
 
     companion object {
         private const val ARG_SESSION = "session"
+        private const val SWITCH_CLASS_NAME = "android.widget.Switch"
 
         fun newInstance(session: Int) = UserActionsSheet().apply { arguments = bundleOf(ARG_SESSION to session) }
     }

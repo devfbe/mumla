@@ -262,7 +262,13 @@ class ChannelListFragment :
 
     override fun setLocalIgnored(session: Int, ignored: Boolean) = tree.setLocalIgnored(session, ignored)
 
+    override fun previewLocalVolume(session: Int, volume: Float) = tree.previewLocalVolume(session, volume)
+
     override fun setLocalVolume(session: Int, volume: Float) = tree.setLocalVolume(session, volume)
+
+    override fun userMenuState(session: Int): UserMenuState? = tree.userMenuState(session)
+
+    override fun userMenuStates(session: Int): Flow<UserMenuState?> = tree.userMenuStates(session)
 
     override fun showInfo(session: Int, name: String?) {
         showUserInfoDialog(requireContext(), name, tree.userStats(session))

@@ -179,7 +179,7 @@ class ChannelTreeViewModel(
     fun userMenuState(session: Int): UserMenuState? = userMenuStateOf(current, session)
 
     /** [session]'s menu state, live; null once they are gone from the model. */
-    fun userMenuStateFlow(session: Int): Flow<UserMenuState?> = model.map { userMenuStateOf(it, session) }
+    fun userMenuStates(session: Int): Flow<UserMenuState?> = model.map { userMenuStateOf(it, session) }
 
     private fun userMenuStateOf(model: ServerState?, session: Int): UserMenuState? {
         val user = model?.user(session) ?: return null
@@ -265,6 +265,11 @@ class ChannelTreeViewModel(
         remember(humla, user) { server, id ->
             if (ignored) addLocalIgnoredUser(server, id) else removeLocalIgnoredUser(server, id)
         }
+    }
+
+    /** Plays [session] at [volume] on this device, live, without storing it. */
+    fun previewLocalVolume(session: Int, volume: Float) {
+        connected?.actions?.setLocalVolume(session, volume)
     }
 
     /** Plays [session] at [volume] on this device and stores it for anyone of the same identity. */
