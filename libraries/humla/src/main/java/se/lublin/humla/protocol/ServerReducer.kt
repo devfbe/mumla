@@ -43,18 +43,6 @@ internal sealed interface LocalInput {
 }
 
 /**
- * The model as a pure function: a snapshot and one message make the next snapshot. Notices for the
- * chat log go to `emit` as they arise.
- */
-internal object ServerReducer {
-    fun reduce(state: ServerState, msg: MessageLite, emit: (HumlaEvent) -> Unit): ServerState =
-        ServerWriter(state).apply { onMessage(msg, emit) }.snapshot()
-
-    fun reduce(state: ServerState, input: LocalInput): ServerState =
-        ServerWriter(state).apply { onLocal(input) }.snapshot()
-}
-
-/**
  * Applies messages to the snapshot [published] last, and makes the next one on [snapshot]. The
  * persistent builders copy only the paths a message touches, and only once between two
  * snapshots, so a burst of frames costs about what it changes, not what the server holds.

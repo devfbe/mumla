@@ -73,25 +73,8 @@ class ActivityInputModeTest {
         // Read whole, the same buffer is far over the threshold.
         assertThat(ActivityInputMode(0.6f).shouldTransmit(reused, 480, null)).isTrue()
     }
-
-    @Test
-    fun `setThreshold updates amplitude mode but does not clobber probability mode`() {
-        val mode = ActivityInputMode(0.5f)
-        mode.setThreshold(0.9f)
-        assertThat(mode.vadConfig).isEqualTo(VadConfig.amplitude(0.9f))
-
-        mode.setVadConfig(VadConfig.probability())
-        mode.setThreshold(0.2f)
-        assertThat(mode.vadConfig.mode).isEqualTo(VadMode.PROBABILITY)
-        assertThat(mode.vadConfig.startThreshold).isEqualTo(0.6f)
-    }
-
-    /** The slider carries no hold time, so `setThreshold` must keep the configured one. */
-    @Test
-    fun `setThreshold keeps the configured hold time`() {
-        val mode = ActivityInputMode(0.5f)
-        mode.setVadConfig(VadConfig.amplitude(0.5f, holdTimeMs = 40L))
-        mode.setThreshold(0.9f)
-        assertThat(mode.vadConfig).isEqualTo(VadConfig(VadMode.AMPLITUDE, 0.9f, 0.75f, 40L))
-    }
 }
+
+/** Amplitude mode with a single start threshold. */
+internal fun ActivityInputMode(detectionThreshold: Float): ActivityInputMode =
+    ActivityInputMode(VoiceActivityDetector(VadConfig.amplitude(detectionThreshold)))

@@ -31,6 +31,4 @@ public object Permissions {
     public const val BAN: Int = 0x20000
     public const val REGISTER: Int = 0x40000
     public const val SELF_REGISTER: Int = 0x80000
-
-    internal const val ALL: Int = 0xf07ff
 }

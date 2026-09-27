@@ -19,27 +19,11 @@ package se.lublin.humla.audio.inputmode
 
 import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.capture.VadConfig
-import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 
 /** Voice-activity input mode: delegates to a [VoiceActivityDetector]. */
 internal class ActivityInputMode(private val detector: VoiceActivityDetector) : IInputMode {
-    /** Amplitude mode with a single start threshold. */
-    constructor(detectionThreshold: Float) : this(VoiceActivityDetector(VadConfig.amplitude(detectionThreshold)))
-
     val vadConfig: VadConfig get() = detector.config
-
-    /**
-     * Sets the amplitude **start** threshold, keeping the hold time; the stop threshold follows at
-     * `start - 0.15`. Ignored in [VadMode.PROBABILITY]: an amplitude value means nothing against
-     * a speech probability.
-     */
-    fun setThreshold(threshold: Float) {
-        val current = detector.config
-        if (current.mode == VadMode.AMPLITUDE) {
-            detector.config = VadConfig.amplitude(threshold, current.holdTimeMs)
-        }
-    }
 
     fun setVadConfig(config: VadConfig) {
         detector.config = config
