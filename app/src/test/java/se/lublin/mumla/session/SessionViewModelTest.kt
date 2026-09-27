@@ -93,22 +93,44 @@ class SessionViewModelTest {
     }
 
     @Test
-    fun theWhisperTargetIsNamedWhileWhispering() {
+    fun theWhisperTargetIsNamedWhileRegisteredWhetherOrNotItIsActive() {
+        every { actions.whisperTarget } returns null
+        every { actions.isWhisperActive } returns false
         state.value = SessionState.Connected
         installSession(session)
         val events = session.stubEvents()
         idleMainLooper()
         assertThat(viewModel.whisperTarget.value).isNull()
+        assertThat(viewModel.isWhisperActive.value).isFalse()
 
-        every { actions.voiceTargetMode } returns VoiceTargetMode.WHISPER
+        // Armed but not active: the panel shows the target, without it receiving voice yet.
         every { actions.whisperTarget } returns mockk<WhisperTarget> { every { name } returns "Lobby" }
+        every { actions.isWhisperActive } returns false
+        events.tryEmit(HumlaEvent.VoiceTargetChanged(VoiceTargetMode.NORMAL))
+        idleMainLooper()
+        assertThat(viewModel.whisperTarget.value).isEqualTo("Lobby")
+        assertThat(viewModel.isWhisperActive.value).isFalse()
+
+        every { actions.isWhisperActive } returns true
         events.tryEmit(HumlaEvent.VoiceTargetChanged(VoiceTargetMode.WHISPER))
         idleMainLooper()
         assertThat(viewModel.whisperTarget.value).isEqualTo("Lobby")
+        assertThat(viewModel.isWhisperActive.value).isTrue()
 
         state.value = SessionState.Disconnected()
         idleMainLooper()
         assertThat(viewModel.whisperTarget.value).isNull()
+        assertThat(viewModel.isWhisperActive.value).isFalse()
+    }
+
+    @Test
+    fun setWhisperActiveActsOnTheConnectedSession() {
+        state.value = SessionState.Connected
+        installSession(session)
+
+        viewModel.setWhisperActive(true)
+
+        verify { actions.setWhisperActive(true) }
     }
 
     @Test
