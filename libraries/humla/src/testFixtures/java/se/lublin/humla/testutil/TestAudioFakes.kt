@@ -15,8 +15,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.audio
+package se.lublin.humla.testutil
 
+import se.lublin.humla.audio.PcmPlaybackSink
+import se.lublin.humla.audio.PcmPlaybackSinkFactory
 import se.lublin.humla.audio.capture.CaptureRequest
 import se.lublin.humla.audio.capture.PcmCaptureSource
 import se.lublin.humla.audio.capture.PcmCaptureSourceFactory
@@ -48,12 +50,13 @@ class TestCaptureSource(
 
     override fun read(buffer: ShortArray, length: Int): Int {
         while (!stopped) {
-            val frame = queue.poll(2, TimeUnit.MILLISECONDS) ?: last?.takeIf { loopLastFrame } ?: continue
-            if (frame.isEmpty()) continue
-            last = frame
-            val n = minOf(frame.size, length)
-            System.arraycopy(frame, 0, buffer, 0, n)
-            return n
+            val frame = queue.poll(2, TimeUnit.MILLISECONDS) ?: last?.takeIf { loopLastFrame }
+            if (frame != null && frame.isNotEmpty()) {
+                last = frame
+                val n = minOf(frame.size, length)
+                System.arraycopy(frame, 0, buffer, 0, n)
+                return n
+            }
         }
         return 0
     }

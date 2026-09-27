@@ -27,8 +27,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.audio.MeterReading
 import se.lublin.mumla.R
-import se.lublin.mumla.audio.MeterReading
 
 /** Every field of a [MeterReading] has to arrive on the bar, read back off the view. */
 @RunWith(RobolectricTestRunner::class)

@@ -15,35 +15,32 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.audio
+package se.lublin.humla.audio
 
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import se.lublin.humla.exception.AudioInitializationException
 
-/**
- * Blocking 16-bit mono PCM playback for the settings screen's loopback monitor. Lives in the app
- * because only the settings screen uses it.
- */
-interface PcmPlaybackSink {
-    fun play()
+/** Blocking 16-bit mono PCM playback for the [CapturePreview]'s loopback. */
+public interface PcmPlaybackSink {
+    public fun play()
 
     /** @return how many samples were written, or a negative error code. */
-    fun write(buffer: ShortArray, length: Int): Int
+    public fun write(buffer: ShortArray, length: Int): Int
 
-    fun pause()
-    fun flush()
-    fun stop()
-    fun release()
+    public fun pause()
+    public fun flush()
+    public fun stop()
+    public fun release()
 }
 
-fun interface PcmPlaybackSinkFactory {
-    fun open(audioStream: Int, sampleRate: Int): PcmPlaybackSink
+public fun interface PcmPlaybackSinkFactory {
+    public fun open(audioStream: Int, sampleRate: Int): PcmPlaybackSink
 }
 
 /** The real sink: one `AudioTrack` in streaming mode. */
-class AndroidAudioTrackSink internal constructor(private val track: AudioTrack) : PcmPlaybackSink {
+public class AndroidAudioTrackSink internal constructor(private val track: AudioTrack) : PcmPlaybackSink {
     override fun play() = track.play()
 
     override fun write(buffer: ShortArray, length: Int): Int = track.write(buffer, 0, length)
@@ -56,7 +53,7 @@ class AndroidAudioTrackSink internal constructor(private val track: AudioTrack) 
 
     override fun release() = track.release()
 
-    class Factory : PcmPlaybackSinkFactory {
+    public class Factory : PcmPlaybackSinkFactory {
         override fun open(audioStream: Int, sampleRate: Int): PcmPlaybackSink {
             val minBufferSize = AudioTrack.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,

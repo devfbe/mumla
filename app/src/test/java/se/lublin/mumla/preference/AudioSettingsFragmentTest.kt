@@ -35,10 +35,10 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.testutil.TestCaptureSource
+import se.lublin.humla.testutil.TestPlaybackSink
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.audio.TestCaptureSource
-import se.lublin.mumla.audio.TestPlaybackSink
 
 /** The live meter only takes the microphone, and the audio mode, while the user asks for it. */
 @RunWith(RobolectricTestRunner::class)

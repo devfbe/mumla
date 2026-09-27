@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.audio
+package se.lublin.humla.audio
 
 import android.content.Context
 import android.media.AudioManager
@@ -36,17 +36,19 @@ import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.fakes.FakeRnnoiseApi
 import se.lublin.humla.audio.capture.fakes.FakeSpeexPreprocessApi
 import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
+import se.lublin.humla.testutil.TestCaptureSource
+import se.lublin.humla.testutil.TestPlaybackSink
 import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
-class AudioTestSessionTest {
+class CapturePreviewTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val readings = CopyOnWriteArrayList<MeterReading>()
-    private var session: AudioTestSession? = null
+    private var session: CapturePreview? = null
 
     @After
     fun stopSession() {
@@ -70,6 +72,7 @@ class AudioTestSessionTest {
             apmApi = { FakeWebRtcApmApi().apply { failCreate = true } },
         )
 
+    @Suppress("LongParameterList") // Every setting a test varies.
     private fun session(
         source: TestCaptureSource,
         sink: TestPlaybackSink = TestPlaybackSink(),
@@ -83,8 +86,8 @@ class AudioTestSessionTest {
         sinkFactory: TestPlaybackSink.Factory = TestPlaybackSink.Factory(sink),
         captureFactory: TestCaptureSource.Factory = TestCaptureSource.Factory(source),
         resamplerFactory: (Int, Int) -> Resampler = { _, _ -> error("no resampler expected at 48 kHz") },
-    ) = AudioTestSession(
-        audioManager, vad, noise, -25, echo, effects, loopback, { readings += it },
+    ) = CapturePreview(
+        audioManager, vad, noise, -25, echo, effects, loopback, onReading = { readings += it },
         readingIntervalFrames = 1,
         captureFactory = captureFactory,
         sinkFactory = sinkFactory,
@@ -210,7 +213,7 @@ class AudioTestSessionTest {
     @Test
     fun `the reading interval decides how many readings a run produces`() {
         val source = TestCaptureSource(List(40) { frameAt(-20f) })
-        val s = AudioTestSession(
+        val s = CapturePreview(
             audioManager, VadConfig.adaptive(), NoiseSuppressionMode.NONE, -25, EchoCancellationMode.NONE,
             AndroidAudioEffects(), false, { readings += it }, readingIntervalFrames = 10,
             captureFactory = TestCaptureSource.Factory(source),
@@ -360,7 +363,7 @@ class AudioTestSessionTest {
     @Test
     fun `a failure after the recorder is open still releases it`() {
         val source = TestCaptureSource(emptyList())
-        val s = AudioTestSession(
+        val s = CapturePreview(
             audioManager, VadConfig.adaptive(), NoiseSuppressionMode.NONE, -25, EchoCancellationMode.NONE,
             AndroidAudioEffects(noiseSuppressor = true), true, { readings += it }, 1,
             TestCaptureSource.Factory(source),

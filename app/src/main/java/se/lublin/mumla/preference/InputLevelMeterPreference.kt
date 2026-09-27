@@ -22,9 +22,9 @@ import android.util.AttributeSet
 import android.widget.TextView
 import androidx.preference.Preference
 import androidx.preference.PreferenceViewHolder
+import se.lublin.humla.audio.MeterReading
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.mumla.R
-import se.lublin.mumla.audio.MeterReading
 import kotlin.math.roundToInt
 
 /**
