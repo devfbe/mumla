@@ -362,6 +362,7 @@
     <string name="markdownMessagesSum">Send **bold**, *italic*, `code` and [links](…) formatted</string>
     <string name="channel_enter_denied">You are not allowed to enter %1$s.</string>
     <string name="a11y_channel_options">Channel options</string>
+    <string name="a11y_channel_level">%1$s, level %2$d</string>
     <string name="a11y_user_options">User options</string>
     <string name="a11y_server_options">Server options</string>
     <string name="a11y_stop_shouting">Stop shouting</string>

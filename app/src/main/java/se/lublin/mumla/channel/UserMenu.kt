@@ -128,12 +128,7 @@ class UserMenu(
     private fun showChannelMoveDialog() {
         val channels = actions.channels()
         if (channels.isEmpty()) return
-        MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.user_menu_move)
-            .setItems(channels.map { it.name }.toTypedArray()) { _, which ->
-                actions.moveUser(session, channels[which].id)
-            }
-            .show()
+        showChannelMoveDialog(context, channels) { actions.moveUser(session, it) }
     }
 
     fun showPopup(anchor: View) {
