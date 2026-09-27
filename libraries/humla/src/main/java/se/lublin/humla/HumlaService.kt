@@ -21,7 +21,6 @@ import android.app.Service
 import android.content.Intent
 import android.media.AudioManager
 import android.net.ConnectivityManager
-import android.net.Network
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -29,6 +28,10 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -72,8 +75,11 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.protocol.ServerCommands
+import se.lublin.humla.session.AndroidNetworkMonitor
+import se.lublin.humla.session.AndroidSessionWakeLock
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.session.SessionLifecycle
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.SessionStateMachine
 import se.lublin.humla.util.HumlaLogger
@@ -104,8 +110,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     private var _voiceTargetId: Byte = 0
     private lateinit var whisperTargetList: WhisperTargetList
 
-    private lateinit var wakeLock: PowerManager.WakeLock
     private lateinit var handler: Handler
+    private lateinit var scope: CoroutineScope
 
     /**
      * Emitted from any thread without suspending. Beyond [EVENT_BUFFER] events not yet collected
@@ -156,9 +162,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * The session lifecycle. Confined to the main thread, where binder calls, connection callbacks,
      * the reconnect timer and the network callback all run; other threads collect [sessionState].
      */
+    private lateinit var lifecycle: SessionLifecycle
+
     @VisibleForTesting
-    internal lateinit var stateMachine: SessionStateMachine
-        private set
+    internal val stateMachine: SessionStateMachine get() = lifecycle.machine
 
     /** Test seam: builds the connection used by [connect]. Set before `onCreate`. */
     var connectionFactory: (HumlaConnection.HumlaConnectionListener) -> HumlaConnection =
@@ -172,26 +179,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /** A test may set a fake before [onCreate]; otherwise [onCreate] creates the Android one. */
     var communicationDevices: CommunicationDevices? = null
-
-    /** Waits for a default network while the reconnect is on hold, and retries as soon as one is up. */
-    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            // Registered with handler, so this runs on the main thread like every other mutator.
-            unregisterNetworkCallback()
-            if (stateMachine.current !is SessionState.ConnectionLost) return
-            Log.v(TAG, "Connectivity restored, attempting reconnect.")
-            if (stateMachine.connectivityRestored()) handler.post(reconnectRunnable)
-        }
-    }
-    private var networkCallbackRegistered = false
-
-    /**
-     * The backoff timer. Pending posts are never cancelled: the state machine refuses a retry in
-     * every state but ConnectionLost. A stale post can therefore retry a later loss early, once.
-     */
-    private val reconnectRunnable = Runnable {
-        if (stateMachine.reconnectTimerFired()) startSession()
-    }
 
     private val routerListener = object : AudioRouter.Listener {
         override fun onRouteChanged(type: Int?) = setRoutedDevice(type)
@@ -246,10 +233,15 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun onCreate() {
         super.onCreate()
-        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Humla:HumlaService")
         handler = Handler(mainLooper)
-        stateMachine = SessionStateMachine(reconnectPolicy)
+        scope = CoroutineScope(SupervisorJob() + handler.asCoroutineDispatcher())
+        lifecycle = SessionLifecycle(
+            reconnectPolicy,
+            AndroidNetworkMonitor(getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager, handler),
+            AndroidSessionWakeLock(getSystemService(POWER_SERVICE) as PowerManager),
+            scope,
+            ::startSession,
+        )
         // One instance per service life, so a platform refusal is reported once rather than on
         // every route decision.
         val devices = communicationDevices ?: AndroidCommunicationDevices(
@@ -283,7 +275,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         // thread running. disconnect() only queues the teardown; onConnectionDisconnected arrives
         // on a later main-looper turn and disengages the already released router, which is harmless.
         disconnect()
-        unregisterNetworkCallback()
+        lifecycle.release()
+        scope.cancel()
         router.disengage()
         router.release()
         // Posts the teardown and quits the looper without waiting for either.
@@ -297,11 +290,11 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * session is up.
      */
     override fun connect() {
-        if (!stateMachine.connectRequested()) return
+        if (!lifecycle.connectRequested()) return
         startSession()
     }
 
-    /** Builds and starts one connection attempt; called from [connect] and [reconnectRunnable]. */
+    /** Builds and starts one connection attempt; called from [connect] and for every retry. */
     private fun startSession() {
         // Whisper slots are cleared when a session ends. The voice target can be set while
         // disconnected, so it is reset here.
@@ -313,7 +306,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         val server = config.server
         if (server == null) {
             Log.e(TAG, "connect() without a target server")
-            stateMachine.disconnectRequested()
+            lifecycle.disconnectRequested()
             emit(
                 HumlaEvent.Disconnected(
                     HumlaException(
@@ -351,7 +344,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             // disconnected this single-use connection and connect() refuses. Report a failed
             // attempt instead of throwing out of onStartCommand or the reconnect runnable.
             Log.w(TAG, "Connection was cancelled before it could start", e)
-            stateMachine.disconnectRequested()
+            lifecycle.disconnectRequested()
             emit(HumlaEvent.Disconnected(HumlaException(e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)))
         }
     }
@@ -361,9 +354,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * connection to report the end, so the wake lock and network callback are released here.
      */
     override fun disconnect() {
-        val waiting = stateMachine.current is SessionState.ConnectionLost
-        stateMachine.disconnectRequested()
-        if (waiting) releaseSessionResources()
+        if (lifecycle.disconnectRequested()) releaseSessionResources()
         connection?.disconnect()
     }
 
@@ -390,23 +381,11 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun onConnectionSynchronized() {
         val connection = conn()
-        if (!connection.isConnected) {
-            return
-        }
-
-        // TODO hackish, but this seems to happen?!
+        // TODO hackish, but a missing model handler seems to happen?!
         val modelHandler = modelHandler
-        if (modelHandler == null) {
-            Log.e(TAG, "onConnectionSynchronized: model handler is null")
-            return
-        }
-
-        stateMachine.synchronized()
+        if (!connection.isConnected || modelHandler == null || !lifecycle.synchronized()) return
 
         Log.v(TAG, "Connected")
-        // The lock is reference counted and taken once per session, but released only when the
-        // session ends for good.
-        if (!wakeLock.isHeld) wakeLock.acquire()
 
         // Restore the route the user asked for; onConnectionDisconnected drops it.
         router.engage()
@@ -461,7 +440,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         val autoReconnect = sessionConfig.autoReconnect && e != null &&
             e.reason == HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
-        val next = stateMachine.lost(autoReconnect, e)
+        val next = lifecycle.lost(autoReconnect, e)
 
         // The route is a session resource and the wish is not, so this runs on every disconnect,
         // auto-reconnect included; onConnectionSynchronized is where it comes back.
@@ -474,11 +453,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         _voiceTargetId = 0
         whisperTargetList.clear()
 
-        if (next is SessionState.ConnectionLost) {
-            // The wake lock, the Bluetooth wish, the mute/deafen state and the app's foreground
-            // notification survive this transition.
-            scheduleReconnect(next.reconnectInMillis)
-        } else {
+        // The wake lock, the Bluetooth wish, the mute/deafen state and the app's foreground
+        // notification survive a ConnectionLost.
+        if (next is SessionState.Disconnected) {
             // A late, error-free report after cancelReconnect keeps the cancelled session's error
             // and must not claim to have given up.
             val ended = next as SessionState.Disconnected
@@ -525,55 +502,11 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     override val events: SharedFlow<HumlaEvent>
         get() = mutableEvents.asSharedFlow()
 
-    private fun scheduleReconnect(delayMillis: Long) {
-        if (isOnline()) {
-            Log.v(TAG, "Reconnecting in $delayMillis ms")
-            handler.postDelayed(reconnectRunnable, delayMillis)
-        } else {
-            // No point in burning attempts while there is no network; wait for it to come back.
-            Log.v(TAG, "Offline; waiting for connectivity before reconnecting.")
-            registerNetworkCallback()
-        }
-    }
-
-    /** Gives back everything a live session holds. Only a Disconnected state reaches this. */
+    /** Gives back what the session held beyond [lifecycle]'s share. Only a Disconnected state reaches this. */
     private fun releaseSessionResources() {
-        unregisterNetworkCallback()
         // The chooser's pick belongs to this session, as a pick in the phone app belongs to one
         // call; a dropped connection keeps it, the end of the session does not.
         router.forgetChoice()
-        if (wakeLock.isHeld) wakeLock.release()
-    }
-
-    /**
-     * Whether a default network is up. Deliberately not a `NET_CAPABILITY_INTERNET` check:
-     * Robolectric's ShadowConnectivityManager reports no capabilities unless a test sets them.
-     */
-    private fun isOnline(): Boolean {
-        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        return cm.activeNetwork != null
-    }
-
-    private fun registerNetworkCallback() {
-        if (networkCallbackRegistered) return
-        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        try {
-            cm.registerDefaultNetworkCallback(networkCallback, handler)
-            networkCallbackRegistered = true
-        } catch (e: RuntimeException) {
-            Log.e(TAG, "Error registering the network callback: " + e.message)
-        }
-    }
-
-    private fun unregisterNetworkCallback() {
-        if (!networkCallbackRegistered) return
-        networkCallbackRegistered = false
-        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        try {
-            cm.unregisterNetworkCallback(networkCallback)
-        } catch (e: IllegalArgumentException) {
-            // Not registered; nothing to do.
-        }
     }
 
     /**
@@ -639,7 +572,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override val connectionState: ConnectionState
-        get() = when (val state = stateMachine.current) {
+        get() = when (val state = lifecycle.current) {
             SessionState.Connecting, is SessionState.Reconnecting -> ConnectionState.CONNECTING
             SessionState.Connected -> ConnectionState.CONNECTED
             is SessionState.ConnectionLost -> ConnectionState.CONNECTION_LOST
@@ -648,14 +581,14 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
 
     override val sessionState: StateFlow<SessionState>
-        get() = stateMachine.state
+        get() = lifecycle.state
 
     /**
      * Why the last session ended. Read from the state machine, which carries the error across
      * reconnect attempts that replace the connection object.
      */
     override val connectionError: HumlaException?
-        get() = when (val state = stateMachine.current) {
+        get() = when (val state = lifecycle.current) {
             is SessionState.Disconnected -> state.error
             is SessionState.ConnectionLost -> state.error
             is SessionState.Reconnecting -> state.error
@@ -663,7 +596,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
 
     override val isReconnecting: Boolean
-        get() = when (stateMachine.current) {
+        get() = when (lifecycle.current) {
             is SessionState.ConnectionLost, is SessionState.Reconnecting -> true
             else -> false
         }
@@ -673,13 +606,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * reach onConnectionSynchronized for a session the user has just ended.
      */
     override fun cancelReconnect() {
-        if (stateMachine.cancelReconnect()) {
+        if (lifecycle.cancelReconnect()) {
             releaseSessionResources()
             connection?.disconnect()
         }
     }
 
-    fun isWakeLockHeldForTest(): Boolean = wakeLock.isHeld
+    fun isWakeLockHeldForTest(): Boolean = lifecycle.isWakeLockHeld
 
     override val targetServer: Server?
         get() = sessionConfig.connection.server
@@ -860,7 +793,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     override fun setSelfMuteDeafState(mute: Boolean, deaf: Boolean) = commands().setSelfMuteDeaf(mute, deaf)
 
     override val isConnected: Boolean
-        get() = stateMachine.current == SessionState.Connected
+        get() = lifecycle.current == SessionState.Connected
 
     override fun linkChannels(channelA: IChannel, channelB: IChannel) =
         commands().linkChannels(channelA.id, channelB.id)

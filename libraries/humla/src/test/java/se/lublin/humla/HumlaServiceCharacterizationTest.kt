@@ -120,7 +120,7 @@ class HumlaServiceCharacterizationTest {
         val lock = ShadowPowerManager.getLatestWakeLock()
         assertThat(lock).isNotNull()
         assertThat(lock.isHeld).isFalse()
-        assertThat(shadowOf(lock).getTag()).isEqualTo("Humla:HumlaService")
+        assertThat(shadowOf(lock).getTag()).isEqualTo("Humla:Session")
     }
 
     /** The binder hands back the service itself; `HumlaService` is its own `IHumlaService`. */
