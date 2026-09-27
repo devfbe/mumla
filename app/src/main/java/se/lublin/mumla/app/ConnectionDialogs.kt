@@ -16,7 +16,6 @@
  */
 package se.lublin.mumla.app
 
-import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.DialogFragment
@@ -24,6 +23,7 @@ import se.lublin.humla.model.Server
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.RejectType
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ConnectionErrorDialogFragment.Action
@@ -207,7 +207,7 @@ class ConnectionDialogs(
     }
 
     private fun onTrustFailed(e: Exception) {
-        Log.w(TAG, "Could not trust the certificate", e)
+        HumlaLog.w(TAG, "Could not trust the certificate", e)
         Toast.makeText(activity, R.string.trust_add_failed, Toast.LENGTH_LONG).show()
     }
 

@@ -38,6 +38,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowToast
 import se.lublin.mumla.R
+import se.lublin.mumla.testing.FileProviderCache
 import se.lublin.mumla.testing.idleMainLooper
 import java.io.File
 import kotlin.coroutines.CoroutineContext

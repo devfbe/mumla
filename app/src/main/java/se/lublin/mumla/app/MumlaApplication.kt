@@ -14,11 +14,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
-import se.lublin.humla.util.AndroidLogSink
-import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.MumlaSQLiteDatabase
+import se.lublin.mumla.log.AppLog
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.util.ApplicationScope
 import se.lublin.mumla.util.changes
@@ -60,7 +59,7 @@ class MumlaApplication :
 
     override fun onCreate() {
         super.onCreate()
-        HumlaLog.addSink(AndroidLogSink)
+        AppLog.install()
         DebugStrictMode.install()
         container = AppContainer(this, scope)
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)

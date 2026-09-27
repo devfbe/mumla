@@ -1,4 +1,4 @@
-package se.lublin.mumla.chat
+package se.lublin.mumla.testing
 
 import androidx.core.content.FileProvider
 

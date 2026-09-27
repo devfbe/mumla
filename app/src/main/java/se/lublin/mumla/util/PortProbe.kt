@@ -1,8 +1,8 @@
 package se.lublin.mumla.util
 
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import se.lublin.humla.util.HumlaLog
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -15,7 +15,7 @@ suspend fun isPortOpen(host: String, port: Int, timeoutMs: Int): Boolean = withC
         Socket().use { it.connect(InetSocketAddress(host, port), timeoutMs) }
         true
     } catch (e: IOException) {
-        Log.d(TAG, "isPortOpen($host, $port): $e")
+        HumlaLog.d(TAG, "isPortOpen($host, $port): $e")
         false
     }
 }

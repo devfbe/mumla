@@ -37,6 +37,11 @@
         app:summary="@string/app_news_summary"
         app:iconSpaceReserved="false"/>
     <Preference
+        android:key="shareLog"
+        android:title="@string/share_log"
+        android:summary="@string/share_log_summary"
+        app:iconSpaceReserved="false"/>
+    <Preference
         android:title="@string/acknowledgements"
         android:summary="@string/acknowledgementsSum"
         app:iconSpaceReserved="false">

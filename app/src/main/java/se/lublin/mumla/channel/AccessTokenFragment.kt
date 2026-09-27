@@ -18,7 +18,6 @@
 package se.lublin.mumla.channel
 
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -31,6 +30,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.databinding.FragmentTokensBinding
 import se.lublin.mumla.databinding.TokenRowBinding
 import se.lublin.mumla.db.MumlaRepository
@@ -81,7 +81,7 @@ class AccessTokenFragment : Fragment() {
         val token = field.text.toString().trim()
         if (token.isEmpty()) return
         field.setText("")
-        Log.i(TAG, "Adding a token")
+        HumlaLog.i(TAG, "Adding a token")
 
         tokens += token
         showTokens { binding?.tokenList?.smoothScrollToPosition(tokens.size - 1) }

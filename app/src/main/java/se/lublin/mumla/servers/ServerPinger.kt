@@ -17,9 +17,9 @@
 
 package se.lublin.mumla.servers
 
-import android.util.Log
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ServerResolver
+import se.lublin.humla.util.HumlaLog
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -52,7 +52,7 @@ class ServerPinger(
             socket.receive(DatagramPacket(reply, reply.size))
             val latencyMs = ((System.nanoTime() - startTime) / NANOS_PER_MILLI).toInt()
             ServerInfoResponse(server, reply, latencyMs).also {
-                Log.d(TAG, "Server version: ${it.versionString} Users: ${it.currentUsers}/${it.maximumUsers}")
+                HumlaLog.d(TAG, "Server version: ${it.versionString} Users: ${it.currentUsers}/${it.maximumUsers}")
             }
         }
     } catch (e: Exception) {

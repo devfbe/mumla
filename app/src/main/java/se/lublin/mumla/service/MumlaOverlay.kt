@@ -20,7 +20,6 @@ package se.lublin.mumla.service
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.PixelFormat
-import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -38,6 +37,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.OverlayBinding
@@ -120,7 +120,7 @@ class MumlaOverlay(private val context: Context, private val sessions: SessionMa
         try {
             windowManager.removeView(overlayView)
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "The overlay was not attached", e)
+            HumlaLog.w(TAG, "The overlay was not attached", e)
         }
     }
 

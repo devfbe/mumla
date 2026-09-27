@@ -22,8 +22,8 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import android.util.Log
 import se.lublin.humla.model.Server
+import se.lublin.humla.util.HumlaLog
 
 /**
  * Server passwords, access tokens and certificate blobs are stored encrypted, see [SecretCodec].
@@ -53,7 +53,7 @@ class MumlaSQLiteDatabase(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        Log.w(TAG, "Database upgrade from $oldVersion to $newVersion")
+        HumlaLog.w(TAG, "Database upgrade from $oldVersion to $newVersion")
         if (oldVersion <= PRE_FAVOURITES_DB_VERSION) db.execSQL(TABLE_FAVOURITES_CREATE_SQL)
         if (oldVersion <= PRE_TOKENS_DB_VERSION) db.execSQL(TABLE_TOKENS_CREATE_SQL)
         if (oldVersion <= PRE_COMMENTS_DB_VERSION) db.execSQL(TABLE_COMMENTS_CREATE_SQL)

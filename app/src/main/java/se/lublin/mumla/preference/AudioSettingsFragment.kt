@@ -29,7 +29,6 @@ import android.media.audiofx.NoiseSuppressor
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.View
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
@@ -52,6 +51,7 @@ import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.listCommunicationDevices
 import se.lublin.humla.exception.AudioInitializationException
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.session.SessionSettings
@@ -234,7 +234,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             // Clear the idle hint; the first reading follows within a few frames.
             meter.setReading(null)
         } catch (e: AudioInitializationException) {
-            Log.w(TAG, "input level meter unavailable", e)
+            HumlaLog.w(TAG, "input level meter unavailable", e)
             meter.setMessage(getString(R.string.inputLevelMeterUnavailable))
         }
     }

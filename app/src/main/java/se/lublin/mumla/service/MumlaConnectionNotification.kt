@@ -30,9 +30,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
 import android.os.Build
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
 
@@ -93,10 +93,10 @@ class MumlaConnectionNotification private constructor(
                 service.startForeground(NOTIFICATION_ID, notification)
             }
         } catch (e: ForegroundServiceStartNotAllowedException) {
-            Log.w(TAG, "Foreground service start not allowed", e)
+            HumlaLog.w(TAG, "Foreground service start not allowed", e)
             return false
         } catch (e: SecurityException) {
-            Log.w(TAG, "Not permitted to start a microphone foreground service", e)
+            HumlaLog.w(TAG, "Not permitted to start a microphone foreground service", e)
             return false
         }
         isForeground = true
