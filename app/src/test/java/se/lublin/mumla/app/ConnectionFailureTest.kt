@@ -104,7 +104,8 @@ class ConnectionFailureTest {
 
     @Test
     fun anUnusableClientCertificateIsRejectedAndAnythingElseGeneric() {
-        val certificate = connectionFailureUi(DisconnectReason.Failed("Could not read certificate", CertificateException()))
+        val certificate =
+            connectionFailureUi(DisconnectReason.Failed("Could not read certificate", CertificateException()))
         val other = connectionFailureUi(DisconnectReason.Failed("", null))
 
         assertThat(certificate.failure).isEqualTo(ConnectionFailure.CERTIFICATE_REJECTED)

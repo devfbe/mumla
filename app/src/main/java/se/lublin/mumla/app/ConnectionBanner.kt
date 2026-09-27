@@ -33,6 +33,8 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.ConnectionBannerBinding
 import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.util.Edge
+import se.lublin.mumla.util.padForSystemBars
 
 private const val SECOND_MS = 1000L
 
@@ -50,6 +52,7 @@ class ConnectionBanner(
     private val countdown = ViewModelProvider(activity)[ReconnectCountdown::class.java]
 
     init {
+        binding.root.padForSystemBars(Edge.START, Edge.END)
         binding.connectionBannerCancel.setOnClickListener { cancel() }
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) { sessions.state.collectLatest(::show) }

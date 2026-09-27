@@ -95,7 +95,8 @@ class ConnectionDialogsTest {
 
     private fun errorDialog(): AlertDialog = checkNotNull(dialog("connection_error"))
 
-    private fun AlertDialog.title(): String = findViewById<TextView>(androidx.appcompat.R.id.alertTitle)!!.text.toString()
+    private fun AlertDialog.title(): String =
+        findViewById<TextView>(androidx.appcompat.R.id.alertTitle)!!.text.toString()
 
     private fun AlertDialog.click(button: Int) {
         getButton(button).performClick()
