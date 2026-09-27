@@ -21,6 +21,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -30,8 +31,12 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
+import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.stubActions
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubEvents
 import android.os.Looper
@@ -77,12 +82,16 @@ class UserInfoTest {
     @Test
     fun theDialogRequestsStatsShowsThemAndRefreshesWhileOpen() {
         val context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
-        val session = mockk<IHumlaSession>(relaxed = true).stubConnected()
+        val session = mockk<IHumlaSession>(relaxed = true)
+        val actions = session.stubActions()
+        installSession(session.stubConnected())
         val events = session.stubEvents()
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val tree = ChannelTreeViewModel(SessionManager.get(app), MumlaRepository.get(app), false, flowOf(true))
 
-        val dialog = showUserInfoDialog(context, session, 7, "Ann")
+        val dialog = showUserInfoDialog(context, "Ann", tree.userStats(7))
         idleMainLooper()
-        verify(exactly = 1) { session.actions.requestUserStats(7) }
+        verify(exactly = 1) { actions.requestUserStats(7) }
         val text = dialog.findViewById<TextView>(R.id.user_info_text)!!
         assertThat(text.text.toString()).isEqualTo("Loading…")
 
@@ -95,10 +104,10 @@ class UserInfoTest {
         assertThat(text.text.toString()).contains("Operating system: Linux Ubuntu 24.04")
 
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
-        verify(exactly = 2) { session.actions.requestUserStats(7) }
+        verify(exactly = 2) { actions.requestUserStats(7) }
 
         dialog.dismiss()
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(20))
-        verify(exactly = 2) { session.actions.requestUserStats(7) }
+        verify(exactly = 2) { actions.requestUserStats(7) }
     }
 }

@@ -92,7 +92,7 @@ class ChannelFragmentTabsTest {
 
     @Test
     fun `a target picked in the channel tab is where the chat tab sends`() {
-        val lounge = FakeChannel(5, "Lounge")
+        val lounge = ChannelRow.Channel(5, "Lounge", 0, null, true, true, false, false, ChannelRow.Lock.NONE)
         val list = fragment.childFragmentManager.fragments.filterIsInstance<ChannelListFragment>().single()
         list.onChannelClick(lounge)
 

@@ -1,5 +1,6 @@
 package se.lublin.mumla.channel
 
+import android.view.View
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -7,34 +8,45 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
+import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.SessionActions
+import se.lublin.humla.model.ChannelState
+import se.lublin.humla.model.Server
+import se.lublin.humla.model.ServerState
+import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
+import se.lublin.mumla.testing.serverState
+import se.lublin.mumla.testing.stubActions
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubModel
 import se.lublin.mumla.testing.stubState
+import se.lublin.mumla.testing.stubTalkStates
 
 /**
- * Covers the chat-target action mode, the list across disconnect and rebind, and the refusal of a
- * host or parent that cannot serve the fragment.
+ * The channel list screen over a mocked session: its rows across disconnects, following us, the
+ * settings it reads, joining, and the chat-target action mode.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelListFragmentTest {
 
     /** Records what the fragment asks the list to scroll to, without needing a laid-out list. */
-    private class RecordingLayoutManager(context: android.content.Context) :
-        LinearLayoutManager(context) {
+    private class RecordingLayoutManager(context: android.content.Context) : LinearLayoutManager(context) {
         val scrolls = mutableListOf<Int>()
         override fun scrollToPosition(position: Int) {
             scrolls.add(position)
@@ -45,137 +57,134 @@ class ChannelListFragmentTest {
     private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var parent: ChatTargetParentFragment
     private lateinit var fragment: ChannelListFragment
-    private lateinit var session: IHumlaSession
-    private lateinit var tree: Map<Int, FakeChannel>
-
-    private val channelView: RecyclerView
-        get() = fragment.requireView().findViewById(R.id.channelUsers)
-
-    @Before
-    fun setUp() {
-        session = mockk(relaxed = true)
-        tree = smallTree()
-        every { session.getChannel(any()) } answers { tree[firstArg<Int>()] }
-        session.stubConnected()
-        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        controller.get().bind(session)
-        parent = ChatTargetParentFragment()
-        controller.get().supportFragmentManager.beginTransaction()
-            .add(parent, "parent").commitNow()
-        fragment = ChannelListFragment.newInstance(pinned = false)
-        parent.childFragmentManager.beginTransaction().add(fragment, "list").commitNow()
+    private val session: IHumlaSession = mockk(relaxed = true) {
+        every { targetServer } returns Server(SERVER, "Home", "example.org", 64738, "me", null)
     }
+    private lateinit var model: MutableStateFlow<ServerState?>
+    private lateinit var talkStates: MutableStateFlow<Map<Int, TalkState>>
+    private lateinit var actions: SessionActions
+
+    private val channelView: RecyclerView get() = fragment.requireView().findViewById(R.id.channelUsers)
+    private val listAdapter: ChannelListAdapter get() = channelView.adapter as ChannelListAdapter
 
     /**
      * ```
      * root(0)
      *   user 200
      *   populated(2)
-     *     user 100
+     *     user 100 (us)
+     *   other(3)
+     *     user 300
      * ```
      */
-    private fun smallTree(): Map<Int, FakeChannel> {
-        val root = FakeChannel(0)
-        val populated = FakeChannel(2, counters = root.counters)
-        root.addSubchannel(populated)
-        root.addUser(FakeUser(200))
-        populated.addUser(FakeUser(100))
-        return mapOf(0 to root, 2 to populated)
+    private fun tree(self: Int = 2, ann: Int = 0, locked: Boolean = false) = serverState(self = 100) {
+        channel(0, "Root")
+        channel(ChannelState(2, "populated", 0, position = 1))
+        channel(ChannelState(3, "other", 0, position = 2, isEnterRestricted = locked, canEnter = !locked))
+        user(100, "Me", channel = self)
+        user(200, "Ann", channel = ann)
+        user(300, "Bob", channel = 3)
     }
 
-    private val listAdapter: ChannelListAdapter
-        get() = channelView.adapter as ChannelListAdapter
+    @Before
+    fun setUp() {
+        model = session.stubModel(tree())
+        talkStates = session.stubTalkStates()
+        actions = session.stubActions()
+        session.stubConnected()
+        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
+        controller.get().bind(session)
+        parent = ChatTargetParentFragment()
+        controller.get().supportFragmentManager.beginTransaction().add(parent, "parent").commitNow()
+        fragment = ChannelListFragment.newInstance(pinned = false)
+        parent.childFragmentManager.beginTransaction().add(fragment, "list").commitNow()
+        drainMainUntil { listAdapter.itemCount > 0 }
+    }
 
+    private fun rows(): List<ChannelRow> = listAdapter.currentList
 
-    private fun countChanges(): () -> Int {
-        var changes = 0
-        listAdapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
-            override fun onChanged() {
-                changes++
-            }
-        })
-        return { changes }
+    private fun rowsSettle(condition: (List<ChannelRow>) -> Boolean) = drainMainUntil { condition(rows()) }
+
+    @Test
+    fun aSynchronizedSessionFillsTheList() {
+        assertThat(rows().map { it.id }).contains(ChannelRow.USER_ID_MASK or 100L)
     }
 
     @Test
-    fun aConnectedSessionGivesTheListAnAdapter() {
-        assertThat(channelView.adapter).isNotNull()
-    }
-
-    /** A lost connection removes the adapter from the list, and the reconnect puts one back. */
-    @Test
-    fun reconnectingAfterALostConnectionPutsAnAdapterBackOnTheList() {
-        assertThat(channelView.adapter).isNotNull()
-
+    fun aLostConnectionEmptiesTheListAndTheReconnectFillsItAgain() {
         session.stubState(SessionState.ConnectionLost(10L, 1, null))
-        idleMainLooper()
-        assertThat(channelView.adapter).isNull()
+        rowsSettle { it.isEmpty() }
 
         session.stubState(SessionState.Reconnecting(null))
         session.stubState(SessionState.Connected)
-        idleMainLooper()
-        assertThat(channelView.adapter).isNotNull()
+        rowsSettle { it.isNotEmpty() }
     }
 
-    /**
-     * Only our own join scrolls the list. The position is asked for in the same turn the event
-     * scheduled a rebuild, so the adapter must settle it first.
-     */
+    @Test
+    fun aChangeInTheModelReachesTheRows() {
+        model.value = tree(ann = 3)
+
+        rowsSettle { rows -> rows.indexOfFirst { it.id == ChannelRow.USER_ID_MASK or 200L } > 3 }
+    }
+
+    @Test
+    fun talkStatesReachTheList() {
+        channelView.measure(
+            View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(4000, View.MeasureSpec.EXACTLY),
+        )
+        channelView.layout(0, 0, 1000, 4000)
+
+        talkStates.value = mapOf(200 to TalkState.TALKING)
+        idleMainLooper()
+        channelView.measure(
+            View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(4000, View.MeasureSpec.EXACTLY),
+        )
+        channelView.layout(0, 0, 1000, 4000)
+
+        val row = channelView.findViewHolderForItemId(ChannelRow.USER_ID_MASK or 200L)!!.itemView
+        assertThat(androidx.core.view.ViewCompat.getStateDescription(row))
+            .isEqualTo(controller.get().getString(R.string.a11y_state_talking))
+    }
+
+    /** Only our own move scrolls the list, and only once the moved rows are in. */
     @Test
     fun ourOwnChannelChangeScrollsTheListAndSomebodyElsesDoesNot() {
         val layout = RecordingLayoutManager(controller.get())
         channelView.layoutManager = layout
-        every { session.sessionId } returns 100
-        idleMainLooper()
 
-        fragment.onSessionEvent(
-            HumlaEvent.UserJoinedChannel(FakeUser(200), tree.getValue(2), tree.getValue(0))
-        )
-        idleMainLooper()
-
+        model.value = tree(ann = 3)
+        rowsSettle { rows -> rows.indexOfFirst { it.id == ChannelRow.USER_ID_MASK or 200L } > 3 }
         assertThat(layout.scrolls).isEmpty()
 
-        fragment.onSessionEvent(
-            HumlaEvent.UserJoinedChannel(FakeUser(100), tree.getValue(2), tree.getValue(0))
-        )
+        model.value = tree(self = 3, ann = 3)
+        drainMainUntil { layout.scrolls.isNotEmpty() }
 
-        assertThat(layout.scrolls).containsExactly(listAdapter.getChannelPosition(2))
-        assertThat(listAdapter.getChannelPosition(2)).isNotEqualTo(-1)
+        assertThat(layout.scrolls).containsExactly(listAdapter.positionOf(ChannelRow.CHANNEL_ID_MASK or 3L))
     }
 
-    /** Without a connection there is no own session to compare with, so no scroll happens. */
     @Test
-    fun aJoinReportedWhileDisconnectedScrollsNothing() {
+    fun aMoveWhileDisconnectedScrollsNothing() {
         val layout = RecordingLayoutManager(controller.get())
         channelView.layoutManager = layout
-        every { session.sessionId } returns 100
         session.stubState(SessionState.Disconnected())
+        rowsSettle { it.isEmpty() }
 
-        fragment.onSessionEvent(
-            HumlaEvent.UserJoinedChannel(FakeUser(100), tree.getValue(2), tree.getValue(0))
-        )
+        model.value = tree(self = 3)
         idleMainLooper()
 
         assertThat(layout.scrolls).isEmpty()
     }
 
-    /** Only a change to the preference this fragment reads reaches the adapter. */
     @Test
-    fun onlyTheUserCountPreferenceReachesTheAdapter() {
-        val preferences =
-            PreferenceManager.getDefaultSharedPreferences(controller.get())
-        val changes = countChanges()
-
-        preferences.edit { putBoolean("some.other.preference", true) }
-        idleMainLooper()
-
-        assertThat(changes()).isEqualTo(0)
-
+    fun theUserCountPreferenceReachesTheRows() {
+        val preferences = PreferenceManager.getDefaultSharedPreferences(controller.get())
         val shown = Settings.getInstance(controller.get()).shouldShowUserCount
-        preferences.edit { putBoolean(Settings.SHOW_USER_COUNT.key, !shown) }
-        idleMainLooper()
 
-        assertThat(changes()).isEqualTo(1)
+        preferences.edit { putBoolean(Settings.SHOW_USER_COUNT.key, !shown) }
+
+        rowsSettle { rows -> (rows.first() as ChannelRow.Channel).userCount != null == !shown }
     }
 
     /** Its argument decides whether it shows the whole tree or the pinned channels. */
@@ -185,45 +194,47 @@ class ChannelListFragmentTest {
         installDatabase(controller.get().database)
         every { controller.get().database.getPinnedChannels(any()) } returns listOf(2)
 
-        val whole = ChatTargetParentFragment()
         val pinned = ChatTargetParentFragment()
-        controller.get().supportFragmentManager.beginTransaction()
-            .add(whole, "whole-parent").add(pinned, "pinned-parent").commitNow()
-        val wholeList = ChannelListFragment.newInstance(false)
+        controller.get().supportFragmentManager.beginTransaction().add(pinned, "pinned-parent").commitNow()
         val pinnedList = ChannelListFragment.newInstance(true)
-        whole.childFragmentManager.beginTransaction().add(wholeList, "whole-list").commitNow()
         pinned.childFragmentManager.beginTransaction().add(pinnedList, "pinned-list").commitNow()
-        idleMainLooper()
 
-        fun firstRow(list: ChannelListFragment): Long {
-            val view = list.requireView().findViewById<RecyclerView>(R.id.channelUsers)
-            return (view.adapter as ChannelListAdapter).getItemId(0)
-        }
-        assertThat(firstRow(wholeList)).isEqualTo(ChannelListAdapter.CHANNEL_ID_MASK or 0L)
-        assertThat(firstRow(pinnedList)).isEqualTo(ChannelListAdapter.CHANNEL_ID_MASK or 2L)
+        val view = pinnedList.requireView().findViewById<RecyclerView>(R.id.channelUsers)
+        drainMainUntil { (view.adapter as ChannelListAdapter).itemCount > 0 }
+        assertThat((view.adapter as ChannelListAdapter).getItemId(0)).isEqualTo(ChannelRow.CHANNEL_ID_MASK or 2L)
+        assertThat(listAdapter.getItemId(0)).isEqualTo(ChannelRow.CHANNEL_ID_MASK or 0L)
     }
 
-    /**
-     * A removal reported after we were disconnected is our own removal; the model is not read.
-     */
     @Test
-    fun aRemovalReportedWhileDisconnectedRebuildsNothing() {
-        val changes = countChanges()
-        session.stubState(SessionState.Disconnected())
+    fun joiningAnEnterableChannelMovesUs() {
+        fragment.join(3)
 
-        fragment.onSessionEvent(HumlaEvent.UserRemoved(FakeUser(200), "gone"))
-        idleMainLooper()
-
-        assertThat(changes()).isEqualTo(0)
-
-        session.stubState(SessionState.Connected)
-        idleMainLooper()
-        val changesWhileConnected = countChanges()
-        fragment.onSessionEvent(HumlaEvent.UserRemoved(FakeUser(200), "gone"))
-        idleMainLooper()
-
-        assertThat(changesWhileConnected()).isEqualTo(1)
+        verify { actions.joinChannel(3) }
+        assertThat(ShadowToast.getLatestToast()).isNull()
     }
+
+    @Test
+    fun joiningAChannelThatCannotBeEnteredExplainsInstead() {
+        model.value = tree(locked = true)
+
+        fragment.join(3)
+
+        verify(exactly = 0) { actions.joinChannel(any()) }
+        assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo("You are not allowed to enter other.")
+    }
+
+    @Test
+    fun ourOwnListenerCanBeStoppedFromItsRow() {
+        fragment.onStopListening(ChannelRow.Listener(3, 100, "Me", 1, isOwn = true))
+
+        verify { actions.setListening(3, false) }
+    }
+
+    private fun channelRow(id: Int, name: String = "channel-$id") =
+        ChannelRow.Channel(id, name, 0, null, true, true, false, false, ChannelRow.Lock.NONE)
+
+    private fun userRow(session: Int) =
+        ChannelRow.User(session, "user-$session", 1, false, se.lublin.mumla.util.UserStatus.NONE, null)
 
     /**
      * Only a set target that is this row's channel with an open action mode means "tapped the open
@@ -231,19 +242,13 @@ class ChannelListFragmentTest {
      */
     @Test
     fun tappingTheOpenChannelTargetAgainClosesItAndTappingAnotherSwitchesIt() {
-        val first = FakeChannel(1)
-        val second = FakeChannel(2)
+        fragment.onChannelClick(channelRow(1))
+        assertThat(parent.chat.target.value).isEqualTo(ChatTarget.Channel(1, "channel-1"))
 
-        // No target yet: opens one.
-        fragment.onChannelClick(first)
-        assertThat((parent.chat.target.value as? ChatTarget.Channel)?.id).isEqualTo(first.id)
+        fragment.onChannelClick(channelRow(2))
+        assertThat(parent.chat.target.value).isEqualTo(ChatTarget.Channel(2, "channel-2"))
 
-        // A target, but not this channel: switches it.
-        fragment.onChannelClick(second)
-        assertThat((parent.chat.target.value as? ChatTarget.Channel)?.id).isEqualTo(second.id)
-
-        // The open target, tapped again.
-        fragment.onChannelClick(second)
+        fragment.onChannelClick(channelRow(2))
         assertThat(parent.chat.target.value).isNull()
     }
 
@@ -253,69 +258,40 @@ class ChannelListFragmentTest {
      */
     @Test
     fun tappingTheChannelOfATargetThisFragmentDidNotOpenOpensAModeForIt() {
-        val channel = FakeChannel(1)
-        parent.chat.select(ChatTarget.Channel(channel.id, channel.name))
+        parent.chat.select(ChatTarget.Channel(1, "channel-1"))
 
-        fragment.onChannelClick(channel)
-
-        assertThat((parent.chat.target.value as? ChatTarget.Channel)?.id).isEqualTo(channel.id)
+        fragment.onChannelClick(channelRow(1))
+        assertThat(parent.chat.target.value).isEqualTo(ChatTarget.Channel(1, "channel-1"))
 
         // Now there is one to dismiss, proving a mode was opened above.
-        fragment.onChannelClick(channel)
-
+        fragment.onChannelClick(channelRow(1))
         assertThat(parent.chat.target.value).isNull()
     }
 
     @Test
     fun tappingTheOpenUserTargetAgainClosesItAndTappingAnotherSwitchesIt() {
-        val first = FakeUser(1)
-        val second = FakeUser(2)
+        fragment.onUserClick(userRow(1))
+        assertThat(parent.chat.target.value).isEqualTo(ChatTarget.User(1, "user-1"))
 
-        fragment.onUserClick(first)
-        assertThat((parent.chat.target.value as? ChatTarget.User)?.session).isEqualTo(first.session)
+        fragment.onUserClick(userRow(2))
+        assertThat(parent.chat.target.value).isEqualTo(ChatTarget.User(2, "user-2"))
 
-        fragment.onUserClick(second)
-        assertThat((parent.chat.target.value as? ChatTarget.User)?.session).isEqualTo(second.session)
-
-        fragment.onUserClick(second)
+        fragment.onUserClick(userRow(2))
         assertThat(parent.chat.target.value).isNull()
     }
 
+    /** A channel target and a user target with the same id differ. */
     @Test
-    fun tappingTheUserOfATargetThisFragmentDidNotOpenOpensAModeForIt() {
-        val user = FakeUser(1)
-        parent.chat.select(ChatTarget.User(user.session, user.name))
+    fun aUserTargetIsNotTheChannelTargetOfTheSameId() {
+        fragment.onUserClick(userRow(1))
+        fragment.onChannelClick(channelRow(1))
+        assertThat(parent.chat.target.value).isEqualTo(ChatTarget.Channel(1, "channel-1"))
 
-        fragment.onUserClick(user)
-
-        assertThat((parent.chat.target.value as? ChatTarget.User)?.session).isEqualTo(user.session)
-
-        fragment.onUserClick(user)
-
-        assertThat(parent.chat.target.value).isNull()
+        fragment.onUserClick(userRow(1))
+        assertThat(parent.chat.target.value).isEqualTo(ChatTarget.User(1, "user-1"))
     }
 
-    /**
-     * A channel target and a user target differ even when one tap follows the other
-     * (`current.channel` is null on a user target).
-     */
-    @Test
-    fun aUserTargetIsNotTheChannelTargetOfTheSameTap() {
-        val channel = FakeChannel(1)
-
-        fragment.onUserClick(FakeUser(1))
-        fragment.onChannelClick(channel)
-
-        assertThat((parent.chat.target.value as? ChatTarget.Channel)?.id).isEqualTo(channel.id)
-    }
-
-    @Test
-    fun aChannelTargetIsNotTheUserTargetOfTheSameTap() {
-        val user = FakeUser(1)
-
-        fragment.onChannelClick(FakeChannel(1))
-        fragment.onUserClick(user)
-
-        assertThat((parent.chat.target.value as? ChatTarget.User)?.session).isEqualTo(user.session)
+    private companion object {
+        const val SERVER = 42L
     }
 }

@@ -27,6 +27,7 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.OverlayUserRowBinding
+import se.lublin.mumla.util.UserStatus
 import se.lublin.mumla.util.talkStateDescription
 
 /** The users of one channel, with how each of them talks. */
@@ -66,7 +67,7 @@ class OverlayUserAdapter(private val context: Context) : BaseAdapter() {
                 else -> R.drawable.outline_circle_talking_off
             }
         )
-        ViewCompat.setStateDescription(binding.root, talkStateDescription(context, user, talkState))
+        ViewCompat.setStateDescription(binding.root, talkStateDescription(context, UserStatus.of(user), talkState))
         return binding.root
     }
 }

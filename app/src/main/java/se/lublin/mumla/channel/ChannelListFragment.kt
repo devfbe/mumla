@@ -23,13 +23,13 @@ import android.database.CursorWrapper
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
@@ -38,100 +38,53 @@ import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.PreferenceManager
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
-import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IUser
-import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.session.SessionState
+import se.lublin.humla.model.ChannelState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.channel.comment.ChannelDescriptionFragment
+import se.lublin.mumla.channel.comment.UserCommentFragment
 import se.lublin.mumla.databinding.FragmentChannelListBinding
-import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.service.toggleSelfMute
-import se.lublin.mumla.session.SessionClient
 import se.lublin.mumla.session.SessionManager
-import se.lublin.mumla.session.bindClient
-import se.lublin.mumla.util.changes
+import se.lublin.mumla.session.SessionViewModel
+import se.lublin.mumla.util.activityAppViewModels
+import se.lublin.mumla.util.appViewModels
 
+/**
+ * The channel tree of the connected server, or with [ARG_PINNED] only the pinned channels. Rows,
+ * talk states and every action go through [ChannelTreeViewModel]; our own mute state in the app bar
+ * through [SessionViewModel].
+ */
+@Suppress("TooManyFunctions") // The list's, the menus' and the app bar's callbacks, each delegating.
 class ChannelListFragment :
     Fragment(),
-    SessionClient,
-    MenuProvider {
+    MenuProvider,
+    ChannelListAdapter.Listener,
+    ChannelMenu.Actions,
+    UserMenu.Actions {
 
-    private val sessions get() = SessionManager.get(requireContext())
-    private var bound = false
-
-    override fun onSessionState(state: SessionState) {
-        val session = sessions.session.value ?: return
-        if (state == SessionState.Connected) {
-            channelListAdapter?.setSession(session) ?: setupChannelList(session)
-        } else if (state !is SessionState.Connecting) {
-            channelView.adapter = null
-            // And forget it: a new connection builds a fresh adapter, as the pinned channels are
-            // per server.
-            channelListAdapter = null
-        }
-    }
-
-    override fun onSessionEvent(event: HumlaEvent) {
-        when (event) {
-            is HumlaEvent.UserJoinedChannel -> onUserJoinedChannel(event.user, event.newChannel)
-            is HumlaEvent.ChannelAdded,
-            is HumlaEvent.ChannelRemoved,
-            is HumlaEvent.ChannelStateUpdated,
-            is HumlaEvent.UserConnected,
-            is HumlaEvent.UserListeningUpdated,
-            -> channelListAdapter?.updateChannels()
-            is HumlaEvent.UserRemoved -> {
-                // If we are the user being removed, don't update the channel list.
-                // We won't be in a synchronized state.
-                if (sessions.connected != null) channelListAdapter?.updateChannels()
-            }
-            is HumlaEvent.UserStateUpdated -> {
-                channelListAdapter?.updateUserStates(event.user, channelView)
-                requireActivity().invalidateMenu() // Update self mute/deafen state
-            }
-            is HumlaEvent.UserTalkStateUpdated -> channelListAdapter?.updateUserStates(event.user, channelView)
-            else -> Unit
-        }
-    }
-
-    private fun onUserJoinedChannel(user: IUser, newChannel: IChannel) {
-        channelListAdapter?.updateChannels()
-
-        val session = sessions.connected ?: return
-        val selfSession = try {
-            session.sessionId
-        } catch (e: IllegalStateException) {
-            Log.d(TAG, "exception in onUserJoinedChannel: $e")
-            null
-        }
-
-        if (selfSession != null && user.session == selfSession) {
-            scrollToChannel(newChannel.id)
-        }
-    }
+    private val tree by appViewModels { ChannelTreeViewModel.create(it, requireArguments().getBoolean(ARG_PINNED)) }
+    private val session by activityAppViewModels { SessionViewModel(SessionManager.get(it)) }
+    private val chat by parentChatViewModel()
 
     private lateinit var channelView: RecyclerView
-    private var channelListAdapter: ChannelListAdapter? = null
-    private val chat by parentChatViewModel()
+    private var adapter: ChannelListAdapter? = null
     private var actionMode: ActionMode? = null
     private lateinit var settings: Settings
+
+    /** The channel we were in when the list last showed it; the list follows us when it changes. */
+    private var shownOwnChannel: Int? = null
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
         settings = Settings.getInstance(context)
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?,
-    ): View {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val binding = FragmentChannelListBinding.inflate(inflater, container, false)
         channelView = binding.channelUsers
         channelView.layoutManager = LinearLayoutManager(activity)
@@ -140,15 +93,41 @@ class ChannelListFragment :
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val adapter = ChannelListAdapter(requireContext(), this).also { this.adapter = it }
+        channelView.adapter = adapter
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         viewLifecycleOwner.lifecycleScope.launch {
-            PreferenceManager.getDefaultSharedPreferences(requireContext()).changes(Settings.SHOW_USER_COUNT.key)
-                .collect { channelListAdapter?.setShowChannelUserCount(settings.shouldShowUserCount) }
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { tree.talkStates.collect(adapter::setTalkStates) }
+                launch { session.self.collect { requireActivity().invalidateMenu() } }
+                tree.tree.collect(::show)
+            }
         }
-        if (!bound) {
-            bound = true
-            sessions.bindClient(this, this)
-        }
+    }
+
+    override fun onDestroyView() {
+        channelView.adapter = null
+        adapter = null
+        shownOwnChannel = null
+        super.onDestroyView()
+    }
+
+    /** Shows [tree], and follows us to our new channel once its rows are in. */
+    private fun show(tree: ChannelTree?) {
+        val adapter = adapter ?: return
+        val own = tree?.ownChannel
+        val follow = own.takeIf { shownOwnChannel != null && it != shownOwnChannel }
+        shownOwnChannel = own
+        adapter.submitList(tree?.rows.orEmpty()) { follow?.let(::scrollToChannel) }
+    }
+
+    fun scrollToChannel(channel: Int) = scrollTo(ChannelRow.CHANNEL_ID_MASK or channel.toLong())
+
+    fun scrollToUser(session: Int) = scrollTo(ChannelRow.USER_ID_MASK or session.toLong())
+
+    private fun scrollTo(id: Long) {
+        val position = adapter?.positionOf(id) ?: return
+        if (position >= 0) channelView.scrollToPosition(position)
     }
 
     override fun onPrepareMenu(menu: Menu) {
@@ -159,69 +138,39 @@ class ChannelListFragment :
             else -> menu.findItem(R.id.menu_noise_rnnoise)
         }?.isChecked = true
 
+        val self = session.self.value ?: return
         val muteItem = menu.findItem(R.id.menu_mute_button)
         val deafenItem = menu.findItem(R.id.menu_deafen_button)
-
-        val session = sessions.connected
-        if (session != null) {
-            // Tinted like the app bar title.
-            val foregroundColor = requireActivity().getColor(R.color.on_app_bar)
-
-            val self = session.sessionUser
-            if (self != null) {
-                muteItem.setIcon(
-                    if (self.isSelfMuted) R.drawable.ic_action_microphone_muted
-                    else R.drawable.ic_action_microphone
-                )
-                deafenItem.setIcon(
-                    if (self.isSelfDeafened) R.drawable.ic_action_audio_muted
-                    else R.drawable.ic_action_audio
-                )
-                // The action a tap takes, which is also what accessibility services read.
-                muteItem.setTitle(if (self.isSelfMuted) R.string.unmute else R.string.mute)
-                deafenItem.setTitle(if (self.isSelfDeafened) R.string.undeafen else R.string.deafen)
-                val tint = PorterDuffColorFilter(foregroundColor, PorterDuff.Mode.MULTIPLY)
-                muteItem.icon?.mutate()?.colorFilter = tint
-                deafenItem.icon?.mutate()?.colorFilter = tint
-            }
-        }
+        muteItem.setIcon(
+            if (self.isSelfMuted) R.drawable.ic_action_microphone_muted else R.drawable.ic_action_microphone,
+        )
+        deafenItem.setIcon(if (self.isSelfDeafened) R.drawable.ic_action_audio_muted else R.drawable.ic_action_audio)
+        // The action a tap takes, which is also what accessibility services read.
+        muteItem.setTitle(if (self.isSelfMuted) R.string.unmute else R.string.mute)
+        deafenItem.setTitle(if (self.isSelfDeafened) R.string.undeafen else R.string.deafen)
+        // Tinted like the app bar title.
+        val tint = PorterDuffColorFilter(requireActivity().getColor(R.color.on_app_bar), PorterDuff.Mode.MULTIPLY)
+        muteItem.icon?.mutate()?.colorFilter = tint
+        deafenItem.icon?.mutate()?.colorFilter = tint
     }
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
         menuInflater.inflate(R.menu.fragment_channel_list, menu)
 
         val searchItem = menu.findItem(R.id.menu_search)
-        val searchManager =
-            requireActivity().getSystemService(Context.SEARCH_SERVICE) as SearchManager
-
+        val searchManager = requireActivity().getSystemService(Context.SEARCH_SERVICE) as SearchManager
         val searchView = searchItem.actionView as SearchView
-        searchView.setSearchableInfo(
-            searchManager.getSearchableInfo(requireActivity().componentName)
-        )
+        searchView.setSearchableInfo(searchManager.getSearchableInfo(requireActivity().componentName))
         searchView.setOnSuggestionListener(object : SearchView.OnSuggestionListener {
             override fun onSuggestionSelect(i: Int): Boolean = false
 
             override fun onSuggestionClick(i: Int): Boolean {
-                val session = sessions.connected ?: return false
                 val cursor = searchView.suggestionsAdapter.getItem(i) as CursorWrapper
-                val typeColumn =
-                    cursor.getColumnIndex(SearchManager.SUGGEST_COLUMN_INTENT_EXTRA_DATA)
-                val dataIdColumn = cursor.getColumnIndex(SearchManager.SUGGEST_COLUMN_INTENT_DATA)
-                val itemType = cursor.getString(typeColumn)
-                val itemId = cursor.getInt(dataIdColumn)
-
+                val itemType = cursor.getString(cursor.getColumnIndex(SearchManager.SUGGEST_COLUMN_INTENT_EXTRA_DATA))
+                val itemId = cursor.getInt(cursor.getColumnIndex(SearchManager.SUGGEST_COLUMN_INTENT_DATA))
                 return when (itemType) {
                     ChannelSearchProvider.INTENT_DATA_CHANNEL -> {
-                        if (session.sessionChannel?.id != itemId) {
-                            val channel = session.getChannel(itemId)
-                            if (channel != null) {
-                                session.joinOrExplain(requireContext(), channel)
-                            } else {
-                                session.joinChannel(itemId)
-                            }
-                        } else {
-                            scrollToChannel(itemId)
-                        }
+                        if (tree.tree.value?.ownChannel != itemId) join(itemId) else scrollToChannel(itemId)
                         true
                     }
                     ChannelSearchProvider.INTENT_DATA_USER -> {
@@ -234,65 +183,44 @@ class ChannelListFragment :
         })
     }
 
-
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when {
-        menuItem.itemId in NOISE_METHODS -> {
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when (menuItem.itemId) {
+        in NOISE_METHODS -> {
             settings.noiseSuppressionMethod = NOISE_METHODS.getValue(menuItem.itemId)
             menuItem.isChecked = true
             true
         }
-        menuItem.itemId == R.id.menu_mute_button || menuItem.itemId == R.id.menu_deafen_button ->
-            toggleSelfMuteDeaf(deafen = menuItem.itemId == R.id.menu_deafen_button)
+        R.id.menu_mute_button -> toggleSelfMuteDeaf { session.toggleMute() }
+        R.id.menu_deafen_button -> toggleSelfMuteDeaf { session.toggleDeafen() }
         else -> false
     }
 
-    /** Flips our own mute, or deafness with [deafen]; returns false while not connected. */
-    private fun toggleSelfMuteDeaf(deafen: Boolean): Boolean {
-        val session = sessions.connected ?: return false
-        if (deafen) {
-            session.sessionUser?.let { self ->
-                val deafened = !self.isSelfDeafened
-                session.setSelfMuteDeafState(deafened, deafened)
-            }
-        } else {
-            toggleSelfMute(session)
-        }
+    /** Flips our own mute or deafness; false while not connected. */
+    private inline fun toggleSelfMuteDeaf(toggle: () -> Unit): Boolean {
+        if (session.self.value == null) return false
+        toggle()
         requireActivity().invalidateMenu()
         return true
     }
 
-    private fun setupChannelList(session: IHumlaSession) {
-        val repository = MumlaRepository.get(requireContext())
-        // Read now, off the main thread, for the channel menus' pin toggle.
-        session.targetServer?.let { repository.pinnedChannels.of(it.id) }
-        val adapter = ChannelListAdapter(
-            requireActivity(), session, repository, childFragmentManager,
-            isShowingPinnedChannels, settings.shouldShowUserCount,
-        )
-        adapter.onChannelClick = ::onChannelClick
-        adapter.onUserClick = ::onUserClick
-        channelView.adapter = adapter
-        adapter.notifyDataSetChanged()
-        channelListAdapter = adapter
-    }
+    // The rows
 
-    fun scrollToChannel(channelId: Int) {
-        val adapter = channelListAdapter ?: return
-        channelView.scrollToPosition(adapter.getChannelPosition(channelId))
-    }
+    /** Makes the channel the chat target, or closes the target if it is that channel already. */
+    override fun onChannelClick(row: ChannelRow.Channel) = toggleTarget(ChatTarget.Channel(row.channel, row.name))
 
-    fun scrollToUser(userId: Int) {
-        val adapter = channelListAdapter ?: return
-        channelView.scrollToPosition(adapter.getUserPosition(userId))
-    }
+    /** Makes the user the chat target, or closes the target if it is that user already. */
+    override fun onUserClick(row: ChannelRow.User) = toggleTarget(ChatTarget.User(row.session, row.name))
 
-    private val isShowingPinnedChannels: Boolean get() = requireArguments().getBoolean(ARG_PINNED)
+    override fun onExpandClick(row: ChannelRow.Channel) = tree.setExpanded(row.channel, !row.expanded)
 
-    /** Makes [channel] the chat target, or closes the target if it is [channel] already. */
-    fun onChannelClick(channel: IChannel) = toggleTarget(ChatTarget.Channel(channel.id, channel.name))
+    override fun onJoinClick(row: ChannelRow.Channel) = join(row.channel)
 
-    /** Makes [user] the chat target, or closes the target if it is [user] already. */
-    fun onUserClick(user: IUser) = toggleTarget(ChatTarget.User(user.session, user.name))
+    override fun onChannelMore(anchor: View, row: ChannelRow.Channel) =
+        ChannelMenu(requireContext(), row.channel, { tree.channelMenuState(row.channel) }, this).showPopup(anchor)
+
+    override fun onUserMore(anchor: View, row: ChannelRow.User) =
+        UserMenu(requireContext(), row.session, { tree.userMenuState(row.session) }, this).showPopup(anchor)
+
+    override fun onStopListening(row: ChannelRow.Listener) = tree.setListening(row.channel, false)
 
     private fun toggleTarget(target: ChatTarget) {
         val mode = actionMode
@@ -305,8 +233,81 @@ class ChannelListFragment :
         }
     }
 
+    // The menus
+
+    override fun permissions(channel: Int): Flow<Int> = tree.permissions(channel)
+
+    override fun requestPermissions(channel: Int) = tree.requestPermissions(channel)
+
+    /** Joins [channel], or tells the user why not when the server has said they may not enter it. */
+    override fun join(channel: Int) {
+        if (!tree.join(channel)) {
+            val text = getString(R.string.channel_enter_denied, tree.channelName(channel))
+            Toast.makeText(requireContext(), text, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun addChannel(parent: Int) =
+        ChannelEditFragment.newInstance(parent, adding = true).show(childFragmentManager, "ChannelAdd")
+
+    override fun editChannel(channel: Int) =
+        ChannelEditFragment.newInstance(channel, adding = false).show(childFragmentManager, "ChannelAdd")
+
+    override fun removeChannel(channel: Int) = tree.removeChannel(channel)
+
+    override fun showDescription(channel: Int) =
+        ChannelDescriptionFragment.newInstance(channel, tree.description(channel))
+            .show(childFragmentManager, ChannelDescriptionFragment::class.java.name)
+
+    override fun setPinned(channel: Int, pinned: Boolean) = tree.setPinned(channel, pinned)
+
+    override fun setLinked(channel: Int, linked: Boolean) = tree.setLinked(channel, linked)
+
+    override fun setListening(channel: Int, listen: Boolean) = tree.setListening(channel, listen)
+
+    override fun unlinkAll(channel: Int) = tree.unlinkAll(channel)
+
+    override fun shout(channel: Int, includeLinked: Boolean, includeSubchannels: Boolean) {
+        if (!tree.shout(channel, includeLinked, includeSubchannels)) {
+            Toast.makeText(requireContext(), R.string.shout_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun kickBan(session: Int, reason: String, ban: Boolean) = tree.kickBan(session, reason, ban)
+
+    override fun setMuteDeaf(session: Int, mute: Boolean, deaf: Boolean) = tree.setMuteDeaf(session, mute, deaf)
+
+    override fun setPrioritySpeaker(session: Int, priority: Boolean) = tree.setPrioritySpeaker(session, priority)
+
+    override fun channels(): List<ChannelState> = tree.channels()
+
+    override fun moveUser(session: Int, channel: Int) = tree.moveUser(session, channel)
+
+    override fun showComment(session: Int, comment: String?, edit: Boolean) =
+        UserCommentFragment.newInstance(session, comment, edit)
+            .show(childFragmentManager, UserCommentFragment::class.java.name)
+
+    override fun resetComment(session: Int) = tree.resetComment(session)
+
+    override fun register(session: Int) = tree.register(session)
+
+    override fun setLocalMuted(session: Int, muted: Boolean) = tree.setLocalMuted(session, muted)
+
+    override fun setLocalIgnored(session: Int, ignored: Boolean) = tree.setLocalIgnored(session, ignored)
+
+    override fun showLocalVolume(session: Int, name: String?) {
+        showLocalVolumeDialog(
+            requireContext(), name, tree.localVolume(session),
+            preview = { tree.previewLocalVolume(session, it) },
+            keep = { tree.setLocalVolume(session, it) },
+        )
+    }
+
+    override fun showInfo(session: Int, name: String?) {
+        showUserInfoDialog(requireContext(), name, tree.userStats(session))
+    }
+
     companion object {
-        private val TAG: String = ChannelListFragment::class.java.name
         private const val ARG_PINNED = "pinned"
 
         /** The whole channel tree, or with [pinned] only the pinned channels. */

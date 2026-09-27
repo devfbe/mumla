@@ -18,12 +18,11 @@
 package se.lublin.mumla.channel
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
+import android.util.LruCache
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -32,215 +31,118 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
-import androidx.fragment.app.FragmentManager
+import androidx.recyclerview.widget.AsyncDifferConfig
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IUser
-import se.lublin.humla.model.LocalVolumes
+import se.lublin.humla.model.Bytes
 import se.lublin.humla.model.TalkState
 import se.lublin.mumla.R
-import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.databinding.ChannelListenerRowBinding
 import se.lublin.mumla.databinding.ChannelRowBinding
 import se.lublin.mumla.databinding.ChannelUserRowBinding
-import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.drawable.CircleDrawable
+import se.lublin.mumla.util.UserStatus
 import se.lublin.mumla.util.dp
 import se.lublin.mumla.util.talkStateDescription
 
 /**
- * Flattens the channel tree into rows. Main thread only, like every `RecyclerView.Adapter`.
- *
- * - [updateChannels] only schedules: a burst of model events in one main-thread turn collapses
- *   into a single rebuild. Model events never carry deltas, so a rebuild just reads the model.
- * - One pass per rebuild, including collapsed subtrees: [constructNodes] carries subtree user
- *   counts back up instead of calling `IChannel.subchannelUserCount` (O(n*depth)), and the
- *   counts land on the [Node] so binding a row reads no model at all.
- *
- * The recursion needs no depth check: `ModelHandler` refuses parent cycles and trees deeper than
- * 256 below the root.
- *
- * With [showPinnedOnly], the tree is rooted at the channels pinned when the adapter was created,
- * which it shows once they are read.
+ * The channel list's rows, diffed by [DiffUtil] off the main thread; a user row whose only change
+ * is its icon gets the icon repainted rather than the row rebound. Talk states come separately
+ * through [setTalkStates], which repaints the icons of the users whose state changed in place: no
+ * rebind, no layout pass. Main thread.
  */
+@Suppress("TooManyFunctions") // RecyclerView.Adapter callbacks and the view holders' binding.
 class ChannelListAdapter(
     private val context: Context,
-    session: IHumlaSession,
-    private val repository: MumlaRepository,
-    private val fragmentManager: FragmentManager,
-    showPinnedOnly: Boolean,
-    showUserCount: Boolean,
-) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private val listener: Listener,
+    differConfig: AsyncDifferConfig<ChannelRow> = AsyncDifferConfig.Builder(DIFF).build(),
+) : ListAdapter<ChannelRow, RecyclerView.ViewHolder>(differConfig) {
 
-    private var session: IHumlaSession = session
-    private var rootChannels: List<Int> = if (showPinnedOnly) emptyList() else listOf(0)
-    private val nodes: MutableList<Node> = ArrayList()
-
-    /**
-     * A mapping of user-set channel expansions.
-     * If a key is not mapped, default to hiding empty channels.
-     */
-    private val expandedChannels = HashMap<Int, Boolean>()
-
-    var onChannelClick: ((IChannel) -> Unit)? = null
-
-    var onUserClick: ((IUser) -> Unit)? = null
-    private var showChannelUserCount: Boolean = showUserCount
-
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var rebuildScheduled = false
-    private val rebuildRunnable = Runnable {
-        rebuildScheduled = false
-        rebuildNodes()
-        notifyDataSetChanged()
+    /** What a tap on a row or one of its buttons asks for. */
+    interface Listener {
+        fun onChannelClick(row: ChannelRow.Channel)
+        fun onUserClick(row: ChannelRow.User)
+        fun onExpandClick(row: ChannelRow.Channel)
+        fun onJoinClick(row: ChannelRow.Channel)
+        fun onChannelMore(anchor: View, row: ChannelRow.Channel)
+        fun onUserMore(anchor: View, row: ChannelRow.User)
+        fun onStopListening(row: ChannelRow.Listener)
     }
+
+    private var talkStates: Map<Int, TalkState> = emptyMap()
+
+    private var list: RecyclerView? = null
+
+    /** Decoded avatars; a snapshot keeps the same [Bytes] until the picture changes. */
+    private val avatars = LruCache<Bytes, Bitmap>(AVATAR_CACHE_SIZE)
 
     init {
         setHasStableIds(true)
-        var constructed = false
-        val server = session.targetServer
-        if (showPinnedOnly && server != null) {
-            repository.pinnedChannels.whenLoaded(server.id) { pinned ->
-                rootChannels = pinned.toList()
-                if (constructed) updateChannels()
-            }
-        }
-        rebuildNodes()
-        constructed = true
     }
 
-    override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+    override fun getItemId(position: Int): Long = getItem(position).id
+
+    override fun getItemViewType(position: Int): Int = when (getItem(position)) {
+        is ChannelRow.Channel -> R.layout.channel_row
+        is ChannelRow.User -> R.layout.channel_user_row
+        is ChannelRow.Listener -> R.layout.channel_listener_row
+    }
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        list = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        list = null
+    }
+
+    /**
+     * Repaints the icons of the users on screen whose talk state changed. A row off screen picks
+     * the state up when it is bound, or when a cached row comes back ([onViewAttachedToWindow]).
+     */
+    fun setTalkStates(states: Map<Int, TalkState>) {
+        val previous = talkStates
+        talkStates = states
+        val list = list ?: return
+        for (session in previous.keys + states.keys) {
+            if (previous[session] == states[session]) continue
+            (list.findViewHolderForItemId(ChannelRow.USER_ID_MASK or session.toLong()) as? UserViewHolder)?.repaint()
+        }
+    }
+
+    override fun onViewAttachedToWindow(holder: RecyclerView.ViewHolder) {
+        if (holder is UserViewHolder) holder.repaint()
+    }
+
+    /** The position of the row with [id], or -1. */
+    fun positionOf(id: Long): Int = currentList.indexOfFirst { it.id == id }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(context)
         return when (viewType) {
-            R.layout.channel_row -> ChannelViewHolder(ChannelRowBinding.inflate(inflater, viewGroup, false))
-            R.layout.channel_user_row -> UserViewHolder(ChannelUserRowBinding.inflate(inflater, viewGroup, false))
+            R.layout.channel_row -> ChannelViewHolder(ChannelRowBinding.inflate(inflater, parent, false))
+            R.layout.channel_user_row -> UserViewHolder(ChannelUserRowBinding.inflate(inflater, parent, false))
             R.layout.channel_listener_row ->
-                ListenerViewHolder(ChannelListenerRowBinding.inflate(inflater, viewGroup, false))
+                ListenerViewHolder(ChannelListenerRowBinding.inflate(inflater, parent, false))
             else -> throw IllegalArgumentException("unknown view type $viewType")
         }
     }
 
-    override fun onBindViewHolder(viewHolder: RecyclerView.ViewHolder, position: Int) {
-        val node = nodes[position]
-        val channel = node.channel
-        val user = node.user
-        val listener = node.listener
-        when {
-            listener != null -> bindListener(viewHolder as ListenerViewHolder, node, listener)
-            channel != null -> bindChannel(viewHolder as ChannelViewHolder, node, channel)
-            user != null -> bindUser(viewHolder as UserViewHolder, node, user)
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (holder) {
+            is ChannelViewHolder -> holder.bind(getItem(position) as ChannelRow.Channel)
+            is UserViewHolder -> holder.bind(getItem(position) as ChannelRow.User)
+            is ListenerViewHolder -> holder.bind(getItem(position) as ChannelRow.Listener)
         }
     }
 
-    private fun bindChannel(cvh: ChannelViewHolder, node: Node, channel: IChannel) {
-        cvh.itemView.setOnClickListener { onChannelClick?.invoke(channel) }
-
-        val expandUsable = node.hasSubchannels || node.subtreeUserCount > 0 || node.subtreeListenerCount > 0
-        cvh.channelExpandToggle.setImageResource(
-            if (node.isExpanded) R.drawable.ic_action_expanded else R.drawable.ic_action_collapsed,
-        )
-        cvh.channelExpandToggle.contentDescription =
-            context.getString(if (node.isExpanded) R.string.a11y_collapse else R.string.expand)
-        cvh.channelExpandToggle.setOnClickListener {
-            expandedChannels[channel.id] = !node.isExpanded
-            updateChannels()
-        }
-        cvh.channelExpandToggle.isEnabled = expandUsable
-        cvh.channelExpandToggle.visibility = if (expandUsable) View.VISIBLE else View.INVISIBLE
-
-        cvh.channelName.text = channel.name
-        cvh.channelName.setTypeface(null, channelTypeface(channel))
-
-        if (showChannelUserCount) {
-            cvh.channelUserCount.visibility = View.VISIBLE
-            cvh.channelUserCount.text = String.format("%d", node.subtreeUserCount)
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: List<Any>) {
+        if (holder is UserViewHolder && payloads.isNotEmpty() && payloads.all { it == ICON }) {
+            holder.bindIcon(getItem(position) as ChannelRow.User)
         } else {
-            cvh.channelUserCount.visibility = View.GONE
+            onBindViewHolder(holder, position)
         }
-
-        indent(cvh.channelHolder, node.depth)
-
-        bindEnterRestriction(cvh, channel)
-        cvh.joinButton.setOnClickListener {
-            val current = session
-            if (current.isConnected) current.joinOrExplain(context, channel)
-        }
-        cvh.moreButton.setOnClickListener { v ->
-            ChannelMenu(context, channel, session, repository.pinnedChannels, fragmentManager).showPopup(v)
-        }
-        cvh.itemView.setOnLongClickListener {
-            cvh.moreButton.performClick()
-            true
-        }
-    }
-
-    /** Bold for our channel, italic for a channel linked with it (and for ours if it has links). */
-    private fun channelTypeface(channel: IChannel): Int {
-        val ourChannel = if (session.isConnected) {
-            try {
-                session.sessionChannel
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in channelTypeface: $e")
-                null
-            }
-        } else {
-            null
-        }
-        if (ourChannel == null) return Typeface.NORMAL
-        val ours = channel == ourChannel
-        val linked = channel.links.contains(ourChannel) || (ours && channel.links.isNotEmpty())
-        // Separate constants rather than `or`: lint refuses combined Typeface @IntDef styles.
-        return when {
-            ours && linked -> Typeface.BOLD_ITALIC
-            ours -> Typeface.BOLD
-            linked -> Typeface.ITALIC
-            else -> Typeface.NORMAL
-        }
-    }
-
-    private fun bindUser(uvh: UserViewHolder, node: Node, user: IUser) {
-        uvh.itemView.setOnClickListener { onUserClick?.invoke(user) }
-        uvh.userName.text = user.name
-
-        val selfSession = try {
-            session.sessionId
-        } catch (e: IllegalStateException) {
-            Log.d(TAG, "exception in bindUser: $e")
-            -1
-        }
-        val isSelf = session.isConnected && user.session == selfSession
-        uvh.userName.setTypeface(null, if (isSelf) Typeface.BOLD else Typeface.NORMAL)
-
-        bindTalkState(uvh, user)
-        indent(uvh.userHolder, node.depth + 1)
-
-        uvh.moreButton.setOnClickListener { v ->
-            UserMenu(context, user, session, fragmentManager, ::onLocalUserStateUpdated).showPopup(v)
-        }
-        uvh.itemView.setOnLongClickListener {
-            uvh.moreButton.performClick()
-            true
-        }
-    }
-
-    /** A listener's row: the user's name, and for the local user's own listener a stop button. */
-    private fun bindListener(lvh: ListenerViewHolder, node: Node, listener: IUser) {
-        val channel = checkNotNull(node.parent?.channel) { "A listener row always hangs under its channel" }
-        lvh.name.text = listener.name
-        lvh.itemView.contentDescription = context.getString(R.string.a11y_listener, listener.name)
-        val own = session.isConnected && try {
-            session.sessionId == listener.session
-        } catch (e: IllegalStateException) {
-            Log.d(TAG, "exception in bindListener: $e")
-            false
-        }
-        lvh.stop.visibility = if (own) View.VISIBLE else View.GONE
-        lvh.stop.setOnClickListener {
-            val current = session
-            if (current.isConnected) current.setListening(channel.id, false)
-        }
-        indent(lvh.holder, node.depth + 1)
     }
 
     /** Pads [view] by [levels] of the tree's indentation. */
@@ -253,310 +155,171 @@ class ChannelListAdapter(
         )
     }
 
-    override fun getItemCount(): Int = nodes.size
+    /** The row [holder] shows now, or null while it is on its way out. */
+    private inline fun <reified R : ChannelRow> rowOf(holder: RecyclerView.ViewHolder): R? =
+        holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let { getItem(it) as? R }
 
-    override fun getItemViewType(position: Int): Int {
-        val node = nodes[position]
-        return when {
-            node.listener != null -> R.layout.channel_listener_row
-            node.channel != null -> R.layout.channel_row
-            node.user != null -> R.layout.channel_user_row
-            else -> 0
-        }
-    }
+    private inner class ChannelViewHolder(binding: ChannelRowBinding) : RecyclerView.ViewHolder(binding.root) {
+        private val holder: LinearLayout = binding.channelRowTitle
+        private val expandToggle: ImageView = binding.channelRowExpand
+        private val name: TextView = binding.channelRowName
+        private val userCount: TextView = binding.channelRowCount
+        private val lock: ImageView = binding.channelRowLock
+        private val more: ImageView = binding.channelRowMore
 
-    override fun getItemId(position: Int): Long = nodes[position].nodeId ?: -1L
-
-    /**
-     * Schedules a rebuild of the channel tree. Runs once at the end of the current main-thread
-     * turn, however often this is called meanwhile.
-     */
-    fun updateChannels() {
-        if (rebuildScheduled) {
-            return
-        }
-        rebuildScheduled = true
-        mainHandler.post(rebuildRunnable)
-    }
-
-    /** Runs a scheduled rebuild now, so that a caller cannot read a tree the model has left. */
-    private fun rebuildIfScheduled() {
-        if (!rebuildScheduled) {
-            return
-        }
-        mainHandler.removeCallbacks(rebuildRunnable)
-        rebuildRunnable.run()
-    }
-
-    private fun rebuildNodes() {
-        val session = session
-        if (!session.isConnected) return
-        nodes.clear()
-        try {
-            for (cid in rootChannels) {
-                val channel = session.getChannel(cid)
-                if (channel != null) {
-                    constructNodes(null, channel, 0, nodes)
-                }
+        init {
+            itemView.setOnClickListener { row()?.let(listener::onChannelClick) }
+            expandToggle.setOnClickListener { row()?.let(listener::onExpandClick) }
+            binding.channelRowJoin.setOnClickListener { row()?.let(listener::onJoinClick) }
+            more.setOnClickListener { view -> row()?.let { listener.onChannelMore(view, it) } }
+            itemView.setOnLongClickListener {
+                more.performClick()
+                true
             }
-        } catch (e: IllegalStateException) {
-            Log.d(TAG, "exception in updateChannels: $e")
+        }
+
+        private fun row(): ChannelRow.Channel? = rowOf(this)
+
+        fun bind(row: ChannelRow.Channel) {
+            bindExpandToggle(row)
+            name.text = row.name
+            // Separate constants rather than `or`: lint refuses combined Typeface @IntDef styles.
+            name.setTypeface(
+                null,
+                when {
+                    row.isOwn && row.isLinked -> Typeface.BOLD_ITALIC
+                    row.isOwn -> Typeface.BOLD
+                    row.isLinked -> Typeface.ITALIC
+                    else -> Typeface.NORMAL
+                },
+            )
+            userCount.visibility = if (row.userCount != null) View.VISIBLE else View.GONE
+            row.userCount?.let { userCount.text = it.toString() }
+            indent(holder, row.depth)
+            bindLock(row.lock)
+        }
+
+        private fun bindExpandToggle(row: ChannelRow.Channel) {
+            val icon = if (row.expanded) R.drawable.ic_action_expanded else R.drawable.ic_action_collapsed
+            expandToggle.setImageResource(icon)
+            expandToggle.contentDescription =
+                context.getString(if (row.expanded) R.string.a11y_collapse else R.string.expand)
+            expandToggle.isEnabled = row.expandable
+            expandToggle.visibility = if (row.expandable) View.VISIBLE else View.INVISIBLE
+        }
+
+        private fun bindLock(state: ChannelRow.Lock) {
+            lock.visibility = if (state == ChannelRow.Lock.NONE) View.GONE else View.VISIBLE
+            if (state == ChannelRow.Lock.NONE) return
+            val open = state == ChannelRow.Lock.OPEN
+            lock.setImageResource(if (open) R.drawable.ic_lock_open else R.drawable.ic_lock)
+            lock.contentDescription =
+                context.getString(if (open) R.string.a11y_channel_restricted else R.string.a11y_channel_locked)
         }
     }
 
-    /**
-     * Repaints one user's state icon in place, without rebuilding the tree (the hot path for talk
-     * and mute changes). Users without a laid-out row are ignored. No "icon changed?" guard:
-     * the icons are layer lists whose `ConstantState` is per instance, so comparing it never
-     * matches; a working guard would have to compare the resource.
-     */
-    fun updateUserStates(user: IUser, view: RecyclerView) {
-        val itemId = user.session.toLong() or USER_ID_MASK
-        val uvh = view.findViewHolderForItemId(itemId) as? UserViewHolder ?: return
-        bindTalkState(uvh, user)
-    }
+    private inner class UserViewHolder(binding: ChannelUserRowBinding) : RecyclerView.ViewHolder(binding.root) {
+        private val holder: LinearLayout = binding.userRowTitle
+        private val talkHighlight: ImageView = binding.userRowTalkHighlight
+        private val name: TextView = binding.userRowName
+        private val more: ImageView = binding.userRowMore
 
-    /** The lock of a channel with enter restrictions, closed if the local user may not enter. */
-    private fun bindEnterRestriction(cvh: ChannelViewHolder, channel: IChannel) {
-        if (!channel.isEnterRestricted && channel.canEnter) {
-            cvh.lock.visibility = View.GONE
-            return
+        init {
+            itemView.setOnClickListener { rowOf<ChannelRow.User>(this)?.let(listener::onUserClick) }
+            more.setOnClickListener { view -> rowOf<ChannelRow.User>(this)?.let { listener.onUserMore(view, it) } }
+            itemView.setOnLongClickListener {
+                more.performClick()
+                true
+            }
         }
-        cvh.lock.visibility = View.VISIBLE
-        cvh.lock.setImageResource(if (channel.canEnter) R.drawable.ic_lock_open else R.drawable.ic_lock)
-        cvh.lock.contentDescription =
-            context.getString(if (channel.canEnter) R.string.a11y_channel_restricted else R.string.a11y_channel_locked)
+
+        private var shownRow: ChannelRow.User? = null
+        private var shownTalkState: TalkState? = null
+
+        fun bind(row: ChannelRow.User) {
+            name.text = row.name
+            name.setTypeface(null, if (row.isSelf) Typeface.BOLD else Typeface.NORMAL)
+            bindIcon(row)
+            indent(holder, row.depth)
+        }
+
+        /** The state icon, and for accessibility services the row's state in words. */
+        fun bindIcon(row: ChannelRow.User) {
+            val talkState = talkStates[row.session] ?: TalkState.PASSIVE
+            shownRow = row
+            shownTalkState = talkState
+            talkHighlight.setImageDrawable(stateIcon(row, talkState))
+            ViewCompat.setStateDescription(itemView, talkStateDescription(context, row.status, talkState))
+        }
+
+        /** Repaints the icon if the talk state moved on since it was painted. */
+        fun repaint() {
+            val row = shownRow ?: return
+            if (shownTalkState != (talkStates[row.session] ?: TalkState.PASSIVE)) bindIcon(row)
+        }
     }
 
-    /** The talk-state icon, and for accessibility services the row's state in words. */
-    private fun bindTalkState(uvh: UserViewHolder, user: IUser) {
-        uvh.userTalkHighlight.setImageDrawable(getTalkStateDrawable(user))
-        ViewCompat.setStateDescription(uvh.itemView, talkStateDescription(context, user))
+    private inner class ListenerViewHolder(binding: ChannelListenerRowBinding) : RecyclerView.ViewHolder(binding.root) {
+        private val holder: LinearLayout = binding.listenerRowTitle
+        private val name: TextView = binding.listenerRowName
+        private val stop: ImageView = binding.listenerRowStop
+
+        init {
+            stop.setOnClickListener { rowOf<ChannelRow.Listener>(this)?.let(listener::onStopListening) }
+        }
+
+        fun bind(row: ChannelRow.Listener) {
+            name.text = row.name
+            itemView.contentDescription = context.getString(R.string.a11y_listener, row.name)
+            stop.visibility = if (row.isOwn) View.VISIBLE else View.GONE
+            indent(holder, row.depth)
+        }
     }
 
-    private fun getTalkStateDrawable(user: IUser): Drawable {
+    private fun stateIcon(row: ChannelRow.User, talkState: TalkState): Drawable {
         val resources = context.resources
-        val id = when {
-            user.isSelfDeafened -> R.drawable.outline_circle_deafened
-            user.isDeafened -> R.drawable.outline_circle_server_deafened
-            user.isSelfMuted -> R.drawable.outline_circle_muted
-            user.isMuted -> R.drawable.outline_circle_server_muted
-            user.isSuppressed -> R.drawable.outline_circle_suppressed
-            user.talkState == TalkState.TALKING ||
-                    user.talkState == TalkState.SHOUTING ||
-                    user.talkState == TalkState.WHISPERING ->
-                // TODO whisper and shouting?
+        val id = when (row.status) {
+            UserStatus.SELF_DEAFENED -> R.drawable.outline_circle_deafened
+            UserStatus.DEAFENED -> R.drawable.outline_circle_server_deafened
+            UserStatus.SELF_MUTED -> R.drawable.outline_circle_muted
+            UserStatus.MUTED -> R.drawable.outline_circle_server_muted
+            UserStatus.SUPPRESSED -> R.drawable.outline_circle_suppressed
+            UserStatus.NONE -> if (talkState != TalkState.PASSIVE) {
                 R.drawable.outline_circle_talking_on
-            else -> {
-                val texture = user.texture
-                if (texture != null) {
-                    // FIXME: cache bitmaps
-                    val bitmap = BitmapFactory.decodeByteArray(texture, 0, texture.size)
-                    if (bitmap != null) {
-                        return CircleDrawable(resources, bitmap)
-                    }
-                }
-                // "default" symbol, used also if bitmap decoding fails
+            } else {
+                avatar(row.avatar)?.let { return CircleDrawable(resources, it) }
+                // Also when the avatar does not decode.
                 R.drawable.outline_circle_talking_off
             }
         }
-        return ResourcesCompat.getDrawable(resources, id, null)!!
+        return checkNotNull(ResourcesCompat.getDrawable(resources, id, null))
     }
 
-    /**
-     * The list position of a user's row, or -1.
-     *
-     * Runs a rebuild scheduled in this turn first, which notifies. Do not call this during layout,
-     * item animation or scrolling: `notifyDataSetChanged()` throws `IllegalStateException` there.
-     */
-    fun getUserPosition(session: Int): Int {
-        rebuildIfScheduled()
-        val itemId = session.toLong() or USER_ID_MASK
-        return nodes.indexOfFirst { it.nodeId == itemId }
-    }
+    private fun avatar(bytes: Bytes?): Bitmap? = bytes?.let { avatars.get(it) ?: decode(it) }
 
-    /**
-     * The list position of a channel's row, or -1. Same caveat as [getUserPosition]: not during
-     * layout or scrolling.
-     */
-    fun getChannelPosition(channelId: Int): Int {
-        rebuildIfScheduled()
-        val itemId = channelId.toLong() or CHANNEL_ID_MASK
-        return nodes.indexOfFirst { it.nodeId == itemId }
-    }
-
-    /** The list position of [session]'s listener row under [channelId], or -1. Same caveat as [getUserPosition]. */
-    fun getListenerPosition(channelId: Int, session: Int): Int {
-        rebuildIfScheduled()
-        val itemId = listenerId(channelId, session)
-        return nodes.indexOfFirst { it.nodeId == itemId }
-    }
-
-    fun setShowChannelUserCount(showUserCount: Boolean) {
-        showChannelUserCount = showUserCount
-        notifyDataSetChanged()
-    }
-
-    /**
-     * Appends the [Node]s for [channel] and its subtree to [nodes] and returns the channel's node,
-     * which carries the subtree counts. The subtree is appended first and dropped again if the
-     * channel is contracted, because that is only known once its users have been counted. A user
-     * the model has not filled in yet gets no row but is counted, matching
-     * `Channel.subchannelUserCount`. Listeners get rows after the users; they are not counted as
-     * users, but keep a channel expanded by default.
-     */
-    private fun constructNodes(
-        parent: Node?,
-        channel: IChannel,
-        depth: Int,
-        nodes: MutableList<Node>,
-    ): Node {
-        val channelNode = Node(parent, depth, channel)
-        nodes.add(channelNode)
-        val subtreeStart = nodes.size
-
-        var userCount = 0
-        for (user in channel.users) {
-            userCount++
-            if (user == null) {
-                continue
-            }
-            nodes.add(Node(channelNode, depth, user))
-        }
-        val listeners = channel.listeners
-        for (listener in listeners) {
-            nodes.add(Node.listener(channelNode, depth, listener))
-        }
-        var listenerCount = listeners.size
-        val subchannels = channel.subchannels
-        channelNode.hasSubchannels = subchannels.isNotEmpty()
-        for (subc in subchannels) {
-            val subNode = constructNodes(channelNode, subc, depth + 1, nodes)
-            userCount += subNode.subtreeUserCount
-            listenerCount += subNode.subtreeListenerCount
-        }
-        channelNode.subtreeUserCount = userCount
-        channelNode.subtreeListenerCount = listenerCount
-
-        val expandSetting = expandedChannels[channel.id]
-        if (expandSetting ?: (userCount != 0 || listenerCount != 0)) {
-            return channelNode
-        }
-        channelNode.isExpanded = false
-        // Contracted or empty: the subtree was walked to count it, but it is not shown.
-        nodes.subList(subtreeStart, nodes.size).clear()
-        return channelNode
-    }
-
-    /** Changes the session backing the adapter and updates the list. */
-    fun setSession(session: IHumlaSession) {
-        this.session = session
-        if (session.isConnected) updateChannels()
-    }
-
-    /**
-     * Redraws [user]'s local mute and ignore, and stores them for a registered user of a saved
-     * server; stores the local volume for anyone [LocalVolumes.keyOf] can identify.
-     */
-    fun onLocalUserStateUpdated(user: IUser) {
-        notifyDataSetChanged()
-
-        val server = session.targetServer
-        LocalVolumes.keyOf(user, server)?.let { key ->
-            val volume = user.localVolume
-            repository.launchIo { setLocalVolume(key, volume) }
-        }
-
-        // Add or remove registered user from local mute history
-
-        if (server != null && user.userId >= 0 && server.isSaved) {
-            repository.launchIo {
-                if (user.isLocalMuted) {
-                    addLocalMutedUser(server.id, user.userId)
-                } else {
-                    removeLocalMutedUser(server.id, user.userId)
-                }
-                if (user.isLocalIgnored) {
-                    addLocalIgnoredUser(server.id, user.userId)
-                } else {
-                    removeLocalIgnoredUser(server.id, user.userId)
-                }
-            }
-        }
-    }
-
-    private class UserViewHolder(binding: ChannelUserRowBinding) : RecyclerView.ViewHolder(binding.root) {
-        val userHolder: LinearLayout = binding.userRowTitle
-        val userTalkHighlight: ImageView = binding.userRowTalkHighlight
-        val userName: TextView = binding.userRowName
-        val moreButton: ImageView = binding.userRowMore
-    }
-
-    private class ChannelViewHolder(binding: ChannelRowBinding) : RecyclerView.ViewHolder(binding.root) {
-        val channelHolder: LinearLayout = binding.channelRowTitle
-        val channelExpandToggle: ImageView = binding.channelRowExpand
-        val channelName: TextView = binding.channelRowName
-        val channelUserCount: TextView = binding.channelRowCount
-        val lock: ImageView = binding.channelRowLock
-        val joinButton: ImageView = binding.channelRowJoin
-        val moreButton: ImageView = binding.channelRowMore
-    }
-
-    private class ListenerViewHolder(binding: ChannelListenerRowBinding) : RecyclerView.ViewHolder(binding.root) {
-        val holder: LinearLayout = binding.listenerRowTitle
-        val name: TextView = binding.listenerRowName
-        val stop: ImageView = binding.listenerRowStop
-    }
-
-    /** A channel, user or listener row in the flattened hierarchy. A listener's parent is its channel. */
-    private class Node private constructor(
-        val parent: Node?,
-        val depth: Int,
-        val channel: IChannel?,
-        val user: IUser?,
-        val listener: IUser?,
-    ) {
-        var isExpanded: Boolean = channel != null
-
-        /** Users in this channel and everything below it, as of the rebuild that made this node. */
-        var subtreeUserCount: Int = 0
-
-        /** Listeners in this channel and everything below it. */
-        var subtreeListenerCount: Int = 0
-        var hasSubchannels: Boolean = false
-
-        constructor(parent: Node?, depth: Int, channel: IChannel) : this(parent, depth, channel, null, null)
-
-        constructor(parent: Node?, depth: Int, user: IUser) : this(parent, depth, null, user, null)
-
-        /** Applies flags to differentiate integer-length identifiers. */
-        val nodeId: Long?
-            get() = when {
-                listener != null -> listenerId(checkNotNull(parent?.channel).id, listener.session)
-                channel != null -> CHANNEL_ID_MASK or channel.id.toLong()
-                user != null -> USER_ID_MASK or user.session.toLong()
-                else -> null
-            }
-
-        companion object {
-            fun listener(channelNode: Node, depth: Int, listener: IUser) =
-                Node(channelNode, depth, null, null, listener)
-        }
+    private fun decode(bytes: Bytes): Bitmap? {
+        val data = bytes.toByteArray()
+        return BitmapFactory.decodeByteArray(data, 0, data.size)?.also { avatars.put(bytes, it) }
     }
 
     companion object {
-        private val TAG: String = ChannelListAdapter::class.java.name
         private const val INDENT_DP = 25f
+        private const val AVATAR_CACHE_SIZE = 64
 
-        // Set particular bits to make the integer-based model item ids unique.
-        const val CHANNEL_ID_MASK = 0x1L shl 32
-        const val USER_ID_MASK = 0x1L shl 33
-        private const val LISTENER_ID_MASK = 0x1L shl 62
-        private const val ID_BITS = 31
-        private const val ID_MASK = (1L shl ID_BITS) - 1
+        /** The payload of a user row change that only its icon shows. */
+        private val ICON = Any()
 
-        /** A listener row's id: channel ids and sessions below 2^31 never collide. */
-        private fun listenerId(channelId: Int, session: Int): Long =
-            LISTENER_ID_MASK or ((channelId.toLong() and ID_MASK) shl ID_BITS) or (session.toLong() and ID_MASK)
+        /** Rows are the same row by id and unchanged when equal; a user's new state is an icon change. */
+        val DIFF = object : DiffUtil.ItemCallback<ChannelRow>() {
+            override fun areItemsTheSame(oldItem: ChannelRow, newItem: ChannelRow): Boolean = oldItem.id == newItem.id
+
+            override fun areContentsTheSame(oldItem: ChannelRow, newItem: ChannelRow): Boolean = oldItem == newItem
+
+            override fun getChangePayload(oldItem: ChannelRow, newItem: ChannelRow): Any? =
+                ICON.takeIf {
+                    oldItem is ChannelRow.User && newItem is ChannelRow.User &&
+                        oldItem.copy(status = newItem.status, avatar = newItem.avatar) == newItem
+                }
+        }
     }
 }

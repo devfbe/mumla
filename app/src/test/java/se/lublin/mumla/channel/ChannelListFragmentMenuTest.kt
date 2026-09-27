@@ -21,7 +21,6 @@ import android.view.Menu
 import android.view.View
 import androidx.appcompat.widget.PopupMenu
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
 import io.mockk.mockk
 import org.junit.Before
 import org.junit.Test
@@ -30,10 +29,14 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.model.UserState
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubModel
 
 /** The channel list's own menu items; the audio chooser is the activity's. */
 @RunWith(RobolectricTestRunner::class)
@@ -65,17 +68,22 @@ class ChannelListFragmentMenuTest {
         return menu
     }
 
+    private fun me(muted: Boolean) = serverState(self = 1) {
+        channel(0, "Root")
+        user(UserState(1, "me", 0, isSelfMuted = muted, isSelfDeafened = muted))
+    }
+
     @Test
     fun theMuteAndDeafenItemsAreTitledWithWhatATapDoes() {
-        val self = FakeUser(1)
-        every { session.sessionUser } returns self
+        val model = session.stubModel(me(muted = false))
+        idleMainLooper()
         prepared().let { menu ->
             assertThat(menu.findItem(R.id.menu_mute_button).title).isEqualTo(activity.getString(R.string.mute))
             assertThat(menu.findItem(R.id.menu_deafen_button).title).isEqualTo(activity.getString(R.string.deafen))
         }
 
-        self.selfMuted = true
-        self.selfDeafened = true
+        model.value = me(muted = true)
+        idleMainLooper()
 
         prepared().let { menu ->
             assertThat(menu.findItem(R.id.menu_mute_button).title).isEqualTo(activity.getString(R.string.unmute))

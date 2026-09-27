@@ -18,8 +18,6 @@ package se.lublin.mumla.channel
 
 import android.content.Context
 import android.graphics.Typeface
-import android.os.Handler
-import android.os.Looper
 import android.text.SpannableStringBuilder
 import android.text.format.DateUtils
 import android.text.style.StyleSpan
@@ -28,50 +26,30 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.text.inSpans
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.MainScope
-import se.lublin.humla.IHumlaSession
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import se.lublin.humla.model.UserStats
-import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.DialogUserInfoBinding
-import se.lublin.mumla.util.collectEvents
 import java.security.cert.X509Certificate
 import javax.security.auth.x500.X500Principal
 import kotlin.math.sqrt
 
-/** How often the dialog asks for fresh statistics while it is open. */
-private const val REFRESH_MILLIS = 5_000L
-
 /**
- * Shows the connection statistics of the user with session [user] and [name], asking the server
- * for them now and every few seconds until the dialog is closed.
+ * Shows the connection statistics of the user called [name] as [stats] delivers them, until the
+ * dialog is closed.
  */
-fun showUserInfoDialog(context: Context, session: IHumlaSession, user: Int, name: String?): AlertDialog {
+fun showUserInfoDialog(context: Context, name: String?, stats: Flow<UserStats>): AlertDialog {
     val binding = DialogUserInfoBinding.inflate(LayoutInflater.from(context))
     binding.userInfoText.setText(R.string.user_info_loading)
     val formatter = UserInfoFormatter(context)
-    val handler = Handler(Looper.getMainLooper())
-    val refresh = object : Runnable {
-        override fun run() {
-            session.actions.requestUserStats(user)
-            handler.postDelayed(this, REFRESH_MILLIS)
-        }
-    }
-    val updates = collectEvents(MainScope(), session) { event ->
-        if (event is HumlaEvent.UserStatsReceived && event.stats.session == user) {
-            binding.userInfoText.text = formatter.format(event.stats)
-        }
-    }
-    val dialog = MaterialAlertDialogBuilder(context)
+    val updates = MainScope().launch { stats.collect { binding.userInfoText.text = formatter.format(it) } }
+    return MaterialAlertDialogBuilder(context)
         .setTitle(name)
         .setView(binding.root)
         .setPositiveButton(android.R.string.ok, null)
-        .setOnDismissListener {
-            handler.removeCallbacks(refresh)
-            updates.cancel()
-        }
+        .setOnDismissListener { updates.cancel() }
         .show()
-    refresh.run()
-    return dialog
 }
 
 /** Phrases [UserStats] as labelled rows; values the server did not send are left out. */

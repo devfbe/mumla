@@ -17,33 +17,45 @@
 package se.lublin.mumla.channel
 
 import android.content.Context
-import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.CheckBox
 import android.widget.LinearLayout
-import android.widget.Toast
-import androidx.fragment.app.FragmentManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.WhisperTargetChannel
+import kotlinx.coroutines.flow.Flow
 import se.lublin.humla.net.Permissions
 import se.lublin.mumla.R
-import se.lublin.mumla.channel.comment.ChannelDescriptionFragment
-import se.lublin.mumla.db.PinnedChannels
-import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.ui.showConfirmDialog
+
+/** Our permissions in a channel, for a menu that depends on them. */
+interface MenuPermissions {
+    fun permissions(channel: Int): Flow<Int>
+
+    fun requestPermissions(channel: Int)
+}
 
 /** The popup menu of a channel's row: join, edit, pin, link, shout and so on. */
 class ChannelMenu(
     private val context: Context,
-    private val channel: IChannel,
-    private val session: IHumlaSession,
-    private val pinnedChannels: PinnedChannels,
-    private val fragmentManager: FragmentManager,
+    private val channel: Int,
+    private val state: () -> ChannelMenuState?,
+    private val actions: Actions,
 ) : PermissionsPopupMenu.IOnMenuPrepareListener {
+
+    /** What the items do, for the channel they were picked on. */
+    interface Actions : MenuPermissions {
+        fun join(channel: Int)
+        fun addChannel(parent: Int)
+        fun editChannel(channel: Int)
+        fun removeChannel(channel: Int)
+        fun showDescription(channel: Int)
+        fun setPinned(channel: Int, pinned: Boolean)
+        fun setLinked(channel: Int, linked: Boolean)
+        fun setListening(channel: Int, listen: Boolean)
+        fun unlinkAll(channel: Int)
+        fun shout(channel: Int, includeLinked: Boolean, includeSubchannels: Boolean)
+    }
 
     override fun onMenuPrepare(menu: Menu, permissions: Int) {
         // TODO This breaks uMurmur ACL. Put in a fix based on server version perhaps?
@@ -51,74 +63,37 @@ class ChannelMenu(
         val canWrite = permissions and Permissions.WRITE > 0
         menu.findItem(R.id.context_channel_edit).isVisible = canWrite
         menu.findItem(R.id.context_channel_remove).isVisible = canWrite
-        menu.findItem(R.id.context_channel_view_description).isVisible =
-            channel.description != null || channel.descriptionHash != null
-        session.targetServer?.let { server ->
-            menu.findItem(R.id.context_channel_pin).isChecked = pinnedChannels.isPinned(server.id, channel.id)
+        val state = state() ?: return
+        menu.findItem(R.id.context_channel_view_description).isVisible = state.hasDescription
+        menu.findItem(R.id.context_channel_pin).isChecked = state.isPinned
+        menu.findItem(R.id.context_channel_link).isChecked = state.isLinkedToOwn
+        // Offered with the Listen permission, and always to stop listening; never for the own channel.
+        menu.findItem(R.id.context_channel_listen).apply {
+            isChecked = state.isListening
+            isVisible = !state.isOwn && (state.isListening || permissions and Permissions.LISTEN > 0)
         }
-        if (session.isConnected) {
-            val ourChannel = try {
-                session.sessionChannel
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "exception in onMenuPrepare: $e")
-                null
-            }
-            if (ourChannel != null) {
-                menu.findItem(R.id.context_channel_link).isChecked = channel.links.contains(ourChannel)
-            }
-            prepareListen(menu.findItem(R.id.context_channel_listen), permissions, ourChannel)
-        }
-    }
-
-    /** Offered with the Listen permission, and always to stop listening; never for the own channel. */
-    private fun prepareListen(item: MenuItem, permissions: Int, ourChannel: IChannel?) {
-        val listening = channel.isListenedToBy(session)
-        item.isChecked = listening
-        item.isVisible = channel != ourChannel && (listening || permissions and Permissions.LISTEN > 0)
     }
 
     @Suppress("CyclomaticComplexMethod", "ReturnCount") // One branch per item.
     override fun onMenuItemClick(item: MenuItem): Boolean {
-        if (!session.isConnected) return false
+        val state = state() ?: return false
         when (item.itemId) {
-            R.id.context_channel_join -> session.joinOrExplain(context, channel)
-            R.id.context_channel_add -> showEditor(adding = true)
-            R.id.context_channel_edit -> showEditor(adding = false)
-            R.id.context_channel_remove -> confirmRemoval()
-            R.id.context_channel_view_description -> showDescription()
-            R.id.context_channel_pin -> togglePin()
-            R.id.context_channel_link -> session.sessionChannel?.let { ours ->
-                if (item.isChecked) session.unlinkChannels(ours, channel) else session.linkChannels(ours, channel)
-            }
-            R.id.context_channel_listen -> session.setListening(channel.id, !channel.isListenedToBy(session))
-            R.id.context_channel_unlink_all -> session.unlinkAllChannels(channel)
+            R.id.context_channel_join -> actions.join(channel)
+            R.id.context_channel_add -> actions.addChannel(channel)
+            R.id.context_channel_edit -> actions.editChannel(channel)
+            R.id.context_channel_remove -> context.showConfirmDialog(
+                context.getString(R.string.confirm_delete_channel),
+                title = context.getString(R.string.confirm),
+            ) { actions.removeChannel(channel) }
+            R.id.context_channel_view_description -> actions.showDescription(channel)
+            R.id.context_channel_pin -> actions.setPinned(channel, !state.isPinned)
+            R.id.context_channel_link -> actions.setLinked(channel, !item.isChecked)
+            R.id.context_channel_listen -> actions.setListening(channel, !state.isListening)
+            R.id.context_channel_unlink_all -> actions.unlinkAll(channel)
             R.id.context_channel_shout -> showShoutDialog()
             else -> return false
         }
         return true
-    }
-
-    private fun confirmRemoval() {
-        context.showConfirmDialog(
-            context.getString(R.string.confirm_delete_channel),
-            title = context.getString(R.string.confirm),
-        ) {
-            if (session.isConnected) session.removeChannel(channel.id)
-        }
-    }
-
-    private fun togglePin() {
-        val server = session.targetServer ?: return
-        pinnedChannels.setPinned(server.id, channel.id, !pinnedChannels.isPinned(server.id, channel.id))
-    }
-
-    private fun showEditor(adding: Boolean) {
-        ChannelEditFragment.newInstance(channel.id, adding).show(fragmentManager, "ChannelAdd")
-    }
-
-    private fun showDescription() {
-        ChannelDescriptionFragment.newInstance(channel.id, channel.description)
-            .show(fragmentManager, ChannelDescriptionFragment::class.java.name)
     }
 
     /** Asks which channels to include, then whispers to them. */
@@ -133,35 +108,17 @@ class ChannelMenu(
         MaterialAlertDialogBuilder(context)
             .setTitle(R.string.shout_configure)
             .setView(layout)
-            .setPositiveButton(R.string.confirm) { _, _ -> shout(linkedBox.isChecked, subchannelBox.isChecked) }
+            .setPositiveButton(R.string.confirm) { _, _ ->
+                actions.shout(channel, linkedBox.isChecked, subchannelBox.isChecked)
+            }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
-    private fun shout(includeLinked: Boolean, includeSubchannels: Boolean) {
-        if (!session.isConnected) return
-        val target = session.model.value?.channel(channel.id) ?: return
-        if (!session.actions.whisperTo(WhisperTargetChannel(target, includeLinked, includeSubchannels, null))) {
-            Toast.makeText(context, R.string.shout_failed, Toast.LENGTH_LONG).show()
-        }
-    }
-
     fun showPopup(anchor: View) {
-        PermissionsPopupMenu(context, anchor, R.menu.context_channel, this, channel.id, session).show()
+        PermissionsPopupMenu(
+            context, anchor, R.menu.context_channel, this,
+            actions.permissions(channel),
+        ) { actions.requestPermissions(channel) }.show()
     }
-
-    private companion object {
-        val TAG: String = ChannelMenu::class.java.name
-    }
-}
-
-/** Whether the local user listens to this channel. */
-private fun IChannel.isListenedToBy(session: IHumlaSession): Boolean {
-    val self = try {
-        session.sessionId
-    } catch (e: IllegalStateException) {
-        Log.d("ChannelMenu", "exception in isListenedToBy: $e")
-        return false
-    }
-    return listeners.any { it.session == self }
 }

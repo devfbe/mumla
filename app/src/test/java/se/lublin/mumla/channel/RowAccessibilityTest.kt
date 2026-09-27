@@ -21,50 +21,49 @@ import android.content.Context
 import android.view.View
 import android.widget.FrameLayout
 import androidx.core.view.ViewCompat
-import androidx.fragment.app.FragmentManager
+import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
-import io.mockk.mockk
-import kotlinx.coroutines.Dispatchers
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
 import se.lublin.mumla.R
-import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.service.OverlayUserAdapter
 import se.lublin.mumla.testing.ThemedActivity
-import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.util.UserStatus
 
 /** What the channel list and the overlay tell accessibility services about their rows. */
 @RunWith(RobolectricTestRunner::class)
 class RowAccessibilityTest {
     private lateinit var context: Context
-    private val root = FakeChannel(0)
-    private val sub = FakeChannel(1)
-    private val user = FakeUser(7)
 
     @Before
     fun setUp() {
         context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
-        root.addSubchannel(sub)
-        root.addUser(user)
     }
 
-    private fun adapter(): ChannelListAdapter {
-        val session = mockk<IHumlaSession>(relaxed = true)
-        every { session.getChannel(0) } returns root
-        session.stubConnected()
-        return ChannelListAdapter(
-            context, session, MumlaRepository(mockk(relaxed = true), Dispatchers.Unconfined),
-            mockk<FragmentManager>(relaxed = true), false, true,
-        )
+    private val noTaps = object : ChannelListAdapter.Listener {
+        override fun onChannelClick(row: ChannelRow.Channel) = Unit
+        override fun onUserClick(row: ChannelRow.User) = Unit
+        override fun onExpandClick(row: ChannelRow.Channel) = Unit
+        override fun onJoinClick(row: ChannelRow.Channel) = Unit
+        override fun onChannelMore(anchor: View, row: ChannelRow.Channel) = Unit
+        override fun onUserMore(anchor: View, row: ChannelRow.User) = Unit
+        override fun onStopListening(row: ChannelRow.Listener) = Unit
+    }
+
+    private fun adapter(vararg rows: ChannelRow): ChannelListAdapter {
+        val config = AsyncDifferConfig.Builder(ChannelListAdapter.DIFF).setBackgroundThreadExecutor { it.run() }.build()
+        return ChannelListAdapter(context, noTaps, config).apply {
+            submitList(rows.toList())
+            idleMainLooper()
+        }
     }
 
     private fun ChannelListAdapter.bound(position: Int): View {
@@ -76,11 +75,14 @@ class RowAccessibilityTest {
 
     private fun View.description(id: Int) = findViewById<View>(id).contentDescription?.toString()
 
+    private fun channel(expanded: Boolean) =
+        ChannelRow.Channel(0, "Root", 0, 1, expanded, true, false, false, ChannelRow.Lock.NONE)
+
+    private fun user(status: UserStatus = UserStatus.NONE) = ChannelRow.User(7, "user-7", 1, false, status, null)
+
     @Test
     fun aChannelRowNamesItsButtonsAndWhatTheToggleWillDo() {
-        val adapter = adapter()
-
-        val row = adapter.bound(adapter.getChannelPosition(0))
+        val row = adapter(channel(expanded = true)).bound(0)
 
         assertThat(row.description(R.id.channel_row_expand)).isEqualTo(context.getString(R.string.a11y_collapse))
         assertThat(row.description(R.id.channel_row_join)).isEqualTo(context.getString(R.string.a11y_join_channel))
@@ -89,22 +91,17 @@ class RowAccessibilityTest {
 
     @Test
     fun aCollapsedChannelOffersToExpand() {
-        sub.addUser(FakeUser(8))
-        val adapter = adapter()
-        adapter.bound(adapter.getChannelPosition(1)).findViewById<View>(R.id.channel_row_expand).performClick()
-        adapter.getChannelPosition(1) // runs the scheduled rebuild
-
-        val row = adapter.bound(adapter.getChannelPosition(1))
+        val row = adapter(channel(expanded = false)).bound(0)
 
         assertThat(row.description(R.id.channel_row_expand)).isEqualTo(context.getString(R.string.expand))
     }
 
     @Test
     fun aUserRowStatesTheTalkStateAndKeepsItsIconOutOfTheWay() {
-        user.state = TalkState.TALKING
-        val adapter = adapter()
+        val adapter = adapter(user())
+        adapter.setTalkStates(mapOf(7 to TalkState.TALKING))
 
-        val row = adapter.bound(adapter.getUserPosition(7))
+        val row = adapter.bound(0)
 
         assertThat(ViewCompat.getStateDescription(row)).isEqualTo(context.getString(R.string.a11y_state_talking))
         assertThat(row.findViewById<View>(R.id.user_row_talk_highlight).importantForAccessibility)
@@ -114,18 +111,22 @@ class RowAccessibilityTest {
 
     @Test
     fun aRepaintedUserRowUpdatesItsState() {
-        val adapter = adapter()
+        val adapter = adapter(user())
         val list = RecyclerView(context).apply {
             layoutManager = LinearLayoutManager(context)
             this.adapter = adapter
-            measure(0, 0)
-            layout(0, 0, 1000, 2000)
         }
-        user.selfMuted = true
+        fun layOut() {
+            list.measure(0, 0)
+            list.layout(0, 0, 1000, 2000)
+        }
+        layOut()
 
-        adapter.updateUserStates(user, list)
+        adapter.submitList(listOf(user(UserStatus.SELF_MUTED)))
+        idleMainLooper()
+        layOut()
 
-        val row = list.findViewHolderForItemId(7L or ChannelListAdapter.USER_ID_MASK)!!.itemView
+        val row = list.findViewHolderForItemId(7L or ChannelRow.USER_ID_MASK)!!.itemView
         assertThat(ViewCompat.getStateDescription(row)).isEqualTo(context.getString(R.string.a11y_state_muted))
     }
 

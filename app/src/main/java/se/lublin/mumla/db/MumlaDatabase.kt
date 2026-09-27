@@ -49,7 +49,7 @@ interface MumlaDatabase {
     fun addLocalIgnoredUser(serverId: Long, userId: Int)
     fun removeLocalIgnoredUser(serverId: Long, userId: Int)
 
-    /** Local playback volumes by `LocalVolumes.keyOf`. */
+    /** Local playback volumes by `localVolumeKey`. */
     fun getLocalVolumes(): Map<String, Float>
 
     /** Stores [volume] for [key]; a volume of 1 removes it. */
