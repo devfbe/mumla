@@ -234,6 +234,8 @@ class ChannelListFragment :
 
     override fun unlinkAll(channel: Int) = tree.unlinkAll(channel)
 
+    override fun channelName(channel: Int): String? = tree.channelName(channel)
+
     override fun shout(channel: Int, includeLinked: Boolean, includeSubchannels: Boolean) {
         if (!tree.shout(channel, includeLinked, includeSubchannels)) {
             showSnackbar(R.string.shout_failed)

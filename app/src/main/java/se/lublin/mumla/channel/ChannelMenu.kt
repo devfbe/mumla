@@ -55,6 +55,7 @@ class ChannelMenu(
         fun setListening(channel: Int, listen: Boolean)
         fun unlinkAll(channel: Int)
         fun shout(channel: Int, includeLinked: Boolean, includeSubchannels: Boolean)
+        fun channelName(channel: Int): String?
     }
 
     override fun onMenuPrepare(menu: Menu, permissions: Int) {
@@ -106,7 +107,7 @@ class ChannelMenu(
             addView(linkedBox)
         }
         MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.shout_configure)
+            .setTitle(context.getString(R.string.shout_configure, actions.channelName(channel).orEmpty()))
             .setView(layout)
             .setPositiveButton(R.string.confirm) { _, _ ->
                 actions.shout(channel, linkedBox.isChecked, subchannelBox.isChecked)
