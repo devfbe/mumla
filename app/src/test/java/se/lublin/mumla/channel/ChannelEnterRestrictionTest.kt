@@ -33,7 +33,6 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowToast
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaRepository
@@ -46,8 +45,7 @@ import se.lublin.mumla.testing.stubConnected
 class ChannelEnterRestrictionTest {
 
     private lateinit var context: Context
-    private val session = mockk<IHumlaSession>(relaxed = true)
-    private val service = mockk<IHumlaService>(relaxed = true).stubConnected(session)
+    private val session = mockk<IHumlaSession>(relaxed = true).stubConnected()
     private val root = FakeChannel(0, "Root")
     private val open = root.addSubchannel(FakeChannel(1, "Open"))
     private val restricted = root.addSubchannel(FakeChannel(2, "Restricted").apply { isEnterRestricted = true })
@@ -71,7 +69,7 @@ class ChannelEnterRestrictionTest {
     }
 
     private fun adapter() = ChannelListAdapter(
-        context, service, MumlaRepository(mockk(relaxed = true), Dispatchers.Unconfined),
+        context, session, MumlaRepository(mockk(relaxed = true), Dispatchers.Unconfined),
         mockk<FragmentManager>(relaxed = true), showPinnedOnly = false, showUserCount = true,
     )
 

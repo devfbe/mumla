@@ -36,7 +36,6 @@ import androidx.appcompat.widget.SearchView
 import androidx.core.os.bundleOf
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
@@ -44,38 +43,42 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.FragmentChannelListBinding
 import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.service.toggleSelfMute
-import se.lublin.mumla.ui.ServiceClient
-import se.lublin.mumla.ui.ServiceViewModel
-import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.session.SessionClient
+import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.session.bindClient
 import se.lublin.mumla.util.changes
 
 class ChannelListFragment :
     Fragment(),
-    ServiceClient,
+    SessionClient,
     MenuProvider {
 
-    private val serviceModel: ServiceViewModel by activityViewModels()
-    private val service: IMumlaService? get() = serviceModel.service.value
+    private val sessions get() = SessionManager.get(requireContext())
     private var bound = false
 
-    override fun onServiceEvent(event: HumlaEvent) {
+    override fun onSessionState(state: SessionState) {
+        val session = sessions.session.value ?: return
+        if (state == SessionState.Connected) {
+            channelListAdapter?.setSession(session) ?: setupChannelList(session)
+        } else if (state !is SessionState.Connecting) {
+            channelView.adapter = null
+            // And forget it: a new connection builds a fresh adapter, as the pinned channels are
+            // per server.
+            channelListAdapter = null
+        }
+    }
+
+    override fun onSessionEvent(event: HumlaEvent) {
         when (event) {
-            is HumlaEvent.Disconnected -> {
-                channelView.adapter = null
-                // And forget it: a rebind after reconnection must build a fresh adapter (the pinned
-                // channels are per server), otherwise the setService branch leaves the list empty.
-                channelListAdapter = null
-            }
             is HumlaEvent.UserJoinedChannel -> onUserJoinedChannel(event.user, event.newChannel)
             is HumlaEvent.ChannelAdded,
             is HumlaEvent.ChannelRemoved,
@@ -86,8 +89,7 @@ class ChannelListFragment :
             is HumlaEvent.UserRemoved -> {
                 // If we are the user being removed, don't update the channel list.
                 // We won't be in a synchronized state.
-                val service = service
-                if (service != null && service.isConnected) channelListAdapter?.updateChannels()
+                if (sessions.connected != null) channelListAdapter?.updateChannels()
             }
             is HumlaEvent.UserStateUpdated -> {
                 channelListAdapter?.updateUserStates(event.user, channelView)
@@ -101,12 +103,9 @@ class ChannelListFragment :
     private fun onUserJoinedChannel(user: IUser, newChannel: IChannel) {
         channelListAdapter?.updateChannels()
 
-        val service = service?.takeIf { it.isConnected } ?: return
+        val session = sessions.connected ?: return
         val selfSession = try {
-            service.session.sessionId
-        } catch (e: HumlaDisconnectedException) {
-            Log.d(TAG, "exception in onUserJoinedChannel: $e")
-            null
+            session.sessionId
         } catch (e: IllegalStateException) {
             Log.d(TAG, "exception in onUserJoinedChannel: $e")
             null
@@ -148,21 +147,12 @@ class ChannelListFragment :
         }
         if (!bound) {
             bound = true
-            serviceModel.bindClient(this, this)
-        }
-    }
-
-    override fun onServiceBound(service: IMumlaService) {
-        val adapter = channelListAdapter
-        if (adapter == null) {
-            setupChannelList(service)
-        } else {
-            adapter.setService(service)
+            sessions.bindClient(this, this)
         }
     }
 
     override fun onPrepareMenu(menu: Menu) {
-        // Writing the preference makes MumlaService reconfigure the audio subsystem live.
+        // Writing the preference reconfigures the session's audio live.
         when (settings.noiseSuppressionMethod) {
             "speex" -> menu.findItem(R.id.menu_noise_speex)
             "none" -> menu.findItem(R.id.menu_noise_none)
@@ -172,10 +162,8 @@ class ChannelListFragment :
         val muteItem = menu.findItem(R.id.menu_mute_button)
         val deafenItem = menu.findItem(R.id.menu_deafen_button)
 
-        val service = service
-        if (service != null && service.isConnected) {
-            val session = service.session
-
+        val session = sessions.connected
+        if (session != null) {
             // Tinted like the app bar title.
             val foregroundColor = requireActivity().getColor(R.color.on_app_bar)
 
@@ -214,10 +202,7 @@ class ChannelListFragment :
             override fun onSuggestionSelect(i: Int): Boolean = false
 
             override fun onSuggestionClick(i: Int): Boolean {
-                val service = service
-                if (service == null || !service.isConnected) {
-                    return false
-                }
+                val session = sessions.connected ?: return false
                 val cursor = searchView.suggestionsAdapter.getItem(i) as CursorWrapper
                 val typeColumn =
                     cursor.getColumnIndex(SearchManager.SUGGEST_COLUMN_INTENT_EXTRA_DATA)
@@ -225,7 +210,6 @@ class ChannelListFragment :
                 val itemType = cursor.getString(typeColumn)
                 val itemId = cursor.getInt(dataIdColumn)
 
-                val session = service.session
                 return when (itemType) {
                     ChannelSearchProvider.INTENT_DATA_CHANNEL -> {
                         if (session.sessionChannel?.id != itemId) {
@@ -250,9 +234,6 @@ class ChannelListFragment :
         })
     }
 
-    /** The session, while there is a connection to have one. */
-    private fun connectedSession(): IHumlaSession? =
-        service?.takeIf { it.isConnected }?.session
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when {
         menuItem.itemId in NOISE_METHODS -> {
@@ -267,7 +248,7 @@ class ChannelListFragment :
 
     /** Flips our own mute, or deafness with [deafen]; returns false while not connected. */
     private fun toggleSelfMuteDeaf(deafen: Boolean): Boolean {
-        val session = connectedSession() ?: return false
+        val session = sessions.connected ?: return false
         if (deafen) {
             session.sessionUser?.let { self ->
                 val deafened = !self.isSelfDeafened
@@ -280,12 +261,12 @@ class ChannelListFragment :
         return true
     }
 
-    private fun setupChannelList(service: IMumlaService) {
+    private fun setupChannelList(session: IHumlaSession) {
         val repository = MumlaRepository.get(requireContext())
         // Read now, off the main thread, for the channel menus' pin toggle.
-        service.targetServer?.let { repository.pinnedChannels.of(it.id) }
+        session.targetServer?.let { repository.pinnedChannels.of(it.id) }
         val adapter = ChannelListAdapter(
-            requireActivity(), service, repository, childFragmentManager,
+            requireActivity(), session, repository, childFragmentManager,
             isShowingPinnedChannels, settings.shouldShowUserCount,
         )
         adapter.onChannelClick = ::onChannelClick

@@ -24,7 +24,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.DividerItemDecoration
@@ -35,12 +34,11 @@ import kotlinx.coroutines.launch
 import se.lublin.mumla.databinding.FragmentTokensBinding
 import se.lublin.mumla.databinding.TokenRowBinding
 import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.session.SessionManager
 
 /** Edits the access tokens stored for a server, and sends them to it while connected. */
 class AccessTokenFragment : Fragment() {
 
-    private val serviceModel: ServiceViewModel by activityViewModels()
     private val repository get() = MumlaRepository.get(requireContext())
     private val serverId get() = requireArguments().getLong(ARG_SERVER)
 
@@ -101,7 +99,7 @@ class AccessTokenFragment : Fragment() {
     }
 
     private fun sendTokens() {
-        serviceModel.service.value?.takeIf { it.isConnected }?.session?.sendAccessTokens(tokens.toList())
+        SessionManager.get(requireContext()).connected?.sendAccessTokens(tokens.toList())
     }
 
     private class TokenHolder(val binding: TokenRowBinding) : RecyclerView.ViewHolder(binding.root)

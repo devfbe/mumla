@@ -15,15 +15,15 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.stubConnected
-import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.stubState
 
 /**
  * Covers the chat-target action mode, the list across disconnect and rebind, and the refusal of a
@@ -45,7 +45,6 @@ class ChannelListFragmentTest {
     private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var parent: ChatTargetParentFragment
     private lateinit var fragment: ChannelListFragment
-    private lateinit var service: IMumlaService
     private lateinit var session: IHumlaSession
     private lateinit var tree: Map<Int, FakeChannel>
 
@@ -54,14 +53,12 @@ class ChannelListFragmentTest {
 
     @Before
     fun setUp() {
-        service = mockk(relaxed = true)
         session = mockk(relaxed = true)
         tree = smallTree()
         every { session.getChannel(any()) } answers { tree[firstArg<Int>()] }
-        service.stubConnected(session)
-        service.stubEvents()
+        session.stubConnected()
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        controller.get().bind(service)
+        controller.get().bind(session)
         parent = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(parent, "parent").commitNow()
@@ -100,30 +97,23 @@ class ChannelListFragmentTest {
         return { changes }
     }
 
-    private fun rebind() {
-        controller.get().bind(null)
-        controller.get().bind(service)
-    }
-
     @Test
-    fun aBoundServiceGivesTheListAnAdapter() {
+    fun aConnectedSessionGivesTheListAnAdapter() {
         assertThat(channelView.adapter).isNotNull()
     }
 
-    /**
-     * A disconnect removes the adapter from the list; the rebind after reconnecting takes the
-     * `setService` branch, which must put it back or the list stays empty.
-     */
+    /** A lost connection removes the adapter from the list, and the reconnect puts one back. */
     @Test
-    fun reconnectingAfterADisconnectPutsAnAdapterBackOnTheList() {
+    fun reconnectingAfterALostConnectionPutsAnAdapterBackOnTheList() {
         assertThat(channelView.adapter).isNotNull()
 
-        fragment.onServiceEvent(HumlaEvent.Disconnected(null))
-
+        session.stubState(SessionState.ConnectionLost(10L, 1, null))
+        idleMainLooper()
         assertThat(channelView.adapter).isNull()
 
-        rebind()
-
+        session.stubState(SessionState.Reconnecting(null))
+        session.stubState(SessionState.Connected)
+        idleMainLooper()
         assertThat(channelView.adapter).isNotNull()
     }
 
@@ -138,14 +128,14 @@ class ChannelListFragmentTest {
         every { session.sessionId } returns 100
         idleMainLooper()
 
-        fragment.onServiceEvent(
+        fragment.onSessionEvent(
             HumlaEvent.UserJoinedChannel(FakeUser(200), tree.getValue(2), tree.getValue(0))
         )
         idleMainLooper()
 
         assertThat(layout.scrolls).isEmpty()
 
-        fragment.onServiceEvent(
+        fragment.onSessionEvent(
             HumlaEvent.UserJoinedChannel(FakeUser(100), tree.getValue(2), tree.getValue(0))
         )
 
@@ -153,15 +143,15 @@ class ChannelListFragmentTest {
         assertThat(listAdapter.getChannelPosition(2)).isNotEqualTo(-1)
     }
 
-    /** A disconnected service reports nothing, so no scroll happens. */
+    /** Without a connection there is no own session to compare with, so no scroll happens. */
     @Test
     fun aJoinReportedWhileDisconnectedScrollsNothing() {
         val layout = RecordingLayoutManager(controller.get())
         channelView.layoutManager = layout
         every { session.sessionId } returns 100
-        every { service.isConnected } returns false
+        session.stubState(SessionState.Disconnected())
 
-        fragment.onServiceEvent(
+        fragment.onSessionEvent(
             HumlaEvent.UserJoinedChannel(FakeUser(100), tree.getValue(2), tree.getValue(0))
         )
         idleMainLooper()
@@ -219,18 +209,20 @@ class ChannelListFragmentTest {
     @Test
     fun aRemovalReportedWhileDisconnectedRebuildsNothing() {
         val changes = countChanges()
-        every { service.isConnected } returns false
+        session.stubState(SessionState.Disconnected())
 
-        fragment.onServiceEvent(HumlaEvent.UserRemoved(FakeUser(200), "gone"))
+        fragment.onSessionEvent(HumlaEvent.UserRemoved(FakeUser(200), "gone"))
         idleMainLooper()
 
         assertThat(changes()).isEqualTo(0)
 
-        every { service.isConnected } returns true
-        fragment.onServiceEvent(HumlaEvent.UserRemoved(FakeUser(200), "gone"))
+        session.stubState(SessionState.Connected)
+        idleMainLooper()
+        val changesWhileConnected = countChanges()
+        fragment.onSessionEvent(HumlaEvent.UserRemoved(FakeUser(200), "gone"))
         idleMainLooper()
 
-        assertThat(changes()).isEqualTo(1)
+        assertThat(changesWhileConnected()).isEqualTo(1)
     }
 
     /**

@@ -16,39 +16,20 @@
  */
 package se.lublin.humla.session
 
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.util.VoiceTargetMode
-import java.security.cert.X509Certificate
 
 /**
- * Something that happened in a session, as published by `IHumlaService.events`.
+ * Something that happened in a session, as published by `IHumlaSession.events`. Whether the session
+ * is connected is its `state`, not an event.
  *
  * Model events carry the live model object, which may have changed again by the time the event is
  * collected: treat them as "re-read this", never as a delta.
  */
 sealed interface HumlaEvent {
-
-    /** A connection attempt started. */
-    data object Connecting : HumlaEvent
-
-    /** The session is synchronized with the server. */
-    data object Connected : HumlaEvent
-
-    /** The connection ended; [error] is null for a requested disconnect. */
-    data class Disconnected(val error: HumlaException?) : HumlaEvent
-
-    /** The server's certificate chain is not trusted. */
-    class TlsHandshakeFailed(val chain: List<X509Certificate>) : HumlaEvent
-
-    /**
-     * The server presented a certificate that differs from the one pinned for its host, and the
-     * system does not trust it either. Possibly an attack; never accept it silently.
-     */
-    class TlsCertificateChanged(val chain: List<X509Certificate>) : HumlaEvent
 
     data class ChannelAdded(val channel: IChannel) : HumlaEvent
 
@@ -101,6 +82,9 @@ sealed interface HumlaEvent {
 
     /** A text message from the server or another user. */
     data class TextMessage(val message: IMessage) : HumlaEvent
+
+    /** The local user sent [message]. */
+    data class MessageSent(val message: IMessage) : HumlaEvent
 
     data class VoiceTargetChanged(val mode: VoiceTargetMode) : HumlaEvent
 

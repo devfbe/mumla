@@ -34,14 +34,13 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.RecyclerView
-import se.lublin.humla.HumlaService
-import se.lublin.humla.IHumlaService
-import se.lublin.humla.exception.HumlaDisconnectedException
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.TalkState
 import se.lublin.mumla.R
+import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.databinding.ChannelListenerRowBinding
 import se.lublin.mumla.databinding.ChannelRowBinding
 import se.lublin.mumla.databinding.ChannelUserRowBinding
@@ -67,14 +66,14 @@ import se.lublin.mumla.util.talkStateDescription
  */
 class ChannelListAdapter(
     private val context: Context,
-    service: IHumlaService,
+    session: IHumlaSession,
     private val repository: MumlaRepository,
     private val fragmentManager: FragmentManager,
     showPinnedOnly: Boolean,
     showUserCount: Boolean,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-    private var humlaService: IHumlaService = service
+    private var session: IHumlaSession = session
     private var rootChannels: List<Int> = if (showPinnedOnly) emptyList() else listOf(0)
     private val nodes: MutableList<Node> = ArrayList()
 
@@ -100,7 +99,7 @@ class ChannelListAdapter(
     init {
         setHasStableIds(true)
         var constructed = false
-        val server = humlaService.targetServer
+        val server = session.targetServer
         if (showPinnedOnly && server != null) {
             repository.pinnedChannels.whenLoaded(server.id) { pinned ->
                 rootChannels = pinned.toList()
@@ -164,11 +163,11 @@ class ChannelListAdapter(
 
         bindEnterRestriction(cvh, channel)
         cvh.joinButton.setOnClickListener {
-            val current = humlaService
-            if (current.isConnected) current.session.joinOrExplain(context, channel)
+            val current = session
+            if (current.isConnected) current.joinOrExplain(context, channel)
         }
         cvh.moreButton.setOnClickListener { v ->
-            ChannelMenu(context, channel, humlaService, repository.pinnedChannels, fragmentManager).showPopup(v)
+            ChannelMenu(context, channel, session, repository.pinnedChannels, fragmentManager).showPopup(v)
         }
         cvh.itemView.setOnLongClickListener {
             cvh.moreButton.performClick()
@@ -178,10 +177,9 @@ class ChannelListAdapter(
 
     /** Bold for our channel, italic for a channel linked with it (and for ours if it has links). */
     private fun channelTypeface(channel: IChannel): Int {
-        val service = humlaService
-        val ourChannel = if (service.isConnected) {
+        val ourChannel = if (session.isConnected) {
             try {
-                service.session.sessionChannel
+                session.sessionChannel
             } catch (e: IllegalStateException) {
                 Log.d(TAG, "exception in channelTypeface: $e")
                 null
@@ -205,24 +203,20 @@ class ChannelListAdapter(
         uvh.itemView.setOnClickListener { onUserClick?.invoke(user) }
         uvh.userName.text = user.name
 
-        val service = humlaService
         val selfSession = try {
-            service.session.sessionId
-        } catch (e: HumlaDisconnectedException) {
-            Log.d(TAG, "exception in bindUser: $e")
-            -1
+            session.sessionId
         } catch (e: IllegalStateException) {
             Log.d(TAG, "exception in bindUser: $e")
             -1
         }
-        val isSelf = service.isConnected && user.session == selfSession
+        val isSelf = session.isConnected && user.session == selfSession
         uvh.userName.setTypeface(null, if (isSelf) Typeface.BOLD else Typeface.NORMAL)
 
         bindTalkState(uvh, user)
         indent(uvh.userHolder, node.depth + 1)
 
         uvh.moreButton.setOnClickListener { v ->
-            UserMenu(context, user, humlaService, fragmentManager, ::onLocalUserStateUpdated).showPopup(v)
+            UserMenu(context, user, session, fragmentManager, ::onLocalUserStateUpdated).showPopup(v)
         }
         uvh.itemView.setOnLongClickListener {
             uvh.moreButton.performClick()
@@ -235,17 +229,16 @@ class ChannelListAdapter(
         val channel = checkNotNull(node.parent?.channel) { "A listener row always hangs under its channel" }
         lvh.name.text = listener.name
         lvh.itemView.contentDescription = context.getString(R.string.a11y_listener, listener.name)
-        val service = humlaService
-        val own = service.isConnected && try {
-            service.session.sessionId == listener.session
+        val own = session.isConnected && try {
+            session.sessionId == listener.session
         } catch (e: IllegalStateException) {
             Log.d(TAG, "exception in bindListener: $e")
             false
         }
         lvh.stop.visibility = if (own) View.VISIBLE else View.GONE
         lvh.stop.setOnClickListener {
-            val current = humlaService
-            if (current.isConnected) current.session.setListening(channel.id, false)
+            val current = session
+            if (current.isConnected) current.setListening(channel.id, false)
         }
         indent(lvh.holder, node.depth + 1)
     }
@@ -296,12 +289,8 @@ class ChannelListAdapter(
     }
 
     private fun rebuildNodes() {
-        val service = humlaService
-        if (!service.isConnected) {
-            return
-        }
-
-        val session = service.session
+        val session = session
+        if (!session.isConnected) return
         nodes.clear()
         try {
             for (cid in rootChannels) {
@@ -459,12 +448,10 @@ class ChannelListAdapter(
         return channelNode
     }
 
-    /** Changes the service backing the adapter and updates the list. */
-    fun setService(service: IHumlaService) {
-        humlaService = service
-        if (service.connectionState == HumlaService.ConnectionState.CONNECTED) {
-            updateChannels()
-        }
+    /** Changes the session backing the adapter and updates the list. */
+    fun setSession(session: IHumlaSession) {
+        this.session = session
+        if (session.isConnected) updateChannels()
     }
 
     /**
@@ -474,7 +461,7 @@ class ChannelListAdapter(
     fun onLocalUserStateUpdated(user: IUser) {
         notifyDataSetChanged()
 
-        val server = humlaService.targetServer
+        val server = session.targetServer
         LocalVolumes.keyOf(user, server)?.let { key ->
             val volume = user.localVolume
             repository.launchIo { setLocalVolume(key, volume) }

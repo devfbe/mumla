@@ -32,7 +32,7 @@ import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.setBluetoothAutomatic
-import se.lublin.humla.testutil.HumlaServiceHarness
+import se.lublin.humla.testutil.HumlaSessionHarness
 import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.TimeUnit
 
@@ -42,16 +42,16 @@ import java.util.concurrent.TimeUnit
  * [se.lublin.humla.audio.routing.AudioRouter] over [se.lublin.humla.audio.routing.CommunicationDevices].
  */
 @RunWith(RobolectricTestRunner::class)
-class HumlaServiceBluetoothTest {
-    private val harnesses = mutableListOf<HumlaServiceHarness>()
+class HumlaSessionBluetoothTest {
+    private val harnesses = mutableListOf<HumlaSessionHarness>()
 
     @After
     fun tearDown() {
-        harnesses.forEach { it.destroy() }
+        harnesses.forEach { it.close() }
     }
 
-    private fun start(autoReconnect: Boolean = false): HumlaServiceHarness =
-        HumlaServiceHarness(autoReconnect = autoReconnect).also { harnesses += it }
+    private fun start(autoReconnect: Boolean = false): HumlaSessionHarness =
+        HumlaSessionHarness(autoReconnect = autoReconnect).also { harnesses += it }
 
     private fun connectionError() =
         HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
@@ -62,25 +62,25 @@ class HumlaServiceBluetoothTest {
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
 
-        assertThat(h.service.audio.router.bluetoothAutomatic).isFalse()
-        assertThat(h.service.audio.router.isBluetoothActive).isFalse()
+        assertThat(h.session.audio.router.bluetoothAutomatic).isFalse()
+        assertThat(h.session.audio.router.isBluetoothActive).isFalse()
 
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
 
         assertThat(h.devices.selectCalls).containsExactly(7)
-        assertThat(h.service.audio.router.bluetoothAutomatic).isTrue()
-        assertThat(h.service.audio.router.isBluetoothActive).isTrue()
+        assertThat(h.session.audio.router.bluetoothAutomatic).isTrue()
+        assertThat(h.session.audio.router.isBluetoothActive).isTrue()
 
-        h.service.setBluetoothAutomatic(false)
+        h.session.setBluetoothAutomatic(false)
 
         assertThat(h.devices.clearCalls).isEqualTo(1)
-        assertThat(h.service.audio.router.bluetoothAutomatic).isFalse()
-        assertThat(h.service.audio.router.isBluetoothActive).isFalse()
+        assertThat(h.session.audio.router.bluetoothAutomatic).isFalse()
+        assertThat(h.session.audio.router.isBluetoothActive).isFalse()
     }
 
     /**
      * A platform that refuses the route is one chat line, not one per attempt. The router reports
-     * every refusal; this service de-duplicates against the last line it delivered.
+     * every refusal; the session de-duplicates against the last line it delivered.
      */
     @Test
     fun aRefusedRouteIsOneChatLine() {
@@ -89,17 +89,17 @@ class HumlaServiceBluetoothTest {
         h.devices.selectResult = false
         h.connectAndSynchronize()
 
-        h.service.setBluetoothAutomatic(true)
-        h.service.setBluetoothAutomatic(false)
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(false)
+        h.session.setBluetoothAutomatic(true)
 
-        val line = h.service.getString(R.string.audio_route_refused)
+        val line = h.string(R.string.audio_route_refused)
         assertThat(h.warnings.filter { it == line }).hasSize(1)
 
         // A different line in between ends the suppression: the rule is about repetition.
-        h.service.logWarning("something else")
-        h.service.setBluetoothAutomatic(false)
-        h.service.setBluetoothAutomatic(true)
+        h.session.logger.logWarning("something else")
+        h.session.setBluetoothAutomatic(false)
+        h.session.setBluetoothAutomatic(true)
         assertThat(h.warnings.filter { it == line }).hasSize(2)
     }
 
@@ -109,7 +109,7 @@ class HumlaServiceBluetoothTest {
         val h = start()
         h.connectAndSynchronize()
 
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
 
         assertThat(h.warnings).isEmpty()
     }
@@ -123,22 +123,22 @@ class HumlaServiceBluetoothTest {
         val h = start(autoReconnect = true)
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
         assertThat(h.devices.selectCalls).containsExactly(7)
-        assertThat(h.service.audio.router.isBluetoothActive).isTrue()
+        assertThat(h.session.audio.router.isBluetoothActive).isTrue()
 
         h.failConnection(0, connectionError())
 
-        assertThat(h.service.sessionState.value)
+        assertThat(h.session.state.value)
             .isInstanceOf(SessionState.ConnectionLost::class.java)
-        assertThat(h.service.audio.router.bluetoothAutomatic).isTrue() // the wish survives the loss
-        assertThat(h.service.audio.router.isBluetoothActive).isFalse() // the route does not
+        assertThat(h.session.audio.router.bluetoothAutomatic).isTrue() // the wish survives the loss
+        assertThat(h.session.audio.router.isBluetoothActive).isFalse() // the route does not
 
         h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS) // backoff timer
         h.synchronize(h.openSocket(1))
 
         assertThat(h.devices.selectCalls).containsExactly(7, 7).inOrder()
-        assertThat(h.service.audio.router.isBluetoothActive).isTrue()
+        assertThat(h.session.audio.router.isBluetoothActive).isTrue()
     }
 
     @Test
@@ -146,27 +146,27 @@ class HumlaServiceBluetoothTest {
         val h = start(autoReconnect = true)
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
 
-        h.service.disconnect()
+        h.session.disconnect()
         h.mainLooper.idle()
 
-        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Disconnected())
+        assertThat(h.session.state.value).isEqualTo(SessionState.Disconnected())
         assertThat(h.devices.clearCalls).isEqualTo(1)
         // The wish is not a session resource: it is the user's setting until they change it.
-        assertThat(h.service.audio.router.bluetoothAutomatic).isTrue()
+        assertThat(h.session.audio.router.bluetoothAutomatic).isTrue()
     }
 
-    /** Destroying the service gives the route back, and takes the listener off the platform. */
+    /** Closing the session gives the route back, and takes the listener off the platform. */
     @Test
-    fun destroyingTheServiceReleasesTheRouteAndTheListener() {
-        val h = HumlaServiceHarness().also { harnesses += it }
+    fun closingTheSessionReleasesTheRouteAndTheListener() {
+        val h = HumlaSessionHarness().also { harnesses += it }
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
         assertThat(h.devices.listener).isNotNull()
 
-        h.destroy()
+        h.close()
         harnesses.remove(h)
 
         assertThat(h.devices.clearCalls).isEqualTo(1)
@@ -179,22 +179,22 @@ class HumlaServiceBluetoothTest {
      */
     @Test
     fun noRouteIsTakenWithoutASession() {
-        val h = HumlaServiceHarness().also { harnesses += it }
+        val h = HumlaSessionHarness().also { harnesses += it }
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
 
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
         h.devices.deviceArrives(9, AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
 
         assertThat(h.devices.selectCalls).isEmpty()
-        assertThat(h.service.audio.router.bluetoothAutomatic).isTrue()
+        assertThat(h.session.audio.router.bluetoothAutomatic).isTrue()
 
-        h.destroy()
+        h.close()
         harnesses.remove(h)
 
         assertThat(h.devices.clearCalls).isEqualTo(0)
     }
 
-    private fun HumlaServiceHarness.phone() {
+    private fun HumlaSessionHarness.phone() {
         devices!!.available[1] = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
         devices.available[2] = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
     }
@@ -207,7 +207,7 @@ class HumlaServiceBluetoothTest {
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.devices.names[7] = "Jabra"
         h.connectAndSynchronize()
-        val session: IHumlaSession = h.service
+        val session: IHumlaSession = h.session
 
         assertThat(session.audioDevices.map { it.id }).containsExactly(1, 2, 7).inOrder()
         assertThat(session.activeAudioDevice?.id).isEqualTo(2)
@@ -223,8 +223,8 @@ class HumlaServiceBluetoothTest {
         val h = start()
         h.phone()
 
-        assertThat(h.service.audioDevices).isEmpty()
-        assertThat(h.service.activeAudioDevice).isNull()
+        assertThat(h.session.audioDevices).isEmpty()
+        assertThat(h.session.activeAudioDevice).isNull()
     }
 
     /** The saved device reaches the router with the config, live. */
@@ -235,7 +235,7 @@ class HumlaServiceBluetoothTest {
         h.configureAudio { copy(preferredDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)) }
         h.connectAndSynchronize()
 
-        assertThat(h.service.activeAudioDevice?.id).isEqualTo(1)
+        assertThat(h.session.activeAudioDevice?.id).isEqualTo(1)
 
         h.configureAudio { copy(preferredDevice = null) }
 
@@ -259,7 +259,7 @@ class HumlaServiceBluetoothTest {
         val h = start()
         h.phone()
         h.connectAndSynchronize()
-        val session: IHumlaSession = h.service
+        val session: IHumlaSession = h.session
         session.selectAudioDevice(1)
 
         session.selectAutomaticAudioDevice()
@@ -278,7 +278,7 @@ class HumlaServiceBluetoothTest {
         h.connectAndSynchronize()
         assertThat(h.devices!!.inCommunicationMode).isTrue()
 
-        h.service.disconnect()
+        h.session.disconnect()
         h.mainLooper.idle()
 
         assertThat(h.devices.inCommunicationMode).isFalse()
@@ -290,7 +290,7 @@ class HumlaServiceBluetoothTest {
         val h = start(autoReconnect = true)
         h.phone()
         h.connectAndSynchronize()
-        h.service.selectAudioDevice(1)
+        h.session.selectAudioDevice(1)
 
         h.failConnection(0, connectionError())
         assertThat(h.devices!!.selectedId).isNull() // the route is a session resource
@@ -306,16 +306,16 @@ class HumlaServiceBluetoothTest {
         val h = start()
         h.phone()
         h.connectAndSynchronize()
-        h.service.selectAudioDevice(1)
+        h.session.selectAudioDevice(1)
 
-        h.service.disconnect()
+        h.session.disconnect()
         h.mainLooper.idle()
 
-        assertThat(h.service.sessionState.value).isEqualTo(SessionState.Disconnected())
-        h.service.connect()
+        assertThat(h.session.state.value).isEqualTo(SessionState.Disconnected())
+        h.session.connect()
         h.connectAndSynchronize(1)
         assertThat(h.devices!!.selectCalls).containsExactly(2, 1, 2).inOrder()
-        assertThat(h.service.activeAudioDevice?.id).isEqualTo(2)
+        assertThat(h.session.activeAudioDevice?.id).isEqualTo(2)
     }
 
     /**
@@ -332,7 +332,7 @@ class HumlaServiceBluetoothTest {
         assertThat(h.audioFactory.configs[0].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
         assertThat(h.audioFactory.configs[0].playbackStream).isEqualTo(AudioManager.STREAM_VOICE_CALL)
 
-        h.service.selectAudioDevice(1)
+        h.session.selectAudioDevice(1)
 
         awaitUntil(description = "audio rebuilt for the earpiece") {
             h.mainLooper.idle()
@@ -350,7 +350,7 @@ class HumlaServiceBluetoothTest {
         awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
         assertThat(h.audioFactory.configs[0].routedDeviceType).isNull()
 
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
 
         awaitUntil(description = "audio rebuilt for sco") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
         assertThat(h.audioFactory.configs[1].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
@@ -365,26 +365,15 @@ class HumlaServiceBluetoothTest {
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
         awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
         awaitUntil(description = "audio rebuilt for sco") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
 
         h.devices.systemSelects(null) // the headset walked away
 
         awaitUntil(description = "audio rebuilt without sco") { h.mainLooper.idle(); h.audioFactory.created.size == 3 }
         assertThat(h.audioFactory.configs[2].routedDeviceType).isNull()
-        assertThat(h.service.audio.router.isBluetoothActive).isFalse()
-        assertThat(h.service.audio.router.bluetoothAutomatic).isTrue() // still wanted; the headset is not there
-    }
-
-    /** The device seam is reachable after `onCreate`, whether a test set it or the service built it. */
-    @Test
-    fun theDeviceSeamIsReachableAfterOnCreate() {
-        val withFake = start()
-        assertThat(withFake.service.communicationDevices).isSameInstanceAs(withFake.devices)
-
-        val withPlatform = HumlaServiceHarness(devices = null).also { harnesses += it }
-        assertThat(withPlatform.service.communicationDevices)
-            .isInstanceOf(se.lublin.humla.audio.routing.AndroidCommunicationDevices::class.java)
+        assertThat(h.session.audio.router.isBluetoothActive).isFalse()
+        assertThat(h.session.audio.router.bluetoothAutomatic).isTrue() // still wanted; the headset is not there
     }
 
     /** The canceller follows the routed device: on for the phone's own speakers, off on a headset. */
@@ -396,13 +385,13 @@ class HumlaServiceBluetoothTest {
         h.connectAndSynchronize()
         assertThat(h.echo).isEqualTo(EchoCancellationMode.WEBRTC) // speaker
 
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
         assertThat(h.echo).isEqualTo(EchoCancellationMode.NONE)
-        assertThat(h.service.isEchoCancellationEnabled).isFalse()
+        assertThat(h.session.isEchoCancellationEnabled).isFalse()
 
-        h.service.selectAudioDevice(1)
+        h.session.selectAudioDevice(1)
         assertThat(h.echo).isEqualTo(EchoCancellationMode.WEBRTC) // earpiece
-        assertThat(h.service.isEchoCancellationEnabled).isTrue()
+        assertThat(h.session.isEchoCancellationEnabled).isTrue()
     }
 
     /**
@@ -422,10 +411,10 @@ class HumlaServiceBluetoothTest {
         awaitUntil(description = "audio rebuilt without echo") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
         assertThat(h.audioFactory.configs[1].echoCancellation).isEqualTo(EchoCancellationMode.NONE)
 
-        h.service.selectAudioDevice(1)
+        h.session.selectAudioDevice(1)
         assertThat(h.echo).isEqualTo(EchoCancellationMode.WEBRTC) // earpiece: default
 
-        h.service.selectAudioDevice(2)
+        h.session.selectAudioDevice(2)
         assertThat(h.echo).isEqualTo(EchoCancellationMode.NONE) // speaker: override
     }
 
@@ -434,31 +423,31 @@ class HumlaServiceBluetoothTest {
         val h = start()
         h.phone()
 
-        assertThat(h.service.isEchoCancellationEnabled).isFalse()
+        assertThat(h.session.isEchoCancellationEnabled).isFalse()
     }
 
     /**
      * An OEM that enforces `BLUETOOTH_CONNECT` on `android.media` gets a caught `SecurityException`,
-     * an answer that reads as "no headset", and one chat line per service life. Runs against the
+     * an answer that reads as "no headset", and one chat line per session. Runs against the
      * real `AndroidCommunicationDevices`.
      */
     @Test
     @Config(shadows = [AndroidCommunicationDevicesTest.DenyingAudioManagerShadow::class])
     fun aPlatformRefusalIsReportedOnceAsAChatLine() {
-        val h = HumlaServiceHarness(devices = null).also { harnesses += it }
+        val h = HumlaSessionHarness(devices = null).also { harnesses += it }
         h.connectAndSynchronize()
 
-        h.service.setBluetoothAutomatic(true)
-        h.service.setBluetoothAutomatic(false)
-        h.service.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(true)
+        h.session.setBluetoothAutomatic(false)
+        h.session.setBluetoothAutomatic(true)
 
-        val line = h.service.getString(R.string.bluetooth_sco_denied)
+        val line = h.string(R.string.bluetooth_sco_denied)
         assertThat(h.warnings.filter { it == line }).hasSize(1)
         // And the wish stands: the user asked for a headset, the platform said no.
-        assertThat(h.service.audio.router.bluetoothAutomatic).isTrue()
-        assertThat(h.service.audio.router.isBluetoothActive).isFalse()
+        assertThat(h.session.audio.router.bluetoothAutomatic).isTrue()
+        assertThat(h.session.audio.router.isBluetoothActive).isFalse()
     }
 }
 
-private val HumlaServiceHarness.echo: EchoCancellationMode
-    get() = service.getAudioConfigForTest().echoCancellation
+private val HumlaSessionHarness.echo: EchoCancellationMode
+    get() = session.audio.config.echoCancellation

@@ -9,7 +9,6 @@ import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
@@ -31,11 +30,11 @@ class AdapterRebuildBenchmarkTest {
         val (root, byId) = buildChannelTree(channelCount = 5000, branching = 4, userEvery = 5)
         val session = mockk<IHumlaSession>(relaxed = true)
         every { session.getChannel(any()) } answers { byId[firstArg<Int>()] }
-        val service = mockk<IHumlaService>(relaxed = true).stubConnected(session)
+        session.stubConnected()
 
         val adapter = ChannelListAdapter(
             ApplicationProvider.getApplicationContext(),
-            service,
+            session,
             MumlaRepository(mockk<MumlaDatabase>(relaxed = true), Dispatchers.Unconfined),
             mockk<FragmentManager>(relaxed = true),
             false,

@@ -34,15 +34,16 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowDialog
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
+import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.ServerRequest
-import se.lublin.mumla.ui.ServiceViewModel
 
 /** How MumlaActivity gets the permissions a connection needs. */
 @RunWith(RobolectricTestRunner::class)
@@ -64,10 +65,8 @@ class MumlaActivityPermissionTest {
         return activity
     }
 
-    private fun MumlaActivity.serviceModel() = ViewModelProvider(this)[ServiceViewModel::class.java]
-
     private fun MumlaActivity.requestConnect() {
-        serviceModel().requestConnect(ServerRequest.Favourite(server))
+        ViewModelProvider(this)[ConnectRequests::class.java].request(ServerRequest.Favourite(server))
         idleMainLooper()
     }
 
@@ -82,7 +81,10 @@ class MumlaActivityPermissionTest {
         idleMainLooper()
     }
 
-    private fun connectedService() = mockk<IMumlaService>(relaxed = true).stubConnected(mockk(relaxed = true))
+    private fun connectElsewhere() {
+        installSession(mockk<IHumlaSession>(relaxed = true).stubConnected())
+        idleMainLooper()
+    }
 
     private fun latestDialog() = ShadowDialog.getLatestDialog() as AlertDialog
 
@@ -152,13 +154,13 @@ class MumlaActivityPermissionTest {
         assertThat(activity.requestedPermissions()).containsExactly(Manifest.permission.POST_NOTIFICATIONS)
 
         // Connected elsewhere, so the flow ends in a confirmation instead of a connection.
-        activity.serviceModel().attach(connectedService())
+        connectElsewhere()
         activity.answer(granted = false)
         assertThat(settings.isNotificationPermissionAsked).isTrue()
         assertThat(latestDialog().message()).isEqualTo(app.getString(R.string.reconnect_dialog_message))
 
         val relaunched = launch()
-        relaunched.serviceModel().attach(connectedService())
+        connectElsewhere()
         relaunched.requestConnect()
         assertThat(relaunched.requested).isNull()
         assertThat(latestDialog().message()).isEqualTo(app.getString(R.string.reconnect_dialog_message))

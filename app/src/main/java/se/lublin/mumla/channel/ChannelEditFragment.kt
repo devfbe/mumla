@@ -21,12 +21,11 @@ import android.app.Dialog
 import android.os.Bundle
 import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
-import androidx.fragment.app.activityViewModels
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import se.lublin.humla.net.Permissions
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.FragmentChannelEditBinding
-import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.session.SessionManager
 
 /**
  * Creates a channel under the given one when adding. Editing an
@@ -34,7 +33,6 @@ import se.lublin.mumla.ui.ServiceViewModel
  */
 class ChannelEditFragment : DialogFragment() {
 
-    private val serviceModel: ServiceViewModel by activityViewModels()
 
     private val isAdding get() = requireArguments().getBoolean(ARG_ADDING)
     private val parent get() = requireArguments().getInt(ARG_CHANNEL)
@@ -47,7 +45,7 @@ class ChannelEditFragment : DialogFragment() {
         val temporaryBox = binding.channelEditTemporary
 
         // If we can only make temporary channels, remove the option.
-        serviceModel.service.value?.takeIf { it.isConnected }?.session?.let { session ->
+        SessionManager.get(requireContext()).connected?.let { session ->
             val combined = session.permissions or (session.getChannel(parent)?.permissions ?: 0)
             val canMakeChannel = (combined and Permissions.MAKE_CHANNEL) != 0
             val canMakeTempChannel = (combined and Permissions.MAKE_TEMP_CHANNEL) != 0
@@ -60,7 +58,7 @@ class ChannelEditFragment : DialogFragment() {
             .setTitle(if (isAdding) R.string.channel_add else R.string.channel_edit)
             .setView(binding.root)
             .setPositiveButton(if (isAdding) R.string.add else R.string.save) { _, _ ->
-                val session = serviceModel.service.value?.takeIf { it.isConnected }?.session
+                val session = SessionManager.get(requireContext()).connected
                 if (isAdding && session != null) {
                     session.createChannel(
                         parent,

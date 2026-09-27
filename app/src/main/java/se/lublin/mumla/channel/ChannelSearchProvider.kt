@@ -17,50 +17,23 @@
 package se.lublin.mumla.channel
 
 import android.app.SearchManager
-import android.content.ComponentName
 import android.content.ContentProvider
 import android.content.ContentValues
-import android.content.Intent
-import android.content.ServiceConnection
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
-import android.os.IBinder
-import android.util.Log
 import androidx.annotation.VisibleForTesting
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.mumla.R
-import se.lublin.mumla.service.MumlaService
+import se.lublin.mumla.session.SessionManager
 import java.util.Locale
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 /**
  * Search suggestions for the channel list: the channels and users of the connected server whose
  * names contain the query, ignoring case.
  */
 class ChannelSearchProvider : ContentProvider() {
-
-    @Volatile
-    private var service: IHumlaService? = null
-
-    /** Opened when the service is connected; a new one after it disconnects. */
-    @Volatile
-    private var bound = CountDownLatch(1)
-
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            service = (binder as MumlaService.MumlaBinder).service
-            bound.countDown()
-        }
-
-        override fun onServiceDisconnected(name: ComponentName) {
-            bound = CountDownLatch(1)
-            service = null
-        }
-    }
 
     override fun onCreate(): Boolean = true
 
@@ -71,10 +44,10 @@ class ChannelSearchProvider : ContentProvider() {
         selectionArgs: Array<out String>?,
         sortOrder: String?,
     ): Cursor? {
-        val service = connectedService()?.takeIf { it.isConnected } ?: return null
         val context = requireContext()
+        val session = SessionManager.get(context).connected ?: return null
         val query = selectionArgs.orEmpty().joinToString(" ").lowercase(Locale.getDefault())
-        val root = service.session.rootChannel
+        val root = session.rootChannel
         val cursor = MatrixCursor(COLUMNS)
         channelsMatching(root, query).forEachIndexed { index, channel ->
             val users = channel.subchannelUserCount
@@ -94,19 +67,6 @@ class ChannelSearchProvider : ContentProvider() {
             )
         }
         return cursor
-    }
-
-    /** The service, binding to it and waiting a while if this is the first query. */
-    private fun connectedService(): IHumlaService? {
-        service?.let { return it }
-        requireContext().bindService(Intent(context, MumlaService::class.java), connection, 0)
-        try {
-            bound.await(BIND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        } catch (e: InterruptedException) {
-            Log.d(TAG, "interrupted while binding: $e")
-            Thread.currentThread().interrupt()
-        }
-        return service.also { if (it == null) Log.v(TAG, "Failed to connect to service from search provider!") }
     }
 
     /** The channels at or below [root] whose names contain the lower-case [query]. */
@@ -146,8 +106,6 @@ class ChannelSearchProvider : ContentProvider() {
         const val INTENT_DATA_CHANNEL = "channel"
         const val INTENT_DATA_USER = "user"
 
-        private val TAG: String = ChannelSearchProvider::class.java.name
-        private const val BIND_TIMEOUT_SECONDS = 5L
         private val COLUMNS = arrayOf(
             "_ID",
             SearchManager.SUGGEST_COLUMN_INTENT_EXTRA_DATA,

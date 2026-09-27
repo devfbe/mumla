@@ -28,11 +28,12 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.text.inSpans
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.MainScope
-import se.lublin.humla.IHumlaService
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
+import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.databinding.DialogUserInfoBinding
 import se.lublin.mumla.util.collectEvents
 import java.security.cert.X509Certificate
@@ -46,18 +47,18 @@ private const val REFRESH_MILLIS = 5_000L
  * Shows [user]'s connection statistics, asking the server for them now and every few seconds until
  * the dialog is closed.
  */
-fun showUserInfoDialog(context: Context, service: IHumlaService, user: IUser): AlertDialog {
+fun showUserInfoDialog(context: Context, session: IHumlaSession, user: IUser): AlertDialog {
     val binding = DialogUserInfoBinding.inflate(LayoutInflater.from(context))
     binding.userInfoText.setText(R.string.user_info_loading)
     val formatter = UserInfoFormatter(context)
     val handler = Handler(Looper.getMainLooper())
     val refresh = object : Runnable {
         override fun run() {
-            if (service.isConnected) service.session.requestUserStats(user.session)
+            if (session.isConnected) session.requestUserStats(user.session)
             handler.postDelayed(this, REFRESH_MILLIS)
         }
     }
-    val updates = collectEvents(MainScope(), service) { event ->
+    val updates = collectEvents(MainScope(), session) { event ->
         if (event is HumlaEvent.UserStatsReceived && event.stats.session == user.session) {
             binding.userInfoText.text = formatter.format(event.stats)
         }

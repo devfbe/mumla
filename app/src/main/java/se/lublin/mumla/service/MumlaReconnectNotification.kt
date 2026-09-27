@@ -30,10 +30,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import se.lublin.mumla.R
 
-/**
- * A notification indicating auto-reconnect is in progress, or if auto-reconnect is disabled,
- * a prompt to reconnect with the error message.
- */
+/** A prompt to reconnect, under why the session ended. Shows on the application context. */
 class MumlaReconnectNotification(
     private val context: Context,
     private val listener: OnActionListener,
@@ -43,18 +40,22 @@ class MumlaReconnectNotification(
             when (intent.action) {
                 BROADCAST_DISMISS -> listener.onReconnectNotificationDismissed()
                 BROADCAST_RECONNECT -> listener.reconnect()
-                BROADCAST_CANCEL_RECONNECT -> listener.cancelReconnect()
             }
         }
     }
 
-    fun show(error: String, autoReconnect: Boolean) {
-        val filter = IntentFilter().apply {
-            addAction(BROADCAST_DISMISS)
-            addAction(BROADCAST_RECONNECT)
-            addAction(BROADCAST_CANCEL_RECONNECT)
+    private var listening = false
+
+    /** Posts the prompt, or replaces the one that is up. */
+    fun show(error: String) {
+        if (!listening) {
+            val filter = IntentFilter().apply {
+                addAction(BROADCAST_DISMISS)
+                addAction(BROADCAST_RECONNECT)
+            }
+            ContextCompat.registerReceiver(context, notificationReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+            listening = true
         }
-        ContextCompat.registerReceiver(context, notificationReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
         NotificationChannels.create(context)
 
@@ -65,21 +66,7 @@ class MumlaReconnectNotification(
             .setContentTitle(context.getString(R.string.mumlaDisconnected))
             .setContentText(error)
             .setDeleteIntent(broadcast(BROADCAST_DISMISS))
-
-        if (autoReconnect) {
-            builder.addAction(
-                R.drawable.ic_action_delete_dark,
-                context.getString(R.string.cancel_reconnect),
-                broadcast(BROADCAST_CANCEL_RECONNECT),
-            )
-            builder.setOngoing(true)
-        } else {
-            builder.addAction(
-                R.drawable.ic_action_move,
-                context.getString(R.string.reconnect),
-                broadcast(BROADCAST_RECONNECT),
-            )
-        }
+            .addAction(R.drawable.ic_action_move, context.getString(R.string.reconnect), broadcast(BROADCAST_RECONNECT))
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
             == PackageManager.PERMISSION_GRANTED
@@ -89,11 +76,9 @@ class MumlaReconnectNotification(
     }
 
     fun hide() {
-        try {
+        if (listening) {
             context.unregisterReceiver(notificationReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Thrown if receiver is not registered.
-            e.printStackTrace()
+            listening = false
         }
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
     }
@@ -107,7 +92,6 @@ class MumlaReconnectNotification(
     interface OnActionListener {
         fun onReconnectNotificationDismissed()
         fun reconnect()
-        fun cancelReconnect()
     }
 
     companion object {
@@ -116,15 +100,5 @@ class MumlaReconnectNotification(
         private const val CHANNEL_ID = NotificationChannels.RECONNECT
         private const val BROADCAST_DISMISS = "b_dismiss"
         private const val BROADCAST_RECONNECT = "b_reconnect"
-        private const val BROADCAST_CANCEL_RECONNECT = "b_cancel_reconnect"
-
-        fun show(
-            context: Context,
-            error: String,
-            autoReconnect: Boolean,
-            listener: OnActionListener,
-        ): MumlaReconnectNotification = MumlaReconnectNotification(context, listener).also {
-            it.show(error, autoReconnect)
-        }
     }
 }

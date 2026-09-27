@@ -18,6 +18,7 @@ package se.lublin.mumla.chat
 
 import android.content.Context
 import se.lublin.humla.model.IMessage
+import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 
@@ -90,6 +91,20 @@ class NoticeFormatter(private val context: Context) {
     }
 
     /** Who sent [message]; the server when it names no sender. */
+    /** Why a session ended, as plain text for a dialog or a notification. */
+    fun disconnectReason(reason: DisconnectReason): String = when (reason) {
+        is DisconnectReason.Rejected -> reason.message.ifEmpty { string(R.string.connectionRefused) }
+        is DisconnectReason.Kicked -> string(
+            if (reason.banned) R.string.chat_notify_kick_ban_self else R.string.chat_notify_kick_self,
+            reason.actor ?: UNKNOWN,
+            reason.reason,
+        )
+        is DisconnectReason.TlsUntrusted -> string(R.string.untrusted_certificate)
+        is DisconnectReason.TlsCertificateChanged -> string(R.string.certificate_changed_title)
+        is DisconnectReason.Network -> reason.message
+        is DisconnectReason.Failed -> reason.message
+    }
+
     fun senderName(message: IMessage): String = message.actorName ?: string(R.string.server)
 
     /** Whoever moved a user: [actor], or the server when null. */

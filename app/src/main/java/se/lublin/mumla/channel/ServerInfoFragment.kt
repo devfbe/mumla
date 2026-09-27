@@ -23,30 +23,25 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.FragmentServerInfoBinding
-import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.ui.ServiceClient
-import se.lublin.mumla.ui.ServiceViewModel
-import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.session.SessionManager
 
 private const val POLL_INTERVAL_MS = 1000L
 private const val MICROS_TO_MILLIS = 1e-3
 private const val KILO = 1000f
 
 /** Displays what is known about the connected server, refreshed every second. */
-class ServerInfoFragment : Fragment(), ServiceClient {
+class ServerInfoFragment : Fragment() {
 
-    private val serviceModel: ServiceViewModel by activityViewModels()
     private var polling: Job? = null
-    private var bound = false
 
     private lateinit var protocolView: TextView
     private lateinit var osVersionView: TextView
@@ -72,30 +67,20 @@ class ServerInfoFragment : Fragment(), ServiceClient {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        if (!bound) {
-            bound = true
-            serviceModel.bindClient(this, this)
-        }
-    }
-
-    override fun onServiceBound(service: IMumlaService) {
-        polling = lifecycleScope.launch {
-            while (isActive) {
-                if (isVisible) updateData(service)
-                delay(POLL_INTERVAL_MS)
+        if (polling == null) {
+            val sessions = SessionManager.get(requireContext())
+            polling = lifecycleScope.launch {
+                while (isActive) {
+                    val session = sessions.connected
+                    if (isVisible && session != null) updateData(session)
+                    delay(POLL_INTERVAL_MS)
+                }
             }
         }
     }
 
-    override fun onServiceUnbound() {
-        polling?.cancel()
-        polling = null
-    }
-
-    private fun updateData(service: IMumlaService) {
-        if (!service.isConnected) return
-        val session = service.session
-        val server = service.targetServer
+    private fun updateData(session: IHumlaSession) {
+        val server = session.targetServer
 
         protocolView.text = getString(R.string.server_info_protocol, session.serverRelease)
         osVersionView.text = getString(R.string.server_info_version, session.serverOSName, session.serverOSVersion)

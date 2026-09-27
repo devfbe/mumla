@@ -16,11 +16,14 @@
  */
 package se.lublin.mumla.app
 
+import android.content.Context
 import android.content.DialogInterface
 import android.os.Bundle
 import android.widget.EditText
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
@@ -30,18 +33,22 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
-import se.lublin.humla.HumlaService.ConnectionState
-import se.lublin.humla.exception.HumlaException
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.HumlaCertificateGenerator
-import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.session.DisconnectReason
+import se.lublin.humla.session.RejectType
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.stubState
 import se.lublin.mumla.util.MumlaTrustStore
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 
 /** The connection dialogs survive a configuration change, and so do the choices made in them. */
 @RunWith(RobolectricTestRunner::class)
@@ -52,13 +59,27 @@ class ConnectionDialogsTest {
 
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
-            dialogs = ConnectionDialogs(this, Settings.getInstance(this), listener) { service }
+            dialogs = ConnectionDialogs(this, Settings.getInstance(this), listener, SessionManager.get(this))
         }
     }
 
     private val server = Server(1, "Home", "example.org", 64738, "me", null)
+    private val session: IHumlaSession = mockk(relaxed = true) {
+        every { targetServer } returns server
+    }
+    private val sessions = SessionManager.get(ApplicationProvider.getApplicationContext<Context>())
     private val controller: ActivityController<HostActivity> =
         Robolectric.buildActivity(HostActivity::class.java).setup()
+
+    init {
+        io.mockk.clearMocks(listener)
+        installSession(session)
+    }
+
+    private fun show(state: SessionState) {
+        session.stubState(state)
+        controller.get().dialogs.update()
+    }
 
     private fun recreate(): HostActivity {
         controller.recreate()
@@ -71,30 +92,24 @@ class ConnectionDialogsTest {
 
     @Test
     fun theConnectingDialogSurvivesRotationAndItsCancelDisconnects() {
-        every { service.connectionState } returns ConnectionState.CONNECTING
-        controller.get().dialogs.update(service)
+        show(SessionState.Connecting)
 
-        recreate().dialogs.update(service)
+        recreate().dialogs.update()
         val dialog = checkNotNull(dialog("connecting"))
         assertThat(dialog.isShowing).isTrue()
 
         dialog.cancel()
         idleMainLooper()
 
-        verify { service.disconnect() }
+        verify { session.disconnect() }
     }
 
     @Test
     fun aWrongPasswordEnteredAfterRotationReconnectsWithIt() {
-        every { service.connectionState } returns ConnectionState.CONNECTION_LOST
-        every { service.isErrorShown } returns false
-        every { service.isReconnecting } returns false
-        every { service.connectionError } returns
-            HumlaException(Mumble.Reject.newBuilder().setType(Mumble.Reject.RejectType.WrongServerPW).build())
-        controller.get().dialogs.update(service)
+        show(SessionState.Disconnected(DisconnectReason.Rejected(RejectType.WRONG_SERVER_PASSWORD, "")))
         checkNotNull(dialog("connection_error")).findViewById<EditText>(R.id.connection_password)!!.setText("sec")
 
-        recreate().dialogs.update(service)
+        recreate().dialogs.update()
         val dialog = checkNotNull(dialog("connection_error"))
         assertThat(dialog.findViewById<EditText>(R.id.connection_password)!!.text.toString()).isEqualTo("sec")
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
@@ -104,25 +119,53 @@ class ConnectionDialogsTest {
         verify { listener.reconnectWithPassword(server) }
     }
 
+    /** A lost connection that is being retried says so, with the network's reason. */
     @Test
-    fun aStateWithoutDialogDismissesTheShownOne() {
-        every { service.connectionState } returns ConnectionState.CONNECTING
-        controller.get().dialogs.update(service)
+    fun aLostConnectionShowsTheReconnectingErrorUntilItIsCancelled() {
+        show(SessionState.ConnectionLost(2_000L, 1, DisconnectReason.Network("reset", IOException("boom"))))
+
+        val dialog = checkNotNull(dialog("connection_error"))
+        val message = dialog.findViewById<TextView>(android.R.id.message)!!.text.toString()
+        assertThat(message).contains("reset")
+        assertThat(message).contains("boom")
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        idleMainLooper()
+
+        verify { session.cancelReconnect() }
+        assertThat(sessions.errorShown.value).isTrue()
+    }
+
+    @Test
+    fun anAcknowledgedErrorIsNotShownAgain() {
+        show(SessionState.Disconnected(DisconnectReason.Failed("bad certificate", null)))
         assertThat(controller.get().dialogs.isShowing).isTrue()
 
-        every { service.connectionState } returns ConnectionState.CONNECTED
-        controller.get().dialogs.update(service)
+        sessions.markErrorShown()
+        controller.get().dialogs.update()
 
         assertThat(controller.get().dialogs.isShowing).isFalse()
     }
 
     @Test
-    fun aCertificateTrustedAfterRotationIsPinnedAndReconnects() {
+    fun aStateWithoutDialogDismissesTheShownOne() {
+        show(SessionState.Connecting)
+        assertThat(controller.get().dialogs.isShowing).isTrue()
+
+        show(SessionState.Connected)
+
+        assertThat(controller.get().dialogs.isShowing).isFalse()
+    }
+
+    /** The prompt comes from the state, once; after rotation the restored dialog pins and reconnects. */
+    @Test
+    fun aChangedCertificateIsOfferedOnceAndTrustedAfterRotation() {
         val certificate = HumlaCertificateGenerator.generateCertificate(ByteArrayOutputStream())
-        controller.get().dialogs.showUntrustedCertificate(server, certificate, changed = true)
+        show(SessionState.Disconnected(DisconnectReason.TlsCertificateChanged(listOf(certificate))))
         idleMainLooper()
+        assertThat(sessions.errorShown.value).isTrue()
 
         val activity = recreate()
+        activity.dialogs.update()
         val dialog = checkNotNull(dialog("certificate"))
         assertThat(dialog.isShowing).isTrue()
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
@@ -134,11 +177,5 @@ class ConnectionDialogsTest {
 
     private companion object {
         val listener: ConnectionDialogs.Listener = mockk(relaxed = true)
-        val service: IMumlaService = mockk(relaxed = true)
-    }
-
-    init {
-        io.mockk.clearMocks(listener, service)
-        every { service.targetServer } returns server
     }
 }

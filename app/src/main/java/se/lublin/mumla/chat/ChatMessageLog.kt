@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.Collections
 
 /**
- * The service's in-memory chat history, bounded at [capacity] entries (oldest dropped).
+ * An in-memory chat history, bounded at [capacity] entries (oldest dropped).
  * [snapshot] copies the list, never the messages: ChatAdapter's diff compares by identity.
  *
  * Main thread only, without a lock: events arrive on the main thread and the send calls are UI

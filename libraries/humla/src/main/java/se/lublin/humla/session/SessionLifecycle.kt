@@ -22,7 +22,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.net.ReconnectPolicy
 import kotlin.random.Random
 
@@ -70,8 +69,8 @@ internal class SessionLifecycle(
      * The connection ended. Schedules the retry the next state asks for, or ends the session.
      * @return the next state.
      */
-    fun lost(autoReconnect: Boolean, error: HumlaException?): SessionState {
-        val next = machine.lost(autoReconnect, error)
+    fun lost(autoReconnect: Boolean, reason: DisconnectReason?): SessionState {
+        val next = machine.lost(autoReconnect, reason)
         if (next is SessionState.ConnectionLost) scheduleRetry(next.reconnectInMillis) else release()
         return next
     }
@@ -88,7 +87,7 @@ internal class SessionLifecycle(
         return waiting
     }
 
-    /** Gives up the automatic reconnect; the error stays in the state. */
+    /** Gives up the automatic reconnect; the reason stays in the state. */
     fun cancelReconnect(): Boolean {
         if (!machine.cancelReconnect()) return false
         release()

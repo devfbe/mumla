@@ -11,7 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.HumlaService
+import se.lublin.humla.HumlaSession
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
@@ -126,7 +126,7 @@ class HumlaConnectionProtocolThreadTest {
     fun fiveThousandChannelStatesDoNotStallAMainLooperTask() {
         val tcp = connectAndEstablish()
         val events = MutableSharedFlow<HumlaEvent>(
-            extraBufferCapacity = HumlaService.EVENT_BUFFER,
+            extraBufferCapacity = HumlaSession.EVENT_BUFFER,
             onBufferOverflow = BufferOverflow.DROP_OLDEST,
         )
         val added = AtomicInteger()

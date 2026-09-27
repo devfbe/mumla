@@ -15,7 +15,6 @@ import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.TalkState
 import se.lublin.mumla.R
@@ -40,9 +39,9 @@ class TalkStateIconTest(
         val root = FakeChannel(0).apply { addUser(user) }
         val session = mockk<IHumlaSession>(relaxed = true)
         every { session.getChannel(0) } returns root
-        val service = mockk<IHumlaService>(relaxed = true).stubConnected(session)
+        session.stubConnected()
         val adapter = ChannelListAdapter(
-            context, service, MumlaRepository(mockk(relaxed = true), Dispatchers.Unconfined),
+            context, session, MumlaRepository(mockk(relaxed = true), Dispatchers.Unconfined),
             mockk<FragmentManager>(relaxed = true), false, true,
         )
         val position = adapter.getUserPosition(SESSION)

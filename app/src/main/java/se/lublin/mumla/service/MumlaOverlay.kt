@@ -32,25 +32,30 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.OverlayBinding
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.util.collectEvents
 import se.lublin.mumla.util.dp
 
 /** An onscreen interactive overlay displaying the users in the current channel. */
-class MumlaOverlay(private val service: MumlaService) {
+class MumlaOverlay(private val context: Context, private val sessions: SessionManager) {
 
-    private val windowManager = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private val binding = OverlayBinding.inflate(LayoutInflater.from(service))
+    private val windowManager = context.getSystemService(WindowManager::class.java)
+    private val binding = OverlayBinding.inflate(LayoutInflater.from(context))
     private val overlayView: View = binding.root
     private val overlayList: ListView = binding.overlayList
     private val talkButton: ImageView = binding.overlayTalk
     private val overlayParams: WindowManager.LayoutParams
     private var userAdapter: OverlayUserAdapter? = null
 
-    /** Collects the service's events while the overlay is shown. */
+    /** The session the overlay shows, while it is shown. */
+    private var session: IHumlaSession? = null
+
+    /** Collects the session's events while the overlay is shown. */
     private var events: Job? = null
 
     var isShown = false
@@ -59,11 +64,11 @@ class MumlaOverlay(private val service: MumlaService) {
     init {
         setUpGestures()
         binding.overlayClose.setOnClickListener { hide() }
-        setPushToTalkShown(Settings.getInstance(service).inputMethod == Settings.ARRAY_INPUT_METHOD_PTT)
+        setPushToTalkShown(Settings.getInstance(context).inputMethod == Settings.ARRAY_INPUT_METHOD_PTT)
 
         overlayParams = WindowManager.LayoutParams(
-            service.resources.dp(DEFAULT_WIDTH_DP).toInt(),
-            service.resources.dp(DEFAULT_HEIGHT_DP).toInt(),
+            context.resources.dp(DEFAULT_WIDTH_DP).toInt(),
+            context.resources.dp(DEFAULT_HEIGHT_DP).toInt(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
@@ -75,29 +80,33 @@ class MumlaOverlay(private val service: MumlaService) {
         }
     }
 
-    private fun onServiceEvent(event: HumlaEvent) {
+    private fun onSessionEvent(session: IHumlaSession, event: HumlaEvent) {
         val adapter = userAdapter ?: return
         when (event) {
             is HumlaEvent.UserTalkStateUpdated -> adapter.notifyDataSetChanged()
             is HumlaEvent.UserStateUpdated -> {
                 val channel = event.user.channel
-                if (channel != null && channel == service.sessionChannel) adapter.notifyDataSetChanged()
+                if (channel != null && channel == session.sessionChannel) adapter.notifyDataSetChanged()
             }
             // Unconditional: the model may no longer know which channel a removed user was in.
             is HumlaEvent.UserRemoved -> adapter.notifyDataSetChanged()
-            is HumlaEvent.UserJoinedChannel -> onUserJoinedChannel(adapter, event)
+            is HumlaEvent.UserJoinedChannel -> onUserJoinedChannel(session, adapter, event)
             else -> Unit
         }
     }
 
-    private fun onUserJoinedChannel(adapter: OverlayUserAdapter, event: HumlaEvent.UserJoinedChannel) {
+    private fun onUserJoinedChannel(
+        session: IHumlaSession,
+        adapter: OverlayUserAdapter,
+        event: HumlaEvent.UserJoinedChannel,
+    ) {
         val selfSession = try {
-            service.sessionId
+            session.sessionId
         } catch (e: IllegalStateException) {
             Log.d(TAG, "exception in onUserJoinedChannel: $e")
             return
         }
-        val sessionChannel = service.sessionChannel ?: return
+        val sessionChannel = session.sessionChannel ?: return
         if (event.user.session == selfSession) {
             // Session user has changed channels
             adapter.channel = sessionChannel
@@ -113,17 +122,20 @@ class MumlaOverlay(private val service: MumlaService) {
         binding.overlayDrag.setOnTouchListener(ResizeListener())
         talkButton.setOnTouchListener(TalkListener())
         ViewCompat.replaceAccessibilityAction(talkButton, AccessibilityActionCompat.ACTION_CLICK, null) { _, _ ->
-            service.setTalkingState(!service.isTalking)
+            session?.let { it.setTalkingState(!it.isTalking) }
             true
         }
     }
 
+    /** Shows the users of our channel in the connected session; nothing without one. */
     fun show() {
-        if (isShown) return
-        val channel = service.sessionChannel ?: return
+        val session = sessions.connected
+        val channel = session?.sessionChannel
+        if (isShown || session == null || channel == null) return
         isShown = true
-        userAdapter = OverlayUserAdapter(service, channel).also { overlayList.adapter = it }
-        events = collectEvents(MainScope(), service, ::onServiceEvent)
+        this.session = session
+        userAdapter = OverlayUserAdapter(context, channel).also { overlayList.adapter = it }
+        events = collectEvents(MainScope(), session) { onSessionEvent(session, it) }
         windowManager.addView(overlayView, overlayParams)
     }
 
@@ -132,6 +144,7 @@ class MumlaOverlay(private val service: MumlaService) {
         isShown = false
         events?.cancel()
         events = null
+        session = null
         overlayList.adapter = null
         userAdapter = null
         try {
@@ -198,11 +211,11 @@ class MumlaOverlay(private val service: MumlaService) {
         @SuppressLint("ClickableViewAccessibility") // Push-to-talk is a hold, not a click.
         override fun onTouch(v: View, event: MotionEvent): Boolean = when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                service.setTalkingState(true)
+                session?.setTalkingState(true)
                 true
             }
             MotionEvent.ACTION_UP -> {
-                service.setTalkingState(false)
+                session?.setTalkingState(false)
                 true
             }
             else -> false

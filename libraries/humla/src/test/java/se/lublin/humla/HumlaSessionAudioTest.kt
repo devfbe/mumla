@@ -33,8 +33,9 @@ import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.FAKE_BANDWIDTH
-import se.lublin.humla.testutil.HumlaServiceHarness
+import se.lublin.humla.testutil.HumlaSessionHarness
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
@@ -47,17 +48,17 @@ import java.util.concurrent.atomic.AtomicBoolean
  * threads, which on the main looper would be an ANR.
  */
 @RunWith(RobolectricTestRunner::class)
-class HumlaServiceAudioTest {
-    private val harnesses = mutableListOf<HumlaServiceHarness>()
+class HumlaSessionAudioTest {
+    private val harnesses = mutableListOf<HumlaSessionHarness>()
 
     @After
     fun tearDown() {
-        harnesses.forEach { it.destroy() }
+        harnesses.forEach { it.close() }
     }
 
-    private fun start(): HumlaServiceHarness = HumlaServiceHarness().also { harnesses += it }
+    private fun start(): HumlaSessionHarness = HumlaSessionHarness().also { harnesses += it }
 
-    private fun audioUp(h: HumlaServiceHarness, count: Int = 1) =
+    private fun audioUp(h: HumlaSessionHarness, count: Int = 1) =
         awaitUntil(description = "audio pipeline $count") {
             h.mainLooper.idle()
             h.audioFactory.created.size == count
@@ -72,21 +73,21 @@ class HumlaServiceAudioTest {
         assertThat(h.audioFactory.createThreads.single()).isEqualTo(AudioController.THREAD_NAME)
         assertThat(h.audioFactory.sessionParams[0].self.name).isEqualTo("me")
         assertThat(h.audioFactory.sessionParams[0].maxBandwidth).isEqualTo(72_000)
-        assertThat(h.service.currentBandwidth).isEqualTo(FAKE_BANDWIDTH)
+        assertThat(h.session.currentBandwidth).isEqualTo(FAKE_BANDWIDTH)
     }
 
     /** The voice format the server's Version picked reaches the pipeline, before any voice is sent. */
     @Test
     fun thePipelineSendsInTheFormatTheConnectionNegotiated() {
         val h = start()
-        h.service.connect()
+        h.session.connect()
         val tcp = h.openSocket(0)
         val version = Mumble.Version.newBuilder().setVersionV2(MumbleVersion.v2(1, 5, 0)).build()
         tcp.simulateMessage(HumlaTCPMessageType.Version, version.toByteArray())
         h.synchronize(tcp)
 
         audioUp(h)
-        assertThat(h.service.connection!!.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
+        assertThat(h.session.connection!!.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
         assertThat(h.audioFactory.sessionParams[0].udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
     }
 
@@ -114,14 +115,14 @@ class HumlaServiceAudioTest {
         // By identity: the toggle the capture loop consults is the toggle a key press writes.
         assertThat(h.audioFactory.sessionParams[0].inputMode)
             .isSameInstanceAs(inputModeOf(h))
-        h.service.setTalkingState(true)
+        h.session.setTalkingState(true)
         assertThat(
             (h.audioFactory.sessionParams[0].inputMode as se.lublin.humla.audio.inputmode.ToggleInputMode)
                 .isTalkingOn
         ).isTrue()
     }
 
-    private fun inputModeOf(h: HumlaServiceHarness): Any = h.service.audio.inputMode
+    private fun inputModeOf(h: HumlaSessionHarness): Any = h.session.audio.inputMode
 
     /**
      * A voice target set while the socket is up but before synchronization reaches the pipeline
@@ -130,10 +131,10 @@ class HumlaServiceAudioTest {
     @Test
     fun aVoiceTargetSetWhileConnectingReachesTheFirstPipeline() {
         val h = start()
-        h.service.connect()
+        h.session.connect()
         val tcp = h.openSocket(0)
 
-        h.service.voiceTargetId = 5
+        h.session.voiceTargetId = 5
         h.synchronize(tcp)
 
         audioUp(h)
@@ -144,22 +145,22 @@ class HumlaServiceAudioTest {
     @Test
     fun aNewSessionStartsWithoutThePreviousVoiceTarget() {
         val h = start()
-        h.service.connect()
+        h.session.connect()
         val tcp = h.openSocket(0)
-        h.service.voiceTargetId = 5
+        h.session.voiceTargetId = 5
         h.synchronize(tcp)
         audioUp(h)
 
-        h.service.disconnect()
+        h.session.disconnect()
         h.mainLooper.idle()
         // Set after the disconnect cleared it, so what must clear it again is startSession's own
         // reset.
-        h.service.voiceTargetId = 9
-        h.service.connect()
+        h.session.voiceTargetId = 9
+        h.session.connect()
         h.synchronize(h.openSocket(1))
 
         audioUp(h, count = 2)
-        assertThat(h.service.voiceTargetId).isEqualTo(0.toByte())
+        assertThat(h.session.voiceTargetId).isEqualTo(0.toByte())
         assertThat(h.audioFactory.sessionParams[1].targetId).isEqualTo(0.toByte())
     }
 
@@ -170,7 +171,7 @@ class HumlaServiceAudioTest {
     @Test
     fun aServerSyncWithoutASessionUserSaysSoAndBuildsNoPipeline() {
         val h = start()
-        h.service.connect()
+        h.session.connect()
         val tcp = h.openSocket(0)
 
         // ServerSync for a session the user list never mentioned.
@@ -181,10 +182,10 @@ class HumlaServiceAudioTest {
         )
         awaitUntil(description = "the sync is reported") {
             h.mainLooper.idle()
-            h.service.connectionState == HumlaService.ConnectionState.CONNECTED
+            h.session.state.value == SessionState.Connected
         }
 
-        assertThat(h.warnings).contains(h.service.getString(R.string.no_session_user))
+        assertThat(h.warnings).contains(h.string(R.string.no_session_user))
         assertThat(h.audioFactory.created).isEmpty()
     }
 
@@ -199,7 +200,7 @@ class HumlaServiceAudioTest {
         audio.shutdownGate = gate
 
         val started = System.nanoTime()
-        h.service.disconnect()
+        h.session.disconnect()
         h.mainLooper.idle()
         val blockedMillis = (System.nanoTime() - started) / 1_000_000
 
@@ -233,28 +234,28 @@ class HumlaServiceAudioTest {
         )
 
         awaitUntil(description = "pipeline stopped") { h.audioFactory.created[0].shutdownCalls.get() == 1 }
-        assertThat(h.service.currentBandwidth).isEqualTo(-1)
+        assertThat(h.session.currentBandwidth).isEqualTo(-1)
     }
 
     /**
-     * `onDestroy` must stop the control thread. Asserted on the thread object rather than by name,
+     * `close` must stop the control thread. Asserted on the thread object rather than by name,
      * because a name filter over all threads passes if the thread is renamed.
      */
     @Test
-    fun destroyingTheServiceStopsTheAudioControlThread() {
+    fun closingTheSessionStopsTheAudioControlThread() {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
         val controller = controllerOf(h)
         assertThat(controller.thread.isAlive).isTrue()
 
-        h.destroy()
+        h.close()
         harnesses.remove(h)
 
         awaitUntil(description = "the control thread ended") { !controller.thread.isAlive }
     }
 
-    private fun controllerOf(h: HumlaServiceHarness): AudioController = h.service.audio.controller
+    private fun controllerOf(h: HumlaSessionHarness): AudioController = h.session.audio.controller
 
     /**
      * A disconnect between the server's sync and its delivery on the main looper: no pipeline is
@@ -263,16 +264,15 @@ class HumlaServiceAudioTest {
     @Test
     fun aDisconnectThatBeatsTheSyncCallbackBuildsNoPipeline() {
         val h = start()
-        h.service.connect()
+        h.session.connect()
         val tcp = h.openSocket(0)
         h.synchronizeWithoutDraining(tcp)
 
-        h.service.disconnect()
+        h.session.disconnect()
         h.mainLooper.idle()
 
         assertThat(h.audioFactory.created).isEmpty()
-        assertThat(h.service.connectionState)
-            .isNotEqualTo(HumlaService.ConnectionState.CONNECTED)
+        assertThat(h.session.state.value).isNotEqualTo(SessionState.Connected)
     }
 
     @Test
@@ -287,7 +287,7 @@ class HumlaServiceAudioTest {
         }
 
         // A microphone that cannot open is not a reason to drop the session.
-        assertThat(h.service.connectionState).isEqualTo(HumlaService.ConnectionState.CONNECTED)
+        assertThat(h.session.state.value).isEqualTo(SessionState.Connected)
     }
 
     @Test
@@ -312,7 +312,7 @@ class HumlaServiceAudioTest {
         h.transports.udps[0].simulateError(IOException("network unreachable"))
         awaitUntil(description = "the warning reaches the chat log") {
             h.mainLooper.idle()
-            h.warnings.contains(h.service.getString(R.string.udp_warning_thread_failed))
+            h.warnings.contains(h.string(R.string.udp_warning_thread_failed))
         }
     }
 
@@ -344,7 +344,7 @@ class HumlaServiceAudioTest {
         val sourceInUse = h.audioFactory.configs[0].settings.audioSource
 
         h.configurePipeline { copy(audioSource = sourceInUse) }
-        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == FAKE_BANDWIDTH }
+        awaitUntil(description = "the reconfigure was processed") { h.session.currentBandwidth == FAKE_BANDWIDTH }
 
         assertThat(h.audioFactory.created).hasSize(1)
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
@@ -383,14 +383,14 @@ class HumlaServiceAudioTest {
         val h = start()
 
         h.configureAudio { copy(halfDuplex = true, transmitMode = TransmitMode.VOICE_ACTIVITY) }
-        assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
+        assertThat(h.session.audio.config.halfDuplex).isFalse()
 
         h.configureAudio { copy(transmitMode = TransmitMode.PUSH_TO_TALK) }
-        assertThat(h.service.getAudioConfigForTest().halfDuplex).isTrue()
+        assertThat(h.session.audio.config.halfDuplex).isTrue()
 
         // Both directions: the flag is what the caller wrote, not a constant.
         h.configureAudio { copy(halfDuplex = false) }
-        assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
+        assertThat(h.session.audio.config.halfDuplex).isFalse()
     }
 
     /**
@@ -403,9 +403,9 @@ class HumlaServiceAudioTest {
         h.connectAndSynchronize()
         audioUp(h)
 
-        h.service.voiceTargetId = 0x1F
+        h.session.voiceTargetId = 0x1F
 
-        assertThat(h.service.voiceTargetId).isEqualTo(0x1F.toByte())
+        assertThat(h.session.voiceTargetId).isEqualTo(0x1F.toByte())
         awaitUntil(description = "the target reaches the pipeline") {
             h.audioFactory.created[0].targetIds.contains(0x1F.toByte())
         }
@@ -421,10 +421,10 @@ class HumlaServiceAudioTest {
     fun aVoiceTargetSetWhileDisconnectedIsHarmless() {
         val h = start()
 
-        h.service.voiceTargetId = 3
+        h.session.voiceTargetId = 3
 
-        assertThat(h.service.voiceTargetId).isEqualTo(3.toByte())
-        assertThat(h.service.voiceTargetMode)
+        assertThat(h.session.voiceTargetId).isEqualTo(3.toByte())
+        assertThat(h.session.voiceTargetMode)
             .isEqualTo(se.lublin.humla.util.VoiceTargetMode.WHISPER)
     }
 
@@ -435,9 +435,9 @@ class HumlaServiceAudioTest {
 
         for (id in listOf(0x20, 0x80, 0xFF)) {
             org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
-                h.service.voiceTargetId = id.toByte()
+                h.session.voiceTargetId = id.toByte()
             }
         }
-        assertThat(h.service.voiceTargetId).isEqualTo(0.toByte())
+        assertThat(h.session.voiceTargetId).isEqualTo(0.toByte())
     }
 }

@@ -23,16 +23,15 @@ import android.webkit.WebView
 import android.widget.EditText
 import androidx.core.view.isVisible
 import androidx.fragment.app.DialogFragment
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.Job
-import se.lublin.humla.IHumlaService
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.DialogCommentBinding
-import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.util.collectEvents
 import se.lublin.mumla.util.configureForUntrustedHtml
 
@@ -44,7 +43,7 @@ internal const val ARG_EDITING = "editing"
 /** Shows a comment as HTML and its source, which can be edited if [isEditing]. */
 abstract class AbstractCommentFragment : DialogFragment() {
 
-    private val serviceModel: ServiceViewModel by activityViewModels()
+    private val sessions get() = SessionManager.get(requireContext())
     private var commentView: WebView? = null
     private lateinit var commentEdit: EditText
     private var comment: String? = null
@@ -68,7 +67,7 @@ abstract class AbstractCommentFragment : DialogFragment() {
         val known = comment
         if (known == null) {
             commentView.loadData("Loading...", null, null)
-            serviceModel.service.value?.let(::requestComment)
+            sessions.connected?.let(::requestComment)
         } else {
             loadComment(known)
         }
@@ -101,7 +100,7 @@ abstract class AbstractCommentFragment : DialogFragment() {
             .setNegativeButton(R.string.close, null)
         if (isEditing) {
             builder.setPositiveButton(R.string.save) { _, _ ->
-                serviceModel.service.value?.let { editComment(it, commentEdit.text.toString()) }
+                sessions.connected?.let { editComment(it, commentEdit.text.toString()) }
             }
         }
         return builder.create()
@@ -113,12 +112,12 @@ abstract class AbstractCommentFragment : DialogFragment() {
     }
 
     /**
-     * Loads the first comment [extractor] finds in the service's events. Stops listening once it
+     * Loads the first comment [extractor] finds in the session's events. Stops listening once it
      * has one, and at the latest in onDestroy.
      */
-    protected fun observeComment(service: IHumlaService, extractor: (HumlaEvent) -> String?) {
+    protected fun observeComment(session: IHumlaSession, extractor: (HumlaEvent) -> String?) {
         stopObservingComment()
-        commentUpdates = collectEvents(lifecycleScope, service) { event ->
+        commentUpdates = collectEvents(lifecycleScope, session) { event ->
             extractor(event)?.let {
                 loadComment(it)
                 stopObservingComment()
@@ -139,11 +138,11 @@ abstract class AbstractCommentFragment : DialogFragment() {
     }
 
     /**
-     * Requests the comment from [service], which is expected to arrive in [loadComment]. Not
-     * called if the comment came with the arguments.
+     * Requests the comment from the connected [session], which is expected to arrive in
+     * [loadComment]. Not called if the comment came with the arguments.
      */
-    abstract fun requestComment(service: IHumlaService)
+    abstract fun requestComment(session: IHumlaSession)
 
-    /** Asks [service] to replace the comment with [comment]. */
-    abstract fun editComment(service: IHumlaService, comment: String)
+    /** Asks the connected [session] to replace the comment with [comment]. */
+    abstract fun editComment(session: IHumlaSession, comment: String)
 }

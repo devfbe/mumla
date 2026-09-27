@@ -16,43 +16,59 @@
  */
 package se.lublin.mumla.app
 
-import android.app.Application
 import android.content.ComponentName
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import io.mockk.verifyOrder
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Server
+import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.service.MumlaService
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.installDatabase
+import se.lublin.mumla.testing.stubDisconnected
+import se.lublin.mumla.testing.stubState
 
 @RunWith(RobolectricTestRunner::class)
 class ServerConnectTest {
 
-    private val app = ApplicationProvider.getApplicationContext<Application>()
+    private val app = ApplicationProvider.getApplicationContext<MumlaApplication>()
     private val server = Server(1, "Home", "example.org", 64738, "me", null)
-    private val service: MumlaService = mockk(relaxed = true)
+    private val session = mockk<IHumlaSession>(relaxed = true).stubDisconnected()
+    private val configs = mutableListOf<SessionConfig>()
 
     @Test
-    fun theServiceIsStartedConfiguredForTheServerAndConnected() {
+    fun aSessionIsConnectedForTheServerAndTheServiceStarted() {
         installDatabase(mockk(relaxed = true))
-        val component = ComponentName(app, MumlaService::class.java)
-        shadowOf(app).setComponentNameAndServiceForBindService(component, MumlaService.MumlaBinder(service))
+        app.installContainer(AppContainer(app, app.scope) { config -> configs += config; session })
+        every { session.connect() } answers { session.stubState(SessionState.Connecting) }
 
         startServerConnect(app, server)
-        drainMainUntil { runCatching { verify { service.connect() } }.isSuccess }
+        drainMainUntil { configs.isNotEmpty() }
 
-        verifyOrder {
-            service.configure(match { it.connection.server === server })
-            service.connect()
-        }
-        assertThat(shadowOf(app).nextStartedService.component).isEqualTo(component)
-        assertThat(shadowOf(app).unboundServiceConnections).hasSize(1)
+        assertThat(configs.single().connection.server).isSameInstanceAs(server)
+        verify { session.connect() }
+        assertThat(SessionManager.get(app).session.value).isSameInstanceAs(session)
+        assertThat(shadowOf(app).nextStartedService.component).isEqualTo(ComponentName(app, MumlaService::class.java))
+    }
+
+    /** A session that ended at once needs no foreground service. */
+    @Test
+    fun aSessionThatEndedAtOnceStartsNoService() {
+        installDatabase(mockk(relaxed = true))
+        app.installContainer(AppContainer(app, app.scope) { config -> configs += config; session })
+
+        startServerConnect(app, server)
+        drainMainUntil { configs.isNotEmpty() }
+
+        assertThat(shadowOf(app).nextStartedService).isNull()
     }
 }

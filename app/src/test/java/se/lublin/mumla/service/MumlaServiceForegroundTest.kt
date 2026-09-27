@@ -2,11 +2,13 @@ package se.lublin.mumla.service
 
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
+import android.app.NotificationManager
 import android.os.Looper
-import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -14,56 +16,104 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
+import se.lublin.humla.HumlaSession
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.FakeCommunicationDevices
 import se.lublin.mumla.R
-import se.lublin.mumla.chat.ChatMessageLog
+import se.lublin.mumla.app.AppContainer
+import se.lublin.mumla.app.MumlaApplication
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.createMumlaService
 import java.time.Duration
 
 /**
- * Foreground behaviour of the service with the screen off. The session runs through the real
- * HumlaService state machine; only the connection is a relaxed mock, and the test delivers its
- * callbacks. ShadowService.setThrowInStartForeground models the platform refusing every
- * startForeground after the first, as with the screen off.
+ * The foreground service over a real session and its reconnect policy, with the connections
+ * mocked: a loss that will be retried keeps the foreground, which Android would refuse to start
+ * again from the background, and only the end of the session leaves it.
  */
 @RunWith(RobolectricTestRunner::class)
 class MumlaServiceForegroundTest {
+    private val app = ApplicationProvider.getApplicationContext<MumlaApplication>()
     private lateinit var controller: ServiceController<MumlaService>
     private lateinit var service: MumlaService
+    private lateinit var sessions: SessionManager
     private val mainLooper = shadowOf(Looper.getMainLooper())
     private val connections = mutableListOf<HumlaConnection>()
+    private val listeners = mutableListOf<HumlaConnection.HumlaConnectionListener>()
 
     @Before
     fun setUp() {
-        controller = createMumlaService {
-            reconnectPolicy = ReconnectPolicy(baseDelayMillis = 2_000L, maxAttempts = 2, maxJitterFraction = 0.0)
-            connectionFactory = { mockk<HumlaConnection>(relaxed = true).also { connections += it } }
-        }
-        service = controller.get()
-        service.configure(
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        app.installContainer(
+            AppContainer(app, app.scope) { config ->
+                HumlaSession(
+                    app, config,
+                    communicationDevices = FakeCommunicationDevices(),
+                    connectionFactory = { listener ->
+                        listeners += listener
+                        mockk<HumlaConnection>(relaxed = true).also { connections += it }
+                    },
+                    reconnectPolicy = ReconnectPolicy(
+                        baseDelayMillis = 2_000L,
+                        maxAttempts = 2,
+                        maxJitterFraction = 0.0,
+                    ),
+                )
+            },
+        )
+        sessions = SessionManager.get(app)
+        sessions.connect(
             SessionConfig(
                 ConnectionConfig(server = Server(-1, "test", "127.0.0.1", 64738, "me", "")),
                 autoReconnect = true,
             ),
         )
+        controller = createMumlaService()
+        service = controller.get()
         mainLooper.idle()
     }
 
     @After
     fun tearDown() {
         controller.destroy()
+        sessions.session.value?.close()
+        mainLooper.idle()
     }
+
+    private val state: SessionState get() = sessions.currentState
 
     private fun lost() = HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
 
+    /** The current connection reports its end, as a dropped socket does. */
+    private fun loseConnection() {
+        listeners.last().onConnectionDisconnected(lost())
+        mainLooper.idle()
+    }
+
+    private fun synchronize() {
+        every { connections.last().isConnected } returns true
+        every { connections.last().isSynchronized } returns true
+        listeners.last().onConnectionSynchronized()
+        mainLooper.idle()
+    }
+
+    private val notificationManager get() = app.getSystemService(NotificationManager::class.java)
+
     private fun foregroundText(): String? =
-        shadowOf(service.getSystemService(android.app.NotificationManager::class.java))
-            .getNotification(1)?.extras?.getString(Notification.EXTRA_TEXT)
+        shadowOf(notificationManager).getNotification(1)?.extras?.getString(Notification.EXTRA_TEXT)
+
+    private fun foregroundActions(): List<String> =
+        shadowOf(notificationManager).getNotification(1)?.actions.orEmpty().map { it.title.toString() }
+
+    private fun reconnectPrompt(): Notification? = shadowOf(notificationManager).getNotification(3)
+
+    private fun log() = sessions.chat.messages.value.map { it.body }
 
     /** From here on the platform refuses every foreground start, as with the screen off. */
     private fun screenOff() {
@@ -72,300 +122,119 @@ class MumlaServiceForegroundTest {
         )
     }
 
+    private fun pressCancelReconnect() {
+        shadowOf(notificationManager).getNotification(1)!!.actions
+            .single { it.title.toString() == app.getString(R.string.cancel_reconnect) }
+            .actionIntent.send()
+        mainLooper.idle()
+    }
+
     @Test
     fun aConnectionLossThatWillBeRetriedKeepsTheServiceInTheForeground() {
-        service.connect()
-        mainLooper.idle()
+        synchronize()
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
         screenOff()
 
-        service.onConnectionDisconnected(lost())
-        mainLooper.idle()
+        loseConnection()
 
-        assertThat(service.isReconnecting).isTrue()
+        assertThat(state).isInstanceOf(SessionState.ConnectionLost::class.java)
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
-        assertThat(foregroundText()).isEqualTo(service.getString(R.string.connection_lost_reconnecting))
+        assertThat(foregroundText()).isEqualTo(app.getString(R.string.connection_lost_reconnecting))
+        assertThat(foregroundActions()).containsExactly(app.getString(R.string.cancel_reconnect))
     }
 
     @Test
     fun theReconnectAttemptItselfStaysInTheForegroundWithoutStartingItAgain() {
-        service.connect()
-        mainLooper.idle()
         screenOff()
-        service.onConnectionDisconnected(lost())
-        mainLooper.idle()
+        loseConnection()
 
         mainLooper.idleFor(Duration.ofMillis(2_000))
 
         assertThat(connections).hasSize(2) // the backoff timer fired and a new attempt started
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
-        assertThat(service.messageLog.value.map { it.body })
-            .doesNotContain(service.getString(R.string.foreground_start_failed))
+        assertThat(log()).doesNotContain(app.getString(R.string.foreground_start_failed))
     }
 
     @Test
-    fun aDisconnectTheUserAskedForLeavesTheForeground() {
-        service.connect()
-        mainLooper.idle()
-
-        service.disconnect()
+    fun aDisconnectTheUserAskedForLeavesTheForegroundAndStopsTheService() {
+        sessions.disconnect()
         mainLooper.idle()
 
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
+        assertThat(shadowOf(service).isStoppedBySelf).isTrue()
     }
 
     @Test
     fun theForegroundFallsOnlyWhenThePolicyGivesUp() {
-        service.connect()
-        mainLooper.idle()
         screenOff()
-        service.onConnectionDisconnected(lost()) // attempt 1 of 2: retried
-        mainLooper.idle()
+        loseConnection() // attempt 1 of 2: retried
         mainLooper.idleFor(Duration.ofMillis(2_000))
-        service.onConnectionDisconnected(lost()) // attempt 2 of 2: retried
-        mainLooper.idle()
+        loseConnection() // attempt 2 of 2: retried
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
         mainLooper.idleFor(Duration.ofMillis(4_000))
 
-        service.onConnectionDisconnected(lost()) // spent: Disconnected
-        mainLooper.idle()
+        loseConnection() // spent: Disconnected
 
-        assertThat(service.isReconnecting).isFalse()
+        assertThat(state).isInstanceOf(SessionState.Disconnected::class.java)
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }
 
-    private fun log() = service.messageLog.value.map { it.body }
-
     @Test
-    fun theChatLogSurvivesAConnectionLossAndIsClearedOnDisconnect() {
-        service.connect()
-        service.logWarning("something happened")
-        mainLooper.idle()
-
-        service.onConnectionDisconnected(lost())
-        mainLooper.idle()
-        assertThat(log()).containsExactly("something happened") // a loss is not the end
-
-        service.disconnect()
-        mainLooper.idle()
-        assertThat(log()).isEmpty()
-    }
-
-    @Test
-    fun theGiveUpLineIsTheOneThingLeftInTheChatLog() {
-        service.connect()
-        mainLooper.idle()
-        service.logWarning("before")
+    fun whenThePolicyGivesUpThePromptOffersAReconnectAndTheLogKeepsOnlyTheGiveUpLine() {
+        synchronize()
+        sessions.chat.warnOnce("before")
         for (delay in listOf(2_000L, 4_000L)) {
-            service.onConnectionDisconnected(lost())
-            mainLooper.idle()
+            loseConnection()
             mainLooper.idleFor(Duration.ofMillis(delay))
         }
+        assertThat(log()).contains("before") // a loss is not the end
 
-        service.onConnectionDisconnected(lost())
-        mainLooper.idle()
-
-        assertThat(log()).containsExactly(service.getString(se.lublin.humla.R.string.reconnect_gave_up))
-    }
-
-    @Test
-    fun theChatLogIsBoundedAtFiveHundredEntries() {
-        repeat(ChatMessageLog.MAX_ENTRIES + 1) { service.logWarning("m$it") }
-        mainLooper.idle()
-
-        assertThat(service.messageLog.value).hasSize(ChatMessageLog.MAX_ENTRIES)
-        assertThat(service.messageLog.value.first().body).isEqualTo("m1")
-    }
-
-    private fun reconnectPrompt(): Notification? =
-        shadowOf(service.getSystemService(android.app.NotificationManager::class.java)).getNotification(3)
-
-    @Test
-    fun whenThePolicyGivesUpThePromptOffersAReconnect() {
-        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
-            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        service.connect()
-        for (delay in listOf(2_000L, 4_000L)) {
-            service.onConnectionDisconnected(lost())
-            mainLooper.idle()
-            mainLooper.idleFor(Duration.ofMillis(delay))
-        }
-        service.onConnectionDisconnected(lost())
-        mainLooper.idle()
+        loseConnection()
 
         val prompt = reconnectPrompt()!!
         assertThat(prompt.extras.getString(Notification.EXTRA_TEXT)).isEqualTo("socket reset")
-        assertThat(prompt.actions.single().title.toString()).isEqualTo(service.getString(R.string.reconnect))
-    }
-
-    @Test
-    fun cancellingTheReconnectEndsTheSessionWithoutAPrompt() {
-        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
-            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        service.connect()
-        service.onConnectionDisconnected(lost())
-        mainLooper.idle()
-
-        service.cancelReconnect()
-        mainLooper.idle()
-
-        assertThat(service.isReconnecting).isFalse()
-        assertThat(shadowOf(service).isForegroundStopped).isTrue()
-        assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
-    }
-
-    private fun foregroundActions(): List<String> =
-        shadowOf(service.getSystemService(android.app.NotificationManager::class.java))
-            .getNotification(1)?.actions.orEmpty().map { it.title.toString() }
-
-    private fun pressCancelReconnect() {
-        val action = shadowOf(service.getSystemService(android.app.NotificationManager::class.java))
-            .getNotification(1)!!.actions
-            .single { it.title.toString() == service.getString(R.string.cancel_reconnect) }
-        action.actionIntent.send()
-        mainLooper.idle()
-    }
-
-    @Test
-    fun onlyALostConnectionOffersToCancelTheReconnect() {
-        service.connect()
-        mainLooper.idle()
-        assertThat(foregroundActions()).isEmpty() // Connecting
-
-        service.renderSessionState(se.lublin.humla.session.SessionState.Connected)
-        assertThat(foregroundActions()).doesNotContain(service.getString(R.string.cancel_reconnect))
-
-        service.onConnectionDisconnected(lost())
-        mainLooper.idle()
-        assertThat(foregroundActions()).containsExactly(service.getString(R.string.cancel_reconnect))
+        assertThat(prompt.actions.single().title.toString()).isEqualTo(app.getString(R.string.reconnect))
+        assertThat(log()).containsExactly(app.getString(se.lublin.humla.R.string.reconnect_gave_up))
     }
 
     @Test
     fun theCancelActionEndsAWaitingReconnectAndLeavesTheForeground() {
-        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
-            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        service.connect()
-        mainLooper.idle()
         screenOff()
-        service.onConnectionDisconnected(lost())
-        mainLooper.idle()
+        loseConnection()
 
         pressCancelReconnect()
 
-        assertThat(service.isReconnecting).isFalse()
+        assertThat(state).isInstanceOf(SessionState.Disconnected::class.java)
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
-        assertThat(reconnectPrompt()).isNull()
+        assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
         mainLooper.idleFor(Duration.ofMillis(10_000))
         assertThat(connections).hasSize(1) // the backoff timer no longer retries
     }
 
     @Test
     fun theCancelActionDuringAnAttemptInFlightDisconnectsIt() {
-        service.connect()
-        mainLooper.idle()
         screenOff()
-        service.onConnectionDisconnected(lost())
-        mainLooper.idle()
+        loseConnection()
         mainLooper.idleFor(Duration.ofMillis(2_000)) // Reconnecting: attempt 2 is in flight
         assertThat(connections).hasSize(2)
-        assertThat(foregroundActions()).containsExactly(service.getString(R.string.cancel_reconnect))
+        assertThat(foregroundActions()).containsExactly(app.getString(R.string.cancel_reconnect))
 
         pressCancelReconnect()
 
-        io.mockk.verify { connections[1].disconnect() }
-        assertThat(service.isReconnecting).isFalse()
+        verify { connections[1].disconnect() }
+        assertThat(state).isInstanceOf(SessionState.Disconnected::class.java)
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
-    }
-
-    @Test
-    fun dismissingTheChatNotificationLeavesThePromptAlone() {
-        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
-            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        service.renderSessionState(se.lublin.humla.session.SessionState.Disconnected(lost()))
-
-        service.clearChatNotifications()
-
-        assertThat(reconnectPrompt()).isNotNull()
-    }
-
-    @Test
-    fun aRefusedForegroundStartBecomesAWarningAndAPromptInsteadOfACrash() {
-        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
-            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        screenOff()
-
-        service.connect()
-        mainLooper.idle()
-
-        assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
-        assertThat(reconnectPrompt()!!.extras.getString(Notification.EXTRA_TEXT))
-            .isEqualTo(service.getString(R.string.foreground_start_failed))
-    }
-
-    @Test
-    fun aRefusalThatRepeatsIsReportedOnce() {
-        screenOff()
-        service.connect()
-        mainLooper.idle()
-
-        service.renderSessionState(se.lublin.humla.session.SessionState.Connected)
-        mainLooper.idle()
-
-        assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
-    }
-
-    @Test
-    fun aRefusalIsNotShownAsAPromptWhileNotificationsAreSuppressed() {
-        org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
-            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        service.setSuppressNotifications(true)
-        screenOff()
-
-        service.connect()
-        mainLooper.idle()
-
-        assertThat(reconnectPrompt()).isNull()
-        assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
-    }
-
-    /** Half duplex follows the transmit mode in force, so a half-duplex write alone is enough. */
-    @Test
-    fun aHalfDuplexPreferenceChangeTakesEffectInPushToTalk() {
-        val preferences = PreferenceManager.getDefaultSharedPreferences(service)
-        preferences.edit()
-            .putString(se.lublin.mumla.Settings.INPUT_METHOD.key, se.lublin.mumla.Settings.ARRAY_INPUT_METHOD_PTT)
-            .commit()
-
-        preferences.edit().putBoolean(se.lublin.mumla.Settings.HALF_DUPLEX.key, true).commit()
-        assertThat(service.getAudioConfigForTest().halfDuplex).isTrue()
-
-        preferences.edit().putBoolean(se.lublin.mumla.Settings.HALF_DUPLEX.key, false).commit()
-        assertThat(service.getAudioConfigForTest().halfDuplex).isFalse()
     }
 
     @Test
     fun aDestroyedServiceNoLongerRendersTheSession() {
         controller.destroy()
+        mainLooper.idle()
+        val before = shadowOf(notificationManager).getNotification(1)
 
-        service.connect()
+        sessions.connect(SessionConfig(ConnectionConfig(server = Server(-1, "t", "127.0.0.1", 1, "me", ""))))
         mainLooper.idle()
 
-        assertThat(shadowOf(service).lastForegroundNotification).isNull()
-    }
-
-    /** onCreate reads these three settings itself; nothing else would until they change. */
-    @Test
-    fun theSettingsInForceAtStartAreTheOnesUsed() {
-        val prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
-        prefs.edit()
-            .putBoolean(se.lublin.mumla.Settings.USE_TTS.key, true)
-            .putBoolean(se.lublin.mumla.Settings.PTT_SOUND.key, true)
-            .putBoolean(se.lublin.mumla.Settings.SHORT_TTS_MESSAGES.key, true)
-            .commit()
-        val fresh = createMumlaService().get()
-        assertThat(fresh.tts).isNotNull()
-        assertThat(fresh.pttSoundEnabled).isTrue()
-        assertThat(fresh.shortTtsMessagesEnabled).isTrue()
-        fresh.onDestroy()
+        assertThat(shadowOf(notificationManager).getNotification(1)).isSameInstanceAs(before)
     }
 }

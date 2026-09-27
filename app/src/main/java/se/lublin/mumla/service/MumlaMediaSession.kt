@@ -13,10 +13,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.MediaButtonAction
 import se.lublin.mumla.Settings
@@ -44,7 +44,7 @@ class MumlaMediaSession(
     private var session: MediaSessionCompat? = null
     private var connected = false
 
-    /** Follows the service's session state between [attach] and [detach]. */
+    /** Follows the session state between [attach] and [detach]. */
     private var stateUpdates: Job? = null
 
     /** Public for tests; the framework calls it on [mainHandler]. */
@@ -69,14 +69,15 @@ class MumlaMediaSession(
     val playbackState: PlaybackStateCompat?
         get() = session?.controller?.playbackState
 
-    fun attach(service: IHumlaService) {
+    /** Follows [state], the current session's, until [detach]. */
+    fun attach(state: Flow<SessionState>) {
         stateUpdates?.cancel()
         stateUpdates = CoroutineScope(Dispatchers.Main.immediate).launch(start = CoroutineStart.UNDISPATCHED) {
             launch(start = CoroutineStart.UNDISPATCHED) {
                 PreferenceManager.getDefaultSharedPreferences(context).changes(Settings.MEDIA_BUTTON_ACTION.key)
                     .collect { applyState() }
             }
-            service.sessionState
+            state
                 .map { it == SessionState.Connected }
                 .distinctUntilChanged()
                 .collect { connected -> if (connected) activate() else deactivate() }

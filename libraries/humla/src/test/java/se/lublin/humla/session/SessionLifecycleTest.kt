@@ -24,7 +24,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Test
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.net.ReconnectPolicy
 
 /** The reconnect timer, the network wait and the wake lock around the state machine; plain JVM. */
@@ -75,14 +74,14 @@ class SessionLifecycleTest {
         jitter = { 0.0 },
     )
 
-    private val error = HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
+    private val error = DisconnectReason.Network("socket reset", null)
 
     private fun connected() {
         assertThat(lifecycle.connectRequested()).isTrue()
         assertThat(lifecycle.synchronized()).isTrue()
     }
 
-    private fun lose(): SessionState = lifecycle.lost(autoReconnect = true, error = error)
+    private fun lose(): SessionState = lifecycle.lost(autoReconnect = true, reason = error)
 
     @Test
     fun theWakeLockIsTakenAtTheFirstSynchronizationOnly() {
@@ -183,7 +182,7 @@ class SessionLifecycleTest {
     fun aLossWithoutAutoReconnectEndsTheSession() {
         connected()
 
-        assertThat(lifecycle.lost(autoReconnect = false, error = error)).isEqualTo(SessionState.Disconnected(error))
+        assertThat(lifecycle.lost(autoReconnect = false, reason = error)).isEqualTo(SessionState.Disconnected(error))
         assertThat(wakeLock.isHeld).isFalse()
     }
 
@@ -209,7 +208,7 @@ class SessionLifecycleTest {
         assertThat(lifecycle.disconnectRequested()).isFalse()
         assertThat(wakeLock.isHeld).isTrue()
 
-        lifecycle.lost(autoReconnect = true, error = error)
+        lifecycle.lost(autoReconnect = true, reason = error)
         assertThat(lifecycle.current).isEqualTo(SessionState.Disconnected())
         assertThat(wakeLock.isHeld).isFalse()
     }

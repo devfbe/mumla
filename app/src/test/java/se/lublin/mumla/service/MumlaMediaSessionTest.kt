@@ -11,7 +11,6 @@ import android.view.KeyEvent
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.spyk
@@ -21,7 +20,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.Settings
@@ -68,8 +66,6 @@ class MumlaMediaSessionTest {
 
     private val state = MutableStateFlow<SessionState>(SessionState.Disconnected())
 
-    /** A service double whose session state the test drives through [state]. */
-    private val service: IHumlaService = mockk { every { sessionState } returns state }
 
     @Test
     fun inactiveUntilActivated() {
@@ -98,7 +94,7 @@ class MumlaMediaSessionTest {
     @Test
     fun noneSettingKeepsSessionInactiveOnConnect() {
         setAction("none")
-        mediaSession.attach(service)
+        mediaSession.attach(state)
 
         state.value = SessionState.Connected
 
@@ -108,7 +104,7 @@ class MumlaMediaSessionTest {
 
     @Test
     fun switchingToNoneWhileConnectedReleasesSessionAndBackRestoresIt() {
-        mediaSession.attach(service)
+        mediaSession.attach(state)
         state.value = SessionState.Connected
         assertThat(mediaSession.isActive).isTrue()
 
@@ -184,7 +180,7 @@ class MumlaMediaSessionTest {
 
     @Test
     fun attachActivatesOnConnectedAndDeactivatesOnDisconnected() {
-        mediaSession.attach(service)
+        mediaSession.attach(state)
         assertThat(mediaSession.isActive).isFalse()
 
         state.value = SessionState.Connected
@@ -197,7 +193,7 @@ class MumlaMediaSessionTest {
     /** A lost connection deactivates too, even though a reconnect may follow. */
     @Test
     fun aLostConnectionDeactivates() {
-        mediaSession.attach(service)
+        mediaSession.attach(state)
         state.value = SessionState.Connected
 
         state.value = SessionState.ConnectionLost(1_000, 1, null)
@@ -208,7 +204,7 @@ class MumlaMediaSessionTest {
     /** MediaSessionCompat must be driven from a looper thread, so a change elsewhere is posted. */
     @Test
     fun aStateChangeOffTheMainThreadIsAppliedOnTheMainLooper() {
-        mediaSession.attach(service)
+        mediaSession.attach(state)
         state.value = SessionState.Connected
         assertThat(mediaSession.isActive).isTrue()
 
@@ -223,7 +219,7 @@ class MumlaMediaSessionTest {
 
     @Test
     fun detachStopsFollowingTheStateAndDeactivates() {
-        mediaSession.attach(service)
+        mediaSession.attach(state)
         state.value = SessionState.Connected
 
         mediaSession.detach()
@@ -249,7 +245,7 @@ class MumlaMediaSessionTest {
         val registered = slot<SharedPreferences.OnSharedPreferenceChangeListener>()
         val unregistered = slot<SharedPreferences.OnSharedPreferenceChangeListener>()
 
-        detached.attach(service)
+        detached.attach(state)
         detached.detach()
 
         verify(exactly = 1) { prefs.registerOnSharedPreferenceChangeListener(capture(registered)) }
@@ -276,7 +272,7 @@ class MumlaMediaSessionTest {
 
     @Test
     fun switchingToNoneStopsTalking() {
-        mediaSession.attach(service)
+        mediaSession.attach(state)
         state.value = SessionState.Connected
         target.setTalking(true)
 
@@ -303,7 +299,7 @@ class MumlaMediaSessionTest {
     /** The preference listener does not filter by key; an unrelated change must change nothing. */
     @Test
     fun anUnrelatedPreferenceChangeLeavesTheSessionAndTalkingAlone() {
-        mediaSession.attach(service)
+        mediaSession.attach(state)
         state.value = SessionState.Connected
         val token = mediaSession.sessionToken
         target.setTalking(true)
@@ -341,7 +337,7 @@ class MumlaMediaSessionTest {
      */
     @Test
     fun onDisconnectedTheTalkingStateIsLeftToStreamA() {
-        mediaSession.attach(service)
+        mediaSession.attach(state)
         state.value = SessionState.Connected
         target.setTalking(true)
 
@@ -356,7 +352,7 @@ class MumlaMediaSessionTest {
     @Test
     fun switchingAwayFromNoneDoesNotStopTalking() {
         setAction("none")
-        mediaSession.attach(service)
+        mediaSession.attach(state)
         state.value = SessionState.Connected
         target.setTalking(true)
 

@@ -18,24 +18,28 @@
 package se.lublin.humla
 
 import com.google.common.truth.Truth.assertThat
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.AudioConfig
 import se.lublin.humla.audio.AudioSettings
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.testutil.testSession
 
 /** The configured VAD settings reach the running microphone configuration. */
 @RunWith(RobolectricTestRunner::class)
-class HumlaServiceVadConfigTest {
-    private fun service(): HumlaService =
-        Robolectric.buildService(HumlaService::class.java).create().get()
+class HumlaSessionVadConfigTest {
+    private val sessions = mutableListOf<HumlaSession>()
 
-    private fun inputMode(service: HumlaService) =
-        service.audio.activityInputMode
+    @After
+    fun tearDown() = sessions.forEach { it.close() }
+
+    private fun service(): HumlaSession = testSession().also { sessions += it }
+
+    private fun inputMode(service: HumlaSession) = service.audio.activityInputMode
 
     @Test
     fun `the whole vad configuration reaches the live detector`() {
@@ -71,6 +75,6 @@ class HumlaServiceVadConfigTest {
 
         service.configure(SessionConfig(audio = AudioSettings(vad = VadConfig.probability(0.8f, 0.2f, 120L))))
 
-        assertThat(service.getAudioConfigForTest()).isEqualTo(AudioConfig())
+        assertThat(service.audio.config).isEqualTo(AudioConfig())
     }
 }

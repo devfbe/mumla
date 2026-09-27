@@ -40,11 +40,13 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.audio.routing.PreferredAudioDevice
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubState
 
 /**
  * The toolbar's audio chooser: "Automatic" and the devices on offer, the saved one ticked
@@ -63,8 +65,7 @@ class AudioDeviceMenuTest {
     private lateinit var app: Application
     private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var chooser: AudioDeviceMenu
-    private lateinit var service: IMumlaService
-    private var boundService: IMumlaService? = null
+    private var current: IHumlaSession? = null
     private lateinit var session: IHumlaSession
     private lateinit var audioManager: AudioManager
     private val settings: Settings get() = Settings.getInstance(app)
@@ -81,17 +82,15 @@ class AudioDeviceMenuTest {
             ),
         )
 
-        service = mockk(relaxed = true)
-        session = mockk(relaxed = true)
-        service.stubConnected(session)
-        boundService = service
+        session = mockk<IHumlaSession>(relaxed = true).stubConnected()
+        current = session
         every { session.audioDevices } returns listOf(earpiece, speaker, headset)
         every { session.activeAudioDevice } returns headset
         every { session.isEchoCancellationEnabled } returns false
 
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         chooser = AudioDeviceMenu(controller.get(), settings) {
-            boundService?.takeIf { it.isConnected }?.session
+            current?.takeIf { it.isConnected }
         }
     }
 
@@ -107,7 +106,7 @@ class AudioDeviceMenuTest {
         }
 
     private fun disconnected() {
-        every { service.isConnected } returns false
+        session.stubState(SessionState.Disconnected())
     }
 
     private fun tap(item: MenuItem): Boolean = chooser.onMenuItemSelected(item)
@@ -289,7 +288,7 @@ class AudioDeviceMenuTest {
 
     @Test
     fun withoutAServiceTheChooserListsThePlatformsDevices() {
-        boundService = null
+        current = null
 
         val menu = prepared()
 

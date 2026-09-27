@@ -14,7 +14,6 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.idleMainLooper
@@ -24,7 +23,7 @@ import se.lublin.mumla.testing.stubConnected
 class AccessTokenFragmentTest {
     private val session = mockk<IHumlaSession>(relaxed = true)
     private val activity = Robolectric.buildActivity(ServiceHostActivity::class.java).setup().get().also {
-        it.bind(mockk<IMumlaService>(relaxed = true).stubConnected(session))
+        it.bind(session.stubConnected())
     }
     private val fragment = AccessTokenFragment.newInstance(SERVER)
 

@@ -23,14 +23,12 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.Window
 import androidx.appcompat.view.menu.MenuBuilder
-import androidx.lifecycle.ViewModelProvider
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,11 +47,10 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.ChannelFragment
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
-import se.lublin.mumla.testing.stubEvents
-import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.stubState
 
 /**
  * The audio chooser is in the toolbar of every main screen, with or without a connection: the
@@ -67,21 +64,15 @@ class MumlaActivityAudioDeviceMenuTest {
     private val audioManager = app.getSystemService(AudioManager::class.java)
     private val settings get() = Settings.getInstance(app)
 
-    private val state = MutableStateFlow<SessionState>(SessionState.Disconnected())
-    private val session: IHumlaSession = mockk(relaxed = true)
-    private val service: IMumlaService = mockk(relaxed = true) {
-        every { sessionState } returns state
-        every { isConnected } answers { state.value == SessionState.Connected }
-        every { this@mockk.session } returns this@MumlaActivityAudioDeviceMenuTest.session
+    private val session: IHumlaSession = mockk(relaxed = true) {
         every { targetServer } returns Server(1, "Home", "example.org", 64738, "me", null)
-        every { messageLog } returns MutableStateFlow(emptyList())
     }
+    private val state = session.stubState(SessionState.Disconnected())
     private lateinit var activity: MumlaActivity
 
     @Before
     fun setUp() {
         installDatabase(mockk(relaxed = true))
-        service.stubEvents()
         shadowOf(audioManager).setAvailableCommunicationDevices(
             listOf(
                 platformDevice(11, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE),
@@ -102,13 +93,13 @@ class MumlaActivityAudioDeviceMenuTest {
         every { productName } returns "Robolectric"
     }
 
-    /** Starts the activity on the drawer screen [screen], with the service bound unless [bind] is false. */
+    /** Starts the activity on the drawer screen [screen], with the session current unless [bind] is false. */
     private fun launch(screen: Int, bind: Boolean = true) {
         val intent = Intent(app, MumlaActivity::class.java).putExtra(MainScreen.EXTRA_SCREEN, screen)
         activity = Robolectric.buildActivity(MumlaActivity::class.java, intent).setup().get()
         idleMainLooper()
         ShadowDialog.getLatestDialog()?.dismiss() // the first-run guide
-        if (bind) ViewModelProvider(activity)[ServiceViewModel::class.java].attach(service)
+        if (bind) installSession(session)
         idleMainLooper()
     }
 

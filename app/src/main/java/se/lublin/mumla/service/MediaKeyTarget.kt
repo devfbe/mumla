@@ -4,7 +4,7 @@ import se.lublin.humla.audio.TransmitMode
 
 /** The part of a Mumla session a headset/media button may act on. */
 interface MediaKeyTarget {
-    /** True while the server session is synchronized (IHumlaService.isConnected). */
+    /** True while the server session is synchronized. */
     val isConnected: Boolean
 
     val transmitMode: TransmitMode

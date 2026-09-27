@@ -5,6 +5,7 @@ import android.view.View
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -15,11 +16,12 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubState
 
 /**
  * The fragment releases only what its own talk button is holding; transmission switched on
@@ -29,7 +31,6 @@ import se.lublin.mumla.testing.stubConnected
 class ChannelFragmentTalkStateTest {
 
     private lateinit var session: IHumlaSession
-    private lateinit var service: IMumlaService
     private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var fragment: ChannelFragment
 
@@ -43,10 +44,10 @@ class ChannelFragmentTalkStateTest {
             .putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT)
             .commit()
         session = mockk(relaxed = true)
-        service = mockk<IMumlaService>(relaxed = true).stubConnected(session)
+        session.stubConnected()
         every { session.isTalking } returns true
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        controller.get().bind(service)
+        controller.get().bind(session)
         fragment = ChannelFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(fragment, "channel").commitNow()
@@ -63,6 +64,9 @@ class ChannelFragmentTalkStateTest {
             .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
             .edit().putBoolean(Settings.PTT_TOGGLE.key, toggle).commit()
     }
+
+    /** Forgets what the session was told so far, so what follows is checked on its own. */
+    private fun forgetCalls() = clearMocks(session, answers = false)
 
     private fun touch(action: Int) {
         talkButton.dispatchTouchEvent(MotionEvent.obtain(0L, 0L, action, 0f, 0f, 0))
@@ -88,6 +92,7 @@ class ChannelFragmentTalkStateTest {
     fun pausingAfterTheButtonWasReleasedSilencesNothing() {
         touch(MotionEvent.ACTION_DOWN)
         touch(MotionEvent.ACTION_UP)
+        forgetCalls()
 
         controller.pause()
 
@@ -120,7 +125,8 @@ class ChannelFragmentTalkStateTest {
 
         touch(MotionEvent.ACTION_CANCEL)
 
-        verify(exactly = 1) { service.onTalkKeyUp() }
+        verify(exactly = 1) { session.setTalkingState(false) }
+        forgetCalls()
         controller.pause()
         verify(exactly = 0) { session.setTalkingState(false) }
     }
@@ -128,10 +134,10 @@ class ChannelFragmentTalkStateTest {
     @Test
     fun theButtonStillDrivesPushToTalk() {
         touch(MotionEvent.ACTION_DOWN)
-        verify(exactly = 1) { service.onTalkKeyDown() }
+        verify(exactly = 1) { session.setTalkingState(true) }
 
         touch(MotionEvent.ACTION_UP)
-        verify(exactly = 1) { service.onTalkKeyUp() }
+        verify(exactly = 1) { session.setTalkingState(false) }
     }
 
     @Test
@@ -167,7 +173,7 @@ class ChannelFragmentTalkStateTest {
     }
 
     /**
-     * In toggle mode `onTalkKeyUp()` is the action itself, so a cancel must not be treated as an
+     * In toggle mode the release is the action itself, so a cancel must not be treated as an
      * up or it would switch the microphone on after the user aborted. The drawer drag zone and the
      * system back gesture both synthesize this cancel.
      */
@@ -178,7 +184,7 @@ class ChannelFragmentTalkStateTest {
 
         touch(MotionEvent.ACTION_CANCEL)
 
-        verify(exactly = 0) { service.onTalkKeyUp() }
+        verify(exactly = 0) { session.setTalkingState(any()) }
     }
 
     /** `onPause` does not release in toggle mode either. */
@@ -190,7 +196,6 @@ class ChannelFragmentTalkStateTest {
 
         controller.pause()
 
-        verify(exactly = 0) { service.onTalkKeyUp() }
         verify(exactly = 0) { session.setTalkingState(any()) }
     }
 
@@ -208,13 +213,10 @@ class ChannelFragmentTalkStateTest {
         verify(exactly = 0) { session.setTalkingState(false) }
     }
 
-    /**
-     * `session` throws when `isConnected` is false, so a pause after disconnect must not
-     * reach for it.
-     */
+    /** Without a connection there is nothing a pause could release. */
     @Test
     fun pausingOnAHeldButtonWhileDisconnectedReleasesNothing() {
-        every { service.isConnected } returns false
+        session.stubState(SessionState.Disconnected())
         touch(MotionEvent.ACTION_DOWN)
 
         controller.pause()

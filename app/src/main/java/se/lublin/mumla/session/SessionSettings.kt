@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.service
+package se.lublin.mumla.session
 
 import android.content.Context
 import se.lublin.humla.audio.AudioSettings
@@ -31,8 +31,8 @@ import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.util.MumlaTrustStore
 
 /**
- * Maps the user's settings onto the [SessionConfig] the service runs with.
- * `MumlaServiceAudioPreferencesTest` checks every key in `settings_audio.xml` is in [AUDIO_KEYS]
+ * Maps the user's settings onto the [SessionConfig] a session runs with.
+ * `SessionSettingsSyncTest` checks every key in `settings_audio.xml` is in [AUDIO_KEYS]
  * or explicitly exempt, so a new switch cannot be left unwired.
  */
 object SessionSettings {

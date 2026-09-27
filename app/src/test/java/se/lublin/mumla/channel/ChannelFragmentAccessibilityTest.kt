@@ -41,7 +41,6 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
@@ -55,7 +54,6 @@ class ChannelFragmentAccessibilityTest {
     private val self = FakeUser(SESSION)
     private lateinit var fragment: ChannelFragment
     private lateinit var session: IHumlaSession
-    private lateinit var service: IMumlaService
     private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var events: MutableSharedFlow<HumlaEvent>
 
@@ -65,11 +63,11 @@ class ChannelFragmentAccessibilityTest {
         session = mockk(relaxed = true)
         every { session.sessionId } returns SESSION
         every { session.sessionUser } returns self
-        service = mockk<IMumlaService>(relaxed = true).stubConnected(session)
-        events = service.stubEvents()
+        session.stubConnected()
+        events = session.stubEvents()
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         val activity = controller.get()
-        activity.bind(service)
+        activity.bind(session)
         fragment = ChannelFragment()
         activity.supportFragmentManager.beginTransaction().add(fragment, "channel").commitNow()
         idleMainLooper()
@@ -103,11 +101,11 @@ class ChannelFragmentAccessibilityTest {
     fun anAccessibilityClickStartsAndStopsTransmitting() {
         every { session.isTalking } returns false
         assertThat(clickForAccessibility()).isTrue()
-        verify(exactly = 1) { service.onTalkKeyDown() }
+        verify(exactly = 1) { session.setTalkingState(true) }
 
         every { session.isTalking } returns true
         clickForAccessibility()
-        verify(exactly = 1) { service.onTalkKeyUp() }
+        verify(exactly = 1) { session.setTalkingState(false) }
     }
 
     @Test

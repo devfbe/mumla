@@ -26,7 +26,6 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.session.HumlaEvent
@@ -78,11 +77,10 @@ class UserInfoTest {
     @Test
     fun theDialogRequestsStatsShowsThemAndRefreshesWhileOpen() {
         val context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
-        val session = mockk<IHumlaSession>(relaxed = true)
-        val service = mockk<IHumlaService>(relaxed = true).stubConnected(session)
-        val events = service.stubEvents()
+        val session = mockk<IHumlaSession>(relaxed = true).stubConnected()
+        val events = session.stubEvents()
 
-        val dialog = showUserInfoDialog(context, service, FakeUser(7, "Ann"))
+        val dialog = showUserInfoDialog(context, session, FakeUser(7, "Ann"))
         idleMainLooper()
         verify(exactly = 1) { session.requestUserStats(7) }
         val text = dialog.findViewById<TextView>(R.id.user_info_text)!!

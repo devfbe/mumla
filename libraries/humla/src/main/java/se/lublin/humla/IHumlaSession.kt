@@ -1,21 +1,67 @@
 package se.lublin.humla
 
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.Message
+import se.lublin.humla.model.Server
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.session.SessionState
+import se.lublin.humla.session.inMainThreadSlices
 import se.lublin.humla.util.VoiceTargetMode
 
 /**
- * A live connection to the server. Unless stated otherwise, members throw [IllegalStateException]
- * while not connected or not synchronized.
+ * One session with a server: a connection and its automatic reconnects. The lifecycle members work
+ * in every state; unless stated otherwise, the others throw [IllegalStateException] while not
+ * synchronized. Main thread, except for collecting [state] and [events].
  */
 @Suppress("TooManyFunctions") // The protocol's whole client API.
-interface IHumlaSession {
+interface IHumlaSession : AutoCloseable {
+    /** Whether the session is connected, and why it is not. */
+    val state: StateFlow<SessionState>
+
+    /**
+     * What happens in the session, emitted from any thread. There is no replay: collect before
+     * acting on a result. Collect on the main thread through [inMainThreadSlices] to keep the UI
+     * responsive during bursts.
+     */
+    val events: SharedFlow<HumlaEvent>
+
+    /** The configuration last passed to [configure]. */
+    val config: SessionConfig
+
+    /** The server of this session. */
+    val targetServer: Server?
+
+    /** The `AudioDeviceInfo` type voice is routed to; null while the platform decides. */
+    val audioRoute: StateFlow<Int?>
+
+    /**
+     * Replaces the configuration. Audio settings apply live, connection settings on the next
+     * connection.
+     * @return true if a reconnect is required for the changes to take effect.
+     */
+    fun configure(config: SessionConfig): Boolean
+
+    /** Connects to the configured server. Ignored while connecting or connected. */
+    fun connect()
+
+    /** Ends the session; a no-op once it has ended. */
+    fun disconnect()
+
+    /** Gives up an automatic reconnect that is waiting or in flight; the reason stays in [state]. */
+    fun cancelReconnect()
+
+    /** Disconnects and releases the session's threads and platform callbacks. The session is unusable afterwards. */
+    override fun close()
+
     /** The TCP round trip in milliseconds. */
     val tcpLatency: Long
 
@@ -141,8 +187,10 @@ interface IHumlaSession {
 
     fun kickBanUser(session: Int, reason: String?, ban: Boolean)
 
+    /** Sends [message] to [session]; the returned message is also published as `MessageSent`. */
     fun sendUserTextMessage(session: Int, message: String): Message
 
+    /** Sends [message] to [channel], and with [tree] to its subchannels; published as `MessageSent`. */
     fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message
 
     fun setUserComment(session: Int, comment: String?)

@@ -54,7 +54,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.AndroidAudioTrackSink
 import se.lublin.mumla.audio.AudioTestSession
 import se.lublin.mumla.audio.PcmPlaybackSinkFactory
-import se.lublin.mumla.service.SessionSettings
+import se.lublin.mumla.session.SessionSettings
 import se.lublin.mumla.util.changes
 
 /** The audio settings screen; the decisions live in [AudioSettingsPolicy], this is the wiring. */

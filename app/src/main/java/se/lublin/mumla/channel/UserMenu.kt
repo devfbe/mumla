@@ -24,11 +24,11 @@ import android.view.View
 import android.widget.EditText
 import androidx.fragment.app.FragmentManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IUser
 import se.lublin.humla.net.Permissions
 import se.lublin.mumla.R
+import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.channel.comment.UserCommentFragment
 import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.util.flattenChannels
@@ -40,13 +40,13 @@ import se.lublin.mumla.util.flattenChannels
 class UserMenu(
     private val context: Context,
     private val user: IUser,
-    private val service: IHumlaService,
+    private val humlaSession: IHumlaSession,
     private val fragmentManager: FragmentManager,
     private val onLocalStateChanged: (IUser) -> Unit,
 ) : PermissionsPopupMenu.IOnMenuPrepareListener {
 
     /** The session while connected; the menu acts on nothing else. */
-    private val session: IHumlaSession? get() = service.takeIf { it.isConnected }?.session
+    private val session: IHumlaSession? get() = humlaSession.takeIf { it.isConnected }
 
     @Suppress("CyclomaticComplexMethod", "ReturnCount") // Guard clauses, then one rule per item.
     override fun onMenuPrepare(menu: Menu, permissions: Int) {
@@ -118,7 +118,7 @@ class UserMenu(
                     R.string.confirm,
                 ) { session?.setUserComment(user.session, "") }
             R.id.context_register -> session?.registerUser(user.session)
-            R.id.context_info -> showUserInfoDialog(context, service, user)
+            R.id.context_info -> showUserInfoDialog(context, humlaSession, user)
             else -> return false
         }
         return true
@@ -154,7 +154,7 @@ class UserMenu(
 
     fun showPopup(anchor: View) {
         val channel = user.channel ?: return
-        PermissionsPopupMenu(context, anchor, R.menu.context_user, this, channel, service).show()
+        PermissionsPopupMenu(context, anchor, R.menu.context_user, this, channel, humlaSession).show()
     }
 
     private companion object {
