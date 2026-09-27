@@ -184,19 +184,24 @@ class PublicServerListFragmentTest {
     }
 
     @Test
-    fun theSortControlReordersByPing() {
+    fun repliesUpdateTheRowsInPlaceAndOnlyTheSortControlReorders() {
         val fragment = showList(
             pinger(
                 users = mapOf("Bravo" to 1, "alpha" to 9, "Charlie" to 5),
                 latency = mapOf("Bravo" to 5, "alpha" to 80, "Charlie" to 20),
             ),
         )
-        fragment.grid().laidOutRows()
-        drainMainUntil(description = "by users") { fragment.shownNames() == listOf("alpha", "Charlie", "Bravo") }
+        drainMainUntil(description = "the replies in the rows") {
+            val users = fragment.grid().laidOutRows().map { it.findViewById<TextView>(R.id.server_row_usercount).text }
+            users.count { it.isNotEmpty() } == servers.size
+        }
+        assertThat(fragment.shownNames()).containsExactly("Bravo", "alpha", "Charlie").inOrder()
 
         fragment.requireView().findViewById<Button>(R.id.server_sort_ping).performClick()
-
         drainMainUntil(description = "by ping") { fragment.shownNames() == listOf("Bravo", "Charlie", "alpha") }
+
+        fragment.requireView().findViewById<Button>(R.id.server_sort_users).performClick()
+        drainMainUntil(description = "by users") { fragment.shownNames() == listOf("alpha", "Charlie", "Bravo") }
     }
 
     @Test
@@ -248,7 +253,12 @@ class PublicServerListFragmentTest {
     fun overTorTheListIsNotDownloadedAndANoticeExplainsWhy() {
         prefs.edit().putBoolean("useTor", true).commit()
 
-        val fragment = showFragment(servers)
+        val fragment = PublicServerListFragment()
+        fragment.fetcher = mockk { coEvery { fetch() } answers { downloads.incrementAndGet(); servers } }
+        activity.host(fragment)
+        assertThat(fragment.visible(R.id.server_list_tor_notice)).isTrue()
+        assertThat(fragment.visible(R.id.serverProgress)).isFalse()
+        idleMainLooper()
 
         assertThat(downloads.get()).isEqualTo(0)
         val notice = fragment.requireView().findViewById<TextView>(R.id.server_list_tor_notice)

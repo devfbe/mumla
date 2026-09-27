@@ -24,11 +24,16 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -39,6 +44,7 @@ import se.lublin.humla.model.Server
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
+import kotlin.time.Duration.Companion.seconds
 
 /** Where a server answers pings; servers at one address share a reply. */
 data class ServerAddress(val host: String, val port: Int)
@@ -118,7 +124,8 @@ class FavouriteServersViewModel(
 /**
  * The public server list: downloaded once (never over Tor, which the download would bypass),
  * filtered and sorted as the user asks (kept in [savedState]), pinged, matched and favourited. The
- * list is arranged on [arrangeDispatcher]. Main thread.
+ * list is arranged on [arrangeDispatcher], by the replies at hand when it loads, when the filter
+ * changes and once when the first replies settle; later replies do not move the cards. Main thread.
  */
 class PublicServersViewModel(
     private val repository: MumlaRepository,
@@ -153,15 +160,22 @@ class PublicServersViewModel(
     )
     val filter: StateFlow<PublicServerFilter> = mutableFilter.asStateFlow()
 
-    /** The download's state; [State.Shown] holds every server here, unfiltered. */
-    private val download = MutableStateFlow<State>(State.Loading)
+    private val initialState = if (torEnabled()) State.TorBlocked else State.Loading
 
-    val state: StateFlow<State> = combine(download, mutableFilter, pings.replies) { download, filter, replies ->
+    /** The download's state; [State.Shown] holds every server here, unfiltered. */
+    private val download = MutableStateFlow(initialState)
+
+    /** The ping replies the list is arranged by. */
+    private val arrangedBy = MutableStateFlow<Map<ServerAddress, ServerInfoResponse>>(emptyMap())
+
+    private var settling: Job? = null
+
+    val state: StateFlow<State> = combine(download, mutableFilter, arrangedBy) { download, filter, replies ->
         when (download) {
             is State.Shown -> download.copy(servers = arrangePublicServers(download.servers, filter, replies))
             else -> download
         }
-    }.flowOn(arrangeDispatcher).stateIn(viewModelScope, SharingStarted.Eagerly, State.Loading)
+    }.flowOn(arrangeDispatcher).stateIn(viewModelScope, SharingStarted.Eagerly, initialState)
 
     init {
         load()
@@ -177,8 +191,19 @@ class PublicServersViewModel(
             download.value = State.Loading
             viewModelScope.launch {
                 val servers = fetcher.fetch()
+                arrangedBy.value = pings.replies.value
                 download.value = servers?.let { State.Shown(it, countriesOf(it)) } ?: State.DownloadFailed
+                if (servers != null) arrangeWhenRepliesSettle()
             }
+        }
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun arrangeWhenRepliesSettle() {
+        settling?.cancel()
+        settling = viewModelScope.launch {
+            pings.replies.filter { it.isNotEmpty() }.debounce(REPLIES_SETTLE_TIME).first()
+            arrangedBy.value = pings.replies.value
         }
     }
 
@@ -198,6 +223,7 @@ class PublicServersViewModel(
     fun setSort(sort: PublicServerSort) = updateFilter { it.copy(sort = sort) }
 
     private fun updateFilter(change: (PublicServerFilter) -> PublicServerFilter) {
+        arrangedBy.value = pings.replies.value
         val filter = mutableFilter.updateAndGet(change)
         savedState[KEY_QUERY] = filter.query
         savedState[KEY_COUNTRIES] = ArrayList(filter.countries)
@@ -217,6 +243,9 @@ class PublicServersViewModel(
         private const val KEY_QUERY = "query"
         private const val KEY_COUNTRIES = "countries"
         private const val KEY_SORT = "sort"
+
+        /** How long no new reply may arrive before the pinged list counts as settled. */
+        private val REPLIES_SETTLE_TIME = 1.seconds
 
         fun create(
             app: Application,

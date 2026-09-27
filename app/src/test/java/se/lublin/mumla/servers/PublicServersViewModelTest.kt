@@ -1,8 +1,10 @@
 package se.lublin.mumla.servers
 
+import android.os.Looper
 import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
@@ -10,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.Server
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.db.MumlaDatabase
@@ -17,6 +20,7 @@ import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.testing.drainMainUntil
 import java.nio.ByteBuffer
+import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
 class PublicServersViewModelTest {
@@ -82,12 +86,27 @@ class PublicServersViewModelTest {
     }
 
     @Test
-    fun `arriving ping replies reorder the list by users`() {
+    fun `arriving ping replies do not reorder the list, a sort change does`() {
+        val list = viewModel(pinger = pinger { name -> if (name == "Charlie") 5 else 1 })
+        servers.forEach { list.pings.request(it.server) }
+        drainMainUntil(description = "all replies") { list.pings.replies.value.size == servers.size }
+        assertThat(list.shown()).containsExactly("Bravo", "alpha", "Charlie").inOrder()
+
+        list.setSort(PublicServerSort.PING)
+        list.setSort(PublicServerSort.USERS)
+        idleMainLooper()
+
+        assertThat(list.shown()).containsExactly("Charlie", "Bravo", "alpha").inOrder()
+    }
+
+    @Test
+    fun `the list is arranged once more when the first replies settle`() {
         val list = viewModel(pinger = pinger { name -> if (name == "Charlie") 5 else 1 })
         servers.forEach { list.pings.request(it.server) }
         drainMainUntil(description = "all replies") { list.pings.replies.value.size == servers.size }
 
-        drainMainUntil(description = "Charlie first") { list.shown().first() == "Charlie" }
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+
         assertThat(list.shown()).containsExactly("Charlie", "Bravo", "alpha").inOrder()
     }
 
@@ -128,10 +147,12 @@ class PublicServersViewModelTest {
 
     @Test
     fun `over Tor nothing is downloaded or pinged`() {
-        val list = viewModel(tor = true)
+        val fetcher = mockk<PublicServerFetcher>()
+        val list = PublicServersViewModel(repository, fetcher, { true }, SavedStateHandle())
 
         assertThat(list.state.value).isEqualTo(PublicServersViewModel.State.TorBlocked)
         assertThat(list.pings.allowed()).isFalse()
+        coVerify(exactly = 0) { fetcher.fetch() }
     }
 
     @Test
