@@ -80,7 +80,6 @@ class LayoutAccessibilityTest {
         val ICON_BUTTONS = mapOf(
             "channel_row" to listOf(R.id.channel_row_expand, R.id.channel_row_join, R.id.channel_row_more),
             "channel_user_row" to listOf(R.id.user_row_more),
-            "fragment_channel" to listOf(R.id.target_panel_cancel),
             "server_list_row" to listOf(R.id.server_row_more),
             "public_server_list_row" to listOf(R.id.server_row_more),
             "overlay" to listOf(R.id.overlay_talk, R.id.overlay_close, R.id.overlay_drag),

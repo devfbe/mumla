@@ -61,6 +61,7 @@ TEXT_TOOL = re.compile(
 )
 RECURSIVE_SEARCH = re.compile(r"(^|[\s;|&(`$])(rg|ag|ack)\b|\bgrep\b[^|;&\n]*\s-\w*[rR]|\bfind\b|\btree\b")
 GIT_CMD = re.compile(r"\bgit\s+[^|;&\n]*")
+LEADING_CD = re.compile(r"^\s*cd\s+(\S+)\s*(?:&&|;)")
 GIT_MESSAGE = re.compile(r"\s-m\s*(\"(?:[^\"\\]|\\.)*\"|'[^']*')", re.S)
 HEREDOC = re.compile(
     r"^(?P<head>[^\n]*<<-?\s*['\"]?(?P<tag>\w+)['\"]?[^\n]*)\n.*?\n[ \t]*(?P=tag)[ \t]*$", re.M | re.S
@@ -104,6 +105,9 @@ def strip_data(cmd: str) -> str:
 
 def bash_hits_sources(cmd: str, cwd: str) -> bool:
     cmd = strip_data(cmd)
+    leading_cd = LEADING_CD.match(cmd)
+    if leading_cd:
+        cwd = os.path.realpath(os.path.join(cwd, os.path.expanduser(leading_cd.group(1).strip("'\""))))
     if not TEXT_TOOL.search(cmd):
         return False
     rest = GIT_CMD.sub(" ", cmd)
