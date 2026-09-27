@@ -36,14 +36,6 @@ class PinnedChannelsTest {
         assertThat(stored).containsExactly(1, 2).inOrder()
     }
 
-    @Test
-    fun `whenLoaded answers at once once the pins are read`() {
-        var seen: Set<Int>? = null
-        pins.whenLoaded(SERVER) { seen = it }
-
-        assertThat(seen).containsExactly(3, 1).inOrder()
-    }
-
     private companion object {
         const val SERVER = 5L
     }

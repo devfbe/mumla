@@ -17,12 +17,9 @@
 package se.lublin.mumla.db
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -59,20 +56,6 @@ class PinnedChannels internal constructor(
                     getPinnedChannels(serverId)
                 }.toSet()
             }
-        }
-    }
-
-    /**
-     * Calls [block] with the pinned channels of [serverId]: at once if they are read already, else
-     * on the main thread once they are.
-     */
-    fun whenLoaded(serverId: Long, block: (Set<Int>) -> Unit) {
-        val flow = flow(serverId)
-        val loaded = flow.value
-        if (loaded != null) {
-            block(loaded)
-        } else {
-            scope.launch(Dispatchers.Main.immediate) { block(flow.filterNotNull().first()) }
         }
     }
 

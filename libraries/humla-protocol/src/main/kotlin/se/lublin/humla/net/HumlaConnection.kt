@@ -24,7 +24,6 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import se.lublin.humla.exception.HumlaException
@@ -312,8 +311,8 @@ internal class HumlaConnection(
         // Nothing started means nothing to tear down or report.
         if (previous != ConnectionState.Idle) {
             // Behind whatever the protocol context is running, so it never races a transport being
-            // built; not cancellable, as the scope it runs in has just been cancelled.
-            teardown = scope.launch(NonCancellable) {
+            // built; outside the connection's job, which has just been cancelled.
+            teardown = CoroutineScope(scope.coroutineContext.minusKey(Job)).launch {
                 tcp?.disconnect()
                 tcp = null
                 udp?.disconnect()
