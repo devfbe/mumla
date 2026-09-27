@@ -46,18 +46,11 @@ class AudioControllerTest {
          * controller would still be blocked. Bounded so a regression fails instead of hanging.
          */
         @Volatile var shutdownGate: CountDownLatch? = null
-        /**
-         * A private field, not a `var`: `var warningListener` would generate
-         * `setWarningListener(Function1)` and clash with the interface's own method.
-         */
-        @Volatile private var warning: ((String) -> Unit)? = null
-        val warningListener: ((String) -> Unit)? get() = warning
         val targetIds = CopyOnWriteArrayList<Byte>()
         override val tcpHandler = TcpMessageHandler {}
         override val voiceHandler = VoicePacketHandler { }
         override val currentBandwidth: Int = 12_345
         override fun setVoiceTargetId(id: Byte) { targetIds += id }
-        override fun setWarningListener(listener: ((String) -> Unit)?) { warning = listener }
         override fun shutdown() {
             shutdownThread = Thread.currentThread()
             shutdownGate?.await(GATE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -98,14 +91,13 @@ class AudioControllerTest {
         override fun removeVoiceHandler(handler: VoicePacketHandler) { udp.remove(handler) }
     }
 
-    private class RecordingListener : AudioController.Listener {
-        val started = AtomicInteger()
+    private class RecordingListener : (String) -> Unit {
         val failures = CopyOnWriteArrayList<String>()
-        val warnings = CopyOnWriteArrayList<String>()
         val threads = CopyOnWriteArrayList<Thread>()
-        override fun onAudioStarted() { started.incrementAndGet(); threads += Thread.currentThread() }
-        override fun onAudioFailed(message: String) { failures += message; threads += Thread.currentThread() }
-        override fun onAudioWarning(message: String) { warnings += message; threads += Thread.currentThread() }
+        override fun invoke(message: String) {
+            failures += message
+            threads += Thread.currentThread()
+        }
     }
 
     private val factory = FakeFactory()
@@ -126,7 +118,7 @@ class AudioControllerTest {
     )
 
     private fun newController(mainHandler: Handler = Handler(Looper.getMainLooper())) = AudioController(
-        AudioHost(context, SilentLogger, encodeListener, outputListener), { factory }, listener, mainHandler,
+        AudioHost(context, SilentLogger, encodeListener, outputListener), factory, listener, mainHandler,
     )
 
     @After
@@ -165,10 +157,7 @@ class AudioControllerTest {
         assertThat(registry.tcp).containsExactly(factory.created[0].tcpHandler)
         assertThat(registry.udp).containsExactly(factory.created[0].voiceHandler)
         assertThat(controller.currentBandwidth).isEqualTo(12_345)
-
-        idleMainWhenSomethingIsPosted()
-        assertThat(listener.started.get()).isEqualTo(1)
-        assertThat(listener.threads).containsExactly(Looper.getMainLooper().thread)
+        assertThat(mainLooper.isIdle).isTrue() // a pipeline that starts reports nothing
     }
 
     @Test
@@ -189,14 +178,12 @@ class AudioControllerTest {
         // stopping, so nothing routes a packet into a dying decoder.
         assertThat(registry.tcp).isEmpty()
         assertThat(registry.udp).isEmpty()
-        assertThat(audio.warningListener).isNull()
         assertThat(callerBlockedMillis).isLessThan(GATE_TIMEOUT_SECONDS * 1_000)
 
         gate.countDown()
         awaitUntil(description = "shutdown finished") { audio.shutdownCalls.get() == 1 }
         assertThat(registry.tcp).isEmpty()
         assertThat(registry.udp).isEmpty()
-        assertThat(audio.warningListener).isNull()
         assertThat(controller.isRunning).isFalse()
         assertThat(controller.currentBandwidth).isEqualTo(-1)
     }
@@ -340,43 +327,19 @@ class AudioControllerTest {
     }
 
     /**
-     * The warning is raised from a foreign thread (the capture thread in production); raised from
-     * the test thread, which is the main thread under Robolectric, inline delivery would look
-     * identical.
-     */
-    @Test
-    fun warningsFromAudioReachTheListenerOnMain() {
-        val audio = startAndAwaitRunning()
-        idleMainWhenSomethingIsPosted() // onAudioStarted
-
-        thread(name = "fake-capture") { audio.warningListener!!.invoke("microphone silenced by the system") }.join()
-
-        assertThat(listener.warnings).isEmpty()
-        idleMainWhenSomethingIsPosted()
-        assertThat(listener.warnings).containsExactly("microphone silenced by the system")
-        assertThat(listener.threads).containsExactly(Looper.getMainLooper().thread, Looper.getMainLooper().thread)
-    }
-
-    /**
-     * The callbacks go to the handler the controller was constructed with. Pinning "not the caller's
+     * The failure goes to the handler the controller was constructed with. Pinning "not the caller's
      * thread" alone would pass for a controller that hard-codes the main looper.
      */
     @Test
-    fun listenerCallbacksRunOnTheSuppliedHandlerRatherThanTheMainLooper() {
+    fun theFailureIsReportedOnTheSuppliedHandlerRatherThanTheMainLooper() {
         val callbackThread = HandlerThread("test-callbacks").apply { start() }
         val other = newController(Handler(callbackThread.looper))
         try {
-            other.start(AudioConfig(), params, registry)
-            awaitUntil(description = "started callback") { listener.started.get() == 1 }
-            val audio = factory.created[0]
-            thread(name = "fake-capture") { audio.warningListener!!.invoke("silenced") }.join()
-            awaitUntil(description = "warning callback") { listener.warnings.isNotEmpty() }
-
             factory.failWith = AudioInitializationException("no microphone")
             other.start(AudioConfig(), params, registry)
             awaitUntil(description = "failure callback") { listener.failures.isNotEmpty() }
 
-            assertThat(listener.threads).containsExactly(callbackThread, callbackThread, callbackThread)
+            assertThat(listener.threads).containsExactly(callbackThread)
             assertThat(mainLooper.isIdle).isTrue()
         } finally {
             other.quit()

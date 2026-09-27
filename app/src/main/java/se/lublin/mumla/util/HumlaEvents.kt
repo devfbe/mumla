@@ -21,15 +21,15 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import se.lublin.humla.IHumlaService
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.inMainThreadSlices
 
 /**
- * Collects [service]'s events in [scope] on the main thread until the returned job or [scope] is
+ * Collects [session]'s events in [scope] on the main thread until the returned job or [scope] is
  * cancelled. Subscribed when this returns; events emitted on the main thread arrive inline.
  */
-fun collectEvents(scope: CoroutineScope, service: IHumlaService, onEvent: (HumlaEvent) -> Unit): Job =
+fun collectEvents(scope: CoroutineScope, session: IHumlaSession, onEvent: (HumlaEvent) -> Unit): Job =
     scope.launch(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) {
-        service.events.inMainThreadSlices().collect(onEvent)
+        session.events.inMainThreadSlices().collect(onEvent)
     }

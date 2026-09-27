@@ -17,13 +17,10 @@
 
 package se.lublin.mumla.app
 
-import android.content.ComponentName
 import android.content.Intent
-import android.content.ServiceConnection
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
-import android.os.IBinder
 import android.util.Log
 import android.view.KeyEvent
 import android.view.Menu
@@ -37,13 +34,19 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentTransaction
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.MumbleURLParser
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionState
+import se.lublin.humla.session.inMainThreadSlices
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
@@ -60,34 +63,30 @@ import se.lublin.mumla.preference.generateDefaultCertificate
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
 import se.lublin.mumla.servers.ServerEditFragment
-import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.service.MumlaService
+import se.lublin.mumla.session.PushToTalk
+import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.ServerRequest
-import se.lublin.mumla.ui.ServiceClient
-import se.lublin.mumla.ui.ServiceViewModel
-import se.lublin.mumla.ui.bindClient
 import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.util.Edge
 import se.lublin.mumla.util.changes
 import se.lublin.mumla.util.padForSystemBars
 import java.net.MalformedURLException
-import java.security.cert.X509Certificate
 
 private const val TAG = "MumlaActivity"
 private const val FALLBACK_SCREEN = DrawerAdapter.ITEM_FAVOURITES
 
 /**
- * The main screen: a drawer to pick between the server lists and the connected server's
- * screens, which it binds [MumlaService] for while started.
+ * The main screen: a drawer to pick between the server lists and the connected server's screens,
+ * which follow the [SessionManager]'s session while started.
  */
 @Suppress("TooManyFunctions") // Framework callbacks, each delegating to the classes that do the work.
 class MumlaActivity :
     AppCompatActivity(),
-    ServiceClient,
     ConnectionDialogs.Listener {
 
-    private val serviceModel: ServiceViewModel by viewModels()
-    private val service: IMumlaService? get() = serviceModel.service.value
+    private val connectRequests: ConnectRequests by viewModels()
+    private val sessions get() = SessionManager.get(this)
     private val repository get() = MumlaRepository.get(this)
 
     private lateinit var settings: Settings
@@ -98,19 +97,6 @@ class MumlaActivity :
 
     /** The dynamic colour setting this activity was themed with. */
     private var themedWithDynamicColors = false
-
-    /** The service [onServiceBound] got, until [onServiceUnbound]. */
-    private var boundService: IMumlaService? = null
-
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            serviceModel.attach((binder as? MumlaService.MumlaBinder)?.service)
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            serviceModel.attach(null)
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         settings = Settings.getInstance(this)
@@ -137,20 +123,29 @@ class MumlaActivity :
             serverName = ::connectedServerName,
             onItemSelected = ::showDrawerFragment,
         )
-        dialogs = ConnectionDialogs(this, settings, this) { service }
-        connectFlow = ConnectFlow(this, settings) { service }
+        dialogs = ConnectionDialogs(this, settings, this, sessions)
+        connectFlow = ConnectFlow(this, settings, sessions)
         batteryPrompt = BatteryOptimizationPrompt(this, settings)
-        addMenuProvider(AudioDeviceMenu(this, settings) { service?.takeIf { it.isConnected }?.session })
+        addMenuProvider(AudioDeviceMenu(this, settings) { sessions.connected })
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setHomeButtonEnabled(true)
 
-        serviceModel.bindClient(this, this)
         supportFragmentManager.setFragmentResultListener(ServerEditFragment.REQUEST_KEY, this) { _, result ->
             onServerEdited(ServerEditFragment.Result.from(result))
         }
-        lifecycleScope.launch { serviceModel.isConnected.collect { backCallback.isEnabled = it } }
         lifecycleScope.launch {
-            serviceModel.connectRequests.collect { request ->
+            // Fragment transactions only while started; each start begins with the current state.
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { sessions.session.collectLatest { session -> if (session != null) followEvents(session) } }
+                var previous: SessionState? = null
+                sessions.state.collect { state ->
+                    onSessionState(previous, state)
+                    previous = state
+                }
+            }
+        }
+        lifecycleScope.launch {
+            connectRequests.requested.collect { request ->
                 when (request) {
                     is ServerRequest.Favourite -> connectFlow.connect(request.server)
                     is ServerRequest.Public -> connectFlow.connectToPublic(request.server)
@@ -198,65 +193,51 @@ class MumlaActivity :
         super.onStart()
         // Changed in the settings screen, which recreates only itself.
         if (settings.isDynamicColorEnabled != themedWithDynamicColors) recreate()
-        bindService(Intent(this, MumlaService::class.java), connection, 0)
+        sessions.setAppVisible(true)
     }
 
     override fun onStop() {
         super.onStop()
         batteryPrompt.dismiss()
-        serviceModel.attach(null)
-        unbindService(connection)
+        sessions.setAppVisible(false)
     }
 
-    /** Suppresses the service's notifications while the activity is visible, which it is while bound. */
-    override fun onServiceBound(service: IMumlaService) {
-        boundService = service
-        service.setSuppressNotifications(true)
-        service.clearChatNotifications()
-        drawer.refresh()
-        if (showsConnectedScreen() && !service.isConnected) showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
-        dialogs.update(service)
-        if (service.isConnected) offerBatteryExemption()
-    }
-
-    override fun onServiceUnbound() {
-        boundService?.setSuppressNotifications(false)
-        boundService = null
-    }
-
-    override fun onServiceEvent(event: HumlaEvent) {
-        val service = service ?: return
-        when (event) {
-            HumlaEvent.Connected -> {
-                val pinned = settings.shouldStartUpInPinnedMode
-                showDrawerFragment(if (pinned) DrawerAdapter.ITEM_PINNED_CHANNELS else DrawerAdapter.ITEM_SERVER)
-                onConnectionChanged(service)
-                offerBatteryExemption()
-            }
-            HumlaEvent.Connecting -> dialogs.update(service)
-            is HumlaEvent.Disconnected -> {
-                if (showsConnectedScreen()) showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
-                onConnectionChanged(service)
-            }
-            is HumlaEvent.TlsHandshakeFailed -> onUntrustedChain(service, event.chain, changed = false)
-            is HumlaEvent.TlsCertificateChanged -> onUntrustedChain(service, event.chain, changed = true)
-            is HumlaEvent.PermissionDenied -> dialogs.showPermissionDenied(NoticeFormatter(this).denial(event))
-            else -> Unit
+    private suspend fun followEvents(session: IHumlaSession) {
+        session.events.inMainThreadSlices().collect { event ->
+            if (event is HumlaEvent.PermissionDenied) dialogs.showPermissionDenied(NoticeFormatter(this).denial(event))
         }
     }
 
-    /** Offers to trust the server's certificate, which is unknown or, if [changed], not the pinned one. */
-    private fun onUntrustedChain(service: IMumlaService, chain: List<X509Certificate>, changed: Boolean) {
-        val server = service.targetServer
-        val certificate = chain.firstOrNull()
-        if (server == null || certificate == null) return
-        dialogs.showUntrustedCertificate(server, certificate, changed)
+    /** [state] follows [previous]; a null [previous] is the state found when the activity started. */
+    private fun onSessionState(previous: SessionState?, state: SessionState) {
+        backCallback.isEnabled = state == SessionState.Connected
+        if (previous == null) {
+            if (showsConnectedScreen() && state != SessionState.Connected) {
+                showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
+            }
+            onConnectionChanged()
+            if (state == SessionState.Connected) offerBatteryExemption()
+            return
+        }
+        when (state) {
+            SessionState.Connected -> if (previous != SessionState.Connected) {
+                val pinned = settings.shouldStartUpInPinnedMode
+                showDrawerFragment(if (pinned) DrawerAdapter.ITEM_PINNED_CHANNELS else DrawerAdapter.ITEM_SERVER)
+                onConnectionChanged()
+                offerBatteryExemption()
+            }
+            SessionState.Connecting, is SessionState.Reconnecting -> dialogs.update()
+            is SessionState.ConnectionLost, is SessionState.Disconnected -> {
+                if (showsConnectedScreen()) showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
+                onConnectionChanged()
+            }
+        }
     }
 
-    private fun onConnectionChanged(service: IMumlaService) {
+    private fun onConnectionChanged() {
         drawer.refresh()
         invalidateOptionsMenu()
-        dialogs.update(service)
+        dialogs.update()
     }
 
     /** Offers the battery exemption, unless a connection dialog is up. */
@@ -272,26 +253,26 @@ class MumlaActivity :
         }
 
     private fun connectedServerName(): String? {
-        val server = service?.takeIf { it.isConnected }?.targetServer ?: return null
+        val server = sessions.connected?.targetServer ?: return null
         return server.name.ifEmpty { server.host }
     }
 
     /** Enabled only while connected, so that back otherwise leaves with the predictive animation. */
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
-            service?.takeIf { it.isConnected }?.let(::confirmDisconnect)
+            sessions.connected?.let(::confirmDisconnect)
         }
     }
 
-    private fun confirmDisconnect(service: IMumlaService) {
-        showConfirmDialog(getString(R.string.disconnectSure, service.targetServer?.name), R.string.confirm) {
-            service.disconnect()
+    private fun confirmDisconnect(session: IHumlaSession) {
+        showConfirmDialog(getString(R.string.disconnectSure, session.targetServer?.name), R.string.confirm) {
+            sessions.disconnect()
             showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
         }
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.findItem(R.id.action_disconnect).isVisible = service?.isConnected == true
+        menu.findItem(R.id.action_disconnect).isVisible = sessions.connected != null
         return super.onPrepareOptionsMenu(menu)
     }
 
@@ -303,7 +284,7 @@ class MumlaActivity :
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when {
         drawer.onOptionsItemSelected(item) -> true
         item.itemId == R.id.action_disconnect -> {
-            service?.disconnect()
+            sessions.disconnect()
             true
         }
         else -> false
@@ -315,18 +296,16 @@ class MumlaActivity :
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        val service = service
-        if (service != null && keyCode == settings.pushToTalkKey) {
-            service.onTalkKeyDown()
+        if (keyCode == settings.pushToTalkKey && sessions.session.value != null) {
+            PushToTalk(settings, sessions).onKeyDown()
             return true
         }
         return super.onKeyDown(keyCode, event)
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        val service = service
-        if (service != null && keyCode == settings.pushToTalkKey) {
-            service.onTalkKeyUp()
+        if (keyCode == settings.pushToTalkKey && sessions.session.value != null) {
+            PushToTalk(settings, sessions).onKeyUp()
             return true
         }
         return super.onKeyUp(keyCode, event)
@@ -367,7 +346,8 @@ class MumlaActivity :
         DrawerAdapter.ITEM_SERVER -> ChannelFragment.newInstance()
         DrawerAdapter.ITEM_PINNED_CHANNELS -> ChannelFragment.newInstance(pinned = true)
         DrawerAdapter.ITEM_INFO -> ServerInfoFragment()
-        DrawerAdapter.ITEM_ACCESS_TOKENS -> service?.targetServer?.id?.let(AccessTokenFragment::newInstance)
+        DrawerAdapter.ITEM_ACCESS_TOKENS ->
+            sessions.session.value?.targetServer?.id?.let(AccessTokenFragment::newInstance)
         DrawerAdapter.ITEM_FAVOURITES -> FavouriteServerListFragment()
         DrawerAdapter.ITEM_PUBLIC -> PublicServerListFragment()
         else -> null

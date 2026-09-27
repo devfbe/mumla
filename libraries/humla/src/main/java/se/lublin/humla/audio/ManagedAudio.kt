@@ -33,9 +33,6 @@ interface ManagedAudio {
     val currentBandwidth: Int
     fun setVoiceTargetId(id: Byte)
 
-    /** Receives user-facing warnings (microphone silenced, decoder errors); null unregisters. */
-    fun setWarningListener(listener: ((String) -> Unit)?)
-
     /**
      * Stops capture and playback. May block for as long as the capture thread takes to notice, so
      * it is only ever called on [AudioController.THREAD_NAME].
@@ -54,7 +51,7 @@ data class AudioSessionParams(
     val udpProtocol: UdpProtocol = UdpProtocol.LEGACY,
 )
 
-/** What every pipeline of a service is built with: the same for each session. */
+/** What every pipeline of a session is built with, across its rebuilds. */
 class AudioHost(
     val context: Context,
     val logger: HumlaLogger,
@@ -76,29 +73,12 @@ object DefaultAudioHandlerFactory : AudioHandlerFactory {
         AudioHandlerAdapter(AudioHandler(host, config, params).apply { start() })
 }
 
-/** Dresses an [AudioHandler] as a [ManagedAudio]; every member but the warning channel delegates. */
+/** Dresses an [AudioHandler] as a [ManagedAudio]. */
 class AudioHandlerAdapter(private val handler: AudioHandler) : ManagedAudio {
-    @Volatile private var warningListener: ((String) -> Unit)? = null
-
     override val tcpHandler: TcpMessageHandler get() = handler
     override val voiceHandler: VoicePacketHandler get() = handler
     override val currentBandwidth: Int get() = handler.currentBandwidth
     override fun setVoiceTargetId(id: Byte) = handler.setVoiceTargetId(id)
-
-    override fun setWarningListener(listener: ((String) -> Unit)?) {
-        warningListener = listener
-    }
-
-    /**
-     * Reports a user-facing audio problem; [AudioController] posts it to the main thread and
-     * `HumlaService` logs it to chat.
-     *
-     * Intended for `CaptureState.Silenced`/`Error` from `handler.captureState`; nothing calls this
-     * in production yet.
-     */
-    fun reportWarning(message: String) {
-        warningListener?.invoke(message)
-    }
 
     override fun shutdown() = handler.shutdown()
 }

@@ -43,6 +43,8 @@ data class AudioSettings(
     val echoCancellationOverrides: Map<AudioDeviceCategory, Boolean> = emptyMap(),
     /** The audio device the user saved; null routes automatically. */
     val preferredDevice: PreferredAudioDevice? = null,
+    /** Take a connected Bluetooth headset automatically, now and whenever one connects. */
+    val bluetoothAutomatic: Boolean = false,
     val pipeline: PipelineSettings = PipelineSettings(),
 ) {
     /**

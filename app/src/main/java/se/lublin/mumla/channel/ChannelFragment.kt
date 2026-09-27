@@ -32,7 +32,6 @@ import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
@@ -40,18 +39,18 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.launch
-import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionState
 import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.FragmentChannelBinding
-import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.ui.ServiceClient
-import se.lublin.mumla.ui.ServiceViewModel
-import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.session.PushToTalk
+import se.lublin.mumla.session.SessionClient
+import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.session.bindClient
 import se.lublin.mumla.util.changes
 import java.util.Locale
 
@@ -62,11 +61,11 @@ import java.util.Locale
 @Suppress("TooManyFunctions") // Framework callbacks, each delegating.
 class ChannelFragment :
     Fragment(),
-    ServiceClient,
+    SessionClient,
     MenuProvider {
 
-    private val serviceModel: ServiceViewModel by activityViewModels()
-    private val service: IMumlaService? get() = serviceModel.service.value
+    private val sessions get() = SessionManager.get(requireContext())
+    private val pushToTalk get() = PushToTalk(requireContext())
 
     private var binding: FragmentChannelBinding? = null
 
@@ -85,7 +84,7 @@ class ChannelFragment :
     /** True if only the user's pinned channels are shown. */
     private val isShowingPinnedChannels get() = arguments?.getBoolean(ARG_PINNED) == true
 
-    override fun onServiceEvent(event: HumlaEvent) {
+    override fun onSessionEvent(event: HumlaEvent) {
         when (event) {
             is HumlaEvent.UserTalkStateUpdated -> onUserTalkStateUpdated(event.user)
             is HumlaEvent.UserStateUpdated -> if (isSelf(event.user)) {
@@ -97,15 +96,14 @@ class ChannelFragment :
         }
     }
 
-    override fun onServiceBound(service: IMumlaService) {
-        if (service.isConnected) {
-            configureTargetPanel()
-            configureInput()
-            announcer.reset()
-            selfUser(service)?.let { self ->
-                announcer.onMuteState(self.isSelfMuted, self.isSelfDeafened)
-                showTalking(self.talkState != TalkState.PASSIVE)
-            }
+    override fun onSessionState(state: SessionState) {
+        if (state != SessionState.Connected) return
+        configureTargetPanel()
+        configureInput()
+        announcer.reset()
+        selfUser()?.let { self ->
+            announcer.onMuteState(self.isSelfMuted, self.isSelfDeafened)
+            showTalking(self.talkState != TalkState.PASSIVE)
         }
     }
 
@@ -132,12 +130,9 @@ class ChannelFragment :
     }
 
     private fun isSelf(user: IUser): Boolean {
-        val service = service?.takeIf { it.isConnected } ?: return false
+        val session = sessions.connected ?: return false
         return try {
-            user.session == service.session.sessionId
-        } catch (e: HumlaDisconnectedException) {
-            Log.d(TAG, "exception in isSelf: $e")
-            false
+            user.session == session.sessionId
         } catch (e: IllegalStateException) {
             Log.d(TAG, "exception in isSelf: $e")
             false
@@ -176,16 +171,16 @@ class ChannelFragment :
     }
 
     private fun toggleTalkingForAccessibility() {
-        val service = service?.takeIf { it.isConnected } ?: return
+        val session = sessions.connected ?: return
         when {
-            settings.isPushToTalkToggle -> service.onTalkKeyUp()
-            service.session.isTalking -> {
+            settings.isPushToTalkToggle -> pushToTalk.onKeyUp()
+            session.isTalking -> {
                 talkButtonHeld = false
-                service.onTalkKeyUp()
+                pushToTalk.onKeyUp()
             }
             else -> {
                 talkButtonHeld = true
-                service.onTalkKeyDown()
+                pushToTalk.onKeyDown()
             }
         }
     }
@@ -194,26 +189,26 @@ class ChannelFragment :
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 talkButtonHeld = true
-                service?.onTalkKeyDown()
+                pushToTalk.onKeyDown()
             }
             MotionEvent.ACTION_UP -> {
                 talkButtonHeld = false
-                service?.onTalkKeyUp()
+                pushToTalk.onKeyUp()
             }
             // A parent taking over the gesture (drawer drag, system back gesture) sends
             // ACTION_CANCEL. In hold mode that must still release the press or transmission
-            // sticks; in toggle mode onTalkKeyUp() is the action itself, and an aborted
+            // sticks; in toggle mode the release is the action itself, and an aborted
             // gesture must not perform it, just as a Button does not click on cancel.
             MotionEvent.ACTION_CANCEL -> {
                 talkButtonHeld = false
-                if (!settings.isPushToTalkToggle) service?.onTalkKeyUp()
+                if (!settings.isPushToTalkToggle) pushToTalk.onKeyUp()
             }
         }
         return true
     }
 
     private fun cancelWhisper() {
-        val session = service?.takeIf { it.isConnected }?.session ?: return
+        val session = sessions.connected ?: return
         if (session.voiceTargetMode == VoiceTargetMode.WHISPER) {
             val target = session.voiceTargetId
             session.voiceTargetId = 0
@@ -244,7 +239,7 @@ class ChannelFragment :
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         if (!bound) {
             bound = true
-            serviceModel.bindClient(this, this)
+            sessions.bindClient(this, this)
         }
     }
 
@@ -272,16 +267,14 @@ class ChannelFragment :
         super.onPause()
         // Release only what this fragment's button holds, so a pause cannot leave it transmitting.
         // A talk state set elsewhere (e.g. a headset key with the screen off) is not ours to clear.
-        val service = service?.takeIf { it.isConnected }
-        if (talkButtonHeld && service != null && !settings.isPushToTalkToggle) {
-            service.session.setTalkingState(false)
-        }
+        val session = sessions.connected
+        if (talkButtonHeld && session != null && !settings.isPushToTalkToggle) session.setTalkingState(false)
         talkButtonHeld = false
     }
 
     private fun configureTargetPanel() {
         val binding = binding ?: return
-        val session = service?.takeIf { it.isConnected }?.session ?: return
+        val session = sessions.connected ?: return
         if (session.voiceTargetMode == VoiceTargetMode.WHISPER) {
             binding.targetPanel.visibility = View.VISIBLE
             binding.targetPanelWarning.text = getString(R.string.shout_target, session.whisperTarget?.name)
@@ -298,9 +291,8 @@ class ChannelFragment :
         params.height = settings.pttButtonHeight
         binding.pushtotalk.layoutParams = params
 
-        val service = service
-        val muted = if (service != null && service.isConnected) {
-            val self = selfUser(service)
+        val muted = if (sessions.connected != null) {
+            val self = selfUser()
             self == null || self.isMuted || self.isSuppressed || self.isSelfMuted
         } else {
             false
@@ -312,11 +304,8 @@ class ChannelFragment :
     }
 
     /** Our own user, or null while the session has none. */
-    private fun selfUser(service: IMumlaService): IUser? = try {
-        service.session.sessionUser
-    } catch (e: HumlaDisconnectedException) {
-        Log.d(TAG, "exception in selfUser: $e")
-        null
+    private fun selfUser(): IUser? = try {
+        sessions.connected?.sessionUser
     } catch (e: IllegalStateException) {
         Log.d(TAG, "exception in selfUser: $e")
         null

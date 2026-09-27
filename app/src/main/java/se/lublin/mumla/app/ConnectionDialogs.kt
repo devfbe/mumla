@@ -20,15 +20,16 @@ import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.DialogFragment
-import se.lublin.humla.HumlaService.ConnectionState
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
-import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.session.DisconnectReason
+import se.lublin.humla.session.RejectType
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ConnectionErrorDialogFragment.Action
 import se.lublin.mumla.app.ConnectionErrorDialogFragment.Kind
-import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.chat.NoticeFormatter
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.ui.MessageDialogFragment
 import se.lublin.mumla.util.MumlaTrustStore
 import java.io.IOException
@@ -44,7 +45,7 @@ class ConnectionDialogs(
     private val activity: AppCompatActivity,
     private val settings: Settings,
     private val listener: Listener,
-    private val service: () -> IMumlaService?,
+    private val sessions: SessionManager,
 ) {
     interface Listener {
         /** Connects to [server] again, e.g. after its certificate was trusted. */
@@ -58,9 +59,11 @@ class ConnectionDialogs(
 
     private val torSuffix get() = if (settings.isTorEnabled) " (Tor)" else ""
 
+    private val notices = NoticeFormatter(activity)
+
     init {
         fragments.setFragmentResultListener(ConnectingDialogFragment.REQUEST_CANCELLED, activity) { _, _ ->
-            service()?.disconnect()
+            sessions.disconnect()
             Toast.makeText(activity, R.string.cancelled, Toast.LENGTH_SHORT).show()
         }
         fragments.setFragmentResultListener(ConnectionErrorDialogFragment.REQUEST_KEY, activity) { _, result ->
@@ -80,27 +83,38 @@ class ConnectionDialogs(
         get() = fragments.findFragmentByTag(TAG_CONNECTING) != null || fragments.findFragmentByTag(TAG_ERROR) != null
 
     /**
-     * Shows the connecting or error dialog [service]'s state calls for, and dismisses the other. A
-     * dialog that is up already and would look the same stays, e.g. one restored after rotation.
+     * Shows the connecting, error or certificate dialog the session's state calls for, and
+     * dismisses the others. A dialog that is up already and would look the same stays, e.g. one
+     * restored after rotation.
      */
-    fun update(service: IMumlaService) {
+    fun update() {
         if (fragments.isStateSaved) return
-        when (service.connectionState) {
-            ConnectionState.CONNECTING -> {
+        val errorShown = sessions.errorShown.value
+        when (val state = sessions.currentState) {
+            SessionState.Connecting, is SessionState.Reconnecting -> {
                 dismiss(TAG_ERROR)
                 if (fragments.findFragmentByTag(TAG_CONNECTING) == null) {
                     // The port is left out: the SRV lookup that may change it comes later.
-                    val host = service.targetServer?.host
+                    val host = sessions.session.value?.targetServer?.host
                     val title = activity.getString(R.string.connecting_to_server, host) + torSuffix
                     ConnectingDialogFragment.newInstance(title).showNow(fragments, TAG_CONNECTING)
                 }
             }
-            // Only bother the user if the error hasn't already been shown.
-            ConnectionState.CONNECTION_LOST -> {
+            is SessionState.ConnectionLost -> {
                 dismiss(TAG_CONNECTING)
-                if (service.isErrorShown) dismiss(TAG_ERROR) else showError(service)
+                if (errorShown) dismiss(TAG_ERROR) else showError(state.reason, reconnecting = true)
             }
-            else -> {
+            is SessionState.Disconnected -> {
+                dismiss(TAG_CONNECTING)
+                val reason = state.reason
+                when {
+                    reason == null || errorShown -> dismiss(TAG_ERROR)
+                    reason is DisconnectReason.TlsUntrusted -> offerTrust(reason.chain, changed = false)
+                    reason is DisconnectReason.TlsCertificateChanged -> offerTrust(reason.chain, changed = true)
+                    else -> showError(reason, reconnecting = false)
+                }
+            }
+            SessionState.Connected -> {
                 dismiss(TAG_CONNECTING)
                 dismiss(TAG_ERROR)
             }
@@ -111,25 +125,27 @@ class ConnectionDialogs(
         (fragments.findFragmentByTag(tag) as? DialogFragment)?.dismissNow()
     }
 
-    private fun showError(service: IMumlaService) {
-        val error = service.connectionError
+    private fun showError(reason: DisconnectReason?, reconnecting: Boolean) {
+        val message = reason?.let(notices::disconnectReason)
         val title = activity.getString(R.string.connectionRefused) + torSuffix
         val dialog = when {
-            error != null && service.isReconnecting -> ConnectionErrorDialogFragment.newInstance(
+            message != null && reconnecting -> ConnectionErrorDialogFragment.newInstance(
                 Kind.RECONNECTING,
                 title,
-                error.message + "\n\n" +
-                    activity.getString(R.string.attempting_reconnect, error.cause?.message ?: "unknown"),
+                message + "\n\n" + activity.getString(
+                    R.string.attempting_reconnect,
+                    (reason as? DisconnectReason.Network)?.cause?.message ?: "unknown",
+                ),
             )
-            error != null && error.isWrongPassword -> ConnectionErrorDialogFragment.newInstance(
+            reason.isWrongPassword -> ConnectionErrorDialogFragment.newInstance(
                 Kind.WRONG_PASSWORD,
                 activity.getString(R.string.invalid_password),
-                error.message.orEmpty(),
+                message.orEmpty(),
             )
             else -> ConnectionErrorDialogFragment.newInstance(
                 Kind.OTHER,
                 title,
-                error?.message ?: activity.getString(R.string.unknown),
+                message ?: activity.getString(R.string.unknown),
             )
         }
         val shown = fragments.findFragmentByTag(TAG_ERROR) as? ConnectionErrorDialogFragment
@@ -139,23 +155,28 @@ class ConnectionDialogs(
     }
 
     private fun onErrorAction(action: Action, password: String) {
-        val service = service() ?: return
         when (action) {
-            Action.CANCEL_RECONNECT -> {
-                service.cancelReconnect()
-                service.markErrorShown()
-            }
+            Action.CANCEL_RECONNECT -> sessions.cancelReconnect()
             Action.RECONNECT_WITH_PASSWORD -> {
-                val server = service.targetServer ?: return
+                val server = sessions.session.value?.targetServer ?: return
                 server.password = password
                 listener.reconnectWithPassword(server)
             }
-            Action.ACKNOWLEDGE -> service.markErrorShown()
+            Action.ACKNOWLEDGE -> sessions.markErrorShown()
         }
     }
 
+    /** Offers once to trust the server's certificate, which is unknown or, if [changed], not the pinned one. */
+    private fun offerTrust(chain: List<X509Certificate>, changed: Boolean) {
+        dismiss(TAG_ERROR)
+        sessions.markErrorShown()
+        val server = sessions.session.value?.targetServer ?: return
+        val certificate = chain.firstOrNull() ?: return
+        showUntrustedCertificate(server, certificate, changed)
+    }
+
     /** Offers to trust the [certificate] of [server], which is unknown or, if [changed], not the pinned one. */
-    fun showUntrustedCertificate(server: Server, certificate: X509Certificate, changed: Boolean) {
+    private fun showUntrustedCertificate(server: Server, certificate: X509Certificate, changed: Boolean) {
         if (fragments.isStateSaved) return
         val dialog = try {
             CertificateTrustDialogFragment.newInstance(server, certificate, changed)
@@ -198,8 +219,8 @@ class ConnectionDialogs(
         const val TAG_CERTIFICATE = "certificate"
         const val TAG_PERMISSION_DENIED = "permission_denied"
 
-        val HumlaException.isWrongPassword: Boolean
-            get() = reason == HumlaException.HumlaDisconnectReason.REJECT &&
-                reject?.type in setOf(Mumble.Reject.RejectType.WrongUserPW, Mumble.Reject.RejectType.WrongServerPW)
+        val DisconnectReason?.isWrongPassword: Boolean
+            get() = this is DisconnectReason.Rejected &&
+                type in setOf(RejectType.WRONG_USER_PASSWORD, RejectType.WRONG_SERVER_PASSWORD)
     }
 }

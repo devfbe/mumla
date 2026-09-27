@@ -34,7 +34,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.net.Permissions
 import se.lublin.mumla.R
@@ -49,8 +48,7 @@ import se.lublin.mumla.testing.stubConnected
 class ChannelListenerTest {
 
     private lateinit var context: Context
-    private val session = mockk<IHumlaSession>(relaxed = true)
-    private val service = mockk<IHumlaService>(relaxed = true).stubConnected(session)
+    private val session = mockk<IHumlaSession>(relaxed = true).stubConnected()
     private val me = FakeUser(1, "Me")
     private val ann = FakeUser(2, "Ann")
 
@@ -76,7 +74,7 @@ class ChannelListenerTest {
     }
 
     private fun adapter() = ChannelListAdapter(
-        context, service, MumlaRepository(mockk(relaxed = true), Dispatchers.Unconfined),
+        context, session, MumlaRepository(mockk(relaxed = true), Dispatchers.Unconfined),
         mockk<FragmentManager>(relaxed = true), showPinnedOnly = false, showUserCount = true,
     )
 
@@ -118,7 +116,7 @@ class ChannelListenerTest {
     }
 
     private fun preparedMenu(channel: FakeChannel, permissions: Int): Pair<ChannelMenu, Menu> {
-        val menu = ChannelMenu(context, channel, service, mockk<PinnedChannels>(relaxed = true), mockk(relaxed = true))
+        val menu = ChannelMenu(context, channel, session, mockk<PinnedChannels>(relaxed = true), mockk(relaxed = true))
         val popup = PopupMenu(context, View(context)).apply { inflate(R.menu.context_channel) }
         menu.onMenuPrepare(popup.menu, permissions)
         return menu to popup.menu

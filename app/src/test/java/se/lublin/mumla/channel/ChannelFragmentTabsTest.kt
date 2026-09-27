@@ -19,7 +19,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubEvents
@@ -37,11 +36,9 @@ class ChannelFragmentTabsTest {
 
     @Before
     fun setUp() {
-        val service = mockk<IMumlaService>(relaxed = true).stubConnected(session)
-        service.stubEvents()
-        every { service.messageLog } returns MutableStateFlow(emptyList())
+        session.stubConnected()
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        controller.get().bind(service)
+        controller.get().bind(session)
         fragment = ChannelFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(android.R.id.content, fragment, "channel").commitNow()

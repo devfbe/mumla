@@ -21,7 +21,7 @@ import se.lublin.humla.audio.AudioSettings
 import se.lublin.humla.model.Server
 
 /**
- * Everything a client configures a session with, handed to `HumlaService.configure` as a whole.
+ * Everything a client configures a session with, handed to `IHumlaSession.configure` as a whole.
  * [connection] takes effect on the next connection; everything else applies live.
  */
 data class SessionConfig(

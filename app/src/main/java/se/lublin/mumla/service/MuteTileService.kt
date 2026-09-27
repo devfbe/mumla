@@ -17,10 +17,6 @@
 
 package se.lublin.mumla.service
 
-import android.content.ComponentName
-import android.content.Intent
-import android.content.ServiceConnection
-import android.os.IBinder
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import androidx.annotation.StringRes
@@ -28,63 +24,52 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.util.collectEvents
 
 /**
  * A Quick Settings tile that mutes and unmutes us. It is unavailable while not connected, and
- * follows [MumlaService] only while the panel shows it, bound without creating the service.
+ * follows the current session only while the panel shows it.
  */
 class MuteTileService : TileService() {
     private var scope: CoroutineScope? = null
-    private var service: IMumlaService? = null
-    private var bound = false
-
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            val service = (binder as? MumlaService.MumlaBinder)?.service ?: return
-            this@MuteTileService.service = service
-            val scope = scope ?: return
-            scope.launch { service.sessionState.collect { render() } }
-            collectEvents(scope, service) { event -> if (event is HumlaEvent.UserStateUpdated) render() }
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            service = null
-            render()
-        }
-    }
+    private val sessions get() = SessionManager.get(this)
 
     override fun onStartListening() {
         super.onStartListening()
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { scope = it }
         render()
-        bound = bindService(Intent(this, MumlaService::class.java), connection, 0)
+        scope.launch {
+            sessions.session.collectLatest { session ->
+                if (session == null) return@collectLatest
+                collectEvents(this, session) { event -> if (event is HumlaEvent.UserStateUpdated) render() }
+                session.state.collect { render() }
+            }
+        }
     }
 
     override fun onStopListening() {
-        if (bound) unbindService(connection)
-        bound = false
         scope?.cancel()
         scope = null
-        service = null
         super.onStopListening()
     }
 
     override fun onClick() {
         super.onClick()
-        connectedSession()?.let(::toggleSelfMute)
+        sessions.connected?.let(::toggleSelfMute)
         render()
     }
 
-    private fun connectedSession(): IHumlaSession? = service?.takeIf { it.isConnected }?.session
-
     private fun render() {
         val tile = qsTile ?: return
-        val model = MuteTileModel.of(connectedSession()?.sessionUser?.isSelfMuted)
+        // The model may already be gone while the state still says connected.
+        val self = sessions.connected?.let { runCatching { it.sessionUser }.getOrNull() }
+        val model = MuteTileModel.of(self?.isSelfMuted)
         tile.state = model.state
         tile.subtitle = model.subtitle?.let(::getString)
         tile.updateTile()

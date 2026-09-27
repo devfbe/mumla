@@ -1,40 +1,34 @@
 package se.lublin.humla.session
 
-import se.lublin.humla.exception.HumlaException
-
 /**
- * Lifecycle of one server session as seen by the service and the UI.
+ * Lifecycle of one server session: the only view of whether it is connected.
  *
  * Disconnected -> Connecting -> Connected -> ConnectionLost -> Reconnecting -> Connected ...
  *
  * Every state except [Disconnected] keeps the foreground notification, the partial wake lock,
- * the Bluetooth SCO "wanted" flag and the user's mute/deafen state.
+ * the route the user chose and the user's mute/deafen state.
  */
-sealed class SessionState {
-    /** No session. [error] is why the last session ended, or null after a clean disconnect. */
-    data class Disconnected(val error: HumlaException? = null) : SessionState()
+sealed interface SessionState {
+    /** No connection. [reason] is why the last one ended, or null if it never started or ended on request. */
+    data class Disconnected(val reason: DisconnectReason? = null) : SessionState
 
     /** A user-initiated connection attempt is in progress. */
-    object Connecting : SessionState() {
-        override fun toString(): String = "Connecting"
-    }
+    data object Connecting : SessionState
 
     /** ServerSync has been received; the session is usable. */
-    object Connected : SessionState() {
-        override fun toString(): String = "Connected"
-    }
+    data object Connected : SessionState
 
-    /** The session dropped; an automatic reconnect fires in [reconnectInMillis]. */
+    /** The connection dropped; an automatic reconnect fires in [reconnectInMillis]. */
     data class ConnectionLost(
         val reconnectInMillis: Long,
         val attempt: Int,
-        val error: HumlaException?,
-    ) : SessionState()
+        val reason: DisconnectReason?,
+    ) : SessionState
 
     /**
-     * An automatic reconnect attempt is in progress. [error] is carried forward from the
-     * [ConnectionLost] state that preceded it, so cancelling here surfaces the same reason to
-     * the UI that cancelling one state earlier would.
+     * An automatic reconnect attempt is in progress. [reason] is carried forward from the
+     * [ConnectionLost] state that preceded it, so cancelling here surfaces the same reason as
+     * cancelling one state earlier would.
      */
-    data class Reconnecting(val error: HumlaException?) : SessionState()
+    data class Reconnecting(val reason: DisconnectReason?) : SessionState
 }

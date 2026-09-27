@@ -38,22 +38,4 @@ class AudioHandlerAdapterTest {
         verify(exactly = 1) { handler.shutdown() }
         confirmVerified(handler)
     }
-
-    @Test
-    fun aWarningReachesTheRegisteredListenerAndNobodyAfterItIsCleared() {
-        val seen = mutableListOf<String>()
-        adapter.setWarningListener { seen += it }
-        adapter.reportWarning("microphone silenced by the system")
-
-        adapter.setWarningListener(null)
-        adapter.reportWarning("dropped")
-
-        assertThat(seen).containsExactly("microphone silenced by the system")
-    }
-
-    /** With no listener ever registered a warning is a no-op, not a crash on the audio thread. */
-    @Test
-    fun aWarningWithNoListenerIsSilent() {
-        adapter.reportWarning("nobody is listening")
-    }
 }

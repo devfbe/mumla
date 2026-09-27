@@ -31,7 +31,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.stubConnected
@@ -46,9 +45,9 @@ class ChannelListFragmentMenuTest {
 
     @Before
     fun setUp() {
-        val service = mockk<IMumlaService>(relaxed = true).stubConnected(session)
+        session.stubConnected()
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        controller.get().bind(service)
+        controller.get().bind(session)
         val parent = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(parent, "parent").commitNow()

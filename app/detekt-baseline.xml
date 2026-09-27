@@ -3,14 +3,13 @@
   <ManuallySuppressedIssues/>
   <CurrentIssues>
     <ID>CyclomaticComplexMethod:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase$private fun sealPlainSecrets(db: SQLiteDatabase)</ID>
-    <ID>EmptyCatchBlock:MumlaService.kt$MumlaService${ }</ID>
     <ID>EmptyFunctionBlock:ChannelChatFragment.kt$ChannelChatFragment.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:NotificationPostingTest.kt$NotificationPostingTest.NoopActions${}</ID>
     <ID>ForbiddenComment:ChannelListAdapter.kt$ChannelListAdapter$// FIXME: cache bitmaps</ID>
     <ID>ImplicitDefaultLocale:ChannelListAdapter.kt$ChannelListAdapter$String.format("%d", node.subtreeUserCount)</ID>
     <ID>LargeClass:ChannelChatFragmentTest.kt$ChannelChatFragmentTest</ID>
     <ID>LargeClass:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest</ID>
-    <ID>LargeClass:MumlaServiceCharacterizationTest.kt$MumlaServiceCharacterizationTest</ID>
+    <ID>LargeClass:MumlaServiceTest.kt$MumlaServiceTest</ID>
     <ID>LongParameterList:AudioTestSession.kt$AudioTestSession$( private val audioManager: AudioManager, private val vadConfig: VadConfig, private val noiseSuppression: NoiseSuppressionMode, private val speexNoiseSuppressDb: Int, private val echoCancellation: EchoCancellationMode, private val effects: AndroidAudioEffects, private val loopback: Boolean, private val onReading: (MeterReading) -&gt; Unit, private val readingIntervalFrames: Int = DEFAULT_READING_INTERVAL_FRAMES, private val captureFactory: PcmCaptureSourceFactory = AndroidAudioRecordSource.Factory(), private val sinkFactory: PcmPlaybackSinkFactory = AndroidAudioTrackSink.Factory(), private val preprocessorFactory: CapturePreprocessorFactory = CapturePreprocessorFactory(log = { Log.w(TAG, it) }), private val resamplerFactory: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
     <ID>LongParameterList:AudioTestSessionTest.kt$AudioTestSessionTest$( source: TestCaptureSource, sink: TestPlaybackSink = TestPlaybackSink(), vad: VadConfig = VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1), noise: NoiseSuppressionMode = NoiseSuppressionMode.NONE, loopback: Boolean = false, effects: AndroidAudioEffects = AndroidAudioEffects(), echo: EchoCancellationMode = EchoCancellationMode.NONE, speexGain: Float = 1f, speexProbability: Int = 0, sinkFactory: TestPlaybackSink.Factory = TestPlaybackSink.Factory(sink), captureFactory: TestCaptureSource.Factory = TestCaptureSource.Factory(source), resamplerFactory: (Int, Int) -&gt; Resampler = { _, _ -&gt; error("no resampler expected at 48 kHz") }, )</ID>
     <ID>LongParameterList:ChannelTreeFixture.kt$FakeUser$( override val session: Int, override val name: String = "user-$session", var selfDeafened: Boolean = false, var deafened: Boolean = false, var selfMuted: Boolean = false, var muted: Boolean = false, var suppressed: Boolean = false, var state: TalkState = TalkState.PASSIVE, /** Negative for an unregistered user. */ override val userId: Int = -1, /** Raw avatar bytes that may or may not decode. */ override val texture: ByteArray? = null, )</ID>
@@ -21,12 +20,11 @@
     <ID>LongParameterList:ServerInfoResponse.kt$ServerInfoResponse$( val server: Server?, val version: Int, val identifier: Long, val currentUsers: Int, val maximumUsers: Int, val allowedBandwidth: Int, val latency: Int, val isDummy: Boolean, )</ID>
     <ID>LongParameterList:ZoomState.kt$ZoomState$( factor: Float, focusX: Float, focusY: Float, viewWidth: Float, viewHeight: Float, imageWidth: Float, imageHeight: Float, )</ID>
     <ID>LoopWithTooManyJumpStatements:AudioTestSession.kt$AudioTestSession$while</ID>
-    <ID>LoopWithTooManyJumpStatements:MumlaServiceAudioPreferencesTest.kt$MumlaServiceAudioPreferencesTest$while</ID>
+    <ID>LoopWithTooManyJumpStatements:SessionSettingsSyncTest.kt$SessionSettingsSyncTest$while</ID>
     <ID>LoopWithTooManyJumpStatements:TestAudioFakes.kt$TestCaptureSource$while</ID>
     <ID>NestedBlockDepth:ManifestAuditTest.kt$ManifestAuditTest$@Test fun theBackupRulesFileExcludesCloudBackupButNotDeviceTransfer()</ID>
     <ID>PrintStackTrace:CertificateImportActivity.kt$CertificateImportActivity$e</ID>
     <ID>PrintStackTrace:MumlaReconnectNotification.kt$MumlaReconnectNotification$e</ID>
-    <ID>PrintStackTrace:MumlaService.kt$MumlaService$e</ID>
     <ID>PrintStackTrace:PublicServerFetcher.kt$PublicServerFetcher$e</ID>
     <ID>ReturnCount:AudioSettingsFragment.kt$AudioSettingsFragment$private fun restartSession( loopback: Boolean = findPreference&lt;SwitchPreferenceCompat&gt;(KEY_LOOPBACK)?.isChecked ?: false, )</ID>
     <ID>ReturnCount:BluetoothScoToggle.kt$BluetoothScoToggle$fun request(enabled: Boolean): Result</ID>
@@ -39,12 +37,11 @@
     <ID>ReturnCount:MumlaConnectionNotification.kt$MumlaConnectionNotification$fun show(): Boolean</ID>
     <ID>ReturnCount:PublicServerListFragment.kt$PublicServerListFragment$override fun onMenuItemSelected(menuItem: MenuItem): Boolean</ID>
     <ID>ReturnCount:ZoomImageView.kt$ZoomImageView$private fun canFit(): Boolean</ID>
-    <ID>SwallowedException:ChannelChatFragment.kt$ChannelChatFragment$e: HumlaDisconnectedException</ID>
+    <ID>SwallowedException:ChannelChatFragment.kt$ChannelChatFragment$e: IllegalStateException</ID>
     <ID>SwallowedException:HtmlUtils.kt$HtmlUtils$e: IllegalArgumentException</ID>
     <ID>SwallowedException:ImageSource.kt$ImageSource.Companion$e: IllegalArgumentException</ID>
     <ID>SwallowedException:ImageViewerDialogFragment.kt$ImageViewerDialogFragment$e: IOException</ID>
     <ID>SwallowedException:ImageViewerDialogFragment.kt$ImageViewerDialogFragment$e: ImageFetchException</ID>
-    <ID>SwallowedException:MumlaService.kt$MumlaService$iae: IllegalArgumentException</ID>
     <ID>SwallowedException:MumlaTrustStoreTest.kt$MumlaTrustStoreTest$e: IOException</ID>
     <ID>SwallowedException:OutgoingImagePreparer.kt$OutgoingImagePreparer$e: IOException</ID>
     <ID>SwallowedException:OutgoingImagePreparer.kt$OutgoingImagePreparer$e: SecurityException</ID>
@@ -52,16 +49,14 @@
     <ID>TooGenericExceptionCaught:AudioTestSession.kt$AudioTestSession$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:CertificateExportActivity.kt$CertificateExportActivity$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CertificateImportActivity.kt$CertificateImportActivity$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:MumlaService.kt$MumlaService$e: RuntimeException</ID>
     <ID>TooGenericExceptionCaught:SecretCipher.kt$KeystoreSecretCipher$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SecretCipher.kt$SecretCodec$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ServerPinger.kt$ServerPinger$e: Exception</ID>
     <ID>TooManyFunctions:AudioSettingsFragment.kt$AudioSettingsFragment : MumlaPreferenceFragment</ID>
-    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentServiceClientMenuProvider</ID>
+    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentSessionClientMenuProvider</ID>
     <ID>TooManyFunctions:ChannelListAdapter.kt$ChannelListAdapter : Adapter</ID>
-    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentServiceClientMenuProvider</ID>
+    <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentSessionClientMenuProvider</ID>
     <ID>TooManyFunctions:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase : SQLiteOpenHelperMumlaDatabase</ID>
-    <ID>TooManyFunctions:MumlaService.kt$MumlaService : HumlaServiceOnActionListenerOnActionListenerIMumlaService</ID>
     <ID>TooManyFunctions:PublicServerListFragment.kt$PublicServerListFragment : FragmentPublicServerAdapterMenuListenerMenuProvider</ID>
     <ID>TooManyFunctions:ZoomImageView.kt$ZoomImageView : AppCompatImageView</ID>
   </CurrentIssues>

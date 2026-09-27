@@ -11,7 +11,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Channel
 import se.lublin.humla.session.HumlaEvent
@@ -26,9 +25,8 @@ class PermissionsPopupMenuTest {
 
     private val activity = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
     private val anchor = View(activity).also { activity.setContentView(it) }
-    private val session: IHumlaSession = mockk(relaxed = true)
-    private val service: IHumlaService = mockk<IHumlaService>(relaxed = true).stubConnected(session)
-    private val events = service.stubEvents()
+    private val session: IHumlaSession = mockk<IHumlaSession>(relaxed = true).stubConnected()
+    private val events = session.stubEvents()
     private val channel = Channel(3, false)
     private val prepared = mutableListOf<Int>()
 
@@ -40,7 +38,7 @@ class PermissionsPopupMenuTest {
         override fun onMenuItemClick(item: MenuItem): Boolean = false
     }
 
-    private fun popup() = PermissionsPopupMenu(activity, anchor, R.menu.context_channel, listener, channel, service)
+    private fun popup() = PermissionsPopupMenu(activity, anchor, R.menu.context_channel, listener, channel, session)
 
     @Test
     fun unknownPermissionsAreRequestedAndTheMenuIsPreparedWhenTheyArrive() {
@@ -81,7 +79,7 @@ class PermissionsPopupMenuTest {
     @Test
     fun theRootChannelUsesTheServerWidePermissions() {
         every { session.permissions } returns 0x20
-        PermissionsPopupMenu(activity, anchor, R.menu.context_channel, listener, Channel(0, false), service)
+        PermissionsPopupMenu(activity, anchor, R.menu.context_channel, listener, Channel(0, false), session)
             .apply { show() }
             .dismiss()
 

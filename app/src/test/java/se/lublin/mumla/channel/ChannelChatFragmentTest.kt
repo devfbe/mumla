@@ -1,5 +1,6 @@
 package se.lublin.mumla.channel
 
+import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.graphics.Bitmap
@@ -29,7 +30,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -44,7 +44,6 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
@@ -52,6 +51,7 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.User
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.ChatAdapter
@@ -64,25 +64,26 @@ import se.lublin.mumla.chat.ImageResult
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.TestImages
-import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.stubState
 
 /**
- * Driven through a real host: an `Activity` whose [se.lublin.mumla.ui.ServiceViewModel] holds the
- * service, and a parent `Fragment` that holds the chat target.
+ * Driven through a real host: the app's session manager holds the session, whose events feed the
+ * chat log, and a parent `Fragment` holds the chat target.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelChatFragmentTest {
 
-    private val service: IMumlaService = mockk(relaxed = true)
     private val session: IHumlaSession = mockk(relaxed = true)
-    private val log = MutableStateFlow<List<IChatMessage>>(emptyList())
+    private val chat get() = SessionManager.get(ApplicationProvider.getApplicationContext<Context>()).chat
 
     private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var activity: ServiceHostActivity
@@ -91,10 +92,7 @@ class ChannelChatFragmentTest {
 
     @Before
     fun setUp() {
-        service.stubConnected(session)
-        service.stubEvents()
-        every { service.messageLog } returns log
-        every { service.clearMessageLog() } answers { log.value = emptyList() }
+        installSession(session.stubConnected())
         every { session.sessionId } returns 7
         every { session.sessionChannel } returns channel("Root")
         every { session.sessionUser } returns null
@@ -110,11 +108,25 @@ class ChannelChatFragmentTest {
         parent.chatTargets.select(target)
     }
 
-    /** Brings the host up with [withService] already bound, then attaches the fragment. */
-    private fun launch(withService: IMumlaService? = service) {
+    /** Adds a line to the chat log the way the session's events do. */
+    private fun add(message: IChatMessage) {
+        val event = when (message) {
+            is IChatMessage.TextMessage -> HumlaEvent.TextMessage(message.message)
+            is IChatMessage.InfoMessage -> HumlaEvent.LogMessage(HumlaEvent.Level.INFO, message.body)
+            else -> error("not a chat line: $message")
+        }
+        session.stubEvents().tryEmit(event)
+        idleMainLooper()
+    }
+
+    /** Makes a session that has ended the current one, as if there were none. */
+    private fun unbind() = installSession(mockk<IHumlaSession>(relaxed = true).stubDisconnected())
+
+    /** Brings the host up, without a connected session unless [withSession], then attaches the fragment. */
+    private fun launch(withSession: Boolean = true) {
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java)
         activity = controller.create().get()
-        activity.bind(withService)
+        if (!withSession) unbind()
         parent = ChatTargetParentFragment()
         activity.supportFragmentManager.beginTransaction()
             .add(android.R.id.content, parent, "parent").commitNow()
@@ -142,9 +154,9 @@ class ChannelChatFragmentTest {
         IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
 
     @Test
-    fun theBoundMessageLogIsWhatTheListShows() {
-        log.value += info("older")
-        log.value += info("newer")
+    fun theSessionsChatLogIsWhatTheListShows() {
+        add(info("older"))
+        add(info("newer"))
         launch()
         drainMainUntil { itemCount() == 2 }
         assertThat(itemCount()).isEqualTo(2)
@@ -153,19 +165,19 @@ class ChannelChatFragmentTest {
     @Test
     fun anArrivingLogLineIsAppended() {
         launch()
-        log.value += info("hello")
+        add(info("hello"))
         drainMainUntil { itemCount() == 1 }
         assertThat(itemCount()).isEqualTo(1)
     }
 
     @Test
-    fun clearEmptiesTheListAndTheServiceLog() {
-        log.value += info("older")
+    fun clearEmptiesTheListAndTheSessionLog() {
+        add(info("older"))
         launch()
         fragment.clear()
         drainMainUntil { itemCount() == 0 }
         assertThat(itemCount()).isEqualTo(0)
-        verify { service.clearMessageLog() }
+        assertThat(chat.messages.value).isEmpty()
     }
 
     @Test
@@ -173,7 +185,7 @@ class ChannelChatFragmentTest {
         launch()
         activity.supportFragmentManager.beginTransaction().remove(parent).commitNow()
         idleMainLooper()
-        log.value += info("late")
+        add(info("late"))
         idleMainLooper()
     }
 
@@ -205,12 +217,12 @@ class ChannelChatFragmentTest {
         assertThat(editor.hint).isNull()
     }
 
-    /** The service usually binds after the view exists, so the hint must be set on bind too. */
+    /** The session usually synchronizes after the view exists, so the hint must be set then too. */
     @Test
-    fun theHintIsSetWhenTheServiceBindsAfterTheView() {
-        launch(withService = null)
+    fun theHintIsSetWhenTheSessionSynchronizesAfterTheView() {
+        launch(withSession = false)
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.send_message))
-        activity.bind(service)
+        activity.bind(session)
         drainMainUntil { editor.hint.toString() != activity.getString(R.string.send_message) }
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
     }
@@ -222,7 +234,7 @@ class ChannelChatFragmentTest {
         every { session.sessionUser } returns self
         launch()
         every { session.sessionChannel } returns channel("Lounge")
-        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
+        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Lounge"))
     }
 
@@ -231,7 +243,7 @@ class ChannelChatFragmentTest {
         every { session.sessionUser } returns user("Me", session = 7)
         launch()
         every { session.sessionChannel } returns channel("Lounge")
-        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(user("Ann"), channel("Lounge"), channel("Root")))
+        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(user("Ann"), channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
     }
 
@@ -242,7 +254,7 @@ class ChannelChatFragmentTest {
         launch()
         selectTarget(ChatTarget.User(user("Ann")))
         every { session.sessionChannel } returns channel("Lounge")
-        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
+        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
     }
 
@@ -326,7 +338,7 @@ class ChannelChatFragmentTest {
     @Test
     fun aDisconnectWhileSendingIsSwallowed() {
         launch()
-        every { service.session } throws HumlaDisconnectedException()
+        session.stubState(SessionState.Disconnected())
         editor.setText("hi")
         sendButton.performClick()
         assertThat(editor.text.toString()).isEqualTo("hi")
@@ -372,17 +384,17 @@ class ChannelChatFragmentTest {
     @Test
     fun theSessionIdSurvivesADisconnect() {
         launch()
-        every { service.session } throws HumlaDisconnectedException()
+        every { session.sessionId } throws IllegalStateException("Not synchronized with the server")
         assertThat(fragment.sessionId()).isNotEqualTo(7)
     }
 
     @Test
-    fun theSessionIdIsAbsentWithNoServiceAndWhenNotConnected() {
-        launch(withService = null)
-        val noService = fragment.sessionId()
-        activity.bind(service)
-        every { service.isConnected } returns false
-        assertThat(fragment.sessionId()).isEqualTo(noService)
+    fun theSessionIdIsAbsentWithNoSessionAndWhenNotConnected() {
+        launch(withSession = false)
+        val noSession = fragment.sessionId()
+        activity.bind(session)
+        session.stubState(SessionState.Reconnecting(null))
+        assertThat(fragment.sessionId()).isEqualTo(noSession)
     }
 
     /**
@@ -391,7 +403,7 @@ class ChannelChatFragmentTest {
      */
     @Test
     fun theAbsentSessionIdCannotCollideWithAMessageActor() {
-        launch(withService = null)
+        launch(withSession = false)
         assertThat(fragment.sessionId()).isNotEqualTo(Message("server said so").actor)
     }
 
@@ -413,13 +425,11 @@ class ChannelChatFragmentTest {
         assertThat(progress.visibility).isEqualTo(View.GONE)
     }
 
-    /**
-     * A dialog stands between picking and confirming, so the service is fetched again at send.
-     */
+    /** A dialog stands between picking and confirming, so the session is fetched again at send. */
     @Test
-    fun anImageConfirmedAfterTheServiceWentAwaySendsNothing() {
+    fun anImageConfirmedAfterTheSessionWentAwaySendsNothing() {
         launch()
-        activity.bind(null)
+        unbind()
         fragment.sendImage(smallBitmap())
         idleMainLooper()
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
@@ -430,7 +440,7 @@ class ChannelChatFragmentTest {
     @Test
     fun aDisconnectWhileEncodingAnImageSendsNothing() {
         launch()
-        every { service.session } throws HumlaDisconnectedException()
+        every { session.serverSettings } throws IllegalStateException("Not synchronized with the server")
         fragment.sendImage(smallBitmap())
         drainMainUntil { progress.visibility == View.GONE }
         verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
@@ -449,12 +459,8 @@ class ChannelChatFragmentTest {
     private fun settings(imageMessageLength: Int): ServerSettings =
         mockk(relaxed = true) { every { this@mockk.imageMessageLength } returns imageMessageLength }
 
-    /**
-     * `isConnected` and the throw inside `session` read the same state in production, so
-     * this disconnects both together.
-     */
     private fun disconnect() {
-        service.stubDisconnected()
+        session.stubState(SessionState.Disconnected())
     }
 
     @Test
@@ -472,7 +478,7 @@ class ChannelChatFragmentTest {
         launch()
         val self = session.sessionUser!!
         disconnect()
-        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
+        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
     }
 
     /** `updateChatTargetText` is public, so it may be called before the view exists. */
@@ -494,12 +500,12 @@ class ChannelChatFragmentTest {
 
     @Test
     fun theClearMenuItemClearsTheLog() {
-        log.value += info("older")
+        add(info("older"))
         launch()
         val item: MenuItem = mockk(relaxed = true) { every { itemId } returns R.id.menu_clear_chat }
         assertThat(fragment.onMenuItemSelected(item)).isTrue()
         drainMainUntil { itemCount() == 0 }
-        verify { service.clearMessageLog() }
+        assertThat(chat.messages.value).isEmpty()
     }
 
     private fun tapUpload() {
@@ -607,7 +613,7 @@ class ChannelChatFragmentTest {
     @Test
     fun aSentMessageAppearsInTheListImmediately() {
         every { session.sendChannelTextMessage(any(), any(), any()) } answers {
-            Message("hi there").also { log.value += IChatMessage.TextMessage(it) }
+            Message("hi there").also { session.stubEvents().tryEmit(HumlaEvent.MessageSent(it)) }
         }
         launch()
         editor.setText("hi there")
@@ -616,16 +622,17 @@ class ChannelChatFragmentTest {
         assertThat(itemCount()).isEqualTo(1)
     }
 
-    /** Rebinding (every reconnect) shows the log as it is rather than appending it again. */
+    /** An automatic reconnect shows the log as it is rather than appending it again. */
     @Test
-    fun rebindingShowsTheLogWithoutDuplicatingIt() {
-        log.value += info("a")
-        log.value += info("b")
+    fun aReconnectShowsTheLogWithoutDuplicatingIt() {
+        add(info("a"))
+        add(info("b"))
         launch()
-        log.value += info("live")
+        add(info("live"))
         drainMainUntil { itemCount() == 3 }
-        activity.bind(null)
-        activity.bind(service)
+        session.stubState(SessionState.ConnectionLost(1L, 1, null))
+        session.stubState(SessionState.Reconnecting(null))
+        session.stubState(SessionState.Connected)
         idleMainLooper()
         assertThat(itemCount()).isEqualTo(3)
     }
@@ -656,7 +663,7 @@ class ChannelChatFragmentTest {
         val before = editor.hint.toString()
         every { session.sessionChannel } returns channel("Lounge")
         val self = user("Me", session = 7)
-        fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
+        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(before)
     }
 
@@ -672,7 +679,7 @@ class ChannelChatFragmentTest {
         try {
             every { session.serverSettings } returns settings(0)
             launch()
-            every { service.session } throws HumlaDisconnectedException()
+            every { session.serverSettings } throws IllegalStateException("Not synchronized with the server")
             fragment.sendImage(smallBitmap())
             drainMainUntil { progress.visibility == View.GONE }
         } finally {
@@ -692,7 +699,7 @@ class ChannelChatFragmentTest {
         coEvery { loader.loadThumbnail(any(), any(), any()) } returns ImageResult.Ready(bitmap)
         ChatImageLoaders.setForTests(loader)
         try {
-            log.value += info("<img src=\"data:image/png;base64,AAAA\"/>")
+            add(info("<img src=\"data:image/png;base64,AAAA\"/>"))
             launch()
             drainMainUntil { itemCount() == 1 }
             val adapter = list.adapter as ChatAdapter
@@ -765,7 +772,7 @@ class ChannelChatFragmentTest {
         // The viewer fetches the full image; this test is only about opening it.
         coEvery { loader.fetchBytes(any()) } throws ImageFetchException(ImageError.NETWORK)
         try {
-            log.value += imageMessage("data:image/png;base64,TAPPED")
+            add(imageMessage("data:image/png;base64,TAPPED"))
             launch()
             drainMainUntil { itemCount() == 1 }
             layOutHost()
@@ -793,8 +800,8 @@ class ChannelChatFragmentTest {
     @Test
     fun yourOwnMessagesAreAlignedToYourSideAndOtherPeoplesAreNot() {
         every { session.sessionId } returns 7
-        log.value += IChatMessage.TextMessage(Message(7, "Me", emptyList(), emptyList(), emptyList(), "mine"))
-        log.value += IChatMessage.TextMessage(Message(9, "Ann", emptyList(), emptyList(), emptyList(), "theirs"))
+        add(IChatMessage.TextMessage(Message(7, "Me", emptyList(), emptyList(), emptyList(), "mine")))
+        add(IChatMessage.TextMessage(Message(9, "Ann", emptyList(), emptyList(), emptyList(), "theirs")))
         launch()
         drainMainUntil { itemCount() == 2 }
         layOutHost()
@@ -814,7 +821,7 @@ class ChannelChatFragmentTest {
     fun theThumbnailIsAskedForAtTheDimensionResourcesBound() {
         val (_, asked) = installThumbnailLoader()
         try {
-            log.value += imageMessage()
+            add(imageMessage())
             launch()
             drainMainUntil { itemCount() == 1 }
             layOutHost()
@@ -833,7 +840,7 @@ class ChannelChatFragmentTest {
     fun aSecondPictureInOneMessageIsWrittenOutAsThePlaceholder() {
         installThumbnailLoader()
         try {
-            log.value += info("<img src=\"data:image/png;base64,AAAA\"/>tail<img src=\"data:image/png;base64,BBBB\"/>")
+            add(info("<img src=\"data:image/png;base64,AAAA\"/>tail<img src=\"data:image/png;base64,BBBB\"/>"))
             launch()
             drainMainUntil { itemCount() == 1 }
             layOutHost()
@@ -927,7 +934,7 @@ class ChannelChatFragmentTest {
     @Test
     fun aPickedImageWithNoSessionIsDroppedBeforeAnythingIsDecoded() {
         launch()
-        activity.bind(null)
+        unbind()
         fragment.onImagePickResult(Uri.parse("content://se.lublin.mumla.test/x.jpg"))
         idleMainLooper()
         assertThat(progress.visibility).isEqualTo(View.GONE)
@@ -968,7 +975,7 @@ class ChannelChatFragmentTest {
 
     @Test
     fun theListIsScrolledToTheNewestMessage() {
-        repeat(40) { log.value += info("m$it") }
+        repeat(40) { add(info("m$it")) }
         launch()
         drainMainUntil { itemCount() == 40 }
         layOutHost()

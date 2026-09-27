@@ -19,21 +19,21 @@ package se.lublin.mumla.service.ipc
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import se.lublin.humla.IHumlaService
+import se.lublin.mumla.session.SessionManager
 
 /**
  * Lets other apps (Tasker and the like) start, stop or toggle transmission through
- * [BROADCAST_TALK], while [allowed] says so and [service] is connected.
+ * [BROADCAST_TALK], while [allowed] says so and a session is connected.
  */
 class TalkBroadcastReceiver(
-    private val service: IHumlaService,
+    private val sessions: SessionManager,
     private val allowed: () -> Boolean,
 ) : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != BROADCAST_TALK) throw UnsupportedOperationException()
-        if (!allowed() || !service.isConnected) return
-        val session = service.session
+        if (!allowed()) return
+        val session = sessions.connected ?: return
         when (intent.getStringExtra(EXTRA_TALK_STATUS) ?: TALK_STATUS_TOGGLE) {
             TALK_STATUS_ON -> session.setTalkingState(true)
             TALK_STATUS_OFF -> session.setTalkingState(false)

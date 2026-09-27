@@ -12,7 +12,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.mumla.R
-import se.lublin.mumla.service.IMumlaService
+import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
@@ -21,10 +21,9 @@ import se.lublin.mumla.testing.stubEvents
 /** The comment dialog shows the rendered comment and its source on two tabs. */
 @RunWith(RobolectricTestRunner::class)
 class CommentTabsTest {
-    private val mumla: IMumlaService = mockk<IMumlaService>(relaxed = true).stubConnected(mockk(relaxed = true))
-        .also { it.stubEvents() }
+    private val session: IHumlaSession = mockk<IHumlaSession>(relaxed = true).stubConnected()
     private val activity = Robolectric.buildActivity(ServiceHostActivity::class.java).setup().get()
-        .also { it.bind(mumla) }
+        .also { it.bind(session) }
 
     private fun show(editing: Boolean): AlertDialog {
         val fragment = UserCommentFragment.newInstance(7, "<b>hi</b>", editing)

@@ -10,7 +10,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.IUser
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.mumla.service.IMumlaService
+import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
@@ -19,12 +19,15 @@ import se.lublin.mumla.testing.stubEvents
 @RunWith(RobolectricTestRunner::class)
 class CommentObserverTest {
 
-    private val mumla: IMumlaService = mockk<IMumlaService>(relaxed = true).stubConnected(mockk(relaxed = true))
-    private val events = mumla.stubEvents()
+    private val session: IHumlaSession = mockk<IHumlaSession>(relaxed = true).stubConnected()
+    private val events = session.stubEvents()
     private val activity = Robolectric.buildActivity(ServiceHostActivity::class.java).setup().get()
-        .also { it.bind(mumla) }
+        .also { it.bind(session) }
 
-    private val listeners: Int get() = events.subscriptionCount.value
+    /** The session's chat log listens all along. */
+    private val othersListening = events.subscriptionCount.value
+
+    private val listeners: Int get() = events.subscriptionCount.value - othersListening
 
     private fun show(fragment: DialogFragment) {
         fragment.show(activity.supportFragmentManager, "comment")

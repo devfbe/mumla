@@ -30,19 +30,13 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.HumlaConnection
-import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.session.inMainThreadSlices
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.PublicServer
-import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.ui.showMessageDialog
 import se.lublin.mumla.util.Orbot
@@ -52,19 +46,16 @@ private const val TOR_PROBE_TIMEOUT_MS = 2000
 
 /**
  * Connects [activity] to servers: gets the permissions a session needs, confirms leaving the
- * current server and checks that Tor is usable if enabled. [service] is the bound service, if any.
+ * current server and checks that Tor is usable if enabled.
  */
 class ConnectFlow(
     private val activity: AppCompatActivity,
     private val settings: Settings,
-    private val service: () -> IMumlaService?,
+    private val sessions: SessionManager,
 ) {
     private val gate = PermissionGate(PermissionHost())
     private val microphoneRequest = requestLauncher(Manifest.permission.RECORD_AUDIO)
     private val notificationsRequest = requestLauncher(Manifest.permission.POST_NOTIFICATIONS)
-
-    /** Waits for a disconnect to connect elsewhere; see [awaitDisconnectThenConnect]. */
-    private var pendingReconnect: Job? = null
 
     private fun requestLauncher(permission: String) =
         activity.registerForActivityResult(RequestPermission()) { gate.onResult(permission, it) }
@@ -144,11 +135,11 @@ class ConnectFlow(
     }
 
     private fun connectNow(server: Server) {
-        val service = service()
-        if (service != null && service.isConnected) {
+        if (sessions.connected != null) {
             activity.showConfirmDialog(activity.getString(R.string.reconnect_dialog_message), R.string.connect) {
-                awaitDisconnectThenConnect(service, server)
-                service.disconnect()
+                // The session is Disconnected when this returns; its connection winds down on its own.
+                sessions.disconnect()
+                connect(server)
             }
             return
         }
@@ -169,16 +160,6 @@ class ConnectFlow(
             } else {
                 showMessage(activity.getString(R.string.orbot_tor_failed, HumlaConnection.TOR_PORT))
             }
-        }
-    }
-
-    /** Connects to [server] once [service] reports the current session disconnected. */
-    private fun awaitDisconnectThenConnect(service: IMumlaService, server: Server) {
-        pendingReconnect?.cancel()
-        pendingReconnect = activity.lifecycleScope.launch(Dispatchers.Main.immediate, CoroutineStart.UNDISPATCHED) {
-            service.events.inMainThreadSlices().first { it is HumlaEvent.Disconnected }
-            pendingReconnect = null
-            connect(server)
         }
     }
 

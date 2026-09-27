@@ -38,7 +38,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.databinding.FragmentServerListBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.ui.ServerRequest
-import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.showConfirmDialog
 
 /** Displays the favourite servers, and lets the user connect to and edit them. */
@@ -48,7 +48,7 @@ class FavouriteServerListFragment :
     FavouriteServerAdapter.FavouriteServerAdapterMenuListener,
     MenuProvider {
 
-    private val serviceModel: ServiceViewModel by activityViewModels()
+    private val connectRequests: ConnectRequests by activityViewModels()
     private val repository get() = MumlaRepository.get(requireContext())
     private var serverAdapter: FavouriteServerAdapter? = null
 
@@ -60,7 +60,7 @@ class FavouriteServerListFragment :
         val binding = FragmentServerListBinding.bind(view)
         setUpServerGrid(binding.serverListGrid)
         val adapter = FavouriteServerAdapter(requireContext(), this, viewLifecycleOwner.lifecycleScope) {
-            serviceModel.requestConnect(ServerRequest.Favourite(it))
+            connectRequests.request(ServerRequest.Favourite(it))
         }
         // As the platform grid's empty view: shown until there are servers to show.
         adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {

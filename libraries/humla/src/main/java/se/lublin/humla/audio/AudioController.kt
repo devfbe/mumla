@@ -28,22 +28,17 @@ import se.lublin.humla.net.MessageHandlerRegistry
  * Owns the audio pipeline's lifecycle on the [THREAD_NAME] HandlerThread.
  *
  * Every public method posts and returns; creation and teardown (which joins the capture and
- * playback threads) run on the control thread. [Listener] callbacks are posted to [mainHandler].
+ * playback threads) run on the control thread. [onFailed] is posted to [mainHandler], with the
+ * message of a pipeline that could not be built.
  * [session] is confined to the control thread; [running] is volatile because [isRunning] and
  * [currentBandwidth] may be read from any thread.
  */
 class AudioController(
     private val host: AudioHost,
-    private val factory: () -> AudioHandlerFactory,
-    private val listener: Listener,
+    private val factory: AudioHandlerFactory,
+    private val onFailed: (String) -> Unit,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
 ) {
-    interface Listener {
-        fun onAudioStarted()
-        fun onAudioFailed(message: String)
-        fun onAudioWarning(message: String)
-    }
-
     /** What a pipeline would be built from right now. */
     private class Session(
         val config: AudioConfig,
@@ -57,7 +52,7 @@ class AudioController(
      */
     private class Running(val audio: ManagedAudio, val registry: MessageHandlerRegistry)
 
-    /** Not private so tests can assert on the thread. Started eagerly; lives as long as the service. */
+    /** Not private so tests can assert on the thread. Started eagerly; lives until [quit]. */
     internal val thread = HandlerThread(THREAD_NAME).apply { start() }
     private val handler = Handler(thread.looper)
 
@@ -119,7 +114,7 @@ class AudioController(
         }
     }
 
-    /** Tears the pipeline down and stops the control thread (service teardown). */
+    /** Tears the pipeline down and stops the control thread (session close). */
     fun quit() {
         shutdown()
         // quitSafely, after the post: quitting first would drop that message and leave the capture
@@ -129,17 +124,15 @@ class AudioController(
 
     private fun create(s: Session) {
         try {
-            val audio = factory().create(host, s.config, s.params)
-            audio.setWarningListener { message -> mainHandler.post { listener.onAudioWarning(message) } }
+            val audio = factory.create(host, s.config, s.params)
             s.registry.addTcpHandler(audio.tcpHandler)
             s.registry.addVoiceHandler(audio.voiceHandler)
             running = Running(audio, s.registry)
-            mainHandler.post { listener.onAudioStarted() }
         } catch (e: Exception) {
             // Exception, not AudioException: AudioTrack/AudioRecord construction can throw
             // unchecked, which would kill the control thread and silently drop all later messages.
             Log.e(TAG, "Audio initialization failed", e)
-            mainHandler.post { listener.onAudioFailed(e.message ?: e.javaClass.simpleName) }
+            mainHandler.post { onFailed(e.message ?: e.javaClass.simpleName) }
         }
     }
 
@@ -148,9 +141,6 @@ class AudioController(
         running = null
         r.registry.removeTcpHandler(r.audio.tcpHandler)
         r.registry.removeVoiceHandler(r.audio.voiceHandler)
-        // Before shutdown(): a warning posted on the way down would refer to a session the user
-        // has already left.
-        r.audio.setWarningListener(null)
         r.audio.shutdown()
     }
 

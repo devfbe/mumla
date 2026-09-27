@@ -208,7 +208,7 @@ class HumlaTCPTest {
     /**
      * HumlaSSLSocketFactory.createSocket() connects with no timeout, so a blackholed server keeps
      * the read thread blocked with no socket for disconnect() to close. The caller must still be
-     * told it is disconnected (HumlaService releases its wake lock on that callback), and exactly
+     * told it is disconnected (the session releases its wake lock on that callback), and exactly
      * once when the read loop finally unwinds.
      */
     @Test

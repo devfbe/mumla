@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.service
+package se.lublin.mumla.session
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -23,43 +23,61 @@ import android.media.AudioDeviceInfo
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowToast
 import org.xmlpull.v1.XmlPullParser
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
-import se.lublin.humla.testutil.testActivityInputMode
-import se.lublin.humla.testutil.testRouter
+import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.testing.createMumlaService
+import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.stubState
 
+/**
+ * Changed preferences reach the current session: every audio setting through one reconfigure,
+ * and a note when a connection setting only applies from the next connection. The session is a
+ * mock that keeps what it is configured with.
+ */
 /**
  * For every switch on the audio settings screen, reads the result back off the object the audio
  * threads use.
  */
 @RunWith(RobolectricTestRunner::class)
-class MumlaServiceAudioPreferencesTest {
-    private lateinit var service: MumlaService
-    private lateinit var prefs: SharedPreferences
+class SessionSettingsSyncTest {
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val prefs: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
+    private var config = SessionConfig()
+    private var configures = 0
+    private val session = mockk<IHumlaSession>(relaxed = true) {
+        every { this@mockk.config } answers { this@SessionSettingsSyncTest.config }
+        every { configure(any()) } answers {
+            this@SessionSettingsSyncTest.config = firstArg()
+            configures++
+            false
+        }
+    }
 
     @Before
     fun setUp() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        service = createMumlaService().get()
+        installSession(session)
     }
 
-    private fun pipeline() = service.getAudioConfigForTest().settings
+    private fun pipeline() = config.audio.pipeline
 
-    private fun vadConfig(): VadConfig = service.testActivityInputMode.vadConfig
+    private fun vadConfig(): VadConfig = config.audio.vad
 
-    private fun change(key: String) = service.onPreferenceChanged(key)
 
     @Test
     fun `every voice gate preference reaches the running detector`() {
@@ -73,8 +91,7 @@ class MumlaServiceAudioPreferencesTest {
         )
         for ((key, write) in writes) {
             prefs.edit().apply(write).commit()
-            change(key)
-            assertThat(vadConfig()).isEqualTo(Settings.getInstance(service).vadConfig)
+            assertThat(vadConfig()).isEqualTo(Settings.getInstance(context).vadConfig)
         }
         // Read back the values themselves: an accessor returning a constant would pass the above.
         val config = vadConfig()
@@ -88,7 +105,6 @@ class MumlaServiceAudioPreferencesTest {
     @Test
     fun `the legacy threshold slider still reaches the detector in amplitude mode`() {
         prefs.edit().putString(Settings.VAD_MODE.key, "amplitude").putInt(Settings.THRESHOLD.key, 81).commit()
-        change(Settings.THRESHOLD.key)
         assertThat(vadConfig().startThreshold).isWithin(0.001f).of(0.81f)
     }
 
@@ -99,7 +115,6 @@ class MumlaServiceAudioPreferencesTest {
             .putInt(Settings.VAD_START.key, 77)
             .putInt(Settings.VAD_STOP.key, 22)
             .commit()
-        change(Settings.VAD_START.key)
         assertThat(vadConfig().startThreshold).isWithin(0.001f).of(0.77f)
         assertThat(vadConfig().stopThreshold).isWithin(0.001f).of(0.22f)
     }
@@ -107,45 +122,48 @@ class MumlaServiceAudioPreferencesTest {
     @Test
     fun `the noise suppression method reaches the audio config`() {
         prefs.edit().putString(Settings.NOISE_SUPPRESSION_METHOD.key, "speex").commit()
-        change(Settings.NOISE_SUPPRESSION_METHOD.key)
         assertThat(pipeline().noiseSuppression).isEqualTo(NoiseSuppressionMode.SPEEX)
     }
 
     @Test
     fun `the speex suppression depth reaches the audio config`() {
         prefs.edit().putString(Settings.SPEEX_NOISE_SUPPRESS_DB.key, "-35").commit()
-        change(Settings.SPEEX_NOISE_SUPPRESS_DB.key)
         assertThat(pipeline().speexNoiseSuppressDb).isEqualTo(-35)
     }
 
-    /** The device saved in the chooser reaches the router, connected or not. */
+    /** The device saved in the chooser reaches the session, connected or not. */
     @Test
-    fun `the saved audio device reaches the router`() {
-        val router = service.testRouter
+    fun `the saved audio device reaches the session`() {
         val earpiece = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
-        Settings.getInstance(service).preferredAudioDevice = earpiece
-        change(Settings.AUDIO_DEVICE.key)
-        assertThat(router.preferred).isEqualTo(earpiece)
+        Settings.getInstance(context).preferredAudioDevice = earpiece
+        assertThat(config.audio.preferredDevice).isEqualTo(earpiece)
 
-        Settings.getInstance(service).preferredAudioDevice = null
-        change(Settings.AUDIO_DEVICE.key)
-        assertThat(router.preferred).isNull()
+        Settings.getInstance(context).preferredAudioDevice = null
+        assertThat(config.audio.preferredDevice).isNull()
+    }
+
+    /** The routing itself is the session's; here only the wish has to arrive, either way. */
+    @Test
+    fun `the bluetooth preference reaches the session`() {
+        Settings.getInstance(context).isBluetoothScoEnabled = false
+        assertThat(config.audio.bluetoothAutomatic).isFalse()
+
+        Settings.getInstance(context).isBluetoothScoEnabled = true
+        assertThat(config.audio.bluetoothAutomatic).isTrue()
     }
 
     /**
-     * The chooser's echo switch writes a per-device override; the service has to hold all of them,
+     * The chooser's echo switch writes a per-device override; the session has to hold all of them,
      * so the next device of that kind gets it too. Read off the map the route decision uses.
      */
     @Test
-    fun `an echo cancellation override reaches the service`() {
-        Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
-        change(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
-        assertThat(service.sessionConfig.audio.echoCancellationOverrides)
+    fun `an echo cancellation override reaches the session`() {
+        Settings.getInstance(context).setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
+        assertThat(config.audio.echoCancellationOverrides)
             .isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
 
-        Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.EARPIECE, false)
-        change(Settings.echoCancellationKey(AudioDeviceCategory.EARPIECE))
-        assertThat(service.sessionConfig.audio.echoCancellationOverrides).isEqualTo(
+        Settings.getInstance(context).setEchoCancellationOverride(AudioDeviceCategory.EARPIECE, false)
+        assertThat(config.audio.echoCancellationOverrides).isEqualTo(
             mapOf(AudioDeviceCategory.SPEAKER to false, AudioDeviceCategory.EARPIECE to false),
         )
     }
@@ -159,8 +177,6 @@ class MumlaServiceAudioPreferencesTest {
                     .putBoolean(Settings.ANDROID_NOISE_SUPPRESSOR.key, ns)
                     .putBoolean(Settings.ANDROID_AGC.key, agc)
                     .commit()
-                change(Settings.ANDROID_NOISE_SUPPRESSOR.key)
-                change(Settings.ANDROID_AGC.key)
                 assertThat(pipeline().androidEffects).isEqualTo(AndroidAudioEffects(ns, agc))
             }
         }
@@ -185,11 +201,11 @@ class MumlaServiceAudioPreferencesTest {
             "hidePtt" to "read by the channel fragment when it builds the PTT button",
             "togglePtt" to "read by the PTT button when it handles a press",
             "allow_external_ptt" to "read by the talk broadcast receiver on each broadcast",
-            "ptt_sound" to "read by MumlaService's own field, in its own case",
+            "ptt_sound" to "read by MumlaService when our talk state changes",
         )
 
         val keys = mutableSetOf<String>()
-        val parser = service.resources.getXml(R.xml.settings_audio)
+        val parser = context.resources.getXml(R.xml.settings_audio)
         while (parser.next() != XmlPullParser.END_DOCUMENT) {
             if (parser.eventType != XmlPullParser.START_TAG) continue
             keys += parser.getAttributeValue(ANDROID_NS, "key") ?: continue
@@ -203,17 +219,38 @@ class MumlaServiceAudioPreferencesTest {
     /** An audio key reapplies every audio setting at once; any other key leaves the config alone. */
     @Test
     fun `only an audio key reconfigures the session`() {
-        val settings = Settings.getInstance(service)
-        prefs.edit().putBoolean(Settings.HALF_DUPLEX.key, true).commit()
-        val before = service.sessionConfig
+        prefs.edit()
+            .putBoolean(Settings.USE_TTS.key, true)
+            .putString(Settings.HOT_CORNER.key, Settings.ARRAY_HOT_CORNER_TOP_LEFT)
+            .putBoolean(Settings.PTT_SOUND.key, true)
+            .putBoolean("nonsense", true)
+            .commit()
+        assertThat(configures).isEqualTo(0)
 
-        for (key in listOf(Settings.USE_TTS.key, Settings.HOT_CORNER.key, Settings.PTT_SOUND.key, "nonsense")) {
-            change(key)
-            assertThat(service.sessionConfig).isSameInstanceAs(before)
+        prefs.edit().putBoolean(Settings.HALF_DUPLEX.key, true).commit()
+
+        assertThat(configures).isEqualTo(1)
+        assertThat(config.audio.halfDuplex).isTrue()
+        assertThat(config).isEqualTo(SessionSettings.withAudioSettings(SessionConfig(), Settings.getInstance(context)))
+    }
+
+    /** Only a connection setting says so, and only while connected: it applies from the next one. */
+    @Test
+    fun `a setting that needs a reconnect says so while connected`() {
+        for (key in listOf(Settings.CERT_ID.key, Settings.FORCE_TCP.key, Settings.USE_TOR.key)) {
+            ShadowToast.reset()
+            session.stubState(SessionState.Connecting)
+            SessionSettingsSync(context, SessionManager.get(context))
+                .onPreferenceChanged(key)
+            assertThat(ShadowToast.getLatestToast()).isNull()
+
+            session.stubState(SessionState.Connected)
+            SessionSettingsSync(context, SessionManager.get(context))
+                .onPreferenceChanged(key)
+            assertThat(ShadowToast.getTextOfLatestToast())
+                .isEqualTo(context.getString(R.string.change_requires_reconnect))
         }
-        change(Settings.HALF_DUPLEX.key)
-        assertThat(service.sessionConfig).isEqualTo(SessionSettings.withAudioSettings(before, settings))
-        assertThat(service.sessionConfig.audio.halfDuplex).isTrue()
+        verify(exactly = 0) { session.disconnect() }
     }
 
     private companion object {

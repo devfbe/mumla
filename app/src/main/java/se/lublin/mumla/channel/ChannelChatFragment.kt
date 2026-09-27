@@ -44,7 +44,6 @@ import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -52,12 +51,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.ChatAdapter
@@ -69,10 +66,9 @@ import se.lublin.mumla.chat.OutgoingImageEncoder
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.outgoingMessageHtml
 import se.lublin.mumla.databinding.FragmentChatBinding
-import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.ui.ServiceClient
-import se.lublin.mumla.ui.ServiceViewModel
-import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.session.SessionClient
+import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.session.bindClient
 
 /** The image preview takes at most a third of the screen height. */
 private const val PREVIEW_SCREEN_FRACTION = 3
@@ -83,10 +79,9 @@ private const val PREVIEW_SCREEN_FRACTION = 3
  * is the uniqueness gate `ChatAdapter.onImageClicked` requires, [sessionId] never throws, and the
  * adapter gets a `lifecycleScope` (`Dispatchers.Main.immediate`) because its coroutines touch views.
  */
-class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
+class ChannelChatFragment : Fragment(), SessionClient, MenuProvider {
 
-    private val serviceModel: ServiceViewModel by activityViewModels()
-    private val service: IMumlaService? get() = serviceModel.service.value
+    private val sessions get() = SessionManager.get(requireContext())
     private var bound = false
 
     private val chatTargets by parentChatTargets()
@@ -94,9 +89,6 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
     private lateinit var chatTextEdit: EditText
     private lateinit var sendButton: ImageButton
     private lateinit var imageProgress: View
-
-    /** The bound service, or null between an unbind and the next bind (the list then stays as it is). */
-    private val boundService = MutableStateFlow<IMumlaService?>(null)
 
     private val imagePicker = registerForActivityResult(GetContent(), ::onImagePickResult)
 
@@ -120,9 +112,9 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
         }
     }
 
-    override fun onServiceEvent(event: HumlaEvent) {
+    override fun onSessionEvent(event: HumlaEvent) {
         if (event !is HumlaEvent.UserJoinedChannel) return
-        val session = service?.takeIf { it.isConnected }?.session ?: return
+        val session = sessions.connected ?: return
         if (event.user == session.sessionUser && chatTargets.target.value == null) {
             // The user changed channels without a target: follow them.
             updateChatTargetText(null)
@@ -181,15 +173,13 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                boundService.collectLatest { service ->
-                    service?.messageLog?.collect { submit(adapter, it) }
-                }
+                sessions.chat.messages.collect { submit(adapter, it) }
             }
         }
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         if (!bound) {
             bound = true
-            serviceModel.bindClient(this, this)
+            sessions.bindClient(this, this)
         }
     }
 
@@ -208,25 +198,20 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
         return true
     }
 
-    /** Empties the service's chat log, and with it the list. */
+    /** Empties the session's chat log, and with it the list. */
     fun clear() {
-        service?.clearMessageLog()
+        sessions.chat.clear()
     }
 
-    override fun onServiceBound(service: IMumlaService) {
-        boundService.value = service
-        // onCreateView may have run before the service was bound, so set the hint here too.
-        updateChatTargetText(chatTargets.target.value)
-    }
-
-    override fun onServiceUnbound() {
-        boundService.value = null
+    override fun onSessionState(state: SessionState) {
+        // onCreateView may have run before the session was synchronized, so set the hint here too.
+        if (state == SessionState.Connected) updateChatTargetText(chatTargets.target.value)
     }
 
     /** Updates the compose hint that shows where the next message goes. */
     fun updateChatTargetText(target: ChatTarget?) {
         if (!this::chatTextEdit.isInitialized) return
-        val session = service?.takeIf { it.isConnected }?.session ?: return
+        val session = sessions.connected ?: return
         val sessionChannel = session.sessionChannel
         val hint = when (target) {
             is ChatTarget.User -> getString(R.string.messageToUser, target.name)
@@ -264,8 +249,8 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
      */
     @VisibleForTesting
     internal fun sessionId(): Int = try {
-        service?.takeIf { it.isConnected }?.session?.sessionId ?: NO_SESSION
-    } catch (e: HumlaDisconnectedException) {
+        sessions.connected?.sessionId ?: NO_SESSION
+    } catch (e: IllegalStateException) {
         NO_SESSION
     }
 
@@ -283,8 +268,7 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
 
     @VisibleForTesting
     internal fun onImagePicked(uri: Uri) {
-        val service = service ?: return
-        if (!service.isConnected) return
+        if (sessions.connected == null) return
         imageProgress.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
             val bitmap = try {
@@ -318,20 +302,20 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
     }
 
     /**
-     * Encodes and sends a confirmed image. The service is fetched again because the session can be
-     * gone by the time the confirmation dialog is dismissed.
+     * Encodes and sends a confirmed image. The session is fetched again because it can be gone by
+     * the time the confirmation dialog is dismissed.
      */
     @VisibleForTesting
     internal fun sendImage(bitmap: Bitmap) {
-        val service = service ?: return
+        val session = sessions.connected ?: return
         imageProgress.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
             val html = try {
                 // Without the server's limit there is nothing to fit the image to.
-                val maxLength = service.session.serverSettings?.imageMessageLength
+                val maxLength = session.serverSettings?.imageMessageLength
                 if (maxLength == null) null
                 else withContext(Dispatchers.Default) { OutgoingImageEncoder.encode(bitmap, maxLength) }
-            } catch (e: HumlaDisconnectedException) {
+            } catch (e: IllegalStateException) {
                 Log.d(TAG, "disconnected while encoding an image: $e")
                 null
             } finally {
@@ -341,42 +325,28 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
                 Toast.makeText(requireContext(), R.string.image_too_large, Toast.LENGTH_LONG).show()
                 return@launch
             }
-            try {
-                sendHtml(html)
-            } catch (e: HumlaDisconnectedException) {
-                Log.d(TAG, "exception from sendMessage: $e")
-            }
+            sendHtml(html)
         }
     }
 
     private fun sendMessageFromEditor() {
         if (chatTextEdit.length() == 0) return
-        try {
-            sendMessage(chatTextEdit.text.toString())
-            chatTextEdit.setText("")
-        } catch (e: HumlaDisconnectedException) {
-            Log.d(TAG, "exception from sendMessage: $e")
-        }
+        if (sendMessage(chatTextEdit.text.toString())) chatTextEdit.setText("")
     }
 
-    /** Sends what the user typed, formatted as the settings say. */
-    private fun sendMessage(message: String) {
+    /** Sends what the user typed, formatted as the settings say; false without a connection. */
+    private fun sendMessage(message: String): Boolean =
         sendHtml(outgoingMessageHtml(message, Settings.getInstance(requireContext()).isMarkdownEnabled))
-    }
 
-    private fun sendHtml(html: String) {
-        val service = service
-        if (service == null) {
-            Log.d(TAG, "service==null in sendMessage")
-            return
-        }
-        val session = service.session
-        // The service adds the sent message to its log, which the list shows.
+    /** The session publishes the sent message, and its chat log shows it. */
+    private fun sendHtml(html: String): Boolean {
+        val session = sessions.connected ?: return false
         when (val target = chatTargets.target.value) {
             is ChatTarget.User -> session.sendUserTextMessage(target.user.session, html)
             is ChatTarget.Channel -> session.sendChannelTextMessage(target.channel.id, html, false)
             null -> session.sessionChannel?.let { session.sendChannelTextMessage(it.id, html, false) }
         }
+        return true
     }
 
     private companion object {

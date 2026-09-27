@@ -23,9 +23,10 @@ import android.view.View
 import androidx.appcompat.widget.PopupMenu
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
-import se.lublin.humla.IHumlaService
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.util.collectEvents
 
 /**
@@ -38,7 +39,7 @@ class PermissionsPopupMenu(
     menuRes: Int,
     private val prepareListener: IOnMenuPrepareListener,
     private val channel: IChannel,
-    private val service: IHumlaService,
+    private val session: IHumlaSession,
 ) : PopupMenu.OnDismissListener {
 
     private val menu = PopupMenu(context, anchor).apply {
@@ -52,21 +53,21 @@ class PermissionsPopupMenu(
 
     private val permissions: Int
         get() = when {
-            !service.isConnected -> 0
-            channel.id == 0 -> service.session.permissions
+            !session.isConnected -> 0
+            channel.id == 0 -> session.permissions
             else -> channel.permissions
         }
 
     fun show() {
         permissionUpdates?.cancel()
-        permissionUpdates = collectEvents(MainScope(), service) { event ->
+        permissionUpdates = collectEvents(MainScope(), session) { event ->
             if (event is HumlaEvent.ChannelPermissionsUpdated && event.channel == channel) {
                 prepareListener.onMenuPrepare(menu.menu, permissions)
             }
         }
         if (permissions == 0) {
             // onMenuPrepare will be called once more once permissions have loaded.
-            if (service.isConnected) service.session.requestPermissions(channel.id)
+            if (session.isConnected) session.requestPermissions(channel.id)
         } else {
             prepareListener.onMenuPrepare(menu.menu, permissions)
         }

@@ -22,12 +22,10 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.GraphicsMode
-import se.lublin.humla.HumlaService
-import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
@@ -35,6 +33,7 @@ import se.lublin.mumla.drawable.CircleDrawable
 import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubState
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -54,7 +53,6 @@ class ChannelListAdapterRebuildTest {
     /** The row layouts resolve theme attributes, so they need a themed context, not the app one. */
     private lateinit var context: Context
     private lateinit var session: IHumlaSession
-    private lateinit var service: IHumlaService
     private lateinit var database: MumlaDatabase
     private lateinit var server: Server
     private lateinit var byId: MutableMap<Int, FakeChannel>
@@ -72,17 +70,15 @@ class ChannelListAdapterRebuildTest {
         server = mockk(relaxed = true)
         every { server.id } returns SERVER_ID
         every { server.isSaved } returns true
-        service = mockk(relaxed = true)
-        every { service.isConnected } returns connected
-        every { service.session } returns session
-        every { service.targetServer } returns server
+        session.stubState(if (connected) SessionState.Connected else SessionState.Disconnected())
+        every { session.targetServer } returns server
         database = mockk(relaxed = true)
         if (pinnedChannels != null) {
             every { database.getPinnedChannels(any()) } returns pinnedChannels
         }
         return ChannelListAdapter(
             context,
-            service,
+            session,
             // Inline, so the database work is deterministic in tests.
             MumlaRepository(database, Dispatchers.Unconfined),
             mockk<FragmentManager>(relaxed = true),
@@ -214,30 +210,29 @@ class ChannelListAdapterRebuildTest {
     }
 
     @Test
-    fun aNewlyBoundConnectedServiceRebuildsTheList() {
+    fun aNewlyBoundConnectedSessionRebuildsTheList() {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
         idleMainLooper()
         val before = adapter.itemCount
 
         ids.getValue(0).addUser(FakeUser(300))
-        every { service.connectionState } returns HumlaService.ConnectionState.CONNECTED
-        adapter.setService(service)
+        adapter.setSession(session)
         idleMainLooper()
 
         assertThat(adapter.itemCount).isEqualTo(before + 1)
     }
 
     @Test
-    fun aNewlyBoundServiceThatIsNotConnectedYetRebuildsNothing() {
+    fun aNewlyBoundSessionThatIsNotConnectedYetRebuildsNothing() {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
         idleMainLooper()
         val before = adapter.itemCount
 
         ids.getValue(0).addUser(FakeUser(300))
-        every { service.connectionState } returns HumlaService.ConnectionState.CONNECTING
-        adapter.setService(service)
+        session.stubState(SessionState.Connecting)
+        adapter.setSession(session)
         idleMainLooper()
 
         assertThat(adapter.itemCount).isEqualTo(before)
@@ -553,13 +548,13 @@ class ChannelListAdapterRebuildTest {
     }
 
     @Test
-    fun aDisconnectedServiceLeavesTheChannelRowUnmarked() {
+    fun aDisconnectedSessionLeavesTheChannelRowUnmarked() {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
         every { session.sessionChannel } returns ids.getValue(2)
         idleMainLooper()
 
-        every { service.isConnected } returns false
+        session.stubState(SessionState.Disconnected())
 
         assertThat(nameStyleOf(adapter, 2)).isEqualTo(Typeface.NORMAL)
     }
@@ -573,7 +568,7 @@ class ChannelListAdapterRebuildTest {
         assertThat(userNameStyleOf(adapter, 100)).isEqualTo(Typeface.BOLD)
         assertThat(userNameStyleOf(adapter, 200)).isEqualTo(Typeface.NORMAL)
 
-        every { service.isConnected } returns false
+        session.stubState(SessionState.Disconnected())
 
         assertThat(userNameStyleOf(adapter, 100)).isEqualTo(Typeface.NORMAL)
     }
@@ -594,7 +589,7 @@ class ChannelListAdapterRebuildTest {
         val adapter = adapterOver(root, ids)
         val join = joinButtonOf(adapter, 2)
 
-        every { service.isConnected } returns false
+        session.stubState(SessionState.Disconnected())
         join.performClick()
 
         verify(exactly = 0) { session.joinChannel(any()) }
@@ -654,7 +649,7 @@ class ChannelListAdapterRebuildTest {
         idleMainLooper()
         val before = adapter.itemCount
 
-        every { service.isConnected } returns false
+        session.stubState(SessionState.Disconnected())
         ids.getValue(0).addUser(FakeUser(300))
         adapter.updateChannels()
         idleMainLooper()
@@ -814,10 +809,10 @@ class ChannelListAdapterRebuildTest {
         val server = mockk<Server>(relaxed = true)
         every { server.id } returns SERVER_ID
         every { server.isSaved } returns true
-        val service = mockk<IHumlaService>(relaxed = true).stubConnected(mockk(relaxed = true))
-        every { service.targetServer } returns server
+        val pinnedSession = mockk<IHumlaSession>(relaxed = true).stubConnected()
+        every { pinnedSession.targetServer } returns server
         val adapter = ChannelListAdapter(
-            context, service, MumlaRepository(database), mockk<FragmentManager>(relaxed = true), false, true,
+            context, pinnedSession, MumlaRepository(database), mockk<FragmentManager>(relaxed = true), false, true,
         )
         val done = CountDownLatch(1)
         val writer = arrayOfNulls<String>(1)
@@ -876,7 +871,7 @@ class ChannelListAdapterRebuildTest {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
         every { session.sessionChannel } throws IllegalStateException("not synchronized")
-        every { session.sessionId } throws HumlaDisconnectedException("gone")
+        every { session.sessionId } throws IllegalStateException("gone")
 
         assertThat(nameStyleOf(adapter, 2)).isEqualTo(Typeface.NORMAL)
         assertThat(userNameStyleOf(adapter, 100)).isEqualTo(Typeface.NORMAL)

@@ -17,15 +17,17 @@
 
 package se.lublin.humla.testutil
 
+import android.app.Application
 import android.os.Handler
 import android.os.Looper
-import org.robolectric.Robolectric
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowLooper
-import se.lublin.humla.HumlaService
+import se.lublin.humla.HumlaSession
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.AudioSettings
 import se.lublin.humla.audio.PipelineSettings
+import se.lublin.humla.audio.routing.CommunicationDevices
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.FakeTcpTransport
@@ -35,20 +37,23 @@ import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.ConnectionConfig
+import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.session.SessionState
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Builds a [HumlaService] whose collaborators are fakes and drives it through a real
- * [HumlaConnection] over [FakeTransports]; the session state machine is never faked.
+ * Builds a [HumlaSession] whose collaborators are fakes and drives it through a real
+ * [HumlaConnection] over [FakeTransports]; the session state machine is never faked. The network
+ * and the wake lock are the platform's, as Robolectric shadows them.
  *
  * Under Robolectric the test thread is the main thread with a paused looper, while the protocol
  * thread is real. Waits poll protocol-thread state and drain the main looper explicitly; polling
  * main-thread state would deadlock.
  */
-class HumlaServiceHarness(
-    private val autoReconnect: Boolean = false,
+class HumlaSessionHarness(
+    autoReconnect: Boolean = false,
     reconnectPolicy: ReconnectPolicy = ReconnectPolicy(
         baseDelayMillis = 10L,
         maxDelayMillis = 10L,
@@ -56,53 +61,44 @@ class HumlaServiceHarness(
         maxJitterFraction = 0.0,
     ),
     server: Server? = Server(-1, "test", "127.0.0.1", 64738, "me", ""),
-    /** null leaves the service to wrap the platform AudioManager, which is its own corner. */
+    /** null leaves the session to wrap the platform AudioManager, which is its own corner. */
     val devices: FakeCommunicationDevices? = FakeCommunicationDevices(),
 ) {
+    val app: Application = RuntimeEnvironment.getApplication()
     val transports = FakeTransports()
     val audioFactory = FakeAudioFactory()
     val mainLooper: ShadowLooper = shadowOf(Looper.getMainLooper())
     val warnings = CopyOnWriteArrayList<String?>()
 
-    val disconnects = CopyOnWriteArrayList<HumlaException?>()
-
-    private val controller: ServiceController<HumlaService> =
-        Robolectric.buildService(HumlaService::class.java)
-    val service: HumlaService = controller.get()
+    val session: HumlaSession = testSession(
+        SessionConfig(ConnectionConfig(server = server, clientName = "harness"), autoReconnect = autoReconnect),
+        devices,
+        reconnectPolicy,
+        connectionFactory = { listener -> HumlaConnection(listener, transports, Handler(Looper.getMainLooper())) },
+        audioFactory = audioFactory,
+    )
 
     init {
-        service.connectionFactory = { listener ->
-            HumlaConnection(listener, transports, Handler(Looper.getMainLooper()))
+        session.onEvents { event ->
+            if (event is HumlaEvent.LogMessage && event.level == HumlaEvent.Level.WARNING) warnings += event.text
         }
-        service.reconnectPolicy = reconnectPolicy
-        service.audioFactory = audioFactory
-        service.communicationDevices = devices
-        controller.create()
-        service.onEvents { event ->
-            when (event) {
-                is HumlaEvent.LogMessage -> if (event.level == HumlaEvent.Level.WARNING) warnings += event.text
-                is HumlaEvent.Disconnected -> disconnects += event.error
-                else -> Unit
-            }
-        }
-        service.configure(
-            SessionConfig(ConnectionConfig(server = server, clientName = "harness"), autoReconnect = autoReconnect),
-        )
         mainLooper.idle()
     }
 
-    fun destroy() {
-        controller.destroy()
+    fun string(id: Int): String = app.getString(id)
+
+    fun close() {
+        session.close()
         mainLooper.idle()
         awaitUntil(description = "nothing of the connection left behind") {
             mainLooper.idle()
-            service.connection?.isTerminated != false
+            session.connection?.isTerminated != false
         }
     }
 
-    /** Reconfigures the service the way MumlaService does, before or during a session. */
+    /** Reconfigures the session the way the app does, before or during a connection. */
     fun configure(change: SessionConfig.() -> SessionConfig) {
-        service.configure(service.sessionConfig.change())
+        session.configure(session.config.change())
         mainLooper.idle()
     }
 
@@ -123,7 +119,7 @@ class HumlaServiceHarness(
         // `connected` is set before that callback is posted to the main looper.
         awaitUntil(description = "connection $index established") {
             mainLooper.idle()
-            service.connection?.isConnected == true &&
+            session.connection?.isConnected == true &&
                 tcp.sent.contains(HumlaTCPMessageType.Authenticate)
         }
         return tcp
@@ -134,21 +130,10 @@ class HumlaServiceHarness(
      * before the session is usable, and drains the main looper.
      */
     fun synchronize(tcp: FakeTcpTransport, session: Int = 1) {
-        tcp.simulateMessage(
-            HumlaTCPMessageType.ChannelState,
-            Mumble.ChannelState.newBuilder().setChannelId(0).setName("Root").build().toByteArray(),
-        )
-        tcp.simulateMessage(
-            HumlaTCPMessageType.UserState,
-            Mumble.UserState.newBuilder().setSession(session).setName("me").setChannelId(0).build().toByteArray(),
-        )
-        tcp.simulateMessage(
-            HumlaTCPMessageType.ServerSync,
-            Mumble.ServerSync.newBuilder().setSession(session).setMaxBandwidth(72_000).build().toByteArray(),
-        )
+        feedSync(tcp, session)
         awaitUntil(description = "server sync delivered") {
             mainLooper.idle()
-            service.connectionState == HumlaService.ConnectionState.CONNECTED
+            this.session.state.value == SessionState.Connected
         }
     }
 
@@ -158,6 +143,13 @@ class HumlaServiceHarness(
      * window in which a disconnect can beat the callback.
      */
     fun synchronizeWithoutDraining(tcp: FakeTcpTransport, session: Int = 1) {
+        feedSync(tcp, session)
+        awaitUntil(description = "server sync parsed") {
+            this.session.connection?.isSynchronized == true
+        }
+    }
+
+    private fun feedSync(tcp: FakeTcpTransport, session: Int) {
         tcp.simulateMessage(
             HumlaTCPMessageType.ChannelState,
             Mumble.ChannelState.newBuilder().setChannelId(0).setName("Root").build().toByteArray(),
@@ -170,13 +162,10 @@ class HumlaServiceHarness(
             HumlaTCPMessageType.ServerSync,
             Mumble.ServerSync.newBuilder().setSession(session).setMaxBandwidth(72_000).build().toByteArray(),
         )
-        awaitUntil(description = "server sync parsed") {
-            service.connection?.isSynchronized == true
-        }
     }
 
     fun connectAndSynchronize(index: Int = 0): FakeTcpTransport {
-        if (index == 0) service.connect()
+        if (index == 0) session.connect()
         val tcp = openSocket(index)
         synchronize(tcp)
         return tcp
@@ -184,7 +173,7 @@ class HumlaServiceHarness(
 
     /** Fails connection [index] the way a dropped socket does, including the late close report. */
     fun failConnection(index: Int, error: HumlaException) {
-        val connection = service.connection
+        val connection = session.connection
         transports.tcps[index].simulateFailure(error)
         awaitUntil(description = "connection $index torn down") {
             mainLooper.idle()
@@ -193,7 +182,48 @@ class HumlaServiceHarness(
         transports.tcps[index].simulateSocketClosed()
         awaitUntil(description = "disconnect report delivered") {
             mainLooper.idle()
-            service.connectionState != HumlaService.ConnectionState.CONNECTED
+            session.state.value != SessionState.Connected
         }
     }
+}
+
+/** A session on Robolectric's platform with fakes where a test needs them. */
+fun testSession(
+    config: SessionConfig = SessionConfig(),
+    devices: CommunicationDevices? = FakeCommunicationDevices(),
+    reconnectPolicy: ReconnectPolicy = ReconnectPolicy(),
+    connectionFactory: ((HumlaConnection.HumlaConnectionListener) -> HumlaConnection)? = null,
+    audioFactory: FakeAudioFactory = FakeAudioFactory(),
+): HumlaSession {
+    val main = Handler(Looper.getMainLooper())
+    val app = RuntimeEnvironment.getApplication()
+    return if (connectionFactory == null) {
+        HumlaSession(
+            app, config, main,
+            communicationDevices = devices, audioFactory = audioFactory, reconnectPolicy = reconnectPolicy,
+        )
+    } else {
+        HumlaSession(
+            app, config, main,
+            communicationDevices = devices, connectionFactory = connectionFactory,
+            audioFactory = audioFactory, reconnectPolicy = reconnectPolicy,
+        )
+    }
+}
+
+/** Why the session is not connected, in whichever state carries it. */
+val IHumlaSession.reason: DisconnectReason?
+    get() = when (val state = state.value) {
+        is SessionState.Disconnected -> state.reason
+        is SessionState.ConnectionLost -> state.reason
+        is SessionState.Reconnecting -> state.reason
+        SessionState.Connecting, SessionState.Connected -> null
+    }
+
+val IHumlaSession.isReconnecting: Boolean
+    get() = state.value is SessionState.ConnectionLost || state.value is SessionState.Reconnecting
+
+/** Stores the Bluetooth wish the way the app's preference does: as part of the audio settings. */
+fun IHumlaSession.setBluetoothAutomatic(on: Boolean) {
+    configure(config.copy(audio = config.audio.copy(bluetoothAutomatic = on)))
 }

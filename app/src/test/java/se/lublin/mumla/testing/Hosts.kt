@@ -22,16 +22,14 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import io.mockk.mockk
+import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
 import se.lublin.mumla.channel.ChatTargetViewModel
 import se.lublin.mumla.db.MumlaDatabase
-import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.ui.ServiceViewModel
 
 /** An activity in the app theme, for fragments that need nothing from their host. */
 open class ThemedActivity : AppCompatActivity() {
@@ -47,14 +45,11 @@ open class ThemedActivity : AppCompatActivity() {
  */
 class ServiceHostActivity : ThemedActivity() {
     val database: MumlaDatabase = installDatabase(mockk(relaxed = true))
-    private val serviceModel: ServiceViewModel by viewModels()
     var menuInvalidations = 0
         private set
 
-    /** Binds [service] as the activity would, or unbinds with null. */
-    fun bind(service: IMumlaService?) {
-        serviceModel.attach(service)
-    }
+    /** Makes [session] the current session, as a connect does. */
+    fun bind(session: IHumlaSession) = installSession(session)
 
     override fun invalidateOptionsMenu() {
         menuInvalidations++

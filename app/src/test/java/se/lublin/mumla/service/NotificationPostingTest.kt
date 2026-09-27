@@ -51,7 +51,7 @@ class NotificationPostingTest {
     private fun showReconnect(): MumlaReconnectNotification {
         shadowOf(context as Application)
             .grantPermissions(context.packageName + DYNAMIC_RECEIVER_PERMISSION)
-        return MumlaReconnectNotification.show(context, "connection lost", false, NoopActions)
+        return MumlaReconnectNotification(context, NoopActions).also { it.show("connection lost") }
     }
 
     /**
@@ -150,6 +150,5 @@ class NotificationPostingTest {
     private object NoopActions : MumlaReconnectNotification.OnActionListener {
         override fun onReconnectNotificationDismissed() {}
         override fun reconnect() {}
-        override fun cancelReconnect() {}
     }
 }

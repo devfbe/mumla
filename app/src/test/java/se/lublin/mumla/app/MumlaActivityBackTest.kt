@@ -18,35 +18,32 @@ package se.lublin.mumla.app
 
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import androidx.lifecycle.ViewModelProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowDialog
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
-import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
-import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.stubState
 
 /** Back asks before leaving a connected server, and only then: predictive back works otherwise. */
 @RunWith(RobolectricTestRunner::class)
 class MumlaActivityBackTest {
 
-    private val state = MutableStateFlow<SessionState>(SessionState.Disconnected())
-    private val service: IMumlaService = mockk(relaxed = true) {
-        every { sessionState } returns state
-        every { isConnected } answers { state.value == SessionState.Connected }
+    private val session: IHumlaSession = mockk(relaxed = true) {
         every { targetServer } returns Server(1, "Home", "example.org", 64738, "me", null)
     }
+    private val state = session.stubState(SessionState.Disconnected())
     private lateinit var activity: MumlaActivity
 
     @Before
@@ -55,7 +52,7 @@ class MumlaActivityBackTest {
         activity = Robolectric.buildActivity(MumlaActivity::class.java).setup().get()
         idleMainLooper()
         ShadowDialog.getLatestDialog()?.dismiss() // the first-run guide
-        ViewModelProvider(activity)[ServiceViewModel::class.java].attach(service)
+        installSession(session)
         idleMainLooper()
     }
 
@@ -92,11 +89,11 @@ class MumlaActivityBackTest {
     }
 
     @Test
-    fun unbindingStopsTheInterception() {
+    fun aNewSessionThatIsNotConnectedYetStopsTheInterception() {
         state.value = SessionState.Connected
         idleMainLooper()
 
-        ViewModelProvider(activity)[ServiceViewModel::class.java].attach(null)
+        installSession(mockk<IHumlaSession>(relaxed = true).also { it.stubState(SessionState.Connecting) })
         idleMainLooper()
 
         assertThat(intercepted).isFalse()

@@ -23,7 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
-import se.lublin.humla.IHumlaService
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.HumlaEvent
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -36,13 +36,13 @@ fun <T> collectOnMain(flow: Flow<T>, block: (T) -> Unit): Job =
         flow.collect { block(it) }
     }
 
-/** Calls [block] for each of this service's events; see [collectOnMain]. Cancel the job to stop. */
-fun IHumlaService.onEvents(block: (HumlaEvent) -> Unit): Job = collectOnMain(events, block)
+/** Calls [block] for each of this session's events; see [collectOnMain]. Cancel the job to stop. */
+fun IHumlaSession.onEvents(block: (HumlaEvent) -> Unit): Job = collectOnMain(events, block)
 
-/** Records this service's events; see [collectOnMain]. */
-class EventRecorder(service: IHumlaService) {
+/** Records this session's events; see [collectOnMain]. */
+class EventRecorder(session: IHumlaSession) {
     val events: MutableList<HumlaEvent> = CopyOnWriteArrayList()
-    val job: Job = service.onEvents { events += it }
+    val job: Job = session.onEvents { events += it }
 
     inline fun <reified T : HumlaEvent> of(): List<T> = events.filterIsInstance<T>()
 }

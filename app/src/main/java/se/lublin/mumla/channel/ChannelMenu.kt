@@ -26,7 +26,7 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.fragment.app.FragmentManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import se.lublin.humla.IHumlaService
+import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.net.Permissions
@@ -34,13 +34,14 @@ import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.mumla.R
 import se.lublin.mumla.channel.comment.ChannelDescriptionFragment
 import se.lublin.mumla.db.PinnedChannels
+import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.ui.showConfirmDialog
 
 /** The popup menu of a channel's row: join, edit, pin, link, shout and so on. */
 class ChannelMenu(
     private val context: Context,
     private val channel: IChannel,
-    private val service: IHumlaService,
+    private val session: IHumlaSession,
     private val pinnedChannels: PinnedChannels,
     private val fragmentManager: FragmentManager,
 ) : PermissionsPopupMenu.IOnMenuPrepareListener {
@@ -53,12 +54,12 @@ class ChannelMenu(
         menu.findItem(R.id.context_channel_remove).isVisible = canWrite
         menu.findItem(R.id.context_channel_view_description).isVisible =
             channel.description != null || channel.descriptionHash != null
-        service.targetServer?.let { server ->
+        session.targetServer?.let { server ->
             menu.findItem(R.id.context_channel_pin).isChecked = pinnedChannels.isPinned(server.id, channel.id)
         }
-        if (service.isConnected) {
+        if (session.isConnected) {
             val ourChannel = try {
-                service.session.sessionChannel
+                session.sessionChannel
             } catch (e: IllegalStateException) {
                 Log.d(TAG, "exception in onMenuPrepare: $e")
                 null
@@ -72,14 +73,14 @@ class ChannelMenu(
 
     /** Offered with the Listen permission, and always to stop listening; never for the own channel. */
     private fun prepareListen(item: MenuItem, permissions: Int, ourChannel: IChannel?) {
-        val listening = channel.isListenedToBy(service)
+        val listening = channel.isListenedToBy(session)
         item.isChecked = listening
         item.isVisible = channel != ourChannel && (listening || permissions and Permissions.LISTEN > 0)
     }
 
     @Suppress("CyclomaticComplexMethod", "ReturnCount") // One branch per item.
     override fun onMenuItemClick(item: MenuItem): Boolean {
-        val session = service.takeIf { it.isConnected }?.session ?: return false
+        if (!session.isConnected) return false
         when (item.itemId) {
             R.id.context_channel_join -> session.joinOrExplain(context, channel)
             R.id.context_channel_add -> showEditor(adding = true)
@@ -90,7 +91,7 @@ class ChannelMenu(
             R.id.context_channel_link -> session.sessionChannel?.let { ours ->
                 if (item.isChecked) session.unlinkChannels(ours, channel) else session.linkChannels(ours, channel)
             }
-            R.id.context_channel_listen -> session.setListening(channel.id, !channel.isListenedToBy(service))
+            R.id.context_channel_listen -> session.setListening(channel.id, !channel.isListenedToBy(session))
             R.id.context_channel_unlink_all -> session.unlinkAllChannels(channel)
             R.id.context_channel_shout -> showShoutDialog()
             else -> return false
@@ -103,12 +104,12 @@ class ChannelMenu(
             context.getString(R.string.confirm_delete_channel),
             title = context.getString(R.string.confirm),
         ) {
-            if (service.isConnected) service.session.removeChannel(channel.id)
+            if (session.isConnected) session.removeChannel(channel.id)
         }
     }
 
     private fun togglePin() {
-        val server = service.targetServer ?: return
+        val server = session.targetServer ?: return
         pinnedChannels.setPinned(server.id, channel.id, !pinnedChannels.isPinned(server.id, channel.id))
     }
 
@@ -139,8 +140,7 @@ class ChannelMenu(
     }
 
     private fun shout(includeLinked: Boolean, includeSubchannels: Boolean) {
-        if (!service.isConnected) return
-        val session = service.session
+        if (!session.isConnected) return
         // Replaces any whisper target we registered before.
         if (session.voiceTargetMode == VoiceTargetMode.WHISPER) {
             session.unregisterWhisperTarget(session.voiceTargetId)
@@ -154,7 +154,7 @@ class ChannelMenu(
     }
 
     fun showPopup(anchor: View) {
-        PermissionsPopupMenu(context, anchor, R.menu.context_channel, this, channel, service).show()
+        PermissionsPopupMenu(context, anchor, R.menu.context_channel, this, channel, session).show()
     }
 
     private companion object {
@@ -163,9 +163,9 @@ class ChannelMenu(
 }
 
 /** Whether the local user listens to this channel. */
-private fun IChannel.isListenedToBy(service: IHumlaService): Boolean {
+private fun IChannel.isListenedToBy(session: IHumlaSession): Boolean {
     val self = try {
-        service.session.sessionId
+        session.sessionId
     } catch (e: IllegalStateException) {
         Log.d("ChannelMenu", "exception in isListenedToBy: $e")
         return false

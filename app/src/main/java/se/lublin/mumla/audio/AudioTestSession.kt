@@ -61,14 +61,14 @@ data class MeterReading(
 /**
  * A short-lived capture session for the settings screen.
  *
- * Runs the same pipeline the service runs, from the same factories and settings, so the meter shows
+ * Runs the same pipeline a session runs, from the same factories and settings, so the meter shows
  * what the microphone will actually do. Reports one [MeterReading] every [readingIntervalFrames]
  * frames and, with [loopback] on, plays back the frames that would have been transmitted.
  * One bare thread, released by [stop]. Not reusable: [start] twice throws.
  *
- * While a call is running this takes the microphone: `SettingsActivity` does not bind the service.
- * On API 31+ the newer client wins, the service's capture reports `CaptureState.Silenced`, and its
- * retry re-opens capture after `onPause` stops this session.
+ * While a call is running this takes the microphone: `SettingsActivity` leaves the session alone.
+ * On API 31+ the newer client wins, the session's capture reports `CaptureState.Silenced`, and its
+ * retry re-opens capture after `onPause` stops this one.
  */
 class AudioTestSession(
     private val audioManager: AudioManager,
@@ -103,7 +103,7 @@ class AudioTestSession(
 
     fun start() {
         check(thread == null) { "already started" }
-        // Route capture exactly like the service will, or the preview calibrates a different setup.
+        // Route capture exactly like a session will, or the preview calibrates a different setup.
         if (AudioSourcePolicy.needsCommunicationMode(effects, echoCancellation)) {
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
             ownsCommunicationMode = true

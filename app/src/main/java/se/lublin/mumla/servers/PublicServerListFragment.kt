@@ -48,7 +48,7 @@ import se.lublin.mumla.databinding.FragmentPublicServerListBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.ui.ServerRequest
-import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.showConfirmDialog
 import java.util.Locale
 
@@ -58,7 +58,7 @@ class PublicServerListFragment :
     PublicServerAdapter.PublicServerAdapterMenuListener,
     MenuProvider {
 
-    private val serviceModel: ServiceViewModel by activityViewModels()
+    private val connectRequests: ConnectRequests by activityViewModels()
     private var binding: FragmentPublicServerListBinding? = null
     private var serverAdapter: PublicServerAdapter? = null
     private val pinger = ServerPinger()
@@ -251,7 +251,7 @@ class PublicServerListFragment :
     }
 
     private fun connect(server: PublicServer) {
-        serviceModel.requestConnect(ServerRequest.Public(server))
+        connectRequests.request(ServerRequest.Public(server))
     }
 
     private companion object {

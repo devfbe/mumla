@@ -57,7 +57,7 @@ import java.util.Date
  * insert.
  *
  * @param selfSessionId the local user's session id, used to align rows. Must not throw (the session
- *   throws `HumlaDisconnectedException` while the log is still shown after a disconnect).
+ *   is not synchronized while the log is still shown after a disconnect).
  * @param onImageClicked called with the raw `src` of the tapped row. Before opening
  *   `ImageViewerDialogFragment`, check `findFragmentByTag(ImageViewerDialogFragment.TAG) == null`:
  *   two live viewers would write the same share file.

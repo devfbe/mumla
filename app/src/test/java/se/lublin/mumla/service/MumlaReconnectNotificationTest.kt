@@ -31,10 +31,6 @@ class MumlaReconnectNotificationTest {
         override fun reconnect() {
             calls += "reconnect"
         }
-
-        override fun cancelReconnect() {
-            calls += "cancel"
-        }
     }
 
     private val context: Application get() = ApplicationProvider.getApplicationContext()
@@ -47,6 +43,19 @@ class MumlaReconnectNotificationTest {
         shadowOf(context).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    private fun show(error: String) = MumlaReconnectNotification(context, actions).also { it.show(error) }
+
+    /** A second prompt replaces the first and registers nothing twice. */
+    @Test
+    fun showingAgainReplacesThePrompt() {
+        val notification = show("first")
+
+        notification.show("second")
+
+        assertThat(posted()!!.extras.getString(Notification.EXTRA_TEXT)).isEqualTo("second")
+        assertThat(ourReceivers()).hasSize(1)
+    }
+
     private fun posted(): Notification? = shadowOf(notificationManager).getNotification(NOTIFICATION_ID)
 
     private fun ourReceivers() = shadowOf(context).registeredReceivers.filter {
@@ -56,7 +65,7 @@ class MumlaReconnectNotificationTest {
 
     @Test
     fun theErrorIsTheTextUnderTheDisconnectedTitle() {
-        MumlaReconnectNotification.show(context, "socket reset", false, actions)
+        show("socket reset")
 
         val n = posted()!!
         assertThat(n.extras.getString(Notification.EXTRA_TITLE))
@@ -70,7 +79,7 @@ class MumlaReconnectNotificationTest {
 
     @Test
     fun theChannelIsNamedFromAResourceAtDefaultImportance() {
-        MumlaReconnectNotification.show(context, "socket reset", false, actions)
+        show("socket reset")
 
         val channel = notificationManager.getNotificationChannel(CHANNEL_ID)
         assertThat(channel).isNotNull()
@@ -80,8 +89,8 @@ class MumlaReconnectNotificationTest {
     }
 
     @Test
-    fun withoutAutoReconnectItOffersReconnectAndCanBeSwipedAway() {
-        MumlaReconnectNotification.show(context, "socket reset", false, actions)
+    fun itOffersReconnectAndCanBeSwipedAway() {
+        show("socket reset")
 
         val n = posted()!!
         assertThat(n.flags and Notification.FLAG_ONGOING_EVENT).isEqualTo(0)
@@ -94,22 +103,8 @@ class MumlaReconnectNotificationTest {
     }
 
     @Test
-    fun withAutoReconnectItOffersCancelAndStays() {
-        MumlaReconnectNotification.show(context, "socket reset", true, actions)
-
-        val n = posted()!!
-        assertThat(n.flags and Notification.FLAG_ONGOING_EVENT).isNotEqualTo(0)
-        assertThat(n.actions.map { it.title.toString() }).containsExactly(context.getString(R.string.cancel_reconnect))
-        @Suppress("DEPRECATION")
-        assertThat(n.actions.single().icon).isEqualTo(R.drawable.ic_action_delete_dark)
-        n.actions.single().actionIntent.send()
-        idleMainLooper()
-        assertThat(actions.calls).containsExactly("cancel")
-    }
-
-    @Test
     fun swipingItAwayIsReported() {
-        MumlaReconnectNotification.show(context, "socket reset", false, actions)
+        show("socket reset")
 
         posted()!!.deleteIntent.send()
         idleMainLooper()
@@ -119,8 +114,7 @@ class MumlaReconnectNotificationTest {
 
     @Test
     fun everyIntentIsAddressedToThisAppAndImmutable() {
-        MumlaReconnectNotification.show(context, "socket reset", false, actions)
-        MumlaReconnectNotification.show(context, "socket reset", true, actions)
+        show("socket reset")
 
         val n = posted()!!
         for (pending in listOf(n.deleteIntent, n.actions.single().actionIntent).map { shadowOf(it) }) {
@@ -132,17 +126,17 @@ class MumlaReconnectNotificationTest {
 
     @Test
     fun theReceiverIsNotExported() {
-        MumlaReconnectNotification.show(context, "socket reset", false, actions)
+        show("socket reset")
 
         val receiver = ourReceivers().single()
         assertThat(receiver.flags and Context.RECEIVER_NOT_EXPORTED).isNotEqualTo(0)
         assertThat(receiver.intentFilter.actionsIterator().asSequence().toList())
-            .containsExactly("b_dismiss", "b_reconnect", "b_cancel_reconnect")
+            .containsExactly("b_dismiss", "b_reconnect")
     }
 
     @Test
     fun hideCancelsTheNotificationAndStopsListening() {
-        val notification = MumlaReconnectNotification.show(context, "socket reset", false, actions)
+        val notification = show("socket reset")
         val reconnect = posted()!!.actions.single().actionIntent
 
         notification.hide()
@@ -156,7 +150,7 @@ class MumlaReconnectNotificationTest {
 
     @Test
     fun hidingTwiceIsHarmless() {
-        val notification = MumlaReconnectNotification.show(context, "socket reset", false, actions)
+        val notification = show("socket reset")
         notification.hide()
 
         notification.hide()

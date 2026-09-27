@@ -20,7 +20,7 @@ package se.lublin.humla.net
 import se.lublin.humla.R
 
 /**
- * Connection-level warnings the service shows in the chat log; each maps to a string resource.
+ * Connection-level warnings the session reports for the chat log; each maps to a string resource.
  *
  * The consumer resolves the text, so the protocol thread needs no Context.
  */

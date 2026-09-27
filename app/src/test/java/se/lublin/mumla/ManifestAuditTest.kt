@@ -8,7 +8,6 @@ import android.content.pm.ServiceInfo
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -107,21 +106,6 @@ class ManifestAuditTest {
         for (activity in activities) {
             val info = pm.getActivityInfo(ComponentName(context, activity), 0)
             assertWithMessage(activity.simpleName).that(info.exported).isFalse()
-        }
-    }
-
-    /**
-     * Change detector: humla's manifest used to merge in an exported `se.lublin.humla.HumlaService`
-     * with connect/disconnect intent filters. Nothing starts it (the app targets `MumlaService`
-     * explicitly), and its declared action did not even match the one `onStartCommand` checks, so
-     * it was removed outright.
-     */
-    @Test
-    fun humlaServiceComponentIsNotMergedIntoTheApp() {
-        val humlaService = ComponentName(context.packageName, "se.lublin.humla.HumlaService")
-
-        assertThrows(PackageManager.NameNotFoundException::class.java) {
-            pm.getServiceInfo(humlaService, 0)
         }
     }
 

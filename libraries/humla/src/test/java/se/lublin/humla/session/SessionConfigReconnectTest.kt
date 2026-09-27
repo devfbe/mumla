@@ -90,6 +90,7 @@ class SessionConfigReconnectTest(
             "audio.preferredDevice" to audio {
                 copy(preferredDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE))
             },
+            "audio.bluetoothAutomatic" to audio { copy(bluetoothAutomatic = true) },
             "audio.pipeline.audioStream" to pipeline { copy(audioStream = 0) },
             "audio.pipeline.audioSource" to pipeline { copy(audioSource = 7) },
             "audio.pipeline.inputSampleRate" to pipeline { copy(inputSampleRate = 16_000) },

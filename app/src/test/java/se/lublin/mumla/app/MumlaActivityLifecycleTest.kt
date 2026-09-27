@@ -17,25 +17,16 @@
 package se.lublin.mumla.app
 
 import android.app.Application
-import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadows.ShadowDialog
-import se.lublin.humla.session.SessionState
-import se.lublin.mumla.service.IMumlaService
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.installDatabase
-import se.lublin.mumla.ui.ServiceViewModel
 
 /**
  * The service stays bound, and its notifications suppressed, while the activity is visible: a
@@ -45,42 +36,26 @@ import se.lublin.mumla.ui.ServiceViewModel
 class MumlaActivityLifecycleTest {
 
     private val app = ApplicationProvider.getApplicationContext<Application>()
-    private val service: IMumlaService = mockk(relaxed = true) {
-        every { sessionState } returns MutableStateFlow(SessionState.Disconnected())
-    }
 
     @Before
     fun setUp() {
         installDatabase(mockk(relaxed = true))
     }
 
+    /** Visible from start to stop, so the service's notifications stay away while paused too. */
     @Test
-    fun theServiceIsBoundFromStartToStop() {
-        val controller = Robolectric.buildActivity(MumlaActivity::class.java).create().start()
-        assertThat(shadowOf(app).boundServiceConnections).hasSize(1)
+    fun theAppCountsAsVisibleFromStartToStop() {
+        val sessions = SessionManager.get(app)
+        val controller = Robolectric.buildActivity(MumlaActivity::class.java).create()
+        assertThat(sessions.appVisible.value).isFalse()
+
+        controller.start()
+        assertThat(sessions.appVisible.value).isTrue()
 
         controller.resume().pause()
-        assertThat(shadowOf(app).unboundServiceConnections).isEmpty()
+        assertThat(sessions.appVisible.value).isTrue()
 
         controller.stop()
-        assertThat(shadowOf(app).unboundServiceConnections).hasSize(1)
-    }
-
-    @Test
-    fun notificationsStaySuppressedWhilePausedAndResumeOnStop() {
-        val controller = Robolectric.buildActivity(MumlaActivity::class.java).setup()
-        idleMainLooper()
-        ShadowDialog.getLatestDialog()?.dismiss() // the first-run guide
-        ViewModelProvider(controller.get())[ServiceViewModel::class.java].attach(service)
-        idleMainLooper()
-        verify { service.setSuppressNotifications(true) }
-
-        controller.pause()
-        idleMainLooper()
-        verify(exactly = 0) { service.setSuppressNotifications(false) }
-
-        controller.stop()
-        idleMainLooper()
-        verify { service.setSuppressNotifications(false) }
+        assertThat(sessions.appVisible.value).isFalse()
     }
 }

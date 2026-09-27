@@ -17,15 +17,29 @@ import kotlinx.coroutines.launch
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.MumlaSQLiteDatabase
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.util.ApplicationScope
 import se.lublin.mumla.util.changes
 
 class MumlaApplication :
     Application(),
     MumlaRepository.Owner,
-    ApplicationScope.Owner {
+    ApplicationScope.Owner,
+    SessionManager.Owner {
 
     override val scope: CoroutineScope = MainScope()
+
+    /** Built in [onCreate], before any component of the app runs. */
+    lateinit var container: AppContainer
+        private set
+
+    /** Replaces the container, e.g. with one whose sessions are fakes. */
+    @VisibleForTesting
+    internal fun installContainer(container: AppContainer) {
+        this.container = container
+    }
+
+    override val sessionManager: SessionManager get() = container.sessionManager
 
     @Volatile
     private var installedRepository: MumlaRepository? = null
@@ -45,6 +59,7 @@ class MumlaApplication :
     override fun onCreate() {
         super.onCreate()
         DebugStrictMode.install()
+        container = AppContainer(this, scope)
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         applyTheme(preferences)
         scope.launch(start = CoroutineStart.UNDISPATCHED) {

@@ -2,10 +2,9 @@ package se.lublin.humla.session
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import se.lublin.humla.exception.HumlaException
 
 class SessionStateMachineTest {
-    private val error = HumlaException("socket closed", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
+    private val error = DisconnectReason.Network("socket closed", null)
     private val machine = SessionStateMachine(jitterSource = { 0.0 })
 
     private fun bringToConnected() {
@@ -37,7 +36,7 @@ class SessionStateMachineTest {
     @Test
     fun lossWithAutoReconnectSchedulesFirstAttemptAfterTwoSeconds() {
         bringToConnected()
-        val next = machine.lost(autoReconnect = true, error = error)
+        val next = machine.lost(autoReconnect = true, reason = error)
         assertThat(next).isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))
         assertThat(machine.state.value).isEqualTo(next)
     }
@@ -45,16 +44,16 @@ class SessionStateMachineTest {
     @Test
     fun lossWithoutAutoReconnectEndsDisconnectedWithTheError() {
         bringToConnected()
-        assertThat(machine.lost(autoReconnect = false, error = error)).isEqualTo(SessionState.Disconnected(error))
+        assertThat(machine.lost(autoReconnect = false, reason = error)).isEqualTo(SessionState.Disconnected(error))
     }
 
     @Test
     fun timerMovesToReconnectingAndAFurtherLossBacksOff() {
         bringToConnected()
-        machine.lost(autoReconnect = true, error = error)
+        machine.lost(autoReconnect = true, reason = error)
         assertThat(machine.reconnectTimerFired()).isTrue()
         assertThat(machine.current).isEqualTo(SessionState.Reconnecting(error))
-        assertThat(machine.lost(autoReconnect = true, error = error))
+        assertThat(machine.lost(autoReconnect = true, reason = error))
             .isEqualTo(SessionState.ConnectionLost(4_000L, 2, error))
     }
 
@@ -69,12 +68,12 @@ class SessionStateMachineTest {
     fun givesUpAfterTenAttempts() {
         bringToConnected()
         repeat(10) { attempt ->
-            val lost = machine.lost(autoReconnect = true, error = error)
+            val lost = machine.lost(autoReconnect = true, reason = error)
             assertThat(lost).isInstanceOf(SessionState.ConnectionLost::class.java)
             assertThat((lost as SessionState.ConnectionLost).attempt).isEqualTo(attempt + 1)
             assertThat(machine.reconnectTimerFired()).isTrue()
         }
-        assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.Disconnected(error))
+        assertThat(machine.lost(autoReconnect = true, reason = error)).isEqualTo(SessionState.Disconnected(error))
         assertThat(machine.attempt).isEqualTo(0)
     }
 
@@ -82,11 +81,11 @@ class SessionStateMachineTest {
     fun successfulSessionResetsTheAttemptCounter() {
         bringToConnected()
         repeat(3) {
-            machine.lost(autoReconnect = true, error = error)
+            machine.lost(autoReconnect = true, reason = error)
             machine.reconnectTimerFired()
         }
         assertThat(machine.synchronized()).isTrue()
-        assertThat(machine.lost(autoReconnect = true, error = error))
+        assertThat(machine.lost(autoReconnect = true, reason = error))
             .isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))
     }
 
@@ -94,14 +93,14 @@ class SessionStateMachineTest {
     fun connectivityChangeResetsAttemptsAndAsksForAnImmediateRetry() {
         bringToConnected()
         repeat(4) {
-            machine.lost(autoReconnect = true, error = error)
+            machine.lost(autoReconnect = true, reason = error)
             machine.reconnectTimerFired()
         }
-        machine.lost(autoReconnect = true, error = error)
+        machine.lost(autoReconnect = true, reason = error)
         assertThat(machine.connectivityRestored()).isTrue()
         assertThat(machine.current).isEqualTo(SessionState.ConnectionLost(0L, 0, error))
         machine.reconnectTimerFired()
-        assertThat(machine.lost(autoReconnect = true, error = error))
+        assertThat(machine.lost(autoReconnect = true, reason = error))
             .isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))
     }
 
@@ -115,7 +114,7 @@ class SessionStateMachineTest {
     @Test
     fun cancelReconnectKeepsTheErrorForTheUi() {
         bringToConnected()
-        machine.lost(autoReconnect = true, error = error)
+        machine.lost(autoReconnect = true, reason = error)
         assertThat(machine.cancelReconnect()).isTrue()
         assertThat(machine.current).isEqualTo(SessionState.Disconnected(error))
         assertThat(machine.cancelReconnect()).isFalse()
@@ -124,7 +123,7 @@ class SessionStateMachineTest {
     @Test
     fun cancelReconnectFromReconnectingAlsoKeepsTheErrorForTheUi() {
         bringToConnected()
-        machine.lost(autoReconnect = true, error = error)
+        machine.lost(autoReconnect = true, reason = error)
         assertThat(machine.reconnectTimerFired()).isTrue()
         assertThat(machine.cancelReconnect()).isTrue()
         assertThat(machine.current).isEqualTo(SessionState.Disconnected(error))
@@ -133,7 +132,7 @@ class SessionStateMachineTest {
     @Test
     fun manualConnectFromConnectionLostStartsAFreshSession() {
         bringToConnected()
-        machine.lost(autoReconnect = true, error = error)
+        machine.lost(autoReconnect = true, reason = error)
         assertThat(machine.connectRequested()).isTrue()
         assertThat(machine.current).isEqualTo(SessionState.Connecting)
         assertThat(machine.attempt).isEqualTo(0)
@@ -151,15 +150,15 @@ class SessionStateMachineTest {
     fun lossWhileConnectingSharesTheSamePathAsLossWhileConnected() {
         assertThat(machine.connectRequested()).isTrue()
         assertThat(machine.current).isEqualTo(SessionState.Connecting)
-        assertThat(machine.lost(autoReconnect = true, error = error))
+        assertThat(machine.lost(autoReconnect = true, reason = error))
             .isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))
     }
 
     @Test
     fun lossWhileDisconnectedOrAlreadyLostIsANoOp() {
-        assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.Disconnected(null))
+        assertThat(machine.lost(autoReconnect = true, reason = error)).isEqualTo(SessionState.Disconnected(null))
         bringToConnected()
-        val lost = machine.lost(autoReconnect = true, error = error)
-        assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(lost)
+        val lost = machine.lost(autoReconnect = true, reason = error)
+        assertThat(machine.lost(autoReconnect = true, reason = error)).isEqualTo(lost)
     }
 }

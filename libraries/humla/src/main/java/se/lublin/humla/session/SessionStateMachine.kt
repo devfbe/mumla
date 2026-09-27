@@ -3,17 +3,14 @@ package se.lublin.humla.session
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.net.ReconnectPolicy
 import kotlin.random.Random
 
 /**
- * Pure transition logic for [SessionState]. Not thread-safe: it must be driven from a single
- * thread the owner designates (a service's protocol or audio-control thread, not necessarily
- * the main thread) — any thread that only observes should collect [state] instead of calling a
- * mutator. Timers and sockets live outside this class; it only decides.
+ * Pure transition logic for [SessionState]. Not thread-safe: [SessionLifecycle] drives it from the
+ * session's thread; other threads collect [state]. Timers and sockets live outside; it only decides.
  */
-class SessionStateMachine(
+internal class SessionStateMachine(
     private val policy: ReconnectPolicy = ReconnectPolicy(),
     private val jitterSource: () -> Double = { Random.nextDouble() },
 ) {
@@ -21,7 +18,6 @@ class SessionStateMachine(
 
     val state: StateFlow<SessionState> = mutableState.asStateFlow()
     val current: SessionState get() = mutableState.value
-    val maxAttempts: Int get() = policy.maxAttempts
 
     /** Reconnect attempts since the last successful session (or connectivity change). */
     var attempt: Int = 0
@@ -52,7 +48,7 @@ class SessionStateMachine(
      * carrying the backoff delay, or [SessionState.Disconnected] once attempts are exhausted.
      * A no-op (returns the current state) when nothing was connected.
      */
-    fun lost(autoReconnect: Boolean, error: HumlaException?): SessionState {
+    fun lost(autoReconnect: Boolean, reason: DisconnectReason?): SessionState {
         when (current) {
             is SessionState.Disconnected, is SessionState.ConnectionLost -> return current
             else -> Unit
@@ -60,9 +56,9 @@ class SessionStateMachine(
         val next = if (autoReconnect) {
             attempt += 1
             val delay = policy.delayFor(attempt, jitterSource())
-            if (delay == null) SessionState.Disconnected(error) else SessionState.ConnectionLost(delay, attempt, error)
+            delay?.let { SessionState.ConnectionLost(it, attempt, reason) } ?: SessionState.Disconnected(reason)
         } else {
-            SessionState.Disconnected(error)
+            SessionState.Disconnected(reason)
         }
         if (next is SessionState.Disconnected) attempt = 0
         mutableState.value = next
@@ -72,7 +68,7 @@ class SessionStateMachine(
     /** The backoff timer fired: start the reconnect attempt. */
     fun reconnectTimerFired(): Boolean {
         val lostState = current as? SessionState.ConnectionLost ?: return false
-        mutableState.value = SessionState.Reconnecting(lostState.error)
+        mutableState.value = SessionState.Reconnecting(lostState.reason)
         return true
     }
 
@@ -80,23 +76,23 @@ class SessionStateMachine(
     fun connectivityRestored(): Boolean {
         val lostState = current as? SessionState.ConnectionLost ?: return false
         attempt = 0
-        mutableState.value = SessionState.ConnectionLost(0L, 0, lostState.error)
+        mutableState.value = SessionState.ConnectionLost(0L, 0, lostState.reason)
         return true
     }
 
-    /** User cancelled the automatic reconnect; the error stays visible to the UI. */
+    /** User cancelled the automatic reconnect; the reason stays visible to the UI. */
     fun cancelReconnect(): Boolean {
-        val error = when (val state = current) {
-            is SessionState.ConnectionLost -> state.error
-            is SessionState.Reconnecting -> state.error
+        val reason = when (val state = current) {
+            is SessionState.ConnectionLost -> state.reason
+            is SessionState.Reconnecting -> state.reason
             else -> return false
         }
         attempt = 0
-        mutableState.value = SessionState.Disconnected(error)
+        mutableState.value = SessionState.Disconnected(reason)
         return true
     }
 
-    /** User asked to disconnect (or the service is going away). */
+    /** User asked to disconnect (or the session is being closed). */
     fun disconnectRequested(): Boolean {
         if (current is SessionState.Disconnected) return false
         attempt = 0

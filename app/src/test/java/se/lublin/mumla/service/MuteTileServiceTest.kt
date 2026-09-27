@@ -18,8 +18,6 @@
 package se.lublin.mumla.service
 
 import android.app.Application
-import android.content.ComponentName
-import android.content.Intent
 import android.service.quicksettings.Tile
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -27,18 +25,18 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.channel.FakeUser
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.stubState
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
@@ -48,22 +46,12 @@ class MuteTileServiceTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val self = FakeUser(1)
     private val session = mockk<IHumlaSession>(relaxed = true) { every { sessionUser } returns self }
-    private val state = MutableStateFlow<SessionState>(SessionState.Connected)
-    private val mumla = mockk<IMumlaService>(relaxed = true) { every { sessionState } returns state }
     private lateinit var events: MutableSharedFlow<HumlaEvent>
 
-    /** The tile service, listening, with [mumla] as the running MumlaService if [running]. */
-    private fun listeningTile(running: Boolean = true): MuteTileService {
-        events = mumla.stubEvents()
-        if (running) {
-            shadowOf(app).setComponentNameAndServiceForBindServiceForIntent(
-                Intent(app, MumlaService::class.java),
-                ComponentName(app, MumlaService::class.java),
-                MumlaService.MumlaBinder(mumla),
-            )
-        } else {
-            shadowOf(app).declareComponentUnbindable(ComponentName(app, MumlaService::class.java))
-        }
+    /** The tile service, listening, with [session] as the current session if [withSession]. */
+    private fun listeningTile(withSession: Boolean = true): MuteTileService {
+        events = session.stubEvents()
+        if (withSession) installSession(session)
         val tile = Robolectric.buildService(MuteTileService::class.java).create().get()
         tile.onStartListening()
         idleMainLooper()
@@ -71,8 +59,8 @@ class MuteTileServiceTest {
     }
 
     @Test
-    fun withoutMumlaRunningTheTileIsUnavailable() {
-        val tile = listeningTile(running = false)
+    fun withoutASessionTheTileIsUnavailable() {
+        val tile = listeningTile(withSession = false)
 
         assertThat(tile.qsTile.state).isEqualTo(Tile.STATE_UNAVAILABLE)
         assertThat(tile.qsTile.subtitle).isEqualTo(app.getString(R.string.drawer_not_connected))
@@ -80,7 +68,7 @@ class MuteTileServiceTest {
 
     @Test
     fun theTileIsActiveWhileWeAreMutedAndFollowsOurState() {
-        mumla.stubConnected(session)
+        session.stubConnected()
         val tile = listeningTile()
         assertThat(tile.qsTile.state).isEqualTo(Tile.STATE_INACTIVE)
 
@@ -94,11 +82,22 @@ class MuteTileServiceTest {
 
     @Test
     fun aDisconnectMakesTheTileUnavailable() {
-        mumla.stubConnected(session)
+        session.stubConnected()
         val tile = listeningTile()
 
-        mumla.stubDisconnected()
-        state.value = SessionState.Disconnected()
+        session.stubState(SessionState.Disconnected())
+        idleMainLooper()
+
+        assertThat(tile.qsTile.state).isEqualTo(Tile.STATE_UNAVAILABLE)
+    }
+
+    @Test
+    fun aNewSessionIsFollowedToo() {
+        session.stubConnected()
+        val tile = listeningTile()
+        val next = mockk<IHumlaSession>(relaxed = true).also { it.stubState(SessionState.Connecting) }
+
+        installSession(next)
         idleMainLooper()
 
         assertThat(tile.qsTile.state).isEqualTo(Tile.STATE_UNAVAILABLE)
@@ -106,7 +105,7 @@ class MuteTileServiceTest {
 
     @Test
     fun aClickTogglesOurMute() {
-        mumla.stubConnected(session)
+        session.stubConnected()
         val tile = listeningTile()
 
         tile.onClick()
@@ -116,7 +115,7 @@ class MuteTileServiceTest {
 
     @Test
     fun aClickWhileDisconnectedDoesNothing() {
-        mumla.stubDisconnected()
+        session.stubDisconnected()
         val tile = listeningTile()
 
         tile.onClick()

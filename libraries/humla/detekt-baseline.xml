@@ -39,7 +39,6 @@
     <ID>ReturnCount:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
     <ID>SwallowedException:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$e: Exception</ID>
     <ID>SwallowedException:HumlaSSLSocketFactoryTrustStoreTest.kt$HumlaSSLSocketFactoryTrustStoreTest$e: IOException</ID>
-    <ID>SwallowedException:HumlaService.kt$HumlaService$e: IllegalArgumentException</ID>
     <ID>SwallowedException:HumlaUDPTest.kt$HumlaUDPTest$e: SocketTimeoutException</ID>
     <ID>SwallowedException:Pkcs12Certificates.kt$Pkcs12Certificates$e: Exception</ID>
     <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: CertificateParsingException</ID>
@@ -50,7 +49,6 @@
     <ID>TooGenericExceptionCaught:CapturePreprocessorFactory.kt$CapturePreprocessorFactory$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:CommunicationDevices.kt$AndroidCommunicationDevices$e: RuntimeException</ID>
     <ID>TooGenericExceptionCaught:HumlaConnection.kt$HumlaConnection$e: RuntimeException</ID>
-    <ID>TooGenericExceptionCaught:HumlaService.kt$HumlaService$e: RuntimeException</ID>
     <ID>TooGenericExceptionCaught:Pkcs12Certificates.kt$Pkcs12Certificates$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
     <ID>TooGenericExceptionThrown:HumlaConnection.kt$HumlaConnection$throw RuntimeException("We use BouncyCastle- what? ", e)</ID>
@@ -58,10 +56,8 @@
     <ID>TooManyFunctions:Channel.kt$Channel : IChannelComparable</ID>
     <ID>TooManyFunctions:CommunicationDevices.kt$AndroidCommunicationDevices : CommunicationDevices</ID>
     <ID>TooManyFunctions:HumlaConnection.kt$HumlaConnection : TCPConnectionListenerUDPConnectionListenerMessageHandlerRegistry</ID>
-    <ID>TooManyFunctions:HumlaService.kt$HumlaService : ServiceIHumlaServiceIHumlaSessionHumlaConnectionListenerHumlaLogger</ID>
     <ID>TooManyFunctions:HumlaTCP.kt$HumlaTCP : TcpTransport</ID>
     <ID>UseCheckOrError:FakeCaptureSource.kt$FakeCaptureSource$throw IllegalStateException("startRecording failed")</ID>
-    <ID>UseCheckOrError:HumlaService.kt$HumlaService$throw IllegalStateException("Session user should be set post-synchronization!")</ID>
     <ID>UseRequire:OpusEncoder.kt$OpusEncoder$throw IllegalArgumentException("This Opus encoder implementation requires a constant frame size.")</ID>
   </CurrentIssues>
 </SmellBaseline>
