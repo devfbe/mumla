@@ -18,6 +18,7 @@ import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.ReconnectPolicy
+import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.SessionConfig
 import se.lublin.mumla.R
 import se.lublin.mumla.chat.ChatMessageLog
@@ -45,7 +46,10 @@ class MumlaServiceForegroundTest {
         }
         service = controller.get()
         service.configure(
-            SessionConfig(server = Server(-1, "test", "127.0.0.1", 64738, "me", ""), autoReconnect = true),
+            SessionConfig(
+                ConnectionConfig(server = Server(-1, "test", "127.0.0.1", 64738, "me", "")),
+                autoReconnect = true,
+            ),
         )
         mainLooper.idle()
     }

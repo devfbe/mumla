@@ -23,6 +23,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.AudioConfig
+import se.lublin.humla.audio.AudioSettings
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.session.SessionConfig
@@ -44,7 +45,7 @@ class HumlaServiceVadConfigTest {
             hysteresisDb = 9f, adaptiveFloor = false, manualFloorDbfs = -52f,
         )
 
-        service.configure(SessionConfig(vadConfig = config))
+        service.configure(SessionConfig(audio = AudioSettings(vad = config)))
 
         assertThat(inputMode(service).vadConfig).isEqualTo(config)
     }
@@ -53,14 +54,14 @@ class HumlaServiceVadConfigTest {
     fun `every mode the settings screen can write arrives as that mode`() {
         for (mode in VadMode.entries) {
             val service = service()
-            service.configure(SessionConfig(vadConfig = VadConfig(mode, 0.7f, 0.2f, 120L)))
+            service.configure(SessionConfig(audio = AudioSettings(vad = VadConfig(mode, 0.7f, 0.2f, 120L))))
             assertThat(inputMode(service).vadConfig.mode).isEqualTo(mode)
         }
     }
 
     @Test
     fun `the detector starts with the default configuration`() {
-        assertThat(inputMode(service()).vadConfig).isEqualTo(SessionConfig().vadConfig)
+        assertThat(inputMode(service()).vadConfig).isEqualTo(VadConfig.DEFAULT)
     }
 
     /** The VAD config reaches a live object, which is what makes a change free of a rebuild. */
@@ -68,7 +69,7 @@ class HumlaServiceVadConfigTest {
     fun `the vad config is not part of the audio config`() {
         val service = service()
 
-        service.configure(SessionConfig(vadConfig = VadConfig.probability(0.8f, 0.2f, 120L)))
+        service.configure(SessionConfig(audio = AudioSettings(vad = VadConfig.probability(0.8f, 0.2f, 120L))))
 
         assertThat(service.getAudioConfigForTest()).isEqualTo(AudioConfig())
     }

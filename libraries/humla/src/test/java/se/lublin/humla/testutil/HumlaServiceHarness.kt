@@ -24,6 +24,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowLooper
 import se.lublin.humla.HumlaService
+import se.lublin.humla.audio.AudioSettings
+import se.lublin.humla.audio.PipelineSettings
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.FakeTcpTransport
@@ -32,6 +34,7 @@ import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import java.util.concurrent.CopyOnWriteArrayList
@@ -82,7 +85,9 @@ class HumlaServiceHarness(
                 else -> Unit
             }
         }
-        service.configure(SessionConfig(server = server, clientName = "harness", autoReconnect = autoReconnect))
+        service.configure(
+            SessionConfig(ConnectionConfig(server = server, clientName = "harness"), autoReconnect = autoReconnect),
+        )
         mainLooper.idle()
     }
 
@@ -100,6 +105,11 @@ class HumlaServiceHarness(
         service.configure(service.sessionConfig.change())
         mainLooper.idle()
     }
+
+    fun configureAudio(change: AudioSettings.() -> AudioSettings) = configure { copy(audio = audio.change()) }
+
+    fun configurePipeline(change: PipelineSettings.() -> PipelineSettings) =
+        configureAudio { copy(pipeline = pipeline.change()) }
 
     /** Opens the socket of connection number [index] (0-based) and reports it established. */
     fun openSocket(index: Int): FakeTcpTransport {

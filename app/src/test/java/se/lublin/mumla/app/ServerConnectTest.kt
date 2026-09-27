@@ -49,7 +49,7 @@ class ServerConnectTest {
         drainMainUntil { runCatching { verify { service.connect() } }.isSuccess }
 
         verifyOrder {
-            service.configure(match { it.server === server })
+            service.configure(match { it.connection.server === server })
             service.connect()
         }
         assertThat(shadowOf(app).nextStartedService.component).isEqualTo(component)

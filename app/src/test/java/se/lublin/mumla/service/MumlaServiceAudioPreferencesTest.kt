@@ -28,6 +28,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
+import se.lublin.humla.audio.capture.AndroidAudioEffects
+import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
@@ -53,8 +55,7 @@ class MumlaServiceAudioPreferencesTest {
         service = createMumlaService().get()
     }
 
-    /** Preferences land in an immutable [se.lublin.humla.audio.AudioConfig]. */
-    private fun audioConfig() = service.getAudioConfigForTest()
+    private fun pipeline() = service.getAudioConfigForTest().settings
 
     private fun vadConfig(): VadConfig = service.testActivityInputMode.vadConfig
 
@@ -107,14 +108,14 @@ class MumlaServiceAudioPreferencesTest {
     fun `the noise suppression method reaches the audio config`() {
         prefs.edit().putString(Settings.NOISE_SUPPRESSION_METHOD.key, "speex").commit()
         change(Settings.NOISE_SUPPRESSION_METHOD.key)
-        assertThat(audioConfig().noiseSuppression).isEqualTo("speex")
+        assertThat(pipeline().noiseSuppression).isEqualTo(NoiseSuppressionMode.SPEEX)
     }
 
     @Test
     fun `the speex suppression depth reaches the audio config`() {
         prefs.edit().putString(Settings.SPEEX_NOISE_SUPPRESS_DB.key, "-35").commit()
         change(Settings.SPEEX_NOISE_SUPPRESS_DB.key)
-        assertThat(audioConfig().speexNoiseSuppressDb).isEqualTo(-35)
+        assertThat(pipeline().speexNoiseSuppressDb).isEqualTo(-35)
     }
 
     /** The device saved in the chooser reaches the router, connected or not. */
@@ -139,12 +140,12 @@ class MumlaServiceAudioPreferencesTest {
     fun `an echo cancellation override reaches the service`() {
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
-        assertThat(service.sessionConfig.echoCancellationOverrides)
+        assertThat(service.sessionConfig.audio.echoCancellationOverrides)
             .isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
 
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.EARPIECE, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.EARPIECE))
-        assertThat(service.sessionConfig.echoCancellationOverrides).isEqualTo(
+        assertThat(service.sessionConfig.audio.echoCancellationOverrides).isEqualTo(
             mapOf(AudioDeviceCategory.SPEAKER to false, AudioDeviceCategory.EARPIECE to false),
         )
     }
@@ -160,8 +161,7 @@ class MumlaServiceAudioPreferencesTest {
                     .commit()
                 change(Settings.ANDROID_NOISE_SUPPRESSOR.key)
                 change(Settings.ANDROID_AGC.key)
-                assertThat(audioConfig().androidNoiseSuppressor).isEqualTo(ns)
-                assertThat(audioConfig().androidAgc).isEqualTo(agc)
+                assertThat(pipeline().androidEffects).isEqualTo(AndroidAudioEffects(ns, agc))
             }
         }
     }
@@ -213,7 +213,7 @@ class MumlaServiceAudioPreferencesTest {
         }
         change(Settings.HALF_DUPLEX.key)
         assertThat(service.sessionConfig).isEqualTo(SessionSettings.withAudioSettings(before, settings))
-        assertThat(service.sessionConfig.halfDuplex).isTrue()
+        assertThat(service.sessionConfig.audio.halfDuplex).isTrue()
     }
 
     private companion object {

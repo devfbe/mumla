@@ -25,6 +25,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.routing.AndroidCommunicationDevicesTest
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
@@ -228,12 +229,12 @@ class HumlaServiceBluetoothTest {
     fun theSavedDeviceIsTheDefaultWhenTheConfigNamesIt() {
         val h = start()
         h.phone()
-        h.configure { copy(preferredAudioDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)) }
+        h.configureAudio { copy(preferredDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)) }
         h.connectAndSynchronize()
 
         assertThat(h.service.activeAudioDevice?.id).isEqualTo(1)
 
-        h.configure { copy(preferredAudioDevice = null) }
+        h.configureAudio { copy(preferredDevice = null) }
 
         assertThat(h.devices!!.selectedId).isEqualTo(2)
     }
@@ -244,7 +245,7 @@ class HumlaServiceBluetoothTest {
         val h = start()
         h.phone()
 
-        h.configure { copy(preferredAudioDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)) }
+        h.configureAudio { copy(preferredDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)) }
 
         assertThat(h.devices!!.selectCalls).isEmpty()
         assertThat(h.devices.modeCalls).isEmpty()
@@ -390,14 +391,14 @@ class HumlaServiceBluetoothTest {
         h.phone()
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
-        assertThat(h.service.getAudioConfigForTest().echoCancellation).isTrue() // speaker
+        assertThat(h.echo).isEqualTo(EchoCancellationMode.WEBRTC) // speaker
 
         h.service.enableBluetoothSco()
-        assertThat(h.service.getAudioConfigForTest().echoCancellation).isFalse()
+        assertThat(h.echo).isEqualTo(EchoCancellationMode.NONE)
         assertThat(h.service.isEchoCancellationEnabled).isFalse()
 
         h.service.selectAudioDevice(1)
-        assertThat(h.service.getAudioConfigForTest().echoCancellation).isTrue() // earpiece
+        assertThat(h.echo).isEqualTo(EchoCancellationMode.WEBRTC) // earpiece
         assertThat(h.service.isEchoCancellationEnabled).isTrue()
     }
 
@@ -411,18 +412,18 @@ class HumlaServiceBluetoothTest {
         h.phone()
         h.connectAndSynchronize()
         awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
-        assertThat(h.audioFactory.configs[0].echoCancellation).isTrue()
+        assertThat(h.audioFactory.configs[0].echoCancellation).isEqualTo(EchoCancellationMode.WEBRTC)
 
-        h.configure { copy(echoCancellationOverrides = mapOf(AudioDeviceCategory.SPEAKER to false)) }
+        h.configureAudio { copy(echoCancellationOverrides = mapOf(AudioDeviceCategory.SPEAKER to false)) }
 
         awaitUntil(description = "audio rebuilt without echo") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
-        assertThat(h.audioFactory.configs[1].echoCancellation).isFalse()
+        assertThat(h.audioFactory.configs[1].echoCancellation).isEqualTo(EchoCancellationMode.NONE)
 
         h.service.selectAudioDevice(1)
-        assertThat(h.service.getAudioConfigForTest().echoCancellation).isTrue() // earpiece: default
+        assertThat(h.echo).isEqualTo(EchoCancellationMode.WEBRTC) // earpiece: default
 
         h.service.selectAudioDevice(2)
-        assertThat(h.service.getAudioConfigForTest().echoCancellation).isFalse() // speaker: override
+        assertThat(h.echo).isEqualTo(EchoCancellationMode.NONE) // speaker: override
     }
 
     @Test
@@ -454,3 +455,6 @@ class HumlaServiceBluetoothTest {
         assertThat(h.service.isBluetoothScoActive).isFalse()
     }
 }
+
+private val HumlaServiceHarness.echo: EchoCancellationMode
+    get() = service.getAudioConfigForTest().echoCancellation

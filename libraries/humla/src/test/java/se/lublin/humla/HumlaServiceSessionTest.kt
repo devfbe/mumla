@@ -169,14 +169,14 @@ class HumlaServiceSessionTest {
         h.configure {
             // Force TCP without Tor, so the two fields differ: with both true, Tor masks a missing
             // `setForceTCP` through `shouldForceTCP()`.
-            copy(
+            copy(connection = connection.copy(
                 forceTcp = true,
                 useTor = false,
                 certificate = ClientCertificate(byteArrayOf(1, 2, 3), "cert-pw"),
                 trustStorePath = "/store",
                 trustStorePassword = "store-pw",
                 trustStoreFormat = "BKS",
-            )
+            ))
         }
 
         h.service.connect()
@@ -196,7 +196,7 @@ class HumlaServiceSessionTest {
     @Test
     fun torReachesTheConnectionAsItsOwnFlag() {
         val h = start()
-        h.configure { copy(useTor = true) }
+        h.configure { copy(connection = connection.copy(useTor = true)) }
 
         h.service.connect()
         h.mainLooper.idle()

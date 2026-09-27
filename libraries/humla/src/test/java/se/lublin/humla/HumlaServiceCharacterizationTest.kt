@@ -31,6 +31,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import se.lublin.humla.audio.AudioConfig
+import se.lublin.humla.audio.AudioSettings
+import se.lublin.humla.audio.PipelineSettings
+import se.lublin.humla.audio.TransmitMode
+import se.lublin.humla.audio.capture.AndroidAudioEffects
+import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
@@ -38,12 +43,12 @@ import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ConnectionWarning
+import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.onEvents
-import se.lublin.humla.util.Constants
 
 /**
  * Characterization of [HumlaService] without a live connection: lifecycle, configuration, and the
@@ -87,7 +92,7 @@ class HumlaServiceCharacterizationTest {
     fun startsWithVoiceActivityTransmitAndNoVoiceTarget() {
         val service = service()
 
-        assertThat(service.transmitMode).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
+        assertThat(service.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
         assertThat(service.voiceTargetId).isEqualTo(0.toByte())
         assertThat(service.voiceTargetMode).isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
         assertThat(service.whisperTarget).isNull()
@@ -154,7 +159,7 @@ class HumlaServiceCharacterizationTest {
             }
         }
 
-        service.configure(SessionConfig(server = server))
+        service.configure(SessionConfig(ConnectionConfig(server = server)))
         service.connect()
 
         assertThat(stateInsideOnConnecting).containsExactly(HumlaService.ConnectionState.CONNECTING)
@@ -162,84 +167,56 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.connection).isNotNull()
     }
 
-    /** Every audio setting lands in its [AudioConfig] field; the VAD config reaches a live object instead. */
+    /** The pipeline settings reach the audio config as they are; nothing is copied field by field. */
     @Test
-    fun everyAudioSettingLandsInTheAudioConfig() {
+    fun thePipelineSettingsReachTheAudioConfigUnchanged() {
         val service = service()
+        val pipeline = PipelineSettings(
+            audioStream = 3,
+            audioSource = 7,
+            inputSampleRate = 16_000,
+            bitrate = 24_000,
+            framesPerPacket = 4,
+            amplitudeBoost = 1.5f,
+            noiseSuppression = NoiseSuppressionMode.RNNOISE,
+            speexNoiseSuppressDb = -40,
+            androidEffects = AndroidAudioEffects(noiseSuppressor = true, automaticGainControl = true),
+        )
 
         service.configure(
             SessionConfig(
-                amplitudeBoost = 1.5f,
-                inputSampleRate = 16_000,
-                inputQuality = 24_000,
-                audioSource = 7,
-                audioStream = 3,
-                framesPerPacket = 4,
-                preprocessorEnabled = true,
-                noiseSuppressionMethod = "rnnoise",
-                speexNoiseSuppressDb = -40,
-                androidNoiseSuppressor = true,
-                androidAgc = true,
-                transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
-                halfDuplex = true,
-            )
+                audio = AudioSettings(transmitMode = TransmitMode.PUSH_TO_TALK, halfDuplex = true, pipeline = pipeline),
+            ),
         )
 
-        assertThat(service.getAudioConfigForTest()).isEqualTo(
-            AudioConfig(
-                amplitudeBoost = 1.5f,
-                inputSampleRate = 16_000,
-                targetBitrate = 24_000,
-                audioSource = 7,
-                audioStream = 3,
-                targetFramesPerPacket = 4,
-                preprocessorEnabled = true,
-                noiseSuppression = "rnnoise",
-                speexNoiseSuppressDb = -40,
-                androidNoiseSuppressor = true,
-                androidAgc = true,
-                transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
-                halfDuplexRequested = true,
-            )
-        )
-        // The fields no setting writes: the route decides them.
-        assertThat(service.getAudioConfigForTest().routedDeviceType).isNull()
-        assertThat(service.getAudioConfigForTest().echoCancellation).isFalse()
+        val config = service.getAudioConfigForTest()
+        assertThat(config.settings).isSameInstanceAs(pipeline)
+        assertThat(config).isEqualTo(AudioConfig(pipeline, halfDuplex = true))
     }
 
-    /** The transmit mode picks one of the three input modes by identity; a fourth value is refused. */
+    /** The transmit mode picks one of the three input modes by identity. */
     @Test
     fun theTransmitModeSelectsTheInputModeByIdentity() {
         val expected = mapOf(
-            Constants.TRANSMIT_PUSH_TO_TALK to ToggleInputMode::class.java,
-            Constants.TRANSMIT_CONTINUOUS to ContinuousInputMode::class.java,
-            Constants.TRANSMIT_VOICE_ACTIVITY to ActivityInputMode::class.java,
+            TransmitMode.PUSH_TO_TALK to ToggleInputMode::class.java,
+            TransmitMode.CONTINUOUS to ContinuousInputMode::class.java,
+            TransmitMode.VOICE_ACTIVITY to ActivityInputMode::class.java,
         )
 
         for ((mode, type) in expected) {
             val service = service()
-            service.configure(SessionConfig(transmitMode = mode))
+            service.configure(SessionConfig(audio = AudioSettings(transmitMode = mode)))
 
             assertThat(service.transmitMode).isEqualTo(mode)
             assertThat(inputMode(service)).isInstanceOf(type)
         }
     }
 
-    @Test
-    fun anUnknownTransmitModeIsRefusedAndChangesNothing() {
-        val service = service()
-
-        assertThrows(IllegalArgumentException::class.java) {
-            service.configure(SessionConfig(transmitMode = 99, server = server))
-        }
-        assertThat(service.sessionConfig).isEqualTo(SessionConfig())
-    }
-
     /** The chosen input mode is the instance `isTalking()` reads, not a fresh copy. */
     @Test
     fun thePushToTalkModeHandedToTheAudioPipelineIsTheOneIsTalkingReads() {
         val service = service()
-        service.configure(SessionConfig(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK))
+        service.configure(SessionConfig(audio = AudioSettings(transmitMode = TransmitMode.PUSH_TO_TALK)))
 
         service.setTalkingState(true)
 
@@ -441,7 +418,7 @@ class HumlaServiceCharacterizationTest {
     fun theSessionCallsThatDoNotDependOnAConnectionStillAnswer() {
         val service = service()
 
-        assertThat(service.transmitMode).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
+        assertThat(service.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
         assertThat(service.isTalking).isFalse()
         assertThat(service.voiceTargetId).isEqualTo(0.toByte())
         assertThat(service.voiceTargetMode)

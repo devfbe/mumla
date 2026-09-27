@@ -23,6 +23,7 @@ import android.media.AudioDeviceInfo
 import android.view.Gravity
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.capture.AdaptiveVadTracker
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
@@ -31,7 +32,6 @@ import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
-import se.lublin.humla.util.Constants
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
@@ -83,12 +83,11 @@ class Settings private constructor(private val context: Context) {
             preferences.edit { putString(INPUT_METHOD.key, value) }
         }
 
-    /** The input method as a Humla `Constants.TRANSMIT_*` value. */
-    val humlaInputMethod: Int
+    val transmitMode: TransmitMode
         get() = when (inputMethod) {
-            ARRAY_INPUT_METHOD_PTT -> Constants.TRANSMIT_PUSH_TO_TALK
-            ARRAY_INPUT_METHOD_CONTINUOUS -> Constants.TRANSMIT_CONTINUOUS
-            else -> Constants.TRANSMIT_VOICE_ACTIVITY
+            ARRAY_INPUT_METHOD_PTT -> TransmitMode.PUSH_TO_TALK
+            ARRAY_INPUT_METHOD_CONTINUOUS -> TransmitMode.CONTINUOUS
+            else -> TransmitMode.VOICE_ACTIVITY
         }
 
     val inputSampleRate: Int get() = preferences.read(INPUT_RATE).toInt()
@@ -193,7 +192,7 @@ class Settings private constructor(private val context: Context) {
 
     val isPttSoundEnabled: Boolean by pref(PTT_SOUND)
 
-    val isPreprocessorEnabled: Boolean by pref(PREPROCESSOR_ENABLED)
+    private val isPreprocessorEnabled: Boolean by pref(PREPROCESSOR_ENABLED)
 
     /**
      * The stored value, else what the legacy `preprocessor_enabled` checkbox decided. Writes only
@@ -269,7 +268,7 @@ class Settings private constructor(private val context: Context) {
     fun isEchoCancellationEnabled(category: AudioDeviceCategory): Boolean =
         getEchoCancellationOverride(category) ?: category.echoCancellationByDefault
 
-    /** Every override the user has made, for `SessionConfig.echoCancellationOverrides`. */
+    /** Every override the user has made, for `AudioSettings.echoCancellationOverrides`. */
     val echoCancellationOverrides: Map<AudioDeviceCategory, Boolean>
         get() = AudioDeviceCategory.entries.mapNotNull { c -> getEchoCancellationOverride(c)?.let { c to it } }.toMap()
 

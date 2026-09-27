@@ -1,5 +1,6 @@
 package se.lublin.humla
 
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
@@ -50,8 +51,7 @@ interface IHumlaSession {
     /** The permissions in the root channel, see [se.lublin.humla.net.Permissions]. */
     val permissions: Int
 
-    /** One of the `Constants.TRANSMIT_*` modes. */
-    val transmitMode: Int
+    val transmitMode: TransmitMode
 
     val codec: HumlaUDPMessageType?
 

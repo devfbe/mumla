@@ -18,7 +18,6 @@
 package se.lublin.humla.audio
 
 import android.content.Context
-import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
@@ -71,58 +70,10 @@ interface AudioHandlerFactory {
     ): ManagedAudio
 }
 
-/**
- * Builds the real [AudioHandler]. [AudioConfig.echoCancellation] maps to the WebRTC canceller or
- * none.
- */
-class DefaultAudioHandlerFactory(
-    /** The builder [builder] fills; tests pass one that records the setter calls. */
-    private val newBuilder: () -> AudioHandler.Builder = { AudioHandler.Builder() },
-) : AudioHandlerFactory {
-    override fun create(
-        host: AudioHost,
-        config: AudioConfig,
-        params: AudioSessionParams,
-    ): ManagedAudio = AudioHandlerAdapter(
-        initialize(builder(host, config, params), params),
-    )
-
-    /**
-     * The per-session arguments. `self` carries the session id stamped on every voice packet, so a
-     * wrong one means sending as somebody else.
-     */
-    internal fun initialize(builder: AudioHandler.Builder, params: AudioSessionParams): AudioHandler =
-        builder.initialize(params.self, params.maxBandwidth, params.codec, params.targetId)
-
-    /** The config-to-builder mapping, split from `initialize` so JVM tests can inspect it. */
-    internal fun builder(
-        host: AudioHost,
-        config: AudioConfig,
-        params: AudioSessionParams,
-    ): AudioHandler.Builder =
-        newBuilder()
-            .setContext(host.context)
-            .setLogger(host.logger)
-            .setAudioStream(config.playbackStream)
-            .setAudioSource(config.audioSource)
-            .setInputSampleRate(config.inputSampleRate)
-            .setTargetBitrate(config.targetBitrate)
-            .setTargetFramesPerPacket(config.targetFramesPerPacket)
-            .setAmplitudeBoost(config.amplitudeBoost)
-            .setHalfDuplexEnabled(config.halfDuplex)
-            .setPreprocessorEnabled(config.preprocessorEnabled)
-            .setEchoCancellationMethod(
-                if (config.echoCancellation) EchoCancellationMode.WEBRTC.preferenceValue
-                else EchoCancellationMode.NONE.preferenceValue,
-            )
-            .setInputMode(params.inputMode)
-            .setUdpProtocol(params.udpProtocol)
-            .setEncodeListener(host.encodeListener)
-            .setTalkingListener(host.outputListener)
-            .setNoiseSuppressionMethod(config.noiseSuppression)
-            .setSpeexNoiseSuppressDb(config.speexNoiseSuppressDb)
-            .setAndroidNoiseSuppressor(config.androidNoiseSuppressor)
-            .setAndroidAutomaticGainControl(config.androidAgc)
+/** Builds and starts the real [AudioHandler]. */
+object DefaultAudioHandlerFactory : AudioHandlerFactory {
+    override fun create(host: AudioHost, config: AudioConfig, params: AudioSessionParams): ManagedAudio =
+        AudioHandlerAdapter(AudioHandler(host, config, params).apply { start() })
 }
 
 /** Dresses an [AudioHandler] as a [ManagedAudio]; every member but the warning channel delegates. */

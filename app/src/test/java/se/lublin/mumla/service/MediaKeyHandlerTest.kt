@@ -9,14 +9,14 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.util.Constants
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.mumla.Settings
 
 @RunWith(RobolectricTestRunner::class)
 class MediaKeyHandlerTest {
     private class FakeTarget(
         override var isConnected: Boolean = true,
-        override var transmitMode: Int = Constants.TRANSMIT_PUSH_TO_TALK,
+        override var transmitMode: TransmitMode = TransmitMode.PUSH_TO_TALK,
     ) : MediaKeyTarget {
         // A mutable `var isTalking` here would generate a JVM `setTalking(boolean)` accessor that
         // clashes with the interface's own `fun setTalking`; back it with a private field instead.
@@ -74,7 +74,7 @@ class MediaKeyHandlerTest {
 
     @Test
     fun playPauseTogglesMuteInVoiceActivityMode() {
-        target.transmitMode = Constants.TRANSMIT_VOICE_ACTIVITY
+        target.transmitMode = TransmitMode.VOICE_ACTIVITY
 
         assertThat(press(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)).isTrue()
 
@@ -84,7 +84,7 @@ class MediaKeyHandlerTest {
 
     @Test
     fun avrcpPlayAndPauseKeysBothToggle() {
-        target.transmitMode = Constants.TRANSMIT_CONTINUOUS
+        target.transmitMode = TransmitMode.CONTINUOUS
 
         press(KeyEvent.KEYCODE_MEDIA_PLAY)
         press(KeyEvent.KEYCODE_MEDIA_PAUSE)
