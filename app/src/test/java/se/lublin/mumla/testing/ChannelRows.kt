@@ -54,4 +54,5 @@ fun userRow(
     isSelf: Boolean = false,
     status: UserStatus = UserStatus.NONE,
     avatar: Bytes? = null,
-) = ChannelRow.User(session, "user-$session", depth, isSelf, status, avatar)
+    localVolumePercent: Int? = null,
+) = ChannelRow.User(session, "user-$session", depth, isSelf, status, avatar, localVolumePercent)

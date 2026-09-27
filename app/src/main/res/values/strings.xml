@@ -333,6 +333,7 @@
     <string name="a11y_listener">%1$s is listening</string>
     <string name="user_menu_local_volume">Local volume</string>
     <string name="local_volume_percent">%1$d%%</string>
+    <string name="a11y_local_volume">Local volume %1$d percent</string>
     <string name="local_volume_reset">Reset</string>
     <string name="local_volume_title">Local volume: %1$s</string>
     <string name="user_menu_information">User information</string>

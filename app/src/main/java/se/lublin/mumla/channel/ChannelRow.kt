@@ -20,7 +20,9 @@ package se.lublin.mumla.channel
 import se.lublin.humla.model.Bytes
 import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.ServerState
+import se.lublin.humla.model.UserState
 import se.lublin.mumla.util.UserStatus
+import kotlin.math.roundToInt
 
 /** One row of the channel list, as immutable data; [id] is stable across rebuilds. */
 sealed interface ChannelRow {
@@ -53,6 +55,8 @@ sealed interface ChannelRow {
         val isSelf: Boolean,
         val status: UserStatus,
         val avatar: Bytes?,
+        /** The local playback volume as a rounded percentage; null at 100%, and always for [isSelf]. */
+        val localVolumePercent: Int? = null,
     ) : ChannelRow {
         override val id: Long get() = USER_ID_MASK or session.toLong()
     }
@@ -106,8 +110,12 @@ fun channelRows(
         val index = rows.size
         rows.add(ChannelRow.Channel(channel.id, null, depth, null, true, false, false, false, ChannelRow.Lock.NONE))
         val users = model.usersIn(channel.id)
-        users.mapTo(rows) {
-            ChannelRow.User(it.session, it.name, depth + 1, it.session == self?.session, UserStatus.of(it), it.texture)
+        users.mapTo(rows) { user ->
+            val isSelf = user.session == self?.session
+            ChannelRow.User(
+                user.session, user.name, depth + 1, isSelf, UserStatus.of(user), user.texture,
+                localVolumePercent = if (isSelf) null else localVolumePercentOf(user),
+            )
         }
         val listeners = model.listenersOf(channel.id)
         listeners.mapTo(rows) { ChannelRow.Listener(channel.id, it.session, it.name, depth + 1, it == self) }
@@ -145,3 +153,9 @@ private fun lockOf(channel: ChannelState): ChannelRow.Lock = when {
     channel.canEnter -> ChannelRow.Lock.OPEN
     else -> ChannelRow.Lock.CLOSED
 }
+
+/** [UserState.localVolume] rounded to a percentage; null at 100%. */
+private fun localVolumePercentOf(user: UserState): Int? =
+    (user.localVolume * PERCENT).roundToInt().takeUnless { it == PERCENT }
+
+private const val PERCENT = 100

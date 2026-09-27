@@ -240,6 +240,25 @@ class ChannelRowsTest {
     }
 
     @Test
+    fun aUserRowCarriesItsLocalVolumeAsAPercentAndHidesItAtOneHundred() {
+        // Named so alphabetical, case-insensitive sorting keeps them in session order.
+        val model = serverState(self = 1) {
+            channel(0, "root")
+            user(UserState(1, "a-self", 0, localVolume = 1.5f))
+            user(UserState(2, "b-full", 0, localVolume = 1f))
+            user(UserState(3, "c-half", 0, localVolume = 0.6f))
+        }
+
+        val users = rows(model).filterIsInstance<ChannelRow.User>()
+
+        assertThat(users.map { it.session to it.localVolumePercent }).containsExactly(
+            1 to null, // our own row never shows it, even though the model has a volume for it.
+            2 to null,
+            3 to 60,
+        ).inOrder()
+    }
+
+    @Test
     fun aPinnedListIsRootedInThePinnedChannelsInPinningOrder() {
         val rows = rows(roots = listOf(4, 1, 99))
 
