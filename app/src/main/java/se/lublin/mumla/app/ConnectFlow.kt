@@ -79,6 +79,7 @@ class ConnectFlow(
                 val username = usernameField.text.toString().ifEmpty { settings.defaultUsername }
                 connect(server.server.copy(username = username))
             }
+            .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
