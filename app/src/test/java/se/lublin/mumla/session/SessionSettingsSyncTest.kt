@@ -211,6 +211,12 @@ class SessionSettingsSyncTest {
         assertThat(keys).containsAtLeastElementsIn(exempt.keys)
     }
 
+    /** One-way audio sits with the push-to-talk controls, yet is applied like the audio screen's keys. */
+    @Test
+    fun `one-way audio on the controls screen reconfigures the session`() {
+        assertThat(SessionSettings.AUDIO_KEYS).contains(Settings.HALF_DUPLEX.key)
+    }
+
     /** An audio key reapplies every audio setting at once; any other key leaves the config alone. */
     @Test
     fun `only an audio key reconfigures the session`() {

@@ -89,7 +89,7 @@ abstract class ServerAdapter<E : Any>(
             else -> {
                 holder.version.text = "${context.getString(R.string.online)} (${response.versionString})"
                 holder.users.text = "${response.currentUsers}/${response.maximumUsers}"
-                holder.latency.text = "${response.latency}ms"
+                holder.latency.text = context.getString(R.string.unitMilliseconds, response.latency)
             }
         }
         onBindServer(holder, item)
