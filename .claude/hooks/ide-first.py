@@ -70,6 +70,8 @@ TEXT_TOOL = re.compile(
 )
 RECURSIVE_SEARCH = re.compile(r"(^|[\s;|&(`$])(rg|ag|ack)\b|\bgrep\b[^|;&\n]*\s-\w*[rR]|\bfind\b|\btree\b")
 GIT_CMD = re.compile(r"\bgit\s+[^|;&\n]*")
+# Arguments to the phone (`adb shell cat shared_prefs/x.xml`) name device paths, not the checkout's.
+ADB_CMD = re.compile(r"\badb\s+(?:-s\s+\S+\s+)?(?:shell|exec-out)\b[^|;&\n]*")
 LEADING_CD = re.compile(r"^\s*cd\s+(\S+)\s*(?:&&|;)")
 GIT_MESSAGE = re.compile(r"\s-m\s*(\"(?:[^\"\\]|\\.)*\"|'[^']*')", re.S)
 HEREDOC = re.compile(
@@ -120,7 +122,7 @@ def bash_hits_sources(cmd: str, cwd: str) -> bool:
         cwd = os.path.realpath(os.path.join(cwd, os.path.expanduser(leading_cd.group(1).strip("'\""))))
     if not TEXT_TOOL.search(cmd):
         return False
-    rest = GIT_CMD.sub(" ", cmd)
+    rest = ADB_CMD.sub(" ", GIT_CMD.sub(" ", cmd))
     paths = [t for t in PATH_TOKEN.findall(rest) if not re.fullmatch(r"[.\d]+|-.*|\*?\.\w+", t)]
     for token in paths:
         full = os.path.realpath(os.path.join(cwd, os.path.expanduser(token)))
