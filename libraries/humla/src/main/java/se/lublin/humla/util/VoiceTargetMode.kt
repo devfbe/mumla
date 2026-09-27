@@ -21,7 +21,7 @@ public enum class VoiceTargetMode {
     WHISPER,
     SERVER_LOOPBACK;
 
-    public companion object {
+    internal companion object {
         private const val LOOPBACK_ID: Byte = 31
 
         /** @throws IllegalArgumentException for an id outside 0..31. */

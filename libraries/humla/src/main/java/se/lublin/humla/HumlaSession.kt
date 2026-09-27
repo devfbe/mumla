@@ -669,7 +669,7 @@ public class HumlaSession internal constructor(
         }
     }
 
-    public companion object {
+    private companion object {
         private const val TAG = "HumlaSession"
         private val dnsLookupInstalled = AtomicBoolean()
 

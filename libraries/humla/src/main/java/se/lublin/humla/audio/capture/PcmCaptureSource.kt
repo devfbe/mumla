@@ -209,7 +209,7 @@ public class AndroidAudioRecordSource internal constructor(
         }
     }
 
-    public companion object {
+    internal companion object {
         private const val TAG = "AndroidAudioRecordSource"
 
         /** What [read] answers after [release]; `AudioInput` maps it like any other negative read. */

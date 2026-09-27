@@ -59,7 +59,7 @@ public data class UserStats(
 
     public data class Packets(val good: Int, val late: Int, val lost: Int, val resync: Int)
 
-    public companion object {
+    internal companion object {
         internal fun from(msg: Mumble.UserStats): UserStats {
             val version = msg.version.takeIf { msg.hasVersion() }
             return UserStats(
