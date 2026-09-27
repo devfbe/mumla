@@ -21,7 +21,6 @@ import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AlertDialog
-import androidx.core.os.BundleCompat
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -29,6 +28,8 @@ import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.DialogServerEditBinding
+import se.lublin.mumla.util.getServer
+import se.lublin.mumla.util.putServer
 
 /**
  * Edits a server's address and credentials. A valid entry is delivered as a fragment result
@@ -39,7 +40,7 @@ class ServerEditFragment : DialogFragment() {
     private lateinit var binding: DialogServerEditBinding
 
     private val server: Server?
-        get() = BundleCompat.getParcelable(requireArguments(), ARG_SERVER, Server::class.java)
+        get() = requireArguments().getServer(ARG_SERVER)
 
     private val action: Action get() = Action.valueOf(requireArguments().getString(ARG_ACTION)!!)
 
@@ -84,8 +85,8 @@ class ServerEditFragment : DialogFragment() {
         val username = binding.serverEditUsername.text.toString().trim()
             .ifEmpty { binding.serverEditUsername.hint.toString() }
         return Server(
-            id = server?.id ?: -1,
-            name = binding.serverEditName.text.toString().trim(),
+            id = server?.id ?: Server.NOT_SAVED,
+            label = binding.serverEditName.text.toString().trim(),
             host = binding.serverEditHost.text.toString().trim(),
             // 0 means "not configured"; consumers fall back to SRV lookup or the default port.
             port = binding.serverEditPort.text.toString().toIntOrNull() ?: 0,
@@ -112,13 +113,13 @@ class ServerEditFragment : DialogFragment() {
     data class Result(val action: Action, val server: Server) {
         fun toBundle() = Bundle().apply {
             putString(ARG_ACTION, action.name)
-            putParcelable(ARG_SERVER, server)
+            putServer(ARG_SERVER, server)
         }
 
         companion object {
             fun from(bundle: Bundle) = Result(
                 Action.valueOf(bundle.getString(ARG_ACTION)!!),
-                BundleCompat.getParcelable(bundle, ARG_SERVER, Server::class.java)!!,
+                requireNotNull(bundle.getServer(ARG_SERVER)),
             )
         }
     }
@@ -136,7 +137,7 @@ class ServerEditFragment : DialogFragment() {
          */
         fun newInstance(server: Server?, action: Action, ignoreTitle: Boolean) = ServerEditFragment().apply {
             arguments = Bundle().apply {
-                putParcelable(ARG_SERVER, server)
+                server?.let { putServer(ARG_SERVER, it) }
                 putString(ARG_ACTION, action.name)
                 putBoolean(ARG_IGNORE_TITLE, ignoreTitle)
             }

@@ -76,8 +76,8 @@ class ConnectFlow(
             .setView(layout)
             .setTitle(R.string.connectToServer)
             .setPositiveButton(R.string.connect) { _, _ ->
-                server.username = usernameField.text.toString().ifEmpty { settings.defaultUsername }
-                connect(server)
+                val username = usernameField.text.toString().ifEmpty { settings.defaultUsername }
+                connect(server.server.copy(username = username))
             }
             .show()
     }

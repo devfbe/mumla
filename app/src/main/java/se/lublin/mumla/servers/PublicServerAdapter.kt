@@ -26,7 +26,7 @@ class PublicServerAdapter(
     private val listener: PublicServerAdapterMenuListener,
     pings: ServerPings,
     onServerClick: (PublicServer) -> Unit,
-) : ServerAdapter<PublicServer>(pings, onServerClick) {
+) : ServerAdapter<PublicServer>(pings, onServerClick, PublicServer::server) {
 
     override val rowLayout: Int get() = R.layout.public_server_list_row
 

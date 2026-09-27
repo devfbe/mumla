@@ -26,7 +26,7 @@ class FavouriteServerAdapter(
     private val listener: FavouriteServerAdapterMenuListener,
     pings: ServerPings,
     onServerClick: (Server) -> Unit,
-) : ServerAdapter<Server>(pings, onServerClick) {
+) : ServerAdapter<Server>(pings, onServerClick, { it }) {
 
     override val rowLayout: Int get() = R.layout.server_list_row
 

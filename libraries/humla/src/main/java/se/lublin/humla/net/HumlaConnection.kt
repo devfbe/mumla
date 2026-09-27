@@ -66,6 +66,7 @@ private const val NANOS_PER_MICRO = 1000
  * [sendUDPMessage] may be called from any thread. State flags are only ever set, never cleared;
  * the cancelled scope closes [isConnected]/[isSynchronized].
  */
+@Suppress("LongParameterList") // The transport, resolution and timing seams.
 class HumlaConnection(
     private val listener: HumlaConnectionListener,
     private val transports: TransportFactory = DefaultTransportFactory(),
@@ -78,6 +79,7 @@ class HumlaConnection(
         maxAttempts = Int.MAX_VALUE,
         maxJitterFraction = 0.0,
     ),
+    private val resolver: ServerResolver = ServerResolver(),
 ) : HumlaTCP.TCPConnectionListener, HumlaUDP.UDPConnectionListener, MessageHandlerRegistry {
 
     /**
@@ -401,7 +403,7 @@ class HumlaConnection(
     }
 
     /**
-     * Starts connecting. Resolution (incl. the blocking SRV lookup, skipped over Tor), key store
+     * Starts connecting. Resolution (incl. the SRV lookup, skipped over Tor), key store
      * loading and socket creation run on the protocol thread; every outcome goes to the listener.
      */
     fun connect(server: Server): Unit = synchronized(lifecycleLock) {
@@ -418,18 +420,16 @@ class HumlaConnection(
                 handleFatalException(e)
                 return@launch
             }
-            // Over Tor the proxy resolves the host; an SRV query would leak it to the local resolver.
-            if (useTor) server.resolveWithoutSrv()
-            val resolvedHost = server.srvHost
-            val resolvedPort = server.srvPort
+            val endpoint = resolver.resolve(server, useTor)
+            this@HumlaConnection.endpoint = endpoint
             // Must be assigned before the transport exists; see the field declaration.
-            host = resolvedHost
-            port = resolvedPort
+            host = endpoint.host
+            port = endpoint.port
             val transport = transports.createTcp(socketFactory, scope)
             transport.setTCPConnectionListener(this@HumlaConnection)
             tcp = transport
             try {
-                transport.connect(resolvedHost, resolvedPort, useTor)
+                transport.connect(endpoint.host, endpoint.port, useTor)
             } catch (e: ConnectException) {
                 handleFatalException(HumlaException(e, HumlaException.HumlaDisconnectReason.CONNECTION_ERROR))
             }
@@ -437,6 +437,10 @@ class HumlaConnection(
     }
 
     val isConnected: Boolean get() = connected && !closed
+
+    /** Where the connection goes, once resolved. */
+    @Volatile var endpoint: Endpoint? = null
+        private set
 
     /** Runs [block] on the protocol thread, after what is queued there already; dropped once disconnected. */
     fun post(block: () -> Unit) {

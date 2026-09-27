@@ -18,18 +18,26 @@ package se.lublin.mumla.db
 
 import se.lublin.humla.model.Server
 
-/**
- * An entry of the public server list. Not a data class: it is a [Server], whose username the
- * user edits before connecting, so structural equality would not hold.
- */
-@Suppress("LongParameterList") // One parameter per attribute of the list's entries.
-class PublicServer(
-    name: String?,
+/** An entry of the public server list: the [server] to connect to and where it is. */
+data class PublicServer(
+    val server: Server,
     val ca: String?,
     val country: String?,
     val countryCode: String?,
-    ip: String,
-    port: Int,
     val region: String?,
     val url: String?,
-) : Server(-1, name, ip, port, "", "")
+) {
+    @Suppress("LongParameterList") // One parameter per attribute of the list's entries.
+    constructor(
+        name: String?,
+        ca: String?,
+        country: String?,
+        countryCode: String?,
+        ip: String,
+        port: Int,
+        region: String?,
+        url: String?,
+    ) : this(Server(Server.NOT_SAVED, name, ip, port, "", ""), ca, country, countryCode, region, url)
+
+    val name: String get() = server.name
+}

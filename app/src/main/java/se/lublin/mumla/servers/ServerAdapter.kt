@@ -39,10 +39,11 @@ import se.lublin.mumla.R
  * allowed, and [setReplies] repaints the cards whose reply arrived. A tapped card goes to
  * [onServerClick]. Main thread only.
  */
-abstract class ServerAdapter<E : Server>(
+abstract class ServerAdapter<E : Any>(
     private val pings: ServerPings,
     private val onServerClick: (E) -> Unit,
-) : ListAdapter<E, ServerAdapter.ServerViewHolder>(ServerDiff()) {
+    private val serverOf: (E) -> Server,
+) : ListAdapter<E, ServerAdapter.ServerViewHolder>(ServerDiff(serverOf)) {
 
     private var replies: Map<ServerAddress, ServerInfoResponse> = emptyMap()
 
@@ -50,8 +51,8 @@ abstract class ServerAdapter<E : Server>(
     fun setReplies(replies: Map<ServerAddress, ServerInfoResponse>) {
         val previous = this.replies
         this.replies = replies
-        currentList.forEachIndexed { index, server ->
-            val address = server.address
+        currentList.forEachIndexed { index, item ->
+            val address = serverOf(item).address
             if (previous[address] !== replies[address]) notifyItemChanged(index)
         }
     }
@@ -64,14 +65,15 @@ abstract class ServerAdapter<E : Server>(
     protected abstract val rowLayout: Int
 
     override fun onBindViewHolder(holder: ServerViewHolder, position: Int) {
-        val server = getItem(position)
+        val item = getItem(position)
+        val server = serverOf(item)
         val context = holder.itemView.context
         val response = replies[server.address]
-        holder.itemView.setOnClickListener { onServerClick(server) }
+        holder.itemView.setOnClickListener { onServerClick(item) }
         holder.name.text = server.name
         holder.user?.text = server.username
         holder.address?.text = server.host + if (server.port == 0) "" else ":${server.port}"
-        holder.more.setOnClickListener { onServerOptionsClick(server, it) }
+        holder.more.setOnClickListener { onServerOptionsClick(item, it) }
 
         val pinging = response == null && pings.allowed()
         val infoVisibility = if (pinging) View.INVISIBLE else View.VISIBLE
@@ -90,7 +92,7 @@ abstract class ServerAdapter<E : Server>(
                 holder.latency.text = "${response.latency}ms"
             }
         }
-        onBindServer(holder, server)
+        onBindServer(holder, item)
     }
 
     /** Binds what a subclass's row shows beyond the common card. */
@@ -128,13 +130,17 @@ abstract class ServerAdapter<E : Server>(
     }
 
     /** The same object is the same row; a stored server is also the same row after a reload. */
-    private class ServerDiff<E : Server> : DiffUtil.ItemCallback<E>() {
-        override fun areItemsTheSame(oldItem: E, newItem: E): Boolean =
-            oldItem === newItem || (oldItem.isSaved && oldItem.id == newItem.id)
+    private class ServerDiff<E : Any>(private val serverOf: (E) -> Server) : DiffUtil.ItemCallback<E>() {
+        override fun areItemsTheSame(oldItem: E, newItem: E): Boolean {
+            val old = serverOf(oldItem)
+            return oldItem === newItem || (old.isSaved && old.id == serverOf(newItem).id)
+        }
 
-        override fun areContentsTheSame(oldItem: E, newItem: E): Boolean =
-            oldItem.name == newItem.name && oldItem.host == newItem.host && oldItem.port == newItem.port &&
-                oldItem.username == newItem.username
+        override fun areContentsTheSame(oldItem: E, newItem: E): Boolean {
+            val old = serverOf(oldItem)
+            val new = serverOf(newItem)
+            return old.name == new.name && old.host == new.host && old.port == new.port && old.username == new.username
+        }
     }
 
     private companion object {

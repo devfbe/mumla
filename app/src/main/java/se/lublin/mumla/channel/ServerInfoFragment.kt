@@ -80,14 +80,13 @@ class ServerInfoFragment : Fragment() {
     }
 
     private fun updateData(session: IHumlaSession) {
-        val server = session.targetServer
         val info = session.serverInfo ?: return
 
         protocolView.text = getString(R.string.server_info_protocol, info.release)
         osVersionView.text = getString(R.string.server_info_version, info.osName, info.osVersion)
         tcpLatencyView.text = getString(R.string.server_info_latency, info.tcpLatency * MICROS_TO_MILLIS)
         udpLatencyView.text = getString(R.string.server_info_latency, info.udpLatency * MICROS_TO_MILLIS)
-        hostView.text = getString(R.string.server_info_host, server?.srvHost, server?.srvPort)
+        hostView.text = getString(R.string.server_info_host, info.host, info.port)
         maxBandwidthView.text = getString(R.string.server_info_max_bandwidth, info.maxBandwidth / KILO)
         currentBandwidthView.text =
             getString(R.string.server_info_current_bandwidth, session.audio.currentBandwidth / KILO)

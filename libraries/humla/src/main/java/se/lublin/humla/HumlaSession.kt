@@ -456,6 +456,8 @@ class HumlaSession(
             val connection = connection?.takeIf { it.isSynchronized } ?: return null
             return try {
                 ServerInfo(
+                    host = connection.endpoint?.host.orEmpty(),
+                    port = connection.endpoint?.port ?: 0,
                     release = connection.getServerRelease(),
                     osName = connection.getServerOSName(),
                     osVersion = connection.getServerOSVersion(),

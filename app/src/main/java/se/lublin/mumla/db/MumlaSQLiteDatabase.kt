@@ -118,9 +118,8 @@ class MumlaSQLiteDatabase(
             }
         }
 
-    override fun addServer(server: Server) {
-        server.id = writableDatabase.insert(TABLE_SERVER, null, serverValues(server))
-    }
+    override fun addServer(server: Server): Server =
+        server.copy(id = writableDatabase.insert(TABLE_SERVER, null, serverValues(server)))
 
     override fun updateServer(server: Server) {
         writableDatabase.update(TABLE_SERVER, serverValues(server), "$SERVER_ID=?", arrayOf(server.id.toString()))

@@ -2,37 +2,29 @@ package se.lublin.humla.net
 
 import android.os.Handler
 import android.os.Looper
+import kotlinx.coroutines.Dispatchers
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.Server
 import se.lublin.humla.testutil.awaitUntil
-import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
 
 @RunWith(RobolectricTestRunner::class)
 class HumlaConnectionSrvTest {
     private val transports = FakeTransports()
     private val lookups = CopyOnWriteArrayList<String>()
-    private lateinit var originalLookup: Server.SrvLookup
+    private val resolver = ServerResolver({ host ->
+        lookups += host
+        Endpoint("srv-target.example", 1234)
+    }, Dispatchers.Unconfined)
     private var connection: HumlaConnection? = null
-
-    @Before
-    fun setUp() {
-        originalLookup = Server.srvLookup
-        Server.srvLookup = Server.SrvLookup { host ->
-            lookups += host
-            InetSocketAddress.createUnresolved("srv-target.example", 1234)
-        }
-    }
 
     @After
     fun tearDown() {
-        Server.srvLookup = originalLookup
         connection?.let { c ->
             c.disconnect()
             shadowOf(Looper.getMainLooper()).idle()
@@ -41,7 +33,9 @@ class HumlaConnectionSrvTest {
     }
 
     private fun connect(useTor: Boolean): FakeTcpTransport {
-        val c = HumlaConnection(RecordingConnectionListener(), transports, Handler(Looper.getMainLooper()), { 0L })
+        val c = HumlaConnection(
+            RecordingConnectionListener(), transports, Handler(Looper.getMainLooper()), { 0L }, resolver = resolver,
+        )
         connection = c
         c.setUseTor(useTor)
         c.connect(Server(-1, "test", "mumble.example", 0, "user", ""))

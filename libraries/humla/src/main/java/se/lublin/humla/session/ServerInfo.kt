@@ -20,6 +20,9 @@ import se.lublin.humla.net.HumlaUDPMessageType
 
 /** What the synchronized connection knows about its server, as of the moment it was read. */
 data class ServerInfo(
+    /** Where the connection went: the entered host, or the target of its SRV record. */
+    val host: String,
+    val port: Int,
     /** The server's Mumble release, user-readable. */
     val release: String?,
     val osName: String?,

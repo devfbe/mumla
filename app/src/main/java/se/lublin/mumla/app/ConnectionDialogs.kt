@@ -159,8 +159,7 @@ class ConnectionDialogs(
             Action.CANCEL_RECONNECT -> sessions.cancelReconnect()
             Action.RECONNECT_WITH_PASSWORD -> {
                 val server = sessions.session.value?.targetServer ?: return
-                server.password = password
-                listener.reconnectWithPassword(server)
+                listener.reconnectWithPassword(server.copy(password = password))
             }
             Action.ACKNOWLEDGE -> sessions.markErrorShown()
         }
