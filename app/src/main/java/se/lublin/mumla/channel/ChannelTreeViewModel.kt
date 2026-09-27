@@ -53,6 +53,7 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.model.WhisperTargetChannel
+import se.lublin.humla.model.WhisperTargetUsers
 import se.lublin.humla.model.localVolumeKey
 import se.lublin.humla.model.localVolumeScope
 import se.lublin.humla.session.HumlaEvent
@@ -228,6 +229,18 @@ class ChannelTreeViewModel(
         val target = session?.model?.value?.channel(channel) ?: return true
         return session.actions.whisperTo(
             WhisperTargetChannel(target, includeLinked, includeSubchannels, null),
+            activate = !settings.isHoldToWhisper,
+        )
+    }
+
+    /**
+     * Whispers to the user at [session]; with hold-to-whisper on, only arms it. False if the
+     * server has no voice target slot left, or true without a session to whisper to.
+     */
+    fun whisperToUser(session: Int): Boolean {
+        val (humla, user) = userOf(session) ?: return true
+        return humla.actions.whisperTo(
+            WhisperTargetUsers(listOf(session), user.name),
             activate = !settings.isHoldToWhisper,
         )
     }

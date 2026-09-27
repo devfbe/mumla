@@ -22,7 +22,7 @@ import se.lublin.humla.net.Permissions
 enum class UserAction(val checkable: Boolean = false) {
     KICK, BAN, MUTE(checkable = true), DEAFEN(checkable = true), MOVE, PRIORITY(checkable = true),
     LOCAL_MUTE(checkable = true), IGNORE_MESSAGES(checkable = true), VIEW_COMMENT, CHANGE_COMMENT,
-    RESET_COMMENT, INFO, REGISTER,
+    RESET_COMMENT, INFO, WHISPER, REGISTER,
 }
 
 /** One row of the user actions sheet: the action it triggers, and for a checkable one its state. */
@@ -63,6 +63,7 @@ fun userMenuRows(state: UserMenuState): List<UserMenuRow> {
             add(UserMenuRow(UserAction.RESET_COMMENT))
         }
         add(UserMenuRow(UserAction.INFO))
+        if (!self) add(UserMenuRow(UserAction.WHISPER))
         if (user.userId < 0 && !user.hash.isNullOrEmpty() && perms and (register or Permissions.WRITE) > 0) {
             add(UserMenuRow(UserAction.REGISTER))
         }

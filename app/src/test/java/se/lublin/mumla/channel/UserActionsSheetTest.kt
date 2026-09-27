@@ -213,6 +213,26 @@ class UserActionsSheetTest {
         verify { actions.setLocalIgnored(2, true) }
     }
 
+    @Test
+    fun tappingTheWhisperRowWhispersToTheUser() {
+        val sheet = show(2)
+
+        rowWithTitle(sheet, R.string.user_menu_whisper).performClick()
+        idleMainLooper()
+
+        verify { actions.whisperTo(match { it.name == "Ann" }, activate = true) }
+    }
+
+    @Test
+    fun theWhisperRowIsNotOfferedOnOurselves() {
+        val sheet = show(1)
+
+        assertThat(rows(sheet).childCount).isGreaterThan(0)
+        val hasWhisperRow = (0 until rows(sheet).childCount).map(rows(sheet)::getChildAt)
+            .any { it.findViewById<TextView>(R.id.user_action_title).text == controller.get().getString(R.string.user_menu_whisper) }
+        assertThat(hasWhisperRow).isFalse()
+    }
+
     /**
      * A state change that leaves the visible actions the same (only a switch's state changes)
      * updates the existing row views rather than rebuilding them, so TalkBack keeps its focus.

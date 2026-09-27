@@ -77,6 +77,7 @@ class UserActionsSheet : BottomSheetDialogFragment() {
         fun showComment(session: Int, comment: String?, edit: Boolean)
         fun resetComment(session: Int)
         fun register(session: Int)
+        fun whisperTo(session: Int)
         fun setLocalMuted(session: Int, muted: Boolean)
         fun setLocalIgnored(session: Int, ignored: Boolean)
 
@@ -252,6 +253,7 @@ class UserActionsSheet : BottomSheetDialogFragment() {
                 R.string.confirm,
             ) { actions.resetComment(session) }
             UserAction.INFO -> actions.showInfo(session, user.name)
+            UserAction.WHISPER -> actions.whisperTo(session)
             UserAction.REGISTER -> actions.register(session)
         }
     }
@@ -304,6 +306,7 @@ class UserActionsSheet : BottomSheetDialogFragment() {
         UserAction.IGNORE_MESSAGES -> R.drawable.ic_action_bad
         UserAction.VIEW_COMMENT, UserAction.CHANGE_COMMENT, UserAction.RESET_COMMENT -> R.drawable.ic_action_comment
         UserAction.INFO -> R.drawable.ic_action_info_dark
+        UserAction.WHISPER -> R.drawable.ic_action_send
         UserAction.REGISTER -> R.drawable.ic_registered
     }
 
@@ -320,6 +323,7 @@ class UserActionsSheet : BottomSheetDialogFragment() {
         UserAction.CHANGE_COMMENT -> R.string.user_menu_change_comment
         UserAction.RESET_COMMENT -> R.string.user_menu_reset_comment
         UserAction.INFO -> R.string.user_menu_information
+        UserAction.WHISPER -> R.string.user_menu_whisper
         UserAction.REGISTER -> R.string.user_menu_register
     }
 

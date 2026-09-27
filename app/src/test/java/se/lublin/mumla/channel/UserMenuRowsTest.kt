@@ -103,7 +103,7 @@ class UserMenuRowsTest {
         assertThat(rows).containsExactly(
             UserAction.KICK, UserAction.BAN, UserAction.MUTE, UserAction.DEAFEN, UserAction.MOVE,
             UserAction.PRIORITY, UserAction.LOCAL_MUTE, UserAction.IGNORE_MESSAGES, UserAction.VIEW_COMMENT,
-            UserAction.RESET_COMMENT, UserAction.INFO, UserAction.REGISTER,
+            UserAction.RESET_COMMENT, UserAction.INFO, UserAction.WHISPER, UserAction.REGISTER,
         ).inOrder()
     }
 
@@ -112,5 +112,12 @@ class UserMenuRowsTest {
         assertThat(userMenuRows(state(UserState(2, "Ann", 1))).map { it.action }).contains(UserAction.INFO)
         assertThat(userMenuRows(state(UserState(1, "Me", 1), isSelf = true)).map { it.action })
             .contains(UserAction.INFO)
+    }
+
+    @Test
+    fun theWhisperRowIsOfferedOnlyForOtherUsers() {
+        assertThat(userMenuRows(state(UserState(2, "Ann", 1))).map { it.action }).contains(UserAction.WHISPER)
+        assertThat(userMenuRows(state(UserState(1, "Me", 1), isSelf = true)).map { it.action })
+            .doesNotContain(UserAction.WHISPER)
     }
 }

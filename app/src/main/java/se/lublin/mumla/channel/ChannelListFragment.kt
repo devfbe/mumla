@@ -260,6 +260,10 @@ class ChannelListFragment :
 
     override fun register(session: Int) = tree.register(session)
 
+    override fun whisperTo(session: Int) {
+        if (!tree.whisperToUser(session)) showSnackbar(R.string.shout_failed)
+    }
+
     override fun setLocalMuted(session: Int, muted: Boolean) = tree.setLocalMuted(session, muted)
 
     override fun setLocalIgnored(session: Int, ignored: Boolean) = tree.setLocalIgnored(session, ignored)

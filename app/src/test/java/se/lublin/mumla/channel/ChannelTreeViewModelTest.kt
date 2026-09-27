@@ -233,6 +233,28 @@ class ChannelTreeViewModelTest {
     }
 
     @Test
+    fun whisperToUserWhispersToThatUserAndSaysWhenNoSlotIsLeft() {
+        val tree = viewModel()
+        every { actions.whisperTo(any(), any()) } returns false
+
+        assertThat(tree.whisperToUser(2)).isFalse()
+
+        verify { actions.whisperTo(match<WhisperTarget> { it.name == "Ann" }, activate = true) }
+    }
+
+    /** With hold-to-whisper on, whispering to a user only arms the target. */
+    @Test
+    fun whisperToUserOnlyArmsTheTargetWithHoldToWhisperOn() {
+        every { settings.isHoldToWhisper } returns true
+        val tree = viewModel()
+        every { actions.whisperTo(any(), any()) } returns true
+
+        tree.whisperToUser(2)
+
+        verify { actions.whisperTo(match<WhisperTarget> { it.name == "Ann" }, activate = false) }
+    }
+
+    @Test
     fun theLocalMuteAndIgnoreOfARegisteredUserOnASavedServerAreStored() {
         val tree = viewModel()
 
