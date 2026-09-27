@@ -20,8 +20,6 @@ package se.lublin.mumla.channel
 import android.app.SearchManager
 import android.content.Context
 import android.database.CursorWrapper
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffColorFilter
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
@@ -49,15 +47,11 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.comment.ChannelDescriptionFragment
 import se.lublin.mumla.channel.comment.UserCommentFragment
 import se.lublin.mumla.databinding.FragmentChannelListBinding
-import se.lublin.mumla.session.SessionManager
-import se.lublin.mumla.session.SessionViewModel
-import se.lublin.mumla.util.activityAppViewModels
 import se.lublin.mumla.util.appViewModels
 
 /**
  * The channel tree of the connected server, or with [ARG_PINNED] only the pinned channels. Rows,
- * talk states and every action go through [ChannelTreeViewModel]; our own mute state in the app bar
- * through [SessionViewModel].
+ * talk states and every action go through [ChannelTreeViewModel].
  */
 @Suppress("TooManyFunctions") // The list's, the menus' and the app bar's callbacks, each delegating.
 class ChannelListFragment :
@@ -68,7 +62,6 @@ class ChannelListFragment :
     UserMenu.Actions {
 
     private val tree by appViewModels { ChannelTreeViewModel.create(it, requireArguments().getBoolean(ARG_PINNED)) }
-    private val session by activityAppViewModels { SessionViewModel(SessionManager.get(it)) }
     private val chat by parentChatViewModel()
 
     private lateinit var channelView: RecyclerView
@@ -99,7 +92,6 @@ class ChannelListFragment :
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { tree.talkStates.collect(adapter::setTalkStates) }
-                launch { session.self.collect { requireActivity().invalidateMenu() } }
                 tree.tree.collect(::show)
             }
         }
@@ -138,20 +130,6 @@ class ChannelListFragment :
             else -> menu.findItem(R.id.menu_noise_rnnoise)
         }?.isChecked = true
 
-        val self = session.self.value ?: return
-        val muteItem = menu.findItem(R.id.menu_mute_button)
-        val deafenItem = menu.findItem(R.id.menu_deafen_button)
-        muteItem.setIcon(
-            if (self.isSelfMuted) R.drawable.ic_action_microphone_muted else R.drawable.ic_action_microphone,
-        )
-        deafenItem.setIcon(if (self.isSelfDeafened) R.drawable.ic_action_audio_muted else R.drawable.ic_action_audio)
-        // The action a tap takes, which is also what accessibility services read.
-        muteItem.setTitle(if (self.isSelfMuted) R.string.unmute else R.string.mute)
-        deafenItem.setTitle(if (self.isSelfDeafened) R.string.undeafen else R.string.deafen)
-        // Tinted like the app bar title.
-        val tint = PorterDuffColorFilter(requireActivity().getColor(R.color.on_app_bar), PorterDuff.Mode.MULTIPLY)
-        muteItem.icon?.mutate()?.colorFilter = tint
-        deafenItem.icon?.mutate()?.colorFilter = tint
     }
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -189,17 +167,7 @@ class ChannelListFragment :
             menuItem.isChecked = true
             true
         }
-        R.id.menu_mute_button -> toggleSelfMuteDeaf { session.toggleMute() }
-        R.id.menu_deafen_button -> toggleSelfMuteDeaf { session.toggleDeafen() }
         else -> false
-    }
-
-    /** Flips our own mute or deafness; false while not connected. */
-    private inline fun toggleSelfMuteDeaf(toggle: () -> Unit): Boolean {
-        if (session.self.value == null) return false
-        toggle()
-        requireActivity().invalidateMenu()
-        return true
     }
 
     // The rows

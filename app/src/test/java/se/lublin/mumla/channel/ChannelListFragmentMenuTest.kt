@@ -28,15 +28,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.UserState
-import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.addUnderChatParent
 import se.lublin.mumla.testing.hostWith
-import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
-import se.lublin.mumla.testing.stubModel
 
 /** The channel list's own menu items; the audio chooser is the activity's. */
 @RunWith(RobolectricTestRunner::class)
@@ -64,31 +60,15 @@ class ChannelListFragmentMenuTest {
         return menu
     }
 
-    private fun me(muted: Boolean) = serverState(self = 1) {
-        channel(0, "Root")
-        user(UserState(1, "me", 0, isSelfMuted = muted, isSelfDeafened = muted))
-    }
-
-    @Test
-    fun theMuteAndDeafenItemsAreTitledWithWhatATapDoes() {
-        val model = session.stubModel(me(muted = false))
-        idleMainLooper()
-        prepared().let { menu ->
-            assertThat(menu.findItem(R.id.menu_mute_button).title).isEqualTo(activity.getString(R.string.mute))
-            assertThat(menu.findItem(R.id.menu_deafen_button).title).isEqualTo(activity.getString(R.string.deafen))
-        }
-
-        model.value = me(muted = true)
-        idleMainLooper()
-
-        prepared().let { menu ->
-            assertThat(menu.findItem(R.id.menu_mute_button).title).isEqualTo(activity.getString(R.string.unmute))
-            assertThat(menu.findItem(R.id.menu_deafen_button).title).isEqualTo(activity.getString(R.string.undeafen))
-        }
-    }
-
     @Test
     fun theAudioChooserIsNotTheListsAnyMore() {
         assertThat(prepared().findItem(R.id.menu_audio_device)).isNull()
+    }
+
+    /** They are the channel screen's, so the chat tab has them too. */
+    @Test
+    fun muteAndDeafenAreNotTheListsAnyMore() {
+        assertThat(prepared().findItem(R.id.menu_mute_button)).isNull()
+        assertThat(prepared().findItem(R.id.menu_deafen_button)).isNull()
     }
 }
