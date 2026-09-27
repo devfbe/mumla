@@ -438,6 +438,11 @@ class HumlaConnection(
 
     val isConnected: Boolean get() = connected && !closed
 
+    /** Runs [block] on the protocol thread, after what is queued there already; dropped once disconnected. */
+    fun post(block: () -> Unit) {
+        if (!closed) scope.launch { block() }
+    }
+
     /** True once ServerSync arrived; don't log user actions before that. */
     val isSynchronized: Boolean get() = synchronizedWithServer && !closed
 

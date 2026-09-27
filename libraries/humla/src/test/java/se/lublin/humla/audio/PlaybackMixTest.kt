@@ -4,7 +4,6 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.model.User
 
 class PlaybackMixTest {
     /** Decodes every frame as a constant, so a mixed talker is audible in the output. */
@@ -31,7 +30,7 @@ class PlaybackMixTest {
 
     /** A talker whose jitter buffer never delivers: concealment until the stream times out. */
     private fun silentTalker() = AudioOutputSpeech(
-        User(1, "alice"), AudioHandler.FRAME_SIZE, { _, state -> states += state }, ConstantOpus(), FakeJitter(),
+        1, AudioHandler.FRAME_SIZE, { _, state -> states += state }, ConstantOpus(), FakeJitter(),
     )
 
     @Test

@@ -26,14 +26,20 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import org.minidns.dnsserverlookup.android21.AndroidUsingLinkProperties
 import se.lublin.humla.audio.AudioHandler
 import se.lublin.humla.audio.AudioHandlerFactory
@@ -41,6 +47,7 @@ import se.lublin.humla.audio.AudioHost
 import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.AudioSessionParams
 import se.lublin.humla.audio.DefaultAudioHandlerFactory
+import se.lublin.humla.audio.PlaybackParams
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.routing.AndroidCommunicationDevices
 import se.lublin.humla.audio.routing.CommunicationDevice
@@ -48,18 +55,22 @@ import se.lublin.humla.audio.routing.CommunicationDevices
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
+import se.lublin.humla.model.LocalUserSettings
 import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.ServerSettings
+import se.lublin.humla.model.ServerState
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.model.User
+import se.lublin.humla.model.UserState
+import se.lublin.humla.model.localVolumeScope
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.model.WhisperTargetList
 import se.lublin.humla.net.ConnectionWarning
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.ReconnectPolicy
+import se.lublin.humla.protocol.LocalInput
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.protocol.ServerCommands
 import se.lublin.humla.session.AndroidNetworkMonitor
@@ -72,6 +83,7 @@ import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionLifecycle
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.SessionWakeLock
+import se.lublin.humla.session.TalkStates
 import se.lublin.humla.session.disconnectReasonOf
 import se.lublin.humla.util.HumlaLogger
 import se.lublin.humla.util.VoiceTargetMode
@@ -138,7 +150,37 @@ class HumlaSession(
     internal var modelHandler: ModelHandler? = null
         private set
 
+    /** Guards the check that a snapshot comes from the live [modelHandler] together with its publication. */
+    private val modelLock = Any()
+
     private var localVolumes: LocalVolumes? = null
+
+    private val mutableModel = MutableStateFlow<ServerState?>(null)
+
+    override val model: StateFlow<ServerState?> = mutableModel.asStateFlow()
+
+    /** What this device remembers about users, carried from one connection of the session to the next. */
+    private var localUsers = LocalUserSettings(
+        volumes = config.localVolumes,
+        mutedUserIds = config.connection.localMuteHistory.toSet(),
+        ignoredUserIds = config.connection.localIgnoreHistory.toSet(),
+        serverScope = config.connection.server?.localVolumeScope,
+    )
+
+    /** Written on the protocol thread with every snapshot, read by the network and playback threads. */
+    @Volatile
+    private var playbackParams = PlaybackParams.DEFAULT
+
+    private val mutableTalkStates = TalkStates(mainHandler.looper) { session, state ->
+        val user = modelHandler?.getUser(session) ?: return@TalkStates
+        user.talkState = state
+        emit(HumlaEvent.UserTalkStateUpdated(user))
+    }
+
+    override val talkStates: StateFlow<Map<Int, TalkState>> get() = mutableTalkStates.states
+
+    /** Waits for the snapshot that knows the own user, to build the pipeline for them. */
+    private var audioStart: Job? = null
 
     /** The certificate problem the connection reported ahead of its end, if any. */
     private var tlsFailure: DisconnectReason? = null
@@ -165,21 +207,15 @@ class HumlaSession(
         }
 
         override fun onTalkingStateChanged(talking: Boolean) {
-            mainHandler.post {
-                // A leftover from a terminated connection when the session is inactive.
-                val connection = connection
-                if (connection == null || !connection.isSynchronized) return@post
-                val self = modelHandler?.getUser(connection.getSession()) ?: return@post
-                self.talkState = if (talking) TalkState.TALKING else TalkState.PASSIVE
-                emit(HumlaEvent.UserTalkStateUpdated(self))
-            }
+            val self = mutableModel.value?.selfSession ?: return
+            mutableTalkStates.report(self, if (talking) TalkState.TALKING else TalkState.PASSIVE)
         }
     }
 
     private val audioOutputListener = object : AudioOutput.AudioOutputListener {
-        override fun onUserTalkStateUpdated(user: User) = emit(HumlaEvent.UserTalkStateUpdated(user))
+        override val playbackParams: PlaybackParams get() = this@HumlaSession.playbackParams
 
-        override fun getUser(session: Int): User? = modelHandler?.getUser(session)
+        override fun onTalkStateUpdated(session: Int, state: TalkState) = mutableTalkStates.report(session, state)
     }
 
     internal val audio = AudioSession(
@@ -243,7 +279,12 @@ class HumlaSession(
 
         val localVolumes = LocalVolumes(server, this.config.localVolumes)
         this.localVolumes = localVolumes
-        val modelHandler = ModelHandler(::emit, config.localMuteHistory, config.localIgnoreHistory, localVolumes)
+        val publisher = SnapshotPublisher(connection)
+        val modelHandler = ModelHandler(
+            ::emit, config.localMuteHistory, config.localIgnoreHistory, localVolumes,
+            ServerState.empty(localUsers), publisher,
+        )
+        publisher.handler = modelHandler
         this.modelHandler = modelHandler
         connection.addTcpHandler(modelHandler)
 
@@ -299,18 +340,20 @@ class HumlaSession(
 
     internal fun onConnectionSynchronized() {
         val connection = connection?.takeIf { it.isConnected }
-        val modelHandler = modelHandler
         if (connection == null || modelHandler == null || !lifecycle.synchronized()) return
         Log.v(TAG, "Connected")
-        startAudio(connection, modelHandler)
+        // The connection reports ServerSync before the model has read it; its snapshot follows.
+        audioStart = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val synced = mutableModel.first { it?.selfSession != null }
+            startAudio(connection, synced?.self)
+        }
     }
 
     /**
      * Restores the route and builds the pipeline on the audio thread; a pipeline that cannot start
      * becomes a warning.
      */
-    private fun startAudio(connection: HumlaConnection, modelHandler: ModelHandler) {
-        val self = modelHandler.getUser(connection.getSession())
+    private fun startAudio(connection: HumlaConnection, self: UserState?) {
         if (self == null) {
             // ServerSync named no known user: keep the session up without a microphone.
             Log.e(TAG, "No session user after ServerSync; audio not started")
@@ -338,10 +381,17 @@ class HumlaSession(
     /** The attempt ended with [reason]: tears the connection's share down and moves the lifecycle on. */
     private fun lost(reason: DisconnectReason?) {
         // First: push-to-talk must be off before anything could reconnect.
+        audioStart?.cancel()
         audio.stop()
         val autoReconnect = config.autoReconnect && reason is DisconnectReason.Network
         val next = lifecycle.lost(autoReconnect, reason)
-        modelHandler = null
+        synchronized(modelLock) {
+            mutableModel.value?.let { localUsers = it.local }
+            modelHandler = null
+            mutableModel.value = null
+            playbackParams = PlaybackParams.DEFAULT
+        }
+        mutableTalkStates.clear()
         currentVoiceTargetId = 0
         whisperTargetList.clear()
         if (next is SessionState.Disconnected) {
@@ -440,8 +490,40 @@ class HumlaSession(
     override fun joinChannel(channel: Int) = moveUserToChannel(sessionId, channel)
 
     override fun setLocalVolume(session: Int, volume: Float) {
-        val user = modelHandler?.getUser(session) ?: return
-        localVolumes?.set(user, volume)
+        modelHandler?.getUser(session)?.let { localVolumes?.set(it, volume) }
+        local(LocalInput.Volume(session, volume))
+    }
+
+    override fun setLocalMuted(session: Int, muted: Boolean) {
+        modelHandler?.getUser(session)?.isLocalMuted = muted
+        local(LocalInput.Mute(session, muted))
+    }
+
+    override fun setLocalIgnored(session: Int, ignored: Boolean) {
+        modelHandler?.getUser(session)?.isLocalIgnored = ignored
+        local(LocalInput.Ignore(session, ignored))
+    }
+
+    /** Hands [input] to the model's writer; ignored without a connection. */
+    private fun local(input: LocalInput) {
+        val handler = modelHandler ?: return
+        connection?.post { handler.onLocal(input) }
+    }
+
+    /** Publishes the snapshots of one connection's model, until another model replaces it. */
+    private inner class SnapshotPublisher(private val connection: HumlaConnection) : ModelHandler.Publisher {
+        lateinit var handler: ModelHandler
+
+        override fun post(block: () -> Unit) = connection.post(block)
+
+        override fun publish(state: ServerState) = synchronized(modelLock) {
+            if (modelHandler !== handler) return
+            val previous = mutableModel.value
+            if (previous == null || previous.users !== state.users) {
+                playbackParams = PlaybackParams.of(state.users.values)
+            }
+            mutableModel.value = state
+        }
     }
 
     override fun setListening(channel: Int, listen: Boolean) = commands().setListening(sessionId, channel, listen)

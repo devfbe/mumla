@@ -9,6 +9,8 @@ import se.lublin.humla.model.IUser
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.ServerSettings
+import se.lublin.humla.model.ServerState
+import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.session.HumlaEvent
@@ -42,6 +44,15 @@ interface IHumlaSession : AutoCloseable {
 
     /** The `AudioDeviceInfo` type voice is routed to; null while the platform decides. */
     val audioRoute: StateFlow<Int?>
+
+    /**
+     * The server's channels and users, one immutable snapshot per burst of changes; null without a
+     * connection. Collect anywhere.
+     */
+    val model: StateFlow<ServerState?>
+
+    /** The talk state of every user who is not silent, by session; updated on the main thread. */
+    val talkStates: StateFlow<Map<Int, TalkState>>
 
     /**
      * Replaces the configuration. Audio settings apply live, connection settings on the next
@@ -162,6 +173,12 @@ interface IHumlaSession : AutoCloseable {
      * the same identity for the rest of the session. Storing it is up to the client.
      */
     fun setLocalVolume(session: Int, volume: Float)
+
+    /** Mutes [session] on this device only; kept for a registered user's later sessions. */
+    fun setLocalMuted(session: Int, muted: Boolean)
+
+    /** Ignores [session]'s text messages on this device only; kept like [setLocalMuted]. */
+    fun setLocalIgnored(session: Int, ignored: Boolean)
 
     /** Starts or stops listening to [channel] without joining it. */
     fun setListening(channel: Int, listen: Boolean)

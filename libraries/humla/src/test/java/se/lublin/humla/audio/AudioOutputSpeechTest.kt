@@ -5,7 +5,6 @@ import org.junit.Test
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.model.User
 import se.lublin.humla.net.VoicePacket
 import java.nio.ByteBuffer
 
@@ -60,7 +59,7 @@ class AudioOutputSpeechTest {
     fun `an opus frame reaches the jitter buffer with its sample count as span and its trailer`() {
         val jitter = FakeJitter()
         val speech = AudioOutputSpeech(
-            User(42, "alice"),
+            42,
             AudioHandler.FRAME_SIZE,
             { _, _ -> },
             FakeOpusDecoder(nbFrames = 2, samplesPerFrame = 480),
@@ -80,7 +79,7 @@ class AudioOutputSpeechTest {
     fun `a packet the opus parser refuses never reaches the jitter buffer`() {
         val jitter = FakeJitter()
         val refusing = FakeOpusDecoder(nbFrames = -4)
-        val speech = AudioOutputSpeech(User(42, "alice"), AudioHandler.FRAME_SIZE, { _, _ -> }, refusing, jitter)
+        val speech = AudioOutputSpeech(42, AudioHandler.FRAME_SIZE, { _, _ -> }, refusing, jitter)
 
         speech.addFrameToBuffer(voicePacket(byteArrayOf(0x41), frameNumber = 1))
 
@@ -96,8 +95,8 @@ class AudioOutputSpeechTest {
             ctlResult = 3
         }
         val states = mutableListOf<TalkState>()
-        val listener = AudioOutputSpeech.TalkStateListener { _, state -> states += state }
-        AudioOutputSpeech(User(42, "alice"), AudioHandler.FRAME_SIZE, listener, FakeOpusDecoder(), jitter).decode()
+        val listener = AudioOutputSpeech.Listener { _, state -> states += state }
+        AudioOutputSpeech(42, AudioHandler.FRAME_SIZE, listener, FakeOpusDecoder(), jitter).decode()
         return states.single()
     }
 
@@ -121,7 +120,7 @@ class AudioOutputSpeechTest {
         }
         val states = mutableListOf<Pair<Int, TalkState>>()
         val speech = AudioOutputSpeech(
-            User(42, "alice"),
+            42,
             AudioHandler.FRAME_SIZE,
             { session, state -> states += session to state },
             FakeOpusDecoder(),
@@ -144,8 +143,11 @@ class AudioOutputSpeechTest {
             nextMeta = intArrayOf(packet.size, 0, 480, 0, 0)
             ctlResult = 3
         }
-        val user = User(42, "alice").apply { this.localVolume = localVolume }
-        val speech = AudioOutputSpeech(user, AudioHandler.FRAME_SIZE, { _, _ -> }, FakeOpusDecoder(fill = 0.5f), jitter)
+        val listener = object : AudioOutputSpeech.Listener {
+            override fun onTalkStateUpdated(session: Int, state: TalkState) = Unit
+            override fun gainOf(session: Int): Float = localVolume
+        }
+        val speech = AudioOutputSpeech(42, AudioHandler.FRAME_SIZE, listener, FakeOpusDecoder(fill = 0.5f), jitter)
         speech.decode()
         return speech.samples.copyOf(speech.numSamples)
     }
@@ -177,7 +179,7 @@ class AudioOutputSpeechTest {
         val jitter = FakeJitter()
         val opus = FakeOpusDecoder()
         val speech = AudioOutputSpeech(
-            User(42, "alice"),
+            42,
             AudioHandler.FRAME_SIZE,
             { _, _ -> },
             opus,

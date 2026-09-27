@@ -19,7 +19,7 @@ package se.lublin.humla.audio
 
 import android.content.Context
 import se.lublin.humla.audio.capture.IInputMode
-import se.lublin.humla.model.User
+import se.lublin.humla.model.UserState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.UdpProtocol
@@ -42,7 +42,7 @@ interface ManagedAudio {
 
 /** Per-session inputs that only exist after ServerSync. */
 data class AudioSessionParams(
-    val self: User,
+    val self: UserState,
     val maxBandwidth: Int,
     val codec: HumlaUDPMessageType?,
     val targetId: Byte,

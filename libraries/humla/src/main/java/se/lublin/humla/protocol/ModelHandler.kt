@@ -23,6 +23,7 @@ import se.lublin.humla.model.Channel
 import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
+import se.lublin.humla.model.ServerState
 import se.lublin.humla.model.User
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.net.TcpMessageHandler
@@ -35,17 +36,35 @@ import java.util.concurrent.ConcurrentHashMap
  * permissions. What happens is published through [events], chat log lines as typed
  * [HumlaEvent.Notice]s for the client to phrase.
  *
- * Threading: [onMessage] runs on the "humla-protocol" thread, the only writer. Getters are called
- * from the main thread and binder threads. Compound read-check-write accesses are safe only
- * because of that single writer; the concurrent maps and volatile fields just keep readers from
- * seeing half-rehashed tables or half-built objects.
+ * The same frames also build immutable [ServerState] snapshots, published through [publisher] once
+ * per burst: after the frames already queued on the protocol thread when the first of them arrived.
+ *
+ * Threading: [onMessage] and [onLocal] run on the "humla-protocol" thread, the only writer.
+ * Getters are called from the main thread and binder threads. Compound read-check-write accesses
+ * are safe only because of that single writer; the concurrent maps and volatile fields just keep
+ * readers from seeing half-rehashed tables or half-built objects.
  */
+@Suppress("TooManyFunctions") // The mutable model and its snapshots side by side for now.
 class ModelHandler(
     private val events: (HumlaEvent) -> Unit,
     private val localMuteHistory: List<Int>?,
     private val localIgnoreHistory: List<Int>?,
     private val localVolumes: LocalVolumes = LocalVolumes(null),
+    initial: ServerState = ServerState.empty(),
+    private val publisher: Publisher? = null,
 ) : TcpMessageHandler {
+
+    /** Where the snapshots go. */
+    interface Publisher {
+        /** Runs [block] on the protocol thread, after what is queued there already. */
+        fun post(block: () -> Unit)
+
+        /** Called on the protocol thread. */
+        fun publish(state: ServerState)
+    }
+
+    private val writer = ServerWriter(initial)
+    private var publishScheduled = false
 
     private val channels = ChannelTree()
 
@@ -70,6 +89,8 @@ class ModelHandler(
     fun getUser(session: Int): User? = users[session]
 
     override fun onMessage(msg: MessageLite) {
+        writer.onMessage(msg) {}
+        schedulePublish()
         when (msg) {
             is Mumble.ChannelState -> channels.apply(msg)?.let(events)
             is Mumble.ChannelRemove -> channels.remove(msg.channelId)?.let { events(HumlaEvent.ChannelRemoved(it)) }
@@ -85,6 +106,22 @@ class ModelHandler(
             is Mumble.ServerConfig -> serverSettings = ServerSettings(msg)
             is Mumble.UserStats -> events(HumlaEvent.UserStatsReceived(UserStats.from(msg)))
             else -> Unit
+        }
+    }
+
+    /** Applies a local mute, ignore or volume; protocol thread. */
+    internal fun onLocal(input: LocalInput) {
+        writer.onLocal(input)
+        schedulePublish()
+    }
+
+    private fun schedulePublish() {
+        val publisher = publisher ?: return
+        if (publishScheduled) return
+        publishScheduled = true
+        publisher.post {
+            publishScheduled = false
+            publisher.publish(writer.snapshot())
         }
     }
 

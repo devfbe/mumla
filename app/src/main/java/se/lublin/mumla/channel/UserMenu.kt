@@ -101,13 +101,13 @@ class UserMenu(
             R.id.context_deafen -> session?.setMuteDeafState(user.session, user.isMuted, !user.isDeafened)
             R.id.context_move -> showChannelMoveDialog()
             R.id.context_priority -> session?.setPrioritySpeaker(user.session, !user.isPrioritySpeaker)
-            R.id.context_local_mute -> {
-                user.isLocalMuted = !user.isLocalMuted
+            R.id.context_local_mute -> session?.let {
+                it.setLocalMuted(user.session, !user.isLocalMuted)
                 onLocalStateChanged(user)
             }
             R.id.context_local_volume -> session?.let { showLocalVolumeDialog(context, it, user, onLocalStateChanged) }
-            R.id.context_ignore_messages -> {
-                user.isLocalIgnored = !user.isLocalIgnored
+            R.id.context_ignore_messages -> session?.let {
+                it.setLocalIgnored(user.session, !user.isLocalIgnored)
                 onLocalStateChanged(user)
             }
             R.id.context_change_comment -> showUserComment(edit = true)

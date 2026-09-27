@@ -86,6 +86,8 @@ class GuardedModelVisibilityTest {
             // owns are final and guarded by its monitor instead (see ChannelTest).
             .filterNot { (_, field) -> Modifier.isFinal(field.modifiers) }
             .filterNot { (_, field) -> Modifier.isVolatile(field.modifiers) }
+            // Read and written on the protocol thread only.
+            .filterNot { (type, field) -> type == ModelHandler::class.java && field.name == "publishScheduled" }
             .map { (type, field) -> "${type.simpleName}.${field.name}" }
 
         assertThat(unguarded).isEmpty()
