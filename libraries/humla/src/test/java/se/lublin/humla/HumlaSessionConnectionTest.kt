@@ -20,7 +20,7 @@ package se.lublin.humla
 import android.content.Context
 import android.net.ConnectivityManager
 import com.google.common.truth.Truth.assertThat
-import org.junit.After
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -37,9 +37,11 @@ import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.EventRecorder
+import se.lublin.humla.testutil.Harnesses
 import se.lublin.humla.testutil.HumlaSessionHarness
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.testutil.collectOnMain
+import se.lublin.humla.testutil.connectionError
 import se.lublin.humla.testutil.isReconnecting
 import se.lublin.humla.testutil.reason
 import se.lublin.humla.util.VoiceTargetMode
@@ -52,18 +54,10 @@ import java.util.concurrent.TimeUnit
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaSessionConnectionTest {
-    private val harnesses = mutableListOf<HumlaSessionHarness>()
+    @get:Rule
+    internal val harnesses = Harnesses()
 
-    @After
-    fun tearDown() {
-        harnesses.forEach { it.close() }
-    }
-
-    private fun start(autoReconnect: Boolean = false): HumlaSessionHarness =
-        HumlaSessionHarness(autoReconnect = autoReconnect).also { harnesses += it }
-
-    private fun connectionError() =
-        HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
+    private fun start(autoReconnect: Boolean = false): HumlaSessionHarness = harnesses.start(autoReconnect)
 
     private fun connectivityManager() = RuntimeEnvironment.getApplication()
         .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -390,8 +384,7 @@ class HumlaSessionConnectionTest {
         assertThat(h.session.state.value).isInstanceOf(SessionState.Reconnecting::class.java)
 
         h.session.cancelReconnect()
-        awaitUntil(description = "the attempt in flight was disconnected") {
-            h.mainLooper.idle()
+        h.drainUntil("the attempt in flight was disconnected") {
             h.transports.tcps[1].disconnectCalls > 0
         }
         h.mainLooper.idle()
@@ -620,8 +613,7 @@ class HumlaSessionConnectionTest {
         h.failConnection(0, connectionError())
         assertThat(networkCallbacks()).hasSize(1)
 
-        h.close()
-        harnesses.remove(h)
+        harnesses.close(h)
 
         assertThat(networkCallbacks()).isEmpty()
     }
@@ -652,7 +644,7 @@ class HumlaSessionConnectionTest {
     /** A connect without a configured server ends as a failed attempt instead of crashing on the main looper. */
     @Test
     fun aConnectWithoutATargetServerReportsAFailureInsteadOfCrashing() {
-        val h = HumlaSessionHarness(server = null).also { harnesses += it }
+        val h = harnesses.start(server = null)
 
         h.session.connect()
         h.mainLooper.idle()
@@ -722,8 +714,7 @@ class HumlaSessionConnectionTest {
             HumlaTCPMessageType.UserRemove,
             Mumble.UserRemove.newBuilder().setSession(1).setActor(4).setReason("spam").build().toByteArray(),
         )
-        awaitUntil(description = "the kick is reported") {
-            h.mainLooper.idle()
+        h.drainUntil("the kick is reported") {
             h.session.state.value is SessionState.Disconnected
         }
 

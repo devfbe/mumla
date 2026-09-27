@@ -20,6 +20,7 @@ package se.lublin.humla
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -46,8 +47,8 @@ import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.messageRes
 import se.lublin.humla.testutil.EventRecorder
+import se.lublin.humla.testutil.Harnesses
 import se.lublin.humla.testutil.HumlaSessionHarness
-import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.testutil.testSession
 import se.lublin.humla.util.VoiceTargetMode
 
@@ -59,18 +60,17 @@ import se.lublin.humla.util.VoiceTargetMode
 class HumlaSessionCharacterizationTest {
     private val server = Server(-1, "test", "127.0.0.1", 64738, "me", "")
     private val sessions = mutableListOf<HumlaSession>()
-    private val harnesses = mutableListOf<HumlaSessionHarness>()
+
+    @get:Rule
+    internal val harnesses = Harnesses()
 
     @After
-    fun tearDown() {
-        sessions.forEach { it.close() }
-        harnesses.forEach { it.close() }
-    }
+    fun tearDown() = sessions.forEach { it.close() }
 
     private fun session(config: SessionConfig = SessionConfig()): HumlaSession =
         testSession(config).also { sessions += it }
 
-    private fun harness(): HumlaSessionHarness = HumlaSessionHarness().also { harnesses += it }
+    private fun harness(): HumlaSessionHarness = harnesses.start()
 
     @Test
     fun startsDisconnectedWithNothingBuilt() {
@@ -125,8 +125,7 @@ class HumlaSessionCharacterizationTest {
         h.session.connect()
 
         assertThat(h.session.state.value).isEqualTo(SessionState.Connecting)
-        awaitUntil(description = "socket opened") {
-            h.mainLooper.idle()
+        h.drainUntil("socket opened") {
             h.transports.tcps.firstOrNull()?.isConnectCalled == true
         }
         assertThat(h.transports.tcps[0].connectHost).isEqualTo("127.0.0.1")
@@ -239,14 +238,12 @@ class HumlaSessionCharacterizationTest {
         val h = harness()
         val chain = TestCertificates.leaf().chain
         h.session.connect()
-        awaitUntil(description = "socket opened") {
-            h.mainLooper.idle()
+        h.drainUntil("socket opened") {
             h.transports.tcps.firstOrNull()?.isConnectCalled == true
         }
 
         h.transports.tcps[0].simulateHandshakeFailure(chain)
-        awaitUntil(description = "the end is reported") {
-            h.mainLooper.idle()
+        h.drainUntil("the end is reported") {
             h.session.state.value is SessionState.Disconnected
         }
 

@@ -5,11 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.os.Looper
-import android.os.SystemClock
 import android.text.SpannableStringBuilder
 import android.text.method.LinkMovementMethod
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -39,6 +37,7 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.UserState
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
+import se.lublin.mumla.testing.tapThrough
 import java.util.Collections
 import kotlin.coroutines.CoroutineContext
 
@@ -107,29 +106,8 @@ class ChatAdapterTest {
         return holder
     }
 
-    /**
-     * A real touch entering at the row and routed down, so disabled and GONE targets are filtered
-     * as for a finger ([View.performClick] and a direct dispatch to the target ignore visibility).
-     */
-    private fun tapRow(holder: ChatAdapter.Holder, targetId: Int) {
-        val target = holder.itemView.findViewById<View>(targetId)
-        var x = target.width / 2f
-        var y = target.height / 2f
-        var v: View = target
-        while (v !== holder.itemView) {
-            x += v.left
-            y += v.top
-            v = v.parent as View
-        }
-        val now = SystemClock.uptimeMillis()
-        val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
-        val up = MotionEvent.obtain(now, now + 10, MotionEvent.ACTION_UP, x, y, 0)
-        holder.itemView.dispatchTouchEvent(down)
-        holder.itemView.dispatchTouchEvent(up)
-        down.recycle()
-        up.recycle()
-        idleMainLooper()
-    }
+    private fun tapRow(holder: ChatAdapter.Holder, targetId: Int) =
+        tapThrough(holder.itemView, holder.itemView.findViewById(targetId))
 
     @Test
     fun parsesEachMessageOffTheMainThreadAndOnlyOnce() = runTest {

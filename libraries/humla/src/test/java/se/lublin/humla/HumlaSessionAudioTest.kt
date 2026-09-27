@@ -21,7 +21,7 @@ import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
-import org.junit.After
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -35,6 +35,7 @@ import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.FAKE_BANDWIDTH
+import se.lublin.humla.testutil.Harnesses
 import se.lublin.humla.testutil.HumlaSessionHarness
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.MumbleVersion
@@ -49,18 +50,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaSessionAudioTest {
-    private val harnesses = mutableListOf<HumlaSessionHarness>()
+    @get:Rule
+    internal val harnesses = Harnesses()
 
-    @After
-    fun tearDown() {
-        harnesses.forEach { it.close() }
-    }
-
-    private fun start(): HumlaSessionHarness = HumlaSessionHarness().also { harnesses += it }
+    private fun start(): HumlaSessionHarness = harnesses.start()
 
     private fun audioUp(h: HumlaSessionHarness, count: Int = 1) =
-        awaitUntil(description = "audio pipeline $count") {
-            h.mainLooper.idle()
+        h.drainUntil("audio pipeline $count") {
             h.audioFactory.created.size == count
         }
 
@@ -181,8 +177,7 @@ class HumlaSessionAudioTest {
                 .setSession(4242).setMaxBandwidth(72_000).build().toByteArray(),
         )
         // The pipeline waits for the snapshot of the sync, which knows no user of this session.
-        awaitUntil(description = "the missing session user is reported") {
-            h.mainLooper.idle()
+        h.drainUntil("the missing session user is reported") {
             h.session.state.value == SessionState.Connected && h.string(R.string.no_session_user) in h.warnings
         }
         assertThat(h.audioFactory.created).isEmpty()
@@ -248,8 +243,7 @@ class HumlaSessionAudioTest {
         val controller = controllerOf(h)
         assertThat(controller.thread.isAlive).isTrue()
 
-        h.close()
-        harnesses.remove(h)
+        harnesses.close(h)
 
         awaitUntil(description = "the control thread ended") { !controller.thread.isAlive }
     }
@@ -280,8 +274,7 @@ class HumlaSessionAudioTest {
         h.audioFactory.failWith = AudioInitializationException("no microphone")
 
         h.connectAndSynchronize()
-        awaitUntil(description = "the failure reaches the chat log") {
-            h.mainLooper.idle()
+        h.drainUntil("the failure reaches the chat log") {
             h.warnings.contains("no microphone")
         }
 
@@ -293,11 +286,10 @@ class HumlaSessionAudioTest {
     fun aConnectionWarningReachesTheChatLog() {
         val h = start()
         h.connectAndSynchronize()
-        awaitUntil(description = "udp transport") { h.mainLooper.idle(); h.transports.udps.isNotEmpty() }
+        h.drainUntil("udp transport") { h.transports.udps.isNotEmpty() }
 
         h.transports.udps[0].simulateError(IOException("network unreachable"))
-        awaitUntil(description = "the warning reaches the chat log") {
-            h.mainLooper.idle()
+        h.drainUntil("the warning reaches the chat log") {
             h.warnings.contains(h.string(R.string.udp_warning_thread_failed))
         }
     }

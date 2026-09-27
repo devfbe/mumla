@@ -20,7 +20,7 @@ package se.lublin.humla
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
-import org.junit.After
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -29,11 +29,11 @@ import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.routing.AndroidCommunicationDevicesTest
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.Harnesses
+import se.lublin.humla.testutil.connectionError
 import se.lublin.humla.testutil.setBluetoothAutomatic
 import se.lublin.humla.testutil.HumlaSessionHarness
-import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.TimeUnit
 
 /**
@@ -43,18 +43,10 @@ import java.util.concurrent.TimeUnit
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaSessionBluetoothTest {
-    private val harnesses = mutableListOf<HumlaSessionHarness>()
+    @get:Rule
+    internal val harnesses = Harnesses()
 
-    @After
-    fun tearDown() {
-        harnesses.forEach { it.close() }
-    }
-
-    private fun start(autoReconnect: Boolean = false): HumlaSessionHarness =
-        HumlaSessionHarness(autoReconnect = autoReconnect).also { harnesses += it }
-
-    private fun connectionError() =
-        HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
+    private fun start(autoReconnect: Boolean = false): HumlaSessionHarness = harnesses.start(autoReconnect)
 
     @Test
     fun theWishAndTheRouteAreDifferentQuestions() {
@@ -160,14 +152,13 @@ class HumlaSessionBluetoothTest {
     /** Closing the session gives the route back, and takes the listener off the platform. */
     @Test
     fun closingTheSessionReleasesTheRouteAndTheListener() {
-        val h = HumlaSessionHarness().also { harnesses += it }
+        val h = harnesses.start()
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
         h.session.setBluetoothAutomatic(true)
         assertThat(h.devices.listener).isNotNull()
 
-        h.close()
-        harnesses.remove(h)
+        harnesses.close(h)
 
         assertThat(h.devices.clearCalls).isEqualTo(1)
         assertThat(h.devices.listener).isNull()
@@ -179,7 +170,7 @@ class HumlaSessionBluetoothTest {
      */
     @Test
     fun noRouteIsTakenWithoutASession() {
-        val h = HumlaSessionHarness().also { harnesses += it }
+        val h = harnesses.start()
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
 
         h.session.setBluetoothAutomatic(true)
@@ -188,8 +179,7 @@ class HumlaSessionBluetoothTest {
         assertThat(h.devices.selectCalls).isEmpty()
         assertThat(h.session.audioSession.router.bluetoothAutomatic).isTrue()
 
-        h.close()
-        harnesses.remove(h)
+        harnesses.close(h)
 
         assertThat(h.devices.clearCalls).isEqualTo(0)
     }
@@ -328,14 +318,13 @@ class HumlaSessionBluetoothTest {
         val h = start()
         h.phone()
         h.connectAndSynchronize()
-        awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
+        h.drainUntil("audio created") { h.audioFactory.created.size == 1 }
         assertThat(h.audioFactory.configs[0].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
         assertThat(h.audioFactory.configs[0].playbackStream).isEqualTo(AudioManager.STREAM_VOICE_CALL)
 
         h.session.audio.selectDevice(1)
 
-        awaitUntil(description = "audio rebuilt for the earpiece") {
-            h.mainLooper.idle()
+        h.drainUntil("audio rebuilt for the earpiece") {
             h.audioFactory.created.size == 2
         }
         assertThat(h.audioFactory.configs[1].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
@@ -347,12 +336,12 @@ class HumlaSessionBluetoothTest {
         val h = start()
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
-        awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
+        h.drainUntil("audio created") { h.audioFactory.created.size == 1 }
         assertThat(h.audioFactory.configs[0].routedDeviceType).isNull()
 
         h.session.setBluetoothAutomatic(true)
 
-        awaitUntil(description = "audio rebuilt for sco") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
+        h.drainUntil("audio rebuilt for sco") { h.audioFactory.created.size == 2 }
         assertThat(h.audioFactory.configs[1].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
         assertThat(h.audioFactory.createThreads.distinct())
             .containsExactly(se.lublin.humla.audio.AudioController.THREAD_NAME)
@@ -364,13 +353,13 @@ class HumlaSessionBluetoothTest {
         val h = start()
         h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         h.connectAndSynchronize()
-        awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
+        h.drainUntil("audio created") { h.audioFactory.created.size == 1 }
         h.session.setBluetoothAutomatic(true)
-        awaitUntil(description = "audio rebuilt for sco") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
+        h.drainUntil("audio rebuilt for sco") { h.audioFactory.created.size == 2 }
 
         h.devices.systemSelects(null) // the headset walked away
 
-        awaitUntil(description = "audio rebuilt without sco") { h.mainLooper.idle(); h.audioFactory.created.size == 3 }
+        h.drainUntil("audio rebuilt without sco") { h.audioFactory.created.size == 3 }
         assertThat(h.audioFactory.configs[2].routedDeviceType).isNull()
         assertThat(h.session.audioSession.router.isBluetoothActive).isFalse()
         assertThat(h.session.audioSession.router.bluetoothAutomatic).isTrue() // still wanted; the headset is not there
@@ -403,12 +392,12 @@ class HumlaSessionBluetoothTest {
         val h = start()
         h.phone()
         h.connectAndSynchronize()
-        awaitUntil(description = "audio created") { h.mainLooper.idle(); h.audioFactory.created.size == 1 }
+        h.drainUntil("audio created") { h.audioFactory.created.size == 1 }
         assertThat(h.audioFactory.configs[0].echoCancellation).isEqualTo(EchoCancellationMode.WEBRTC)
 
         h.configureAudio { copy(echoCancellationOverrides = mapOf(AudioDeviceCategory.SPEAKER to false)) }
 
-        awaitUntil(description = "audio rebuilt without echo") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
+        h.drainUntil("audio rebuilt without echo") { h.audioFactory.created.size == 2 }
         assertThat(h.audioFactory.configs[1].echoCancellation).isEqualTo(EchoCancellationMode.NONE)
 
         h.session.audio.selectDevice(1)
@@ -434,7 +423,7 @@ class HumlaSessionBluetoothTest {
     @Test
     @Config(shadows = [AndroidCommunicationDevicesTest.DenyingAudioManagerShadow::class])
     fun aPlatformRefusalIsReportedOnceAsAChatLine() {
-        val h = HumlaSessionHarness(devices = null).also { harnesses += it }
+        val h = harnesses.start(devices = null)
         h.connectAndSynchronize()
 
         h.session.setBluetoothAutomatic(true)

@@ -42,7 +42,10 @@ import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
+import org.junit.rules.ExternalResource
 import java.util.concurrent.CopyOnWriteArrayList
+
+private val TEST_SERVER = Server(-1, "test", "127.0.0.1", 64738, "me", "")
 
 /**
  * Builds a [HumlaSession] whose collaborators are fakes and drives it through a real
@@ -61,7 +64,7 @@ internal class HumlaSessionHarness(
         maxAttempts = 3,
         maxJitterFraction = 0.0,
     ),
-    server: Server? = Server(-1, "test", "127.0.0.1", 64738, "me", ""),
+    server: Server? = TEST_SERVER,
     /** null leaves the session to wrap the platform AudioManager, which is its own corner. */
     val devices: FakeCommunicationDevices? = FakeCommunicationDevices(),
 ) {
@@ -90,11 +93,16 @@ internal class HumlaSessionHarness(
 
     fun string(id: Int): String = app.getString(id)
 
+    /** Drains the main looper until [condition] holds; the condition may read main-thread state. */
+    fun drainUntil(description: String, condition: () -> Boolean) = awaitUntil(description = description) {
+        mainLooper.idle()
+        condition()
+    }
+
     fun close() {
         session.close()
         mainLooper.idle()
-        awaitUntil(description = "nothing of the connection left behind") {
-            mainLooper.idle()
+        drainUntil("nothing of the connection left behind") {
             session.connection?.isTerminated != false
         }
     }
@@ -112,16 +120,14 @@ internal class HumlaSessionHarness(
 
     /** Opens the socket of connection number [index] (0-based) and reports it established. */
     fun openSocket(index: Int): FakeTcpTransport {
-        awaitUntil(description = "tcp transport $index") {
-            mainLooper.idle()
+        drainUntil("tcp transport $index") {
             transports.tcps.size > index && transports.tcps[index].isConnectCalled
         }
         val tcp = transports.tcps[index]
         tcp.simulateConnected()
         // Waits for the handshake sent from onConnectionEstablished, not just isConnected:
         // `connected` is set before that callback is posted to the main looper.
-        awaitUntil(description = "connection $index established") {
-            mainLooper.idle()
+        drainUntil("connection $index established") {
             session.connection?.isConnected == true &&
                 tcp.sent.contains(HumlaTCPMessageType.Authenticate)
         }
@@ -134,8 +140,7 @@ internal class HumlaSessionHarness(
      */
     fun synchronize(tcp: FakeTcpTransport, session: Int = 1) {
         feedSync(tcp, session)
-        awaitUntil(description = "server sync delivered") {
-            mainLooper.idle()
+        drainUntil("server sync delivered") {
             this.session.state.value == SessionState.Connected
         }
     }
@@ -178,17 +183,38 @@ internal class HumlaSessionHarness(
     fun failConnection(index: Int, error: HumlaException) {
         val connection = session.connection
         transports.tcps[index].simulateFailure(error)
-        awaitUntil(description = "connection $index torn down") {
-            mainLooper.idle()
+        drainUntil("connection $index torn down") {
             connection?.isConnected != true
         }
         transports.tcps[index].simulateSocketClosed()
-        awaitUntil(description = "disconnect report delivered") {
-            mainLooper.idle()
+        drainUntil("disconnect report delivered") {
             session.state.value != SessionState.Connected
         }
     }
 }
+
+/** Harnesses a test starts, closed after it. */
+internal class Harnesses : ExternalResource() {
+    private val started = mutableListOf<HumlaSessionHarness>()
+
+    fun start(
+        autoReconnect: Boolean = false,
+        server: Server? = TEST_SERVER,
+        devices: FakeCommunicationDevices? = FakeCommunicationDevices(),
+    ): HumlaSessionHarness =
+        HumlaSessionHarness(autoReconnect, server = server, devices = devices).also { started += it }
+
+    /** Closes [harness] now instead of after the test. */
+    fun close(harness: HumlaSessionHarness) {
+        started -= harness
+        harness.close()
+    }
+
+    override fun after() = started.forEach { it.close() }
+}
+
+/** What a dropped socket reports. */
+internal fun connectionError() = HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
 
 /** A session on Robolectric's platform with fakes where a test needs them. */
 internal fun testSession(

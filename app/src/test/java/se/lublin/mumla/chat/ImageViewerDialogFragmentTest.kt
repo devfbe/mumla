@@ -7,8 +7,6 @@ import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
-import android.os.SystemClock
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -40,6 +38,7 @@ import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.FileProviderCache
+import se.lublin.mumla.testing.tapThrough
 import java.io.File
 import kotlin.coroutines.CoroutineContext
 
@@ -105,32 +104,12 @@ class ImageViewerDialogFragmentTest {
     }
 
 
-    /**
-     * A tap that enters at the fragment's root view and is hit-tested down to [id], so disabled,
-     * `GONE` and unlaid-out (0x0) targets fail as they would for a finger; [View.performClick]
-     * would see none of these.
-     */
+    /** A finger's tap on [id], which must be laid out: an unmeasured button would silently miss. */
     private fun ImageViewerDialogFragment.tap(id: Int) {
-        val root = requireView()
-        val target = root.findViewById<View>(id)
+        val target = requireView().findViewById<View>(id)
         assertThat(target.width).isGreaterThan(0)
         assertThat(target.height).isGreaterThan(0)
-        var x = target.width / 2f
-        var y = target.height / 2f
-        var view: View = target
-        while (view !== root) {
-            x += view.left
-            y += view.top
-            view = view.parent as View
-        }
-        val down = SystemClock.uptimeMillis()
-        val downEvent = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, y, 0)
-        val upEvent = MotionEvent.obtain(down, down + 1, MotionEvent.ACTION_UP, x, y, 0)
-        root.dispatchTouchEvent(downEvent)
-        root.dispatchTouchEvent(upEvent)
-        downEvent.recycle()
-        upEvent.recycle()
-        idleMainLooper()
+        tapThrough(requireView(), target)
     }
 
     private fun ImageViewerDialogFragment.image(): ZoomImageView =

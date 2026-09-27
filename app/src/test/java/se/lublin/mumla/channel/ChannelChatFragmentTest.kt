@@ -6,11 +6,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
-import android.os.SystemClock
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MenuItem
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
@@ -74,6 +72,7 @@ import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubModel
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.tapThrough
 import se.lublin.mumla.testing.textMessage
 import se.lublin.mumla.testing.stubState
 
@@ -737,26 +736,6 @@ class ChannelChatFragmentTest {
 
     private fun imageMessage(src: String = "data:image/png;base64,AAAA", trailing: String = "") =
         info("<img src=\"$src\"/>$trailing")
-
-    /** Enters at [root] with the coordinates of [target]'s centre, the way a finger does. */
-    private fun tapThrough(root: View, target: View) {
-        var x = target.width / 2f
-        var y = target.height / 2f
-        var v: View = target
-        while (v !== root) {
-            x += v.left
-            y += v.top
-            v = v.parent as View
-        }
-        val now = SystemClock.uptimeMillis()
-        val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
-        val up = MotionEvent.obtain(now, now + 10, MotionEvent.ACTION_UP, x, y, 0)
-        root.dispatchTouchEvent(down)
-        root.dispatchTouchEvent(up)
-        down.recycle()
-        up.recycle()
-        idleMainLooper()
-    }
 
     /** Tapping an image row opens the viewer through the `onImageClicked` wire. */
     @Test
