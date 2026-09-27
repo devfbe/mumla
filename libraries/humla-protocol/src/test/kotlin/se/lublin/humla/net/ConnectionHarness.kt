@@ -23,9 +23,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import org.junit.rules.ExternalResource
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.util.MumbleVersion
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicLong
@@ -125,6 +128,33 @@ internal class ConnectionHarness(
         val TEST_SERVER = Server(-1, "test", "127.0.0.1", 64738, "user", "")
         private const val NANOS_PER_SECOND = 1_000_000_000L
     }
+}
+
+/** The harnesses a test adds, each closed after it, which also checks that nothing is left. */
+internal class ConnectionHarnesses : ExternalResource() {
+    private val added = mutableListOf<ConnectionHarness>()
+
+    fun add(harness: ConnectionHarness): ConnectionHarness = harness.also { added += it }
+
+    override fun after() = added.forEach { it.close() }
+}
+
+/** A TCP frame as the wire carries it; [length] may lie about the payload. */
+internal fun tcpFrame(type: Int, payload: ByteArray = ByteArray(0), length: Int = payload.size): ByteArray {
+    val bytes = ByteArrayOutputStream()
+    DataOutputStream(bytes).apply {
+        writeShort(type)
+        writeInt(length)
+        write(payload)
+    }
+    return bytes.toByteArray()
+}
+
+internal fun textFrame(text: String): ByteArray = Mumble.TextMessage.newBuilder().setMessage(text).build().toByteArray()
+
+/** A datagram of [size] bytes whose leading type nibble marks it as Opus voice data. */
+internal fun voiceDatagram(size: Int): ByteArray = ByteArray(size).also {
+    it[0] = ((HumlaUDPMessageType.UDPVoiceOpus.ordinal shl 5) and 0xFF).toByte()
 }
 
 /** A thread's task queue, run by the test: tasks wait until [runAll]. */

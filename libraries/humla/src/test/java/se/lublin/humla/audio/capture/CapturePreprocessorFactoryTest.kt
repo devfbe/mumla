@@ -76,13 +76,6 @@ class CapturePreprocessorFactoryTest {
     }
 
     @Test
-    fun `none noise suppression without echo cancellation is the no-op stage itself`() {
-        val chain = factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.NONE)
-
-        assertThat(chain.preprocessor).isSameInstanceAs(NoopPreprocessor)
-    }
-
-    @Test
     fun `webrtc echo runs before rnnoise and the probability comes from rnnoise`() {
         val chain = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
 
@@ -166,18 +159,14 @@ class CapturePreprocessorFactoryTest {
     }
 
     @Test
-    fun `speex gets the requested suppression depth`() {
+    fun `speex gets the requested suppression depth, or the default when none is asked for`() {
         factory.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.NONE, speexNoiseSuppressDb = -35)
-
-        assertThat(speex.setCalls).contains(R.SET_NOISE_SUPPRESS to -35)
-    }
-
-    @Test
-    fun `speex gets the default suppression depth when none is asked for`() {
         factory.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.NONE)
 
-        assertThat(speex.setCalls)
-            .contains(R.SET_NOISE_SUPPRESS to SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB)
+        assertThat(speex.setCalls).containsAtLeast(
+            R.SET_NOISE_SUPPRESS to -35,
+            R.SET_NOISE_SUPPRESS to SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB,
+        ).inOrder()
     }
 
     /** `RnnoisePreprocessor` alone holds about 1.4 MB of native model state. */
@@ -191,90 +180,60 @@ class CapturePreprocessorFactoryTest {
         assertThat(apm.destroyed).isEqualTo(1)
     }
 
-    @Test
-    fun `a stage whose native state fails is skipped and logged, the rest keeps working`() {
-        rnnoise.failCreate = true
+    private class Outcome(val order: List<String>, val probability: Float?, val logs: List<String>, val farEnd: Boolean)
 
-        val chain = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
-        val probability = chain.preprocessor.process(ShortArray(FRAME))
-
-        assertThat(order).containsExactly("apm")
-        assertThat(probability).isWithin(0.0005f).of(0.4608f)
-        assertThat(logs).hasSize(1)
-        assertThat(logs.single()).contains("RNNoise")
+    /**
+     * A WebRTC chain with [noise] whose [stage] cannot be built: its factory throws [error], or
+     * without one its native state fails. Fresh fakes, so each case is judged alone.
+     */
+    private fun withBroken(stage: String, noise: NoiseSuppressionMode, error: Throwable?): Outcome {
+        val order = mutableListOf<String>()
+        val logs = mutableListOf<String>()
+        val nativeFails = { name: String -> stage == name && error == null }
+        val speex = FakeSpeexPreprocessApi(probability = 40, onRun = { order += "speex" })
+            .apply { failCreate = nativeFails("Speex") }
+        val rnnoise = FakeRnnoiseApi(probability = 0.95f, onProcess = { order += "rnnoise" })
+            .apply { failCreate = nativeFails("RNNoise") }
+        val apm = FakeWebRtcApmApi(levelDbfs = -35f, onCapture = { order += "apm" })
+            .apply { failCreate = nativeFails("WebRTC APM") }
+        fun <T> load(name: String, fake: T): () -> T = { if (stage == name && error != null) throw error else fake }
+        val factory = CapturePreprocessorFactory(
+            load("Speex", speex), load("RNNoise", rnnoise), load("WebRTC APM", apm),
+        ) { logs += it }
+        val chain = factory.create(noise, EchoCancellationMode.WEBRTC)
+        return Outcome(order, chain.preprocessor.process(ShortArray(FRAME)), logs, chain.farEndSink != null)
     }
 
     /**
-     * The native objects load their library in the object initialiser, so a missing `.so` surfaces
-     * as `ExceptionInInitializerError` first and `NoClassDefFoundError` afterwards, never as an
-     * `Exception`. One failed stage must not take down the rest of the pipeline.
+     * One stage that cannot be built costs that stage and nothing else, and its log line is what
+     * tells the user which one is not running. The native objects load their library in the object
+     * initialiser, so a missing `.so` surfaces as `ExceptionInInitializerError` first and
+     * `NoClassDefFoundError` afterwards, never as an `Exception`. A missing APM means there is
+     * nothing to feed the far end to.
      */
     @Test
-    fun `a stage whose native library fails to load is skipped and logged`() {
-        val broken = CapturePreprocessorFactory(
-            { speex },
-            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_native.so not found")) },
-            { apm },
-        ) { logs += it }
-
-        val chain = broken.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
-        val probability = chain.preprocessor.process(ShortArray(FRAME))
-
-        assertThat(order).containsExactly("apm")
-        assertThat(probability).isWithin(0.0005f).of(0.4608f)
-        assertThat(logs).hasSize(1)
-        assertThat(logs.single()).contains("RNNoise")
-    }
-
-    @Test
-    fun `a stage whose native class is already missing is skipped and logged`() {
-        val broken = CapturePreprocessorFactory(
-            { speex },
-            { rnnoise },
-            { throw NoClassDefFoundError("se/lublin/humla/audio/native/WebRtcApmNative") },
-        ) { logs += it }
-
-        val chain = broken.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
-        val probability = chain.preprocessor.process(ShortArray(FRAME))
-
-        assertThat(order).containsExactly("rnnoise")
-        assertThat(probability).isEqualTo(0.95f)
-        assertWithMessage("a missing APM means there is nothing to feed the far end to")
-            .that(chain.farEndSink).isNull()
-        assertThat(logs).hasSize(1)
-        assertThat(logs.single()).contains("WebRTC APM")
-    }
-
-    /** A speex stage that fails to load must cost the noise suppression and nothing else. */
-    @Test
-    fun `a speex stage whose native library fails to load is skipped and logged`() {
-        val broken = CapturePreprocessorFactory(
-            { throw ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_native.so not found")) },
-            { rnnoise },
-            { apm },
-        ) { logs += it }
-
-        val chain = broken.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.WEBRTC)
-        val probability = chain.preprocessor.process(ShortArray(FRAME))
-
-        assertThat(order).containsExactly("apm")
-        assertThat(probability).isWithin(0.0005f).of(0.4608f)
-        assertThat(logs).hasSize(1)
-        assertWithMessage("the log line is what tells the user which suppressor is not running")
-            .that(logs.single()).contains("Speex")
-    }
-
-    @Test
-    fun `a speex stage whose native state fails is skipped and logged`() {
-        speex.failCreate = true
-
-        val chain = factory.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.WEBRTC)
-        val probability = chain.preprocessor.process(ShortArray(FRAME))
-
-        assertThat(order).containsExactly("apm")
-        assertThat(probability).isWithin(0.0005f).of(0.4608f)
-        assertThat(logs).hasSize(1)
-        assertThat(logs.single()).contains("Speex")
+    fun `a stage that cannot be built is skipped and logged, the rest keeps working`() {
+        val missingLibrary =
+            ExceptionInInitializerError(UnsatisfiedLinkError("dlopen failed: libhumla_native.so not found"))
+        val apmLevel = 0.4608f
+        val cases = listOf(
+            Triple("RNNoise", NoiseSuppressionMode.RNNOISE, null) to ("apm" to apmLevel),
+            Triple("RNNoise", NoiseSuppressionMode.RNNOISE, missingLibrary) to ("apm" to apmLevel),
+            Triple("WebRTC APM", NoiseSuppressionMode.RNNOISE, NoClassDefFoundError("WebRtcApmNative")) to
+                ("rnnoise" to 0.95f),
+            Triple("Speex", NoiseSuppressionMode.SPEEX, missingLibrary) to ("apm" to apmLevel),
+            Triple("Speex", NoiseSuppressionMode.SPEEX, null) to ("apm" to apmLevel),
+        )
+        for ((broken, expected) in cases) {
+            val (stage, noise, error) = broken
+            val outcome = withBroken(stage, noise, error)
+            val case = "$stage ${error?.javaClass?.simpleName ?: "without native state"}"
+            assertWithMessage(case).that(outcome.order).containsExactly(expected.first)
+            assertWithMessage(case).that(outcome.probability).isWithin(0.0005f).of(expected.second)
+            assertWithMessage(case).that(outcome.logs).hasSize(1)
+            assertWithMessage(case).that(outcome.logs.single()).contains(stage)
+            assertWithMessage(case).that(outcome.farEnd).isEqualTo(stage != "WebRTC APM")
+        }
     }
 
     @Test

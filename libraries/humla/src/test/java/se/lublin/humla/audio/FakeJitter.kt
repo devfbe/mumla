@@ -17,7 +17,6 @@ class FakeJitter : SpeexJitterApi {
     /** `[length, timestamp, span, sequence, userData]` the next `get` reports. */
     var nextMeta = intArrayOf(0, 0, 0, 0, 0)
     var ticks = 0
-    var updateDelayCalls = 0
     /** Counts `jitter_buffer_destroy` calls: a second one on the same handle is a double free. */
     var destroys = 0
 
@@ -43,8 +42,5 @@ class FakeJitter : SpeexJitterApi {
         value[0] = ctlResult
         return 0
     }
-    override fun updateDelay(handle: Long): Int {
-        updateDelayCalls++
-        return 0
-    }
+    override fun updateDelay(handle: Long): Int = 0
 }

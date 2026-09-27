@@ -7,12 +7,7 @@ import org.bouncycastle.asn1.DEROctetString
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers
 import org.bouncycastle.asn1.pkcs.Pfx
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
-import org.bouncycastle.asn1.x500.X500Name
-import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
-import org.bouncycastle.cert.X509v3CertificateBuilder
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.jce.provider.BouncyCastleProvider
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.bouncycastle.pkcs.PKCS12PfxPdu
 import org.bouncycastle.pkcs.PKCS12PfxPduBuilder
 import org.bouncycastle.pkcs.PKCS12SafeBag
@@ -24,13 +19,9 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.math.BigInteger
-import java.security.KeyPair
-import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.cert.X509Certificate
 import java.security.interfaces.RSAPrivateKey
-import java.util.Date
 
 class Pkcs12CertificatesTest {
 
@@ -76,9 +67,9 @@ class Pkcs12CertificatesTest {
 
     @Test
     fun `loads a mumble style pkcs12 whose private key sits in an unencrypted keyBag`() {
-        val keyPair = rsaKeyPair()
-        val cert = selfSigned(keyPair, "CN=Mumble Test")
-        val bytes = mumbleStylePkcs12(keyPair, cert)
+        val identity = mumbleIdentity()
+        val cert = identity.certificate
+        val bytes = mumbleStylePkcs12(identity)
         assertIsUnencryptedKeyBagShape(bytes)
 
         val store = Pkcs12Certificates.load(bytes, null)
@@ -133,9 +124,7 @@ class Pkcs12CertificatesTest {
 
     @Test
     fun `a null password is treated as the empty password`() {
-        val keyPair = rsaKeyPair()
-        val cert = selfSigned(keyPair, "CN=Mumble Test")
-        val bytes = mumbleStylePkcs12(keyPair, cert)
+        val bytes = mumbleStylePkcs12(mumbleIdentity())
 
         val viaNull = Pkcs12Certificates.load(bytes, null)
         val viaEmpty = Pkcs12Certificates.load(bytes, "")
@@ -145,8 +134,7 @@ class Pkcs12CertificatesTest {
 
     @Test
     fun `a wrong password is rejected instead of yielding a half loaded keystore`() {
-        val keyPair = rsaKeyPair()
-        val bytes = mumbleStylePkcs12(keyPair, selfSigned(keyPair, "CN=Mumble Test"))
+        val bytes = mumbleStylePkcs12(mumbleIdentity())
 
         val thrown = assertThrows(IOException::class.java) {
             Pkcs12Certificates.load(bytes, "not the password")
@@ -157,8 +145,7 @@ class Pkcs12CertificatesTest {
 
     @Test
     fun `a corrupted file is rejected instead of yielding a half loaded keystore`() {
-        val keyPair = rsaKeyPair()
-        val bytes = mumbleStylePkcs12(keyPair, selfSigned(keyPair, "CN=Mumble Test"))
+        val bytes = mumbleStylePkcs12(mumbleIdentity())
         // Flip a bit inside the authenticated safe, well past the outer ASN.1 headers, so the
         // structure still parses and it is the MAC that catches the damage.
         val corrupted = bytes.copyOf().also { it[it.size / 2] = (it[it.size / 2].toInt() xor 0xFF).toByte() }
@@ -184,20 +171,7 @@ class Pkcs12CertificatesTest {
             .doesNotContain(PKCSObjectIdentifiers.encryptedData)
     }
 
-    private fun rsaKeyPair(): KeyPair =
-        KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
-
-    private fun selfSigned(keyPair: KeyPair, dn: String): X509Certificate {
-        val provider = BouncyCastleProvider()
-        val name = X500Name(dn)
-        val notBefore = Date()
-        val notAfter = Date(notBefore.time + 24L * 60 * 60 * 1000)
-        val holder = X509v3CertificateBuilder(
-            name, BigInteger.ONE, notBefore, notAfter, name,
-            SubjectPublicKeyInfo.getInstance(keyPair.public.encoded),
-        ).build(JcaContentSignerBuilder("SHA256withRSA").setProvider(provider).build(keyPair.private))
-        return JcaX509CertificateConverter().setProvider(provider).getCertificate(holder)
-    }
+    private fun mumbleIdentity() = TestCertificates.leaf(selfSigned = true, cn = "Mumble Test")
 
     /**
      * Mirrors what Mumble's Cert.cpp writes with
@@ -205,7 +179,8 @@ class Pkcs12CertificatesTest {
      * an unencrypted keyBag and certBag in plain `data` ContentInfos, both tagged with
      * friendlyName and localKeyId, and a MAC computed over the empty password.
      */
-    private fun mumbleStylePkcs12(keyPair: KeyPair, cert: X509Certificate): ByteArray {
+    private fun mumbleStylePkcs12(identity: TestCertificates.Issued): ByteArray {
+        val keyPair = identity.keyPair
         val provider = BouncyCastleProvider()
         val friendlyName = DERBMPString("Mumble Identity")
         val localKeyId = DEROctetString(MessageDigest.getInstance("SHA-1").digest(keyPair.public.encoded))
@@ -213,7 +188,7 @@ class Pkcs12CertificatesTest {
             .addBagAttribute(PKCS12SafeBag.friendlyNameAttribute, friendlyName)
             .addBagAttribute(PKCS12SafeBag.localKeyIdAttribute, localKeyId)
             .build()
-        val certBag = JcaPKCS12SafeBagBuilder(cert)
+        val certBag = JcaPKCS12SafeBagBuilder(identity.certificate)
             .addBagAttribute(PKCS12SafeBag.friendlyNameAttribute, friendlyName)
             .addBagAttribute(PKCS12SafeBag.localKeyIdAttribute, localKeyId)
             .build()

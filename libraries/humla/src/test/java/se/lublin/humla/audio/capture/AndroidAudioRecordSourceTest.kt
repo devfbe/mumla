@@ -24,6 +24,7 @@ import android.media.audiofx.AudioEffect
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -100,30 +101,19 @@ class AndroidAudioRecordSourceTest {
         assertThat(source.record.sampleRate).isEqualTo(RATE)
     }
 
-    /** Verifies [AudioSourcePolicy] is actually applied. */
+    /** Verifies [AudioSourcePolicy] is actually applied: an effect or AEC3 needs the voice source. */
     @Test
-    fun `plain capture opens the requested source`() {
-        val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE))
-
-        assertThat(source.record.audioSource).isEqualTo(MediaRecorder.AudioSource.MIC)
-    }
-
-    @Test
-    fun `an effect switches the open to the voice communication source`() {
-        val source = open(
-            CaptureRequest(
-                MediaRecorder.AudioSource.MIC, RATE, effects = AndroidAudioEffects(noiseSuppressor = true),
-            ),
+    fun `the source follows the policy`() {
+        val mic = CaptureRequest(MediaRecorder.AudioSource.MIC, RATE)
+        val voice = MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        val cases = listOf(
+            mic to MediaRecorder.AudioSource.MIC,
+            mic.copy(effects = AndroidAudioEffects(noiseSuppressor = true)) to voice,
+            mic.copy(echo = EchoCancellationMode.WEBRTC) to voice,
         )
-
-        assertThat(source.record.audioSource).isEqualTo(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-    }
-
-    @Test
-    fun `webrtc echo cancellation switches the open to the voice communication source`() {
-        val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE, echo = EchoCancellationMode.WEBRTC))
-
-        assertThat(source.record.audioSource).isEqualTo(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+        for ((request, expected) in cases) {
+            assertWithMessage("$request").that(open(request).record.audioSource).isEqualTo(expected)
+        }
     }
 
     /** The SCO headset is routed to by device, not by hoping it is the default input. */
@@ -141,13 +131,6 @@ class AndroidAudioRecordSourceTest {
         val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE))
 
         assertThat(source.record.preferredDevice).isNull()
-    }
-
-    @Test
-    fun `no effects are attached when none were asked for`() {
-        val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE))
-
-        assertThat(source.effects).isEmpty()
     }
 
     @Test
@@ -197,25 +180,17 @@ class AndroidAudioRecordSourceTest {
     }
 
     /**
-     * A platform canceller in front of AEC3 would hand it an already-altered echo, so none is
-     * attached, even on devices that have one.
+     * No effect is attached unasked, and in particular no platform canceller: one in front of AEC3
+     * would hand it an already-altered echo, so none is attached even on devices that have one.
      */
     @Test
-    fun `webrtc echo cancellation attaches no platform canceller`() {
+    fun `no effect is attached unasked, not even a platform canceller`() {
         makeAvailable(AudioEffect.EFFECT_TYPE_AEC)
 
-        val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE, echo = EchoCancellationMode.WEBRTC))
-
-        assertThat(source.effects).isEmpty()
-    }
-
-    @Test
-    fun `no echo cancellation attaches no platform canceller`() {
-        makeAvailable(AudioEffect.EFFECT_TYPE_AEC)
-
-        val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE, echo = EchoCancellationMode.NONE))
-
-        assertThat(source.effects).isEmpty()
+        for (echo in EchoCancellationMode.entries) {
+            val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE, echo = echo))
+            assertWithMessage("$echo").that(source.effects).isEmpty()
+        }
     }
 
     /** A device without the effect must open anyway, without it, rather than fail to record. */
@@ -285,26 +260,12 @@ class AndroidAudioRecordSourceTest {
         source.stop()
     }
 
-    /** The premise that lets [AndroidAudioRecordSource.release] carry no re-entry guard. */
+    /**
+     * Release frees the attached effects too, and twice is safe: the premise that lets
+     * [AndroidAudioRecordSource.release] carry no re-entry guard.
+     */
     @Test
     fun `releasing twice is safe`() {
-        makeAvailable(AudioEffect.EFFECT_TYPE_NS)
-        val source = open(
-            CaptureRequest(
-                MediaRecorder.AudioSource.MIC, RATE, effects = AndroidAudioEffects(noiseSuppressor = true),
-            ),
-        )
-        val effect = source.effects.single()
-
-        source.release()
-        source.release()
-
-        assertThat(source.record.state).isEqualTo(AudioRecord.STATE_UNINITIALIZED)
-        assertThrows(IllegalStateException::class.java) { effect.enabled }
-    }
-
-    @Test
-    fun `release frees the attached effects too`() {
         makeAvailable(AudioEffect.EFFECT_TYPE_NS)
         val source = open(
             CaptureRequest(
@@ -315,7 +276,9 @@ class AndroidAudioRecordSourceTest {
         assertThat(effect.enabled).isTrue()
 
         source.release()
+        source.release()
 
+        assertThat(source.record.state).isEqualTo(AudioRecord.STATE_UNINITIALIZED)
         // `getEnabled()` throws on a released effect.
         assertThrows(IllegalStateException::class.java) { effect.enabled }
     }

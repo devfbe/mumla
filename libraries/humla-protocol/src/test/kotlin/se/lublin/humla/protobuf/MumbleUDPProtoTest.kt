@@ -19,12 +19,10 @@ package se.lublin.humla.protobuf
 import com.google.common.truth.Truth.assertThat
 import com.google.protobuf.ByteString
 import org.junit.Test
+import se.lublin.humla.testutil.bytes
 
 /** Pins the proto3 wire format of the generated MumbleUDP classes against hand-verified bytes. */
 class MumbleUDPProtoTest {
-
-    private fun bytes(vararg values: Int) = ByteArray(values.size) { values[it].toByte() }
-
     @Test
     fun `a target of zero is on the wire because it is a oneof member`() {
         val audio = MumbleUDP.Audio.newBuilder()

@@ -16,7 +16,6 @@ import org.junit.Test
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.testutil.awaitUntil
 import java.io.ByteArrayOutputStream
-import java.io.DataOutputStream
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -117,12 +116,6 @@ class HumlaTCPTest {
         fun runQueued() {
             while (true) (queue.poll() ?: return).run()
         }
-    }
-
-    private fun frame(type: HumlaTCPMessageType, payload: ByteArray = ByteArray(0)): ByteArray {
-        val bytes = ByteArrayOutputStream()
-        DataOutputStream(bytes).apply { writeShort(type.ordinal); writeInt(payload.size); write(payload) }
-        return bytes.toByteArray()
     }
 
     @Test
@@ -277,7 +270,7 @@ class HumlaTCPTest {
 
         transport.disconnect()
         assertThat(listener.next()).isEqualTo("disconnect" to "test-tcp-callbacks")
-        toClient.write(frame(HumlaTCPMessageType.Ping)) // the server's answer only lands now
+        toClient.write(tcpFrame(HumlaTCPMessageType.Ping.ordinal)) // the server's answer only lands now
         toClient.flush()
 
         awaitFinished(transport)
@@ -318,7 +311,7 @@ class HumlaTCPTest {
         transport.connect("example.invalid", 64738, false)
         assertThat(queuedEstablished.await(5, TimeUnit.SECONDS)).isTrue()
         assertThat(reading.await(5, TimeUnit.SECONDS)).isTrue() // the read thread is inside readFrame
-        toClient.write(frame(HumlaTCPMessageType.Ping))
+        toClient.write(tcpFrame(HumlaTCPMessageType.Ping.ordinal))
         toClient.flush()
 
         awaitFinished(transport)

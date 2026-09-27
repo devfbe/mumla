@@ -23,13 +23,12 @@ import org.junit.Test
 import se.lublin.humla.audio.capture.fakes.FailingResampler
 import se.lublin.humla.audio.capture.fakes.FakePreprocessor
 import se.lublin.humla.audio.capture.fakes.FakeResampler
+import se.lublin.humla.audio.constant
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
 
 class CapturePipelineTest {
-    private fun constant(value: Int, size: Int = 480) = ShortArray(size) { value.toShort() }
-
     /** Regression for voice activation being triggered by background noise. */
     @Test
     fun `vad decides on the preprocessed frame, not the raw frame`() {
@@ -218,58 +217,38 @@ class CapturePipelineTest {
         assertThat(out.samples[0]).isEqualTo(4000.toShort())
     }
 
-    /** The premise of the `amplitudeBoost != 1f` fast path: a factor of one is the identity. */
-    @Test
-    fun `a boost of one changes no sample`() {
-        val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode(), amplitudeBoost = 1f)
-        val input = shortArrayOf(Short.MIN_VALUE, -32767, -1, 0, 1, 32766, Short.MAX_VALUE)
-        val frame = ShortArray(480) { input[it % input.size] }
-
-        val out = pipeline.process(frame, 480)
-
-        for (i in 0 until 480) {
-            assertWithMessage("diverges at sample %s", i).that(out.samples[i]).isEqualTo(frame[i])
-        }
-    }
-
-    @Test
-    fun `boost clamps to 16-bit range`() {
-        val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode(), amplitudeBoost = 2f)
-        val out = pipeline.process(ShortArray(480) { if (it % 2 == 0) 20000 else -20000 }, 480)
-        assertThat(out.samples[0]).isEqualTo(Short.MAX_VALUE)
-        assertThat(out.samples[1]).isEqualTo(Short.MIN_VALUE)
-    }
-
     /**
-     * The slider runs 0 to 200 %, so factors below one are real settings. The narrowing truncates
-     * toward zero, so a sample of 1 attenuates to 0.
+     * The boost scales every sample. A factor of one is the identity (the premise of the
+     * `amplitudeBoost != 1f` fast path); the result is clamped to 16 bits; the slider runs 0 to
+     * 200 %, so factors below one are real settings, and the narrowing truncates toward zero (a
+     * sample of 1 attenuates to 0, 16383.5 to 16383); the bottom of the slider mutes rather than
+     * attenuates.
      */
     @Test
-    fun `a boost below one attenuates and truncates toward zero`() {
-        val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode(), amplitudeBoost = 0.5f)
-        val input = ShortArray(480)
-        shortArrayOf(1000, -1000, 1, -1, Short.MAX_VALUE, Short.MIN_VALUE).copyInto(input)
+    fun `the boost scales every sample, clamped to 16 bits and truncated toward zero`() {
+        val edges = shortArrayOf(Short.MIN_VALUE, -32767, -1, 0, 1, 32766, Short.MAX_VALUE)
+        fun head(vararg samples: Short) = ShortArray(480).also { samples.copyInto(it) }
+        val cases = listOf(
+            Triple(1f, ShortArray(480) { edges[it % edges.size] }, ShortArray(480) { edges[it % edges.size] }),
+            Triple(
+                2f,
+                ShortArray(480) { if (it % 2 == 0) 20000 else -20000 },
+                ShortArray(480) { if (it % 2 == 0) Short.MAX_VALUE else Short.MIN_VALUE },
+            ),
+            Triple(
+                0.5f,
+                head(1000, -1000, 1, -1, Short.MAX_VALUE, Short.MIN_VALUE),
+                head(500, -500, 0, 0, 16383, -16384),
+            ),
+            Triple(0f, constant(20000), ShortArray(480)),
+        )
+        for ((boost, input, expected) in cases) {
+            val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode(), amplitudeBoost = boost)
 
-        val out = pipeline.process(input, 480)
+            val out = pipeline.process(input, 480)
 
-        assertThat(out.samples[0]).isEqualTo(500.toShort())
-        assertThat(out.samples[1]).isEqualTo((-500).toShort())
-        assertThat(out.samples[2]).isEqualTo(0.toShort())
-        assertThat(out.samples[3]).isEqualTo(0.toShort())
-        assertThat(out.samples[4]).isEqualTo(16383.toShort())    // 16383.5 truncated, not rounded
-        assertThat(out.samples[5]).isEqualTo((-16384).toShort())
-    }
-
-    /** The bottom of the slider mutes rather than attenuates. */
-    @Test
-    fun `the bottom of the slider silences the frame`() {
-        val pipeline = CapturePipeline(null, NoopPreprocessor, ContinuousInputMode(), amplitudeBoost = 0f)
-
-        val out = pipeline.process(constant(20000), 480)
-
-        assertThat(out.transmit).isTrue()
-        for (i in 0 until 480) {
-            assertWithMessage("diverges at sample %s", i).that(out.samples[i]).isEqualTo(0.toShort())
+            assertWithMessage("boost $boost").that(out.transmit).isTrue()
+            assertWithMessage("boost $boost").that(out.samples.copyOf(480)).isEqualTo(expected)
         }
     }
 
@@ -333,28 +312,23 @@ class CapturePipelineTest {
         assertThat(second.samples[0]).isEqualTo(2000.toShort())
     }
 
-    @Test
-    fun `release releases resampler and preprocessor`() {
-        val r = FakeResampler(1); val p = FakePreprocessor()
-        CapturePipeline(r, p, ContinuousInputMode()).release()
-        assertThat(r.releases).isEqualTo(1)
-        assertThat(p.released).isTrue()
-    }
-
     /**
-     * After release the resampler field is cleared: a second release does not reach it, and a frame
-     * still in flight falls through to the copy path.
+     * Release releases the resampler and the preprocessor. After it the resampler field is
+     * cleared: a second release does not reach it, and a frame still in flight falls through to the
+     * copy path.
      */
     @Test
     fun `release clears the resampler so it is neither released nor used twice`() {
         val r = FakeResampler(3)
-        val pipeline = CapturePipeline(r, FakePreprocessor(), ContinuousInputMode())
+        val p = FakePreprocessor()
+        val pipeline = CapturePipeline(r, p, ContinuousInputMode())
 
         pipeline.release()
         pipeline.release()
         val out = pipeline.process(constant(5, 160), 160)
 
         assertThat(r.releases).isEqualTo(1)
+        assertThat(p.released).isTrue()
         assertThat(out.samples[0]).isEqualTo(5.toShort())
         assertWithMessage("the released 3x resampler would have filled 480 samples; the copy path fills 160")
             .that(out.samples[160]).isEqualTo(0.toShort())

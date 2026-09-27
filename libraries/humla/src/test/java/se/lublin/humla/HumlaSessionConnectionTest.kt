@@ -62,6 +62,19 @@ class HumlaSessionConnectionTest {
     private fun connectivityManager() = RuntimeEnvironment.getApplication()
         .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
+    /** A synchronized session with automatic reconnect whose connection just dropped. */
+    private fun lost(): HumlaSessionHarness = start(autoReconnect = true).also {
+        it.connectAndSynchronize()
+        it.failConnection(0, connectionError())
+    }
+
+    /** [lost], with no network to reconnect over. */
+    private fun lostWhileOffline(): HumlaSessionHarness = start(autoReconnect = true).also {
+        it.connectAndSynchronize()
+        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
+        it.failConnection(0, connectionError())
+    }
+
     private fun networkCallbacks() = shadowOf(connectivityManager()).networkCallbacks.toList()
 
     /** Tells every registered callback that a default network came up. */
@@ -121,20 +134,16 @@ class HumlaSessionConnectionTest {
     }
 
     @Test
-    fun listeningToAChannelAddsAndRemovesItForTheOwnSession() {
+    fun listeningToAChannelIsSentForTheOwnSession() {
         val h = start()
         val tcp = h.connectAndSynchronize()
 
         h.session.actions.setListening(5, true)
         h.session.actions.setListening(6, false)
 
+        // What the frames say is ServerCommandsTest's; this is the session filling in its own id.
         val states = tcp.sentMessages.filterIsInstance<Mumble.UserState>()
         assertThat(states.map { it.session }).containsExactly(1, 1)
-        assertThat(states[0].listeningChannelAddList).containsExactly(5)
-        assertThat(states[0].listeningChannelRemoveList).isEmpty()
-        assertThat(states[1].listeningChannelRemoveList).containsExactly(6)
-        assertThat(states[1].listeningChannelAddList).isEmpty()
-        assertThat(states.none { it.hasChannelId() }).isTrue()
     }
 
     /**
@@ -184,10 +193,7 @@ class HumlaSessionConnectionTest {
 
     @Test
     fun aConnectionErrorWithAutoReconnectEntersConnectionLostAndKeepsTheWakeLock() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-
-        h.failConnection(0, connectionError())
+        val h = lost()
 
         val state = h.session.state.value as SessionState.ConnectionLost
         assertThat(state.attempt).isEqualTo(1)
@@ -273,10 +279,7 @@ class HumlaSessionConnectionTest {
     /** A session that synchronizes again starts the budget over; otherwise a flaky link runs out. */
     @Test
     fun aSuccessfulSessionResetsTheAttemptCounter() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-
-        h.failConnection(0, connectionError())
+        val h = lost()
         assertThat((h.session.state.value as SessionState.ConnectionLost).attempt)
             .isEqualTo(1)
         h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS)
@@ -294,9 +297,7 @@ class HumlaSessionConnectionTest {
      */
     @Test
     fun aReconnectDoesNotLeaveASecondWakeLockCountBehind() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        h.failConnection(0, connectionError())
+        val h = lost()
         h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS)
         h.synchronize(h.openSocket(1))
         assertThat(h.session.lifecycle.isWakeLockHeld).isTrue()
@@ -332,9 +333,7 @@ class HumlaSessionConnectionTest {
 
     @Test
     fun cancelReconnectStopsTheTimerAndEndsTheSession() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        h.failConnection(0, connectionError())
+        val h = lost()
 
         h.session.cancelReconnect()
         h.mainLooper.idleFor(100, TimeUnit.MILLISECONDS)
@@ -354,9 +353,7 @@ class HumlaSessionConnectionTest {
      */
     @Test
     fun aRetryThatFiresAfterTheUserCancelledIsRefused() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        h.failConnection(0, connectionError())
+        val h = lost()
         val connection = h.session.connection
 
         h.session.cancelReconnect()
@@ -374,9 +371,7 @@ class HumlaSessionConnectionTest {
      */
     @Test
     fun cancelReconnectDuringAnAttemptInFlightDisconnectsThatAttempt() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        h.failConnection(0, connectionError())
+        val h = lost()
         awaitUntil(description = "the retry opened a second socket") {
             h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS)
             h.transports.tcps.size > 1 && h.transports.tcps[1].isConnectCalled
@@ -403,9 +398,7 @@ class HumlaSessionConnectionTest {
      */
     @Test
     fun aLateErrorReportAfterACancelDoesNotClaimTheReconnectGaveUp() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        h.failConnection(0, connectionError())
+        val h = lost()
 
         h.session.cancelReconnect()
         h.session.onConnectionDisconnected(connectionError())
@@ -421,10 +414,7 @@ class HumlaSessionConnectionTest {
      */
     @Test
     fun aDisconnectWhileWaitingToReconnectReleasesTheWakeLockAndTheNetworkCallback() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null) // waits for the network
-        h.failConnection(0, connectionError())
+        val h = lostWhileOffline()
         assertThat(h.session.lifecycle.isWakeLockHeld).isTrue()
         assertThat(networkCallbacks()).isNotEmpty()
 
@@ -455,9 +445,7 @@ class HumlaSessionConnectionTest {
     /** The same through the session being closed, which disconnects. */
     @Test
     fun closingTheSessionWhileWaitingToReconnectReleasesTheWakeLock() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        h.failConnection(0, connectionError())
+        val h = lost()
         assertThat(h.session.lifecycle.isWakeLockHeld).isTrue()
 
         h.close()
@@ -518,11 +506,7 @@ class HumlaSessionConnectionTest {
      */
     @Test
     fun aReconnectWithoutConnectivityWaitsForTheNetworkInstead() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-
-        h.failConnection(0, connectionError())
+        val h = lostWhileOffline()
 
         assertThat(h.session.isReconnecting).isTrue()
         assertThat(networkCallbacks()).hasSize(1)
@@ -533,10 +517,7 @@ class HumlaSessionConnectionTest {
     /** With connectivity it polls instead, and registers no network callback. */
     @Test
     fun aReconnectWithConnectivityPollsAfterTheBackoffDelay() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-
-        h.failConnection(0, connectionError())
+        val h = lost()
 
         assertThat(networkCallbacks()).isEmpty()
         h.mainLooper.idleFor(9, TimeUnit.MILLISECONDS)
@@ -554,10 +535,7 @@ class HumlaSessionConnectionTest {
     /** A default network coming back retries at once instead of waiting out the backoff. */
     @Test
     fun theNetworkCallbackReconnectsAsSoonAsTheNetworkIsBack() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-        h.failConnection(0, connectionError())
+        val h = lostWhileOffline()
         assertThat(networkCallbacks()).hasSize(1)
         assertThat(h.transports.tcps).hasSize(1)
 
@@ -573,10 +551,7 @@ class HumlaSessionConnectionTest {
      */
     @Test
     fun aCallbackThatArrivesAfterTheSessionEndedDoesNotReconnect() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-        h.failConnection(0, connectionError())
+        val h = lostWhileOffline()
         val callback = networkCallbacks().single()
 
         h.session.cancelReconnect()
@@ -590,10 +565,7 @@ class HumlaSessionConnectionTest {
     /** `cancelReconnect` unregisters the callback on its own, without a callback to help it. */
     @Test
     fun cancellingWhileWaitingForTheNetworkUnregistersTheNetworkCallback() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-        h.failConnection(0, connectionError())
+        val h = lostWhileOffline()
         assertThat(networkCallbacks()).hasSize(1)
 
         h.session.cancelReconnect()
@@ -607,10 +579,7 @@ class HumlaSessionConnectionTest {
      */
     @Test
     fun closingTheSessionWhileWaitingForTheNetworkUnregistersTheNetworkCallback() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-        h.failConnection(0, connectionError())
+        val h = lostWhileOffline()
         assertThat(networkCallbacks()).hasSize(1)
 
         harnesses.close(h)
@@ -625,10 +594,7 @@ class HumlaSessionConnectionTest {
      */
     @Test
     fun aCallbackAfterAManualConnectUnregistersItInsteadOfRetrying() {
-        val h = start(autoReconnect = true)
-        h.connectAndSynchronize()
-        shadowOf(connectivityManager()).setActiveNetworkInfo(null)
-        h.failConnection(0, connectionError())
+        val h = lostWhileOffline()
         val callback = networkCallbacks().single()
 
         h.session.connect() // Connecting, and the callback is still registered

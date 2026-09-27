@@ -1,28 +1,17 @@
 package se.lublin.humla.net
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
-import java.io.DataOutputStream
 import java.io.EOFException
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 
 class TcpFrameReaderTest {
-    private fun frame(type: Int, payload: ByteArray): ByteArray {
-        val bytes = ByteArrayOutputStream()
-        DataOutputStream(bytes).apply {
-            writeShort(type)
-            writeInt(payload.size)
-            write(payload)
-        }
-        return bytes.toByteArray()
-    }
-
     private fun stream(vararg frames: ByteArray) =
         DataInputStream(ByteArrayInputStream(frames.reduce { a, b -> a + b }))
 
@@ -34,7 +23,7 @@ class TcpFrameReaderTest {
 
     @Test
     fun readsTypeAndPayload() {
-        val input = stream(frame(7, byteArrayOf(1, 2, 3)))
+        val input = stream(tcpFrame(7, byteArrayOf(1, 2, 3)))
 
         val read = HumlaTCP.readFrame(input)!!
 
@@ -44,7 +33,7 @@ class TcpFrameReaderTest {
 
     @Test
     fun unknownTypeIsSkippedAndTheNextFrameIsStillReadable() {
-        val input = stream(frame(99, byteArrayOf(9, 9)), frame(3, byteArrayOf()))
+        val input = stream(tcpFrame(99, byteArrayOf(9, 9)), tcpFrame(3, byteArrayOf()))
 
         assertThat(HumlaTCP.readFrame(input)).isNull()
         val next = HumlaTCP.readFrame(input)!!
@@ -52,20 +41,17 @@ class TcpFrameReaderTest {
         assertThat(next.data).isEmpty()
     }
 
-    /** Both bytes of the type are there, the stream ends inside the length field. */
+    /**
+     * The stream ends halfway through the type field, inside the length field, or inside a payload
+     * the header promised: none of these is delivered as a frame.
+     */
     @Test
-    fun endOfStreamInsideTheLengthFieldThrowsEof() {
-        val input = DataInputStream(ByteArrayInputStream(byteArrayOf(0, 7)))
-
-        assertThrows(EOFException::class.java) { HumlaTCP.readFrame(input) }
-    }
-
-    /** The stream ends after a single byte, halfway through the type field. */
-    @Test
-    fun endOfStreamInsideTheTypeFieldThrowsEof() {
-        val input = DataInputStream(ByteArrayInputStream(byteArrayOf(0)))
-
-        assertThrows(EOFException::class.java) { HumlaTCP.readFrame(input) }
+    fun endOfStreamInsideAFrameThrowsEof() {
+        val full = tcpFrame(7, ByteArray(8) { 1 })
+        for (bytes in listOf(byteArrayOf(0), byteArrayOf(0, 7), full.copyOf(full.size - 5))) {
+            val input = DataInputStream(ByteArrayInputStream(bytes))
+            assertThrows(EOFException::class.java) { HumlaTCP.readFrame(input) }
+        }
     }
 
     /**
@@ -76,7 +62,7 @@ class TcpFrameReaderTest {
     @Test
     fun aPayloadSplitAcrossManyReadsIsReassembledAndTheStreamStaysInSync() {
         val payload = ByteArray(300) { (it and 0xFF).toByte() }
-        val bytes = frame(7, payload) + frame(3, byteArrayOf(42))
+        val bytes = tcpFrame(7, payload) + tcpFrame(3, byteArrayOf(42))
         val input = DataInputStream(Dribbling(ByteArrayInputStream(bytes)))
 
         val first = HumlaTCP.readFrame(input)!!
@@ -89,19 +75,10 @@ class TcpFrameReaderTest {
         assertThat(input.read()).isEqualTo(-1)
     }
 
-    /** A frame whose header promises more payload than the peer ever sent must not be delivered. */
-    @Test
-    fun aFrameTruncatedInsideItsPayloadThrowsEof() {
-        val full = frame(7, ByteArray(8) { 1 })
-        val input = DataInputStream(ByteArrayInputStream(full.copyOf(full.size - 5)))
-
-        assertThrows(EOFException::class.java) { HumlaTCP.readFrame(input) }
-    }
-
     /** End of stream between frames: a clean server close, not a corrupt frame. */
     @Test
     fun endOfStreamAtAFrameBoundaryThrowsEof() {
-        val input = stream(frame(3, byteArrayOf()))
+        val input = stream(tcpFrame(3, byteArrayOf()))
 
         assertThat(HumlaTCP.readFrame(input)).isNotNull()
         assertThrows(EOFException::class.java) { HumlaTCP.readFrame(input) }
@@ -111,7 +88,7 @@ class TcpFrameReaderTest {
     @Test
     fun theHighestKnownTypeIsAccepted() {
         val last = HumlaTCPMessageType.values().last()
-        val input = stream(frame(last.ordinal, byteArrayOf(5)))
+        val input = stream(tcpFrame(last.ordinal, byteArrayOf(5)))
 
         val read = HumlaTCP.readFrame(input)!!
 
@@ -119,45 +96,30 @@ class TcpFrameReaderTest {
         assertThat(read.data).isEqualTo(byteArrayOf(5))
     }
 
-    private fun header(type: Int, length: Int): ByteArray {
-        val bytes = ByteArrayOutputStream()
-        DataOutputStream(bytes).apply { writeShort(type); writeInt(length) }
-        return bytes.toByteArray()
-    }
-
     /**
      * A hostile or broken server can put anything in the length field. ByteArray(length) would
      * throw NegativeArraySizeException, which is not an IOException and would escape the read loop.
-     */
-    @Test
-    fun aNegativeLengthIsReportedAsAConnectionErrorRatherThanKillingTheReader() {
-        val input = DataInputStream(ByteArrayInputStream(header(3, -1)))
-
-        val thrown = assertThrows(IOException::class.java) { HumlaTCP.readFrame(input) }
-
-        assertThat(thrown).isNotInstanceOf(EOFException::class.java)
-    }
-
-    /**
      * Mumble's own limit, in Connection.cpp: a server drops the connection for a packet above
      * 0x7fffff and refuses to send one, so the first length no server will ever produce must be
-     * refused before it is allocated.
+     * refused before it is allocated. Not an EOFException: the reader must reject the header, not
+     * try to read the payload.
      */
     @Test
-    fun aLengthBeyondTheProtocolMaximumIsRefusedBeforeAllocating() {
-        val input = DataInputStream(ByteArrayInputStream(header(3, 0x7fffff + 1)))
+    fun aNegativeOrOversizedLengthIsAConnectionErrorRefusedBeforeAllocating() {
+        for (length in listOf(-1, 0x7fffff + 1)) {
+            val input = DataInputStream(ByteArrayInputStream(tcpFrame(3, length = length)))
 
-        val thrown = assertThrows(IOException::class.java) { HumlaTCP.readFrame(input) }
+            val thrown = assertThrows(IOException::class.java) { HumlaTCP.readFrame(input) }
 
-        // Not an EOFException: the reader must reject the header, not try to read the payload.
-        assertThat(thrown).isNotInstanceOf(EOFException::class.java)
+            assertWithMessage("length $length").that(thrown).isNotInstanceOf(EOFException::class.java)
+        }
     }
 
     /** The largest frame the protocol allows - 8 MiB minus one byte - is still a valid frame. */
     @Test
     fun aFrameOfExactlyTheProtocolMaximumIsAccepted() {
         val payload = ByteArray(0x7fffff)
-        val input = stream(frame(3, payload))
+        val input = stream(tcpFrame(3, payload))
 
         val read = HumlaTCP.readFrame(input)!!
 

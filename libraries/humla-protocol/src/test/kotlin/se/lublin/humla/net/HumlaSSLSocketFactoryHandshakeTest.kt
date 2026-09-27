@@ -49,13 +49,17 @@ class HumlaSSLSocketFactoryHandshakeTest {
             while (!socket.isClosed) {
                 val client = try { socket.accept() as SSLSocket } catch (e: Exception) { return@execute }
                 closeables += client
+                // Closed once answered: the JDK's client waits for the server's close_notify when
+                // it closes, up to its read timeout.
                 pool.execute {
                     runCatching {
-                        client.startHandshake()
-                        (client.session as? ExtendedSSLSession)?.requestedServerNames
-                            ?.filterIsInstance<SNIHostName>()?.forEach { requestedSni += it.asciiName }
-                        client.outputStream.write(1)
-                        client.outputStream.flush()
+                        client.use {
+                            it.startHandshake()
+                            (it.session as? ExtendedSSLSession)?.requestedServerNames
+                                ?.filterIsInstance<SNIHostName>()?.forEach { name -> requestedSni += name.asciiName }
+                            it.outputStream.write(1)
+                            it.outputStream.flush()
+                        }
                     }
                 }
             }

@@ -1,6 +1,7 @@
 package se.lublin.humla.net
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import se.lublin.humla.net.UdpHealthMonitor.Decision
@@ -20,34 +21,42 @@ class UdpHealthMonitorTest {
         assertThat(monitor.onTcpPing(seconds(15), 0, 0, usingUdp = true)).isEqualTo(Decision.KEEP)
     }
 
-    /** The healthy case over a *full* window, not answered by the window-not-full early return. */
-    @Test
-    fun keepsUdpWhenBothDirectionsCarryTrafficAcrossAFullWindow() {
-        for (t in 0L..15L step 5) monitor.onTcpPing(seconds(t), t.toInt(), t.toInt(), usingUdp = true)
-
-        assertThat(monitor.onTcpPing(seconds(20), 20, 20, usingUdp = true)).isEqualTo(Decision.KEEP)
+    /**
+     * The decision at 20 s after a full window of pings at 0..15 s, whose counters (ours, the
+     * server's) [fill] gives for each second, with [last] reported at 20 s.
+     */
+    private fun afterFullWindow(usingUdp: Boolean, last: Pair<Int, Int>, fill: (Int) -> Pair<Int, Int>): Decision {
+        val fresh = UdpHealthMonitor()
+        for (t in 0..15 step 5) {
+            val (good, serverGood) = fill(t)
+            fresh.onTcpPing(seconds(t.toLong()), good, serverGood, usingUdp)
+        }
+        return fresh.onTcpPing(seconds(20), last.first, last.second, usingUdp)
     }
 
+    /**
+     * Judged by the deltas in the window, not by lifetime counters: large frozen counters would keep
+     * UDP forever under a cumulative check. Tunneling over TCP the only UDP traffic is the 5 s ping,
+     * four per window, so two replies each way must restore, or one lost ping disables UDP forever.
+     * Voice only works when it flows both ways, so the restore joins both directions with `and`;
+     * the one-direction rows cover the corners where `and`/`or`/`xor` differ.
+     */
     @Test
-    fun switchesToTcpWhenNothingWasReceivedForTwentySeconds() {
-        for (t in 0L..15L step 5) monitor.onTcpPing(seconds(t), 10, (t * 2).toInt(), usingUdp = true)
-
-        assertThat(monitor.onTcpPing(seconds(20), 10, 40, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_RECEIVE)
-    }
-
-    @Test
-    fun switchesToTcpWhenTheServerReceivedNothingForTwentySeconds() {
-        for (t in 0L..15L step 5) monitor.onTcpPing(seconds(t), (t * 2).toInt(), 7, usingUdp = true)
-
-        assertThat(monitor.onTcpPing(seconds(20), 40, 7, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_SEND)
-    }
-
-    @Test
-    fun judgesByDeltasInTheWindowNotByLifetimeCounters() {
-        // Both counters are large but frozen: a cumulative check would keep UDP forever.
-        for (t in 0L..15L step 5) monitor.onTcpPing(seconds(t), 100, 100, usingUdp = true)
-
-        assertThat(monitor.onTcpPing(seconds(20), 100, 100, usingUdp = true)).isEqualTo(Decision.SWITCH_TO_TCP_BOTH)
+    fun aFullWindowIsJudgedByTheDeltasOfBothDirections() {
+        val onUdp = listOf(
+            Triple(20 to 20, { t: Int -> t to t }, Decision.KEEP),
+            Triple(10 to 40, { t: Int -> 10 to t * 2 }, Decision.SWITCH_TO_TCP_RECEIVE),
+            Triple(40 to 7, { t: Int -> t * 2 to 7 }, Decision.SWITCH_TO_TCP_SEND),
+            Triple(100 to 100, { _: Int -> 100 to 100 }, Decision.SWITCH_TO_TCP_BOTH),
+        )
+        for ((last, fill, expected) in onUdp) {
+            assertWithMessage("on UDP, $last").that(afterFullWindow(usingUdp = true, last, fill)).isEqualTo(expected)
+        }
+        val tunnelled = mapOf(2 to 2 to Decision.RESTORE_UDP, 5 to 1 to Decision.KEEP, 1 to 5 to Decision.KEEP)
+        for ((last, expected) in tunnelled) {
+            assertWithMessage("tunnelled, $last").that(afterFullWindow(usingUdp = false, last) { 0 to 0 })
+                .isEqualTo(expected)
+        }
     }
 
     @Test
@@ -82,34 +91,6 @@ class UdpHealthMonitorTest {
 
         assertThat(monitor.onTcpPing(seconds(20), 1, 1, usingUdp = false)).isEqualTo(Decision.KEEP)
         assertThat(monitor.onTcpPing(seconds(25), 2, 2, usingUdp = false)).isEqualTo(Decision.RESTORE_UDP)
-    }
-
-    @Test
-    fun oneLostPingInAWindowStillAllowsRecovery() {
-        // Tunneling over TCP, the only UDP traffic is the 5 s ping: four per 20 s window.
-        // Two replies in each direction must be enough, or one lost ping disables UDP forever.
-        for (t in 0L..15L step 5) monitor.onTcpPing(seconds(t), 0, 0, usingUdp = false)
-
-        assertThat(monitor.onTcpPing(seconds(20), 2, 2, usingUdp = false)).isEqualTo(Decision.RESTORE_UDP)
-    }
-
-    /**
-     * Voice only works when it flows both ways, so the restore condition joins both directions with
-     * `and`; this and the next test cover the corners where `and`/`or`/`xor` differ.
-     */
-    @Test
-    fun doesNotRestoreUdpWhenOnlyTheReceivingDirectionRecovers() {
-        for (t in 0L..15L step 5) monitor.onTcpPing(seconds(t), 0, 0, usingUdp = false)
-
-        assertThat(monitor.onTcpPing(seconds(20), 5, 1, usingUdp = false)).isEqualTo(Decision.KEEP)
-    }
-
-    /** The server hears us again but we still hear nothing. */
-    @Test
-    fun doesNotRestoreUdpWhenOnlyTheSendingDirectionRecovers() {
-        for (t in 0L..15L step 5) monitor.onTcpPing(seconds(t), 0, 0, usingUdp = false)
-
-        assertThat(monitor.onTcpPing(seconds(20), 1, 5, usingUdp = false)).isEqualTo(Decision.KEEP)
     }
 
     /**
@@ -254,19 +235,12 @@ class UdpHealthMonitorTest {
 
     /**
      * A non-positive window would not crash: every delta would be taken against the newest sample
-     * itself and voice would be tunneled for the whole session.
+     * itself and voice would be tunneled for the whole session. A non-positive timeout would fire at
+     * the first ping and never recover, because the reference only moves forward with a reply.
      */
     @Test
-    fun rejectsANonPositiveWindow() {
+    fun rejectsANonPositiveWindowOrPingTimeout() {
         assertThrows(IllegalArgumentException::class.java) { UdpHealthMonitor(windowMicros = 0L) }
-    }
-
-    /**
-     * A non-positive timeout would fire at the first ping and never recover, because the reference
-     * only moves forward with a reply.
-     */
-    @Test
-    fun rejectsANonPositivePingTimeout() {
         assertThrows(IllegalArgumentException::class.java) { UdpHealthMonitor(pingTimeoutMicros = 0L) }
     }
 

@@ -19,7 +19,7 @@ package se.lublin.humla.protocol
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import se.lublin.humla.model.ServerState
-import java.lang.management.ManagementFactory
+import se.lublin.humla.testutil.AllocationMeter.allocatedBytes
 
 /**
  * A large server stays cheap to reduce: every frame costs about what it changes. The bounds are
@@ -27,10 +27,6 @@ import java.lang.management.ManagementFactory
  * numbers are printed for the record.
  */
 class ServerReducerScaleTest {
-
-    private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
-
-    private fun allocated(): Long = threads.getThreadAllocatedBytes(Thread.currentThread().threadId())
 
     @Test
     fun aFiveThousandChannelSyncAndTheMovesAfterItStayCheap() {
@@ -42,13 +38,13 @@ class ServerReducerScaleTest {
         lateinit var synced: ServerState
         repeat(RUNS) {
             val harness = ReducerHarness()
-            val before = allocated()
+            val before = allocatedBytes()
             val start = System.nanoTime()
             synced = harness.feed(*frames.toTypedArray())
             val nanos = System.nanoTime() - start
             if (nanos < bestNanos) {
                 bestNanos = nanos
-                bytes = allocated() - before
+                bytes = allocatedBytes() - before
             }
         }
         assertThat(synced.channels).hasSize(5_000)
@@ -57,24 +53,24 @@ class ServerReducerScaleTest {
         val moves = (0 until MOVES).map { userFrame(2) { channelId = it % 5_000 } }
         val harness = ReducerHarness(synced)
         harness.feed(*moves.toTypedArray())
-        val before = allocated()
+        val before = allocatedBytes()
         val start = System.nanoTime()
         harness.feed(*moves.toTypedArray())
         val moveNanos = (System.nanoTime() - start) / MOVES
-        val moveBytes = (allocated() - before) / MOVES
+        val moveBytes = (allocatedBytes() - before) / MOVES
 
         var batchNanos = Long.MAX_VALUE
         var batchBytes = 0L
         repeat(RUNS) {
             val writer = ServerWriter(ServerState.empty())
-            val before = allocated()
+            val before = allocatedBytes()
             val start = System.nanoTime()
             for (frame in frames) writer.onMessage(frame) {}
             writer.snapshot()
             val nanos = System.nanoTime() - start
             if (nanos < batchNanos) {
                 batchNanos = nanos
-                batchBytes = allocated() - before
+                batchBytes = allocatedBytes() - before
             }
         }
 

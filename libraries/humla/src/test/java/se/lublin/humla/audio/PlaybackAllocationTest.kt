@@ -22,17 +22,14 @@ import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import se.lublin.humla.audio.native.SpeexJitterApi
 import se.lublin.humla.audio.native.SpeexJitterNative
+import se.lublin.humla.testutil.AllocationMeter
+import se.lublin.humla.testutil.AllocationMeter.HALF_AN_OBJECT
+import se.lublin.humla.testutil.AllocationMeter.checkInstrument
+import se.lublin.humla.testutil.AllocationMeter.worstPerCall
 import se.lublin.humla.testutil.FakeOpusDecoder
-import java.lang.management.ManagementFactory
 
-/**
- * The playback thread decodes and mixes every talker once per mix, so a per-mix allocation risks a
- * GC pause mid-buffer. Same method as the capture-side allocation test: bytes per call over a cold
- * and a hot window, after checking the counter against a known allocation.
- */
+/** The playback thread decodes and mixes every talker once per mix; see [AllocationMeter]. */
 class PlaybackAllocationTest {
-    private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
-
     /** Always has a packet: one opus frame, then a volume adjustment of 1 and no terminator. */
     private class SilentJitter : SpeexJitterApi {
         private val packet = byteArrayOf(0x41, 0x42, 0x43, 0x3F, 0x80.toByte(), 0, 0, 0)
@@ -67,69 +64,33 @@ class PlaybackAllocationTest {
 
     @Test
     fun `decoding one talker allocates under half an object per mix`() {
-        checkInstrument()
+        checkInstrument(MIX_SAMPLES)
         val speech = speech(1)
 
-        val cold = cold { speech.decode() }
-        val hot = hot { speech.decode() }
-        println(
-            "allocation per mix of $MIX_SAMPLES samples (cold / hot): " +
-                "AudioOutputSpeech ${"%.3f".format(cold)} / ${"%.3f".format(hot)} B",
-        )
-
         assertWithMessage("AudioOutputSpeech allocates on the playback thread")
-            .that(maxOf(cold, hot)).isLessThan(HALF_AN_OBJECT)
+            .that(worstPerCall("AudioOutputSpeech", HOT_CALLS) { speech.decode() }).isLessThan(HALF_AN_OBJECT)
     }
 
     /** The whole mix: three talkers decoded inline, then summed. */
     @Test
     fun `decoding and mixing three talkers allocates under half an object per mix`() {
-        checkInstrument()
+        checkInstrument(MIX_SAMPLES)
         val mix = PlaybackMix()
         repeat(3) { mix.add(speech(it)) }
         val out = ShortArray(MIX_SAMPLES)
         val onEnded: (AudioOutputSpeech) -> Unit = { throw AssertionError("no talker ends here") }
 
-        val cold = cold { mix.mixInto(out, 0, MIX_SAMPLES, onEnded) }
-        val hot = hot { mix.mixInto(out, 0, MIX_SAMPLES, onEnded) }
-        println(
-            "allocation per mix of $MIX_SAMPLES samples (cold / hot): " +
-                "PlaybackMix of 3 ${"%.3f".format(cold)} / ${"%.3f".format(hot)} B",
-        )
-
         assertWithMessage("the mix allocates on the playback thread")
-            .that(maxOf(cold, hot)).isLessThan(HALF_AN_OBJECT)
+            .that(worstPerCall("PlaybackMix of 3", HOT_CALLS) { mix.mixInto(out, 0, MIX_SAMPLES, onEnded) })
+            .isLessThan(HALF_AN_OBJECT)
         assertThat(mix.size).isEqualTo(3)
         assertWithMessage("the talkers must actually have been mixed").that(out[0]).isNotEqualTo(0.toShort())
-    }
-
-    private fun checkInstrument() {
-        assertThat(threads.isThreadAllocatedMemorySupported).isTrue()
-        assertThat(threads.isThreadAllocatedMemoryEnabled).isTrue()
-        val sink = arrayOfNulls<Any>(1)
-        val instrument = hot { sink[0] = ShortArray(MIX_SAMPLES) }
-        assertWithMessage("the allocation counter is not counting; every result would be a false green")
-            .that(instrument).isAtLeast(MIX_SAMPLES.toDouble())
-    }
-
-    private fun cold(body: () -> Unit) = bytesPerCall(warmups = 500, iterations = 4_000, body = body)
-
-    private fun hot(body: () -> Unit) = bytesPerCall(warmups = 50_000, iterations = 50_000, body = body)
-
-    private fun bytesPerCall(warmups: Int, iterations: Int, body: () -> Unit): Double {
-        repeat(warmups) { body() }
-        val self = Thread.currentThread().threadId()
-        val before = threads.getThreadAllocatedBytes(self)
-        repeat(iterations) { body() }
-        val after = threads.getThreadAllocatedBytes(self)
-        return (after - before).toDouble() / iterations
     }
 
     private companion object {
         /** Two frames, what a typical device's minimum track buffer gives a mix. */
         const val MIX_SAMPLES = AudioHandler.FRAME_SIZE * 2
 
-        /** See CaptureThreadAllocationTest: separates a per-call allocation from a one-off. */
-        const val HALF_AN_OBJECT = 8.0
+        const val HOT_CALLS = 50_000
     }
 }

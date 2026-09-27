@@ -21,7 +21,6 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import java.lang.reflect.Modifier
 import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
 
 /** The WebRTC APM as a capture stage that also takes the playback reverse stream. */
@@ -90,8 +89,11 @@ class WebRtcApmPreprocessorTest {
         val api = FakeWebRtcApmApi(levelDbfs = -35f, onCapture = { it.fill(3) })
         val frame = ShortArray(FRAME) { 500 }
 
-        val probability = WebRtcApmPreprocessor(api, ONE).process(frame)
+        val stage = WebRtcApmPreprocessor(api, ONE)
 
+        val probability = stage.process(frame)
+
+        assertThat(stage.rejectedFrames).isEqualTo(0)
         assertThat(frame[0]).isEqualTo(3.toShort())
         // -35 dBFS is 10 dB above the -45 floor, i.e. 10/21.7 of the adopted -45/-23.3 window.
         assertThat(probability).isWithin(0.0005f).of(0.4608f)
@@ -125,15 +127,6 @@ class WebRtcApmPreprocessorTest {
 
         assertThat(api.capturedLengths).isEmpty()
         assertThat(stage.rejectedFrames).isEqualTo(1)
-    }
-
-    @Test
-    fun `an accepted frame is not counted as rejected`() {
-        val stage = WebRtcApmPreprocessor(api, ONE)
-
-        stage.process(ShortArray(FRAME))
-
-        assertThat(stage.rejectedFrames).isEqualTo(0)
     }
 
     /**
@@ -192,20 +185,12 @@ class WebRtcApmPreprocessorTest {
     }
 
     @Test
-    fun `release destroys the apm exactly once`() {
-        val stage = WebRtcApmPreprocessor(api, ONE)
-
-        stage.release()
-        stage.release()
-
-        assertThat(api.destroyed).isEqualTo(1)
-    }
-
-    @Test
-    fun `process after release touches nothing and returns no probability`() {
+    fun `release destroys the apm exactly once and process after it touches nothing`() {
         val api = FakeWebRtcApmApi(levelDbfs = -20f)
         val stage = WebRtcApmPreprocessor(api, ONE)
         stage.release()
+        stage.release()
+        assertThat(api.destroyed).isEqualTo(1)
 
         assertThat(stage.process(ShortArray(FRAME))).isNull()
 

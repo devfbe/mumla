@@ -22,21 +22,27 @@ import se.lublin.humla.audio.AudioHandlerFactory
 import se.lublin.humla.audio.AudioHost
 import se.lublin.humla.audio.AudioSessionParams
 import se.lublin.humla.audio.ManagedAudio
-import se.lublin.humla.exception.AudioException
 import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.VoicePacketHandler
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 internal const val FAKE_BANDWIDTH = 12_345
+
+/** How long [FakeAudio.shutdown] waits at most for its gate. */
+internal const val GATE_TIMEOUT_SECONDS = 5L
 
 /** A pipeline that opens no device; shared by the service tests. */
 internal class FakeAudio : ManagedAudio {
     val shutdownCalls = AtomicInteger()
     @Volatile var shutdownThread: String? = null
 
-    /** Held shut, [shutdown] parks in it - the only way to observe an asynchronous teardown. */
+    /**
+     * Held shut, [shutdown] parks in it - the only way to observe an asynchronous teardown. Bounded
+     * so a regression fails instead of hanging.
+     */
     @Volatile var shutdownGate: CountDownLatch? = null
 
     val targetIds = CopyOnWriteArrayList<Byte>()
@@ -48,7 +54,7 @@ internal class FakeAudio : ManagedAudio {
 
     override fun shutdown() {
         shutdownThread = Thread.currentThread().name
-        shutdownGate?.await()
+        shutdownGate?.await(GATE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         shutdownCalls.incrementAndGet()
     }
 }
@@ -59,7 +65,7 @@ internal class FakeAudioFactory : AudioHandlerFactory {
     val sessionParams = CopyOnWriteArrayList<AudioSessionParams>()
     val hosts = CopyOnWriteArrayList<AudioHost>()
     val createThreads = CopyOnWriteArrayList<String>()
-    @Volatile var failWith: AudioException? = null
+    @Volatile var failWith: Exception? = null
 
     override fun create(
         host: AudioHost,

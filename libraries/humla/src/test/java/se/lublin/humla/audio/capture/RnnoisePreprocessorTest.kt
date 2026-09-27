@@ -20,7 +20,6 @@ package se.lublin.humla.audio.capture
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import java.lang.reflect.Modifier
 import se.lublin.humla.audio.capture.fakes.FakeRnnoiseApi
 
 /** RNNoise as a capture stage: 480-sample frames at 48 kHz, reporting the model's probability. */
@@ -52,11 +51,14 @@ class RnnoisePreprocessorTest {
         val api = FakeRnnoiseApi(probability = 0.87f, onProcess = { it.fill(7) })
         val frame = ShortArray(FRAME) { 1000 }
 
-        val probability = RnnoisePreprocessor(api).process(frame)
+        val stage = RnnoisePreprocessor(api)
+
+        val probability = stage.process(frame)
 
         assertThat(probability).isEqualTo(0.87f)
         assertThat(frame[FRAME - 1]).isEqualTo(7.toShort())
         assertThat(api.processedLengths).containsExactly(FRAME)
+        assertThat(stage.rejectedFrames).isEqualTo(0)
     }
 
     /**
@@ -95,15 +97,6 @@ class RnnoisePreprocessorTest {
     }
 
     @Test
-    fun `an accepted frame is not counted as rejected`() {
-        val stage = RnnoisePreprocessor(api)
-
-        stage.process(ShortArray(FRAME))
-
-        assertThat(stage.rejectedFrames).isEqualTo(0)
-    }
-
-    @Test
     fun `a longer frame is accepted, because the bridge only reads the first 480 samples`() {
         val stage = RnnoisePreprocessor(FakeRnnoiseApi(probability = 0.5f))
 
@@ -111,21 +104,12 @@ class RnnoisePreprocessorTest {
         assertThat(stage.rejectedFrames).isEqualTo(0)
     }
 
-    @Test
-    fun `release destroys the denoiser exactly once`() {
-        val stage = RnnoisePreprocessor(api)
-
-        stage.release()
-        stage.release()
-
-        assertThat(api.destroyed).isEqualTo(1)
-    }
-
     /** A capture thread that outlived its join timeout must not reach rnnoise on a freed state. */
     @Test
-    fun `process after release touches nothing and returns no probability`() {
+    fun `release destroys the denoiser exactly once and process after it touches nothing`() {
         val api = FakeRnnoiseApi(probability = 0.9f)
         val stage = RnnoisePreprocessor(api)
+        stage.release()
         stage.release()
 
         assertThat(stage.process(ShortArray(FRAME))).isNull()

@@ -21,7 +21,6 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import java.lang.reflect.Modifier
 import se.lublin.humla.audio.capture.fakes.FakeSpeexPreprocessApi
 import se.lublin.humla.audio.capture.fakes.SpeexPreprocessorRequests as R
 
@@ -161,6 +160,7 @@ class SpeexPreprocessorTest {
         assertThat(frame[0]).isEqualTo(500.toShort())
         assertThat(probability).isEqualTo(0.73f)
         assertThat(halving.getRequests).containsExactly(R.GET_PROB)
+        assertThat(stage.rejectedFrames).isEqualTo(0)
     }
 
     @Test
@@ -190,15 +190,6 @@ class SpeexPreprocessorTest {
         assertThat(stage.rejectedFrames).isEqualTo(1)
     }
 
-    @Test
-    fun `an accepted frame is not counted as rejected`() {
-        val stage = SpeexPreprocessor(api)
-
-        stage.process(ShortArray(FRAME))
-
-        assertThat(stage.rejectedFrames).isEqualTo(0)
-    }
-
     /**
      * A refused `GET_PROB` leaves `value[0]` at 0 ("certainly not speech"), which would mute the
      * user; null means no opinion.
@@ -211,21 +202,13 @@ class SpeexPreprocessorTest {
         assertThat(stage.process(ShortArray(FRAME))).isNull()
     }
 
-    @Test
-    fun `release destroys the state exactly once`() {
-        val stage = SpeexPreprocessor(api)
-
-        stage.release()
-        stage.release()
-
-        assertThat(api.destroyed).isEqualTo(1)
-    }
-
     /** A capture thread that outlived its join timeout must not reach speex on a freed state. */
     @Test
-    fun `process after release touches nothing and returns no probability`() {
+    fun `release destroys the state exactly once and process after it touches nothing`() {
         val stage = SpeexPreprocessor(api)
         stage.release()
+        stage.release()
+        assertThat(api.destroyed).isEqualTo(1)
         val runsBefore = api.runs
         val requestsBefore = api.attemptedRequests.size
 

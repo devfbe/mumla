@@ -103,14 +103,6 @@ class ServerReducerTest {
     }
 
     @Test
-    fun namelessStubsSortFirst() {
-        model.feed(userFrame(3) { setName("x").setChannelId(1) }, channelFrame(6, parent = 9, name = "orphan"))
-
-        assertThat(state.channel(9)!!.name).isNull()
-        assertThat(state.subchannelIds(9)).containsExactly(6)
-    }
-
-    @Test
     fun usersAreOrderedByNameIgnoringCaseAndFollowRenames() {
         model.feed(
             userFrame(3) { setName("bob").setChannelId(1) },

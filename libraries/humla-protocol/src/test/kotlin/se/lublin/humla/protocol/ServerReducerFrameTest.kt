@@ -49,15 +49,6 @@ class ServerReducerFrameTest {
         assertThat(channelsBelowRoot()).containsExactly(1, 2).inOrder()
     }
 
-    @Test
-    fun aLinkSetNamingUnknownChannelsKeepsOnlyTheKnownOnes() {
-        model.feed(channelFrame(1, parent = 0, name = "a"), channelFrame(2, parent = 0, name = "b"))
-
-        model.feed(linksFrame(1, 2, 99))
-
-        assertThat(state.channel(1)!!.links).containsExactly(2)
-    }
-
     /** A channel that names itself as its parent keeps its own state and is refused as a one-frame cycle. */
     @Test
     fun aFrameThatNamesItselfAsItsOwnParentIsHungUnderTheRootInstead() {

@@ -12,11 +12,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowAudioTrack
 import se.lublin.humla.exception.NativeAudioException
-import se.lublin.humla.model.TalkState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.testutil.FakeOpusDecoder
 import se.lublin.humla.testutil.LogRecorder
+import se.lublin.humla.testutil.NoopOutputListener
 import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.TimeUnit
 
@@ -24,11 +24,6 @@ import java.util.concurrent.TimeUnit
 class AudioOutputTest {
     @get:Rule
     val log = LogRecorder()
-
-    private val listener = object : AudioOutput.AudioOutputListener {
-        override val playbackParams: PlaybackParams = PlaybackParams.DEFAULT
-        override fun onTalkStateUpdated(session: Int, state: TalkState) = Unit
-    }
 
     private var output: AudioOutput? = null
 
@@ -47,10 +42,10 @@ class AudioOutputTest {
         factory: AudioOutput.SpeechFactory =
             AudioOutput.SpeechFactory { u, n, l, a -> AudioOutputSpeech(u, n, l, averageAvailable = a) },
     ): AudioOutput {
-        val o = AudioOutput(listener, null, factory)
+        val o = AudioOutput(NoopOutputListener, null, factory)
         output = o
         o.startPlaying(AudioManager.STREAM_MUSIC)
-        awaitTrue("the playback thread to start") { o.isPlaying }
+        awaitUntil(description = "the playback thread to start") { o.isPlaying }
         return o
     }
 
@@ -90,7 +85,7 @@ class AudioOutputTest {
     fun `an unusable system minimum is an initialization error`() {
         ShadowAudioTrack.setMinBufferSize(0) // getMinBufferSize answers ERROR for it
 
-        val o = AudioOutput(listener, null)
+        val o = AudioOutput(NoopOutputListener, null)
         val thrown = runCatching { o.startPlaying(AudioManager.STREAM_MUSIC) }.exceptionOrNull()
 
         assertThat(thrown).isInstanceOf(se.lublin.humla.exception.AudioInitializationException::class.java)
@@ -123,7 +118,7 @@ class AudioOutputTest {
     fun `stopping straight after starting stops the playback thread`() {
         // AudioHandler.shutdown can follow initialize before the playback thread has run a line.
         repeat(20) { round ->
-            val o = AudioOutput(listener, null)
+            val o = AudioOutput(NoopOutputListener, null)
             val thread = o.startPlaying(AudioManager.STREAM_MUSIC)!!
 
             runBounded("stopPlaying in round $round") { o.stopPlaying() }
@@ -209,9 +204,6 @@ class AudioOutputTest {
         assertWithMessage("$what did not return within 5 s").that(t.isAlive).isFalse()
         failure?.let { throw it }
     }
-
-    private fun awaitTrue(what: String, condition: () -> Boolean) =
-        awaitUntil(description = what, condition = condition)
 
     private companion object {
         const val SESSION = 7

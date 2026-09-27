@@ -21,14 +21,13 @@ import com.google.common.truth.Truth.assertWithMessage
 import com.google.protobuf.ByteString
 import org.junit.Test
 import se.lublin.humla.protobuf.MumbleUDP
-import java.lang.management.ManagementFactory
+import se.lublin.humla.testutil.AllocationMeter
+import se.lublin.humla.testutil.bytes
 import kotlin.random.Random
 
 /** The hand-written UDP audio codec against the generated MumbleUDP classes and the legacy format. */
 class UdpAudioCodecTest {
     private val random = Random(1234)
-
-    private fun bytes(vararg values: Int) = ByteArray(values.size) { values[it].toByte() }
 
     private fun clientPacket(
         protocol: UdpProtocol,
@@ -233,8 +232,6 @@ class UdpAudioCodecTest {
 
     @Test
     fun `encoding and decoding allocate nothing`() {
-        val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
-        val self = Thread.currentThread().threadId()
         val opus = random.nextBytes(120)
         val buffer = ByteArray(1024)
         val packet = PacketBuffer(buffer, buffer.size)
@@ -263,11 +260,9 @@ class UdpAudioCodecTest {
         )
 
         val perCall = parts.associate { (name, part) ->
+            var i = 0
             // Indices below 128 keep the boxed lambda argument in the Integer cache.
-            repeat(50_000) { part(it and 0x7F) }
-            val before = threads.getThreadAllocatedBytes(self)
-            repeat(100_000) { part(it and 0x7F) }
-            name to (threads.getThreadAllocatedBytes(self) - before).toDouble() / 100_000
+            name to AllocationMeter.bytesPerCall(50_000, 100_000) { part(i++ and 0x7F) }
         }
 
         println("ALLOC $perCall")

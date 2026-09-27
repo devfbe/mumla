@@ -18,15 +18,24 @@
 package se.lublin.humla.audio.capture
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import se.lublin.humla.audio.constant
 import kotlin.random.Random
 
 class VoiceActivityDetectorTest {
     private var nowNanos = 0L
     private fun ms(v: Long) = v * 1_000_000L
     private fun detector(config: VadConfig) = VoiceActivityDetector(config) { nowNanos }
-    private fun constant(value: Int) = ShortArray(480) { value.toShort() }
+
+    /** Whether each of a series of silent frames with these probabilities is voice. */
+    private fun VoiceActivityDetector.voices(vararg probabilities: Float) =
+        probabilities.map { isVoice(constant(0), 480, it) }
+
+    /** Like [voices], each frame at its own clock reading. */
+    private fun VoiceActivityDetector.voicesAt(vararg frames: Pair<Long, Float>) =
+        frames.map { (at, probability) -> nowNanos = at; isVoice(constant(0), 480, probability) }
 
     @Test
     fun `amplitude score is the legacy dBFS mapping`() {
@@ -71,17 +80,17 @@ class VoiceActivityDetectorTest {
             .isWithin(0.02f).of(0f)
     }
 
+    /**
+     * The frame level (0.792 here) against the start threshold. Amplitude mode is a level detector
+     * by definition, so a stage's opinion must not enter it.
+     */
     @Test
-    fun `amplitude mode compares the frame level against the start threshold`() {
-        assertThat(detector(VadConfig.amplitude(0.7f)).isVoice(constant(3277), 480, null)).isTrue()
-        assertThat(detector(VadConfig.amplitude(0.85f)).isVoice(constant(3277), 480, null)).isFalse()
-    }
-
-    /** Amplitude mode is a level detector by definition; a stage's opinion must not enter it. */
-    @Test
-    fun `amplitude mode ignores the preprocessor probability`() {
-        assertThat(detector(VadConfig.amplitude(0.85f)).isVoice(constant(3277), 480, 1.0f)).isFalse()
-        assertThat(detector(VadConfig.amplitude(0.7f)).isVoice(constant(3277), 480, 0.0f)).isTrue()
+    fun `amplitude mode compares the frame level against the start threshold and ignores the probability`() {
+        for ((start, probability) in listOf(0.7f to null, 0.85f to null, 0.85f to 1.0f, 0.7f to 0.0f)) {
+            assertWithMessage("start $start, probability $probability")
+                .that(detector(VadConfig.amplitude(start)).isVoice(constant(3277), 480, probability))
+                .isEqualTo(start < 0.792f)
+        }
     }
 
     @Test
@@ -110,38 +119,28 @@ class VoiceActivityDetectorTest {
         assertThat(VadConfig.DEFAULT_HOLD_MS).isEqualTo(250L)
     }
 
-    @Test
-    fun `stop threshold above start is rejected`() {
-        assertThrows(IllegalArgumentException::class.java) { VadConfig(VadMode.PROBABILITY, 0.3f, 0.6f, 250L) }
-    }
-
-    @Test
-    fun `a start threshold outside zero to one is rejected`() {
-        assertThrows(IllegalArgumentException::class.java) { VadConfig(VadMode.PROBABILITY, 1.5f, 0.3f, 250L) }
-        assertThrows(IllegalArgumentException::class.java) { VadConfig(VadMode.PROBABILITY, -0.1f, -0.2f, 250L) }
-    }
-
     /**
-     * A negative start is also rejected by the stop range check, so the message tells the two
-     * guards apart. A negative stop would latch the microphone on for the session.
+     * Each range check names the field it rejected; a negative start is also rejected by the stop
+     * range check, so the message tells the two guards apart. A negative stop would latch the
+     * microphone on for the session.
      */
     @Test
-    fun `each range check names the field it rejected`() {
-        assertThat(
-            assertThrows(IllegalArgumentException::class.java) {
-                VadConfig(VadMode.PROBABILITY, -0.1f, -0.1f, 250L)
+    fun `a threshold or hold time out of range is rejected, naming the field`() {
+        val cases = listOf(
+            Triple(0.3f, 0.6f, 250L) to "stopThreshold",
+            Triple(1.5f, 0.3f, 250L) to "startThreshold",
+            Triple(-0.1f, -0.2f, 250L) to "startThreshold",
+            Triple(-0.1f, -0.1f, 250L) to "startThreshold",
+            Triple(0.6f, -0.1f, 250L) to "stopThreshold",
+            Triple(0.6f, 0.3f, -1L) to "holdTimeMs",
+        )
+        for ((values, field) in cases) {
+            val (start, stop, hold) = values
+            val thrown = assertThrows(IllegalArgumentException::class.java) {
+                VadConfig(VadMode.PROBABILITY, start, stop, hold)
             }
-        ).hasMessageThat().startsWith("startThreshold")
-        assertThat(
-            assertThrows(IllegalArgumentException::class.java) {
-                VadConfig(VadMode.PROBABILITY, 0.6f, -0.1f, 250L)
-            }
-        ).hasMessageThat().startsWith("stopThreshold")
-    }
-
-    @Test
-    fun `a negative hold time is rejected`() {
-        assertThrows(IllegalArgumentException::class.java) { VadConfig(VadMode.PROBABILITY, 0.6f, 0.3f, -1L) }
+            assertWithMessage("$values").that(thrown).hasMessageThat().startsWith(field)
+        }
     }
 
     /**
@@ -174,41 +173,28 @@ class VoiceActivityDetectorTest {
     @Test
     fun `hysteresis keeps talking while above stop and needs start to begin again`() {
         val d = detector(VadConfig.probability(start = 0.8f, stop = 0.6f, holdTimeMs = 0))
-        assertThat(d.isVoice(constant(0), 480, 0.7f)).isFalse()   // below start: not talking
-        assertThat(d.isVoice(constant(0), 480, 0.85f)).isTrue()   // above start: talking
-        assertThat(d.isVoice(constant(0), 480, 0.7f)).isTrue()    // above stop while talking: still talking
-        assertThat(d.isVoice(constant(0), 480, 0.5f)).isFalse()   // below stop: stops
-        assertThat(d.isVoice(constant(0), 480, 0.7f)).isFalse()   // below start again: stays off
+        assertThat(d.voices(0.7f, 0.85f, 0.7f, 0.5f, 0.7f)).containsExactly(false, true, true, false, false).inOrder()
     }
 
     /** The comparison is `>=`, on both arms: a score sitting exactly on a threshold passes it. */
     @Test
     fun `a score exactly on a threshold counts as above it`() {
         val d = detector(VadConfig.probability(start = 0.8f, stop = 0.6f, holdTimeMs = 0))
-        assertThat(d.isVoice(constant(0), 480, 0.8f)).isTrue()
-        assertThat(d.isVoice(constant(0), 480, 0.6f)).isTrue()
-        assertThat(d.isVoice(constant(0), 480, 0.5f)).isFalse()
+        assertThat(d.voices(0.8f, 0.6f, 0.5f)).containsExactly(true, true, false).inOrder()
     }
 
     @Test
     fun `hold time keeps talking for holdTimeMs after the last detection`() {
         val d = detector(VadConfig.probability(holdTimeMs = 250))
-        nowNanos = 0
-        assertThat(d.isVoice(constant(0), 480, 0.9f)).isTrue()
-        nowNanos = ms(100)
-        assertThat(d.isVoice(constant(0), 480, 0.0f)).isTrue()
-        nowNanos = ms(249)
-        assertThat(d.isVoice(constant(0), 480, 0.0f)).isTrue()
-        nowNanos = ms(251)
-        assertThat(d.isVoice(constant(0), 480, 0.0f)).isFalse()
+        assertThat(d.voicesAt(0L to 0.9f, ms(100) to 0f, ms(249) to 0f, ms(251) to 0f))
+            .containsExactly(true, true, true, false).inOrder()
     }
 
     @Test
     fun `the hold is measured in nanoseconds`() {
         val d = detector(VadConfig.probability(holdTimeMs = 250))
-        assertThat(d.isVoice(constant(0), 480, 0.9f)).isTrue()
-        nowNanos = 300L  // 300 ns: past 250 ms only if the unit conversion is missing
-        assertThat(d.isVoice(constant(0), 480, 0.0f)).isTrue()
+        // 300 ns: past 250 ms only if the unit conversion is missing
+        assertThat(d.voicesAt(0L to 0.9f, 300L to 0f)).containsExactly(true, true).inOrder()
     }
 
     /**
@@ -217,22 +203,21 @@ class VoiceActivityDetectorTest {
      */
     @Test
     fun `a clock near the end of its range does not latch the detector on`() {
-        nowNanos = Long.MAX_VALUE - ms(10)
+        val start = Long.MAX_VALUE - ms(10)
+        nowNanos = start
         val d = detector(VadConfig.probability(holdTimeMs = 250))
-        assertThat(d.isVoice(constant(0), 480, 0.0f)).isFalse()
-        nowNanos += ms(20)  // wraps past Long.MAX_VALUE
-        assertThat(d.isVoice(constant(0), 480, 0.0f)).isFalse()
+        // The second frame wraps past Long.MAX_VALUE.
+        assertThat(d.voicesAt(start to 0f, start + ms(20) to 0f)).containsExactly(false, false).inOrder()
     }
 
     @Test
     fun `the hold survives a clock wrap`() {
-        nowNanos = Long.MAX_VALUE - ms(10)
+        val start = Long.MAX_VALUE - ms(10)
+        nowNanos = start
         val d = detector(VadConfig.probability(holdTimeMs = 250))
-        assertThat(d.isVoice(constant(0), 480, 0.9f)).isTrue()
-        nowNanos += ms(100)  // wrapped; 100 ms after the detection
-        assertThat(d.isVoice(constant(0), 480, 0.0f)).isTrue()
-        nowNanos += ms(200)  // 300 ms after the detection
-        assertThat(d.isVoice(constant(0), 480, 0.0f)).isFalse()
+        // Wrapped from the second frame on: 100 ms, then 300 ms after the detection.
+        assertThat(d.voicesAt(start to 0.9f, start + ms(100) to 0f, start + ms(300) to 0f))
+            .containsExactly(true, true, false).inOrder()
     }
 
     @Test

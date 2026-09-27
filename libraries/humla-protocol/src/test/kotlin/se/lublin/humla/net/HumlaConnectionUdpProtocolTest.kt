@@ -67,8 +67,6 @@ class HumlaConnectionUdpProtocolTest {
         h.synchronize()
     }
 
-    private fun drain() = h.runCurrent()
-
     private fun udp(): FakeUdpTransport = h.transports.udps.single()
 
     private fun v2Version(major: Int, minor: Int, patch: Int) =
@@ -114,7 +112,7 @@ class HumlaConnectionUdpProtocolTest {
         h.clock.set(2_050_000_000L)
         udp.simulateDatagram(protobufPingReply(2_000_000L))
         udp.simulateDatagram(protobufAudio(byteArrayOf(0x11, 0x22)))
-        drain()
+        h.runCurrent()
 
         assertThat(connection.latency!!.udpMicros).isEqualTo(50_000L)
         assertThat(heard).containsExactly(
@@ -128,7 +126,7 @@ class HumlaConnectionUdpProtocolTest {
         tcp.announce(v2Version(1, 5, 0))
 
         tcp.simulateMessage(HumlaTCPMessageType.UDPTunnel, protobufAudio(byteArrayOf(0x33)))
-        drain()
+        h.runCurrent()
 
         assertThat(connection.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
         assertThat(heard.single().opus).containsExactly(0x33.toByte())
@@ -143,7 +141,7 @@ class HumlaConnectionUdpProtocolTest {
 
         udp.simulateDatagram(legacyAudio(byteArrayOf(0x44)))
         udp.simulateDatagram(UdpPing.encode(UdpProtocol.LEGACY, 1L))
-        drain()
+        h.runCurrent()
 
         assertThat(heard).isEmpty()
         assertThat(connection.latency!!.udpMicros).isEqualTo(0L)
@@ -161,7 +159,7 @@ class HumlaConnectionUdpProtocolTest {
         udp.simulateDatagram(legacyAudio(byteArrayOf(0x55)))
         tcp.simulateMessage(HumlaTCPMessageType.UDPTunnel, legacyAudio(byteArrayOf(0x66)))
         udp.simulateDatagram(protobufAudio(byteArrayOf(0x77)))
-        drain()
+        h.runCurrent()
 
         // The protobuf packet reads as a legacy CELT one, which playback drops.
         val opus = heard.filter { it.codec == HumlaUDPMessageType.UDPVoiceOpus }

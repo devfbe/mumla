@@ -19,7 +19,7 @@ package se.lublin.humla.audio
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import se.lublin.humla.model.UserState
-import java.lang.management.ManagementFactory
+import se.lublin.humla.testutil.AllocationMeter
 
 class PlaybackParamsTest {
 
@@ -49,15 +49,14 @@ class PlaybackParamsTest {
     @Test
     fun aLookupAllocatesNothing() {
         val params = PlaybackParams.of(users)
-        val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
-        val id = Thread.currentThread().id
         var sink = 0f
-        repeat(10_000) { sink += params.volume(it) }
-        val before = threads.getThreadAllocatedBytes(id)
-        repeat(100_000) { sink += params.volume(it) + if (params.isMuted(it)) 1 else 0 }
-        val allocated = threads.getThreadAllocatedBytes(id) - before
+        var user = 0
+        val perCall = AllocationMeter.bytesPerCall(10_000, 100_000) {
+            val id = user++
+            sink += params.volume(id) + if (params.isMuted(id)) 1 else 0
+        }
 
         assertThat(sink).isGreaterThan(0f)
-        assertThat(allocated).isLessThan(1_024L)
+        assertThat(perCall).isLessThan(1_024.0 / 100_000)
     }
 }

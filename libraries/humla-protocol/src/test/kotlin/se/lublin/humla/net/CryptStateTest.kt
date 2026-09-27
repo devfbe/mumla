@@ -3,18 +3,16 @@ package se.lublin.humla.net
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
+import se.lublin.humla.testutil.bytes
 
 /** OCB2-AES128 behaviour as Mumble's `CryptStateOCB2` and its `TestCrypt` suite define it. */
 class CryptStateTest {
-
     private val rawKey = ByteArray(16) { it.toByte() }
     private val nonce = byteArrayOf(
         0xff.toByte(), 0xee.toByte(), 0xdd.toByte(), 0xcc.toByte(), 0xbb.toByte(), 0xaa.toByte(),
         0x99.toByte(), 0x88.toByte(), 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00,
     )
     private val secret = "abcdefghi\u0000".toByteArray(Charsets.US_ASCII)
-
-    private fun bytes(vararg b: Int) = ByteArray(b.size) { b[it].toByte() }
 
     /** A sender and receiver sharing one key, the sender's encrypt IV forced to 0x55.. as upstream does. */
     private fun pair(): Pair<CryptState, CryptState> {

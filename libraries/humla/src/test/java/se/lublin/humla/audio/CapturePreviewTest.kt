@@ -23,6 +23,7 @@ import android.media.MediaRecorder
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -40,8 +41,6 @@ import se.lublin.humla.testutil.TestCaptureSource
 import se.lublin.humla.testutil.TestPlaybackSink
 import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlin.math.pow
-import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 class CapturePreviewTest {
@@ -53,11 +52,6 @@ class CapturePreviewTest {
     @After
     fun stopSession() {
         session?.stop()
-    }
-
-    private fun frameAt(dbfs: Float, length: Int = 480): ShortArray {
-        val amplitude = (32768.0 * 10.0.pow(dbfs / 20.0)).roundToInt().coerceIn(0, 32767)
-        return ShortArray(length) { amplitude.toShort() }
     }
 
     private fun preprocessors(speexGain: Float = 1f, speexProbability: Int = 0) =
@@ -95,14 +89,17 @@ class CapturePreviewTest {
         resamplerFactory = resamplerFactory,
     ).also { session = it }
 
-    private fun await(condition: () -> Boolean) = awaitUntil(condition = condition)
+    /** Runs the preview until [condition] holds, then stops it. */
+    private fun CapturePreview.runUntil(condition: () -> Boolean) {
+        start()
+        awaitUntil(condition = condition)
+        stop()
+    }
 
     @Test
     fun `the reading carries the level, the two tracked marks and the threshold between them`() {
         val s = session(TestCaptureSource(List(20) { frameAt(-20f) }, loopLastFrame = true))
-        s.start()
-        await { readings.size >= 5 }
-        s.stop()
+        s.runUntil { readings.size >= 5 }
 
         val reading = readings.last()
         assertThat(reading.levelDbfs).isWithin(0.1f).of(-20f)
@@ -118,9 +115,7 @@ class CapturePreviewTest {
     @Test
     fun `a fresh session reads the threshold the fixed window used to demand`() {
         val s = session(TestCaptureSource(List(2) { frameAt(-80f) }))
-        s.start()
-        await { readings.isNotEmpty() }
-        s.stop()
+        s.runUntil { readings.isNotEmpty() }
         // One frame of -80 dBFS has already pulled the floor down by the 0.24 dB it may move in
         // 10 ms, which is the tracker working rather than a tolerance for noise.
         assertThat(readings.first().floorDbfs!!).isWithin(0.3f).of(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS)
@@ -135,9 +130,7 @@ class CapturePreviewTest {
             TestCaptureSource(frames, loopLastFrame = true),
             vad = VadConfig.adaptive(holdTimeMs = 2000, onsetFrames = 1),
         )
-        s.start()
-        await { readings.size >= 9 }
-        s.stop()
+        s.runUntil { readings.size >= 9 }
 
         assertThat(readings.first().voice).isTrue()
         assertThat(readings.first().holding).isFalse()
@@ -148,9 +141,7 @@ class CapturePreviewTest {
     @Test
     fun `too far away is reported rather than hidden`() {
         val s = session(TestCaptureSource(List(3) { frameAt(-80f) }))
-        s.start()
-        await { readings.isNotEmpty() }
-        s.stop()
+        s.runUntil { readings.isNotEmpty() }
         // A fresh tracker assumes a 20 dB gap, so nothing is "too close" until it has learned.
         assertThat(readings.first().tooClose).isFalse()
     }
@@ -163,7 +154,7 @@ class CapturePreviewTest {
     fun `the meter measures the frame the gate measures, after the preprocessor`() {
         val raw = session(TestCaptureSource(List(3) { frameAt(-20f) }))
         raw.start()
-        await { readings.isNotEmpty() }
+        awaitUntil { readings.isNotEmpty() }
         raw.stop()
         val rawLevel = readings.first().levelDbfs
 
@@ -175,7 +166,7 @@ class CapturePreviewTest {
             speexGain = 0.5f,
         )
         denoised.start()
-        await { readings.isNotEmpty() }
+        awaitUntil { readings.isNotEmpty() }
         denoised.stop()
         assertThat(readings.first().levelDbfs).isWithin(0.05f).of(rawLevel - 6.02f)
     }
@@ -186,9 +177,7 @@ class CapturePreviewTest {
             TestCaptureSource(List(3) { frameAt(-20f) }),
             vad = VadConfig.amplitude(0.7f, holdTimeMs = 0, onsetFrames = 1),
         )
-        s.start()
-        await { readings.isNotEmpty() }
-        s.stop()
+        s.runUntil { readings.isNotEmpty() }
         // A score of 0.7 on the 1 + dBFS/96 curve is -28.8 dBFS.
         assertThat(readings.first().thresholdDbfs!!).isWithin(0.01f).of(-28.8f)
         assertThat(readings.first().floorDbfs).isNull()
@@ -203,9 +192,7 @@ class CapturePreviewTest {
             noise = NoiseSuppressionMode.SPEEX,
             speexProbability = 90,
         )
-        s.start()
-        await { readings.isNotEmpty() }
-        s.stop()
+        s.runUntil { readings.isNotEmpty() }
         assertThat(readings.first().thresholdDbfs).isNull()
         assertThat(readings.first().voice).isTrue()
     }
@@ -223,7 +210,7 @@ class CapturePreviewTest {
         session = s
         s.start()
         // 40 frames at one reading per 10: exactly four, and the source then runs dry.
-        await { readings.size >= 4 }
+        awaitUntil { readings.size >= 4 }
         s.stop()
         assertThat(readings.size).isEqualTo(4)
     }
@@ -234,14 +221,14 @@ class CapturePreviewTest {
         val s = session(TestCaptureSource(frames, loopLastFrame = true))
         s.start()
         // A close, loud talker leaves a gap far wider than the one a fresh tracker assumes.
-        await { readings.any { it.speechDbfs!! - it.floorDbfs!! > 30f } }
-        await { readings.last().levelDbfs < -60f }
+        awaitUntil { readings.any { it.speechDbfs!! - it.floorDbfs!! > 30f } }
+        awaitUntil { readings.last().levelDbfs < -60f }
 
         readings.clear()
         s.recalibrate()
         // The reset lands on the capture thread's next frame, so the assertion is over the
         // readings rather than over an index: two frames may already have been in flight.
-        await { readings.any { (it.speechDbfs!! - it.floorDbfs!!) < AdaptiveVadTracker.DEFAULT_GAP_DB + 0.5f } }
+        awaitUntil { readings.any { (it.speechDbfs!! - it.floorDbfs!!) < AdaptiveVadTracker.DEFAULT_GAP_DB + 0.5f } }
         s.stop()
         val reset = readings.first { (it.speechDbfs!! - it.floorDbfs!!) < AdaptiveVadTracker.DEFAULT_GAP_DB + 0.5f }
         assertThat(reset.speechDbfs!! - reset.floorDbfs!!)
@@ -266,9 +253,7 @@ class CapturePreviewTest {
             loopback = true,
             vad = VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1),
         )
-        s.start()
-        await { sink.written.size >= 2 }
-        s.stop()
+        s.runUntil { sink.written.size >= 2 }
         assertThat(sink.written[0].any { it != 0.toShort() }).isTrue()
         assertThat(sink.written[1].toSet()).containsExactly(0.toShort())
         assertThat(sink.events.first()).isEqualTo("play")
@@ -288,9 +273,7 @@ class CapturePreviewTest {
         val source = TestCaptureSource(emptyList())
         val sink = TestPlaybackSink()
         val s = session(source, sink = sink, loopback = true)
-        s.start()
-        await { "start" in source.events }
-        s.stop()
+        s.runUntil { "start" in source.events }
         assertThat(source.events.last()).isEqualTo("release")
         assertThat(sink.events.takeLast(4)).containsExactly("pause", "flush", "stop", "release").inOrder()
     }
@@ -353,9 +336,7 @@ class CapturePreviewTest {
                 }
             },
         )
-        s.start()
-        await { readings.isNotEmpty() }
-        s.stop()
+        s.runUntil { readings.isNotEmpty() }
         assertThat(built).containsExactly(16000 to 48000)
     }
 
@@ -370,12 +351,7 @@ class CapturePreviewTest {
             { _, _ -> throw IllegalStateException("no track") },
             preprocessors(),
         ) { _, _ -> error("no resampler expected") }
-        try {
-            s.start()
-            throw AssertionError("expected the sink failure to escape")
-        } catch (e: IllegalStateException) {
-            assertThat(e).hasMessageThat().isEqualTo("no track")
-        }
+        assertThat(assertThrows(IllegalStateException::class.java) { s.start() }).hasMessageThat().isEqualTo("no track")
         assertThat(source.events).contains("release")
         assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
     }
@@ -384,12 +360,8 @@ class CapturePreviewTest {
     fun `starting twice is refused rather than taking the microphone twice`() {
         val s = session(TestCaptureSource(emptyList()))
         s.start()
-        try {
-            s.start()
-            throw AssertionError("expected a refusal")
-        } catch (e: IllegalStateException) {
-            assertThat(e).hasMessageThat().contains("already started")
-        }
+        assertThat(assertThrows(IllegalStateException::class.java) { s.start() })
+            .hasMessageThat().contains("already started")
         s.stop()
     }
 }

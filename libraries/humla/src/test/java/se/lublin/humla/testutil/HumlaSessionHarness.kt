@@ -213,6 +213,16 @@ internal class Harnesses : ExternalResource() {
     override fun after() = started.forEach { it.close() }
 }
 
+/** Sessions a test builds with [testSession], closed after it. */
+internal class Sessions : ExternalResource() {
+    private val built = mutableListOf<HumlaSession>()
+
+    fun start(config: SessionConfig = SessionConfig(), devices: CommunicationDevices? = FakeCommunicationDevices()) =
+        testSession(config, devices).also { built += it }
+
+    override fun after() = built.forEach { it.close() }
+}
+
 /** What a dropped socket reports. */
 internal fun connectionError() = HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
 

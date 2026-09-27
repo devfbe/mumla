@@ -22,35 +22,26 @@ import android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
 import android.media.AudioDeviceInfo.TYPE_USB_HEADSET
 import android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 
 class PreferredAudioDeviceTest {
 
+    /**
+     * Headsets are saved with their address; other devices are one of a kind, so whatever address
+     * the platform reports is not kept; an empty address is no address.
+     */
     @Test
-    fun aBluetoothHeadsetIsSavedWithItsAddress() {
-        val saved = PreferredAudioDevice.of(CommunicationDevice(7, TYPE_BLUETOOTH_SCO, "Jabra", "AA"))
-
-        assertThat(saved).isEqualTo(PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA"))
-    }
-
-    @Test
-    fun aUsbHeadsetIsSavedWithItsAddress() {
-        assertThat(PreferredAudioDevice.of(CommunicationDevice(3, TYPE_USB_HEADSET, "", "card=1")))
-            .isEqualTo(PreferredAudioDevice(TYPE_USB_HEADSET, "card=1"))
-    }
-
-    /** Other devices are one of a kind; whatever address the platform reports is not kept. */
-    @Test
-    fun otherDevicesAreSavedByTypeAlone() {
-        assertThat(PreferredAudioDevice.of(CommunicationDevice(2, TYPE_BUILTIN_SPEAKER, "Pixel", "x")))
-            .isEqualTo(PreferredAudioDevice(TYPE_BUILTIN_SPEAKER))
-        assertThat(PreferredAudioDevice.of(CommunicationDevice(4, TYPE_WIRED_HEADSET, "", "")))
-            .isEqualTo(PreferredAudioDevice(TYPE_WIRED_HEADSET))
-    }
-
-    @Test
-    fun anEmptyAddressIsNoAddress() {
-        assertThat(PreferredAudioDevice.of(CommunicationDevice(7, TYPE_BLUETOOTH_SCO, "", "")).address).isNull()
+    fun aDeviceIsSavedByTypeAndForAHeadsetItsAddress() {
+        mapOf(
+            CommunicationDevice(7, TYPE_BLUETOOTH_SCO, "Jabra", "AA") to PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA"),
+            CommunicationDevice(3, TYPE_USB_HEADSET, "", "card=1") to PreferredAudioDevice(TYPE_USB_HEADSET, "card=1"),
+            CommunicationDevice(2, TYPE_BUILTIN_SPEAKER, "Pixel", "x") to PreferredAudioDevice(TYPE_BUILTIN_SPEAKER),
+            CommunicationDevice(4, TYPE_WIRED_HEADSET, "", "") to PreferredAudioDevice(TYPE_WIRED_HEADSET),
+            CommunicationDevice(7, TYPE_BLUETOOTH_SCO, "", "") to PreferredAudioDevice(TYPE_BLUETOOTH_SCO),
+        ).forEach { (device, saved) ->
+            assertWithMessage("$device").that(PreferredAudioDevice.of(device)).isEqualTo(saved)
+        }
     }
 
     /** The id is the platform's for this connection only and plays no part. */

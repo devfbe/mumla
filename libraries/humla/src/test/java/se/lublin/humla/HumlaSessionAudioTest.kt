@@ -110,15 +110,13 @@ class HumlaSessionAudioTest {
         assertThat(config.halfDuplex).isTrue()
         // By identity: the toggle the capture loop consults is the toggle a key press writes.
         assertThat(h.audioFactory.sessionParams[0].inputMode)
-            .isSameInstanceAs(inputModeOf(h))
+            .isSameInstanceAs(h.session.audioSession.inputMode)
         h.session.audio.setTalking(true)
         assertThat(
             (h.audioFactory.sessionParams[0].inputMode as se.lublin.humla.audio.inputmode.ToggleInputMode)
                 .isTalkingOn
         ).isTrue()
     }
-
-    private fun inputModeOf(h: HumlaSessionHarness): Any = h.session.audioSession.inputMode
 
     /**
      * A voice target set while the socket is up but before synchronization reaches the pipeline
@@ -240,15 +238,13 @@ class HumlaSessionAudioTest {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
-        val controller = controllerOf(h)
+        val controller = h.session.audioSession.controller
         assertThat(controller.thread.isAlive).isTrue()
 
         harnesses.close(h)
 
         awaitUntil(description = "the control thread ended") { !controller.thread.isAlive }
     }
-
-    private fun controllerOf(h: HumlaSessionHarness): AudioController = h.session.audioSession.controller
 
     /**
      * A disconnect between the server's sync and its delivery on the main looper: no pipeline is

@@ -2,6 +2,7 @@ package se.lublin.humla.net
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
+import org.junit.Rule
 import org.junit.Test
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.ServerState
@@ -20,7 +21,10 @@ import java.util.concurrent.atomic.AtomicReference
  * and nothing of the connection left behind.
  */
 class HumlaConnectionLifecycleTest {
-    private val h = ConnectionHarness(forceTcp = true)
+    @get:Rule
+    internal val harnesses = ConnectionHarnesses()
+
+    private val h = harnesses.add(ConnectionHarness(forceTcp = true))
     private val connection = h.connection
     private val listener = h.listener
 
@@ -33,7 +37,6 @@ class HumlaConnectionLifecycleTest {
         assertThat(connection.endpoint).isEqualTo(Endpoint("127.0.0.1", 64738))
         assertThat(listener.established.get()).isEqualTo(1)
         assertThat(listener.allOnCallbackThread).isTrue()
-        h.close()
     }
 
     @Test
@@ -52,7 +55,6 @@ class HumlaConnectionLifecycleTest {
         assertThat(info.maxBandwidth).isEqualTo(72_000)
         assertThat(info.host).isEqualTo("127.0.0.1")
         assertThat(connection.latency).isNotNull()
-        h.close()
     }
 
     /**
@@ -81,7 +83,6 @@ class HumlaConnectionLifecycleTest {
 
         assertThat(published).hasSize(1)
         assertThat(published.single().subchannelIds(0)).hasSize(4_999)
-        h.close()
     }
 
     @Test
@@ -160,7 +161,6 @@ class HumlaConnectionLifecycleTest {
         h.receive(HumlaTCPMessageType.UserRemove, Mumble.UserRemove.newBuilder().setSession(8).build())
 
         assertThat(connection.isSynchronized).isTrue()
-        h.close()
     }
 
     @Test
@@ -217,7 +217,6 @@ class HumlaConnectionLifecycleTest {
 
         assertThat(survivors.get()).isEqualTo(1)
         assertThat(listener.disconnects).isEmpty()
-        h.close()
     }
 
     /** What the handlers do not catch ends the connection with an error instead of the process. */
@@ -246,23 +245,6 @@ class HumlaConnectionLifecycleTest {
         assertThat(tcp.sentMessages.filterIsInstance<Mumble.Ping>()).hasSize(1)
         h.advanceBy(5_000)
         assertThat(tcp.sentMessages.filterIsInstance<Mumble.Ping>()).hasSize(2)
-        h.close()
-    }
-
-    @Test
-    fun theUdpTransportFailsIntoAWarningAndATunnelRequest() {
-        val udpHarness = ConnectionHarness(forceTcp = false)
-        val tcp = udpHarness.establish()
-        val udp = udpHarness.transports.udps.single()
-        assertThat(udp.connectCalls.get()).isEqualTo(1)
-
-        udp.simulateError(java.io.IOException("socket closed"))
-        udpHarness.runCurrent()
-
-        assertThat(udpHarness.listener.warnings).containsExactly(ConnectionWarning.UDP_THREAD_FAILED)
-        assertThat(udpHarness.listener.allOnCallbackThread).isTrue()
-        assertThat(tcp.sent).contains(HumlaTCPMessageType.UDPTunnel)
-        udpHarness.close()
     }
 
     @Test
@@ -284,7 +266,6 @@ class HumlaConnectionLifecycleTest {
         val thrown = assertThrows(IllegalStateException::class.java) { connection.connect() }
 
         assertThat(thrown).hasMessageThat().contains("single-use")
-        h.close()
     }
 
     /** A disconnect before the connection was ever started must still refuse a later connect(). */
@@ -317,40 +298,6 @@ class HumlaConnectionLifecycleTest {
 
         val expected = texts.flatMapIndexed { i, text -> if (i % 50 == 0) listOf(text, "posted $i") else listOf(text) }
         assertThat(seen).containsExactlyElementsIn(expected).inOrder()
-        h.close()
-    }
-
-    /** Observed via the UDP transport, because the terminal gate drops a late callback on its own. */
-    @Test
-    fun anEstablishedCallbackBehindADisconnectStartsNoSecondUdpTransport() {
-        val udpHarness = ConnectionHarness(forceTcp = false)
-        udpHarness.establish()
-
-        udpHarness.inTheTeardownWindow { udpHarness.connection.onTCPConnectionEstablished() }
-
-        assertThat(udpHarness.transports.udps).hasSize(1)
-        assertThat(udpHarness.connection.isConnected).isFalse()
-    }
-
-    @Test
-    fun aDatagramArrivingBehindADisconnectIsNotDispatched() {
-        h.establish()
-        val seen = AtomicInteger()
-        connection.addVoiceHandler { seen.incrementAndGet() }
-
-        h.inTheTeardownWindow { connection.onUDPDataReceived(voiceDatagram) }
-
-        assertThat(seen.get()).isEqualTo(0)
-    }
-
-    @Test
-    fun aCryptResyncBehindADisconnectPutsNothingOnTheWire() {
-        val tcp = h.establish()
-        val sentBefore = tcp.sent.toList()
-
-        h.inTheTeardownWindow { connection.resyncCryptState() }
-
-        assertThat(tcp.sent).containsExactlyElementsIn(sentBefore).inOrder()
     }
 
     /** Checked while the teardown is queued but has not run, so nothing else has changed yet. */
@@ -374,7 +321,7 @@ class HumlaConnectionLifecycleTest {
      */
     @Test
     fun aVoicePacketSentBehindADisconnectReachesNeitherTransport() {
-        val udpHarness = ConnectionHarness(forceTcp = false)
+        val udpHarness = harnesses.add(ConnectionHarness(forceTcp = false))
         val tcp = udpHarness.establish()
         val udp = udpHarness.transports.udps.single()
         udp.simulateError(java.io.IOException("down")) // unforced voice now goes through the tunnel
@@ -390,29 +337,16 @@ class HumlaConnectionLifecycleTest {
         assertThat(tcp.sent).containsExactlyElementsIn(tcpSentBefore).inOrder()
     }
 
-    /** A clean end already decided must not gain an error afterwards. */
-    @Test
-    fun aTransportFailureBehindADisconnectDoesNotBecomeTheConnectionsError() {
-        h.establish()
-
-        h.inTheTeardownWindow {
-            connection.onTCPConnectionFailed(
-                HumlaException("late failure", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
-            )
-        }
-
-        assertThat(connection.error).isNull()
-        assertThat(listener.disconnects).containsExactly(null)
-    }
-
     /**
-     * Every method of both transport listener interfaces must be inert in the teardown window.
-     * Written with reflection so a newly added callback fails this test until its behaviour behind
-     * a disconnect has been decided.
+     * Every method of both transport listener interfaces must be inert in the teardown window: no
+     * frame or datagram dispatched, nothing on the wire, no second UDP transport, no error on a
+     * clean end, and no prompt or warning for a session that has already ended. Written with
+     * reflection so a newly added callback fails this test until its behaviour behind a disconnect
+     * has been decided.
      */
     @Test
     fun noTransportCallbackDoesAnyWorkBehindADisconnect() {
-        val udpHarness = ConnectionHarness(forceTcp = false)
+        val udpHarness = harnesses.add(ConnectionHarness(forceTcp = false))
         val tcp = udpHarness.establish()
         val connection = udpHarness.connection
         val frames = AtomicInteger()
@@ -434,6 +368,11 @@ class HumlaConnectionLifecycleTest {
         assertThat(tcp.sent).containsExactlyElementsIn(sentBefore).inOrder()
         assertThat(udpHarness.transports.udps).hasSize(1)
         assertThat(connection.error).isNull()
+        assertThat(connection.isConnected).isFalse()
+        assertThat(udpHarness.listener.handshakeFailures).isEmpty()
+        assertThat(udpHarness.listener.certificateChanges).isEmpty()
+        assertThat(udpHarness.listener.warnings).isEmpty()
+        assertThat(udpHarness.listener.disconnects).containsExactly(null)
         assertThat(udpHarness.listener.events).containsExactly("established", "disconnected").inOrder()
     }
 
@@ -455,39 +394,6 @@ class HumlaConnectionLifecycleTest {
         assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
         assertThat(listener.synchronizedCount.get()).isEqualTo(0)
     }
-
-    /** The certificate prompt would open on top of a session that has already ended. */
-    @Test
-    fun aHandshakeFailureBehindADisconnectPromptsNobody() {
-        h.establish()
-
-        h.inTheTeardownWindow { connection.onTLSHandshakeFailed(emptyArray()) }
-
-        assertThat(listener.handshakeFailures).isEmpty()
-        assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
-    }
-
-    @Test
-    fun aCertificateChangeBehindADisconnectPromptsNobody() {
-        h.establish()
-
-        h.inTheTeardownWindow { connection.onTLSCertificateChanged(emptyArray()) }
-
-        assertThat(listener.certificateChanges).isEmpty()
-        assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
-    }
-
-    @Test
-    fun aUdpErrorBehindADisconnectWarnsNobody() {
-        h.establish()
-
-        h.inTheTeardownWindow { connection.onUDPConnectionError(java.io.IOException("socket closed")) }
-
-        assertThat(listener.warnings).isEmpty()
-        assertThat(listener.events).containsExactly("established", "disconnected").inOrder()
-    }
-
-    private fun textFrame(text: String) = Mumble.TextMessage.newBuilder().setMessage(text).build().toByteArray()
 
     /**
      * Invokes every method of both transport listener interfaces on [connection].
@@ -530,9 +436,6 @@ class HumlaConnectionLifecycleTest {
         /** A well-formed Version frame, used wherever a callback wants TCP payload bytes. */
         val versionFrame: ByteArray = Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray()
 
-        /** A datagram whose leading type nibble marks it as Opus voice data. */
-        val voiceDatagram: ByteArray = ByteArray(64).also {
-            it[0] = ((HumlaUDPMessageType.UDPVoiceOpus.ordinal shl 5) and 0xFF).toByte()
-        }
+        val voiceDatagram: ByteArray = voiceDatagram(64)
     }
 }

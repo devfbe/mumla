@@ -1,6 +1,7 @@
 package se.lublin.humla.net
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Rule
 import org.junit.Test
 import se.lublin.humla.protobuf.Mumble
@@ -19,18 +20,15 @@ class HumlaConnectionUdpRecoveryTest {
     @get:Rule
     val log = LogRecorder()
 
-    /** Built without a policy, so the production default is what the backoff test measures. */
+    @get:Rule
+    internal val harnesses = ConnectionHarnesses()
+
     private fun harness(
         udpHealth: UdpHealthMonitor = UdpHealthMonitor(),
         restartPolicy: ReconnectPolicy = ProtocolSession.UDP_RESTART_POLICY,
         forceTcp: Boolean = false,
         useTor: Boolean = false,
-    ) = ConnectionHarness(
-        forceTcp = forceTcp,
-        useTor = useTor,
-        udpHealth = udpHealth,
-        udpRestartPolicy = restartPolicy,
-    )
+    ) = harnesses.add(ConnectionHarness(forceTcp, useTor, udpHealth = udpHealth, udpRestartPolicy = restartPolicy))
 
     private val ConnectionHarness.udps: List<FakeUdpTransport> get() = transports.udps
 
@@ -46,6 +44,13 @@ class HumlaConnectionUdpRecoveryTest {
     private fun ConnectionHarness.datagram(udp: FakeUdpTransport, data: ByteArray) {
         udp.simulateDatagram(data)
         runCurrent()
+    }
+
+    /** Fails UDP transport [index] and lets the first restart come due one second later. */
+    private fun ConnectionHarness.failUdpAndRestart(index: Int) {
+        udps[index].simulateError(IOException("down"))
+        runCurrent()
+        advanceBy(1_000)
     }
 
     /** Synchronizes, which sends the first pings; returns the UDP one. */
@@ -66,6 +71,7 @@ class HumlaConnectionUdpRecoveryTest {
 
         assertThat(h.connection.isUsingUdp).isFalse()
         assertThat(h.listener.warnings).containsExactly(ConnectionWarning.UDP_THREAD_FAILED)
+        assertThat(h.listener.allOnCallbackThread).isTrue()
         assertThat(tcp.sent).contains(HumlaTCPMessageType.UDPTunnel) // tells the server to tunnel
         assertThat(h.udps).hasSize(1)
 
@@ -73,13 +79,10 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(h.udps).hasSize(2)
         assertThat(h.udps[1].connectCalls.get()).isEqualTo(1)
 
-        h.udps[1].simulateError(IOException("still down"))
-        h.runCurrent()
-        h.advanceBy(1_000)
+        h.failUdpAndRestart(1)
         assertThat(h.udps).hasSize(2) // the second restart waits 2 s
         h.advanceBy(1_000)
         assertThat(h.udps).hasSize(3)
-        h.close()
     }
 
     @Test
@@ -91,7 +94,6 @@ class HumlaConnectionUdpRecoveryTest {
 
         assertThat(h.connection.isUsingUdp).isFalse()
         assertThat(h.listener.warnings).containsExactly(ConnectionWarning.UDP_UNAVAILABLE)
-        h.close()
     }
 
     @Test
@@ -104,7 +106,6 @@ class HumlaConnectionUdpRecoveryTest {
 
         assertThat(h.connection.isUsingUdp).isFalse()
         assertThat(h.listener.warnings).containsExactly(ConnectionWarning.UDP_PING_TIMEOUT)
-        h.close()
     }
 
     /** A reply resets the timeout, so sixteen seconds after the *first* send nothing switches. */
@@ -121,7 +122,6 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(h.connection.isUsingUdp).isTrue()
         assertThat(h.listener.warnings).isEmpty()
         assertThat(h.connection.latency!!.udpMicros).isEqualTo(6_000_000L)
-        h.close()
     }
 
     /**
@@ -140,7 +140,6 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(ping.map { it.toInt() and 0xFF }).containsExactly(0x20, 0xF0, 0x11, 0xE1, 0xA3, 0x00).inOrder()
         assertThat(ping.size).isAtMost(10)
         assertThat(MumbleLegacyPingDecoder.decodeAsServer(ping)).isEqualTo(300_000_000L)
-        h.close()
     }
 
     /** Guards the decoder: a 16-byte ping (header, raw long, padding) must be rejected. */
@@ -165,7 +164,6 @@ class HumlaConnectionUdpRecoveryTest {
         h.datagram(h.udps.single(), udpPingReply(sentAtMicros = eightyMinutes * 1_000_000L - 50_000L))
 
         assertThat(h.connection.latency!!.udpMicros).isEqualTo(50_000L)
-        h.close()
     }
 
     /** What a server older than 1.5 does: it sends the datagram back as it came. */
@@ -183,7 +181,6 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(h.connection.latency!!.udpMicros).isEqualTo(8_000_000L)
         assertThat(h.connection.isUsingUdp).isTrue()
         assertThat(h.listener.warnings).isEmpty()
-        h.close()
     }
 
     /**
@@ -207,7 +204,6 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(log.lines.filter { it.level == HumlaLog.Level.ERROR }).isEmpty()
         assertThat(h.connection.latency!!.udpMicros).isEqualTo(0L)
         assertThat(h.listener.warnings).containsExactly(ConnectionWarning.UDP_PING_TIMEOUT)
-        h.close()
     }
 
     /**
@@ -241,7 +237,6 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(h.listener.warnings)
             .containsExactly(ConnectionWarning.UDP_PING_TIMEOUT, ConnectionWarning.UDP_RESTORED).inOrder()
         assertThat(h.connection.latency!!.udpMicros).isEqualTo(30_000L)
-        h.close()
     }
 
     @Test
@@ -254,7 +249,6 @@ class HumlaConnectionUdpRecoveryTest {
         h.receive(HumlaTCPMessageType.Ping, Mumble.Ping.newBuilder().setTimestamp(4_000_000L).build())
 
         assertThat(h.connection.latency!!.tcpMicros).isEqualTo(6_000_000L)
-        h.close()
     }
 
     @Test
@@ -285,53 +279,27 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(second.udpPingAvg).isWithin(1e-3f).of(4f)
         assertThat(second.udpPingVar).isWithin(1e-3f).of(0f)
         assertThat(second.good).isEqualTo(1)
-        h.close()
-    }
-
-    @Test
-    fun forcedTcpNeverStartsUdpNorWarns() {
-        val h = harness(forceTcp = true)
-        h.establish()
-
-        h.feedPings(listOf(0L, 10L, 20L, 30L))
-
-        assertThat(h.udps).isEmpty()
-        assertThat(h.listener.warnings).isEmpty()
-        assertThat(h.connection.isUsingUdp).isFalse()
-        h.close()
-    }
-
-    /** Tor is the other reason to tunnel the voice. */
-    @Test
-    fun routingOverTorTunnelsVoiceTheSameWayTheSettingDoes() {
-        val h = harness(useTor = true)
-        val tcp = h.establish()
-
-        h.feedPings(listOf(0L, 5L, 10L, 15L, 20L))
-
-        assertThat(tcp.connectUseTor).isTrue()
-        assertThat(h.udps).isEmpty()
-        assertThat(h.listener.warnings).isEmpty()
-        assertThat(h.connection.isUsingUdp).isFalse()
-        h.close()
     }
 
     /**
-     * Both settings on: the corner where `||` and `xor` differ. Under `xor` the voice of someone who
-     * asked for Tor would leave the device outside the proxy.
+     * Forced TCP and Tor both tunnel the voice, and so do both at once: the corner where `||` and
+     * `xor` differ, where under `xor` the voice of someone who asked for Tor would leave the device
+     * outside the proxy.
      */
     @Test
-    fun forcingTcpWhileAlsoRoutingOverTorStillTunnelsTheVoice() {
-        val h = harness(forceTcp = true, useTor = true)
-        val tcp = h.establish()
+    fun forcedTcpOrTorNeverStartsUdpNorWarns() {
+        for ((forceTcp, useTor) in listOf(true to false, false to true, true to true)) {
+            val h = harness(forceTcp = forceTcp, useTor = useTor)
+            val tcp = h.establish()
 
-        h.feedPings(listOf(0L, 5L, 10L, 15L, 20L))
+            h.feedPings(listOf(0L, 5L, 10L, 15L, 20L, 30L))
 
-        assertThat(tcp.connectUseTor).isTrue()
-        assertThat(h.udps).isEmpty()
-        assertThat(h.listener.warnings).isEmpty()
-        assertThat(h.connection.isUsingUdp).isFalse()
-        h.close()
+            val case = "forceTcp=$forceTcp useTor=$useTor"
+            assertWithMessage(case).that(tcp.connectUseTor).isEqualTo(useTor)
+            assertWithMessage(case).that(h.udps).isEmpty()
+            assertWithMessage(case).that(h.listener.warnings).isEmpty()
+            assertWithMessage(case).that(h.connection.isUsingUdp).isFalse()
+        }
     }
 
     /**
@@ -350,13 +318,10 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(udp.connectHost).isNotEmpty()
         assertThat(udp.connectPort).isNotEqualTo(0)
 
-        udp.simulateError(IOException("down"))
-        h.runCurrent()
-        h.advanceBy(1_000)
+        h.failUdpAndRestart(0)
 
         assertThat(h.udps[1].connectHost).isEqualTo(tcp.connectHost)
         assertThat(h.udps[1].connectPort).isEqualTo(tcp.connectPort)
-        h.close()
     }
 
     /** The backoff belongs to the outage, not to the connection. The monitor restores on the second ping. */
@@ -365,9 +330,7 @@ class HumlaConnectionUdpRecoveryTest {
         val h = harness(UdpHealthMonitor(windowMicros = 2_000_000L, restoreThreshold = -1))
         h.establish()
 
-        h.udps.single().simulateError(IOException("down"))
-        h.runCurrent()
-        h.advanceBy(1_000)
+        h.failUdpAndRestart(0)
         assertThat(h.udps).hasSize(2)
 
         h.feedPings(listOf(0L, 2L))
@@ -375,12 +338,9 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(h.listener.warnings)
             .containsExactly(ConnectionWarning.UDP_THREAD_FAILED, ConnectionWarning.UDP_RESTORED).inOrder()
 
-        h.udps[1].simulateError(IOException("down again"))
-        h.runCurrent()
-        h.advanceBy(1_000)
+        h.failUdpAndRestart(1)
 
         assertThat(h.udps).hasSize(3)
-        h.close()
     }
 
     /**
@@ -393,9 +353,7 @@ class HumlaConnectionUdpRecoveryTest {
         val h = harness() // the production monitor: 20 s window, threshold 1
         h.establish()
 
-        h.udps.single().simulateError(IOException("down"))
-        h.runCurrent()
-        h.advanceBy(1_000)
+        h.failUdpAndRestart(0)
         val restarted = h.udps[1]
 
         h.feedPings(listOf(0L), good = 0) // the base sample, both counters at zero
@@ -405,36 +363,28 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(h.connection.isUsingUdp).isTrue()
         assertThat(h.listener.warnings)
             .containsExactly(ConnectionWarning.UDP_THREAD_FAILED, ConnectionWarning.UDP_RESTORED).inOrder()
-        h.close()
     }
 
-    /** SWITCH_TO_TCP_SEND: a firewall that passes one way only - we hear the server, it stops hearing us. */
+    /**
+     * A firewall that passes one way only: we hear the server and it stops hearing us
+     * (SWITCH_TO_TCP_SEND), or the server hears us and nothing comes back (SWITCH_TO_TCP_RECEIVE).
+     */
     @Test
-    fun aServerThatStopsHearingUsTunnelsTheVoiceWhileWeStillHearIt() {
-        val h = harness()
-        h.establish()
+    fun aOneWayLinkTunnelsTheVoice() {
+        for ((repliesHeard, serverGood, warning) in listOf(
+            Triple(4, 0, ConnectionWarning.UDP_SEND_FAILED),
+            Triple(0, 4, ConnectionWarning.UDP_RECEIVE_FAILED),
+        )) {
+            val h = harness()
+            h.establish()
 
-        h.feedPings(listOf(0L), good = 0)
-        repeat(4) { h.datagram(h.udps.single(), udpPingReply(sentAtMicros = 0L)) }
-        h.feedPings(listOf(20L), good = 0) // the server still reports nothing good
+            h.feedPings(listOf(0L), good = 0)
+            repeat(repliesHeard) { h.datagram(h.udps.single(), udpPingReply(sentAtMicros = 0L)) }
+            h.feedPings(listOf(20L), good = serverGood)
 
-        assertThat(h.connection.isUsingUdp).isFalse()
-        assertThat(h.listener.warnings).containsExactly(ConnectionWarning.UDP_SEND_FAILED)
-        h.close()
-    }
-
-    /** SWITCH_TO_TCP_RECEIVE: the server hears us, nothing comes back. */
-    @Test
-    fun aServerWeCanReachButNotHearTunnelsTheVoiceToo() {
-        val h = harness()
-        h.establish()
-
-        h.feedPings(listOf(0L), good = 0)
-        h.feedPings(listOf(20L), good = 4) // the server heard four, we heard none
-
-        assertThat(h.connection.isUsingUdp).isFalse()
-        assertThat(h.listener.warnings).containsExactly(ConnectionWarning.UDP_RECEIVE_FAILED)
-        h.close()
+            assertWithMessage("$warning").that(h.connection.isUsingUdp).isFalse()
+            assertWithMessage("$warning").that(h.listener.warnings).containsExactly(warning)
+        }
     }
 
     /**
@@ -473,7 +423,6 @@ class HumlaConnectionUdpRecoveryTest {
 
         assertThat(h.udps).hasSize(2)
         assertThat(tcp.sent).contains(HumlaTCPMessageType.UDPTunnel)
-        h.close()
     }
 
     /**
@@ -490,7 +439,7 @@ class HumlaConnectionUdpRecoveryTest {
         var good = 0
         for (t in 0L..120L step 5) {
             repeat(4) {
-                h.datagram(udp, udpVoice()) // decrypts, counts, answers no ping
+                h.datagram(udp, voiceDatagram(16)) // decrypts, counts, answers no ping
                 good += 1
             }
             h.feedPings(listOf(t), good = good)
@@ -498,7 +447,6 @@ class HumlaConnectionUdpRecoveryTest {
 
         assertThat(h.connection.isUsingUdp).isTrue()
         assertThat(h.listener.warnings).isEmpty()
-        h.close()
     }
 
     /**
@@ -510,9 +458,7 @@ class HumlaConnectionUdpRecoveryTest {
         val h = harness()
         h.establish()
 
-        h.udps.single().simulateError(IOException("down"))
-        h.runCurrent()
-        h.advanceBy(1_000)
+        h.failUdpAndRestart(0)
         assertThat(h.udps).hasSize(2)
 
         h.atSeconds(2)
@@ -540,7 +486,6 @@ class HumlaConnectionUdpRecoveryTest {
         h.runCurrent()
 
         assertThat(h.listener.warnings).hasSize(2)
-        h.close()
     }
 
     /**
@@ -571,7 +516,6 @@ class HumlaConnectionUdpRecoveryTest {
         assertThat(h.connection.isUsingUdp).isFalse()
         assertThat(h.listener.warnings).hasSize(15)
         assertThat(h.listener.warnings.last()).isEqualTo(ConnectionWarning.UDP_UNAVAILABLE)
-        h.close()
     }
 
     /** The remaining corner of warn()'s condition: a *different* warning after the interval. */
@@ -589,7 +533,6 @@ class HumlaConnectionUdpRecoveryTest {
             .containsExactly(ConnectionWarning.UDP_UNAVAILABLE, ConnectionWarning.UDP_RESTORED)
             .inOrder()
         assertThat(h.connection.isUsingUdp).isTrue()
-        h.close()
     }
 
     /** Every decision that takes voice off UDP carries its own warning; iterated from the enum. */
@@ -605,11 +548,6 @@ class HumlaConnectionUdpRecoveryTest {
             UdpHealthMonitor.Decision.SWITCH_TO_TCP_RECEIVE, ConnectionWarning.UDP_RECEIVE_FAILED,
             UdpHealthMonitor.Decision.SWITCH_TO_TCP_PING_TIMEOUT, ConnectionWarning.UDP_PING_TIMEOUT,
         )
-    }
-
-    /** A datagram shaped like voice: it decrypts and it counts, and it tells the monitor nothing. */
-    private fun udpVoice(): ByteArray = ByteArray(16).also {
-        it[0] = ((HumlaUDPMessageType.UDPVoiceOpus.ordinal shl 5) and 0xFF).toByte()
     }
 
     /**

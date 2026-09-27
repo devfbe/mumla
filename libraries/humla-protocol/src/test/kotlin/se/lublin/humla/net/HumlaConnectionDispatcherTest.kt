@@ -153,8 +153,6 @@ class HumlaConnectionDispatcherTest {
         assertThat(publishedOffContext.get()).isFalse()
     }
 
-    private fun textFrame(text: String) = Mumble.TextMessage.newBuilder().setMessage(text).build().toByteArray()
-
     /** Wraps [delegate], marking the threads that run its tasks and counting overlapping tasks. */
     private class Probe(private val delegate: CoroutineDispatcher) : CoroutineDispatcher() {
         val dispatched = AtomicInteger()
