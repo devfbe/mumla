@@ -79,9 +79,15 @@ class ChannelTreeViewModelTest {
         user(UserState(3, "Bob", 2, userId = 30))
     }
 
+    /** A view model with a screen collecting its rows and talk states. */
     private fun viewModel(pinnedOnly: Boolean = false) =
         ChannelTreeViewModel(SessionManager.get(app), repository, pinnedOnly, showUserCount, Dispatchers.Unconfined)
-            .also { idleMainLooper() }
+            .also { tree ->
+                val screen = CoroutineScope(UnconfinedTestDispatcher())
+                screen.launch { tree.tree.collect {} }
+                screen.launch { tree.talkStates.collect {} }
+                idleMainLooper()
+            }
 
     private fun ChannelTreeViewModel.ids() = tree.value?.rows?.map { it.id }
 

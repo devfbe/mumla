@@ -127,11 +127,11 @@ class ChannelTreeViewModel(
             }
         }
         .flowOn(buildDispatcher)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        .stateIn(viewModelScope, WHILE_SHOWN, null)
 
     val talkStates: StateFlow<Map<Int, TalkState>> =
         sessions.session.flatMapLatest { it?.talkStates ?: flowOf(emptyMap()) }
-            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+            .stateIn(viewModelScope, WHILE_SHOWN, emptyMap())
 
     private class TreeInput(
         val model: ServerState?,
@@ -314,6 +314,9 @@ class ChannelTreeViewModel(
 
     companion object {
         private const val STATS_REFRESH_MILLIS = 5_000L
+
+        /** No rows are built while no screen shows them, e.g. with the app in the background. */
+        private val WHILE_SHOWN = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000L)
 
         fun create(app: Application, pinnedOnly: Boolean): ChannelTreeViewModel {
             val preferences = PreferenceManager.getDefaultSharedPreferences(app)
