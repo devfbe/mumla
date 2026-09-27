@@ -60,3 +60,25 @@ gradle.projectsEvaluated {
         "Toolchain version drift: :libraries:humla resolves cmakeVersion '$resolvedCmake' but gradle.properties says '$expectedCmake'."
     }
 }
+
+// The pre-merge check. The flavors share one test source set, so the app's unit and instrumented
+// tests are built and run for foss debug only; the other shipped variants are only assembled.
+tasks.register("verify") {
+    group = "verification"
+    description = "Assembles every shipped variant, runs all unit tests once, builds the device tests, lints."
+    dependsOn(
+        ":app:assembleFossDebug",
+        ":app:assembleGoogDebug",
+        ":app:assembleBetaDebug",
+        ":app:assembleFossRelease",
+        ":app:testFossDebugUnitTest",
+        ":app:assembleFossDebugAndroidTest",
+        ":app:lintFossDebug",
+        ":app:detekt",
+        ":libraries:humla:testDebugUnitTest",
+        ":libraries:humla:assembleDebugAndroidTest",
+        ":libraries:humla:detekt",
+        ":libraries:humla-protocol:test",
+        ":libraries:humla-protocol:detekt",
+    )
+}
