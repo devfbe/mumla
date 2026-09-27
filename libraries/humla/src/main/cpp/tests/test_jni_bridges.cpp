@@ -70,8 +70,6 @@ static jshort noise_from(std::uint32_t* s) {
 }
 static jshort noise() { return noise_from(&rng); }
 
-/* ------------------------------------------------------------------ rnnoise */
-
 static void test_rnnoise(Env& env) {
     JNIEnv* e = env.get();
 
@@ -132,8 +130,6 @@ static void test_rnnoise(Env& env) {
     RN_DESTROY(e, nullptr, 0);           /* a zero handle is a no-op */
     RN_DESTROY(e, nullptr, 0xdeadbeef);  /* so is a handle that was never created */
 }
-
-/* ------------------------------------------------------------------ webrtc apm */
 
 static void test_apm_arguments(Env& env) {
     JNIEnv* e = env.get();

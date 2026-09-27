@@ -47,8 +47,6 @@ private const val RESYNC_AFTER_MICROS = 5_000_000
  *
  * Single-use: [connect] may be called once; UDP recovery creates a new transport.
  *
- * @param cryptState Cryptographic state provider.
- * @param listener Callback target.
  * @param scope The connection's scope; its dispatcher delivers the callbacks.
  * @param socketFactory Creates the datagram socket the loops run on.
  */
@@ -65,7 +63,6 @@ class HumlaUDP(
     @Volatile private var stopRequested = false
     private var job: Job? = null
 
-    /** Unbounded queue of outgoing packets to be sent. */
     private val sendQueue = Channel<DatagramPacket>(Channel.UNLIMITED)
 
     override val isRunning: Boolean get() = connected

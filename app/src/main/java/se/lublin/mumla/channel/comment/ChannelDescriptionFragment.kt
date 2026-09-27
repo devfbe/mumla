@@ -21,7 +21,6 @@ import androidx.core.os.bundleOf
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.HumlaEvent
 
-/** Shows a channel's description. */
 class ChannelDescriptionFragment : AbstractCommentFragment() {
 
     private val channelId: Int get() = requireArguments().getInt(ARG_CHANNEL)

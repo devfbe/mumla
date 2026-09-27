@@ -9,7 +9,7 @@
     <ID>CyclomaticComplexMethod:VoiceActivityDetector.kt$VoiceActivityDetector$fun isVoice(pcm: ShortArray, length: Int, probability: Float?): Boolean</ID>
     <ID>CyclomaticComplexMethod:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$@Test fun `a long score sequence agrees with the state machine on every frame`()</ID>
     <ID>EmptyFunctionBlock:HumlaUDPTest.kt$HumlaUDPTest.RecordingListener${}</ID>
-    <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @param buffer The buffer to mix output data into. * @param bufferOffset The offset into the buffer. * @param bufferSize The size of the buffer. * @return true if the buffer contains audio data.</ID>
+    <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @return true if the buffer contains audio data.</ID>
     <ID>ForbiddenComment:HumlaConnection.kt$HumlaConnection.Companion$// FIXME: assumes worst-case using TCP</ID>
     <ID>LongMethod:ModelRaceTest.kt$ModelRaceTest$@Test fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread()</ID>
     <ID>LongParameterList:CaptureWiring.kt$CaptureWiring$( inputSampleRate: Int, inputMode: IInputMode, amplitudeBoost: Float, noise: NoiseSuppressionMode, echo: EchoCancellationMode, speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB, logger: HumlaLogger? = null, factory: CapturePreprocessorFactory? = null, newResampler: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>

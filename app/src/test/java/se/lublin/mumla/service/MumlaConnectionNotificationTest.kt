@@ -83,8 +83,6 @@ class MumlaConnectionNotificationTest {
     }
 
 
-    // ---- what the notification shows -------------------------------------------------------
-
     @Test
     fun showPutsTheServiceInTheForegroundWithTheContentText() {
         MumlaConnectionNotification.create(service, "Connecting", listener).show()
@@ -198,8 +196,6 @@ class MumlaConnectionNotificationTest {
             assertThat(pending.savedIntent.`package`).isEqualTo(service.packageName)
         }
     }
-
-    // ---- what the buttons reach -------------------------------------------------------------
 
     /** Fires each button's own PendingIntent, i.e. both halves of the wiring at once. */
     @Test
@@ -390,8 +386,6 @@ class MumlaConnectionNotificationTest {
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
         assertThat(ourReceivers()).hasSize(1)
     }
-
-    // ---- the foreground service type --------------------------------------------------------
 
     @Test
     fun onAndroid14AndLaterTheForegroundIsTypedAsMicrophone() {

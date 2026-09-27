@@ -84,10 +84,8 @@ class ChannelListAdapter(
      */
     private val expandedChannels = HashMap<Int, Boolean>()
 
-    /** Called when a channel's row is tapped. */
     var onChannelClick: ((IChannel) -> Unit)? = null
 
-    /** Called when a user's row is tapped. */
     var onUserClick: ((IUser) -> Unit)? = null
     private var showChannelUserCount: Boolean = showUserCount
 
@@ -361,12 +359,10 @@ class ChannelListAdapter(
                 // TODO whisper and shouting?
                 R.drawable.outline_circle_talking_on
             else -> {
-                // Passive drawables
                 val texture = user.texture
                 if (texture != null) {
                     // FIXME: cache bitmaps
                     val bitmap = BitmapFactory.decodeByteArray(texture, 0, texture.size)
-                    // yes, decoding can fail
                     if (bitmap != null) {
                         return CircleDrawable(resources, bitmap)
                     }
@@ -407,7 +403,6 @@ class ChannelListAdapter(
         return nodes.indexOfFirst { it.nodeId == itemId }
     }
 
-    /** Sets whether to show the channel user count in a channel row. */
     fun setShowChannelUserCount(showUserCount: Boolean) {
         showChannelUserCount = showUserCount
         notifyDataSetChanged()

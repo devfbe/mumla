@@ -148,7 +148,7 @@ class AudioOutput(
         running = false
         synchronized(inactiveLock) {
             woken = true
-            inactiveLock.notify() // Wake inactive lock if active
+            inactiveLock.notify()
         }
         try {
             thread?.join()
@@ -229,9 +229,6 @@ class AudioOutput(
     /**
      * Fetches audio data from registered audio output users and mixes them into the given buffer.
      * TODO: add priority speaker support.
-     * @param buffer The buffer to mix output data into.
-     * @param bufferOffset The offset into the buffer.
-     * @param bufferSize The size of the buffer.
      * @return true if the buffer contains audio data.
      */
     private fun fetchAudio(buffer: ShortArray, bufferOffset: Int, bufferSize: Int): Boolean {
@@ -290,15 +287,10 @@ class AudioOutput(
     }
 
     interface AudioOutputListener {
-        /**
-         * Called when a user's talking state is changed.
-         * @param user The user whose talking state has been modified.
-         */
         fun onUserTalkStateUpdated(user: User)
 
         /**
          * Used to set audio-related user data.
-         * @return The user for the associated session.
          */
         fun getUser(session: Int): User?
     }
@@ -315,11 +307,6 @@ class AudioOutput(
         private const val BYTES_PER_SAMPLE = 2 // ENCODING_PCM_16BIT, CHANNEL_OUT_MONO
 
         /**
-         * [minBufferBytes] is [AudioTrack.getMinBufferSize], in **bytes**. The track gets it in
-         * full; a mix is at most what it holds and never more than twelve frames (120 ms), which
-         * is what the far-end chunker and the decoders are sized for.
-         */
-        /**
          * The attributes a track on [stream] had with the legacy stream-type constructor. The
          * voice-call stream is spelled out as voice communication, the usage that follows the
          * communication device the router selects.
@@ -334,6 +321,11 @@ class AudioOutput(
                 AudioAttributes.Builder().setLegacyStreamType(stream).build()
             }
 
+        /**
+         * [minBufferBytes] is [AudioTrack.getMinBufferSize], in **bytes**. The track gets it in
+         * full; a mix is at most what it holds and never more than twelve frames (120 ms), which
+         * is what the far-end chunker and the decoders are sized for.
+         */
         fun playbackBuffer(minBufferBytes: Int): PlaybackBuffer {
             val maxMix = AudioHandler.FRAME_SIZE * AudioHandler.MAX_PACKET_FRAMES
             val mixSamples = minOf(minBufferBytes / BYTES_PER_SAMPLE, maxMix)

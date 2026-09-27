@@ -69,8 +69,6 @@ class HumlaServiceSessionTest {
         harness.mainLooper.idle()
     }
 
-    // ---------------------------------------------------------------- the happy path
-
     @Test
     fun connectWalksDisconnectedToConnectingToConnected() {
         val h = start()
@@ -205,8 +203,6 @@ class HumlaServiceSessionTest {
 
         assertThat(h.service.connection!!.useTor).isEqualTo(true)
     }
-
-    // ---------------------------------------------------------------- loss and backoff
 
     @Test
     fun aConnectionErrorWithAutoReconnectEntersConnectionLostAndKeepsTheWakeLock() {
@@ -549,8 +545,6 @@ class HumlaServiceSessionTest {
             .isNotEqualTo((-1).toByte())
     }
 
-    // ---------------------------------------------------------------- connectivity
-
     /**
      * Without connectivity the service does **not** burn attempts: it registers the network
      * callback and waits. Idling a full minute past the backoff shows nothing was queued at all.
@@ -680,8 +674,6 @@ class HumlaServiceSessionTest {
         assertThat(networkCallbacks()).isEmpty()
         assertThat(h.service.connection).isSameInstanceAs(connection)
     }
-
-    // ---------------------------------------------------------------- the missing server
 
     /**
      * A connect without a configured server is reported as a failed attempt instead of crashing on

@@ -98,8 +98,6 @@ class ImageShareExporterTest {
             .isEqualTo("png" to "image/png")
     }
 
-    // --- the file name ---------------------------------------------------------------------------
-
     /**
      * A chat message picks the share file's name via [ChatImageLoader.cacheKey], so the name must
      * stay inside the published directory; the key is forty hex characters and nothing else.

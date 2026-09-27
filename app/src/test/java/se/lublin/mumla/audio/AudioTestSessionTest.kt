@@ -94,8 +94,6 @@ class AudioTestSessionTest {
 
     private fun await(condition: () -> Boolean) = awaitUntil(condition = condition)
 
-    // --- what the meter reports ----------------------------------------------------------------
-
     @Test
     fun `the reading carries the level, the two tracked marks and the threshold between them`() {
         val s = session(TestCaptureSource(List(20) { frameAt(-20f) }, loopLastFrame = true))
@@ -246,8 +244,6 @@ class AudioTestSessionTest {
         assertThat(reset.speechDbfs!! - reset.floorDbfs!!)
             .isWithin(0.5f).of(AdaptiveVadTracker.DEFAULT_GAP_DB)
     }
-
-    // --- the hardware edges --------------------------------------------------------------------
 
     @Test
     fun `without loopback no playback sink is opened`() {

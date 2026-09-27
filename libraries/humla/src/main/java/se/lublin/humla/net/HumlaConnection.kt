@@ -145,7 +145,6 @@ class HumlaConnection(
     /** Guards [connectCalled] and [teardownStarted] against a racing connect/disconnect. */
     private val lifecycleLock = Any()
 
-    // Authentication
     @VisibleForTesting
     internal var certificate: ByteArray? = null
         private set
@@ -162,7 +161,6 @@ class HumlaConnection(
     internal var trustStoreFormat: String? = null
         private set
 
-    // Networking and protocols
     @Volatile private var tcp: TcpTransport? = null
     @Volatile private var udp: UdpTransport? = null
     @Volatile private var usingUdp = true
@@ -190,7 +188,6 @@ class HumlaConnection(
     private var lastWarning: ConnectionWarning? = null
     private var lastWarnedMicros = 0L
 
-    // Latency
     @Volatile private var udpLatency = 0L
     @Volatile private var tcpLatency = 0L
 
@@ -227,7 +224,6 @@ class HumlaConnection(
     /** The server-lacks-Opus warning is shown once per connection; protocol thread only. */
     private var noOpusWarned = false
 
-    // Session
     @Volatile private var sessionId = 0
 
     // Message handlers (the protocol thread iterates; any thread may add or remove)
@@ -515,7 +511,6 @@ class HumlaConnection(
         return value
     }
 
-    /** True if TCP is manually forced or Tor is enabled. */
     fun shouldForceTCP(): Boolean = forceTcp || useTor
 
     /**
@@ -776,7 +771,6 @@ class HumlaConnection(
         /** [e] is null for a clean disconnect. Exactly once per started connection, and last. */
         fun onConnectionDisconnected(e: HumlaException?)
 
-        /** Called if the user should be notified of a connection-related warning. */
         fun onConnectionWarning(warning: ConnectionWarning)
     }
 
@@ -804,7 +798,6 @@ class HumlaConnection(
         val UNLOGGED_MESSAGES: Set<HumlaTCPMessageType> =
             setOf(HumlaTCPMessageType.UDPTunnel, HumlaTCPMessageType.Ping)
 
-        // Tor connection details
         const val TOR_HOST = "localhost"
         const val TOR_PORT = 9050
 

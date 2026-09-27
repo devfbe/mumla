@@ -22,7 +22,6 @@ interface IInputMode {
     /**
      * Called for every frame after preprocessing, never gated on the talking state.
      *
-     * @param pcm the preprocessed PCM frame.
      * @param length the number of valid shorts in [pcm].
      * @param vadProbability the preprocessor chain's voice probability, or null when no stage
      *   provides one; null means "no information", not "no voice".

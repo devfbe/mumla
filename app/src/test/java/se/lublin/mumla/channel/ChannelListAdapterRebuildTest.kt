@@ -44,8 +44,6 @@ import java.util.concurrent.TimeUnit
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelListAdapterRebuildTest {
-    /** The row layouts resolve theme attributes, so they need a themed context, not the app one. */
-
     private companion object {
         /** Tall enough for every row of [smallTree] to be laid out at once. */
         const val WIDTH_PX = 1000
@@ -53,6 +51,7 @@ class ChannelListAdapterRebuildTest {
         const val SERVER_ID = 42L
     }
 
+    /** The row layouts resolve theme attributes, so they need a themed context, not the app one. */
     private lateinit var context: Context
     private lateinit var session: IHumlaSession
     private lateinit var service: IHumlaService
@@ -458,7 +457,6 @@ class ChannelListAdapterRebuildTest {
         assertThat(expandToggleOf(adapter, 3).isEnabled).isFalse()
     }
 
-    /** Which way the chevron points. */
     @Test
     fun theExpandToggleChevronShowsWhetherTheRowIsOpen() {
         val (root, ids) = smallTree()
@@ -951,7 +949,6 @@ class ChannelListAdapterRebuildTest {
         return newcomer
     }
 
-    /** A bound row, by list position. */
     private fun rowOf(adapter: ChannelListAdapter, position: Int): View {
         val parent = recyclerView()
         val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(position))

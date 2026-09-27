@@ -40,7 +40,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLSocket
 
-/** One framed Mumble TCP message. */
 class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
 
 /**

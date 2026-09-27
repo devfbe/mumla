@@ -52,7 +52,6 @@ class PublicServerAdapter(
         }
     }
 
-    /** Sorts the shown servers. */
     fun sort(comparator: Comparator<PublicServer>) {
         shownServers = shownServers.sortedWith(comparator)
     }

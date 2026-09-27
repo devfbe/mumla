@@ -54,7 +54,6 @@ class ServerInfoResponse private constructor(
         isDummy = false,
     )
 
-    /** A dummy response. */
     constructor() : this(null, 0, 0L, 0, 0, 0, 0, true)
 
     val versionString: String

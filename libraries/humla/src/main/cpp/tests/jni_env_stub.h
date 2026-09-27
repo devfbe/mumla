@@ -28,8 +28,6 @@
 
 namespace jnistub {
 
-/* ---------------------------------------------------------------- classes and RegisterNatives */
-
 /* One RegisterNatives entry, with the class it was registered on. */
 struct Registration {
     std::string cls, name, signature;

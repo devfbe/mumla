@@ -118,7 +118,6 @@ class MainDrawer(
         }
     }
 
-    /** The title of the item with [id]. */
     fun title(id: Int): String? = adapter.currentList.filterIsInstance<DrawerRow.Item>().find { it.id == id }?.title
 
     /** Updates the rows, which depend on the connection. */

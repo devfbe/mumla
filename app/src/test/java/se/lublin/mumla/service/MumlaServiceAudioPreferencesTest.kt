@@ -60,8 +60,6 @@ class MumlaServiceAudioPreferencesTest {
 
     private fun change(key: String) = service.onPreferenceChanged(key)
 
-    // --- the voice gate -----------------------------------------------------------------------
-
     @Test
     fun `every voice gate preference reaches the running detector`() {
         val writes: Map<String, SharedPreferences.Editor.() -> Unit> = mapOf(
@@ -104,8 +102,6 @@ class MumlaServiceAudioPreferencesTest {
         assertThat(vadConfig().startThreshold).isWithin(0.001f).of(0.77f)
         assertThat(vadConfig().stopThreshold).isWithin(0.001f).of(0.22f)
     }
-
-    // --- the preprocessor chain ----------------------------------------------------------------
 
     @Test
     fun `the noise suppression method reaches the audio config`() {
@@ -169,8 +165,6 @@ class MumlaServiceAudioPreferencesTest {
             }
         }
     }
-
-    // --- pin the set ---------------------------------------------------------------------------
 
     /**
      * Every `android:key` in the audio settings XML is either turned into an extra by

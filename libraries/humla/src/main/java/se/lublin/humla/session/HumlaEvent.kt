@@ -114,7 +114,6 @@ sealed interface HumlaEvent {
     /** A notice whose text is already final: server text or a message of the library's own. */
     data class LogMessage(override val level: Level, val text: String) : Notice
 
-    /** [user] connected to the server. */
     data class UserJoinedServer(val user: String?) : Notice {
         override val level get() = Level.INFO
     }

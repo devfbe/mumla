@@ -53,8 +53,6 @@ class WebRtcApmPreprocessorTest {
 
     private val api = FakeWebRtcApmApi()
 
-    // ------------------------------------------------------------------ construction
-
     @Test
     fun `creates the apm at 48 kHz with exactly the config it was given`() {
         for (config in listOf(ONE, OTHER)) {
@@ -86,8 +84,6 @@ class WebRtcApmPreprocessorTest {
 
         assertThat(failure).hasMessageThat().contains("44100")
     }
-
-    // ------------------------------------------------------------------ the capture path
 
     @Test
     fun `capture frames go through the apm and the probability follows the output level`() {
@@ -139,8 +135,6 @@ class WebRtcApmPreprocessorTest {
 
         assertThat(stage.rejectedFrames).isEqualTo(0)
     }
-
-    // ------------------------------------------------------------------ the reverse stream
 
     /**
      * The bridge refuses a short far-end frame but silently truncates a long one, so the chunker
@@ -197,8 +191,6 @@ class WebRtcApmPreprocessorTest {
             .that(stage.rejectedFarEndFrames).isEqualTo(0)
     }
 
-    // ------------------------------------------------------------------ life cycle
-
     @Test
     fun `release destroys the apm exactly once`() {
         val stage = WebRtcApmPreprocessor(api, ONE)
@@ -221,8 +213,6 @@ class WebRtcApmPreprocessorTest {
         assertThat(api.levelReads).isEqualTo(0)
     }
 
-    // ------------------------------------------------------------------ level to probability
-
     /**
      * This is a level, not a speech model: with noise suppression NONE and echo cancellation WEBRTC
      * it is the only opinion in the chain, so thresholds tuned against RNNoise mean something else.
@@ -244,8 +234,6 @@ class WebRtcApmPreprocessorTest {
             assertWithMessage("%s dBFS", dbfs).that(p).isAtMost(1f)
         }
     }
-
-    // ------------------------------------------------------------- the two streams, in sequence
 
     /**
      * The only test that drives both entry points alternately: the stage must forward tick n's

@@ -38,7 +38,6 @@ class OpusEncoder(
     private val buffer = ByteArray(maxBufferSize)
     private val audioBuffer = ShortArray(framesPerPacket * frameSize)
 
-    // Stateful
     override var bufferedFrames = 0
         private set
     override var encodedLength = 0
@@ -102,7 +101,6 @@ class OpusEncoder(
     override fun terminate() {
         terminated = true
         if (bufferedFrames > 0 && !isReady) {
-            // Perform encode operation on remaining audio if available.
             encodePacket()
         }
     }

@@ -158,8 +158,6 @@ class MumlaServiceCharacterizationTest {
 
     private fun error() = HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
 
-    // ---- the chat log --------------------------------------------------------------------------
-
     @Test
     fun startsDisconnectedWithAnEmptyChatLogAndNoForegroundNotification() {
         assertThat(service.connectionState).isEqualTo(HumlaService.ConnectionState.DISCONNECTED)
@@ -307,8 +305,6 @@ class MumlaServiceCharacterizationTest {
 
         assertThat(service.messageLog.value).isEmpty()
     }
-
-    // ---- chat notifications and text to speech --------------------------------------------------
 
     @Test
     fun aReceivedMessageIsNotifiedWhenChatNotificationsAreOn() {
@@ -472,8 +468,6 @@ class MumlaServiceCharacterizationTest {
 
         assertThat(service.tts).isNotNull()
     }
-
-    // ---- the foreground notification ------------------------------------------------------------
 
     @Test
     fun connectingEntersTheForegroundWithTheConnectingText() {
@@ -644,8 +638,6 @@ class MumlaServiceCharacterizationTest {
         assertThat(reconnectPrompt()).isNull()
     }
 
-    // ---- avatars --------------------------------------------------------------------------------
-
     @Test
     fun aUserWithAnUnfetchedAvatarHasItRequested() {
         connect()
@@ -675,8 +667,6 @@ class MumlaServiceCharacterizationTest {
 
         assertThat(blobRequests()).isEmpty()
     }
-
-    // ---- the session hooks ----------------------------------------------------------------------
 
     @Test
     fun synchronizingRestoresTheStoredMuteAndDeafenState() {
@@ -776,8 +766,6 @@ class MumlaServiceCharacterizationTest {
         assertThat(shadowOf(notificationManager).allNotifications).isEmpty()
     }
 
-    // ---- the talk keys --------------------------------------------------------------------------
-
     private fun pushToTalk(toggle: Boolean) {
         preferences().edit()
             .putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT)
@@ -853,8 +841,6 @@ class MumlaServiceCharacterizationTest {
         assertThat(service.isTalking).isFalse()
     }
 
-    // ---- mute and deafen from the notification ------------------------------------------------
-
     @Test
     fun muteToggleFlipsMuteAndDropsDeafenWhenUnmuting() {
         connect(muted = true, deafened = true)
@@ -914,8 +900,6 @@ class MumlaServiceCharacterizationTest {
         assertThat(userStates()).isEmpty()
     }
 
-    // ---- the overlay ----------------------------------------------------------------------------
-
     @Test
     fun theOverlayToggleShowsAHiddenOverlayWhenAllowed() {
         every { overlay.isShown } returns false
@@ -972,8 +956,6 @@ class MumlaServiceCharacterizationTest {
         assertThat(service.isTalking).isFalse()
     }
 
-    // ---- preferences that are not audio extras --------------------------------------------------
-
     @Test
     fun switchingToPushToTalkShowsTheOverlayButton() {
         // The commits alone: the service is registered as the preference listener.
@@ -1021,8 +1003,6 @@ class MumlaServiceCharacterizationTest {
         assertThat(ShadowToast.getLatestToast()).isNull()
     }
 
-    // ---- binding and lifecycle ------------------------------------------------------------------
-
     @Test
     fun theBinderHandsOutThisService() {
         val binder = service.onBind(Intent()) as MumlaService.MumlaBinder
@@ -1069,8 +1049,6 @@ class MumlaServiceCharacterizationTest {
         preferences().edit().putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT).commit()
         verify(exactly = 0) { overlay.setPushToTalkShown(any()) }
     }
-
-    // ---- the push-to-talk click -----------------------------------------------------------------
 
     private var clicks = 0
 
@@ -1144,8 +1122,6 @@ class MumlaServiceCharacterizationTest {
         talk(u)
         assertThat(clicks).isEqualTo(0)
     }
-
-    // ---- notification actions and the talk receiver ---------------------------------------------
 
     private fun postedActions(): Array<Notification.Action>? =
         shadowOf(notificationManager).getNotification(FOREGROUND_ID)?.actions

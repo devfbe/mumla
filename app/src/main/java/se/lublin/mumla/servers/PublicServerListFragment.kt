@@ -161,7 +161,6 @@ class PublicServerListFragment :
 
     /** Looks for an empty, nearby server in [countryCode] (anywhere when null) and offers to join it. */
     private fun findOptimalServer(countryCode: String?) {
-        // The servers shown, as filtered and sorted.
         val candidates = serverAdapter?.shownServers.orEmpty()
         val progressDialog = MaterialAlertDialogBuilder(requireActivity())
             .setMessage(R.string.server_match_progress)

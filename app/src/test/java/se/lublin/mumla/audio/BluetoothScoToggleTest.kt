@@ -113,8 +113,6 @@ class BluetoothScoToggleTest {
         assertThat(settings.isBluetoothScoEnabled).isFalse()
     }
 
-    // --- onPermissionAnswered() ---
-
     @Test
     fun answeringTheDialogStoresTheWishThatRaisedIt() {
         deny()
@@ -134,8 +132,6 @@ class BluetoothScoToggleTest {
 
         assertThat(settings.isBluetoothScoEnabled).isTrue()
     }
-
-    // --- isEnabled / hasPermission ---
 
     @Test
     fun isEnabledReadsThePreferenceBothWays() {

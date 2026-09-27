@@ -345,7 +345,6 @@ class HumlaTCPTest {
         assertThat(listener.disconnects.get()).isEqualTo(1)
     }
 
-    /** What was queued before disconnect() is written before the socket closes. */
     @Test
     fun messagesQueuedBeforeADisconnectAreWrittenBeforeTheSocketCloses() {
         val written = ByteArrayOutputStream()
@@ -396,7 +395,6 @@ class HumlaTCPTest {
         assertThat(listener.events).isEmpty()
     }
 
-    /** A connect into a scope that is already cancelled opens no socket. */
     @Test
     fun aConnectIntoACancelledScopeOpensNoSocket() {
         val scope = scopeOn(Handler(callbackThread.looper)).also { it.cancel() }

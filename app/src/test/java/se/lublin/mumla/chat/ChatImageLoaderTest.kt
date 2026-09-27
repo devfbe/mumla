@@ -63,8 +63,6 @@ class ChatImageLoaderTest {
     private fun ImageResult.size(): Pair<Int, Int> =
         (this as ImageResult.Ready).bitmap.let { it.width to it.height }
 
-    // Thumbnails.
-
     @Test
     fun aThumbnailFitsTheBoundsKeepsTheAspectRatioAndIsNeverEnlarged() = runBlocking {
         val loader = loader()
@@ -183,8 +181,6 @@ class ChatImageLoaderTest {
         assertThat(server.requestCount).isEqualTo(0)
     }
 
-    // The viewer's path.
-
     @Test
     fun fetchBytesReturnsExactlyWhatWasServed() = runBlocking {
         val png = TestImages.png(40, 40)
@@ -223,8 +219,6 @@ class ChatImageLoaderTest {
         assertThat(loader.decodeFull("nope".toByteArray(), 640, 940))
             .isEqualTo(ImageResult.Failed(ImageError.MALFORMED))
     }
-
-    // The production wiring.
 
     /** The process-wide loader refuses a loopback `<img src>` without the server ever being asked. */
     @Test

@@ -81,8 +81,6 @@ class SingleHandleStageTest {
         override fun onReleaseHandle(handle: Long) = Unit
     }
 
-    // ---------------------------------------------------------------- handle ownership
-
     @Test
     fun `every callback gets exactly the handle the stage was built with`() {
         val stage = TestStage(handle = 0xBEEFL)
@@ -138,8 +136,6 @@ class SingleHandleStageTest {
         assertThat(failure).hasMessageThat().contains("test stage")
     }
 
-    // ---------------------------------------------------------------- life cycle
-
     @Test
     fun `capture frames after release touch nothing and have no opinion`() {
         val stage = TestStage()
@@ -193,8 +189,6 @@ class SingleHandleStageTest {
             CaptureOnlyStage().analyzeReverseStream(ShortArray(FRAME))
         }
     }
-
-    // ---------------------------------------------------------------- one lock, both streams
 
     @Test
     fun `the render path waits while the capture path is inside the native call`() {

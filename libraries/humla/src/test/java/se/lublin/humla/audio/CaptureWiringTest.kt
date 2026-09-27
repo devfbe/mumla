@@ -111,8 +111,6 @@ class CaptureWiringTest {
         assertThat(warnings).isEmpty()
     }
 
-    // ------------------------------------------------------------------ the far-end reference
-
     /** The APM must be in the chain and the playback path must have a far-end tap; either alone is useless. */
     @Test
     fun `the webrtc canceller gets both a capture stage and a far-end tap`() {
@@ -210,8 +208,6 @@ class CaptureWiringTest {
         assertThat(wiring.pipeline.process(ShortArray(FRAME) { 5 }, FRAME).length).isEqualTo(FRAME)
         assertThat(warnings.any { it.contains("echo cancellation (webrtc)") }).isTrue()
     }
-
-    // ------------------------------------------------------------------ the resampler
 
     @Test
     fun `capture at 48 kHz needs no resampler`() {

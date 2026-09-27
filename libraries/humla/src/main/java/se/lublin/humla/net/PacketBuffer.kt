@@ -31,7 +31,6 @@ class PacketBuffer(private val buffer: ByteBuffer) {
     /** The number of bytes written or read so far. */
     fun size(): Int = buffer.position()
 
-    /** The number of bytes this packet can hold. */
     fun capacity(): Int = buffer.limit()
 
     /** The number of bytes left to read or write. */

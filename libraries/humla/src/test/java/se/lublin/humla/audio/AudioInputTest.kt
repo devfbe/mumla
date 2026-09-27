@@ -90,8 +90,6 @@ class AudioInputTest {
 
     private fun waitUntil(what: String, condition: () -> Boolean) = awaitUntil(SETTLE_MS, what, condition)
 
-    // ------------------------------------------------------------------ the frame path
-
     @Test
     fun `delivers frames to the listener in order`() {
         val latch = CountDownLatch(3)
@@ -187,8 +185,6 @@ class AudioInputTest {
         assertThat(received.single()[0]).isEqualTo(7.toShort())
         assertThat(source.reads.get()).isAtLeast(3)
     }
-
-    // ------------------------------------------------------------------ stopping
 
     @Test
     fun `isRecording follows the intent to record`() {
@@ -298,8 +294,6 @@ class AudioInputTest {
         assertThat(exited).isFalse()
     }
 
-    // ------------------------------------------------------------------ silencing
-
     @Test
     fun `platform silencing is reported as capture states`() {
         val source = FakeCaptureSource()
@@ -322,8 +316,6 @@ class AudioInputTest {
 
         assertThat(source.silenceListener).isNull()
     }
-
-    // ------------------------------------------------------------------ errors
 
     @Test
     fun `a read error while recording is reported and ends the loop`() {
@@ -363,8 +355,6 @@ class AudioInputTest {
         assertThat(received).isEmpty()
     }
 
-    // ------------------------------------------------------------------ shutdown
-
     @Test
     fun `shutdown stops before it releases, and releases once`() {
         val source = FakeCaptureSource()
@@ -392,8 +382,6 @@ class AudioInputTest {
         assertThat(audioInput.sampleRate).isEqualTo(16000)
         assertThat(audioInput.frameSize).isEqualTo(160)
     }
-
-    // ------------------------------------------------------------------ starting twice
 
     /**
      * Two capture threads on one source would interleave the recorder's frames. `isRecording`

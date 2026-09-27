@@ -100,7 +100,6 @@ class DrawerAdapter(private val onClick: (DrawerRow) -> Unit) :
     }
 }
 
-/** A row of the navigation drawer. */
 sealed interface DrawerRow {
     /** Tells rows apart across updates. */
     val key: String

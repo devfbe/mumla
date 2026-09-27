@@ -41,7 +41,6 @@ interface IHumlaService {
     /** The error that ended the last connection, or null if it ended cleanly or none was made yet. */
     val connectionError: HumlaException?
 
-    /** True while the service will try to reconnect. */
     val isReconnecting: Boolean
 
     /** The server that Humla is connected to, was connected to, or will connect to. */
@@ -66,6 +65,5 @@ interface IHumlaService {
     /** Disconnects, or does nothing if no connection is active. */
     fun disconnect()
 
-    /** Cancels any future reconnection attempts. */
     fun cancelReconnect()
 }

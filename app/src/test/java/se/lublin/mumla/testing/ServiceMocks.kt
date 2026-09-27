@@ -24,7 +24,6 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.session.HumlaEvent
 
-/** Stubs a service mock as connected, handing out [session]. */
 fun <T : IHumlaService> T.stubConnected(session: IHumlaSession): T = apply {
     every { isConnected } returns true
     every { this@stubConnected.session } returns session

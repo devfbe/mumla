@@ -269,8 +269,6 @@ class AudioDeviceMenuTest {
         assertThat(menu.choices().map { it.itemId }).containsExactly(R.id.menu_audio_device_automatic)
     }
 
-    // --- without a connection -----------------------------------------------------------------
-
     /** Without a session the chooser lists what the platform offers for calls, never the session. */
     @Test
     fun withoutAConnectionTheChooserListsThePlatformsDevices() {
@@ -380,7 +378,6 @@ class AudioDeviceMenuTest {
         assertThat(prepared().echo().isChecked).isTrue()
     }
 
-    /** Tapping it writes the override for this kind of device. */
     @Test
     fun tappingTheEchoSwitchRemembersTheChoiceForThisKindOfDevice() {
         val settings = Settings.getInstance(app)

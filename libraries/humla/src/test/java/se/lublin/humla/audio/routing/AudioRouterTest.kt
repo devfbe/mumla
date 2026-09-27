@@ -52,8 +52,6 @@ class AudioRouterTest {
         router.engage()
     }
 
-    // ---------------------------------------------------------------- the automatic default
-
     @Test
     fun theFirstBluetoothHeadsetIsTakenAutomatically() {
         phone()
@@ -378,8 +376,6 @@ class AudioRouterTest {
         assertThat(devices.selectCalls).containsExactly(7)
     }
 
-    // ---------------------------------------------------------------- the session
-
     /** Routing voice with no voice to route holds an SCO link open for nothing. */
     @Test
     fun nothingIsRoutedBeforeTheRouterIsEngaged() {
@@ -440,8 +436,6 @@ class AudioRouterTest {
         assertThat(devices.selectedId).isEqualTo(2)
     }
 
-    // ---------------------------------------------------------------- the user's choice
-
     @Test
     fun theUserCanChooseTheSpeakerOverAHeadset() {
         phone()
@@ -492,8 +486,6 @@ class AudioRouterTest {
         assertThat(router.choice).isNull()
         assertThat(devices.selectCalls).containsExactly(2)
     }
-
-    // ---------------------------------------------------------------- plugging in and out
 
     /** A headset that is switched on during the call takes over. */
     @Test
@@ -583,8 +575,6 @@ class AudioRouterTest {
         assertThat(router.activeDevice()?.id).isEqualTo(2)
     }
 
-    // ---------------------------------------------------------------- what the chooser shows
-
     @Test
     fun changingTheSavedDeviceMovesTheDefaultAtTheNextApply() {
         phone()
@@ -626,8 +616,6 @@ class AudioRouterTest {
 
         assertThat(router.availableDevices()).isEmpty()
     }
-
-    // ---------------------------------------------------------------- teardown
 
     @Test
     fun releaseStopsListening() {

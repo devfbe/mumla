@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 enable_testing()
 
-# ---------------------------------------------------------------- sanitizer availability
 # The sanitized tests only register where the host toolchain supports the flags.
 # HUMLA_REQUIRE_SANITIZERS turns a missing sanitizer runtime into a configure error instead of a
 # silently smaller test run (CI sets it and runs ctest with --no-tests=error).
@@ -57,7 +56,6 @@ function(humla_add_labelled_test name target label)
   endif()
 endfunction()
 
-# ---------------------------------------------------------------- rnnoise
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../rnnoise ${CMAKE_BINARY_DIR}/rnnoise)
 
 add_executable(test_rnnoise test_rnnoise.c)
@@ -92,7 +90,6 @@ if(HUMLA_HAVE_SANITIZERS)
   humla_add_labelled_test(rnnoise_sanitized test_rnnoise_asan sanitized)
 endif()
 
-# ---------------------------------------------------------------- webrtc audio processing
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../webrtc_apm ${CMAKE_BINARY_DIR}/webrtc_apm)
 
 # test_apm.c is C on purpose, to prove humla_apm.h is valid C with C linkage. The C++ driver
@@ -151,7 +148,6 @@ if(HUMLA_HAVE_SANITIZERS)
   set_tests_properties(apm_is_instrumented PROPERTIES LABELS sanitized)
 endif()
 
-# ---------------------------------------------------------------- the handle table
 add_executable(test_handle_table test_handle_table.cpp)
 target_include_directories(test_handle_table PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 humla_add_labelled_test(handle_table test_handle_table plain)
@@ -164,7 +160,6 @@ if(HUMLA_HAVE_SANITIZERS)
   humla_add_labelled_test(handle_table_sanitized test_handle_table_asan sanitized)
 endif()
 
-# ---------------------------------------------------------------- the JNI bridges
 # jni_rnnoise.cpp and jni_webrtc_apm.cpp run here through a stand-in JNIEnv (jni_env_stub.h):
 # a missing length check, a double free or a bridge wired to the wrong C function produces no
 # error code and is invisible from Kotlin. The Android build only proves these files compile.
@@ -205,7 +200,6 @@ if(HUMLA_HAVE_SANITIZERS)
   humla_add_labelled_test(jni_bridges_sanitized test_jni_bridges_asan sanitized)
 endif()
 
-# ---------------------------------------------------------------- the speexdsp bridge
 # libspeexdsp takes sample counts from the state or from separate arguments, never from the
 # buffer, so the JNI layer is the only place that can compare the two.
 #
@@ -252,7 +246,6 @@ if(HUMLA_HAVE_SANITIZERS)
   humla_add_labelled_test(jni_speexdsp_sanitized test_jni_speexdsp_asan sanitized)
 endif()
 
-# ---------------------------------------------------------------- the opus bridge
 # libopus is built with the same options as ../CMakeLists.txt. Only the bridge and the test are
 # instrumented in the sanitized variant.
 set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
@@ -284,7 +277,6 @@ if(HUMLA_HAVE_SANITIZERS)
   humla_add_labelled_test(jni_opus_sanitized test_jni_opus_asan sanitized)
 endif()
 
-# ---------------------------------------------------------------- JNI_OnLoad
 # Every bridge in one binary, as in libhumla_native.so, registered through JNI_OnLoad and compared
 # with ../jni_registrations.txt.
 add_executable(test_jni_registration

@@ -130,8 +130,6 @@ class MumlaServiceForegroundTest {
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }
 
-    // ---- the chat log across the session --------------------------------------------------------
-
     private fun log() = service.messageLog.value.map { it.body }
 
     @Test
@@ -175,8 +173,6 @@ class MumlaServiceForegroundTest {
         assertThat(service.messageLog.value.first().body).isEqualTo("m1")
     }
 
-    // ---- the reconnect prompt -------------------------------------------------------------------
-
     private fun reconnectPrompt(): Notification? =
         shadowOf(service.getSystemService(android.app.NotificationManager::class.java)).getNotification(3)
 
@@ -213,8 +209,6 @@ class MumlaServiceForegroundTest {
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
         assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
     }
-
-    // ---- cancelling from the foreground notification --------------------------------------------
 
     private fun foregroundActions(): List<String> =
         shadowOf(service.getSystemService(android.app.NotificationManager::class.java))
@@ -290,8 +284,6 @@ class MumlaServiceForegroundTest {
         assertThat(reconnectPrompt()).isNotNull()
     }
 
-    // ---- a refused start ------------------------------------------------------------------------
-
     @Test
     fun aRefusedForegroundStartBecomesAWarningAndAPromptInsteadOfACrash() {
         org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
@@ -331,8 +323,6 @@ class MumlaServiceForegroundTest {
         assertThat(reconnectPrompt()).isNull()
         assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
     }
-
-    // ---- half duplex ----------------------------------------------------------------------------
 
     /** Half duplex follows the transmit mode in force, so a half-duplex write alone is enough. */
     @Test

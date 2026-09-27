@@ -391,7 +391,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     override fun onConnectionSynchronized() {
         val connection = conn()
-        // early disconned?
         if (!connection.isConnected) {
             return
         }
@@ -676,7 +675,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
                 if (state.error != null) ConnectionState.CONNECTION_LOST else ConnectionState.DISCONNECTED
         }
 
-    /** The session lifecycle as a flow. */
     override val sessionState: StateFlow<SessionState>
         get() = stateMachine.state
 
@@ -709,7 +707,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
     }
 
-    /** Test seam: whether the wake lock is held. */
     fun isWakeLockHeldForTest(): Boolean = wakeLock.isHeld
 
     override val targetServer: Server?
@@ -1013,7 +1010,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
          */
         DISCONNECTED,
 
-        /** A connection to the server is currently in progress. */
         CONNECTING,
 
         /** Humla has received all data necessary for normal protocol communication with the server. */

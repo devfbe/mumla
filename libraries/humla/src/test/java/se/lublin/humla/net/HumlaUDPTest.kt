@@ -200,7 +200,6 @@ class HumlaUDPTest {
         awaitFinished(udp)
     }
 
-    /** Neither socket loop may outlive a disconnect. */
     @Test
     fun bothUdpLoopsEndOnDisconnect() {
         val client = startClient()

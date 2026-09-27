@@ -295,13 +295,11 @@ class ChannelListFragment :
         channelListAdapter = adapter
     }
 
-    /** Scrolls to the passed channel. */
     fun scrollToChannel(channelId: Int) {
         val adapter = channelListAdapter ?: return
         channelView.scrollToPosition(adapter.getChannelPosition(channelId))
     }
 
-    /** Scrolls to the passed user. */
     fun scrollToUser(userId: Int) {
         val adapter = channelListAdapter ?: return
         channelView.scrollToPosition(adapter.getUserPosition(userId))

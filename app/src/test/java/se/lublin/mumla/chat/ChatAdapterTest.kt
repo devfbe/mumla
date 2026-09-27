@@ -577,8 +577,6 @@ class ChatAdapterTest {
         assertThat(fetched).containsExactly(url)
     }
 
-    // The snapshot and the submit ordering.
-
     @Test
     fun theDifferOnlyEverAsksAboutTheContentsOfOneAndTheSameInstance() = runTest {
         // areContentsTheSame can be a constant: DiffUtil only asks it about pairs areItemsTheSame

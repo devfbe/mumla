@@ -105,14 +105,12 @@ class ChannelChatFragmentTest {
         if (this::controller.isInitialized) controller.close()
     }
 
-    // ---- harness ----------------------------------------------------------------------------
-
-    /** Brings the host up with [withService] already bound, then attaches the fragment. */
     /** Delivered at once: the fragment collects on the immediate main dispatcher. */
     private fun selectTarget(target: ChatTarget) {
         parent.chatTargets.select(target)
     }
 
+    /** Brings the host up with [withService] already bound, then attaches the fragment. */
     private fun launch(withService: IMumlaService? = service) {
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java)
         activity = controller.create().get()
@@ -142,8 +140,6 @@ class ChannelChatFragmentTest {
 
     private fun info(body: String) =
         IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
-
-    // ---- the list ---------------------------------------------------------------------------
 
     @Test
     fun theBoundMessageLogIsWhatTheListShows() {
@@ -180,8 +176,6 @@ class ChannelChatFragmentTest {
         log.value += info("late")
         idleMainLooper()
     }
-
-    // ---- the compose hint -------------------------------------------------------------------
 
     @Test
     fun theHintNamesTheSessionChannelWithNoTarget() {
@@ -251,8 +245,6 @@ class ChannelChatFragmentTest {
         fragment.onServiceEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
     }
-
-    // ---- the compose row --------------------------------------------------------------------
 
     /**
      * `android:enabled="false"` on an `ImageButton` is inert (see `ChatLayoutTest`), and the text
@@ -340,8 +332,6 @@ class ChannelChatFragmentTest {
         assertThat(editor.text.toString()).isEqualTo("hi")
     }
 
-    // ---- the viewer -------------------------------------------------------------------------
-
     private fun openViewers(): Int =
         fragment.parentFragmentManager.fragments.count { it is ImageViewerDialogFragment }
 
@@ -358,7 +348,6 @@ class ChannelChatFragmentTest {
         assertThat(openViewers()).isEqualTo(1)
     }
 
-    /** Once the viewer is gone, the next tap opens one again. */
     @Test
     fun theViewerOpensAgainAfterItIsDismissed() {
         launch()
@@ -372,8 +361,6 @@ class ChannelChatFragmentTest {
         idleMainLooper()
         assertThat(openViewers()).isEqualTo(1)
     }
-
-    // ---- the session id ---------------------------------------------------------------------
 
     @Test
     fun theSessionIdIsTheLiveOneWhileConnected() {
@@ -407,8 +394,6 @@ class ChannelChatFragmentTest {
         launch(withService = null)
         assertThat(fragment.sessionId()).isNotEqualTo(Message("server said so").actor)
     }
-
-    // ---- the outgoing image path ------------------------------------------------------------
 
     private val progress: View get() = fragment.requireView().findViewById(R.id.chat_image_progress)
 
@@ -517,7 +502,6 @@ class ChannelChatFragmentTest {
         verify { service.clearMessageLog() }
     }
 
-    // ---- storage permission ------------------------------------------------------------------
     private fun tapUpload() {
         val button = fragment.requireView().findViewById<ImageButton>(R.id.chatImageSend)
         // performClick ignores isEnabled and visibility, so the state is asserted explicitly.
@@ -556,7 +540,6 @@ class ChannelChatFragmentTest {
         assertThat(startedAction()).isEqualTo(Intent.ACTION_GET_CONTENT)
     }
 
-    // ---- confirmation dialog -----------------------------------------------------------------
     private fun latestDialog(): AlertDialog = ShadowDialog.getLatestDialog() as AlertDialog
 
     @Test
@@ -865,7 +848,6 @@ class ChannelChatFragmentTest {
     }
 
 
-    // ---- pick -> prepare -> confirm ----------------------------------------------------------
     private fun registerImage(uri: Uri, bytes: ByteArray) {
         shadowOf(activity.contentResolver).registerInputStreamSupplier(uri) {
             java.io.ByteArrayInputStream(bytes)
@@ -963,8 +945,6 @@ class ChannelChatFragmentTest {
     }
 
 
-    // ---- misc ---------------------------------------------------------------------------------
-
     @Test
     fun theSpinnerIsUpWhileAnImageIsBeingEncoded() {
         every { session.serverSettings } returns settings(0)
@@ -976,7 +956,6 @@ class ChannelChatFragmentTest {
         drainMainUntil { progress.visibility == View.GONE }
     }
 
-    /** An image no quality rung fits is reported. */
     @Test
     fun anImageThatCannotBeMadeToFitSaysSo() {
         every { session.serverSettings } returns settings(10)

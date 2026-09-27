@@ -45,8 +45,6 @@ class ModelHandlerEventsTest {
         events.clear()
     }
 
-    // ---- the tree -------------------------------------------------------------------------------
-
     @Test
     fun aNewChannelIsAddedAndAKnownOneUpdated() {
         handler.onMessage(channel(3, parent = 0, name = "New"))
@@ -94,8 +92,6 @@ class ModelHandlerEventsTest {
         assertThat(games.canEnter).isTrue()
         assertThat(games.isEnterRestricted).isTrue()
     }
-
-    // ---- users ----------------------------------------------------------------------------------
 
     @Test
     fun listenersAreTrackedPerChannelFromEveryUsersState() {
@@ -256,8 +252,6 @@ class ModelHandlerEventsTest {
         assertThat(handler.getUser(2)!!.comment).isNull()
     }
 
-    // ---- removals -------------------------------------------------------------------------------
-
     @Test
     fun beingKickedOrBannedIsAWarningNamingTheActor() {
         handler.onMessage(userRemove(1, actor = 2, reason = "spam"))
@@ -288,8 +282,6 @@ class ModelHandlerEventsTest {
         assertThat(removed.map { it.user?.session }).containsExactly(3, 2).inOrder()
         assertThat(removed[0].user!!.channel).isNull()
     }
-
-    // ---- permissions and messages ---------------------------------------------------------------
 
     @Test
     fun aPermissionDenialCarriesItsTypeAndTheServersReason() {

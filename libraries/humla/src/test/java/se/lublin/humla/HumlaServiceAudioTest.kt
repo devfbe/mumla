@@ -62,8 +62,6 @@ class HumlaServiceAudioTest {
             h.audioFactory.created.size == count
         }
 
-    // ---------------------------------------------------------------- the pipeline's lifecycle
-
     @Test
     fun audioIsBuiltOnTheControlThreadWithTheSessionUser() {
         val h = start()
@@ -274,8 +272,6 @@ class HumlaServiceAudioTest {
             .isNotEqualTo(HumlaService.ConnectionState.CONNECTED)
     }
 
-    // ---------------------------------------------------------------- problems are visible
-
     @Test
     fun audioCreationFailureIsLoggedAsAWarning() {
         val h = start()
@@ -316,8 +312,6 @@ class HumlaServiceAudioTest {
             h.warnings.contains(h.service.getString(R.string.udp_warning_thread_failed))
         }
     }
-
-    // ---------------------------------------------------------------- the settings that rebuild
 
     @Test
     fun changingAnAudioSettingWhileConnectedRebuildsThePipeline() {
@@ -386,8 +380,6 @@ class HumlaServiceAudioTest {
         assertThat(h.service.getAudioConfigForTest().halfDuplexRequested).isFalse()
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
     }
-
-    // ---------------------------------------------------------------- voice targets
 
     /**
      * The target reaches the running pipeline and the session behind it, so the next rebuild keeps

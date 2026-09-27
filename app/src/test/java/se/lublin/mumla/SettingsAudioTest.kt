@@ -112,8 +112,6 @@ class SettingsAudioTest {
             .contains(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
     }
 
-    // --- the saved audio device --------------------------------------------------------------
-
     @Test
     fun `no audio device is saved until the user picks one`() {
         assertThat(settings.preferredAudioDevice).isNull()
@@ -247,8 +245,6 @@ class SettingsAudioTest {
         assertThat(prefs.contains("disableOpus")).isFalse()
     }
 
-    // --- the voice gate ----------------------------------------------------------------------
-
     @Test
     fun `the adaptive gate is the default and reproduces the demand the fixed window made`() {
         assertThat(settings.vadMode).isEqualTo(VadMode.ADAPTIVE)
@@ -345,8 +341,6 @@ class SettingsAudioTest {
         prefs.edit().putString(Settings.VAD_MODE.key, "telepathy").commit()
         assertThat(settings.vadMode).isEqualTo(VadMode.AMPLITUDE)
     }
-
-    // --- the platform audio effects ------------------------------------------------------------
 
     @Test
     fun `android effects default off and read their toggles`() {

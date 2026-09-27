@@ -74,7 +74,6 @@ class AudioOutputSpeech(
     private val jitterLock = Any()
     private val audioBufferSize = AudioHandler.FRAME_SIZE * AudioHandler.MAX_PACKET_FRAMES
 
-    // State-specific
     private var buffer: FloatArray
     private val out: FloatArray
     private val fadeOut = FloatArray(AudioHandler.FRAME_SIZE)

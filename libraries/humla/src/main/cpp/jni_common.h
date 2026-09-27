@@ -13,8 +13,6 @@
 
 namespace humla {
 
-// ---------------------------------------------------------------- JNI type descriptors
-
 template <typename T> struct JniDescriptor;
 template <> struct JniDescriptor<void> { static constexpr char value[] = "V"; };
 template <> struct JniDescriptor<jboolean> { static constexpr char value[] = "Z"; };
@@ -79,8 +77,6 @@ bool registerNatives(JNIEnv* env, const char* className, const std::array<JNINat
     env->DeleteLocalRef(cls);
     return ok;
 }
-
-// ---------------------------------------------------------------- array regions
 
 template <typename T> struct ArrayAccess;
 template <> struct ArrayAccess<jbyte> {

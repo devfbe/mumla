@@ -126,8 +126,6 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         updateAudioDependents(preferenceScreen, inputPreference.value)
     }
 
-    // ---------------------------------------------------------------- the audio device
-
     private var audioDeviceChoices: AudioDeviceChoices? = null
 
     /** Lists the devices there now, read without routing, and shows the saved choice. */
@@ -153,8 +151,6 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         Settings.getInstance(requireContext()).preferredAudioDevice = choices.devices[position]
         refreshAudioDevices()
     }
-
-    // ---------------------------------------------------------------- the live meter
 
     private var session: AudioTestSession? = null
     private val mainHandler = Handler(Looper.getMainLooper())

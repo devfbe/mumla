@@ -181,7 +181,6 @@ class AudioHandler private constructor(builder: Builder, targetId: Byte) :
     val currentBandwidth: Int
         get() = HumlaConnection.calculateAudioBandwidth(bitrate, framesPerPacket)
 
-    /** Halts input and output. */
     @Synchronized
     fun shutdown() {
         synchronized(input) { input.shutdown() }

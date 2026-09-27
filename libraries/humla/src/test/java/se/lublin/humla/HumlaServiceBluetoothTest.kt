@@ -54,8 +54,6 @@ class HumlaServiceBluetoothTest {
     private fun connectionError() =
         HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
 
-    // ---------------------------------------------------------------- wanted vs active
-
     @Test
     fun theWishAndTheRouteAreDifferentQuestions() {
         val h = start()
@@ -111,8 +109,6 @@ class HumlaServiceBluetoothTest {
 
         assertThat(h.warnings).isEmpty()
     }
-
-    // ---------------------------------------------------------------- the route across a session
 
     /**
      * The route is dropped with every connection, the wish is not, and a synchronized session
@@ -193,8 +189,6 @@ class HumlaServiceBluetoothTest {
 
         assertThat(h.devices.clearCalls).isEqualTo(0)
     }
-
-    // ---------------------------------------------------------------- the chooser
 
     private fun HumlaServiceHarness.phone() {
         devices!!.available[1] = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
@@ -344,8 +338,6 @@ class HumlaServiceBluetoothTest {
         assertThat(h.audioFactory.configs[1].playbackStream).isEqualTo(AudioManager.STREAM_VOICE_CALL)
     }
 
-    // ---------------------------------------------------------------- the route and the pipeline
-
     @Test
     fun theScoRouteBecomingActiveRebuildsThePipelineOffTheMainThread() {
         val h = start()
@@ -390,8 +382,6 @@ class HumlaServiceBluetoothTest {
         assertThat(withPlatform.service.communicationDevices)
             .isInstanceOf(se.lublin.humla.audio.routing.AndroidCommunicationDevices::class.java)
     }
-
-    // ---------------------------------------------------------------- echo cancellation
 
     /** The canceller follows the routed device: on for the phone's own speakers, off on a headset. */
     @Test
@@ -442,8 +432,6 @@ class HumlaServiceBluetoothTest {
 
         assertThat(h.service.isEchoCancellationEnabled).isFalse()
     }
-
-    // ---------------------------------------------------------------- the platform refusing
 
     /**
      * An OEM that enforces `BLUETOOTH_CONNECT` on `android.media` gets a caught `SecurityException`,

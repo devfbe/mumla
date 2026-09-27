@@ -350,7 +350,6 @@ class MumlaActivity :
             .show()
     }
 
-    /** Shows the screen of the drawer row [id]. */
     private fun showDrawerFragment(id: Int) {
         if (id == DrawerAdapter.ITEM_SETTINGS) {
             startActivity(Intent(this, SettingsActivity::class.java))

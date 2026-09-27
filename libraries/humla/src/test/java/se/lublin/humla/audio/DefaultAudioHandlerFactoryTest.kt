@@ -168,7 +168,6 @@ class DefaultAudioHandlerFactoryTest {
         assertThat(built(config, session)).containsExactlyEntriesIn(expected)
     }
 
-    /** The two boolean fields must not be cross-wired. */
     @Test
     fun theBooleanBuilderFieldsAreNotInterchangeable() {
         fun booleansOf(config: AudioConfig): Pair<Any?, Any?> =

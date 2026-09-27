@@ -554,7 +554,7 @@ class MumlaService : HumlaService(),
     override fun onTalkKeyDown() {
         if (isConnectionEstablished && Settings.ARRAY_INPUT_METHOD_PTT == settings.inputMethod) {
             if (!settings.isPushToTalkToggle) {
-                setTalkingState(true) // Start talking
+                setTalkingState(true)
             }
         }
     }
@@ -563,7 +563,7 @@ class MumlaService : HumlaService(),
     override fun onTalkKeyUp() {
         if (isConnectionEstablished && Settings.ARRAY_INPUT_METHOD_PTT == settings.inputMethod) {
             if (settings.isPushToTalkToggle) {
-                setTalkingState(!isTalking) // Toggle talk state
+                setTalkingState(!isTalking)
             } else {
                 setTalkingState(false) // Stop talking (idempotent)
             }

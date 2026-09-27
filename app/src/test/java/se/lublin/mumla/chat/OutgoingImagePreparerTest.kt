@@ -118,7 +118,6 @@ class OutgoingImagePreparerTest {
         assertThat(bitmap.height).isEqualTo(400)
     }
 
-    /** The limiting axis is the height here. */
     @Test
     fun aTallImageIsBoundedByItsHeight() {
         val bitmap = preparer.decode(TestImages.jpeg(800, 1200))!!
@@ -191,7 +190,6 @@ class OutgoingImagePreparerTest {
         }
     }
 
-    /** One pixel over on either axis is out, and gets fitted. */
     @Test
     fun onePixelOverEitherBoundIsFitted() {
         val wide = preparer.decode(TestImages.png(601, 400))!!

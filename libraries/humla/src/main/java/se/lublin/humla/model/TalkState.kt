@@ -16,7 +16,6 @@
  */
 package se.lublin.humla.model
 
-/** User talk state. */
 enum class TalkState {
     TALKING,
     SHOUTING,

@@ -63,7 +63,6 @@ class CertificateImportActivity : AppCompatActivity() {
             contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         } catch (e: FileNotFoundException) {
             e.printStackTrace()
-            // FIXME(acomminos)
             finish()
             return
         } catch (e: IOException) {
