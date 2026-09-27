@@ -36,6 +36,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
+import se.lublin.humla.AudioControls
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.CommunicationDevice
@@ -45,6 +46,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubState
 
@@ -67,6 +69,7 @@ class AudioDeviceMenuTest {
     private lateinit var chooser: AudioDeviceMenu
     private var current: IHumlaSession? = null
     private lateinit var session: IHumlaSession
+    private lateinit var audio: AudioControls
     private lateinit var audioManager: AudioManager
     private val settings: Settings get() = Settings.getInstance(app)
 
@@ -83,10 +86,11 @@ class AudioDeviceMenuTest {
         )
 
         session = mockk<IHumlaSession>(relaxed = true).stubConnected()
+        audio = session.stubAudio()
         current = session
-        every { session.audioDevices } returns listOf(earpiece, speaker, headset)
-        every { session.activeAudioDevice } returns headset
-        every { session.isEchoCancellationEnabled } returns false
+        every { audio.devices } returns listOf(earpiece, speaker, headset)
+        every { audio.activeDevice } returns headset
+        every { audio.isEchoCancellationEnabled } returns false
 
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         chooser = AudioDeviceMenu(controller.get(), settings) {
@@ -187,8 +191,8 @@ class AudioDeviceMenuTest {
     @Test
     fun whenVoiceGoesElsewhereThanTheSavedDeviceAutomaticIsTicked() {
         settings.preferredAudioDevice = PreferredAudioDevice.of(speaker)
-        every { session.audioDevices } returns listOf(earpiece, speaker, wired)
-        every { session.activeAudioDevice } returns wired
+        every { audio.devices } returns listOf(earpiece, speaker, wired)
+        every { audio.activeDevice } returns wired
 
         val menu = prepared()
 
@@ -206,7 +210,7 @@ class AudioDeviceMenuTest {
         val consumed = tap(speakerItem)
 
         assertThat(consumed).isTrue()
-        verify(exactly = 1) { session.selectAudioDevice(2) }
+        verify(exactly = 1) { audio.selectDevice(2) }
         assertThat(settings.preferredAudioDevice).isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER))
         assertThat(activity.menuInvalidations).isGreaterThan(before)
     }
@@ -228,7 +232,7 @@ class AudioDeviceMenuTest {
 
         assertThat(consumed).isTrue()
         assertThat(settings.preferredAudioDevice).isNull()
-        verify(exactly = 1) { session.selectAutomaticAudioDevice() }
+        verify(exactly = 1) { audio.selectAutomaticDevice() }
     }
 
     /**
@@ -238,13 +242,13 @@ class AudioDeviceMenuTest {
     @Test
     fun openingTheChooserReadsTheDevicesAgain() {
         settings.preferredAudioDevice = PreferredAudioDevice.of(headset)
-        every { session.audioDevices } returns listOf(earpiece, speaker)
-        every { session.activeAudioDevice } returns speaker
+        every { audio.devices } returns listOf(earpiece, speaker)
+        every { audio.activeDevice } returns speaker
         val menu = prepared()
         assertThat(menu.devices()).hasSize(2)
 
-        every { session.audioDevices } returns listOf(earpiece, speaker, headset)
-        every { session.activeAudioDevice } returns headset
+        every { audio.devices } returns listOf(earpiece, speaker, headset)
+        every { audio.activeDevice } returns headset
         val consumed = tap(menu.chooser())
 
         assertThat(consumed).isFalse()
@@ -260,7 +264,7 @@ class AudioDeviceMenuTest {
     /** A platform that refused the device list still leaves "Automatic". */
     @Test
     fun anEmptyDeviceListLeavesAutomatic() {
-        every { session.audioDevices } returns emptyList()
+        every { audio.devices } returns emptyList()
 
         val menu = prepared()
 
@@ -283,7 +287,7 @@ class AudioDeviceMenuTest {
             "Sony WH",
         ).inOrder()
         assertThat(menu.ticked()).containsExactly(R.id.menu_audio_device_automatic)
-        verify(exactly = 0) { session.audioDevices }
+        verify(exactly = 0) { audio.devices }
     }
 
     @Test
@@ -320,7 +324,7 @@ class AudioDeviceMenuTest {
         assertThat(consumed).isTrue()
         assertThat(settings.preferredAudioDevice)
             .isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "AA"))
-        verify(exactly = 0) { session.selectAudioDevice(any()) }
+        verify(exactly = 0) { audio.selectDevice(any()) }
         assertAudioManagerUntouched()
         assertThat(activity.menuInvalidations).isGreaterThan(before)
     }
@@ -333,7 +337,7 @@ class AudioDeviceMenuTest {
         tap(prepared().automatic())
 
         assertThat(settings.preferredAudioDevice).isNull()
-        verify(exactly = 0) { session.selectAutomaticAudioDevice() }
+        verify(exactly = 0) { audio.selectAutomaticDevice() }
         assertAudioManagerUntouched()
     }
 
@@ -345,7 +349,7 @@ class AudioDeviceMenuTest {
 
         tap(speakerItem)
 
-        verify(exactly = 0) { session.selectAudioDevice(any()) }
+        verify(exactly = 0) { audio.selectDevice(any()) }
         assertThat(settings.preferredAudioDevice).isNull()
         assertAudioManagerUntouched()
     }
@@ -372,7 +376,7 @@ class AudioDeviceMenuTest {
         assertThat(echo.isChecked).isFalse()
         assertThat(echo.groupId).isNotEqualTo(R.id.menu_audio_device_group)
 
-        every { session.isEchoCancellationEnabled } returns true
+        every { audio.isEchoCancellationEnabled } returns true
 
         assertThat(prepared().echo().isChecked).isTrue()
     }
@@ -389,8 +393,8 @@ class AudioDeviceMenuTest {
             .containsExactly(AudioDeviceCategory.BLUETOOTH, true)
         assertThat(activity.menuInvalidations).isGreaterThan(before)
 
-        every { session.isEchoCancellationEnabled } returns true
-        every { session.activeAudioDevice } returns speaker
+        every { audio.isEchoCancellationEnabled } returns true
+        every { audio.activeDevice } returns speaker
         tap(prepared().echo())
 
         assertThat(settings.echoCancellationOverrides).containsExactly(
@@ -401,7 +405,7 @@ class AudioDeviceMenuTest {
 
     @Test
     fun withoutAnActiveDeviceTheEchoSwitchIsHidden() {
-        every { session.activeAudioDevice } returns null
+        every { audio.activeDevice } returns null
 
         assertThat(prepared().echo().isVisible).isFalse()
     }

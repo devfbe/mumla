@@ -41,12 +41,15 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.model.Message
-import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
@@ -168,7 +171,23 @@ class MumlaService :
     /** Renders [session] until it is replaced. */
     private suspend fun follow(session: IHumlaSession): Unit = coroutineScope {
         collectEvents(this, session) { onEvent(session, it) }
-        launch(start = CoroutineStart.UNDISPATCHED) { session.audioRoute.drop(1).collect(::applyAudioRoute) }
+        launch(start = CoroutineStart.UNDISPATCHED) { session.audio.route.drop(1).collect(::applyAudioRoute) }
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            session.state.map { it == SessionState.Connected }.distinctUntilChanged().collectLatest { connected ->
+                // Changes only: the state found at synchronization is the one onSynchronized restores.
+                if (connected) {
+                    session.model.map { model -> model?.self?.let { it.isSelfMuted to it.isSelfDeafened } }
+                        .filterNotNull().distinctUntilChanged().drop(1)
+                        .collect { (muted, deafened) -> onSelfMuteChanged(muted, deafened) }
+                }
+            }
+        }
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            val self = session.model.map { it?.selfSession }.distinctUntilChanged()
+            combine(self, session.talkStates) { id, states -> id != null && states[id] == TalkState.TALKING }
+                .distinctUntilChanged().drop(1)
+                .collect { talking -> if (talking) onStartedTalking(session) }
+        }
         var previous: SessionState? = null
         session.state.collect { state ->
             renderSessionState(session, state)
@@ -276,9 +295,6 @@ class MumlaService :
 
     private fun onEvent(session: IHumlaSession, event: HumlaEvent) {
         when (event) {
-            is HumlaEvent.UserConnected -> requestAvatarIfMissing(session, event.user)
-            is HumlaEvent.UserStateUpdated -> onUserStateUpdated(session, event.user)
-            is HumlaEvent.UserTalkStateUpdated -> onUserTalkStateUpdated(session, event.user)
             is HumlaEvent.TextMessage -> onTextMessage(session, event.message)
             is HumlaEvent.PermissionDenied ->
                 if (notification.isForeground && !sessions.appVisible.value) notification.show()
@@ -286,24 +302,16 @@ class MumlaService :
         }
     }
 
-    private fun requestAvatarIfMissing(session: IHumlaSession, user: IUser) {
-        if (user.textureHash != null && user.texture == null) session.requestAvatar(user.session)
-    }
-
-    private fun onUserStateUpdated(session: IHumlaSession, user: IUser) {
-        val self = orNullOutsideSession { session.sessionId } ?: return
-        if (user.session == self) {
-            settings.setMutedAndDeafened(user.isSelfMuted, user.isSelfDeafened)
-            if (notification.isForeground) {
-                notification.customContentText = when {
-                    user.isSelfMuted && user.isSelfDeafened -> getString(R.string.status_notify_muted_and_deafened)
-                    user.isSelfMuted -> getString(R.string.status_notify_muted)
-                    else -> getString(R.string.connected)
-                }
-                notification.show()
+    private fun onSelfMuteChanged(muted: Boolean, deafened: Boolean) {
+        settings.setMutedAndDeafened(muted, deafened)
+        if (notification.isForeground) {
+            notification.customContentText = when {
+                muted && deafened -> getString(R.string.status_notify_muted_and_deafened)
+                muted -> getString(R.string.status_notify_muted)
+                else -> getString(R.string.connected)
             }
+            notification.show()
         }
-        requestAvatarIfMissing(session, user)
     }
 
     private fun onTextMessage(session: IHumlaSession, message: Message) {
@@ -320,7 +328,7 @@ class MumlaService :
 
         // tts is non-null exactly while the setting is on (the preference listener owns it).
         val tts = tts
-        val deafened = orNullOutsideSession { session.sessionUser }?.isSelfDeafened
+        val deafened = session.model.value?.self?.isSelfDeafened
         if (tts != null && formattedTtsMessage.length <= TTS_THRESHOLD && deafened == false) {
             @Suppress("DEPRECATION")
             tts.speak(formattedTtsMessage, TextToSpeech.QUEUE_ADD, null)
@@ -330,17 +338,15 @@ class MumlaService :
         if (settings.isChatNotifyEnabled) messageNotification.show(sender, strippedMessage, conversation(session))
     }
 
-    private fun onUserTalkStateUpdated(session: IHumlaSession, user: IUser) {
-        val self = orNullOutsideSession { session.sessionId }
-        val selfStartedTalking = user.session == self && user.talkState == TalkState.TALKING
-        val pttClick = settings.isPttSoundEnabled && session.transmitMode == TransmitMode.PUSH_TO_TALK
-        if (pttClick && selfStartedTalking && session.isConnected) keyClickSound()
+    private fun onStartedTalking(session: IHumlaSession) {
+        val pttClick = settings.isPttSoundEnabled && session.audio.transmitMode == TransmitMode.PUSH_TO_TALK
+        if (pttClick && session.isConnected) keyClickSound()
     }
 
     /** The session synchronized, the first time or again after a reconnect. */
     private fun onSynchronized(session: IHumlaSession) {
         if (settings.isMuted || settings.isDeafened) {
-            session.setSelfMuteDeafState(settings.isMuted, settings.isDeafened)
+            session.actions.setSelfMuteDeafState(settings.isMuted, settings.isDeafened)
         }
         if (!talkReceiverRegistered) {
             ContextCompat.registerReceiver(
@@ -368,18 +374,13 @@ class MumlaService :
     }
 
     /** Our name, the channel a reply goes to and the server, for the chat notification. */
-    private fun conversation(session: IHumlaSession) = MumlaMessageNotification.Conversation(
-        self = orNullOutsideSession { session.sessionUser }?.name,
-        channel = orNullOutsideSession { session.sessionChannel }?.name,
-        server = session.targetServer?.let { it.name.ifEmpty { it.host } },
-    )
-
-    /** [read]'s result, or null where it needs a synchronized session and there is none. */
-    private fun <T> orNullOutsideSession(read: () -> T?): T? = try {
-        read()
-    } catch (e: IllegalStateException) {
-        Log.d(TAG, "no session: $e")
-        null
+    private fun conversation(session: IHumlaSession): MumlaMessageNotification.Conversation {
+        val model = session.model.value
+        return MumlaMessageNotification.Conversation(
+            self = model?.self?.name,
+            channel = model?.selfChannel?.name,
+            server = session.targetServer?.let { it.name.ifEmpty { it.host } },
+        )
     }
 
     /**
@@ -389,7 +390,7 @@ class MumlaService :
     private fun onChatReply(intent: Intent) {
         val reply = MumlaMessageNotification.replyText(intent)?.trim()
         val session = sessions.connected
-        val channel = session?.let { orNullOutsideSession { it.sessionChannel } }
+        val channel = session?.model?.value?.selfChannel
         if (session == null || channel == null) {
             messageNotification.dismiss()
             return
@@ -398,7 +399,8 @@ class MumlaService :
             messageNotification.refresh()
             return
         }
-        session.sendChannelTextMessage(channel.id, outgoingMessageHtml(reply, settings.isMarkdownEnabled), false)
+        val html = outgoingMessageHtml(reply, settings.isMarkdownEnabled)
+        session.actions.sendChannelTextMessage(channel.id, html, false)
         messageNotification.showReply(reply, conversation(session))
     }
 
@@ -448,9 +450,7 @@ class MumlaService :
     }
 
     override fun onDeafenToggled() {
-        val session = sessions.connected ?: return
-        val self = session.sessionUser ?: return
-        session.setSelfMuteDeafState(!self.isSelfDeafened, !self.isSelfDeafened)
+        sessions.connected?.let(::toggleSelfDeafen)
     }
 
     override fun onOverlayToggled() {

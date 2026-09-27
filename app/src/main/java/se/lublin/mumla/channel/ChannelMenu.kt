@@ -147,7 +147,7 @@ class ChannelMenu(
     }
 
     fun showPopup(anchor: View) {
-        PermissionsPopupMenu(context, anchor, R.menu.context_channel, this, channel, session).show()
+        PermissionsPopupMenu(context, anchor, R.menu.context_channel, this, channel.id, session).show()
     }
 
     private companion object {

@@ -48,6 +48,7 @@ import se.lublin.mumla.channel.ChannelFragment
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubState
@@ -67,6 +68,7 @@ class MumlaActivityAudioDeviceMenuTest {
     private val session: IHumlaSession = mockk(relaxed = true) {
         every { targetServer } returns Server(1, "Home", "example.org", 64738, "me", null)
     }
+    private val audio = session.stubAudio()
     private val state = session.stubState(SessionState.Disconnected())
     private lateinit var activity: MumlaActivity
 
@@ -79,7 +81,7 @@ class MumlaActivityAudioDeviceMenuTest {
                 platformDevice(12, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER),
             ),
         )
-        every { session.audioDevices } returns listOf(
+        every { audio.devices } returns listOf(
             CommunicationDevice(1, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, "Pixel"),
             CommunicationDevice(2, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, "Pixel"),
         )
@@ -166,7 +168,7 @@ class MumlaActivityAudioDeviceMenuTest {
 
         assertThat(consumed).isTrue()
         assertThat(settings.preferredAudioDevice).isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER))
-        verify(exactly = 0) { session.selectAudioDevice(any()) }
+        verify(exactly = 0) { audio.selectDevice(any()) }
         assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
         assertThat(audioManager.communicationDevice).isNull()
     }
@@ -197,7 +199,7 @@ class MumlaActivityAudioDeviceMenuTest {
         val consumed = select(menu().devices().single { it.itemId == 2 })
 
         assertThat(consumed).isTrue()
-        verify(exactly = 1) { session.selectAudioDevice(2) }
+        verify(exactly = 1) { audio.selectDevice(2) }
         assertThat(settings.preferredAudioDevice).isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER))
     }
 }

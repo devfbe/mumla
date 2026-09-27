@@ -26,13 +26,17 @@ import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.model.ServerState
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.DialogCommentBinding
 import se.lublin.mumla.session.SessionManager
-import se.lublin.mumla.util.collectEvents
 import se.lublin.mumla.util.configureForUntrustedHtml
 
 private const val TAB_SOURCE = 1
@@ -112,16 +116,13 @@ abstract class AbstractCommentFragment : DialogFragment() {
     }
 
     /**
-     * Loads the first comment [extractor] finds in the session's events. Stops listening once it
+     * Loads the comment once [extractor] finds it in the session's model. Stops waiting once it
      * has one, and at the latest in onDestroy.
      */
-    protected fun observeComment(session: IHumlaSession, extractor: (HumlaEvent) -> String?) {
+    protected fun observeComment(session: IHumlaSession, extractor: (ServerState) -> String?) {
         stopObservingComment()
-        commentUpdates = collectEvents(lifecycleScope, session) { event ->
-            extractor(event)?.let {
-                loadComment(it)
-                stopObservingComment()
-            }
+        commentUpdates = lifecycleScope.launch(Dispatchers.Main.immediate, CoroutineStart.UNDISPATCHED) {
+            loadComment(session.model.mapNotNull { it?.let(extractor) }.first())
         }
     }
 

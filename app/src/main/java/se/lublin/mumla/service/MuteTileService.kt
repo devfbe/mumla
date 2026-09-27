@@ -25,12 +25,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.session.SessionManager
-import se.lublin.mumla.util.collectEvents
 
 /**
  * A Quick Settings tile that mutes and unmutes us. It is unavailable while not connected, and
@@ -43,12 +44,13 @@ class MuteTileService : TileService() {
     override fun onStartListening() {
         super.onStartListening()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { scope = it }
-        render()
+        render(null)
         scope.launch {
             sessions.session.collectLatest { session ->
                 if (session == null) return@collectLatest
-                collectEvents(this, session) { event -> if (event is HumlaEvent.UserStateUpdated) render() }
-                session.state.collect { render() }
+                combine(session.state, session.model) { state, model ->
+                    model?.self?.isSelfMuted?.takeIf { state == SessionState.Connected }
+                }.distinctUntilChanged().collect(::render)
             }
         }
     }
@@ -62,14 +64,11 @@ class MuteTileService : TileService() {
     override fun onClick() {
         super.onClick()
         sessions.connected?.let(::toggleSelfMute)
-        render()
     }
 
-    private fun render() {
+    private fun render(selfMuted: Boolean?) {
         val tile = qsTile ?: return
-        // The model may already be gone while the state still says connected.
-        val self = sessions.connected?.let { runCatching { it.sessionUser }.getOrNull() }
-        val model = MuteTileModel.of(self?.isSelfMuted)
+        val model = MuteTileModel.of(selfMuted)
         tile.state = model.state
         tile.subtitle = model.subtitle?.let(::getString)
         tile.updateTile()
@@ -89,7 +88,14 @@ data class MuteTileModel(val state: Int, @param:StringRes val subtitle: Int?) {
 
 /** Flips our mute as the mute button does: unmuting undeafens too. */
 fun toggleSelfMute(session: IHumlaSession) {
-    val self = session.sessionUser ?: return
+    val self = session.model.value?.self ?: return
     val muted = !self.isSelfMuted
-    session.setSelfMuteDeafState(muted, self.isSelfDeafened && muted)
+    session.actions.setSelfMuteDeafState(muted, self.isSelfDeafened && muted)
+}
+
+/** Flips our deafness as the deafen button does: deafening mutes too, undeafening unmutes. */
+fun toggleSelfDeafen(session: IHumlaSession) {
+    val self = session.model.value?.self ?: return
+    val deafened = !self.isSelfDeafened
+    session.actions.setSelfMuteDeafState(deafened, deafened)
 }

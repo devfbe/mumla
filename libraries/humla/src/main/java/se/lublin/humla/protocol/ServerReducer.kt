@@ -106,18 +106,9 @@ internal class ServerWriter(private var published: ServerState) {
         return published
     }
 
-    /** Display order of subchannels: position, then name, with nameless stubs first. */
-    private val channelOrder = Comparator<Int> { a, b ->
-        val ca = channels[a]
-        val cb = channels[b]
-        val byPosition = (ca?.position ?: 0).compareTo(cb?.position ?: 0)
-        if (byPosition != 0) byPosition else (ca?.name ?: "").compareTo(cb?.name ?: "")
-    }
+    private val channelOrder = Comparator<Int> { a, b -> ServerState.compareChannels(channels[a], channels[b]) }
 
-    /** Users and listeners by name, ignoring case, with nameless users first. */
-    private val userOrder = Comparator<Int> { a, b ->
-        (users[a]?.name ?: "").compareTo(users[b]?.name ?: "", ignoreCase = true)
-    }
+    private val userOrder = Comparator<Int> { a, b -> ServerState.compareUsers(users[a], users[b]) }
 
     private fun channelState(msg: Mumble.ChannelState) {
         val id = msg.channelId

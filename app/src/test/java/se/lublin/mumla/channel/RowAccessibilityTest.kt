@@ -35,6 +35,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.model.UserState
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.service.OverlayUserAdapter
@@ -130,9 +131,10 @@ class RowAccessibilityTest {
 
     @Test
     fun anOverlayRowStatesTheTalkState() {
-        user.deafened = true
+        val adapter = OverlayUserAdapter(context)
+        adapter.submit(listOf(UserState(7, "user-7", 0, isDeafened = true)), mapOf(7 to TalkState.TALKING))
 
-        val row = OverlayUserAdapter(context, root).getView(0, null, FrameLayout(context))
+        val row = adapter.getView(0, null, FrameLayout(context))
 
         assertThat(ViewCompat.getStateDescription(row))
             .isEqualTo(context.getString(R.string.a11y_state_server_deafened))
@@ -140,7 +142,10 @@ class RowAccessibilityTest {
 
     @Test
     fun aSilentUserHasNoState() {
-        val row = OverlayUserAdapter(context, root).getView(0, null, FrameLayout(context))
+        val adapter = OverlayUserAdapter(context)
+        adapter.submit(listOf(UserState(7, "user-7", 0)), emptyMap())
+
+        val row = adapter.getView(0, null, FrameLayout(context))
 
         assertThat(ViewCompat.getStateDescription(row)).isNull()
     }

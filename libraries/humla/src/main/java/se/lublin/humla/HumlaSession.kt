@@ -272,7 +272,6 @@ class HumlaSession(
         val connection = connectionFactory(callbacks)
         callbacks.connection = connection
         this.connection = connection
-        commands = ServerCommands(connection::sendTCPMessage)
         connection.setForceTCP(config.forceTcp)
         connection.setUseTor(config.useTor)
         connection.setKeys(config.certificate?.pkcs12, config.certificate?.password)
@@ -281,9 +280,11 @@ class HumlaSession(
         val localVolumes = LocalVolumes(server, this.config.localVolumes)
         this.localVolumes = localVolumes
         val publisher = SnapshotPublisher(connection)
+        val commands = ServerCommands(connection::sendTCPMessage)
+        this.commands = commands
         val modelHandler = ModelHandler(
             ::emit, config.localMuteHistory, config.localIgnoreHistory, localVolumes,
-            ServerState.empty(localUsers), publisher,
+            ServerState.empty(localUsers), publisher, commands::requestAvatar,
         )
         publisher.handler = modelHandler
         this.modelHandler = modelHandler

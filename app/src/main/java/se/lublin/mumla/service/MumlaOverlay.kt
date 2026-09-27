@@ -30,15 +30,18 @@ import android.widget.ImageView
 import android.widget.ListView
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.OverlayBinding
 import se.lublin.mumla.session.SessionManager
-import se.lublin.mumla.util.collectEvents
 import se.lublin.mumla.util.dp
 
 /** An onscreen interactive overlay displaying the users in the current channel. */
@@ -50,13 +53,12 @@ class MumlaOverlay(private val context: Context, private val sessions: SessionMa
     private val overlayList: ListView = binding.overlayList
     private val talkButton: ImageView = binding.overlayTalk
     private val overlayParams: WindowManager.LayoutParams
-    private var userAdapter: OverlayUserAdapter? = null
 
     /** The session the overlay shows, while it is shown. */
     private var session: IHumlaSession? = null
 
-    /** Collects the session's events while the overlay is shown. */
-    private var events: Job? = null
+    /** Follows the users of our channel while the overlay is shown. */
+    private var updates: Job? = null
 
     var isShown = false
         private set
@@ -80,41 +82,6 @@ class MumlaOverlay(private val context: Context, private val sessions: SessionMa
         }
     }
 
-    private fun onSessionEvent(session: IHumlaSession, event: HumlaEvent) {
-        val adapter = userAdapter ?: return
-        when (event) {
-            is HumlaEvent.UserTalkStateUpdated -> adapter.notifyDataSetChanged()
-            is HumlaEvent.UserStateUpdated -> {
-                val channel = event.user.channel
-                if (channel != null && channel == session.sessionChannel) adapter.notifyDataSetChanged()
-            }
-            // Unconditional: the model may no longer know which channel a removed user was in.
-            is HumlaEvent.UserRemoved -> adapter.notifyDataSetChanged()
-            is HumlaEvent.UserJoinedChannel -> onUserJoinedChannel(session, adapter, event)
-            else -> Unit
-        }
-    }
-
-    private fun onUserJoinedChannel(
-        session: IHumlaSession,
-        adapter: OverlayUserAdapter,
-        event: HumlaEvent.UserJoinedChannel,
-    ) {
-        val selfSession = try {
-            session.sessionId
-        } catch (e: IllegalStateException) {
-            Log.d(TAG, "exception in onUserJoinedChannel: $e")
-            return
-        }
-        val sessionChannel = session.sessionChannel ?: return
-        if (event.user.session == selfSession) {
-            // Session user has changed channels
-            adapter.channel = sessionChannel
-        } else if (event.newChannel.id == sessionChannel.id || event.oldChannel?.id == sessionChannel.id) {
-            adapter.notifyDataSetChanged()
-        }
-    }
-
     /** Dragging has no click equivalent; the talk button's accessibility click toggles talking. */
     @SuppressLint("ClickableViewAccessibility")
     private fun setUpGestures() {
@@ -122,7 +89,7 @@ class MumlaOverlay(private val context: Context, private val sessions: SessionMa
         binding.overlayDrag.setOnTouchListener(ResizeListener())
         talkButton.setOnTouchListener(TalkListener())
         ViewCompat.replaceAccessibilityAction(talkButton, AccessibilityActionCompat.ACTION_CLICK, null) { _, _ ->
-            session?.let { it.setTalkingState(!it.isTalking) }
+            session?.audio?.let { it.setTalking(!it.isTalking) }
             true
         }
     }
@@ -130,23 +97,26 @@ class MumlaOverlay(private val context: Context, private val sessions: SessionMa
     /** Shows the users of our channel in the connected session; nothing without one. */
     fun show() {
         val session = sessions.connected
-        val channel = session?.sessionChannel
-        if (isShown || session == null || channel == null) return
+        if (isShown || session?.model?.value?.selfChannel == null) return
         isShown = true
         this.session = session
-        userAdapter = OverlayUserAdapter(context, channel).also { overlayList.adapter = it }
-        events = collectEvents(MainScope(), session) { onSessionEvent(session, it) }
+        val adapter = OverlayUserAdapter(context).also { overlayList.adapter = it }
+        updates = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+            .launch(start = CoroutineStart.UNDISPATCHED) {
+                combine(session.model, session.talkStates) { model, talkStates ->
+                    model?.selfChannel?.let { model.usersIn(it.id) }.orEmpty() to talkStates
+                }.collect { (users, talkStates) -> adapter.submit(users, talkStates) }
+            }
         windowManager.addView(overlayView, overlayParams)
     }
 
     fun hide() {
         if (!isShown) return
         isShown = false
-        events?.cancel()
-        events = null
+        updates?.cancel()
+        updates = null
         session = null
         overlayList.adapter = null
-        userAdapter = null
         try {
             windowManager.removeView(overlayView)
         } catch (e: IllegalArgumentException) {
@@ -211,11 +181,11 @@ class MumlaOverlay(private val context: Context, private val sessions: SessionMa
         @SuppressLint("ClickableViewAccessibility") // Push-to-talk is a hold, not a click.
         override fun onTouch(v: View, event: MotionEvent): Boolean = when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                session?.setTalkingState(true)
+                session?.audio?.setTalking(true)
                 true
             }
             MotionEvent.ACTION_UP -> {
-                session?.setTalkingState(false)
+                session?.audio?.setTalking(false)
                 true
             }
             else -> false

@@ -15,11 +15,13 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
+import se.lublin.humla.AudioControls
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubState
 
@@ -31,6 +33,7 @@ import se.lublin.mumla.testing.stubState
 class ChannelFragmentTalkStateTest {
 
     private lateinit var session: IHumlaSession
+    private lateinit var audio: AudioControls
     private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var fragment: ChannelFragment
 
@@ -44,8 +47,9 @@ class ChannelFragmentTalkStateTest {
             .putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT)
             .commit()
         session = mockk(relaxed = true)
+        audio = session.stubAudio()
         session.stubConnected()
-        every { session.isTalking } returns true
+        every { audio.isTalking } returns true
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         controller.get().bind(session)
         fragment = ChannelFragment()
@@ -66,7 +70,7 @@ class ChannelFragmentTalkStateTest {
     }
 
     /** Forgets what the session was told so far, so what follows is checked on its own. */
-    private fun forgetCalls() = clearMocks(session, answers = false)
+    private fun forgetCalls() = clearMocks(session, audio, answers = false)
 
     private fun touch(action: Int) {
         talkButton.dispatchTouchEvent(MotionEvent.obtain(0L, 0L, action, 0f, 0f, 0))
@@ -76,7 +80,7 @@ class ChannelFragmentTalkStateTest {
     fun pausingDoesNotSilenceATalkStateTheButtonIsNotHolding() {
         controller.pause()
 
-        verify(exactly = 0) { session.setTalkingState(false) }
+        verify(exactly = 0) { audio.setTalking(false) }
     }
 
     @Test
@@ -85,7 +89,7 @@ class ChannelFragmentTalkStateTest {
 
         controller.pause()
 
-        verify(exactly = 1) { session.setTalkingState(false) }
+        verify(exactly = 1) { audio.setTalking(false) }
     }
 
     @Test
@@ -96,7 +100,7 @@ class ChannelFragmentTalkStateTest {
 
         controller.pause()
 
-        verify(exactly = 0) { session.setTalkingState(false) }
+        verify(exactly = 0) { audio.setTalking(false) }
     }
 
     /**
@@ -107,12 +111,12 @@ class ChannelFragmentTalkStateTest {
     fun aPressThatWasAlreadyReleasedOnPauseIsNotReleasedTwice() {
         touch(MotionEvent.ACTION_DOWN)
         controller.pause()
-        verify(exactly = 1) { session.setTalkingState(false) }
+        verify(exactly = 1) { audio.setTalking(false) }
 
         controller.resume()
         controller.pause()
 
-        verify(exactly = 1) { session.setTalkingState(false) }
+        verify(exactly = 1) { audio.setTalking(false) }
     }
 
     /**
@@ -125,19 +129,19 @@ class ChannelFragmentTalkStateTest {
 
         touch(MotionEvent.ACTION_CANCEL)
 
-        verify(exactly = 1) { session.setTalkingState(false) }
+        verify(exactly = 1) { audio.setTalking(false) }
         forgetCalls()
         controller.pause()
-        verify(exactly = 0) { session.setTalkingState(false) }
+        verify(exactly = 0) { audio.setTalking(false) }
     }
 
     @Test
     fun theButtonStillDrivesPushToTalk() {
         touch(MotionEvent.ACTION_DOWN)
-        verify(exactly = 1) { session.setTalkingState(true) }
+        verify(exactly = 1) { audio.setTalking(true) }
 
         touch(MotionEvent.ACTION_UP)
-        verify(exactly = 1) { session.setTalkingState(false) }
+        verify(exactly = 1) { audio.setTalking(false) }
     }
 
     @Test
@@ -184,7 +188,7 @@ class ChannelFragmentTalkStateTest {
 
         touch(MotionEvent.ACTION_CANCEL)
 
-        verify(exactly = 0) { session.setTalkingState(any()) }
+        verify(exactly = 0) { audio.setTalking(any()) }
     }
 
     /** `onPause` does not release in toggle mode either. */
@@ -196,7 +200,7 @@ class ChannelFragmentTalkStateTest {
 
         controller.pause()
 
-        verify(exactly = 0) { session.setTalkingState(any()) }
+        verify(exactly = 0) { audio.setTalking(any()) }
     }
 
     /**
@@ -210,7 +214,7 @@ class ChannelFragmentTalkStateTest {
 
         controller.pause()
 
-        verify(exactly = 0) { session.setTalkingState(false) }
+        verify(exactly = 0) { audio.setTalking(false) }
     }
 
     /** Without a connection there is nothing a pause could release. */
@@ -221,6 +225,6 @@ class ChannelFragmentTalkStateTest {
 
         controller.pause()
 
-        verify(exactly = 0) { session.setTalkingState(false) }
+        verify(exactly = 0) { audio.setTalking(false) }
     }
 }

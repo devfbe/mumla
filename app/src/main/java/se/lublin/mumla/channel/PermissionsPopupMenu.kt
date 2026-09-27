@@ -21,24 +21,27 @@ import android.content.Context
 import android.view.Menu
 import android.view.View
 import androidx.appcompat.widget.PopupMenu
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.session.isConnected
-import se.lublin.mumla.util.collectEvents
 
 /**
  * A popup menu whose items depend on the permissions in [channel]; it asks for them when they are
- * not known yet and prepares the menu again once they arrive.
+ * not known yet and prepares the menu again whenever they change.
  */
 class PermissionsPopupMenu(
     context: Context,
     anchor: View,
     menuRes: Int,
     private val prepareListener: IOnMenuPrepareListener,
-    private val channel: IChannel,
+    private val channel: Int,
     private val session: IHumlaSession,
 ) : PopupMenu.OnDismissListener {
 
@@ -52,22 +55,17 @@ class PermissionsPopupMenu(
     private var permissionUpdates: Job? = null
 
     private val permissions: Int
-        get() = when {
-            !session.isConnected -> 0
-            channel.id == 0 -> session.permissions
-            else -> channel.permissions
-        }
+        get() = if (session.isConnected) session.model.value?.permissionsIn(channel) ?: 0 else 0
 
     fun show() {
         permissionUpdates?.cancel()
-        permissionUpdates = collectEvents(MainScope(), session) { event ->
-            if (event is HumlaEvent.ChannelPermissionsUpdated && event.channel == channel) {
-                prepareListener.onMenuPrepare(menu.menu, permissions)
-            }
+        permissionUpdates = MainScope().launch(Dispatchers.Main.immediate, CoroutineStart.UNDISPATCHED) {
+            session.model.map { it?.permissionsIn(channel) ?: 0 }.distinctUntilChanged().drop(1)
+                .collect { prepareListener.onMenuPrepare(menu.menu, it) }
         }
         if (permissions == 0) {
             // onMenuPrepare will be called once more once permissions have loaded.
-            if (session.isConnected) session.requestPermissions(channel.id)
+            session.actions.requestPermissions(channel)
         } else {
             prepareListener.onMenuPrepare(menu.menu, permissions)
         }

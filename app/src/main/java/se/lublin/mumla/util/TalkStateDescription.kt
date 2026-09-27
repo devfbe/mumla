@@ -20,6 +20,7 @@ package se.lublin.mumla.util
 import android.content.Context
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.model.UserState
 import se.lublin.mumla.R
 
 /**
@@ -34,6 +35,20 @@ fun talkStateDescription(context: Context, user: IUser): String? {
         user.isMuted -> R.string.a11y_state_server_muted
         user.isSuppressed -> R.string.a11y_state_suppressed
         user.talkState != TalkState.PASSIVE -> R.string.a11y_state_talking
+        else -> return null
+    }
+    return context.getString(id)
+}
+
+/** The same for a snapshot of [user], who talks as [talkState] says. */
+fun talkStateDescription(context: Context, user: UserState, talkState: TalkState?): String? {
+    val id = when {
+        user.isSelfDeafened -> R.string.a11y_state_deafened
+        user.isDeafened -> R.string.a11y_state_server_deafened
+        user.isSelfMuted -> R.string.a11y_state_muted
+        user.isMuted -> R.string.a11y_state_server_muted
+        user.isSuppressed -> R.string.a11y_state_suppressed
+        talkState != null && talkState != TalkState.PASSIVE -> R.string.a11y_state_talking
         else -> return null
     }
     return context.getString(id)

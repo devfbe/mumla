@@ -516,4 +516,19 @@ class ServerReducerTest {
 
         assertThat(state).isSameInstanceAs(before)
     }
+
+    @Test
+    fun aSnapshotAssembledFromItsRecordsHasTheSameTree() {
+        val reduced = ReducerHarness().feed(*syncFrames(channels = 200, users = 60).toTypedArray())
+        val listening = reduced.users.values.map { if (it.session % 3 == 0) it.copy(listening = setOf(7)) else it }
+
+        val assembled = ServerState.of(reduced.channels.values, listening, reduced.selfSession)
+
+        for (id in reduced.channels.keys) {
+            assertThat(assembled.subchannelIds(id)).isEqualTo(reduced.subchannelIds(id))
+            assertThat(assembled.userIds(id)).isEqualTo(reduced.userIds(id))
+        }
+        assertThat(assembled.listenerIds(7)).containsExactlyElementsIn((3..60 step 3).toList())
+        assertThat(assembled.self).isEqualTo(reduced.self)
+    }
 }

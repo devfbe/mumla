@@ -38,13 +38,15 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * The same frames also build immutable [ServerState] snapshots, published through [publisher] once
  * per burst: after the frames already queued on the protocol thread when the first of them arrived.
+ * Every avatar the server announces only by its hash is asked for through [requestAvatar] at once,
+ * so the model fills in with the pictures the channel list shows.
  *
  * Threading: [onMessage] and [onLocal] run on the "humla-protocol" thread, the only writer.
  * Getters are called from the main thread and binder threads. Compound read-check-write accesses
  * are safe only because of that single writer; the concurrent maps and volatile fields just keep
  * readers from seeing half-rehashed tables or half-built objects.
  */
-@Suppress("TooManyFunctions") // The mutable model and its snapshots side by side for now.
+@Suppress("TooManyFunctions", "LongParameterList") // The mutable model and its snapshots side by side for now.
 class ModelHandler(
     private val events: (HumlaEvent) -> Unit,
     private val localMuteHistory: List<Int>?,
@@ -52,6 +54,7 @@ class ModelHandler(
     private val localVolumes: LocalVolumes = LocalVolumes(null),
     initial: ServerState = ServerState.empty(),
     private val publisher: Publisher? = null,
+    private val requestAvatar: (Int) -> Unit = {},
 ) : TcpMessageHandler {
 
     /** Where the snapshots go. */
@@ -91,6 +94,7 @@ class ModelHandler(
     override fun onMessage(msg: MessageLite) {
         writer.onMessage(msg) {}
         schedulePublish()
+        if (msg is Mumble.UserState) requestMissingAvatar(msg)
         when (msg) {
             is Mumble.ChannelState -> channels.apply(msg)?.let(events)
             is Mumble.ChannelRemove -> channels.remove(msg.channelId)?.let { events(HumlaEvent.ChannelRemoved(it)) }
@@ -113,6 +117,10 @@ class ModelHandler(
     internal fun onLocal(input: LocalInput) {
         writer.onLocal(input)
         schedulePublish()
+    }
+
+    private fun requestMissingAvatar(msg: Mumble.UserState) {
+        if (msg.hasTextureHash() && writer.user(msg.session)?.texture == null) requestAvatar(msg.session)
     }
 
     private fun schedulePublish() {

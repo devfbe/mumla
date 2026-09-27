@@ -29,11 +29,9 @@ import androidx.core.text.inSpans
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.MainScope
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.IUser
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
-import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.databinding.DialogUserInfoBinding
 import se.lublin.mumla.util.collectEvents
 import java.security.cert.X509Certificate
@@ -44,27 +42,27 @@ import kotlin.math.sqrt
 private const val REFRESH_MILLIS = 5_000L
 
 /**
- * Shows [user]'s connection statistics, asking the server for them now and every few seconds until
- * the dialog is closed.
+ * Shows the connection statistics of the user with session [user] and [name], asking the server
+ * for them now and every few seconds until the dialog is closed.
  */
-fun showUserInfoDialog(context: Context, session: IHumlaSession, user: IUser): AlertDialog {
+fun showUserInfoDialog(context: Context, session: IHumlaSession, user: Int, name: String?): AlertDialog {
     val binding = DialogUserInfoBinding.inflate(LayoutInflater.from(context))
     binding.userInfoText.setText(R.string.user_info_loading)
     val formatter = UserInfoFormatter(context)
     val handler = Handler(Looper.getMainLooper())
     val refresh = object : Runnable {
         override fun run() {
-            if (session.isConnected) session.requestUserStats(user.session)
+            session.actions.requestUserStats(user)
             handler.postDelayed(this, REFRESH_MILLIS)
         }
     }
     val updates = collectEvents(MainScope(), session) { event ->
-        if (event is HumlaEvent.UserStatsReceived && event.stats.session == user.session) {
+        if (event is HumlaEvent.UserStatsReceived && event.stats.session == user) {
             binding.userInfoText.text = formatter.format(event.stats)
         }
     }
     val dialog = MaterialAlertDialogBuilder(context)
-        .setTitle(user.name)
+        .setTitle(name)
         .setView(binding.root)
         .setPositiveButton(android.R.string.ok, null)
         .setOnDismissListener {

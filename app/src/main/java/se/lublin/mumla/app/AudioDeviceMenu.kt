@@ -77,7 +77,7 @@ class AudioDeviceMenu(
         sub.removeGroup(R.id.menu_audio_device_group)
         val session = session()
         val devices = devices(session)
-        val active = session?.activeAudioDevice
+        val active = session?.audio?.activeDevice
         val saved = settings.preferredAudioDevice
         val ticked = devices.firstOrNull { saved?.matches(it) == true && (session == null || it.id == active?.id) }
         val resources = activity.resources
@@ -96,13 +96,13 @@ class AudioDeviceMenu(
         // The echo canceller for the active device's kind; nothing runs without a session.
         sub.findItem(R.id.menu_audio_echo)?.let { echo ->
             echo.isVisible = active != null
-            echo.isChecked = session?.isEchoCancellationEnabled == true
+            echo.isChecked = session?.audio?.isEchoCancellationEnabled == true
         }
     }
 
     /** The session's devices, or without one what the platform offers, read without routing. */
     private fun devices(session: IHumlaSession?): List<CommunicationDevice> =
-        session?.audioDevices ?: listCommunicationDevices(activity.getSystemService(AudioManager::class.java))
+        session?.audio?.devices ?: listCommunicationDevices(activity.getSystemService(AudioManager::class.java))
 
     /**
      * Saves the tapped entry; with a session it also takes effect now. Saved first, so the session
@@ -113,12 +113,12 @@ class AudioDeviceMenu(
         val session = session()
         if (itemId == R.id.menu_audio_device_automatic) {
             settings.preferredAudioDevice = null
-            session?.selectAutomaticAudioDevice()
+            session?.audio?.selectAutomaticDevice()
         } else {
             // Gone since the menu was filled: nothing to save.
             val device = devices(session).firstOrNull { it.id == itemId } ?: return
             settings.preferredAudioDevice = PreferredAudioDevice.of(device)
-            session?.selectAudioDevice(device.id)
+            session?.audio?.selectDevice(device.id)
         }
         activity.invalidateMenu()
     }
@@ -126,8 +126,9 @@ class AudioDeviceMenu(
     /** Flips the echo canceller of the active device's kind; the session applies it live and on every routing. */
     private fun toggleEchoCancellation() {
         val session = session() ?: return
-        val active = session.activeAudioDevice ?: return
-        settings.setEchoCancellationOverride(AudioDeviceCategory.of(active.type), !session.isEchoCancellationEnabled)
+        val active = session.audio.activeDevice ?: return
+        val enabled = session.audio.isEchoCancellationEnabled
+        settings.setEchoCancellationOverride(AudioDeviceCategory.of(active.type), !enabled)
         activity.invalidateMenu()
     }
 }

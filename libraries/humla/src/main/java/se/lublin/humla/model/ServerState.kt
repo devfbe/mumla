@@ -19,6 +19,8 @@ package se.lublin.humla.model
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.PersistentMap
 import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toPersistentList
+import kotlinx.collections.immutable.toPersistentMap
 
 /**
  * One immutable snapshot of a server's channels and users. Readable from any thread; a newer
@@ -85,6 +87,42 @@ class ServerState internal constructor(
     companion object {
         /** The id Mumble gives the root channel. */
         const val ROOT_CHANNEL_ID = 0
+
+        /** Subchannel order: position, then name, with nameless stubs first. */
+        internal fun compareChannels(a: ChannelState?, b: ChannelState?): Int {
+            val byPosition = (a?.position ?: 0).compareTo(b?.position ?: 0)
+            return if (byPosition != 0) byPosition else (a?.name ?: "").compareTo(b?.name ?: "")
+        }
+
+        /** User and listener order: by name, ignoring case, with nameless users first. */
+        internal fun compareUsers(a: UserState?, b: UserState?): Int =
+            (a?.name ?: "").compareTo(b?.name ?: "", ignoreCase = true)
+
+        /**
+         * The snapshot of these channels and users, with the tree derived from their parents,
+         * channels and listening channels, for a client that assembles one itself.
+         */
+        fun of(
+            channels: Collection<ChannelState>,
+            users: Collection<UserState> = emptyList(),
+            selfSession: Int? = null,
+            permissions: Int = 0,
+            serverSettings: ServerSettings? = null,
+        ): ServerState {
+            val channelMap = channels.associateBy { it.id }
+            val children = channels.filter { it.parent in channelMap }.groupBy { it.parent!! }
+                .mapValues { (_, list) -> list.sortedWith(::compareChannels).map { it.id }.toPersistentList() }
+            val members = users.groupBy { it.channel }
+                .mapValues { (_, list) -> list.sortedWith(::compareUsers).map { it.session }.toPersistentList() }
+            val listeners = users.flatMap { user -> user.listening.map { it to user } }
+                .groupBy({ it.first }, { it.second })
+                .mapValues { (_, list) -> list.sortedWith(::compareUsers).map { it.session }.toPersistentList() }
+            return ServerState(
+                selfSession, channelMap.toPersistentMap(), users.associateBy { it.session }.toPersistentMap(),
+                children.toPersistentMap(), members.toPersistentMap(), listeners.toPersistentMap(),
+                permissions, serverSettings, LocalUserSettings(),
+            )
+        }
 
         /** A server nothing is known of yet, with what this device remembers about users. */
         fun empty(local: LocalUserSettings = LocalUserSettings()): ServerState = ServerState(

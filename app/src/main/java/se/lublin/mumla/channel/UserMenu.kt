@@ -118,7 +118,7 @@ class UserMenu(
                     R.string.confirm,
                 ) { session?.setUserComment(user.session, "") }
             R.id.context_register -> session?.registerUser(user.session)
-            R.id.context_info -> showUserInfoDialog(context, humlaSession, user)
+            R.id.context_info -> showUserInfoDialog(context, humlaSession, user.session, user.name)
             else -> return false
         }
         return true
@@ -154,7 +154,7 @@ class UserMenu(
 
     fun showPopup(anchor: View) {
         val channel = user.channel ?: return
-        PermissionsPopupMenu(context, anchor, R.menu.context_user, this, channel, humlaSession).show()
+        PermissionsPopupMenu(context, anchor, R.menu.context_user, this, channel.id, humlaSession).show()
     }
 
     private companion object {

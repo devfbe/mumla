@@ -2,32 +2,38 @@ package se.lublin.mumla.channel.comment
 
 import androidx.fragment.app.DialogFragment
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.model.IUser
-import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.model.UserState
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
-import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.serverState
+import se.lublin.mumla.testing.stubModel
 
 @RunWith(RobolectricTestRunner::class)
 class CommentObserverTest {
 
     private val session: IHumlaSession = mockk<IHumlaSession>(relaxed = true).stubConnected()
-    private val events = session.stubEvents()
+    private val model = session.stubModel(withComment(7, null))
     private val activity = Robolectric.buildActivity(ServiceHostActivity::class.java).setup().get()
         .also { it.bind(session) }
 
-    /** The session's chat log listens all along. */
-    private val othersListening = events.subscriptionCount.value
+    /** Whatever else follows the model (the session's own observers) all along. */
+    private val othersListening = model.subscriptionCount.value
 
-    private val listeners: Int get() = events.subscriptionCount.value - othersListening
+    private val listeners: Int get() = model.subscriptionCount.value - othersListening
+
+    private fun withComment(user: Int, comment: String?) = serverState {
+        channel(0, "Root")
+        user(UserState(7, "Ann", 0, comment = if (user == 7) comment else null))
+        user(UserState(8, "Bob", 0, comment = if (user == 8) comment else null))
+    }
 
     private fun show(fragment: DialogFragment) {
         fragment.show(activity.supportFragmentManager, "comment")
@@ -40,10 +46,11 @@ class CommentObserverTest {
     }
 
     @Test
-    fun aUserCommentStopsListeningWhenTheDialogClosesWithoutAReply() {
+    fun aUserCommentStopsWaitingWhenTheDialogClosesWithoutAReply() {
         val fragment = UserCommentFragment.newInstance(7, comment = null, editing = false)
         show(fragment)
         assertThat(listeners).isEqualTo(1)
+        verify { session.actions.requestComment(7) }
 
         close(fragment)
 
@@ -51,10 +58,11 @@ class CommentObserverTest {
     }
 
     @Test
-    fun aChannelDescriptionStopsListeningWhenTheDialogClosesWithoutAReply() {
+    fun aChannelDescriptionStopsWaitingWhenTheDialogClosesWithoutAReply() {
         val fragment = ChannelDescriptionFragment.newInstance(3, description = null)
         show(fragment)
         assertThat(listeners).isEqualTo(1)
+        verify { session.actions.requestChannelDescription(3) }
 
         close(fragment)
 
@@ -62,15 +70,11 @@ class CommentObserverTest {
     }
 
     @Test
-    fun theReplyStopsTheListeningAndClosingAfterwardsIsHarmless() {
+    fun theReplyStopsTheWaitingAndClosingAfterwardsIsHarmless() {
         val fragment = UserCommentFragment.newInstance(7, comment = null, editing = false)
         show(fragment)
-        val user = mockk<IUser> {
-            every { session } returns 7
-            every { comment } returns "hello"
-        }
 
-        events.tryEmit(HumlaEvent.UserStateUpdated(user))
+        model.value = withComment(7, "hello")
         idleMainLooper()
         assertThat(listeners).isEqualTo(0)
 
@@ -79,15 +83,11 @@ class CommentObserverTest {
     }
 
     @Test
-    fun anotherUsersStateKeepsTheListening() {
+    fun anotherUsersCommentKeepsTheWaiting() {
         val fragment = UserCommentFragment.newInstance(7, comment = null, editing = false)
         show(fragment)
-        val other = mockk<IUser> {
-            every { session } returns 8
-            every { comment } returns "not yours"
-        }
 
-        events.tryEmit(HumlaEvent.UserStateUpdated(other))
+        model.value = withComment(8, "not yours")
         idleMainLooper()
 
         assertThat(listeners).isEqualTo(1)

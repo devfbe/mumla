@@ -45,8 +45,8 @@ class ChannelEditFragment : DialogFragment() {
         val temporaryBox = binding.channelEditTemporary
 
         // If we can only make temporary channels, remove the option.
-        SessionManager.get(requireContext()).connected?.let { session ->
-            val combined = session.permissions or (session.getChannel(parent)?.permissions ?: 0)
+        SessionManager.get(requireContext()).connected?.model?.value?.let { model ->
+            val combined = model.permissions or (model.channel(parent)?.permissions ?: 0)
             val canMakeChannel = (combined and Permissions.MAKE_CHANNEL) != 0
             val canMakeTempChannel = (combined and Permissions.MAKE_TEMP_CHANNEL) != 0
             val onlyTemp = canMakeTempChannel && !canMakeChannel
@@ -60,7 +60,7 @@ class ChannelEditFragment : DialogFragment() {
             .setPositiveButton(if (isAdding) R.string.add else R.string.save) { _, _ ->
                 val session = SessionManager.get(requireContext()).connected
                 if (isAdding && session != null) {
-                    session.createChannel(
+                    session.actions.createChannel(
                         parent,
                         nameField.text.toString(),
                         descriptionField.text.toString(),

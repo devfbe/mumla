@@ -80,9 +80,9 @@ class UserInfoTest {
         val session = mockk<IHumlaSession>(relaxed = true).stubConnected()
         val events = session.stubEvents()
 
-        val dialog = showUserInfoDialog(context, session, FakeUser(7, "Ann"))
+        val dialog = showUserInfoDialog(context, session, 7, "Ann")
         idleMainLooper()
-        verify(exactly = 1) { session.requestUserStats(7) }
+        verify(exactly = 1) { session.actions.requestUserStats(7) }
         val text = dialog.findViewById<TextView>(R.id.user_info_text)!!
         assertThat(text.text.toString()).isEqualTo("Loading…")
 
@@ -95,10 +95,10 @@ class UserInfoTest {
         assertThat(text.text.toString()).contains("Operating system: Linux Ubuntu 24.04")
 
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
-        verify(exactly = 2) { session.requestUserStats(7) }
+        verify(exactly = 2) { session.actions.requestUserStats(7) }
 
         dialog.dismiss()
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(20))
-        verify(exactly = 2) { session.requestUserStats(7) }
+        verify(exactly = 2) { session.actions.requestUserStats(7) }
     }
 }

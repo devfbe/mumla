@@ -174,7 +174,7 @@ class ChannelFragment :
         val session = sessions.connected ?: return
         when {
             settings.isPushToTalkToggle -> pushToTalk.onKeyUp()
-            session.isTalking -> {
+            session.audio.isTalking -> {
                 talkButtonHeld = false
                 pushToTalk.onKeyUp()
             }
@@ -263,7 +263,7 @@ class ChannelFragment :
         // Release only what this fragment's button holds, so a pause cannot leave it transmitting.
         // A talk state set elsewhere (e.g. a headset key with the screen off) is not ours to clear.
         val session = sessions.connected
-        if (talkButtonHeld && session != null && !settings.isPushToTalkToggle) session.setTalkingState(false)
+        if (talkButtonHeld && session != null && !settings.isPushToTalkToggle) session.audio.setTalking(false)
         talkButtonHeld = false
     }
 
