@@ -41,7 +41,6 @@
     <string name="server_info_version">%1$s (%2$s)</string>
     <string name="server_match_not_found">Server tidak dapat ditemukan</string>
     <string name="server_match_info">Nama: %1$s\nHost: %2$s:%3$d\nJumlah User: %4$d / %5$d\nVersi: %6$s \nNegara: %7$s \nLatensi: %8$d ms</string>
-    <string name="no_servers">Tekan tombol \'Tambah\' pada action bar untuk menambahkan server terlebih dahulu.</string>
     <string name="server_password">Password</string>
     <string name="server_username">Username</string>
     <string name="server_port">Port</string>
@@ -67,7 +66,6 @@
     <string name="generateCertFailure">Tidak dapat membuat sertifikat keamanan.</string>
     <string name="search">Pencarian</string>
     <string name="searchHint">Cari channel dan user</string>
-    <string name="quickConnect">Sambung Cepat</string>
     <string name="connectToServer">Sambung ke Server</string>
     <string name="edit">Edit</string>
     <string name="delete">Hapus Permanen</string>
@@ -80,12 +78,7 @@
     <string name="mumlaDisconnected">Mumla terputus</string>
     <string name="channel">Channel</string>
     <string name="user">User</string>
-    <string name="sort">Sortir</string>
-    <string name="sortBy">Sortir berdasarkan…</string>
-    <string name="country">Negara</string>
     <string name="description">Deskripsi</string>
-    <string name="search_name">Nama</string>
-    <string name="search_country">Negara</string>
     <string name="error_fetching_servers">Tidak dapat mencari server.\nApakah anda tersambung dengan internet?</string>
     <string name="overlay">Overlay</string>
     <string name="hint_reason">Alasan</string>
@@ -96,18 +89,15 @@
     <string name="mumble_url_parse_failed">URL Mumble tidak valid.</string>
     <string name="first_run_generate_certificate_title">Selamat datang di Mumla</string>
     <string name="generate">Buat</string>
-    <string name="invalid_password">Password salah.</string>
     <string name="send_message">Kirim pesan</string>
     <string name="channel_menu_view_description">Lihat Deskripsi</string>
     <string name="untrusted_certificate">Sertifikat Keamanan tidak Dipercaya</string>
     <string name="allow">Izinkan</string>
     <string name="trust_added">Sertifikat keamanan berhasil ditambahkan ke database</string>
-    <string name="cancelled">Dibatalkan</string>
     <string name="current_chat_target">Target chat sekarang</string>
     <string name="channel_join">Gabung</string>
     <string name="invalid_port_range">Port tidak valid (1-65535)</string>
     <string name="cancel_reconnect">Batalkan sambung ulang</string>
-    <string name="attempting_reconnect">Error: %s.\n\nMenyambungkan ulang…</string>
     <string name="change_requires_reconnect">Sambung ulang untuk menggunakan pengaturan baru.</string>
     <string name="no_certificate">Tidak ada Sertifikat Keamanan</string>
     <string name="decrypt_certificate">Dekripsi Sertifikat Keamanan</string>

@@ -17,10 +17,19 @@
 
 package se.lublin.mumla.testing
 
+import android.view.View
+import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceGroup
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.preference.SettingsActivity
+
+/** The XML of every settings screen, in the order of the index. */
+val SETTINGS_SCREENS = listOf(
+    R.xml.settings_audio, R.xml.settings_controls, R.xml.settings_chat, R.xml.settings_connection,
+    R.xml.settings_authentication, R.xml.settings_appearance, R.xml.settings_about,
+)
 
 /** The settings screen shown now. */
 fun SettingsActivity.currentScreen(): PreferenceFragmentCompat =
@@ -35,4 +44,13 @@ fun <T : PreferenceFragmentCompat> SettingsActivity.openScreen(screen: Class<T>)
     root.onPreferenceTreeClick(entry)
     idleMainLooper()
     return screen.cast(currentScreen())
+}
+
+/** The row [key] is shown in, with the list laid out tall enough to show every row. */
+fun PreferenceFragmentCompat.rowOf(key: String): View {
+    val preference = requireNotNull(findPreference<Preference>(key)) { "no preference $key" }
+    listView.laidOutRows()
+    val position = (listView.adapter as PreferenceGroup.PreferencePositionCallback)
+        .getPreferenceAdapterPosition(preference)
+    return requireNotNull(listView.findViewHolderForAdapterPosition(position)) { "$key is not shown" }.itemView
 }

@@ -28,21 +28,38 @@
         android:title="@string/audioInputMethod"
         app:iconSpaceReserved="false"/>
 
-    <se.lublin.mumla.preference.SeekBarDialogPreference
-        android:title="@string/audioInputVolume"
-        android:summary="@string/audioInputVolumeSum"
-        android:key="inputVolume"
-        app:max="200"
-        android:defaultValue="100"
-        android:text="%"
-        app:iconSpaceReserved="false"/>
-
     <!-- Filled and saved by AudioSettingsFragment through Settings.preferredAudioDevice. -->
     <ListPreference
         android:key="audio_device"
         android:persistent="false"
         android:title="@string/audio_device"
         android:dialogTitle="@string/audio_device"
+        app:iconSpaceReserved="false"/>
+
+    <!-- android:defaultValue must equal Settings.DEFAULT_BLUETOOTH_SCO. -->
+    <SwitchPreferenceCompat
+        android:defaultValue="true"
+        android:key="pref_bluetooth_sco"
+        android:summary="@string/bluetoothScoSum"
+        android:title="@string/bluetoothSco"
+        app:iconSpaceReserved="false"/>
+
+    <se.lublin.mumla.preference.SliderPreference
+        android:title="@string/audioInputVolume"
+        android:summary="@string/audioInputVolumeSum"
+        android:key="inputVolume"
+        app:max="200"
+        android:defaultValue="100"
+        app:valueFormat="@string/unitPercent"
+        app:iconSpaceReserved="false"/>
+
+    <ListPreference
+        android:key="noise_suppression_method"
+        android:defaultValue="rnnoise"
+        android:entries="@array/noiseSuppressionNames"
+        android:entryValues="@array/noiseSuppressionValues"
+        android:title="@string/noiseSuppression"
+        android:summary="@string/noiseSuppressionSum"
         app:iconSpaceReserved="false"/>
 
     <PreferenceCategory android:title="@string/voiceActivitySettings"
@@ -73,84 +90,6 @@
             android:summary="@string/inputLevelMeterSum"
             app:iconSpaceReserved="false"/>
 
-        <!-- Adaptive mode: a fraction of the measured speech-to-floor gap, not a loudness. -->
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
-            android:defaultValue="65"
-            android:key="vad_sensitivity"
-            app:min="0"
-            app:max="100"
-            android:text="%"
-            android:summary="@string/vadSensitivitySum"
-            android:title="@string/vadSensitivity"
-            app:iconSpaceReserved="false"/>
-
-        <CheckBoxPreference
-            android:key="vad_adaptive_floor"
-            android:defaultValue="true"
-            android:title="@string/vadAdaptiveFloor"
-            android:summary="@string/vadAdaptiveFloorSum"
-            app:iconSpaceReserved="false"/>
-
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
-            android:defaultValue="45"
-            android:key="vad_floor_db"
-            app:min="20"
-            app:max="90"
-            android:text=" dB below full scale"
-            android:summary="@string/vadFloorSum"
-            android:title="@string/vadFloor"
-            app:iconSpaceReserved="false"/>
-
-        <!-- Classic mode: the legacy level slider, left on disk so switching back restores it. -->
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
-            android:defaultValue="50"
-            android:key="vadThreshold"
-            app:max="100"
-            android:summary="@string/detectionThresholdSum"
-            android:title="@string/detectionThreshold"
-            app:iconSpaceReserved="false"/>
-
-        <!-- Speech-model mode. -->
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
-            android:defaultValue="60"
-            android:key="vad_start"
-            app:max="100"
-            android:text="%"
-            android:summary="@string/vadStartSum"
-            android:title="@string/vadStart"
-            app:iconSpaceReserved="false"/>
-
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
-            android:defaultValue="30"
-            android:key="vad_stop"
-            app:max="100"
-            android:text="%"
-            android:summary="@string/vadStopSum"
-            android:title="@string/vadStop"
-            app:iconSpaceReserved="false"/>
-
-        <!-- Every mode. -->
-        <ListPreference
-            android:key="vad_onset_frames"
-            android:defaultValue="2"
-            android:entries="@array/vadOnsetNames"
-            android:entryValues="@array/vadOnsetValues"
-            android:title="@string/vadOnset"
-            android:summary="@string/vadOnsetSum"
-            app:iconSpaceReserved="false"/>
-
-        <Preference
-            android:key="vad_recalibrate"
-            android:persistent="false"
-            android:title="@string/vadRecalibrate"
-            android:summary="@string/vadRecalibrateSum"
-            app:iconSpaceReserved="false"/>
-
         <SwitchPreferenceCompat
             android:key="audio_loopback_test"
             android:dependency="audio_test_microphone"
@@ -160,74 +99,59 @@
             android:summary="@string/audioLoopbackTestSum"
             app:iconSpaceReserved="false"/>
 
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="10"
-            android:defaultValue="25"
-            android:key="vad_hold_ms"
+        <!-- Adaptive mode: a fraction of the measured speech-to-floor gap, not a loudness. -->
+        <se.lublin.mumla.preference.SliderPreference
+            android:defaultValue="65"
+            android:key="vad_sensitivity"
             app:min="0"
-            app:max="200"
-            android:text=" ms"
-            android:summary="@string/vadHoldSum"
-            android:title="@string/vadHold"
+            app:max="100"
+            app:valueFormat="@string/unitPercent"
+            android:summary="@string/vadSensitivitySum"
+            android:title="@string/vadSensitivity"
+            app:iconSpaceReserved="false"/>
+
+        <!-- Classic mode: the legacy level slider, left on disk so switching back restores it. -->
+        <se.lublin.mumla.preference.SliderPreference
+            android:defaultValue="50"
+            android:key="vadThreshold"
+            app:max="100"
+            app:valueFormat="@string/unitPercent"
+            android:summary="@string/detectionThresholdSum"
+            android:title="@string/detectionThreshold"
+            app:iconSpaceReserved="false"/>
+
+        <!-- Speech-model mode. -->
+        <se.lublin.mumla.preference.SliderPreference
+            android:defaultValue="60"
+            android:key="vad_start"
+            app:max="100"
+            app:valueFormat="@string/unitPercent"
+            android:summary="@string/vadStartSum"
+            android:title="@string/vadStart"
+            app:iconSpaceReserved="false"/>
+
+        <se.lublin.mumla.preference.SliderPreference
+            android:defaultValue="30"
+            android:key="vad_stop"
+            app:max="100"
+            app:valueFormat="@string/unitPercent"
+            android:summary="@string/vadStopSum"
+            android:title="@string/vadStop"
+            app:iconSpaceReserved="false"/>
+
+        <Preference
+            android:key="vad_recalibrate"
+            android:persistent="false"
+            android:title="@string/vadRecalibrate"
+            android:summary="@string/vadRecalibrateSum"
             app:iconSpaceReserved="false"/>
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="@string/pttSettings"
-        android:key="ptt_settings"
-        app:iconSpaceReserved="false">
-        <se.lublin.mumla.preference.KeySelectDialogPreference
-            android:key="talkKey"
-            android:summary="@string/pttKeySum"
-            android:title="@string/pttKey"
-            app:iconSpaceReserved="false"/>
-
-        <ListPreference
-            android:defaultValue="none"
-            android:entries="@array/hotCornerNames"
-            android:entryValues="@array/hotCornerValues"
-            android:key="hotCorner"
-            android:summary="@string/hotCornerSum"
-            android:title="@string/hotCorner"
-            app:iconSpaceReserved="false"/>
-
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="ptt_sound"
-            android:summary="@string/pttSoundSum"
-            android:title="@string/pttSound"
-            app:iconSpaceReserved="false"/>
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="hidePtt"
-            android:summary="@string/hidePttSum"
-            android:title="@string/hidePtt"
-            app:iconSpaceReserved="false"/>
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="togglePtt"
-            android:summary="@string/togglePttSum"
-            android:title="@string/togglePtt"
-            app:iconSpaceReserved="false"/>
-        <SwitchPreferenceCompat
-            android:defaultValue="false"
-            android:key="holdToWhisper"
-            android:summary="@string/holdToWhisperSum"
-            android:title="@string/hold_to_whisper"
-            app:iconSpaceReserved="false"/>
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="allow_external_ptt"
-            android:summary="@string/allowExternalPttSum"
-            android:title="@string/allowExternalPtt"
-            app:iconSpaceReserved="false"/>
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="half_duplex"
-            android:title="@string/halfDuplex"
-            android:summary="@string/halfDuplexSum"
-            app:iconSpaceReserved="false"/>
-    </PreferenceCategory>
-    <PreferenceCategory android:title="@string/advancedAudio"
+    <!-- Expert settings, collapsed behind one "Advanced" row. Kept on this screen so a running
+         microphone test hears every change. -->
+    <PreferenceCategory
+        android:key="advanced_audio"
+        app:initialExpandedChildrenCount="0"
         app:iconSpaceReserved="false">
 
         <!-- TODO add an actual min of 8000hz -->
@@ -240,15 +164,16 @@
             android:entryValues="@array/audioSampleRateValues"
             app:iconSpaceReserved="false"/>
 
-        <se.lublin.mumla.preference.SeekBarDialogPreference
+        <se.lublin.mumla.preference.SliderPreference
             android:key="input_bitrate"
             android:title="@string/inputQuality"
             android:summary="@string/inputQualitySum"
-            app:multiplier="1000"
-            app:max="96"
-            app:min="8"
-            android:defaultValue="40"
-            android:text=" bps"
+            app:min="8000"
+            app:max="96000"
+            app:valueStep="1000"
+            android:defaultValue="40000"
+            app:valueFormat="@string/unitKilobitsPerSecond"
+            app:valueDivisor="1000"
             app:iconSpaceReserved="false"/>
 
         <ListPreference
@@ -256,17 +181,7 @@
             android:title="@string/audio_per_packet"
             android:summary="@string/audio_per_packet_sum"
             android:defaultValue="2"
-            android:entries="@array/audio_per_packet_names"
             android:entryValues="@array/audio_per_packet_values"
-            app:iconSpaceReserved="false"/>
-
-        <ListPreference
-            android:key="noise_suppression_method"
-            android:defaultValue="rnnoise"
-            android:entries="@array/noiseSuppressionNames"
-            android:entryValues="@array/noiseSuppressionValues"
-            android:title="@string/noiseSuppression"
-            android:summary="@string/noiseSuppressionSum"
             app:iconSpaceReserved="false"/>
 
         <ListPreference
@@ -278,18 +193,56 @@
             android:summary="@string/speexNoiseSuppressSum"
             app:iconSpaceReserved="false"/>
 
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:key="android_noise_suppressor"
             android:defaultValue="false"
             android:title="@string/androidNoiseSuppressor"
             android:summary="@string/androidNoiseSuppressorSum"
             app:iconSpaceReserved="false"/>
 
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:key="android_agc"
             android:defaultValue="false"
             android:title="@string/androidAgc"
             android:summary="@string/androidAgcSum"
+            app:iconSpaceReserved="false"/>
+
+        <!-- The voice detector's tuning; like the section above, only used with voice activity. -->
+        <SwitchPreferenceCompat
+            android:key="vad_adaptive_floor"
+            android:defaultValue="true"
+            android:title="@string/vadAdaptiveFloor"
+            android:summary="@string/vadAdaptiveFloorSum"
+            app:iconSpaceReserved="false"/>
+
+        <se.lublin.mumla.preference.SliderPreference
+            android:defaultValue="45"
+            android:key="vad_floor_db"
+            app:min="20"
+            app:max="90"
+            app:valueFormat="@string/unitDbfsBelow"
+            android:summary="@string/vadFloorSum"
+            android:title="@string/vadFloor"
+            app:iconSpaceReserved="false"/>
+
+        <ListPreference
+            android:key="vad_onset_frames"
+            android:defaultValue="2"
+            android:entries="@array/vadOnsetNames"
+            android:entryValues="@array/vadOnsetValues"
+            android:title="@string/vadOnset"
+            android:summary="@string/vadOnsetSum"
+            app:iconSpaceReserved="false"/>
+
+        <se.lublin.mumla.preference.SliderPreference
+            android:defaultValue="250"
+            android:key="vad_hold_ms"
+            app:min="0"
+            app:max="2000"
+            app:valueStep="10"
+            app:valueFormat="@string/unitMilliseconds"
+            android:summary="@string/vadHoldSum"
+            android:title="@string/vadHold"
             app:iconSpaceReserved="false"/>
     </PreferenceCategory>
 </PreferenceScreen>

@@ -4,7 +4,6 @@
     <string name="edit">Rediger</string>
     <string name="connectToServer">Koble til tjener</string>
     <string name="connect">Koble til</string>
-    <string name="quickConnect">Hurtigtilkobling</string>
     <string name="searchHint">Søk i kanaler og brukere</string>
     <string name="search">Søk</string>
     <string name="generateCertProgress">Genererer sertifikat …</string>
@@ -33,7 +32,6 @@
     <string name="server_port">Port</string>
     <string name="server_username">Brukernavn</string>
     <string name="server_password">Passord</string>
-    <string name="no_servers">Trykk «Legg til» fra handlingsfeltet for å legge til en tjener først.</string>
     <string name="server_match_description">Mumla kan automatisk finne deg en tom tjener, optimalisere for plassering, versjon, og latens.</string>
     <string name="server_match_info">Navn: %1$s
 \nVert: %2$s:%3$d
@@ -80,9 +78,6 @@
     <string name="decrypt_certificate">Dekrypter sertifikat</string>
     <string name="no_certificate">Inget sertifikat</string>
     <string name="change_requires_reconnect">Koble til igjen for at endringene skal tre i effekt.</string>
-    <string name="attempting_reconnect">Feil: %s
-\n
-\nKobler til igjen …</string>
     <string name="cancel_reconnect">Avbryt forsøk på å koble til igjen</string>
     <string name="invalid_port_range">Ugyldig port (1-65535)</string>
     <string name="invalid_host">Ugyldig vert</string>
@@ -102,7 +97,6 @@
 \n%5$s</string>
     <string name="channel_join">Ta del</string>
     <string name="current_chat_target">Nåværende sludremål</string>
-    <string name="cancelled">Avbrutt</string>
     <string name="trust_cleared">Tillitsbunke tømt</string>
     <string name="trust_add_failed">Kunne ikke legge til sertifikat i tillitsbunken.</string>
     <string name="trust_added">Sertifikat lagt til i tillitsbunken</string>
@@ -110,7 +104,6 @@
     <string name="untrusted_certificate">Ubetrodd sertifikat</string>
     <string name="channel_menu_view_description">Vis beskrivelse</string>
     <string name="send_message">Send melding</string>
-    <string name="invalid_password">Feil passord.</string>
     <string name="generate">Generer</string>
     <string name="first_run_generate_certificate">Generering av sertifikat anbefales sterkt, og er påkrevd for tilkobling til noen tjenere.</string>
     <string name="first_run_generate_certificate_title">Velkommen</string>
@@ -131,16 +124,11 @@
     <string name="error_fetching_servers">Kunne ikke hente tjenere.
 \nEr du koblet til Internett\?</string>
     <string name="information">Info</string>
-    <string name="search_country">Land</string>
-    <string name="search_name">Navn</string>
     <string name="close">Lukk</string>
     <string name="shareMessage">Ta del i denne Mumble-tjeneren med Mumla. %s</string>
     <string name="description">Beskrivelse</string>
     <string name="share">Deling</string>
-    <string name="country">Land</string>
     <string name="name">Navn</string>
-    <string name="sortBy">Sorter etter …</string>
-    <string name="sort">Rekkefølge</string>
     <string name="unknown">Ukjent</string>
     <string name="user">Bruker</string>
     <string name="channel">Kanal</string>

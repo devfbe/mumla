@@ -14,7 +14,6 @@
     <string name="edit">Editar</string>
     <string name="connectToServer">Conectar-se ao servidor</string>
     <string name="connect">Conectar</string>
-    <string name="quickConnect">Conexão rápida</string>
     <string name="searchHint">Procurar canais e usuários</string>
     <string name="search">Procurar</string>
     <string name="generateCertProgress">Gerando certificado…</string>
@@ -43,7 +42,6 @@
     <string name="server_port">Porta</string>
     <string name="server_username">Nome de usuário</string>
     <string name="server_password">Senha</string>
-    <string name="no_servers">Você ainda não adicionou servidores. Pressione o botão \"Adicionar\" na barra de ações para começar.</string>
     <string name="server_match_description">Mumla pode procurar automaticamente um servidor vazio, otimizado para sua localização, versão e latência.</string>
     <string name="server_match_info">Nome: %1$s
 \nHost: %2$s:%3$d
@@ -124,9 +122,6 @@
     <string name="decrypt_certificate">Descriptografar certificado</string>
     <string name="no_certificate">Sem certificado</string>
     <string name="change_requires_reconnect">Reconecte-se para usar as novas configurações.</string>
-    <string name="attempting_reconnect">Erro: %s.
-\n
-\nReconectando…</string>
     <string name="cancel_reconnect">Cancelar reconexão</string>
     <string name="invalid_port_range">Porta inválida (1-65535)</string>
     <string name="invalid_host">Host inválido</string>
@@ -146,7 +141,6 @@
 \n%5$s</string>
     <string name="channel_join">Entrar</string>
     <string name="current_chat_target">Alvo atual do chat</string>
-    <string name="cancelled">Cancelado</string>
     <string name="trust_cleared">Lista de certificados confiáveis limpa</string>
     <string name="trust_add_failed">Não foi possível adicionar o certificado para a lista de certificados confiáveis.</string>
     <string name="trust_added">Certificado adicionado à lista de certificados confiáveis</string>
@@ -154,7 +148,6 @@
     <string name="untrusted_certificate">Certificado não confiável</string>
     <string name="channel_menu_view_description">Ver descrição</string>
     <string name="send_message">Enviar mensagem</string>
-    <string name="invalid_password">Senha incorreta.</string>
     <string name="generate">Gerar</string>
     <string name="first_run_generate_certificate">Gerar um certificado é altamente recomendado e necessário para se conectar em alguns servidores.</string>
     <string name="first_run_generate_certificate_title">Bem-vindo(a) ao Mumla</string>
@@ -175,16 +168,11 @@
     <string name="error_fetching_servers">Não foi possível obter a lista de servidores.
 \nVocê está conectado à internet\?</string>
     <string name="information">Informação</string>
-    <string name="search_country">País</string>
-    <string name="search_name">Nome</string>
     <string name="close">Fechar</string>
     <string name="shareMessage">Entre nesse servidor Mumble com o Mumla. %s</string>
     <string name="description">Descrição</string>
     <string name="share">Compartilhar</string>
-    <string name="country">País</string>
     <string name="name">Nome</string>
-    <string name="sortBy">Ordenar por…</string>
-    <string name="sort">Ordenar</string>
     <string name="unknown">Desconhecido</string>
     <string name="image_confirm_send">Enviar esta imagem\?</string>
     <string name="connection_lost_reconnecting">Conexão perdida – reconectando…</string>

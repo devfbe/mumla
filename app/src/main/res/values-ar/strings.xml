@@ -41,7 +41,6 @@
     <string name="server_port">منفذ</string>
     <string name="server_username">اسم المستخدم</string>
     <string name="server_password">كلمة المرور</string>
-    <string name="no_servers">أولا أضف خادما عن طريق \'أضف\' من شريط الإجراءات.</string>
     <string name="server_match_info">الاسم: %1$s
 \nالمضيف: %2$s:%3$d
 \nالمستخدمون: %4$d \\ %5$d
@@ -78,7 +77,6 @@
     <string name="generateCertProgress">يولد الشهادة…</string>
     <string name="search">ابحث</string>
     <string name="searchHint">ابحث عن قنوات أو مستخدمين</string>
-    <string name="quickConnect">الاتصال السريع</string>
     <string name="edit">عدّل</string>
     <string name="messageToUser">اكتب رسالة لـ \'%s\'</string>
     <string name="messageToChannel">اكتب رسال في \'%s\'</string>
@@ -89,11 +87,8 @@
     <string name="user">مستخدم</string>
     <string name="unknown">مجهول</string>
     <string name="name">الاسم</string>
-    <string name="country">البلد</string>
     <string name="share">شارك</string>
     <string name="description">الوصف</string>
-    <string name="sort">افرز</string>
-    <string name="sortBy">افرز حسب…</string>
     <string name="information">المعلومات</string>
     <string name="error_fetching_servers">تعذر جلب الخوادم.
 \nهل أنت متصل؟</string>
@@ -108,12 +103,10 @@
     <string name="first_run_generate_certificate_title">مرحبًا غي موملا</string>
     <string name="first_run_generate_certificate">يُنصح بتوليد شهادة، فهي إلزامية في بعض الخوادم.</string>
     <string name="generate">ولّد</string>
-    <string name="invalid_password">كلمة السر خاطئة.</string>
     <string name="send_message">أرسل رسالة</string>
     <string name="channel_menu_view_description">اعرض الوصف</string>
     <string name="untrusted_certificate">شهادة غير موثوقة</string>
     <string name="allow">اسمح</string>
-    <string name="cancelled">أُلغي</string>
     <string name="channel_join">انضم</string>
     <string name="certificate_info">الموضوع:
 \n%1$s
@@ -132,9 +125,6 @@
     <string name="invalid_host">مستضيف غير صالح</string>
     <string name="invalid_port_range">منفذ غير صالح (1-65535)</string>
     <string name="cancel_reconnect">ألغ إعادة الاتصال</string>
-    <string name="attempting_reconnect">خطأ: %s
-\n
-\nيعيد الاتصال…</string>
     <string name="change_requires_reconnect">أعد الاتصال لتطبيق الاعدادات الجديدة.</string>
     <string name="no_certificate">بدون شهادة</string>
     <string name="decrypt_certificate">فك تشفير الشهادة</string>
@@ -153,14 +143,12 @@
         <item quantity="other">%d مستخدم</item>
     </plurals>
     <string name="connect">اتصل</string>
-    <string name="search_name">الاسم</string>
     <string name="connectToServer">اتصل بخادم</string>
     <string name="delete">احذف</string>
     <string name="connected">متصل</string>
     <string name="mumlaConnecting">موملا يتصل…</string>
     <string name="mumlaDisconnected">موملا غير متصل</string>
     <string name="close">أغلق</string>
-    <string name="search_country">البلد</string>
     <string name="channel_add">أضف قناة</string>
     <string name="tts_failed">تعذر بدأ TTS</string>
     <string name="user_menu_deafen">أصم</string>

@@ -41,7 +41,6 @@
     <string name="inputQualitySum">அனுப்பப்படும் தரவுகளின் விருப்பமான விகிதம் (நொடிக்குப் இருமங்களில்).</string>
     <string name="pref_start_up_in_pinned_mode">பின் செய்யப்பட்ட தடங்கள் பயன்முறை</string>
     <string name="licenses">உரிமங்கள்</string>
-    <string name="authentication">உறுதிப்பாடு</string>
     <string name="audioInputMethodSum">ஒலி பரப்புகை எவ்வாறு செயல்படுத்தப்படுகிறது.</string>
     <string name="audioInputMethod">பரிமாற்ற பயன்முறை</string>
     <string name="audioInputVolume">ஓரி அளவு</string>
@@ -55,10 +54,8 @@
     <string name="general">பொது</string>
     <string name="appearance">தோற்றம்</string>
     <string name="theme">கருப்பொருள்</string>
-    <string name="advancedAudio">மேம்பட்ட</string>
     <string name="forceTcp">பகநெ மட்டும்</string>
     <string name="forceTcpSum">தகவல்தொடர்புக்காகப் பதநெயை முடக்குகிறது.</string>
-    <string name="audio">ஒலிதம்</string>
     <string name="audioSampleRate">உள்ளீட்டு மாதிரி வீதம்</string>
     <string name="audioSampleRateSum">விருப்பமான ஒலி மாதிரி வீதம். சில சாதனங்கள் குறைவான விகிதங்களை ஆதரிக்கின்றன.</string>
     <string name="chatNotifications">அரட்டை அறிவிப்புகள்</string>

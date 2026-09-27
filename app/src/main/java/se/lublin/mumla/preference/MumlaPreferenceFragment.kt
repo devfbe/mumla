@@ -28,12 +28,9 @@ abstract class MumlaPreferenceFragment(@param:XmlRes private val preferencesXml:
     }
 
     override fun onDisplayPreferenceDialog(preference: Preference) {
-        val dialog = when (preference) {
-            is SeekBarDialogPreference -> SeekBarPreferenceDialogFragment()
-            is KeySelectDialogPreference -> KeySelectPreferenceDialogFragment()
-            else -> return super.onDisplayPreferenceDialog(preference)
-        }
+        if (preference !is KeySelectDialogPreference) return super.onDisplayPreferenceDialog(preference)
         if (childFragmentManager.findFragmentByTag(DIALOG_TAG) != null) return
+        val dialog = KeySelectPreferenceDialogFragment()
         dialog.arguments = Bundle().apply { putString(PreferenceValueDialogFragment.ARG_KEY, preference.key) }
         dialog.show(childFragmentManager, DIALOG_TAG)
     }

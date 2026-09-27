@@ -17,7 +17,6 @@
     <string name="acknowledgements">贡献者</string>
     <string name="acknowledgementsSum">查看 Mumla 的贡献者（网页链接）</string>
     <string name="licenses">许可证</string>
-    <string name="authentication">身份验证</string>
     <string name="audioInputMethodSum">如何激活音频传输。</string>
     <string name="audioInputMethod">传输模式</string>
     <string name="audioInputVolume">麦克风音量</string>
@@ -31,10 +30,8 @@
     <string name="general">常规</string>
     <string name="appearance">外观</string>
     <string name="theme">主题</string>
-    <string name="advancedAudio">高级</string>
     <string name="forceTcp">仅使用 TCP</string>
     <string name="forceTcpSum">禁止 UDP 通信。</string>
-    <string name="audio">音频</string>
     <string name="audioSampleRate">输入采样率</string>
     <string name="audioSampleRateSum">偏好音频采样率。某些设备仅支持部分采样率。</string>
     <string name="chatNotifications">聊天提醒</string>

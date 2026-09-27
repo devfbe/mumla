@@ -49,11 +49,18 @@ class LayoutAccessibilityTest {
 
     private fun View.name() = if (id == View.NO_ID) javaClass.simpleName else resources.getResourceEntryName(id)
 
+    /** Whether this view and its parents up to [root] are visible; a gone view is not read out. */
+    private fun View.visibleIn(root: View): Boolean =
+        generateSequence(this) { if (it === root) null else it.parent as? View }
+            .all { it.visibility == View.VISIBLE }
+
     @Test
     fun everyImageIsDescribedOrHidden() {
         for ((layout, root) in inflateAll()) {
             // A toolbar's own buttons are described once it becomes the action bar.
-            for (image in root.tree().filterIsInstance<ImageView>().filter { it.parent !is Toolbar }) {
+            val images = root.tree().filterIsInstance<ImageView>()
+                .filter { it.parent !is Toolbar && it.visibleIn(root) }
+            for (image in images) {
                 val described = image.contentDescription != null ||
                     image.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 assertWithMessage("${image.name()} in $layout").that(described).isTrue()

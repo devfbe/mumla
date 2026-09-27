@@ -8,7 +8,6 @@
     <string name="acknowledgements">Συνεισφέροντες</string>
     <string name="acknowledgementsSum">Δείτε ποιοι συνέβαλαν στο Mumla (σύνδεσμος ιστού)</string>
     <string name="licenses">Άδειες</string>
-    <string name="authentication">Ταυτοποίηση</string>
     <string name="audioInputMethodSum">Πώς ενεργοποιείται η μετάδοση ήχου.</string>
     <string name="detectionThreshold">Όριο ανίχνευσης</string>
     <string name="detectionThresholdSum">Ελάχιστο επίπεδο έντασης για την ανίχνευση φωνής (όταν η λειτουργία μετάδοσης είναι \"φωνητική δραστηριότητα\").</string>
@@ -18,10 +17,8 @@
     <string name="general">Γενικά</string>
     <string name="appearance">Εμφάνιση</string>
     <string name="theme">Θέμα</string>
-    <string name="advancedAudio">Επιλογές για προχωρημένος</string>
     <string name="forceTcp">Μόνο TCP</string>
     <string name="forceTcpSum">Απενεργοποιεί το UDP για επικοινωνία.</string>
-    <string name="audio">Ήχος</string>
     <string name="audioSampleRateSum">Προτιμώμενος ρυθμός δειγματοληψίας ήχου. Ορισμένες συσκευές υποστηρίζουν λιγότερες τιμές.</string>
     <string name="voiceActivitySettings">Ρυθμίσεις φωνητικής δραστηριότητας</string>
     <string name="hidePttSum">Μόνο χρήσιμο εάν χρησιμοποιείτε γωνία push-to-talk ή φυσικό κουμπί.</string>

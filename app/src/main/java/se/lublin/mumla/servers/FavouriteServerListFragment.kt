@@ -20,15 +20,13 @@ package se.lublin.mumla.servers
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -42,12 +40,14 @@ import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.showConfirmDialog
 
-/** Displays the favourite servers, and lets the user connect to and edit them. */
-@Suppress("TooManyFunctions") // Fragment, menu and card menu callbacks.
+/**
+ * Displays the favourite servers, and lets the user connect to, add and edit them. Without any, it
+ * offers to add one or to browse the public servers, which it asks the activity for with a
+ * fragment result under [REQUEST_BROWSE_PUBLIC].
+ */
 class FavouriteServerListFragment :
     Fragment(),
-    FavouriteServerAdapter.FavouriteServerAdapterMenuListener,
-    MenuProvider {
+    FavouriteServerAdapter.FavouriteServerAdapterMenuListener {
 
     private val connectRequests: ConnectRequests by activityViewModels()
     private val favourites by appViewModels(FavouriteServersViewModel::create)
@@ -59,22 +59,26 @@ class FavouriteServerListFragment :
         super.onViewCreated(view, savedInstanceState)
         val binding = FragmentServerListBinding.bind(view)
         setUpServerGrid(binding.serverListGrid)
+        binding.serverListGrid.updatePadding(
+            bottom = binding.serverListGrid.paddingBottom +
+                resources.getDimensionPixelSize(R.dimen.server_list_fab_clearance),
+        )
+        binding.serverListAdd.setOnClickListener { showEditDialog(null, ServerEditFragment.Mode.ADD) }
+        binding.serverListEmptyAdd.setOnClickListener { showEditDialog(null, ServerEditFragment.Mode.ADD) }
+        binding.serverListEmptyBrowse.setOnClickListener { setFragmentResult(REQUEST_BROWSE_PUBLIC, Bundle.EMPTY) }
         val adapter = FavouriteServerAdapter(this, favourites.pings) {
             connectRequests.request(ServerRequest.Favourite(it))
         }
-        // As the platform grid's empty view: shown until there are servers to show.
+        // As the platform grid's empty view: shown until there are servers to show, instead of the add button.
         adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
             override fun onChanged() = showEmpty()
             override fun onItemRangeInserted(positionStart: Int, itemCount: Int) = showEmpty()
             override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) = showEmpty()
 
-            fun showEmpty() {
-                binding.serverListGridEmpty.isVisible = adapter.itemCount == 0
-            }
+            fun showEmpty() = showEmptyState(binding, adapter.itemCount == 0)
         })
-        binding.serverListGridEmpty.isVisible = true
+        showEmptyState(binding, true)
         binding.serverListGrid.adapter = adapter
-        requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { favourites.pings.replies.collect(adapter::setReplies) }
@@ -83,32 +87,24 @@ class FavouriteServerListFragment :
         }
     }
 
+    private fun showEmptyState(binding: FragmentServerListBinding, empty: Boolean) {
+        binding.serverListGridEmpty.isVisible = empty
+        binding.serverListAdd.isVisible = !empty
+    }
+
     override fun onResume() {
         super.onResume()
         // Edits are made elsewhere and stored by the activity.
         favourites.reload()
     }
 
-    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        menuInflater.inflate(R.menu.fragment_server_list, menu)
-    }
-
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        when (menuItem.itemId) {
-            R.id.menu_add_server_item -> showEditDialog(null, ServerEditFragment.Action.ADD, false)
-            R.id.menu_quick_connect -> showEditDialog(null, ServerEditFragment.Action.CONNECT, true)
-            else -> return false
-        }
-        return true
-    }
-
     override fun editServer(server: Server) {
-        showEditDialog(server, ServerEditFragment.Action.EDIT, false)
+        showEditDialog(server, ServerEditFragment.Mode.EDIT)
     }
 
-    private fun showEditDialog(server: Server?, action: ServerEditFragment.Action, ignoreTitle: Boolean) {
+    private fun showEditDialog(server: Server?, mode: ServerEditFragment.Mode) {
         // Shown by the activity's fragment manager, where MumlaActivity takes the result.
-        ServerEditFragment.newInstance(server, action, ignoreTitle).show(parentFragmentManager, "serverInfo")
+        ServerEditFragment.newInstance(server, mode).show(parentFragmentManager, "serverInfo")
     }
 
     override fun shareServer(server: Server) {
@@ -123,5 +119,9 @@ class FavouriteServerListFragment :
         requireContext().showConfirmDialog(getString(R.string.confirm_delete_server), R.string.delete) {
             favourites.delete(server)
         }
+    }
+
+    companion object {
+        const val REQUEST_BROWSE_PUBLIC = "browse_public_servers"
     }
 }

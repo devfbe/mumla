@@ -32,9 +32,6 @@
     <string name="decrypt_certificate">Dešifrovat certifikát</string>
     <string name="no_certificate">Žádný certifikát</string>
     <string name="change_requires_reconnect">Pro použití nových nastavení se znovu připojte.</string>
-    <string name="attempting_reconnect">Chyba: %s.
-\n
-\nOpětovné připojování…</string>
     <string name="cancel_reconnect">Zrušit opětovné připojení</string>
     <string name="invalid_port_range">Neplatný port (1-65535)</string>
     <string name="invalid_host">Neplatný hostitel</string>
@@ -54,7 +51,6 @@
 \n%5$s</string>
     <string name="channel_join">Připojit</string>
     <string name="current_chat_target">Aktuální cíl chatu</string>
-    <string name="cancelled">Zrušeno</string>
     <string name="trust_cleared">Databáze důvěryhodných údajů vymazána</string>
     <string name="trust_add_failed">Nepodařilo se přidat certifikát do úložiště důvěryhodných certifikátů.</string>
     <string name="trust_added">Certifikát přidán do úložiště důvěryhodných certifikátů</string>
@@ -62,7 +58,6 @@
     <string name="untrusted_certificate">Nedůvěryhodný certifikát</string>
     <string name="channel_menu_view_description">Zobrazit popis</string>
     <string name="send_message">Odeslat zprávu</string>
-    <string name="invalid_password">Nesprávné heslo.</string>
     <string name="generate">Vygenerovat</string>
     <string name="first_run_generate_certificate">Generování certifikátu se důrazně doporučuje a je nezbytné pro připojení k některým serverům.</string>
     <string name="first_run_generate_certificate_title">Vítejte v Mumla</string>
@@ -83,16 +78,11 @@
     <string name="error_fetching_servers">Nelze načíst servery.
 \nJste připojeni k internetu\?</string>
     <string name="information">Informace</string>
-    <string name="search_country">Země</string>
-    <string name="search_name">Název</string>
     <string name="close">Zavřít</string>
     <string name="shareMessage">Připojte se k tomuto Mumble serveru pomocí Mumla. %s</string>
     <string name="description">Popis</string>
     <string name="share">Sdílet</string>
-    <string name="country">Země</string>
     <string name="name">Název</string>
-    <string name="sort">Seřadit</string>
-    <string name="sortBy">Seřadit podle…</string>
     <string name="unknown">Neznámé</string>
     <string name="user">Uživatel</string>
     <string name="channel">Kanál</string>
@@ -108,7 +98,6 @@
     <string name="edit">Upravit</string>
     <string name="connectToServer">Připojit k serveru</string>
     <string name="connect">Připojit</string>
-    <string name="quickConnect">Rychlé připojení</string>
     <string name="searchHint">Prohledat kanály a uživatele</string>
     <string name="search">Hledat</string>
     <string name="generateCertProgress">Generování certifikátu…</string>
@@ -137,7 +126,6 @@
     <string name="server_port">Port</string>
     <string name="server_username">Uživatelské jméno</string>
     <string name="server_password">Heslo</string>
-    <string name="no_servers">Stiskněte „Přidat“ v horním panelu pro přidání serveru.</string>
     <string name="server_match_description">Mumla pro vás automaticky může najít prázdný server s optimální lokací, verzí a latencí.</string>
     <string name="server_match_info">Jméno: %1$s
 \nHost: %2$s:%3$d

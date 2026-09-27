@@ -36,5 +36,7 @@
     <!-- Server cards: as many columns of this width as fit, this far apart. -->
     <dimen name="server_grid_column_width">320dp</dimen>
     <dimen name="server_grid_spacing">10dp</dimen>
+    <!-- Room below the last card for the add button: its height and its margins. -->
+    <dimen name="server_list_fab_clearance">88dp</dimen>
 
 </resources>

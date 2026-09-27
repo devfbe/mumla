@@ -53,7 +53,6 @@
     <string name="server_match_info">名前: %1$s\nホスト: %2$s:%3$d\nユーザー: %4$d / %5$d\nバージョン: %6$s \n国: %7$s \n遅延時間: %8$d ms</string>
     <string name="server_match_description">Mumla は、サーバの場所、バージョン、および遅延時間に基づいて最適な空のサーバーを自動的に見つけることができます。</string>
     <!--Common-->
-    <string name="no_servers">サーバーが追加されていません。\nアクションバーにある \'追加\' ボタンを押して開始ししてください。</string>
     <string name="server_password">パスワード</string>
     <string name="server_username">ユーザー名</string>
     <string name="server_port">ポート</string>
@@ -82,7 +81,6 @@
     <string name="generateCertProgress">証明書の生成中…</string>
     <string name="search">検索</string>
     <string name="searchHint">チャンネルとユーザーを検索</string>
-    <string name="quickConnect">クイック接続</string>
     <string name="connect">接続</string>
     <string name="connectToServer">サーバーに接続</string>
     <string name="edit">編集</string>
@@ -98,16 +96,11 @@
     <string name="channel">チャンネル</string>
     <string name="user">ユーザー</string>
     <string name="unknown">不明</string>
-    <string name="sort">ソート</string>
-    <string name="sortBy">ソート順…</string>
     <string name="name">名前</string>
-    <string name="country">国</string>
     <string name="share">共有</string>
     <string name="description">説明</string>
     <string name="shareMessage">Mumla で、この Mumble サーバーに参加してください! %s</string>
     <string name="close">閉じる</string>
-    <string name="search_name">名前</string>
-    <string name="search_country">国</string>
     <string name="information">情報</string>
     <string name="error_fetching_servers">サーバーの取得中にエラー!\nインターネット接続を確認してください。</string>
     <string name="overlay">オーバーレイ</string>
@@ -127,7 +120,6 @@
     <string name="first_run_generate_certificate_title">Mumla にようこそ</string>
     <string name="first_run_generate_certificate">証明書を生成することが非常に推奨されます。いくつかのサーバへ接続するために必要です。</string>
     <string name="generate">生成</string>
-    <string name="invalid_password">パスワードが正しくありません。</string>
     <string name="send_message">メッセージを送信</string>
     <string name="channel_menu_view_description">説明を表示</string>
     <string name="untrusted_certificate">信頼できない証明書</string>
@@ -135,14 +127,12 @@
     <string name="trust_added">トラストストアに証明書を追加しました</string>
     <string name="trust_add_failed">トラストストアへの証明書の追加に失敗しました</string>
     <string name="trust_cleared">トラストデータベースがクリアされました</string>
-    <string name="cancelled">キャンセルされました</string>
     <string name="current_chat_target">現在のチャット対象</string>
     <string name="channel_join">参加</string>
     <string name="certificate_info">サブジェクト:\n%1$s\n\n有効期限開始:\n%2$s\n\n有効期限終了:\n%3$s\n\nダイジェスト (SHA-1):\n%4$sダイジェスト (SHA-256):\n%5$s</string>
     <string name="invalid_host">ホストが正しくありません</string>
     <string name="invalid_port_range">ポートが正しくありません (1-65535)</string>
     <string name="cancel_reconnect">再接続をキャンセル</string>
-    <string name="attempting_reconnect">エラー: %s.\n\n再接続の試行中.</string>
     <plurals name="search_channel_users">
         <item quantity="other">%d ユーザー</item>
     </plurals>

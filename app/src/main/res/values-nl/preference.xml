@@ -17,7 +17,6 @@
     <string name="acknowledgements">Bijdragers</string>
     <string name="acknowledgementsSum">Bekijk wie tot Mumla heeft bijgedragen</string>
     <string name="licenses">Licenties</string>
-    <string name="authentication">Authenticatie</string>
     <string name="audioInputMethodSum">De methode van audio invoer.</string>
     <string name="audioInputMethod">Doorstuur methode</string>
     <string name="audioInputVolume">Microfoon volume</string>
@@ -31,10 +30,8 @@
     <string name="general">Algemeen</string>
     <string name="appearance">Uiterlijk</string>
     <string name="theme">Thema</string>
-    <string name="advancedAudio">Geavanceerd</string>
     <string name="forceTcp">Enkel TCP</string>
     <string name="forceTcpSum">Schakelt UDP uit voor communicatie.</string>
-    <string name="audio">Audio</string>
     <string name="audioSampleRate">Invoer sample rate</string>
     <string name="audioSampleRateSum">De voorkeur audio sample rate. Niet alle rates worden door alle toestellen ondersteund.</string>
     <string name="chatNotifications">Chat notificaties</string>

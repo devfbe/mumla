@@ -43,7 +43,13 @@
     <string name="acknowledgementsSum">See who contributed to Mumla (web link)</string>
     <string name="licenses">Licenses</string>
 
-    <string name="authentication">Authentication</string>
+
+    <!-- The settings screens -->
+    <string name="speakingAndAudio">Speaking &amp; audio</string>
+    <string name="chatAndNotifications">Chat &amp; notifications</string>
+    <string name="connection">Connection</string>
+    <string name="accountAndCertificates">Account &amp; certificates</string>
+
     <string name="audioInputMethodSum">How audio transmission is activated.</string>
     <string name="audioInputMethod">Transmit mode</string>
     <string name="audioInputVolume">Microphone volume</string>
@@ -58,10 +64,8 @@
     <string name="appearance">Appearance</string>
     <string name="theme">Theme</string>
     <string name="language">Language</string>
-    <string name="advancedAudio">Advanced</string>
     <string name="forceTcp">Only TCP</string>
     <string name="forceTcpSum">Turns off UDP for communication.</string>
-    <string name="audio">Audio</string>
     <string name="audioSampleRate">Input sample rate</string>
     <string name="audioSampleRateSum">Preferred sample rate; devices support different ones</string>
     <string name="chatNotifications">Chat notifications</string>
@@ -180,4 +184,15 @@
     <string name="mediaButtonActionMute">Toggle mute</string>
     <string name="bluetoothSco">Use Bluetooth headset automatically</string>
     <string name="bluetoothScoSum">Use a connected Bluetooth headset; asks for Nearby devices</string>
+
+    <!-- Units of the values on the settings screens -->
+    <string name="unitPercent">%1$d%%</string>
+    <string name="unitMilliseconds">%1$d ms</string>
+    <string name="unitKilobitsPerSecond">%1$d kbit/s</string>
+    <string name="unitDp">%1$d dp</string>
+    <string name="unitHertz">%1$d Hz</string>
+    <!-- A level below full scale; the value is positive, the sign is part of the text. -->
+    <string name="unitDbfsBelow">−%1$d dBFS</string>
+    <!-- %1$s is a sample rate with its unit. -->
+    <string name="audioSampleRateUnsupported">%1$s (unsupported)</string>
 </resources>

@@ -24,6 +24,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
 import se.lublin.mumla.R
+import se.lublin.mumla.testing.SETTINGS_SCREENS
 
 /** The settings screens' fixed summaries fit on about one line of a phone screen. */
 @RunWith(RobolectricTestRunner::class)
@@ -41,11 +42,7 @@ class PreferenceSummariesTest {
 
     @Test
     fun everySummaryIsShort() {
-        val screens = listOf(
-            R.xml.settings_general, R.xml.settings_audio, R.xml.settings_appearance,
-            R.xml.settings_authentication, R.xml.settings_about,
-        )
-        val tooLong = screens.flatMap(::summaries)
+        val tooLong = SETTINGS_SCREENS.flatMap(::summaries)
             .filter { (name, text) -> name != LEGAL_NOTICE && text.length > MAX_LENGTH }
         assertWithMessage("too long").that(tooLong).isEmpty()
     }

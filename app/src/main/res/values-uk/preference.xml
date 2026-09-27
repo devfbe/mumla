@@ -8,7 +8,6 @@
     <string name="hot_corner_none">Викл</string>
     <string name="audioInputMethod">Режим передачі</string>
     <string name="hotCornerSum">Натисніть на кут екрану з будь-якого додатку Android для початку передачі аудіо.</string>
-    <string name="advancedAudio">Розширені</string>
     <string name="forceTcp">Тільки TCP</string>
     <string name="chatNotificationsSum">Відображаються для нових повідомлень чату.</string>
     <string name="detectionThresholdSum">Мінімальний рівень гучності для виявлення голосу (коли режим передачі встановлено на \"За порогом гучності\").</string>
@@ -31,7 +30,6 @@
     <string name="acknowledgements">Розробники</string>
     <string name="acknowledgementsSum">Переглянути, хто вніс вклад в розвиток Mumla (посилання)</string>
     <string name="licenses">Ліцензії</string>
-    <string name="authentication">Автентифікація</string>
     <string name="detectionThreshold">Рівень виявлення</string>
     <string name="pttKey">Кнопка Push-to-talk</string>
     <string name="pttKeySum">Апаратна кнопка для передачі аудіо.</string>
@@ -52,7 +50,6 @@
     <string name="appearance">Вигляд</string>
     <string name="theme">Тема</string>
     <string name="forceTcpSum">Вимикає передачу через протокол UDP.</string>
-    <string name="audio">Аудіо</string>
     <string name="audioSampleRate">Частота дискретизації вхідного сигналу</string>
     <string name="audioSampleRateSum">Бажана частота дискретизації аудіо. Деякі пристрої підтримують лише менші частоти.</string>
     <string name="chatNotifications">Сповіщення чату</string>

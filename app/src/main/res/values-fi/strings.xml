@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="sortBy">Järjestä…</string>
     <string name="connecting_to_server">Yhdistetään %s…</string>
     <plurals name="search_channel_users">
         <item quantity="one">%d käyttäjä</item>
@@ -31,9 +30,6 @@
     <string name="decrypt_certificate">Pura Sertifikaatti</string>
     <string name="no_certificate">Ei sertifikaattia</string>
     <string name="change_requires_reconnect">Muodosta yhteys uudelleen käyttääksesi uusia asetuksia.</string>
-    <string name="attempting_reconnect">Virhe: %s.
-\n
-\nYhdistetään uudelleen…</string>
     <string name="cancel_reconnect">Peruuta yhteyden muodostaminen uudelleen</string>
     <string name="invalid_port_range">Virheellinen portti (1-65535)</string>
     <string name="invalid_host">Virheellinen isäntä</string>
@@ -53,7 +49,6 @@
 \n%5$s</string>
     <string name="channel_join">Liity</string>
     <string name="current_chat_target">Nykyinen chat-kohde</string>
-    <string name="cancelled">Peruutettu</string>
     <string name="trust_cleared">Luottamustietokanta tyhjennetty</string>
     <string name="trust_add_failed">Sertifikaattia ei voitu lisätä luottamussäilöön.</string>
     <string name="trust_added">Lisätty sertifikaatti luottamussäilöön</string>
@@ -61,7 +56,6 @@
     <string name="untrusted_certificate">Epäluotettava sertifikaatti</string>
     <string name="channel_menu_view_description">Näytä kuvaus</string>
     <string name="send_message">Lähetä viesti</string>
-    <string name="invalid_password">Väärä salasana.</string>
     <string name="generate">Luo</string>
     <string name="first_run_generate_certificate">Sertifikaatin luominen on erittäin suositeltavaa ja välttämätöntä yhteyden muodostamiseksi joihinkin palvelimiin.</string>
     <string name="first_run_generate_certificate_title">Tervetuloa Mumlaan</string>
@@ -82,15 +76,11 @@
     <string name="error_fetching_servers">Palvelimia ei voitu noutaa.
 \nOletko yhteydessä Internetiin\?</string>
     <string name="information">Tiedot</string>
-    <string name="search_country">Maa</string>
-    <string name="search_name">Nimi</string>
     <string name="close">Sulje</string>
     <string name="shareMessage">Liity tähän Mumble-palvelimeen Mumlan kanssa. %s</string>
     <string name="description">Kuvaus</string>
     <string name="share">Jaa</string>
-    <string name="country">Maa</string>
     <string name="name">Nimi</string>
-    <string name="sort">Järjestä</string>
     <string name="unknown">Tuntematon</string>
     <string name="user">Käyttäjä</string>
     <string name="channel">Kanava</string>
@@ -106,7 +96,6 @@
     <string name="edit">Muokkaa</string>
     <string name="connectToServer">Yhdistä palvelimeen</string>
     <string name="connect">Yhdistä</string>
-    <string name="quickConnect">Pikayhteys</string>
     <string name="searchHint">Hae kanavia ja käyttäjiä</string>
     <string name="search">Haku</string>
     <string name="generateCertProgress">Luodaan sertifikaattia…</string>
@@ -134,7 +123,6 @@
     <string name="server_port">Portti</string>
     <string name="server_username">Käyttäjänimi</string>
     <string name="server_password">Salasana</string>
-    <string name="no_servers">Lisää palvelin ensin painamalla toimintopalkista Lisää.</string>
     <string name="server_match_description">Mumla löytää automaattisesti tyhjän palvelimen, joka optimoi sijainnin, version ja viiveen.</string>
     <string name="server_match_info">Nimi: %1$s
 \nIsäntä: %2$s: %3$d

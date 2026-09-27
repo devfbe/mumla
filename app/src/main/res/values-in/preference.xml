@@ -28,7 +28,6 @@
     <string name="acknowledgements">Kontributor</string>
     <string name="acknowledgementsSum">Lihat kontributor Mumla (link web)</string>
     <string name="licenses">Lisensi</string>
-    <string name="authentication">Autentikasi</string>
     <string name="audioInputMethodSum">Metode aktivasi transmisi audio.</string>
     <string name="audioInputMethod">Mode transmisi</string>
     <string name="audioInputVolume">Volume mikrofon</string>
@@ -42,10 +41,8 @@
     <string name="general">Umum</string>
     <string name="appearance">Tampilan</string>
     <string name="theme">Tema</string>
-    <string name="advancedAudio">Pengaturan Lanjut</string>
     <string name="forceTcp">Hanya TCP</string>
     <string name="forceTcpSum">Mematikan protokol UDP untuk komunikasi.</string>
-    <string name="audio">Audio</string>
     <string name="audioSampleRate">Pengaturan Input sample rate audio</string>
     <string name="audioSampleRateSum">Sample rate audio yang diinginkan. Beberapa device hanya mendukung rate yang lebih rendah.</string>
     <string name="chatNotifications">Notifikasi chat</string>

@@ -17,7 +17,6 @@
     <string name="acknowledgements">Mitwirkende</string>
     <string name="acknowledgementsSum">Wer zu Mumla beigetragen hat (Weblink)</string>
     <string name="licenses">Lizenzen</string>
-    <string name="authentication">Authentifizierung</string>
     <string name="audioInputMethodSum">Wie die Audioübertragung aktiviert wird.</string>
     <string name="audioInputMethod">Sendemodus</string>
     <string name="audioInputVolume">Mikrofonlautstärke</string>
@@ -31,10 +30,8 @@
     <string name="general">Allgemein</string>
     <string name="appearance">Aussehen</string>
     <string name="theme">Erscheinungsbild</string>
-    <string name="advancedAudio">Erweiterte Audioeinstellungen</string>
     <string name="forceTcp">Nur TCP</string>
     <string name="forceTcpSum">Deaktiviert UDP für die Kommunikation.</string>
-    <string name="audio">Audio</string>
     <string name="audioSampleRate">Abtastrate der Eingabe</string>
     <string name="audioSampleRateSum">Bevorzugte Abtastrate; nicht jedes Gerät kann jede</string>
     <string name="chatNotifications">Chat-Benachrichtigungen</string>

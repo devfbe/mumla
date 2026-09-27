@@ -45,7 +45,6 @@
     <string name="server_match_expand_country">உங்கள் நாட்டில் எந்த உகந்த சேவையகங்களையும் கண்டுபிடிக்க முடியவில்லை. உலகளவில் தேடவா?</string>
     <string name="server_match_info">பெயர்: %1$s\nபுரவலன்: %2$s: %3$d\nபயனர்கள்: %4$d / %5$d\nபதிப்பு: %6$s\nநாடு: %7$s\nதாமதம்: %8$d மிநொ</string>
     <string name="server_match_description">மும்லா தானாகவே ஒரு வெற்று சேவையகத்தைக் கண்டுபிடித்து, இருப்பிடம், பதிப்பு மற்றும் தாமதத்தை மேம்படுத்தலாம்.</string>
-    <string name="no_servers">முதலில் ஒரு சேவையகத்தைச் சேர்க்க செயல் பட்டியிலிருந்து \'சேர்\' என்பதை அழுத்தவும்.</string>
     <string name="server_password">கடவுச்சொல்</string>
     <string name="server_username">பயனர்பெயர்</string>
     <string name="server_port">துறைமுகம்</string>
@@ -73,7 +72,6 @@
     <string name="generateCertProgress">சான்றிதழ் உருவாக்குதல்…</string>
     <string name="search">தேடல்</string>
     <string name="searchHint">தடங்கள் மற்றும் பயனர்களைத் தேடுங்கள்</string>
-    <string name="quickConnect">விரைவான இணைப்பு</string>
     <string name="connect">இணை</string>
     <string name="connectToServer">சேவையகத்துடன் இணைக்கவும்</string>
     <string name="edit">தொகு</string>
@@ -89,16 +87,11 @@
     <string name="channel">தடம்</string>
     <string name="user">பயனர்</string>
     <string name="unknown">தெரியவில்லை</string>
-    <string name="sort">வரிசைப்படுத்து</string>
-    <string name="sortBy">இதன்மூலம் வரிசைப்படுத்தவும்…</string>
     <string name="name">பெயர்</string>
-    <string name="country">நாடு</string>
     <string name="share">பங்கு</string>
     <string name="description">விவரம்</string>
     <string name="shareMessage">மும்லாவுடன் இந்த முணுமுணுப்பு சேவையகத்தில் சேரவும். %s</string>
     <string name="close">மூடு</string>
-    <string name="search_name">பெயர்</string>
-    <string name="search_country">நாடு</string>
     <string name="information">தகவல்</string>
     <string name="error_fetching_servers">சேவையகங்களைப் பெற முடியவில்லை.\n நீங்கள் இணையத்துடன் இணைக்கப்பட்டுள்ளீர்களா?</string>
     <string name="overlay">மேலடுக்கு</string>
@@ -118,7 +111,6 @@
     <string name="first_run_generate_certificate_title">மும்லாவுக்கு வருக</string>
     <string name="first_run_generate_certificate">ஒரு சான்றிதழை உருவாக்குவது மிகவும் பரிந்துரைக்கப்படுகிறது, மேலும் சில சேவையகங்களுடனான இணைப்பிற்கு தேவை.</string>
     <string name="generate">உருவாக்கு</string>
-    <string name="invalid_password">தவறான கடவுச்சொல்.</string>
     <string name="send_message">செய்தி அனுப்பவும்</string>
     <string name="channel_menu_view_description">விளக்கத்தைக் காண்க</string>
     <string name="untrusted_certificate">நம்பத் தகாத சான்றிதழ்</string>
@@ -126,14 +118,12 @@
     <string name="trust_added">நம்பகூடிய கடைக்குச் சான்றிதழ் சேர்க்கப்பட்டது</string>
     <string name="trust_add_failed">நம்பகூடிய கடைக்குச் சான்றிதழ் சேர்க்க முடியவில்லை.</string>
     <string name="trust_cleared">நம்பிக்கை தரவுத்தளம் அழிக்கப்பட்டது</string>
-    <string name="cancelled">கைவிடப்பட்டது</string>
     <string name="current_chat_target">தற்போதைய அரட்டை இலக்கு</string>
     <string name="channel_join">சேர</string>
     <string name="certificate_info">பொருள்:\n %1$s\n\n இதிலிருந்து செல்லுபடியாகும்:\n %2$s\n\n இதுவரை செல்லுபடியாகும்:\n %3$s\n\n சுருக்கம்(சா -1):\n %4$s\n\n சுருக்கம்(சா -256):\n %5$s</string>
     <string name="invalid_host">தவறான புரவலன்</string>
     <string name="invalid_port_range">தவறான துறைமுகம் (1-65535)</string>
     <string name="cancel_reconnect">மீண்டும் இணை கைவிடு</string>
-    <string name="attempting_reconnect">பிழை: %s.\n\nமீண்டும் இணைத்தல்…</string>
     <string name="change_requires_reconnect">புதிய அமைப்புகளைப் பயன்படுத்த மீண்டும் இணை.</string>
     <string name="no_certificate">சான்றிதழ் இல்லை</string>
     <string name="decrypt_certificate">மறைவிலக்கு சான்றிதழ்</string>

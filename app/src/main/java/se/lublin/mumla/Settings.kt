@@ -475,7 +475,7 @@ class Settings private constructor(private val context: Context) {
         /** Headset / AVRCP media button behavior, one of [MediaButtonAction.prefValue]. */
         val MEDIA_BUTTON_ACTION = Pref("media_button_action", "auto")
 
-        /** The general settings row for the battery-optimization exemption; stores nothing. */
+        /** The connection settings row for the battery-optimization exemption; stores nothing. */
         const val PREF_BATTERY_OPTIMIZATION = "battery_optimization"
 
         /** True once the battery-optimization exemption has been offered. */

@@ -57,9 +57,7 @@
     <string name="connect">連線</string>
     <string name="connectToServer">連線至伺服器</string>
     <string name="connected">已連線</string>
-    <string name="quickConnect">快速連線</string>
     <string name="reconnect">重新連線</string>
-    <string name="attempting_reconnect">錯誤: %s\n\n重新連線中…</string>
     <string name="change_requires_reconnect">重新連線以套用新的設定。</string>
     <string name="first_run_generate_certificate">強烈建議產生憑證，部份伺服器需要憑證才能進行連線。</string>
     <string name="reconnect_dialog_message">你已連線至伺服器。確定要改為連線至這個伺服器嗎？</string>
@@ -79,7 +77,6 @@
     <string name="udp_encryption_mode">使用 128 bit OCB-AES-128 加密</string>
     <string name="server_match_expand_country">無法在你的國家內找到最合適的伺服器。改為全球搜尋嗎？</string>
     <string name="server_match_description">Mumla 可以自動依據所在地區、版本、延遲為你尋找最適合的空伺服器。</string>
-    <string name="no_servers">請用上方工具列 \'＋\' 按鈕新增一個伺服器。</string>
     <string name="chat">聊天</string>
     <string name="addFavorite">新增收藏</string>
     <string name="search">搜尋</string>
@@ -96,10 +93,7 @@
     <string name="channel">頻道</string>
     <string name="user">使用者</string>
     <string name="unknown">未知</string>
-    <string name="sort">排序</string>
-    <string name="sortBy">排序方式…</string>
     <string name="name">名稱</string>
-    <string name="country">國家</string>
     <string name="clearChat">清除聊天</string>
     <string name="offline">離線</string>
     <string name="online">在線</string>
@@ -109,8 +103,6 @@
     <string name="description">描述</string>
     <string name="shareMessage">使用 Mumla 加入這個 Mumble 伺服器。 %s</string>
     <string name="close">關閉</string>
-    <string name="search_name">名稱</string>
-    <string name="search_country">國家</string>
     <string name="information">資訊</string>
     <string name="hint_reason">原因</string>
     <string name="action_settings">設定</string>
@@ -124,12 +116,10 @@
     <string name="mumble_url_parse_failed">Mumble URL 無效。</string>
     <string name="first_run_generate_certificate_title">歡迎來到 Mumla</string>
     <string name="generate">產生</string>
-    <string name="invalid_password">密碼錯誤。</string>
     <string name="send_message">傳送訊息</string>
     <string name="channel_menu_view_description">檢視描述</string>
     <string name="untrusted_certificate">未受信任的憑證</string>
     <string name="allow">允許</string>
-    <string name="cancelled">已取消</string>
     <string name="current_chat_target">目前聊天對象</string>
     <string name="channel_join">加入</string>
     <string name="invalid_host">無效主機</string>

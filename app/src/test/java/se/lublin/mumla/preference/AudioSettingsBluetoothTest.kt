@@ -3,10 +3,8 @@ package se.lublin.mumla.preference
 import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
-import androidx.preference.CheckBoxPreference
 import androidx.preference.Preference
-import androidx.preference.PreferenceCategory
-import androidx.preference.PreferenceGroup
+import androidx.preference.SwitchPreferenceCompat
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -28,16 +26,16 @@ import se.lublin.mumla.testing.host
  * persists anything.
  */
 @RunWith(RobolectricTestRunner::class)
-class GeneralSettingsBluetoothTest {
+class AudioSettingsBluetoothTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val settings = Settings.getInstance(app)
     private lateinit var activity: ThemedActivity
-    private lateinit var fragment: GeneralSettingsFragment
+    private lateinit var fragment: AudioSettingsFragment
 
     private fun open() {
         resetSnackbars()
         activity = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
-        fragment = activity.host(GeneralSettingsFragment())
+        fragment = activity.host(AudioSettingsFragment())
     }
 
     /** The default is on; ticking the box is the gesture that asks for the permission. */
@@ -46,15 +44,15 @@ class GeneralSettingsBluetoothTest {
         open()
     }
 
-    private fun checkBox(): CheckBoxPreference {
+    private fun checkBox(): SwitchPreferenceCompat {
         val preference = fragment.preferenceScreen
             .findPreference<Preference>(Settings.BLUETOOTH_SCO.key)
         assertWithMessage(
-            "no preference with key '%s' on the general settings screen",
+            "no preference with key '%s' on the audio settings screen",
             Settings.BLUETOOTH_SCO.key,
         ).that(preference).isNotNull()
-        assertThat(preference).isInstanceOf(CheckBoxPreference::class.java)
-        return preference as CheckBoxPreference
+        assertThat(preference).isInstanceOf(SwitchPreferenceCompat::class.java)
+        return preference as SwitchPreferenceCompat
     }
 
     private fun lastRequestedPermissions(): List<String> =
@@ -78,14 +76,11 @@ class GeneralSettingsBluetoothTest {
     }
 
     @Test
-    fun theCheckBoxSitsInTheControlsCategoryAndStartsFromTheCodeDefault() {
+    fun theSwitchFollowsTheAudioDeviceAndStartsFromTheCodeDefault() {
         open()
-        val category = fragment.preferenceScreen.findPreference<Preference>("controls_settings")
-        assertWithMessage("no PreferenceCategory with key 'controls_settings'")
-            .that(category).isNotNull()
-        assertThat(category).isInstanceOf(PreferenceCategory::class.java)
-        assertThat((category as PreferenceGroup).findPreference<Preference>(Settings.BLUETOOTH_SCO.key))
-            .isNotNull()
+        val screen = fragment.preferenceScreen
+        val order = (0 until screen.preferenceCount).map { screen.getPreference(it).key }
+        assertThat(order.indexOf(Settings.BLUETOOTH_SCO.key)).isEqualTo(order.indexOf(Settings.AUDIO_DEVICE.key) + 1)
 
         // Two sources for one default: android:defaultValue on this screen, and
         // Settings.BLUETOOTH_SCO.default, which every other reader gets.

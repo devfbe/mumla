@@ -48,7 +48,6 @@
     <string name="generateCertProgress">Generazione certificato…</string>
     <string name="search">Cerca</string>
     <string name="searchHint">Cerca canali e utenti</string>
-    <string name="quickConnect">Connessione rapida</string>
     <string name="connect">Connetti</string>
     <string name="connectToServer">Connetti al server</string>
     <string name="edit">Modifica</string>
@@ -62,15 +61,10 @@
     <string name="channel">Canale</string>
     <string name="user">Utente</string>
     <string name="unknown">Sconosciuto</string>
-    <string name="sort">Ordine</string>
-    <string name="sortBy">Ordina per…</string>
     <string name="name">Nome</string>
-    <string name="country">Paese</string>
     <string name="share">Condividi</string>
     <string name="description">Descrizione</string>
     <string name="close">Chiudi</string>
-    <string name="search_name">Nome</string>
-    <string name="search_country">Paese</string>
     <string name="information">Informazioni</string>
     <string name="hint_reason">Motivo</string>
     <string name="action_settings">Impostazioni</string>
@@ -83,7 +77,6 @@
     <string name="channel_add">Aggiungi Canale</string>
     <string name="first_run_generate_certificate_title">Benvenuto in Mumla</string>
     <string name="generate">Genera</string>
-    <string name="invalid_password">Password errata.</string>
     <string name="send_message">Invia messaggio</string>
     <string name="channel_menu_view_description">Mostra la descrizione</string>
     <string name="allow">Consenti</string>
@@ -122,9 +115,6 @@
     <string name="password">Password</string>
     <string name="no_certificate">Nessun Certificato</string>
     <string name="change_requires_reconnect">Riconnettiti per usare le nuove impostazioni.</string>
-    <string name="attempting_reconnect">Errore: %s.
-\n
-\nRiconnessione…</string>
     <string name="cancel_reconnect">Annulla riconnessione</string>
     <string name="channel_join">Unisciti</string>
     <string name="invalid_port_range">Porta non valida (1-65535)</string>
@@ -143,7 +133,6 @@
 \n
 \nDigest (SHA-256):
 \n%5$s</string>
-    <string name="cancelled">Annullato</string>
     <string name="trust_cleared">Banca dati dei certificati attendibili pulito</string>
     <string name="trust_add_failed">Impossibile aggiungere il certificato tra quelli attendibili.</string>
     <string name="trust_added">Certificato aggiunto tra quelli attendibili</string>
@@ -171,7 +160,6 @@
     <string name="externalStorageUnavailable">Archiviazione esterna non disponibile, impossibile caricare il certificato</string>
     <string name="ptt">Premi per parlare</string>
     <string name="server_label">Etichetta</string>
-    <string name="no_servers">Aggiungere un server premendo «Aggiungi» dalla barra delle azioni.</string>
     <string name="server_match_description">Mumla può trovare automaticamente un server vuoto, con posizione, versione e latenza ideali.</string>
     <string name="server_match_info">Nome: %1$s
 \nHost: %2$s:%3$d

@@ -129,39 +129,21 @@ class MumlaActivity :
             onItemSelected = ::showDrawerFragment,
         )
         dialogs = ConnectionDialogs(this, settings, this, sessions)
+        ConnectionBanner(this, binding.connectionBanner, settings, sessions)
         connectFlow = ConnectFlow(this, settings, sessions)
         batteryPrompt = BatteryOptimizationPrompt(this, settings)
         addMenuProvider(AudioPanelMenu(supportFragmentManager))
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setHomeButtonEnabled(true)
 
-        supportFragmentManager.setFragmentResultListener(ServerEditFragment.REQUEST_KEY, this) { _, result ->
-            onServerEdited(ServerEditFragment.Result.from(result))
-        }
-        lifecycleScope.launch {
-            // Fragment transactions only while started; each start begins with the current state.
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { sessions.session.collectLatest { session -> if (session != null) followEvents(session) } }
-                var previous: SessionState? = null
-                sessions.state.collect { state ->
-                    onSessionState(previous, state)
-                    previous = state
-                }
-            }
-        }
-        lifecycleScope.launch {
-            connectRequests.requested.collect { request ->
-                when (request) {
-                    is ServerRequest.Favourite -> connectFlow.connect(request.server)
-                    is ServerRequest.Public -> connectFlow.connectToPublic(request.server)
-                }
-            }
-        }
+        followFragmentRequests()
+        followSession()
 
         if (savedInstanceState == null) {
             showDrawerFragment(intent?.getIntExtra(MainScreen.EXTRA_SCREEN, FALLBACK_SCREEN) ?: FALLBACK_SCREEN)
+            // A recreated activity has the link's dialog back already.
+            if (intent?.action == Intent.ACTION_VIEW) offerServerFromUrl(intent.dataString)
         }
-        if (intent?.action == Intent.ACTION_VIEW) offerServerFromUrl(intent.dataString)
 
         volumeControlStream = Settings.PLAYBACK_STREAM
 
@@ -171,11 +153,45 @@ class MumlaActivity :
         }
     }
 
-    /** Offers to connect to the server a mumble:// [url] names. */
+    /** Carries out what the fragments and their dialogs ask for. */
+    private fun followFragmentRequests() {
+        val fragments = supportFragmentManager
+        fragments.setFragmentResultListener(ServerEditFragment.REQUEST_KEY, this) { _, result ->
+            onServerEdited(ServerEditFragment.Result.from(result))
+        }
+        fragments.setFragmentResultListener(FavouriteServerListFragment.REQUEST_BROWSE_PUBLIC, this) { _, _ ->
+            showDrawerFragment(DrawerAdapter.ITEM_PUBLIC)
+        }
+        lifecycleScope.launch {
+            connectRequests.requested.collect { request ->
+                when (request) {
+                    is ServerRequest.Favourite -> connectFlow.connect(request.server)
+                    is ServerRequest.Public -> connectFlow.connectToPublic(request.server)
+                }
+            }
+        }
+    }
+
+    /** Follows the session's events and state while started; each start begins with the current state. */
+    private fun followSession() {
+        lifecycleScope.launch {
+            // Fragment transactions only while started.
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { sessions.session.collectLatest { session -> if (session != null) followEvents(session) } }
+                var previous: SessionState? = null
+                sessions.state.collect { state ->
+                    onSessionState(previous, state)
+                    previous = state
+                }
+            }
+        }
+    }
+
+    /** Offers to save and connect to the server a mumble:// [url] names. */
     private fun offerServerFromUrl(url: String?) {
         try {
             val server = MumbleURLParser.parseURL(url)
-            ServerEditFragment.newInstance(server, ServerEditFragment.Action.CONNECT, true)
+            ServerEditFragment.newInstance(server, ServerEditFragment.Mode.LINK)
                 .show(supportFragmentManager, "url_edit")
         } catch (e: MalformedURLException) {
             onBadUrl(e)
@@ -396,6 +412,9 @@ class MumlaActivity :
             ServerEditFragment.Action.ADD -> saveThenShowFavourites { addServer(server) }
             ServerEditFragment.Action.EDIT -> saveThenShowFavourites { updateServer(server) }
             ServerEditFragment.Action.CONNECT -> connectFlow.connect(server)
+            ServerEditFragment.Action.ADD_AND_CONNECT -> lifecycleScope.launch {
+                connectFlow.connect(repository.io { addServer(server) })
+            }
         }
     }
 

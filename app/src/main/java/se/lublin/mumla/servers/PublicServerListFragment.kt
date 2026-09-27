@@ -24,45 +24,64 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
-import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
 import androidx.annotation.VisibleForTesting
 import androidx.core.view.MenuProvider
+import androidx.core.view.children
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.databinding.DialogServerSearchBinding
 import se.lublin.mumla.databinding.FragmentPublicServerListBinding
 import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.showConfirmDialog
-import se.lublin.mumla.ui.showSnackbar
-import se.lublin.mumla.util.appViewModels
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
-/** Displays the public servers, which can be sorted, filtered, matched, favourited and joined. */
+/**
+ * Displays the public servers, which can be searched, narrowed to countries, sorted, matched,
+ * favourited and joined.
+ */
 class PublicServerListFragment :
     Fragment(),
     PublicServerAdapter.PublicServerAdapterMenuListener,
     MenuProvider {
 
     private val connectRequests: ConnectRequests by activityViewModels()
-    private val publicServers by appViewModels { PublicServersViewModel.create(it, fetcher) }
+    private val publicServers: PublicServersViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                PublicServersViewModel.create(requireActivity().application, fetcher, pinger, createSavedStateHandle())
+            }
+        }
+    }
     private var binding: FragmentPublicServerListBinding? = null
 
     @VisibleForTesting
     internal var fetcher = PublicServerFetcher()
+
+    @VisibleForTesting
+    internal var pinger = ServerPinger()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val binding = FragmentPublicServerListBinding.inflate(inflater, container, false)
@@ -76,13 +95,25 @@ class PublicServerListFragment :
         val binding = requireNotNull(binding)
         val adapter = PublicServerAdapter(this, publicServers.pings, ::connect)
         binding.serverListGrid.adapter = adapter
+        setUpControls(binding)
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { publicServers.pings.replies.collect(adapter::setReplies) }
+                launch { publicServers.filter.collect { showFilter(binding, it) } }
+                launch { announceCounts(binding) }
                 publicServers.state.collect { show(binding, adapter, it) }
             }
         }
+    }
+
+    private fun setUpControls(binding: FragmentPublicServerListBinding) {
+        binding.serverSearch.setText(publicServers.filter.value.query)
+        binding.serverSearch.doAfterTextChanged { publicServers.setQuery(it.toString()) }
+        binding.serverSort.addOnButtonCheckedListener { _, id, checked ->
+            if (checked) publicServers.setSort(SORT_BUTTONS.entries.first { it.value == id }.key)
+        }
+        binding.serverListRetry.setOnClickListener { publicServers.retry() }
     }
 
     private fun show(
@@ -90,13 +121,61 @@ class PublicServerListFragment :
         adapter: PublicServerAdapter,
         state: PublicServersViewModel.State,
     ) {
+        val shown = state as? PublicServersViewModel.State.Shown
         binding.serverProgress.isVisible = state == PublicServersViewModel.State.Loading
         // The download would bypass Tor.
         binding.serverListTorNotice.isVisible = state == PublicServersViewModel.State.TorBlocked
-        if (state is PublicServersViewModel.State.Shown) adapter.submitList(state.servers)
-        if (state == PublicServersViewModel.State.DownloadFailed) {
-            showSnackbar(R.string.error_fetching_servers, R.string.retry) { publicServers.retry() }
+        binding.serverListError.isVisible = state == PublicServersViewModel.State.DownloadFailed
+        binding.serverListControls.isVisible = shown != null
+        binding.serverListEmpty.isVisible = shown?.servers?.isEmpty() == true
+        if (shown != null) {
+            adapter.submitList(shown.servers)
+            showCountries(binding, shown.countries)
         }
+    }
+
+    /** Offers "All" and a chip per country, once per list of [countries]. */
+    private fun showCountries(binding: FragmentPublicServerListBinding, countries: List<String>) {
+        val group = binding.serverCountryChips
+        if (group.tag == countries) return
+        group.tag = countries
+        group.removeAllViews()
+        group.addView(countryChip(binding, null, getString(R.string.public_server_country_all)))
+        countries.forEach { group.addView(countryChip(binding, it, it)) }
+        showFilter(binding, publicServers.filter.value)
+    }
+
+    /** A chip that selects [country], or all countries when it is null. */
+    private fun countryChip(binding: FragmentPublicServerListBinding, country: String?, label: String): Chip {
+        val group = binding.serverCountryChips
+        val chip = layoutInflater.inflate(R.layout.public_server_country_chip, group, false) as Chip
+        chip.text = label
+        chip.tag = country
+        chip.setOnClickListener {
+            if (country == null) publicServers.clearCountries() else publicServers.setCountry(country, chip.isChecked)
+            showFilter(binding, publicServers.filter.value)
+        }
+        return chip
+    }
+
+    private fun showFilter(binding: FragmentPublicServerListBinding, filter: PublicServerFilter) {
+        for (chip in binding.serverCountryChips.children) {
+            val country = chip.tag as String?
+            (chip as Chip).isChecked = if (country == null) filter.countries.isEmpty() else country in filter.countries
+        }
+        binding.serverSort.check(SORT_BUTTONS.getValue(filter.sort))
+    }
+
+    /** Shows the number of servers shown once it settles, which screen readers announce politely. */
+    @OptIn(FlowPreview::class)
+    private suspend fun announceCounts(binding: FragmentPublicServerListBinding) {
+        publicServers.state
+            .mapNotNull { (it as? PublicServersViewModel.State.Shown)?.servers?.size }
+            .distinctUntilChanged()
+            .debounce(COUNT_SETTLE_TIME)
+            .collect { count ->
+                binding.serverListCount.text = resources.getQuantityString(R.plurals.public_server_count, count, count)
+            }
     }
 
     override fun onDestroyView() {
@@ -114,14 +193,10 @@ class PublicServerListFragment :
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        if (publicServers.state.value !is PublicServersViewModel.State.Shown) return false
-        when (menuItem.itemId) {
-            R.id.menu_match_server -> showMatchDialog()
-            R.id.menu_sort_server_item -> showSortDialog()
-            R.id.menu_search_server_item -> showFilterDialog()
-            else -> return false
-        }
-        return true
+        val matching = menuItem.itemId == R.id.menu_match_server &&
+            publicServers.state.value is PublicServersViewModel.State.Shown
+        if (matching) showMatchDialog()
+        return matching
     }
 
     override fun favouriteServer(server: PublicServer) {
@@ -195,55 +270,17 @@ class PublicServerListFragment :
         }
     }
 
-    private fun showSortDialog() {
-        MaterialAlertDialogBuilder(requireActivity())
-            .setTitle(R.string.sortBy)
-            .setItems(arrayOf(getString(R.string.name), getString(R.string.country))) { _, which ->
-                when (which) {
-                    SORT_NAME -> publicServers.sort(PublicServersViewModel.Order.NAME)
-                    SORT_COUNTRY -> publicServers.sort(PublicServersViewModel.Order.COUNTRY)
-                }
-            }
-            .show()
-    }
-
-    private fun showFilterDialog() {
-        val dialog = DialogServerSearchBinding.inflate(layoutInflater)
-        val nameText = dialog.serverSearchName
-        val countryText = dialog.serverSearchCountry
-        fun applyFilter() = publicServers.filter(nameText.text.toString(), countryText.text.toString())
-
-        val alertDialog = MaterialAlertDialogBuilder(requireActivity())
-            .setTitle(R.string.search)
-            .setView(dialog.root)
-            .setPositiveButton(R.string.search) { dialog, _ ->
-                applyFilter()
-                dialog.dismiss()
-            }
-            .create()
-
-        for (field in listOf(nameText, countryText)) {
-            field.imeOptions = EditorInfo.IME_ACTION_SEARCH
-            field.setOnEditorActionListener { _, _, _ ->
-                applyFilter()
-                alertDialog.dismiss()
-                true
-            }
-        }
-        nameText.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus) {
-                alertDialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
-            }
-        }
-        alertDialog.show()
-    }
-
     private fun connect(server: PublicServer) {
         connectRequests.request(ServerRequest.Public(server))
     }
 
     private companion object {
-        const val SORT_NAME = 0
-        const val SORT_COUNTRY = 1
+        /** How long the shown count must hold before it is announced, so typing is not read out. */
+        val COUNT_SETTLE_TIME = 700.milliseconds
+
+        val SORT_BUTTONS = mapOf(
+            PublicServerSort.USERS to R.id.server_sort_users,
+            PublicServerSort.PING to R.id.server_sort_ping,
+        )
     }
 }

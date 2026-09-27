@@ -59,7 +59,6 @@
 \nЗадержка: %8$d мс</string>
     <string name="server_match_description">Mumla может автоматически найти пустой сервер, основываясь на местоположении, версии, и задержке.</string>
     <!-- Common -->
-    <string name="no_servers">Для начала добавьте сервер, нажав \'Добавить\' в панели управления.</string>
     <string name="server_password">Пароль</string>
     <string name="server_username">Имя пользователя</string>
     <string name="server_port">Порт</string>
@@ -88,7 +87,6 @@
     <string name="generateCertProgress">Создание сертификата…</string>
     <string name="search">Поиск</string>
     <string name="searchHint">Поиск каналов и пользователей</string>
-    <string name="quickConnect">Быстрое подключение</string>
     <string name="connect">Подключиться</string>
     <string name="connectToServer">Подключиться к серверу</string>
     <string name="edit">Редактировать</string>
@@ -104,16 +102,11 @@
     <string name="channel">Канал</string>
     <string name="user">Пользователь</string>
     <string name="unknown">Неизвестный</string>
-    <string name="sort">Сортировка</string>
-    <string name="sortBy">Сортировать по…</string>
     <string name="name">Название</string>
-    <string name="country">Страна</string>
     <string name="share">Поделиться</string>
     <string name="description">Описание</string>
     <string name="shareMessage">Присоединяйся к этому Mumble-серверу с помощью Mumla. %s</string>
     <string name="close">Закрыть</string>
-    <string name="search_name">Название</string>
-    <string name="search_country">Страна</string>
     <string name="information">Информация</string>
     <string name="error_fetching_servers">Не удалось получить список.\nВы подключены к интернету?</string>
     <string name="overlay">Накладка</string>
@@ -133,7 +126,6 @@
     <string name="first_run_generate_certificate_title">Добро пожаловать в Mumla</string>
     <string name="first_run_generate_certificate">Мы рекомендуем создать сертификат. К тому же, он необходим для подключения к некоторым серверам.</string>
     <string name="generate">Создать</string>
-    <string name="invalid_password">Неверный пароль.</string>
     <string name="send_message">Отправить сообщение</string>
     <string name="channel_menu_view_description">Просмотреть описание</string>
     <string name="untrusted_certificate">Не доверенный сертификат</string>
@@ -141,16 +133,12 @@
     <string name="trust_added">Сертификат добавлен в хранилище доверенных сертификатов</string>
     <string name="trust_add_failed">Не удалось добавить сертификат в хранилище доверенных сертификатов.</string>
     <string name="trust_cleared">Хранилище доверенных сертификатов очищено</string>
-    <string name="cancelled">Отменено</string>
     <string name="current_chat_target">Текущий получатель сообщений</string>
     <string name="channel_join">Присоединиться</string>
     <string name="certificate_info">Получатель:\n%1$s\n\nДействует с:\n%2$s\n\nДействует до:\n%3$s\n\nПодпись (SHA-1):\n%4$s\n\nПодпись (SHA-256):\n%5$s</string>
     <string name="invalid_host">Некорректный адрес</string>
     <string name="invalid_port_range">Некорректный порт (1-65535)</string>
     <string name="cancel_reconnect">Отменить переподключение</string>
-    <string name="attempting_reconnect">Ошибка: %s.
-\n
-\nПереподключение…</string>
     <string name="change_requires_reconnect">Переподключитесь, чтобы использовать новые настройки.</string>
     <string name="no_certificate">Без сертификата</string>
     <string name="decrypt_certificate">Расшифровать сертификат</string>

@@ -154,13 +154,11 @@ class AudioPanelSheetTest {
     }
 
     @Test
-    fun theFavouritesOfferThePanelAfterTheirOwnActions() {
+    fun theFavouritesOfferOnlyThePanel() {
         launch(DrawerAdapter.ITEM_FAVOURITES)
         assertThat(shownScreen()).isInstanceOf(FavouriteServerListFragment::class.java)
 
-        assertThat(menu().titles())
-            .containsExactlyElementsIn(titles(R.string.add, R.string.quickConnect, R.string.audio_panel))
-            .inOrder()
+        assertThat(menu().titles()).containsExactlyElementsIn(titles(R.string.audio_panel))
     }
 
     @Test

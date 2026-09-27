@@ -20,7 +20,6 @@
 \nVerzió: %6$s
 \nOrszág: %7$s
 \nKésleltetés: %8$d ms</string>
-    <string name="no_servers">Nyomd meg a \'Hozzáad\' gombot (+) , egy kiszolgáló hozzáadásához.</string>
     <string name="server_host">Cím</string>
     <string name="accessAdd">Hozzáférési token hozzáadása</string>
     <string name="mute">Némít</string>
@@ -85,7 +84,6 @@
     <string name="generateCertProgress">Tanúsítvány létrehozása…</string>
     <string name="search">Keresés</string>
     <string name="searchHint">Csatorna és felhasználó keresés</string>
-    <string name="quickConnect">Gyors csatlakozás</string>
     <string name="connect">Csatlakozás</string>
     <string name="connectToServer">Kapcsolódás szerverhez</string>
     <string name="edit">Szerkesztés</string>
@@ -96,16 +94,11 @@
     <string name="mumlaConnecting">Mumla csatlakozás…</string>
     <string name="mumlaDisconnected">Mumla leválasztva</string>
     <string name="channel">Csatorna</string>
-    <string name="sort">Válogatás</string>
-    <string name="sortBy">Válogatás a következő szerint…</string>
     <string name="name">Név</string>
-    <string name="country">Ország</string>
     <string name="share">Megosztás</string>
     <string name="description">Leírás</string>
-    <string name="search_name">Név</string>
     <string name="shareMessage">Csatlakozz Mumlával ehhez a Mumble szerverhez. %s</string>
     <string name="close">Bezárás</string>
-    <string name="search_country">Ország</string>
     <string name="information">Információ</string>
     <string name="overlay">Átfedés</string>
     <string name="hint_reason">Indok</string>
@@ -115,14 +108,12 @@
     <string name="temporary">Ideiglenes</string>
     <string name="position">Pozíció</string>
     <string name="generate">Generálás</string>
-    <string name="invalid_password">Rossz jelszó.</string>
     <string name="send_message">Üzenet küldése</string>
     <string name="channel_menu_view_description">Megjegyzést megtekint</string>
     <string name="untrusted_certificate">Nem megbízható tanúsítvány</string>
     <string name="trust_added">Tanúsítvány hozzáadása a biztonságos tárolóhoz</string>
     <string name="trust_add_failed">A tanúsítványt nem sikerült hozzáadni a biztonságos tárolóhoz.</string>
     <string name="trust_cleared">Megbízható adatbázis törölve</string>
-    <string name="cancelled">Törölve</string>
     <string name="current_chat_target">Csevegő címzettje</string>
     <string name="invalid_port_range">Helytelen portszám (1-65535)</string>
     <string name="cancel_reconnect">Újracsatlakozás megszakítása</string>
@@ -163,9 +154,6 @@
 \n
 \nDigest (SHA-256):
 \n%5$s</string>
-    <string name="attempting_reconnect">Hiba: %s.
-\n
-\nÚjracsatlakozás…</string>
     <string name="no_certificate">Nincs tanúsítvány</string>
     <string name="decrypt_certificate">Tanúsítvány dekódolása</string>
     <string name="invalid_host">Helytelen kiszolgáló</string>

@@ -19,11 +19,9 @@
     <string name="add">Lägg till</string>
     <string name="information">Information</string>
     <string name="action_settings">Inställningar</string>
-    <string name="cancelled">Avbröts</string>
     <string name="invalid_port_range">Ogiltig port (1-65535)</string>
     <string name="change_requires_reconnect">Återansluter för att använda nya inställningar.</string>
     <string name="temporary">Tillfällig</string>
-    <string name="invalid_password">Fel lösenord.</string>
     <string name="send_message">Skicka meddelande</string>
     <string name="shout_include_subchannels">Ropa till underkanaler</string>
     <string name="shout_failed">Kunde inte skapa röstmål.</string>
@@ -58,7 +56,6 @@
     <string name="server_info_max_bandwidth">Max %.1f kbit/s</string>
     <string name="server_match_found">Servern hittades</string>
     <string name="server_match_expand_country">Kunde inte hitta några optimala servrar i ditt land. Sök över hela världen?</string>
-    <string name="no_servers">Tryck på \"Lägg till\" från åtgärdsfältet för att lägga till en server först.</string>
     <string name="server_password">Lösenord</string>
     <string name="server_port">Port</string>
     <string name="server_host">Adress</string>
@@ -81,9 +78,6 @@
     <string name="channel_menu_view_description">Visa beskrivning</string>
     <string name="untrusted_certificate">Ej betrott certifikat</string>
     <string name="allow">Tillåt</string>
-    <string name="attempting_reconnect">Fel: %s.
-\n
-\nÅteransluter…</string>
     <string name="no_certificate">Inget certifikat</string>
     <string name="password">Lösenord</string>
     <string name="certificate_load_failed">Kunde inte ladda arkivets certifikat.</string>
@@ -103,10 +97,7 @@
     <string name="channel">Kanal</string>
     <string name="user">Användare</string>
     <string name="unknown">Okänt</string>
-    <string name="sort">Sortera</string>
-    <string name="sortBy">Sortera efter…</string>
     <string name="name">Name</string>
-    <string name="country">Land</string>
     <string name="share">Dela</string>
     <string name="description">Beskrivning</string>
     <string name="trust_added">Certifikatet lades till i databasen för betrodda certifikat</string>
@@ -135,7 +126,6 @@
     <string name="generateCertFailure">Kunde inte generera certifikat.</string>
     <string name="generateCertProgress">Genererar certifikat…</string>
     <string name="search">Sök</string>
-    <string name="quickConnect">Snabbanslutning</string>
     <string name="connect">Anslut</string>
     <string name="edit">Redigera</string>
     <string name="delete">Ta bort</string>
@@ -147,8 +137,6 @@
     <string name="mumlaDisconnected">Mumla nedkopplad</string>
     <string name="shareMessage">Anslut till denna Mumble-server med Mumla. %s</string>
     <string name="close">Stäng</string>
-    <string name="search_name">Namn</string>
-    <string name="search_country">Land</string>
     <string name="error_fetching_servers">Kan inte hämta servrar.
 \nÄr du ansluten till Internet?</string>
     <string name="overlay">Överlagring</string>

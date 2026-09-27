@@ -37,9 +37,6 @@
     <string name="decrypt_certificate">Sertifikanın Şifresini Çöz</string>
     <string name="no_certificate">Sertifika Yok</string>
     <string name="change_requires_reconnect">Yeni ayarları kullanmak için yeniden bağlanın.</string>
-    <string name="attempting_reconnect">Hata: %s.
-\n
-\nYeniden bağlanılıyor…</string>
     <string name="cancel_reconnect">Yeniden bağlanmayı iptal et</string>
     <string name="invalid_port_range">Geçersiz bağlantı noktası (1-65535)</string>
     <string name="invalid_host">Geçersiz ana makine</string>
@@ -59,7 +56,6 @@
 \n%5$s</string>
     <string name="channel_join">Katıl</string>
     <string name="current_chat_target">Geçerli sohbet hedefi</string>
-    <string name="cancelled">İptal edildi</string>
     <string name="trust_cleared">Güven veri tabanı temizlendi</string>
     <string name="trust_add_failed">Sertifika güven deposuna eklenemedi.</string>
     <string name="trust_added">Sertifika güven deposuna eklendi</string>
@@ -67,7 +63,6 @@
     <string name="untrusted_certificate">Güvenilmeyen Sertifika</string>
     <string name="channel_menu_view_description">Açıklamayı Görüntüle</string>
     <string name="send_message">Mesaj gönder</string>
-    <string name="invalid_password">Yanlış parola.</string>
     <string name="generate">Oluştur</string>
     <string name="first_run_generate_certificate">Sertifika oluşturulması şiddetle tavsiye edilir ve bazı sunuculara bağlanmak için gereklidir.</string>
     <string name="first_run_generate_certificate_title">Mumla\'ya hoş geldiniz</string>
@@ -87,16 +82,11 @@
     <string name="error_fetching_servers">Sunucular alınamadı.
 \nİnternete bağlı mısınız\?</string>
     <string name="information">Bilgi</string>
-    <string name="search_country">Ülke</string>
-    <string name="search_name">Ad</string>
     <string name="close">Kapat</string>
     <string name="shareMessage">Bu Mumble sunucusuna Mumla ile katılın. %s</string>
     <string name="description">Açıklama</string>
     <string name="share">Paylaş</string>
-    <string name="country">Ülke</string>
     <string name="name">Ad</string>
-    <string name="sortBy">Sıralama ölçütü…</string>
-    <string name="sort">Sırala</string>
     <string name="unknown">Bilinmeyen</string>
     <string name="user">Kullanıcı</string>
     <string name="channel">Kanal</string>
@@ -112,7 +102,6 @@
     <string name="edit">Düzenle</string>
     <string name="connectToServer">Sunucuya Bağlan</string>
     <string name="connect">Bağlan</string>
-    <string name="quickConnect">Hızlı Bağlan</string>
     <string name="searchHint">Kanalları ve kullanıcıları arayın</string>
     <string name="search">Ara</string>
     <string name="generateCertProgress">Sertifika oluşturuluyor…</string>
@@ -140,7 +129,6 @@
     <string name="server_port">Bağlantı Noktası</string>
     <string name="server_username">Kullanıcı Adı</string>
     <string name="server_password">Parola</string>
-    <string name="no_servers">Önce bir sunucu eklemek için eylem çubuğundan \'Ekle\' düğmesine basın.</string>
     <string name="server_match_description">Mumla konuma, sürüme ve gecikmeye göre sizin için en iyi boş sunucuyu otomatik olarak bulabilir.</string>
     <string name="chat_message_tts_short_link">(%1$s için bağlantı)</string>
     <string name="perm_denied">İzin reddedildi.</string>

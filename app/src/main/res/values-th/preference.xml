@@ -11,14 +11,12 @@
     <string name="acknowledgements">ผู้มีส่วนร่วม</string>
     <string name="theme">ธีม</string>
     <string name="language">ภาษา</string>
-    <string name="advancedAudio">ขั้นสูง</string>
     <string name="hot_corner_top_left">↖ บนซ้าย</string>
     <string name="hot_corner_bottom_left">↙ ล่างซ้าย</string>
     <string name="hot_corner_top_right">บนขวา ↗</string>
     <string name="hot_corner_bottom_right">ล่างขวา ↘</string>
     <string name="acknowledgementsSum">ดูรายชื่อผู้มีส่วนร่วมในการพัฒนา Mumla (ลิงก์เว็บไซต์)</string>
     <string name="licenses">ใบอนุญาต</string>
-    <string name="authentication">การตรวจสอบสิทธิ์</string>
     <string name="audioInputMethodSum">วิธีการเปิดใช้งานการส่งสัญญาณเสียง.</string>
     <string name="audioInputMethod">โหมดการส่ง</string>
     <string name="audioInputVolume">ระดับเสียงไมโครโฟน</string>
@@ -33,7 +31,6 @@
     <string name="appearance">รูปร่าง</string>
     <string name="forceTcp">เฉพาะ TCP เท่านั้น</string>
     <string name="forceTcpSum">ปิดการใช้งาน UDP สำหรับการสื่อสาร</string>
-    <string name="audio">เสียง</string>
     <string name="chatNotifications">การแจ้งเตือนแชท</string>
     <string name="chatNotificationsSum">แสดงเฉพาะข้อความแชทใหม่</string>
     <string name="defaultUsername">ชื่อผู้ใช้เริ่มต้น</string>

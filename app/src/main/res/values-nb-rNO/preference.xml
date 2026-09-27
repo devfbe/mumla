@@ -4,7 +4,6 @@
     <string name="hot_corner_none">Av</string>
     <string name="hot_corner_top_left">↖ øverst til venstre</string>
     <string name="licenses">Lisenser</string>
-    <string name="authentication">Identitetsbekreftelse</string>
     <string name="audioInputVolume">Mikrofonlydstyrke</string>
     <string name="audioInputMethodSum">Lydinngangsmetode.</string>
     <string name="audioInputMethod">Overføringsmodus</string>
@@ -55,8 +54,6 @@
     <string name="detectionThreshold">Oppdagelsesterskel</string>
     <string name="general">Generelt</string>
     <string name="theme">Drakt</string>
-    <string name="advancedAudio">Avansert</string>
-    <string name="audio">Lyd</string>
     <string name="hot_corner_bottom_right">Nede til høyre ↘</string>
     <string name="chatNotifications">Sludremerknader</string>
     <string name="pref_certificate_title">Sertifikat</string>

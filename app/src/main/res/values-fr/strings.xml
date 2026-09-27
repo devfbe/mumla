@@ -58,7 +58,6 @@
 \nLatence : %8$d ms</string>
     <string name="server_match_description">Mumla peut vous trouver automatiquement un serveur vide, en optimisant en se basant sur la position du serveur, sa version, et sa latence.</string>
     <!--Common-->
-    <string name="no_servers">Appuyez sur le bouton « Ajouter » dans la barre d\'action pour commencer.</string>
     <string name="server_password">Mot de passe</string>
     <string name="server_username">Nom d\'utilisateur</string>
     <string name="server_port">Port</string>
@@ -87,7 +86,6 @@
     <string name="generateCertProgress">Génération d\'un certificat…</string>
     <string name="search">Rechercher</string>
     <string name="searchHint">Rechercher des salons et des utilisateurs</string>
-    <string name="quickConnect">Connexion rapide</string>
     <string name="connect">Connexion</string>
     <string name="connectToServer">Connexion au serveur</string>
     <string name="edit">Modifier</string>
@@ -103,16 +101,11 @@
     <string name="channel">Salon</string>
     <string name="user">Utilisateur</string>
     <string name="unknown">Inconnu</string>
-    <string name="sort">Trier</string>
-    <string name="sortBy">Trier par…</string>
     <string name="name">Nom</string>
-    <string name="country">Pays</string>
     <string name="share">Partager</string>
     <string name="description">Description</string>
     <string name="shareMessage">Rejoindre ce serveur Mumble avec Mumla. %s</string>
     <string name="close">Fermer</string>
-    <string name="search_name">Nom</string>
-    <string name="search_country">Pays</string>
     <string name="information">Information</string>
     <string name="error_fetching_servers">Erreur du chargement des serveurs.
 \nVérifiez votre connexion internet.</string>
@@ -133,7 +126,6 @@
     <string name="first_run_generate_certificate_title">Bienvenue dans Mumla</string>
     <string name="first_run_generate_certificate">Générer un certificat est très recommandé, et nécessaire pour la connexion à certains serveurs.</string>
     <string name="generate">Générer</string>
-    <string name="invalid_password">Mot de passe invalide.</string>
     <string name="send_message">Envoyer un message</string>
     <string name="channel_menu_view_description">Voir la description</string>
     <string name="untrusted_certificate">Certificat non autorisé</string>
@@ -141,7 +133,6 @@
     <string name="trust_added">Certificat ajouté dans la base de confiance</string>
     <string name="trust_add_failed">Échec de l\'ajout du certificat à la base de confiance.</string>
     <string name="trust_cleared">Base de confiance effacée</string>
-    <string name="cancelled">Annulé</string>
     <string name="current_chat_target">Discussion cible actuelle</string>
     <string name="channel_join">Joindre</string>
     <string name="certificate_info">Sujet :
@@ -161,9 +152,6 @@
     <string name="invalid_host">Hôte invalide</string>
     <string name="invalid_port_range">Port invalide (1-65535)</string>
     <string name="cancel_reconnect">Annuler la reconnexion</string>
-    <string name="attempting_reconnect">Erreur : %s.
-\n
-\nTentative de reconnexion…</string>
     <string name="default_">Défaut</string>
     <plurals name="search_channel_users">
         <item quantity="one">%d utilisateur</item>

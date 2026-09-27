@@ -6,13 +6,10 @@
     <string name="about">Info su</string>
     <string name="acknowledgementsSum">Vedi chi ha contribuito a Mumla (collegamento web)</string>
     <string name="licenses">Licenze</string>
-    <string name="authentication">Autenticazione</string>
     <string name="audioInputVolume">Volume microfono</string>
     <string name="general">Generale</string>
     <string name="theme">Tema</string>
-    <string name="advancedAudio">Avanzato</string>
     <string name="forceTcp">Solo TCP</string>
-    <string name="audio">Audio</string>
     <string name="chatNotifications">Notifiche chat</string>
     <string name="certificateGenerate">Genera certificato</string>
     <string name="useTts">Sintesi vocale</string>

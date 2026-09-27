@@ -35,7 +35,6 @@
 \nΧώρα: %7$s
 \nΚαθυστέρηση: %8$d ms</string>
     <string name="server_match_description">Το Mumla μπορεί να βρει αυτόματα έναν κενό διακομιστή, βελτιστοποιώντας την τοποθεσία, την έκδοση και την καθυστέρηση.</string>
-    <string name="no_servers">Πατήστε \'Προσθήκη\' από τη γραμμή δράσης για να προσθέσετε πρώτα ένα διακομιστή.</string>
     <string name="server_password">Κωδικός πρόσβασης</string>
     <string name="server_username">Όνομα χρήστη</string>
     <string name="server_port">Θύρα</string>
@@ -56,7 +55,6 @@
     <string name="generateCertFailure">Δεν ήταν δυνατή η δημιουργία πιστοποιητικού.</string>
     <string name="generateCertProgress">Γίνεται δημιουργία πιστοποιητικού…</string>
     <string name="search">Αναζήτηση</string>
-    <string name="quickConnect">Γρήγορη σύνδεση</string>
     <string name="connect">Σύνδεση</string>
     <string name="connectToServer">Σύνδεση στο διακομιστή</string>
     <string name="edit">Επεξεργασία</string>
@@ -68,14 +66,10 @@
     <string name="mumlaConnecting">Το Mumla συνδέεται…</string>
     <string name="mumlaDisconnected">Το Mumla αποσυνδέθηκε</string>
     <string name="unknown">Άγνωστο</string>
-    <string name="sort">Ταξινόμηση</string>
     <string name="name">Όνομα</string>
-    <string name="country">Χώρα</string>
     <string name="share">Κοινοποίηση</string>
     <string name="description">Περιγραφή</string>
     <string name="close">Κλείσιμο</string>
-    <string name="search_name">Όνομα</string>
-    <string name="search_country">Χώρα</string>
     <string name="information">Πληροφορίες</string>
     <string name="hint_reason">Λόγος</string>
     <string name="action_settings">Ρυθμίσεις</string>
@@ -93,7 +87,6 @@
     <string name="trust_added">Προστέθηκε πιστοποιητικό στο trust store</string>
     <string name="trust_add_failed">Δεν ήταν δυνατή η προσθήκη πιστοποιητικού στο trust store.</string>
     <string name="trust_cleared">Καθαρίστηκε η βάση δεδομένων εμπιστοσύνης</string>
-    <string name="cancelled">Ακυρώθηκε</string>
     <string name="current_chat_target">Τρέχων στόχος συνομιλίας</string>
     <string name="channel_join">Εγγραφή</string>
     <string name="certificate_info">Θέμα:
@@ -113,9 +106,6 @@
     <string name="invalid_host">Μη έγκυρος απομακρυσμένος κεντρικός υπολογιστής</string>
     <string name="invalid_port_range">Μη έγκυρη θύρα (1-65535)</string>
     <string name="cancel_reconnect">Ακύρωση επανασύνδεσης</string>
-    <string name="attempting_reconnect">Σφάλμα: %s.
-\n
-\nΕπανασύνδεση…</string>
     <string name="no_certificate">Έλλειψη πιστοποιητικού</string>
     <string name="decrypt_certificate">Αποκρυπτογράφηση πιστοποιητικού</string>
     <string name="certificate_load_failed">Δεν ήταν δυνατή η αποθήκευση του πιστοποιητικού.</string>
@@ -161,7 +151,6 @@
     <string name="user">Χρήστης</string>
     <string name="clearChat">Καθάρισμα συζήτησης</string>
     <string name="connected">Συνδέθηκε</string>
-    <string name="sortBy">Ταξινόμηση κατά…</string>
     <string name="shareMessage">Εγγραφείτε σε αυτόν τον διακομιστή Mumble με το Mumla. %s</string>
     <string name="error_fetching_servers">Δεν μπόρεσα να φέρω διακομιστές.
 \nΕίστε συνδεδεμένοι στο Διαδίκτυο;</string>
@@ -172,7 +161,6 @@
     <string name="channel_edit">Επεξεργασία Καναλιού</string>
     <string name="channel_add">Προσθήκη καναλιού</string>
     <string name="first_run_generate_certificate">Η δημιουργία πιστοποιητικού συνιστάται ιδιαίτερα και είναι απαραίτητη για σύνδεση με ορισμένους διακομιστές.</string>
-    <string name="invalid_password">Λάθος κωδικός πρόσβασης.</string>
     <string name="send_message">Αποστολή μηνύματος</string>
     <string name="password">Κωδικός πρόσβασης</string>
     <string name="invalid_certificate">Δεν ήταν δυνατή η φόρτωση μη έγκυρου πιστοποιητικού.</string>

@@ -28,7 +28,7 @@
         android:title="@string/theme"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:key="dynamic_colors"
         android:defaultValue="false"
         android:title="@string/pref_dynamic_colors"
@@ -42,31 +42,24 @@
         app:useSimpleSummaryProvider="true"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:key="show_user_count"
         android:defaultValue="false"
         android:title="@string/pref_show_user_count"
         android:summary="@string/pref_show_user_count_summary"
         app:iconSpaceReserved="false" />
 
-    <ListPreference
-        android:key="controlBarPosition"
-        android:defaultValue="bottom"
-        android:entries="@array/controlBarPositionNames"
-        android:entryValues="@array/controlBarPositionValues"
-        app:useSimpleSummaryProvider="true"
-        android:title="@string/controlBarPosition"
+    <SwitchPreferenceCompat
+        android:defaultValue="false"
+        android:key="startUpInPinnedMode"
+        android:summary="@string/pref_start_upIn_pinned_mode_sum"
+        android:title="@string/pref_start_up_in_pinned_mode"
         app:iconSpaceReserved="false" />
 
-    <se.lublin.mumla.preference.SeekBarDialogPreference
-        android:key="pttButtonHeight"
-        android:title="@string/pttButtonHeight"
-        app:useSimpleSummaryProvider="true"
-        android:summary="@string/pttButtonHeightSum"
-        app:multiplier="10"
-        app:max="100"
-        app:min="15"
-        android:defaultValue="15"
-        android:text=" dp"
+    <SwitchPreferenceCompat
+        android:key="stay_awake"
+        android:defaultValue="false"
+        android:title="@string/stay_awake"
+        android:summary="@string/stay_awake_sum"
         app:iconSpaceReserved="false" />
 </PreferenceScreen>

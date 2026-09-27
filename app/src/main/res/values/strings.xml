@@ -71,7 +71,7 @@
     <string name="server_info_current_bandwidth">Current %.1f kbit/s</string>
 
     <!-- Server matching -->
-    <string name="server_match">Find Server</string>
+    <string name="server_match">Find empty server</string>
     <string name="server_match_progress">Finding a server…</string>
     <string name="server_match_found">Server found</string>
     <string name="server_match_not_found">Couldn\'t find server</string>
@@ -80,8 +80,14 @@
     <string name="server_match_description">Mumla can automatically find you an empty server, optimizing for location, version, and latency.</string>
 
     <!-- Common -->
-    <string name="no_servers">Press \'Add\' from the action bar to add a server first.</string>
+    <string name="server_list_empty">No favorite servers yet</string>
+    <string name="server_list_empty_hint">Add a server you know, or pick one from the public list.</string>
+    <string name="server_list_browse_public">Browse public servers</string>
+    <string name="server_add">Add server</string>
+    <string name="server_connect_only">Connect only</string>
+    <string name="server_save_and_connect">Save &amp; connect</string>
     <string name="server_password">Password</string>
+    <string name="server_password_show">Show password</string>
     <string name="server_username">Username</string>
     <string name="server_port">Port</string>
     <string name="server_host">Address</string>
@@ -124,7 +130,6 @@
     <!-- The saved device in the settings while it is not there, e.g. "Bluetooth headset (not connected)". -->
     <string name="audio_device_not_connected">%1$s (not connected)</string>
     <string name="echo_cancellation">Echo cancellation</string>
-    <string name="quickConnect">Quick Connect</string>
     <string name="connect">Connect</string>
     <string name="connectToServer">Connect to Server</string>
     <string name="edit">Edit</string>
@@ -142,10 +147,7 @@
     <string name="channel">Channel</string>
     <string name="user">User</string>
     <string name="unknown">Unknown</string>
-    <string name="sort">Sort</string>
-    <string name="sortBy">Sort by…</string>
     <string name="name">Name</string>
-    <string name="country">Country</string>
     <string name="share">Share</string>
     <string name="description">Description</string>
     <string name="shareMessage">Join this Mumble server with Mumla. %s</string>
@@ -161,11 +163,21 @@
     <string name="chat_cleared">Chat cleared</string>
     <string name="undo">Undo</string>
     <string name="close">Close</string>
-    <string name="search_name">Name</string>
-    <string name="search_country">Country</string>
     <string name="information">Information</string>
     <string name="error_fetching_servers">Could not fetch servers.\nAre you connected to the Internet?</string>
     <string name="public_server_list_tor_disabled">The public server list is not loaded while Tor is on, because it would be downloaded without Tor.</string>
+    <string name="public_server_list_error_title">Couldn\'t load the server list</string>
+    <string name="public_server_list_empty">No servers match your search.</string>
+    <string name="public_server_search_hint">Search by name or country</string>
+    <string name="public_server_country_all">All</string>
+    <string name="public_server_countries">Countries</string>
+    <string name="public_server_sort">Sort servers</string>
+    <string name="public_server_sort_users">Most users</string>
+    <string name="public_server_sort_ping">Lowest ping</string>
+    <plurals name="public_server_count">
+        <item quantity="one">%d server</item>
+        <item quantity="other">%d servers</item>
+    </plurals>
     <string name="overlay">Overlay</string>
     <string name="hint_reason">Reason</string>
     <string name="action_settings">Settings</string>
@@ -183,7 +195,6 @@
     <string name="first_run_generate_certificate_title">Welcome to Mumla</string>
     <string name="first_run_generate_certificate">Generating a certificate is highly recommended, and necessary for connection to some servers.</string>
     <string name="generate">Generate</string>
-    <string name="invalid_password">Wrong password.</string>
     <string name="send_message">Send message</string>
     <string name="channel_menu_view_description">View Description</string>
     <string name="channel_add_subchannel">Add sub-channel</string>
@@ -195,14 +206,43 @@
     <string name="certificate_changed_message">%1$s now presents a different certificate from the one you trusted before. Someone may be intercepting your connection. Only continue if the server administrator told you the certificate was replaced.</string>
     <string name="certificate_changed_accept">Trust new certificate</string>
     <string name="trust_cleared">Trust database cleared</string>
-    <string name="cancelled">Canceled</string>
     <string name="current_chat_target">Current chat target</string>
     <string name="channel_join">Join</string>
     <string name="certificate_info">Subject:\n%1$s\n\nValid from:\n%2$s\n\nValid to:\n%3$s\n\nDigest (SHA-1):\n%4$s\n\nDigest (SHA-256):\n%5$s</string>
     <string name="invalid_host">Invalid host</string>
     <string name="invalid_port_range">Invalid port (1-65535)</string>
     <string name="cancel_reconnect">Cancel reconnect</string>
-    <string name="attempting_reconnect">Error: %s.\n\nReconnecting…</string>
+    <string name="connection_reconnecting_to">Reconnecting to %1$s…</string>
+    <string name="connection_lost">Connection lost</string>
+    <!-- A countdown in seconds under "Connection lost", e.g. "Retrying in 5 s". -->
+    <string name="connection_retrying_in">Retrying in %1$d s</string>
+    <string name="edit_server">Edit server</string>
+    <string name="failure_generic_title">Could not connect</string>
+    <string name="failure_generic">The connection to the server failed.</string>
+    <string name="failure_name_taken_title">Name already in use</string>
+    <string name="failure_name_taken">Someone on this server already uses your name. Enter another one to connect.</string>
+    <string name="failure_invalid_name_title">Name not allowed</string>
+    <string name="failure_invalid_name">The server does not accept your name. Enter another one to connect.</string>
+    <string name="failure_wrong_password_title">Wrong password</string>
+    <string name="failure_wrong_password">The server did not accept the password. Enter it again to connect.</string>
+    <string name="failure_unreachable_title">Server unreachable</string>
+    <string name="failure_unreachable">Could not reach the server. Check its address and your network connection.</string>
+    <string name="failure_timeout_title">Server not responding</string>
+    <string name="failure_timeout">The server did not answer in time. It may be down, or the network may block it.</string>
+    <string name="failure_certificate_required_title">Certificate required</string>
+    <string name="failure_certificate_required">This server only lets in users with a certificate. Generate or import one in the settings.</string>
+    <string name="failure_certificate_rejected_title">Certificate not usable</string>
+    <string name="failure_certificate_rejected">Your certificate could not be used. Check it, and its password, in the settings.</string>
+    <string name="failure_server_full_title">Server full</string>
+    <string name="failure_server_full">The server has as many users as it allows. Try again later.</string>
+    <string name="failure_version_title">Version mismatch</string>
+    <string name="failure_version">The server does not support this version of Mumla.</string>
+    <string name="failure_tls_title">Secure connection failed</string>
+    <string name="failure_tls">The encrypted connection to the server could not be set up.</string>
+    <string name="failure_kicked_title">Kicked from the server</string>
+    <string name="failure_kicked">You were removed from the server.</string>
+    <string name="failure_banned_title">Banned from the server</string>
+    <string name="failure_banned">You were banned from the server.</string>
     <string name="change_requires_reconnect">Reconnect to use new settings.</string>
     <string name="no_certificate">No Certificate</string>
     <string name="decrypt_certificate">Decrypt Certificate</string>

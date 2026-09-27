@@ -26,7 +26,6 @@ import android.media.audiofx.NoiseSuppressor
 import android.os.Bundle
 import android.view.View
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
@@ -45,6 +44,8 @@ import se.lublin.mumla.util.changes
 
 /** The audio settings screen; the decisions live in [AudioSettingsPolicy], this is the wiring. */
 open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio) {
+    private val bluetoothSwitch = BluetoothScoSwitch(this)
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         super.onCreatePreferences(savedInstanceState, rootKey)
 
@@ -54,18 +55,12 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             true
         }
 
-        // Scan each sample rate and mark the ones this device cannot open.
-        val inputQualityPreference = requireNotNull(findPreference<ListPreference>(Settings.INPUT_RATE.key))
-        inputQualityPreference.entries = inputQualityPreference.entryValues.map { value ->
-            val rate = value.toString().toInt()
-            val supported =
-                AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) > 0
-            "${rate}Hz" + if (supported) "" else " (unsupported)"
-        }.toTypedArray()
+        labelAudioFormats()
+        bluetoothSwitch.bind()
 
-        findPreference<CheckBoxPreference>(Settings.ANDROID_NOISE_SUPPRESSOR.key)
+        findPreference<SwitchPreferenceCompat>(Settings.ANDROID_NOISE_SUPPRESSOR.key)
             ?.let { markAvailability(it, NoiseSuppressor.isAvailable()) }
-        findPreference<CheckBoxPreference>(Settings.ANDROID_AGC.key)
+        findPreference<SwitchPreferenceCompat>(Settings.ANDROID_AGC.key)
             ?.let { markAvailability(it, AutomaticGainControl.isAvailable()) }
 
         val noisePref = requireNotNull(findPreference<ListPreference>(Settings.NOISE_SUPPRESSION_METHOD.key))
@@ -80,7 +75,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             applyVadDependents(VadMode.fromPreferenceValue(newValue as String))
             true
         }
-        findPreference<CheckBoxPreference>(Settings.VAD_ADAPTIVE_FLOOR.key)
+        findPreference<SwitchPreferenceCompat>(Settings.VAD_ADAPTIVE_FLOOR.key)
             ?.setOnPreferenceChangeListener { _, newValue ->
                 applyFloorDependents(currentVadMode(), newValue as Boolean)
                 true
@@ -113,6 +108,22 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     }
 
     private var audioDeviceChoices: AudioDeviceChoices? = null
+
+    /** Names the sample rates, marking the ones this device cannot open, and the packet lengths. */
+    private fun labelAudioFormats() {
+        val rates = requireNotNull(findPreference<ListPreference>(Settings.INPUT_RATE.key))
+        rates.entries = rates.entryValues.map { value ->
+            val rate = value.toString().toInt()
+            val label = getString(R.string.unitHertz, rate)
+            val supported =
+                AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) > 0
+            if (supported) label else getString(R.string.audioSampleRateUnsupported, label)
+        }.toTypedArray()
+        val packets = requireNotNull(findPreference<ListPreference>(Settings.FRAMES_PER_PACKET.key))
+        packets.entries = packets.entryValues
+            .map { frames -> getString(R.string.unitMilliseconds, frames.toString().toInt() * FRAME_MS) }
+            .toTypedArray()
+    }
 
     /** Lists the devices there now, read without routing, and shows the saved choice. */
     private fun refreshAudioDevices() {
@@ -210,7 +221,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     protected fun currentVadMode(): VadMode =
         VadMode.fromPreferenceValue(findPreference<ListPreference>(Settings.VAD_MODE.key)?.value)
 
-    private fun markAvailability(pref: CheckBoxPreference, available: Boolean) {
+    private fun markAvailability(pref: SwitchPreferenceCompat, available: Boolean) {
         if (available) return
         pref.isEnabled = false
         pref.isChecked = false
@@ -237,7 +248,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         findPreference<Preference>(KEY_RECALIBRATE)?.isVisible = dependents.adaptive
         applyFloorDependents(
             mode,
-            findPreference<CheckBoxPreference>(Settings.VAD_ADAPTIVE_FLOOR.key)?.isChecked
+            findPreference<SwitchPreferenceCompat>(Settings.VAD_ADAPTIVE_FLOOR.key)?.isChecked
                 ?: Settings.VAD_ADAPTIVE_FLOOR.default,
         )
     }
@@ -248,10 +259,9 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     }
 
     private fun updateAudioDependents(screen: PreferenceScreen, inputMethod: String) {
-        requireNotNull(screen.findPreference<PreferenceCategory>("ptt_settings")).isEnabled =
-            Settings.ARRAY_INPUT_METHOD_PTT == inputMethod
-        requireNotNull(screen.findPreference<PreferenceCategory>("vad_settings")).isEnabled =
-            Settings.ARRAY_INPUT_METHOD_VOICE == inputMethod
+        val voice = Settings.ARRAY_INPUT_METHOD_VOICE == inputMethod
+        requireNotNull(screen.findPreference<PreferenceCategory>("vad_settings")).isEnabled = voice
+        VAD_TUNING_KEYS.forEach { screen.findPreference<Preference>(it)?.isEnabled = voice }
     }
 
     private companion object {
@@ -259,5 +269,14 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         private const val KEY_TEST = "audio_test_microphone"
         private const val KEY_LOOPBACK = "audio_loopback_test"
         private const val KEY_RECALIBRATE = "vad_recalibrate"
+
+        /** The length of one audio frame; a packet holds a whole number of them. */
+        private const val FRAME_MS = 10
+
+        /** The detector's settings in the advanced section, which only voice activity uses. */
+        private val VAD_TUNING_KEYS = listOf(
+            Settings.VAD_ADAPTIVE_FLOOR.key, Settings.VAD_FLOOR_DB.key,
+            Settings.VAD_ONSET_FRAMES.key, Settings.VAD_HOLD_MS.key,
+        )
     }
 }

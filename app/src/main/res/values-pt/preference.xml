@@ -25,7 +25,6 @@
     <string name="voiceActivitySettings">Configurações da Ativação por nível de voz</string>
     <string name="hot_corner_none">Desativado</string>
     <string name="detectionThresholdSum">Nível mínimo de volume para detecção de voz (quando o modo de transmissão está configurado para \"Ativação por nível de voz\").</string>
-    <string name="authentication">Autenticação</string>
     <string name="audioInputVolume">Volume do microfone</string>
     <string name="theme">Tema</string>
     <string name="pttKeySum">Use um botão físico para transmitir áudio.</string>
@@ -66,7 +65,6 @@
     <string name="pttButtonHeight">Altura do botão Pressione para falar</string>
     <string name="inputMethodVoice">Ativação por nível de voz</string>
     <string name="certificateGenerateSum">Gera um novo certificado Mumla autoassinado. Recomendado para iniciantes.</string>
-    <string name="advancedAudio">Avançado</string>
     <string name="hot_corner_top_right">canto superior direito ↗</string>
     <string name="audioInputMethod">Modo de transmissão</string>
     <string name="clearServerCertificatesSum">Remove todos os certificados de servidor confiáveis do Mumla.</string>
@@ -79,7 +77,6 @@
     <string name="pref_start_upIn_pinned_mode_sum">Ativa o modo \"Canais fixados\" depois de conectar (esconde canais que não estão fixados).</string>
     <string name="defaultUsernameDefault">Usuario_Mumla</string>
     <string name="pref_start_up_in_pinned_mode">Modo de canais fixados</string>
-    <string name="audio">Áudio</string>
     <string name="pref_export_certificate_summary">Exporta um certificado para o armazenamento externo.</string>
     <string name="useTts">Texto para fala</string>
     <string name="chatNotificationsSum">Exibidas para novas mensagens do chat.</string>

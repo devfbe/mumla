@@ -59,7 +59,6 @@
 \n延迟：%8$d 毫秒</string>
     <string name="server_match_description">Mumla 可以根据区域、版本与延迟自动为您寻找最佳的空服务器。</string>
     <!-- Common -->
-    <string name="no_servers">请先点击操作栏上的“添加”按钮添加一个服务器。</string>
     <string name="server_password">密码</string>
     <string name="server_username">用户名</string>
     <string name="server_port">端口</string>
@@ -88,7 +87,6 @@
     <string name="generateCertProgress">正在生成证书…</string>
     <string name="search">搜索</string>
     <string name="searchHint">搜索频道与用户</string>
-    <string name="quickConnect">快速连接</string>
     <string name="connect">连接</string>
     <string name="connectToServer">连接服务器</string>
     <string name="edit">编辑</string>
@@ -104,16 +102,11 @@
     <string name="channel">频道</string>
     <string name="user">用户</string>
     <string name="unknown">未知</string>
-    <string name="sort">排序</string>
-    <string name="sortBy">排序方式…</string>
     <string name="name">名称</string>
-    <string name="country">区域</string>
     <string name="share">分享</string>
     <string name="description">描述</string>
     <string name="shareMessage">用 Mumla 加入这个 Mumble 服务器。%s</string>
     <string name="close">关闭</string>
-    <string name="search_name">名称</string>
-    <string name="search_country">区域</string>
     <string name="information">信息</string>
     <string name="error_fetching_servers">无法获取服务器。\n您确定已连接互联网吗？</string>
     <string name="overlay">浮窗</string>
@@ -133,7 +126,6 @@
     <string name="first_run_generate_certificate_title">欢迎使用 Mumla</string>
     <string name="first_run_generate_certificate">强烈推荐您生成证书，部分服务器要求您必须有证书。</string>
     <string name="generate">生成</string>
-    <string name="invalid_password">密码错误。</string>
     <string name="send_message">发送消息</string>
     <string name="channel_menu_view_description">查看描述</string>
     <string name="untrusted_certificate">不被信任的证书</string>
@@ -141,14 +133,12 @@
     <string name="trust_added">添加此证书为信任</string>
     <string name="trust_add_failed">无法添加此证书为信任。</string>
     <string name="trust_cleared">信任数据库已清空</string>
-    <string name="cancelled">已取消</string>
     <string name="current_chat_target">当前聊天目标</string>
     <string name="channel_join">加入</string>
     <string name="certificate_info">通用名称：\n%1$s\n\n有效期始于：\n%2$s\n\n有效期止于：\n%3$s\n\n摘要（SHA-1）：\n%4$s\n\n摘要（SHA-256）：\n%5$s</string>
     <string name="invalid_host">无效主机</string>
     <string name="invalid_port_range">无效端口（1-65535）</string>
     <string name="cancel_reconnect">取消重新连接</string>
-    <string name="attempting_reconnect">错误：%s。\n\n正在重新连接…</string>
     <string name="change_requires_reconnect">重新连接以使用新设置。</string>
     <string name="no_certificate">无证书</string>
     <string name="decrypt_certificate">解密证书</string>

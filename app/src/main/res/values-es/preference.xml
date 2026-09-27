@@ -17,7 +17,6 @@
     <string name="acknowledgements">Contribuidores</string>
     <string name="acknowledgementsSum">Mira quién ha contribuido a Mumla (enlace web)</string>
     <string name="licenses">Licencias</string>
-    <string name="authentication">Autenticación</string>
     <string name="audioInputMethodSum">¿Cómo se activa la transmisión del audio?</string>
     <string name="audioInputMethod">Modo de transmisión</string>
     <string name="audioInputVolume">Volumen del micrófono</string>
@@ -31,10 +30,8 @@
     <string name="general">General</string>
     <string name="appearance">Apariencia</string>
     <string name="theme">Tema</string>
-    <string name="advancedAudio">Avanzado</string>
     <string name="forceTcp">Sólo usar TCP</string>
     <string name="forceTcpSum">Desactiva el uso de UDP para comunicaciones.</string>
-    <string name="audio">Audio</string>
     <string name="audioSampleRate">Frecuencia de muestreo de la entrada</string>
     <string name="audioSampleRateSum">La frecuencia de muestreo del audio preferida. Algunos dispositivos soportan menos frecuencias.</string>
     <string name="chatNotifications">Notificaciones del chat</string>
