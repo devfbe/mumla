@@ -18,7 +18,6 @@
 package se.lublin.humla
 
 import android.content.Context
-import android.content.Intent
 import android.net.ConnectivityManager
 import com.google.common.truth.Truth.assertThat
 import org.junit.After

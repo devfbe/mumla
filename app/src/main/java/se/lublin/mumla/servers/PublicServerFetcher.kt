@@ -83,7 +83,7 @@ class PublicServerFetcher(
         val ip = attr("ip")
         val server = if (port != null && ip != null) {
             PublicServer(
-                attr("name"), attr("ca"), attr("continent_code"), attr("country"),
+                attr("name"), attr("ca"), attr("country"),
                 attr("country_code"), ip, port, attr("region"), attr("url"),
             )
         } else {

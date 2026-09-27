@@ -51,22 +51,6 @@ bool setIntRequestAllowed(jint request) {
     }
 }
 
-/* Requests whose single variadic argument is an opus_int32* written exactly once. */
-bool getIntRequestAllowed(jint request) {
-    switch (request) {
-        case OPUS_GET_BITRATE_REQUEST:
-        case OPUS_GET_VBR_REQUEST:
-        case OPUS_GET_COMPLEXITY_REQUEST:
-        case OPUS_GET_INBAND_FEC_REQUEST:
-        case OPUS_GET_PACKET_LOSS_PERC_REQUEST:
-        case OPUS_GET_DTX_REQUEST:
-        case OPUS_GET_LOOKAHEAD_REQUEST:
-            return true;
-        default:
-            return false;
-    }
-}
-
 /* Validates an optional input packet: null means packet loss, otherwise offset + len must fit the
  * array. */
 bool packetFits(JNIEnv* env, jbyteArray data, jint offset, jint len) {
@@ -121,16 +105,6 @@ jint encoderCtlSetInt(JNIEnv*, jobject, jlong state, jint request, jint value) n
     auto* h = static_cast<EncoderHandle*>(encoders().get(state));
     if (h == nullptr || !setIntRequestAllowed(request)) return OPUS_BAD_ARG;
     return opus_encoder_ctl(h->state, request, static_cast<opus_int32>(value));
-}
-
-jint encoderCtlGetInt(JNIEnv* env, jobject, jlong state, jint request, jintArray value) noexcept {
-    auto* h = static_cast<EncoderHandle*>(encoders().get(state));
-    if (h == nullptr || value == nullptr || env->GetArrayLength(value) < 1) return OPUS_BAD_ARG;
-    if (!getIntRequestAllowed(request)) return OPUS_BAD_ARG;
-    opus_int32 v = 0;
-    int result = opus_encoder_ctl(h->state, request, &v);
-    writeInt(env, value, v);
-    return result;
 }
 
 void encoderDestroy(JNIEnv*, jobject, jlong state) noexcept {
@@ -200,11 +174,10 @@ jint packetGetSamplesPerFrame(JNIEnv* env, jobject, jbyteArray packet, jint samp
 }  // namespace
 
 bool humla::registerOpusNatives(JNIEnv* env) {
-    const std::array<JNINativeMethod, 5> encoder = {
+    const std::array<JNINativeMethod, 4> encoder = {
         humla::nativeMethod("create", encoderCreate),
         humla::nativeMethod("encode", encoderEncode),
         humla::nativeMethod("ctlSetInt", encoderCtlSetInt),
-        humla::nativeMethod("ctlGetInt", encoderCtlGetInt),
         humla::nativeMethod("destroy", encoderDestroy),
     };
     const std::array<JNINativeMethod, 5> decoder = {

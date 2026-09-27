@@ -117,12 +117,6 @@ object SpeexPreprocessorRequests {
     const val GET_PROB = SpeexPreprocessNative.SPEEX_PREPROCESS_GET_PROB                // 45
     const val SET_AGC_TARGET = SpeexPreprocessNative.SPEEX_PREPROCESS_SET_AGC_TARGET    // 46
 
-    /**
-     * `SPEEX_PREPROCESS_SET_PROB_CONTINUE`, a literal because `SpeexPreprocessNative` deliberately
-     * does not declare it: it is not on the bridge's allow list.
-     */
-    const val SET_PROB_CONTINUE = 16
-
     val ALLOWED = setOf(
         SET_DENOISE, SET_AGC, SET_VAD, SET_DEREVERB, SET_PROB_START,
         GET_PROB_START, SET_NOISE_SUPPRESS, GET_PROB, SET_AGC_TARGET,

@@ -406,7 +406,7 @@ class ChannelListAdapterRebuildTest {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
 
-        ids.getValue(0).addSubchannel(newcomerBelowRoot(root, ids))
+        ids.getValue(0).addSubchannel(newcomerBelowRoot(root))
         adapter.updateChannels()
 
         assertThat(adapter.getChannelPosition(5)).isNotEqualTo(-1)
@@ -417,7 +417,7 @@ class ChannelListAdapterRebuildTest {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
 
-        ids.getValue(0).addSubchannel(newcomerBelowRoot(root, ids))
+        ids.getValue(0).addSubchannel(newcomerBelowRoot(root))
         adapter.updateChannels()
 
         assertThat(adapter.getUserPosition(400)).isNotEqualTo(-1)
@@ -944,7 +944,7 @@ class ChannelListAdapterRebuildTest {
         return bytes.toByteArray()
     }
 
-    private fun newcomerBelowRoot(root: FakeChannel, ids: Map<Int, FakeChannel>): FakeChannel {
+    private fun newcomerBelowRoot(root: FakeChannel): FakeChannel {
         val newcomer = FakeChannel(5, counters = root.counters)
         newcomer.addUser(FakeUser(400))
         byId[5] = newcomer

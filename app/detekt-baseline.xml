@@ -64,7 +64,5 @@
     <ID>TooManyFunctions:MumlaService.kt$MumlaService : HumlaServiceOnActionListenerOnActionListenerIMumlaService</ID>
     <ID>TooManyFunctions:PublicServerListFragment.kt$PublicServerListFragment : FragmentPublicServerAdapterMenuListenerMenuProvider</ID>
     <ID>TooManyFunctions:ZoomImageView.kt$ZoomImageView : AppCompatImageView</ID>
-    <ID>UnusedParameter:ChannelListAdapterRebuildTest.kt$ChannelListAdapterRebuildTest$ids: Map&lt;Int, FakeChannel&gt;</ID>
-    <ID>UnusedPrivateProperty:LevelMeterViewTest.kt$LevelMeterViewTest$name</ID>
   </CurrentIssues>
 </SmellBaseline>

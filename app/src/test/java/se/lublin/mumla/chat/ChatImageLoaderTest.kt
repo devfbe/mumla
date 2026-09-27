@@ -18,7 +18,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.GraphicsMode
 import se.lublin.mumla.Settings
-import java.io.IOException
 import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.security.MessageDigest

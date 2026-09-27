@@ -26,7 +26,6 @@ object Constants {
     const val TRANSMIT_PUSH_TO_TALK = 1
     const val TRANSMIT_CONTINUOUS = 2
 
-    const val PROTOCOL_VERSION = (PROTOCOL_MAJOR shl 16) or (PROTOCOL_MINOR shl 8) or PROTOCOL_PATCH
     const val PROTOCOL_STRING = "$PROTOCOL_MAJOR.$PROTOCOL_MINOR.$PROTOCOL_PATCH"
     const val DEFAULT_PORT = 64738
 }

@@ -25,10 +25,6 @@ class OpusEncoderTest {
             settings[request] = value
             return 0
         }
-        override fun ctlGetInt(state: Long, request: Int, value: IntArray): Int {
-            value[0] = 40000
-            return 0
-        }
         override fun destroy(state: Long) {
             destroys++
         }

@@ -32,7 +32,6 @@ static int failures = 0;
 #define ENC_CREATE ENC("create", jlong (*)(JNIEnv*, jobject, jint, jint, jint, jintArray) noexcept)
 #define ENC_ENCODE ENC("encode", jint (*)(JNIEnv*, jobject, jlong, jshortArray, jint, jbyteArray, jint) noexcept)
 #define ENC_CTL_SET ENC("ctlSetInt", jint (*)(JNIEnv*, jobject, jlong, jint, jint) noexcept)
-#define ENC_CTL_GET ENC("ctlGetInt", jint (*)(JNIEnv*, jobject, jlong, jint, jintArray) noexcept)
 #define ENC_DESTROY ENC("destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
 #define DEC_CREATE DEC("create", jlong (*)(JNIEnv*, jobject, jint, jint, jintArray) noexcept)
 #define DEC_DECODE_FLOAT \
@@ -86,16 +85,8 @@ static void test_encoder(Env& env) {
     }
 
     CHECK(ENC_CTL_SET(e, nullptr, enc, OPUS_SET_BITRATE_REQUEST, 40000) == OPUS_OK, "set bitrate");
-    Array<jint> value(1);
-    CHECK(ENC_CTL_GET(e, nullptr, enc, OPUS_GET_BITRATE_REQUEST, value.as<jintArray>()) == OPUS_OK
-              && value[0] == 40000, "get bitrate reads back what was set");
     CHECK(ENC_CTL_SET(e, nullptr, enc, OPUS_GET_BITRATE_REQUEST, 1234) == OPUS_BAD_ARG,
           "a GET request through the by-value setter is refused");
-    CHECK(ENC_CTL_GET(e, nullptr, enc, OPUS_SET_BITRATE_REQUEST, value.as<jintArray>()) == OPUS_BAD_ARG,
-          "a SET request through the pointer getter is refused");
-    Array<jint> empty(0);
-    CHECK(ENC_CTL_GET(e, nullptr, enc, OPUS_GET_BITRATE_REQUEST, empty.as<jintArray>()) == OPUS_BAD_ARG,
-          "an empty value array is refused");
 
     ENC_DESTROY(e, nullptr, enc);
     ENC_DESTROY(e, nullptr, 0);
@@ -207,9 +198,6 @@ static void test_inband_fec(Env& env) {
     CHECK(ENC_CTL_SET(e, nullptr, enc, OPUS_SET_INBAND_FEC_REQUEST, 1) == OPUS_OK, "enable fec");
     CHECK(ENC_CTL_SET(e, nullptr, enc, OPUS_SET_PACKET_LOSS_PERC_REQUEST, 10) == OPUS_OK, "set loss");
     CHECK(ENC_CTL_SET(e, nullptr, enc, OPUS_SET_DTX_REQUEST, 0) == OPUS_OK, "disable dtx");
-    Array<jint> value(1);
-    CHECK(ENC_CTL_GET(e, nullptr, enc, OPUS_GET_INBAND_FEC_REQUEST, value.as<jintArray>()) == OPUS_OK
-              && value[0] == 1, "fec reads back as enabled");
 
     int withLbrr = 0;
     Array<jbyte> packet(512);

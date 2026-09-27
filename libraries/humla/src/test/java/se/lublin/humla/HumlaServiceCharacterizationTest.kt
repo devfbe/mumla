@@ -18,11 +18,8 @@
 package se.lublin.humla
 
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
-import android.net.ConnectivityManager
-import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -47,7 +44,6 @@ import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.onEvents
 import se.lublin.humla.util.Constants
-import java.util.concurrent.TimeUnit
 
 /**
  * Characterization of [HumlaService] without a live connection: lifecycle, configuration, and the
@@ -70,17 +66,6 @@ class HumlaServiceCharacterizationTest {
 
     /** The input mode in force. */
     private fun inputMode(service: HumlaService): Any = service.inputMode
-
-    /**
-     * A service that cancels every connection attempt on `Connecting`, which a main-thread
-     * collector sees inline, so `connect()` can be driven without opening a socket.
-     */
-    private fun cancellingService(): HumlaService = service().also { service ->
-        service.onEvents { if (it == HumlaEvent.Connecting) service.disconnect() }
-    }
-
-    private fun connectivityManager() = RuntimeEnvironment.getApplication()
-        .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
     // ---------------------------------------------------------------- lifecycle and initial state
 

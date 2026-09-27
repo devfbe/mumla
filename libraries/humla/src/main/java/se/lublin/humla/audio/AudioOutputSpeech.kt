@@ -59,7 +59,7 @@ private const val BYTE_MASK = 0xFF
  */
 class AudioOutputSpeech(
     val user: User,
-    private var requestedSamples: Int,
+    private val requestedSamples: Int,
     private val talkStateListener: TalkStateListener,
     private val opusApi: OpusDecoderApi = OpusDecoderNative,
     jitterApi: SpeexJitterApi = SpeexJitterNative,
@@ -294,11 +294,6 @@ class AudioOutputSpeech(
 
     private fun resizeBuffer(newSize: Int) {
         if (newSize > buffer.size) buffer = Arrays.copyOf(buffer, newSize)
-    }
-
-    /** Sets the number of samples each [decode] prepares. */
-    fun setRequestedSamples(samples: Int) {
-        requestedSamples = samples
     }
 
     val session: Int

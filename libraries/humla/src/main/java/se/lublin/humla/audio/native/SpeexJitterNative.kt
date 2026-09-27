@@ -48,7 +48,6 @@ object SpeexJitterNative : SpeexJitterApi {
     const val JITTER_BUFFER_MISSING = 1
 
     /** libspeex called this `INCOMPLETE`. */
-    const val JITTER_BUFFER_INSERTION = 2
     const val JITTER_BUFFER_INTERNAL_ERROR = -1
     const val JITTER_BUFFER_BAD_ARGUMENT = -2
     const val JITTER_BUFFER_SET_MARGIN = 0

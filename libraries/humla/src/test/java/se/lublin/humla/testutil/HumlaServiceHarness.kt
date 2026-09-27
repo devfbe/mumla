@@ -101,12 +101,6 @@ class HumlaServiceHarness(
         mainLooper.idle()
     }
 
-    /** Waits until something has been posted to the main looper, then runs it. */
-    fun drainMainWhenPosted() {
-        awaitUntil(description = "a task on the main looper") { !mainLooper.isIdle }
-        mainLooper.idle()
-    }
-
     /** Opens the socket of connection number [index] (0-based) and reports it established. */
     fun openSocket(index: Int): FakeTcpTransport {
         awaitUntil(description = "tcp transport $index") {

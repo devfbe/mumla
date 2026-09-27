@@ -79,7 +79,6 @@ class FakeTcpTransport(private val scope: CoroutineScope) : TcpTransport {
         post { it.onTCPMessageReceived(type, data.size, data) }
     fun simulateFailure(e: HumlaException) = post { it.onTCPConnectionFailed(e) }
     fun simulateHandshakeFailure(chain: Array<X509Certificate>) = post { it.onTLSHandshakeFailed(chain) }
-    fun simulateCertificateChanged(chain: Array<X509Certificate>) = post { it.onTLSCertificateChanged(chain) }
 
     /**
      * The read loop's finally block reporting the closed socket. Called **directly**, not through

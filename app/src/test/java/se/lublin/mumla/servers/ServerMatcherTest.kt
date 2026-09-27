@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class ServerMatcherTest {
     private fun server(name: String, country: String = "SE") =
-        PublicServer(name, "0", "EU", country, country, "$name.example", 64738, "", "")
+        PublicServer(name, "0", country, country, "$name.example", 64738, "", "")
 
     private fun reply(server: PublicServer, users: Int, latency: Int, version: Int = 0x10400) =
         ServerInfoResponse(

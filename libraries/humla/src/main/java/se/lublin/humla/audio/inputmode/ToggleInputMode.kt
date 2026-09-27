@@ -29,8 +29,6 @@ class ToggleInputMode : IInputMode {
     @Volatile
     private var inputOn = false
 
-    fun toggleTalkingOn() = setTalkingOn(!inputOn)
-
     val isTalkingOn: Boolean get() = inputOn
 
     fun setTalkingOn(talking: Boolean) {

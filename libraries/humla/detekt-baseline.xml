@@ -60,8 +60,6 @@
     <ID>TooManyFunctions:HumlaConnection.kt$HumlaConnection : TCPConnectionListenerUDPConnectionListenerMessageHandlerRegistry</ID>
     <ID>TooManyFunctions:HumlaService.kt$HumlaService : ServiceIHumlaServiceIHumlaSessionHumlaConnectionListenerHumlaLogger</ID>
     <ID>TooManyFunctions:HumlaTCP.kt$HumlaTCP : TcpTransport</ID>
-    <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun cancellingService(): HumlaService</ID>
-    <ID>UnusedPrivateMember:HumlaServiceCharacterizationTest.kt$HumlaServiceCharacterizationTest$private fun connectivityManager()</ID>
     <ID>UseCheckOrError:FakeCaptureSource.kt$FakeCaptureSource$throw IllegalStateException("startRecording failed")</ID>
     <ID>UseCheckOrError:HumlaService.kt$HumlaService$throw IllegalStateException("Session user should be set post-synchronization!")</ID>
     <ID>UseRequire:OpusEncoder.kt$OpusEncoder$throw IllegalArgumentException("This Opus encoder implementation requires a constant frame size.")</ID>

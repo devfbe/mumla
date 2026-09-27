@@ -22,14 +22,12 @@ interface OpusEncoderApi {
     fun create(sampleRate: Int, channels: Int, application: Int, error: IntArray): Long
     fun encode(state: Long, pcm: ShortArray, frameSize: Int, out: ByteArray, maxBytes: Int): Int
     fun ctlSetInt(state: Long, request: Int, value: Int): Int
-    fun ctlGetInt(state: Long, request: Int, value: IntArray): Int
     fun destroy(state: Long)
 }
 
 object OpusEncoderNative : OpusEncoderApi {
     const val OPUS_APPLICATION_VOIP = 2048
     const val OPUS_SET_BITRATE_REQUEST = 4002
-    const val OPUS_GET_BITRATE_REQUEST = 4003
     const val OPUS_SET_VBR_REQUEST = 4006
     const val OPUS_SET_INBAND_FEC_REQUEST = 4012
     const val OPUS_SET_PACKET_LOSS_PERC_REQUEST = 4014
@@ -42,6 +40,5 @@ object OpusEncoderNative : OpusEncoderApi {
     external override fun create(sampleRate: Int, channels: Int, application: Int, error: IntArray): Long
     external override fun encode(state: Long, pcm: ShortArray, frameSize: Int, out: ByteArray, maxBytes: Int): Int
     external override fun ctlSetInt(state: Long, request: Int, value: Int): Int
-    external override fun ctlGetInt(state: Long, request: Int, value: IntArray): Int
     external override fun destroy(state: Long)
 }
