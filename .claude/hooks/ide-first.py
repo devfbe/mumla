@@ -48,6 +48,12 @@ TEXT_TOOL = re.compile(
 )
 RECURSIVE_SEARCH = re.compile(r"(^|[\s;|&(`$])(rg|ag|ack)\b|\bgrep\b[^|;&\n]*\s-\w*[rR]|\bfind\b|\btree\b")
 GIT_CMD = re.compile(r"\bgit\s+[^|;&\n]*")
+GIT_MESSAGE = re.compile(r"\s-m\s*(\"(?:[^\"\\]|\\.)*\"|'[^']*')", re.S)
+HEREDOC = re.compile(
+    r"^(?P<head>[^\n]*<<-?\s*['\"]?(?P<tag>\w+)['\"]?[^\n]*)\n.*?\n[ \t]*(?P=tag)[ \t]*$", re.M | re.S
+)
+DATA_SINK = re.compile(r"\b(cat|tee|git)\b")
+SCRIPT_RUNNER = re.compile(r"\b(python3?|perl|bash|sh|zsh|awk|gawk|sed|ruby|node)\b")
 PATH_TOKEN = re.compile(r"[\w.~/+@*-]*[/.][\w.~/+@*-]*")
 
 WORKTREE_HINT = (
@@ -72,7 +78,19 @@ def indexed_source(path: str, cwd: str) -> bool:
     return not FREE_DIR.search(full[len(INDEXED_ROOT):])
 
 
+def strip_data(cmd: str) -> str:
+    """Drops text that is data, not paths: commit messages and heredocs fed to cat, tee or git."""
+    cmd = GIT_MESSAGE.sub(" ", cmd)
+
+    def heredoc(match: re.Match) -> str:
+        head = match.group("head")
+        return head if DATA_SINK.search(head) and not SCRIPT_RUNNER.search(head) else match.group(0)
+
+    return HEREDOC.sub(heredoc, cmd)
+
+
 def bash_hits_sources(cmd: str, cwd: str) -> bool:
+    cmd = strip_data(cmd)
     if not TEXT_TOOL.search(cmd):
         return False
     rest = GIT_CMD.sub(" ", cmd)
