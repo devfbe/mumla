@@ -20,7 +20,6 @@ package se.lublin.mumla.preference
 import android.content.DialogInterface
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
@@ -40,6 +39,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.databinding.DialogExportPasswordBinding
 import se.lublin.mumla.db.DatabaseCertificate
 import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.ui.AppMessages
 import se.lublin.mumla.ui.showMessageDialog
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -159,7 +159,7 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
         if (error != null) {
             showErrorDialog(error)
         } else {
-            Toast.makeText(this, getString(R.string.export_success, name), Toast.LENGTH_LONG).show()
+            AppMessages.get(this).post(getString(R.string.export_success, name))
             finish()
         }
     }

@@ -25,7 +25,6 @@ import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
 import android.view.WindowManager
-import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -71,6 +70,8 @@ import se.lublin.mumla.session.serverName
 import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.showConfirmDialog
+import se.lublin.mumla.ui.showAppMessages
+import se.lublin.mumla.ui.showSnackbar
 import se.lublin.mumla.util.Edge
 import se.lublin.mumla.util.changes
 import se.lublin.mumla.util.padForSystemBars
@@ -114,6 +115,7 @@ class MumlaActivity :
         binding.leftDrawer.padForSystemBars(Edge.START, Edge.TOP, Edge.BOTTOM)
         setSupportActionBar(binding.toolbar)
         onBackPressedDispatcher.addCallback(this, backCallback)
+        showAppMessages()
 
         setStayAwake(settings.shouldStayAwake)
         lifecycleScope.launch {
@@ -184,7 +186,7 @@ class MumlaActivity :
 
     private fun onBadUrl(e: Exception) {
         HumlaLog.w(TAG, "Could not parse the mumble:// URL", e)
-        Toast.makeText(this, getString(R.string.mumble_url_parse_failed), Toast.LENGTH_LONG).show()
+        showSnackbar(R.string.mumble_url_parse_failed)
     }
 
     override fun onPostCreate(savedInstanceState: Bundle?) {

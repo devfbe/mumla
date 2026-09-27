@@ -28,7 +28,6 @@ import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
@@ -48,6 +47,7 @@ import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.showConfirmDialog
+import se.lublin.mumla.ui.showSnackbar
 import se.lublin.mumla.util.appViewModels
 import java.util.Locale
 
@@ -95,7 +95,7 @@ class PublicServerListFragment :
         binding.serverListTorNotice.isVisible = state == PublicServersViewModel.State.TorBlocked
         if (state is PublicServersViewModel.State.Shown) adapter.submitList(state.servers)
         if (state == PublicServersViewModel.State.DownloadFailed) {
-            Toast.makeText(requireContext(), R.string.error_fetching_servers, Toast.LENGTH_SHORT).show()
+            showSnackbar(R.string.error_fetching_servers, R.string.retry) { publicServers.retry() }
         }
     }
 

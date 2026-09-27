@@ -26,9 +26,9 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.Toast
 import androidx.core.content.ContextCompat
 import se.lublin.mumla.R
+import se.lublin.mumla.ui.AppMessages
 
 /** A push-to-talk area drawn over other apps in one corner of the screen. */
 @SuppressLint("InflateParams") // An overlay window has no parent to inflate against.
@@ -99,7 +99,7 @@ class MumlaHotCorner(
         val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
             .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
-        Toast.makeText(context, R.string.grant_perm_draw_over_apps, Toast.LENGTH_LONG).show()
+        AppMessages.post(context, R.string.grant_perm_draw_over_apps)
     }
 
     interface MumlaHotCornerListener {

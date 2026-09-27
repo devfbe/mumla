@@ -40,7 +40,6 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
-import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.ServerSettings
@@ -62,6 +61,7 @@ import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.TestImages
 import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.addUnderChatParent
@@ -786,7 +786,7 @@ class ChannelChatFragmentTest {
         fragment.onReadPermissionResult(true)
         idleMainLooper()
         assertThat(startedAction()).isEqualTo(Intent.ACTION_GET_CONTENT)
-        assertThat(ShadowToast.getLatestToast()).isNull()
+        assertThat(activity.snackbarText()).isNull()
     }
 
     @Test
@@ -795,8 +795,7 @@ class ChannelChatFragmentTest {
         launch()
         fragment.onReadPermissionResult(false)
         idleMainLooper()
-        assertThat(ShadowToast.getTextOfLatestToast())
-            .isEqualTo(activity.getString(R.string.permission_denied_storage))
+        assertThat(activity.snackbarText()).isEqualTo(activity.getString(R.string.permission_denied_storage))
         assertThat(startedAction()).isNull()
     }
 
@@ -807,7 +806,7 @@ class ChannelChatFragmentTest {
         idleMainLooper()
         assertThat(progress.visibility).isEqualTo(View.GONE)
         assertThat(ShadowDialog.getLatestDialog()).isNull()
-        assertThat(ShadowToast.getLatestToast()).isNull()
+        assertThat(activity.snackbarText()).isNull()
     }
 
     /**
@@ -841,9 +840,8 @@ class ChannelChatFragmentTest {
         val uri = Uri.parse("content://se.lublin.mumla.test/notes.txt")
         registerImage(uri, "definitely not an image".toByteArray())
         fragment.onImagePickResult(uri)
-        drainMainUntil { ShadowToast.getLatestToast() != null }
-        assertThat(ShadowToast.getTextOfLatestToast())
-            .isEqualTo(activity.getString(R.string.image_decode_failed))
+        drainMainUntil { activity.snackbarText() != null }
+        assertThat(activity.snackbarText()).isEqualTo(activity.getString(R.string.image_decode_failed))
         assertThat(ShadowDialog.getLatestDialog()).isNull()
         assertThat(progress.visibility).isEqualTo(View.GONE)
     }
@@ -883,9 +881,8 @@ class ChannelChatFragmentTest {
         model.value = model(settings = settings(10))
         launch()
         fragment.sendImage(smallBitmap())
-        drainMainUntil { ShadowToast.getLatestToast() != null }
-        assertThat(ShadowToast.getTextOfLatestToast())
-            .isEqualTo(activity.getString(R.string.image_too_large))
+        drainMainUntil { activity.snackbarText() != null }
+        assertThat(activity.snackbarText()).isEqualTo(activity.getString(R.string.image_too_large))
     }
 
     @Test

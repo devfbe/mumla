@@ -22,7 +22,6 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.text.InputType
 import android.widget.EditText
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -41,6 +40,7 @@ import java.security.KeyStoreException
 import java.security.NoSuchAlgorithmException
 import java.security.cert.CertificateException
 import java.util.UUID
+import se.lublin.mumla.ui.AppMessages
 
 class CertificateImportActivity : AppCompatActivity() {
 
@@ -102,7 +102,7 @@ class CertificateImportActivity : AppCompatActivity() {
             when (e) {
                 is KeyStoreException, is IOException, is NoSuchAlgorithmException, is CertificateException -> {
                     e.printStackTrace()
-                    Toast.makeText(this, R.string.certificate_load_failed, Toast.LENGTH_LONG).show()
+                    AppMessages.post(this, R.string.certificate_load_failed)
                     finish()
                     return
                 }
@@ -114,7 +114,7 @@ class CertificateImportActivity : AppCompatActivity() {
         val success = getString(R.string.certificate_import_success, fileName)
         lifecycleScope.launch {
             MumlaRepository.get(this@CertificateImportActivity).io { addCertificate(fileName, pkcs12Out) }
-            Toast.makeText(this@CertificateImportActivity, success, Toast.LENGTH_LONG).show()
+            AppMessages.get(this@CertificateImportActivity).post(success)
             finish()
         }
     }
@@ -136,7 +136,7 @@ class CertificateImportActivity : AppCompatActivity() {
 
     private fun invalidCertificate(e: Exception) {
         e.printStackTrace()
-        Toast.makeText(this, R.string.invalid_certificate, Toast.LENGTH_LONG).show()
+        AppMessages.post(this, R.string.invalid_certificate)
         finish()
     }
 }

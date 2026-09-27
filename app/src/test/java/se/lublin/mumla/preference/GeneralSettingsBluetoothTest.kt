@@ -15,9 +15,9 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadows.ShadowToast
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.host
 
@@ -149,7 +149,7 @@ class GeneralSettingsBluetoothTest {
 
         assertThat(settings.isBluetoothScoEnabled).isTrue()
         assertThat(checkBox().isChecked).isTrue()
-        assertThat(ShadowToast.getTextOfLatestToast()).isNull()
+        assertThat(activity.snackbarText()).isNull()
     }
 
     /** A denial is not a "no": the preference is kept regardless. */
@@ -163,7 +163,6 @@ class GeneralSettingsBluetoothTest {
 
         assertThat(settings.isBluetoothScoEnabled).isTrue()
         assertThat(checkBox().isChecked).isTrue()
-        assertThat(ShadowToast.getTextOfLatestToast())
-            .isEqualTo(app.getString(R.string.bluetooth_perm_denied))
+        assertThat(activity.snackbarText()).isEqualTo(app.getString(R.string.bluetooth_perm_denied))
     }
 }

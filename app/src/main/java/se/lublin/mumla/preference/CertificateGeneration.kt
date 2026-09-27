@@ -18,7 +18,6 @@ package se.lublin.mumla.preference
 
 import android.content.Context
 import android.database.SQLException
-import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +29,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.DatabaseCertificate
 import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.ui.AppMessages
 import se.lublin.mumla.util.ApplicationScope
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -57,7 +57,7 @@ suspend fun Context.generateDefaultCertificate(): DatabaseCertificate? {
         .show()
     try {
         val certificate = work.await()
-        if (certificate == null) Toast.makeText(this, R.string.generateCertFailure, Toast.LENGTH_SHORT).show()
+        if (certificate == null) AppMessages.post(this, R.string.generateCertFailure)
         return certificate
     } finally {
         progress.dismiss()

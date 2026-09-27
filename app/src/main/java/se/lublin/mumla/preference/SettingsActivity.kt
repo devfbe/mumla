@@ -7,6 +7,7 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ActivitySettingsBinding
+import se.lublin.mumla.ui.showAppMessages
 import se.lublin.mumla.util.Edge
 import se.lublin.mumla.util.padForSystemBars
 
@@ -28,6 +29,7 @@ class SettingsActivity :
             setTitle(R.string.action_settings)
         }
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        showAppMessages()
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.settings_container, RootPreferenceFragment())

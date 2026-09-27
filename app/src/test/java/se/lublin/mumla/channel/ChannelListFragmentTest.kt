@@ -14,7 +14,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
-import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.SessionActions
 import se.lublin.humla.model.ChannelState
@@ -25,6 +24,7 @@ import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.addUnderChatParent
@@ -200,7 +200,7 @@ class ChannelListFragmentTest {
         fragment.join(3)
 
         verify { actions.joinChannel(3) }
-        assertThat(ShadowToast.getLatestToast()).isNull()
+        assertThat(controller.get().snackbarText()).isNull()
     }
 
     @Test
@@ -210,7 +210,7 @@ class ChannelListFragmentTest {
         fragment.join(3)
 
         verify(exactly = 0) { actions.joinChannel(any()) }
-        assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo("You are not allowed to enter other.")
+        assertThat(controller.get().snackbarText()).isEqualTo("You are not allowed to enter other.")
     }
 
     @Test

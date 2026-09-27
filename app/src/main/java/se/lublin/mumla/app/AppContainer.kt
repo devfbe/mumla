@@ -26,6 +26,7 @@ import se.lublin.mumla.chat.SessionChat
 import se.lublin.mumla.service.MumlaService
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.session.SessionSettingsSync
+import se.lublin.mumla.ui.AppMessages
 
 /** The objects the whole process shares, wired by hand once per process. Main thread. */
 class AppContainer(
@@ -33,6 +34,8 @@ class AppContainer(
     scope: CoroutineScope,
     newSession: (SessionConfig) -> IHumlaSession = { config -> HumlaSession(app, config) },
 ) {
+    val appMessages = AppMessages()
+
     val sessionManager = SessionManager(
         newSession = newSession,
         startForeground = { MumlaService.start(app) },
@@ -40,6 +43,6 @@ class AppContainer(
     )
 
     init {
-        SessionSettingsSync(app, sessionManager).start(scope)
+        SessionSettingsSync(app, sessionManager, appMessages).start(scope)
     }
 }

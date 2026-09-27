@@ -23,7 +23,6 @@ import android.net.Uri
 import android.os.Build
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -38,6 +37,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.ui.showConfirmDialog
+import se.lublin.mumla.ui.showPermissionDeniedSnackbar
 import se.lublin.mumla.ui.showMessageDialog
 import se.lublin.mumla.util.Orbot
 import se.lublin.mumla.util.isPortOpen
@@ -126,11 +126,11 @@ class ConnectFlow(
         }
 
         override fun onMicrophoneDenied() {
-            Toast.makeText(activity, R.string.grant_perm_microphone, Toast.LENGTH_LONG).show()
+            activity.showPermissionDeniedSnackbar(R.string.grant_perm_microphone)
         }
 
         override fun onNotificationsDenied() {
-            Toast.makeText(activity, R.string.grant_perm_notifications, Toast.LENGTH_LONG).show()
+            activity.showPermissionDeniedSnackbar(R.string.grant_perm_notifications)
         }
     }
 

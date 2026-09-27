@@ -17,7 +17,6 @@
 package se.lublin.mumla.session
 
 import android.content.Context
-import android.widget.Toast
 import androidx.preference.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -26,13 +25,18 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.ui.AppMessages
 import se.lublin.mumla.util.changes
 
 /**
  * Carries changed preferences to the current session: audio settings live, and a note when a
  * setting only takes effect on the next connection.
  */
-class SessionSettingsSync(private val context: Context, private val sessions: SessionManager) {
+class SessionSettingsSync(
+    private val context: Context,
+    private val sessions: SessionManager,
+    private val messages: AppMessages,
+) {
     fun start(scope: CoroutineScope): Job = scope.launch(Dispatchers.Main.immediate, CoroutineStart.UNDISPATCHED) {
         PreferenceManager.getDefaultSharedPreferences(context).changes(OBSERVED_KEYS).collect(::onPreferenceChanged)
     }
@@ -44,7 +48,7 @@ class SessionSettingsSync(private val context: Context, private val sessions: Se
             session.configure(SessionSettings.withAudioSettings(session.config, Settings.getInstance(context)))
         }
         if (key in RECONNECT_KEYS && sessions.connected != null) {
-            Toast.makeText(context, R.string.change_requires_reconnect, Toast.LENGTH_LONG).show()
+            messages.post(context.getString(R.string.change_requires_reconnect))
         }
     }
 

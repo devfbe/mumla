@@ -27,7 +27,6 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.SearchView
@@ -47,6 +46,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.comment.ChannelDescriptionFragment
 import se.lublin.mumla.channel.comment.UserCommentFragment
 import se.lublin.mumla.databinding.FragmentChannelListBinding
+import se.lublin.mumla.ui.showSnackbar
 import se.lublin.mumla.util.appViewModels
 
 /**
@@ -210,8 +210,7 @@ class ChannelListFragment :
     /** Joins [channel], or tells the user why not when the server has said they may not enter it. */
     override fun join(channel: Int) {
         if (!tree.join(channel)) {
-            val text = getString(R.string.channel_enter_denied, tree.channelName(channel))
-            Toast.makeText(requireContext(), text, Toast.LENGTH_LONG).show()
+            showSnackbar(getString(R.string.channel_enter_denied, tree.channelName(channel)))
         }
     }
 
@@ -237,7 +236,7 @@ class ChannelListFragment :
 
     override fun shout(channel: Int, includeLinked: Boolean, includeSubchannels: Boolean) {
         if (!tree.shout(channel, includeLinked, includeSubchannels)) {
-            Toast.makeText(requireContext(), R.string.shout_failed, Toast.LENGTH_LONG).show()
+            showSnackbar(R.string.shout_failed)
         }
     }
 

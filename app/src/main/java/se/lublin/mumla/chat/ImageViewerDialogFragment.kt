@@ -7,7 +7,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -20,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.DialogImageViewerBinding
+import se.lublin.mumla.ui.showSnackbar
 import se.lublin.mumla.util.Edge
 import se.lublin.mumla.util.padForSystemBars
 import java.io.IOException
@@ -139,7 +139,7 @@ class ImageViewerDialogFragment : DialogFragment() {
                 send.clipData = ClipData.newRawUri(null, exported.uri)
                 startActivity(Intent.createChooser(send, getString(R.string.chat_image_share)))
             } catch (e: IOException) {
-                Toast.makeText(context, R.string.chat_image_load_failed, Toast.LENGTH_SHORT).show()
+                showSnackbar(requireView(), getString(R.string.chat_image_load_failed))
             } finally {
                 share.isEnabled = true
             }
