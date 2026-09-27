@@ -27,6 +27,7 @@ import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.HumlaService
+import se.lublin.humla.audio.AudioSettings
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Channel
@@ -37,6 +38,7 @@ import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.ModelHandler
+import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
@@ -1013,7 +1015,8 @@ class MumlaServiceCharacterizationTest {
 
     @Test
     fun reconnectAsksForAConnection() {
-        service.configure(SessionConfig(server = se.lublin.humla.model.Server(-1, "t", "127.0.0.1", 64738, "me", "")))
+        val server = se.lublin.humla.model.Server(-1, "t", "127.0.0.1", 64738, "me", "")
+        service.configure(SessionConfig(ConnectionConfig(server = server)))
         service.connectionFactory = { mockk(relaxed = true) }
 
         service.reconnect()
@@ -1056,7 +1059,7 @@ class MumlaServiceCharacterizationTest {
     /** All five clauses true; each test below turns exactly one of them false. */
     private fun clickReady(): User {
         service.keyClickSound = { clicks++ }
-        service.configure(SessionConfig(transmitMode = TransmitMode.PUSH_TO_TALK))
+        service.configure(SessionConfig(audio = AudioSettings(transmitMode = TransmitMode.PUSH_TO_TALK)))
         preferences().edit().putBoolean(Settings.PTT_SOUND.key, true).commit()
         connect()
         val talking = user(SELF)
@@ -1095,7 +1098,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun noClickOutsidePushToTalk() {
         val u = clickReady()
-        service.configure(SessionConfig(transmitMode = TransmitMode.VOICE_ACTIVITY))
+        service.configure(SessionConfig(audio = AudioSettings(transmitMode = TransmitMode.VOICE_ACTIVITY)))
         talk(u)
         assertThat(clicks).isEqualTo(0)
     }

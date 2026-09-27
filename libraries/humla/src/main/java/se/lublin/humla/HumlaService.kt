@@ -44,18 +44,14 @@ import se.lublin.humla.audio.AudioHost
 import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.AudioSessionParams
 import se.lublin.humla.audio.DefaultAudioHandlerFactory
-import se.lublin.humla.audio.PipelineSettings
 import se.lublin.humla.audio.TransmitMode
-import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.IInputMode
-import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.audio.routing.AndroidCommunicationDevices
-import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.AudioRouter
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.audio.routing.CommunicationDevices
@@ -98,8 +94,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     final override var sessionConfig = SessionConfig()
         private set
 
-    /** Current audio settings: [sessionConfig]'s audio half plus what the route decides. */
-    private var audioConfig = AudioConfig()
+    /** The `AudioDeviceInfo` type the router routes voice to; null while the platform decides. */
+    private var routedDeviceType: Int? = null
+
+    private val audioConfig: AudioConfig get() = sessionConfig.audio.toAudioConfig(routedDeviceType)
 
     /** Held by identity: the audio thread and `isTalking` must see the same toggle object. */
     @VisibleForTesting
@@ -260,9 +258,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         ) { logWarningOnce(getString(R.string.bluetooth_sco_denied)) }
         communicationDevices = devices
         router = AudioRouter(devices, routerListener)
-        router.preferred = sessionConfig.preferredAudioDevice
+        router.preferred = sessionConfig.audio.preferredDevice
         toggleInputMode = ToggleInputMode()
-        activityInputMode = ActivityInputMode(VoiceActivityDetector(sessionConfig.vadConfig))
+        activityInputMode = ActivityInputMode(VoiceActivityDetector(sessionConfig.audio.vad))
         continuousInputMode = ContinuousInputMode()
         inputMode = activityInputMode
         whisperTargetList = WhisperTargetList()
@@ -311,7 +309,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         // Checked before anything is built, so a misconfigured start allocates nothing and is
         // reported as a failed attempt.
-        val config = sessionConfig
+        val config = sessionConfig.connection
         val server = config.server
         if (server == null) {
             Log.e(TAG, "connect() without a target server")
@@ -334,7 +332,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         connection.setKeys(config.certificate?.pkcs12, config.certificate?.password)
         connection.setTrustStore(config.trustStorePath, config.trustStorePassword, config.trustStoreFormat)
 
-        val localVolumes = LocalVolumes(server, config.localVolumes)
+        val localVolumes = LocalVolumes(server, sessionConfig.localVolumes)
         this.localVolumes = localVolumes
         val modelHandler =
             ModelHandler(::emit, config.localMuteHistory, config.localIgnoreHistory, localVolumes)
@@ -379,10 +377,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         get() = connection?.isSynchronized == true
 
     override fun onConnectionEstablished() {
-        val version = MumbleVersion.clientVersion(sessionConfig.clientName, "Android", Build.VERSION.RELEASE)
+        val version = MumbleVersion.clientVersion(sessionConfig.connection.clientName, "Android", Build.VERSION.RELEASE)
 
         val auth = Mumble.Authenticate.newBuilder()
-        val server = checkNotNull(sessionConfig.server) { "Connected without a target server" }
+        val server = checkNotNull(sessionConfig.connection.server) { "Connected without a target server" }
         auth.setUsername(server.username)
         auth.setPassword(server.password)
         auth.setOpus(true)
@@ -587,7 +585,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * @return true if a reconnect is required for the changes to take effect.
      */
     override fun configure(config: SessionConfig): Boolean {
-        val inputMode = when (config.transmitMode) {
+        val audio = config.audio
+        val inputMode = when (audio.transmitMode) {
             TransmitMode.PUSH_TO_TALK -> toggleInputMode
             TransmitMode.CONTINUOUS -> continuousInputMode
             TransmitMode.VOICE_ACTIVITY -> activityInputMode
@@ -596,32 +595,17 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         sessionConfig = config
         this.inputMode = inputMode
         // Applied live: the input mode outlives pipeline rebuilds.
-        activityInputMode.setVadConfig(config.vadConfig)
+        activityInputMode.setVadConfig(audio.vad)
 
         if (config.accessTokens != previous.accessTokens) {
             connection?.takeIf { it.isConnected }?.sendAccessTokens(config.accessTokens)
         }
-        if (config.preferredAudioDevice != previous.preferredAudioDevice) {
+        if (audio.preferredDevice != previous.audio.preferredDevice) {
             // Live: the next apply routes it, and a user's explicit choice is left standing.
-            router.preferred = config.preferredAudioDevice
+            router.preferred = audio.preferredDevice
             router.apply()
         }
 
-        audioConfig = audioConfig.copy(
-            settings = PipelineSettings(
-                audioStream = config.audioStream,
-                audioSource = config.audioSource,
-                inputSampleRate = config.inputSampleRate,
-                bitrate = config.inputQuality,
-                framesPerPacket = config.framesPerPacket,
-                amplitudeBoost = config.amplitudeBoost,
-                noiseSuppression = NoiseSuppressionMode.fromPreferenceValue(config.noiseSuppressionMethod),
-                speexNoiseSuppressDb = config.speexNoiseSuppressDb,
-                androidEffects = AndroidAudioEffects(config.androidNoiseSuppressor, config.androidAgc),
-            ),
-            halfDuplex = config.halfDuplex && config.transmitMode == TransmitMode.PUSH_TO_TALK,
-            echoCancellation = echoCancellationFor(audioConfig.routedDeviceType),
-        )
         // Unconditional: AudioController skips a config equal by value and an input mode equal
         // by identity.
         audioController.reconfigure(audioConfig, inputMode)
@@ -633,23 +617,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * sample rate). A redundant event is dropped by [AudioController.reconfigure].
      */
     private fun setRoutedDevice(type: Int?) {
-        audioConfig = audioConfig.copy(
-            routedDeviceType = type,
-            echoCancellation = echoCancellationFor(type),
-        )
+        routedDeviceType = type
         // Posts to humla-audio-control; never joins on main.
         audioController.reconfigure(audioConfig, inputMode)
         onAudioRouteChanged(type)
-    }
-
-    /**
-     * The echo canceller for a routed device of [type]: the user's override for its kind of
-     * device, else the kind's default. No route, no canceller - nothing plays that could echo.
-     */
-    private fun echoCancellationFor(type: Int?): EchoCancellationMode {
-        val category = AudioDeviceCategory.of(type ?: return EchoCancellationMode.NONE)
-        val enabled = sessionConfig.echoCancellationOverrides[category] ?: category.echoCancellationByDefault
-        return if (enabled) EchoCancellationMode.WEBRTC else EchoCancellationMode.NONE
     }
 
     /**
@@ -712,7 +683,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     fun isWakeLockHeldForTest(): Boolean = wakeLock.isHeld
 
     override val targetServer: Server?
-        get() = sessionConfig.server
+        get() = sessionConfig.connection.server
 
     override val session: IHumlaSession
         get() {
@@ -772,7 +743,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         get() = model().permissions
 
     override val transmitMode: TransmitMode
-        get() = sessionConfig.transmitMode
+        get() = sessionConfig.audio.transmitMode
 
     override val codec: HumlaUDPMessageType?
         get() = conn().getCodec()

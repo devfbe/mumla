@@ -31,10 +31,10 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import se.lublin.humla.audio.AudioConfig
+import se.lublin.humla.audio.AudioSettings
 import se.lublin.humla.audio.PipelineSettings
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.capture.AndroidAudioEffects
-import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
@@ -43,6 +43,7 @@ import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ConnectionWarning
+import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.EventRecorder
@@ -158,7 +159,7 @@ class HumlaServiceCharacterizationTest {
             }
         }
 
-        service.configure(SessionConfig(server = server))
+        service.configure(SessionConfig(ConnectionConfig(server = server)))
         service.connect()
 
         assertThat(stateInsideOnConnecting).containsExactly(HumlaService.ConnectionState.CONNECTING)
@@ -166,48 +167,31 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.connection).isNotNull()
     }
 
-    /** Every audio setting lands in its [AudioConfig] field; the VAD config reaches a live object instead. */
+    /** The pipeline settings reach the audio config as they are; nothing is copied field by field. */
     @Test
-    fun everyAudioSettingLandsInTheAudioConfig() {
+    fun thePipelineSettingsReachTheAudioConfigUnchanged() {
         val service = service()
+        val pipeline = PipelineSettings(
+            audioStream = 3,
+            audioSource = 7,
+            inputSampleRate = 16_000,
+            bitrate = 24_000,
+            framesPerPacket = 4,
+            amplitudeBoost = 1.5f,
+            noiseSuppression = NoiseSuppressionMode.RNNOISE,
+            speexNoiseSuppressDb = -40,
+            androidEffects = AndroidAudioEffects(noiseSuppressor = true, automaticGainControl = true),
+        )
 
         service.configure(
             SessionConfig(
-                amplitudeBoost = 1.5f,
-                inputSampleRate = 16_000,
-                inputQuality = 24_000,
-                audioSource = 7,
-                audioStream = 3,
-                framesPerPacket = 4,
-                preprocessorEnabled = true,
-                noiseSuppressionMethod = "rnnoise",
-                speexNoiseSuppressDb = -40,
-                androidNoiseSuppressor = true,
-                androidAgc = true,
-                transmitMode = TransmitMode.PUSH_TO_TALK,
-                halfDuplex = true,
-            )
+                audio = AudioSettings(transmitMode = TransmitMode.PUSH_TO_TALK, halfDuplex = true, pipeline = pipeline),
+            ),
         )
 
-        assertThat(service.getAudioConfigForTest()).isEqualTo(
-            AudioConfig(
-                PipelineSettings(
-                    audioStream = 3,
-                    audioSource = 7,
-                    inputSampleRate = 16_000,
-                    bitrate = 24_000,
-                    framesPerPacket = 4,
-                    amplitudeBoost = 1.5f,
-                    noiseSuppression = NoiseSuppressionMode.RNNOISE,
-                    speexNoiseSuppressDb = -40,
-                    androidEffects = AndroidAudioEffects(noiseSuppressor = true, automaticGainControl = true),
-                ),
-                halfDuplex = true,
-                // The route decides these.
-                routedDeviceType = null,
-                echoCancellation = EchoCancellationMode.NONE,
-            )
-        )
+        val config = service.getAudioConfigForTest()
+        assertThat(config.settings).isSameInstanceAs(pipeline)
+        assertThat(config).isEqualTo(AudioConfig(pipeline, halfDuplex = true))
     }
 
     /** The transmit mode picks one of the three input modes by identity. */
@@ -221,7 +205,7 @@ class HumlaServiceCharacterizationTest {
 
         for ((mode, type) in expected) {
             val service = service()
-            service.configure(SessionConfig(transmitMode = mode))
+            service.configure(SessionConfig(audio = AudioSettings(transmitMode = mode)))
 
             assertThat(service.transmitMode).isEqualTo(mode)
             assertThat(inputMode(service)).isInstanceOf(type)
@@ -232,7 +216,7 @@ class HumlaServiceCharacterizationTest {
     @Test
     fun thePushToTalkModeHandedToTheAudioPipelineIsTheOneIsTalkingReads() {
         val service = service()
-        service.configure(SessionConfig(transmitMode = TransmitMode.PUSH_TO_TALK))
+        service.configure(SessionConfig(audio = AudioSettings(transmitMode = TransmitMode.PUSH_TO_TALK)))
 
         service.setTalkingState(true)
 

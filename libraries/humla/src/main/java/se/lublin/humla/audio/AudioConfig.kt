@@ -40,9 +40,9 @@ data class PipelineSettings(
 )
 
 /**
- * Everything a pipeline is built from: [settings] plus what the transmit mode and the route decide.
- * Immutable; [AudioController] rebuilds the pipeline when a new value differs, so structural
- * equality over every field matters.
+ * Everything a pipeline is built from: [settings] plus what the transmit mode and the route decide,
+ * see [AudioSettings.toAudioConfig]. [AudioController] rebuilds the pipeline when a new value
+ * differs, so structural equality over every field matters.
  */
 data class AudioConfig(
     val settings: PipelineSettings = PipelineSettings(),
@@ -54,7 +54,6 @@ data class AudioConfig(
      * must follow any routed device, and SCO needs to be told apart.
      */
     val routedDeviceType: Int? = null,
-    /** Decided by `HumlaService` from the routed device category. */
     val echoCancellation: EchoCancellationMode = EchoCancellationMode.NONE,
 ) {
     /**

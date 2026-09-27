@@ -28,6 +28,7 @@ import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.AudioController
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.capture.VadConfig
+import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.net.UdpProtocol
@@ -96,8 +97,12 @@ class HumlaServiceAudioTest {
     @Test
     fun theFirstPipelineIsBuiltFromTheSettingsInForce() {
         val h = start()
-        h.configure {
-            copy(transmitMode = TransmitMode.PUSH_TO_TALK, halfDuplex = true, inputQuality = 24_000)
+        h.configureAudio {
+            copy(
+                transmitMode = TransmitMode.PUSH_TO_TALK,
+                halfDuplex = true,
+                pipeline = pipeline.copy(bitrate = 24_000),
+            )
         }
 
         h.connectAndSynchronize()
@@ -317,7 +322,7 @@ class HumlaServiceAudioTest {
         h.connectAndSynchronize()
         audioUp(h)
 
-        h.configure { copy(audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION) }
+        h.configurePipeline { copy(audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION) }
 
         audioUp(h, count = 2)
         assertThat(h.audioFactory.configs[1].settings.audioSource)
@@ -338,7 +343,7 @@ class HumlaServiceAudioTest {
         audioUp(h)
         val sourceInUse = h.audioFactory.configs[0].settings.audioSource
 
-        h.configure { copy(audioSource = sourceInUse) }
+        h.configurePipeline { copy(audioSource = sourceInUse) }
         awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == FAKE_BANDWIDTH }
 
         assertThat(h.audioFactory.created).hasSize(1)
@@ -346,20 +351,30 @@ class HumlaServiceAudioTest {
     }
 
     /**
-     * The VAD configuration reaches the live [se.lublin.humla.audio.inputmode.ActivityInputMode]
-     * without tearing down the capture chain.
+     * Changes that leave what a pipeline is built from alone - live audio settings and everything
+     * outside audio - do not rebuild it. The real change at the end is the barrier: the control
+     * thread handles posts in order, so once it has rebuilt, every earlier reconfigure was handled.
      */
     @Test
-    fun aLiveSettingDoesNotRebuildThePipeline() {
+    fun onlyAChangeToWhatThePipelineIsBuiltFromRebuildsIt() {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
+        val first = h.audioFactory.configs[0]
 
-        h.configure { copy(vadConfig = VadConfig.amplitude(0.8f, 120L)) }
-        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == FAKE_BANDWIDTH }
+        h.configureAudio { copy(vad = VadConfig.amplitude(0.8f, 120L)) }
+        // Not push-to-talk, so the effective half duplex stays off.
+        h.configureAudio { copy(halfDuplex = true) }
+        h.configureAudio { copy(echoCancellationOverrides = mapOf(AudioDeviceCategory.BLUETOOTH to true)) }
+        h.configure { copy(accessTokens = listOf("token"), localVolumes = mapOf("cert:abc" to 0.5f)) }
+        h.configure { copy(connection = connection.copy(forceTcp = true)) }
+        h.configurePipeline { copy(amplitudeBoost = 2f) }
 
-        assertThat(h.audioFactory.created).hasSize(1)
-        assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
+        audioUp(h, count = 2)
+        assertThat(h.audioFactory.configs[1])
+            .isEqualTo(first.copy(settings = first.settings.copy(amplitudeBoost = 2f)))
+        assertThat(h.audioFactory.created).hasSize(2)
+        assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(1)
     }
 
     /** Half duplex is resolved against the transmit mode in force. */
@@ -367,14 +382,14 @@ class HumlaServiceAudioTest {
     fun halfDuplexOnlyAppliesToPushToTalk() {
         val h = start()
 
-        h.configure { copy(halfDuplex = true, transmitMode = TransmitMode.VOICE_ACTIVITY) }
+        h.configureAudio { copy(halfDuplex = true, transmitMode = TransmitMode.VOICE_ACTIVITY) }
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
 
-        h.configure { copy(transmitMode = TransmitMode.PUSH_TO_TALK) }
+        h.configureAudio { copy(transmitMode = TransmitMode.PUSH_TO_TALK) }
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isTrue()
 
         // Both directions: the flag is what the caller wrote, not a constant.
-        h.configure { copy(halfDuplex = false) }
+        h.configureAudio { copy(halfDuplex = false) }
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
     }
 
@@ -395,7 +410,7 @@ class HumlaServiceAudioTest {
             h.audioFactory.created[0].targetIds.contains(0x1F.toByte())
         }
 
-        h.configure { copy(audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION) }
+        h.configurePipeline { copy(audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION) }
 
         audioUp(h, count = 2)
         assertThat(h.audioFactory.sessionParams[1].targetId).isEqualTo(0x1F.toByte())

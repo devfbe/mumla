@@ -7,6 +7,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
+import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.onEvents
@@ -27,7 +28,7 @@ class HumlaServiceConnectCancellationTest {
     @Test
     fun aCollectorThatDisconnectsOnConnectingGetsAFailureReportInsteadOfACrash() {
         val service = Robolectric.buildService(HumlaService::class.java).create().get()
-        service.configure(SessionConfig(server = server))
+        service.configure(SessionConfig(ConnectionConfig(server = server)))
         val disconnects = CopyOnWriteArrayList<HumlaException?>()
         service.onEvents { event ->
             when (event) {

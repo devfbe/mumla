@@ -119,7 +119,7 @@ class MumlaServiceAudioRouteTest {
         create()
         // What ServerConnectTask sends at connect; the preference listener only sees changes.
         router().preferred =
-            SessionSettings.withAudioSettings(SessionConfig(), Settings.getInstance(app)).preferredAudioDevice
+            SessionSettings.withAudioSettings(SessionConfig(), Settings.getInstance(app)).audio.preferredDevice
 
         router().engage()
 

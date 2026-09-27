@@ -140,12 +140,12 @@ class MumlaServiceAudioPreferencesTest {
     fun `an echo cancellation override reaches the service`() {
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.SPEAKER, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.SPEAKER))
-        assertThat(service.sessionConfig.echoCancellationOverrides)
+        assertThat(service.sessionConfig.audio.echoCancellationOverrides)
             .isEqualTo(mapOf(AudioDeviceCategory.SPEAKER to false))
 
         Settings.getInstance(service).setEchoCancellationOverride(AudioDeviceCategory.EARPIECE, false)
         change(Settings.echoCancellationKey(AudioDeviceCategory.EARPIECE))
-        assertThat(service.sessionConfig.echoCancellationOverrides).isEqualTo(
+        assertThat(service.sessionConfig.audio.echoCancellationOverrides).isEqualTo(
             mapOf(AudioDeviceCategory.SPEAKER to false, AudioDeviceCategory.EARPIECE to false),
         )
     }
@@ -213,7 +213,7 @@ class MumlaServiceAudioPreferencesTest {
         }
         change(Settings.HALF_DUPLEX.key)
         assertThat(service.sessionConfig).isEqualTo(SessionSettings.withAudioSettings(before, settings))
-        assertThat(service.sessionConfig.halfDuplex).isTrue()
+        assertThat(service.sessionConfig.audio.halfDuplex).isTrue()
     }
 
     private companion object {

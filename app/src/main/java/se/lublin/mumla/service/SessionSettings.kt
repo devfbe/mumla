@@ -18,8 +18,11 @@
 package se.lublin.mumla.service
 
 import android.content.Context
+import se.lublin.humla.audio.AudioSettings
+import se.lublin.humla.audio.PipelineSettings
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.ClientCertificate
+import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.SessionConfig
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.R
@@ -58,25 +61,26 @@ object SessionSettings {
     )
 
     /** [base] with every audio setting replaced by the user's current choice. */
-    fun withAudioSettings(base: SessionConfig, settings: Settings): SessionConfig {
-        val effects = settings.androidAudioEffects
-        return base.copy(
-            transmitMode = settings.transmitMode,
-            vadConfig = settings.vadConfig,
-            amplitudeBoost = settings.amplitudeBoostMultiplier,
+    fun withAudioSettings(base: SessionConfig, settings: Settings): SessionConfig =
+        base.copy(audio = audioSettings(settings))
+
+    private fun audioSettings(settings: Settings) = AudioSettings(
+        transmitMode = settings.transmitMode,
+        vad = settings.vadConfig,
+        halfDuplex = settings.isHalfDuplex,
+        echoCancellationOverrides = settings.echoCancellationOverrides,
+        preferredDevice = settings.preferredAudioDevice,
+        pipeline = PipelineSettings(
+            audioStream = Settings.PLAYBACK_STREAM,
             inputSampleRate = settings.inputSampleRate,
-            inputQuality = settings.inputQuality,
+            bitrate = settings.inputQuality,
             framesPerPacket = settings.framesPerPacket,
-            halfDuplex = settings.isHalfDuplex,
-            preprocessorEnabled = settings.isPreprocessorEnabled,
-            noiseSuppressionMethod = settings.noiseSuppressionMethod,
+            amplitudeBoost = settings.amplitudeBoostMultiplier,
+            noiseSuppression = settings.noiseSuppressionMode,
             speexNoiseSuppressDb = settings.speexNoiseSuppressDb,
-            androidNoiseSuppressor = effects.noiseSuppressor,
-            androidAgc = effects.automaticGainControl,
-            echoCancellationOverrides = settings.echoCancellationOverrides,
-            preferredAudioDevice = settings.preferredAudioDevice,
-        )
-    }
+            androidEffects = settings.androidAudioEffects,
+        ),
+    )
 
     /** Everything to connect to [server] with. Reads the database, so not on the main thread. */
     fun forServer(context: Context, settings: Settings, database: MumlaDatabase, server: Server): SessionConfig {
@@ -86,22 +90,23 @@ object SessionSettings {
         } else {
             null
         }
-        val connection = SessionConfig(
-            server = server,
-            clientName = context.getString(R.string.app_name) + " " + BuildConfig.VERSION_NAME,
-            certificate = certificate,
-            trustStorePath = MumlaTrustStore.getTrustStorePath(context),
-            trustStorePassword = MumlaTrustStore.STORE_PASSWORD,
-            trustStoreFormat = MumlaTrustStore.STORE_FORMAT,
-            forceTcp = settings.isTcpForced,
-            useTor = settings.isTorEnabled,
-            localMuteHistory = if (server.isSaved) database.getLocalMutedUsers(server.id) else emptyList(),
-            localIgnoreHistory = if (server.isSaved) database.getLocalIgnoredUsers(server.id) else emptyList(),
+        return SessionConfig(
+            connection = ConnectionConfig(
+                server = server,
+                clientName = context.getString(R.string.app_name) + " " + BuildConfig.VERSION_NAME,
+                certificate = certificate,
+                trustStorePath = MumlaTrustStore.getTrustStorePath(context),
+                trustStorePassword = MumlaTrustStore.STORE_PASSWORD,
+                trustStoreFormat = MumlaTrustStore.STORE_FORMAT,
+                forceTcp = settings.isTcpForced,
+                useTor = settings.isTorEnabled,
+                localMuteHistory = if (server.isSaved) database.getLocalMutedUsers(server.id) else emptyList(),
+                localIgnoreHistory = if (server.isSaved) database.getLocalIgnoredUsers(server.id) else emptyList(),
+            ),
+            audio = audioSettings(settings),
             localVolumes = database.getLocalVolumes(),
             autoReconnect = settings.isAutoReconnectEnabled,
             accessTokens = database.getAccessTokens(server.id),
-            audioStream = Settings.PLAYBACK_STREAM,
         )
-        return withAudioSettings(connection, settings)
     }
 }

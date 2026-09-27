@@ -192,7 +192,7 @@ class Settings private constructor(private val context: Context) {
 
     val isPttSoundEnabled: Boolean by pref(PTT_SOUND)
 
-    val isPreprocessorEnabled: Boolean by pref(PREPROCESSOR_ENABLED)
+    private val isPreprocessorEnabled: Boolean by pref(PREPROCESSOR_ENABLED)
 
     /**
      * The stored value, else what the legacy `preprocessor_enabled` checkbox decided. Writes only
@@ -268,7 +268,7 @@ class Settings private constructor(private val context: Context) {
     fun isEchoCancellationEnabled(category: AudioDeviceCategory): Boolean =
         getEchoCancellationOverride(category) ?: category.echoCancellationByDefault
 
-    /** Every override the user has made, for `SessionConfig.echoCancellationOverrides`. */
+    /** Every override the user has made, for `AudioSettings.echoCancellationOverrides`. */
     val echoCancellationOverrides: Map<AudioDeviceCategory, Boolean>
         get() = AudioDeviceCategory.entries.mapNotNull { c -> getEchoCancellationOverride(c)?.let { c to it } }.toMap()
 
