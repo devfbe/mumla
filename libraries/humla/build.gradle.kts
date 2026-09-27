@@ -40,6 +40,8 @@ android {
 
     defaultConfig {
         testApplicationId = "se.lublin.humla.test"
+        // Device tests run the real libhumla_native.so (src/androidTest).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
 
         ndk {
@@ -87,6 +89,7 @@ dependencies {
     implementation(libs.minidns.android23)
 
     testImplementation(libs.bundles.unit.test)
+    androidTestImplementation(libs.bundles.android.test)
     testFixturesApi(testFixtures(project(":libraries:humla-protocol")))
     testFixturesImplementation(libs.robolectric)
 }
