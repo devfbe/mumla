@@ -283,16 +283,6 @@ class ChannelFragment :
         when (menuItem.itemId) {
             R.id.menu_mute_button -> session.toggleMute()
             R.id.menu_deafen_button -> session.toggleDeafen()
-            else -> return selectInputMethod(menuItem)
-        }
-        return true
-    }
-
-    private fun selectInputMethod(menuItem: MenuItem): Boolean {
-        settings.inputMethod = when (menuItem.itemId) {
-            R.id.menu_input_voice -> Settings.ARRAY_INPUT_METHOD_VOICE
-            R.id.menu_input_ptt -> Settings.ARRAY_INPUT_METHOD_PTT
-            R.id.menu_input_continuous -> Settings.ARRAY_INPUT_METHOD_CONTINUOUS
             else -> return false
         }
         return true

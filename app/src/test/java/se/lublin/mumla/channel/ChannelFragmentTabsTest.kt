@@ -31,7 +31,7 @@ import se.lublin.mumla.testing.textMessage
 
 /**
  * The channel screen's tabs: its menu has its own items first, then those of the shown tab, and
- * the tabs share the chat target. The audio chooser is the activity's, see `MumlaActivityAudioDeviceMenuTest`.
+ * the tabs share the chat target. The audio panel is the activity's, see `AudioPanelSheetTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelFragmentTabsTest {
@@ -66,13 +66,11 @@ class ChannelFragmentTabsTest {
         idleMainLooper()
     }
 
+    /** Transmit mode and noise suppression are in the audio panel now, not in the overflow. */
     @Test
-    fun `the channel tab adds the list's items after mute, deafen and the input method`() {
+    fun `the channel tab adds the list's search after mute and deafen`() {
         assertThat(menuTitles()).containsExactlyElementsIn(
-            titles(
-                R.string.mute, R.string.deafen, R.string.audioInputMethod, R.string.search,
-                R.string.noiseSuppression,
-            ),
+            titles(R.string.mute, R.string.deafen, R.string.search),
         ).inOrder()
     }
 
@@ -81,16 +79,13 @@ class ChannelFragmentTabsTest {
         showTab(1)
 
         assertThat(menuTitles()).containsExactlyElementsIn(
-            titles(R.string.mute, R.string.deafen, R.string.audioInputMethod, R.string.clearChat),
+            titles(R.string.mute, R.string.deafen, R.string.clearChat),
         ).inOrder()
 
         showTab(0)
 
         assertThat(menuTitles()).containsExactlyElementsIn(
-            titles(
-                R.string.mute, R.string.deafen, R.string.audioInputMethod, R.string.search,
-                R.string.noiseSuppression,
-            ),
+            titles(R.string.mute, R.string.deafen, R.string.search),
         ).inOrder()
     }
 

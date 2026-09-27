@@ -21,11 +21,4 @@
       xmlns:mumla="http://schemas.android.com/apk/res-auto">
     <item android:id="@+id/menu_mute_button" android:title="@string/mute" mumla:showAsAction="ifRoom" android:icon="@drawable/ic_action_microphone"/>
     <item android:id="@+id/menu_deafen_button" android:title="@string/deafen" mumla:showAsAction="ifRoom" android:icon="@drawable/ic_action_audio"/>
-    <item android:title="@string/audioInputMethod">
-        <menu>
-            <item android:id="@+id/menu_input_voice" android:title="@string/inputMethodVoice"/>
-            <item android:id="@+id/menu_input_ptt" android:title="@string/inputMethodPtt"/>
-            <item android:id="@+id/menu_input_continuous" android:title="@string/inputMethodContinuous"/>
-        </menu>
-    </item>
 </menu>

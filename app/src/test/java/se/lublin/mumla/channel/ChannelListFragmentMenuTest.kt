@@ -65,6 +65,14 @@ class ChannelListFragmentMenuTest {
         assertThat(prepared().findItem(R.id.menu_audio_panel)).isNull()
     }
 
+    /** Noise suppression is in the audio panel now; the list offers only its search. */
+    @Test
+    fun theListOffersOnlySearch() {
+        val menu = prepared()
+
+        assertThat((0 until menu.size()).map { menu.getItem(it).itemId }).containsExactly(R.id.menu_search)
+    }
+
     /** They are the channel screen's, so the chat tab has them too. */
     @Test
     fun muteAndDeafenAreNotTheListsAnyMore() {
