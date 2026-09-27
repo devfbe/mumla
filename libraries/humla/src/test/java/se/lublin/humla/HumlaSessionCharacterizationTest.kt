@@ -296,6 +296,7 @@ class HumlaSessionCharacterizationTest {
 
         assertThat(session.actions.whisperTarget).isNull()
         assertThat(session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
+        assertThat(session.actions.isWhisperActive).isFalse()
     }
 
     /** The calls that answer while disconnected instead of throwing. */

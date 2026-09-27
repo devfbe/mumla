@@ -70,6 +70,7 @@ class HumlaSessionActionsTest {
             { actions.setLocalMuted(1, true) },
             { actions.setLocalIgnored(1, true) },
             { actions.setLocalVolume(1, 0.5f) },
+            { actions.setWhisperActive(true) },
             { actions.stopWhispering() },
             { h.session.audio.setTalking(false) },
             { h.session.audio.selectAutomaticDevice() },
@@ -81,6 +82,7 @@ class HumlaSessionActionsTest {
         assertThat(actions.sendChannelTextMessage(1, "m", false)).isNull()
         assertThat(actions.whisperTo(WhisperTargetChannel(ChannelState(1), false, false, null))).isFalse()
         assertThat(actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
+        assertThat(actions.isWhisperActive).isFalse()
         assertThat(h.session.serverInfo).isNull()
         assertThat(h.session.audio.devices).isEmpty()
         assertThat(h.session.audio.currentBandwidth).isEqualTo(-1)
@@ -122,11 +124,68 @@ class HumlaSessionActionsTest {
         assertThat(h.session.actions.whisperTo(target)).isTrue()
         assertThat(h.session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.WHISPER)
         assertThat(h.session.actions.whisperTarget?.name).isEqualTo("Root")
+        assertThat(h.session.actions.isWhisperActive).isTrue()
         assertThat(tcp.sentMessages.filterIsInstance<Mumble.VoiceTarget>()).hasSize(1)
 
         h.session.actions.stopWhispering()
 
         assertThat(h.session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
+        assertThat(h.session.actions.whisperTarget).isNull()
+        assertThat(h.session.actions.isWhisperActive).isFalse()
+    }
+
+    /** Arming a target with `activate = false` registers it without sending voice there yet. */
+    @Test
+    fun aTargetCanBeArmedWithoutBecomingActive() {
+        connected()
+        val target = WhisperTargetChannel(ChannelState(0, "Root"), false, true, null)
+
+        assertThat(h.session.actions.whisperTo(target, activate = false)).isTrue()
+
+        assertThat(h.session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
+        assertThat(h.session.actions.whisperTarget?.name).isEqualTo("Root")
+        assertThat(h.session.actions.isWhisperActive).isFalse()
+    }
+
+    /** [SessionActions.setWhisperActive] switches transmission to an armed target and back. */
+    @Test
+    fun setWhisperActiveSwitchesTransmissionToTheArmedTarget() {
+        connected()
+        val target = WhisperTargetChannel(ChannelState(0, "Root"), false, true, null)
+        h.session.actions.whisperTo(target, activate = false)
+
+        h.session.actions.setWhisperActive(true)
+        assertThat(h.session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.WHISPER)
+        assertThat(h.session.actions.isWhisperActive).isTrue()
+        assertThat(h.session.actions.whisperTarget?.name).isEqualTo("Root")
+
+        h.session.actions.setWhisperActive(false)
+        assertThat(h.session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
+        assertThat(h.session.actions.isWhisperActive).isFalse()
+        // Still armed: the target stays registered, only inactive.
+        assertThat(h.session.actions.whisperTarget?.name).isEqualTo("Root")
+    }
+
+    /** Without a target armed, [SessionActions.setWhisperActive] is a no-op. */
+    @Test
+    fun setWhisperActiveWithoutAnArmedTargetIsANoOp() {
+        connected()
+
+        h.session.actions.setWhisperActive(true)
+
+        assertThat(h.session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
+        assertThat(h.session.actions.whisperTarget).isNull()
+    }
+
+    /** Stopping frees an armed target's slot even while it was never made active. */
+    @Test
+    fun stoppingWhisperingFreesAnArmedButInactiveTarget() {
+        connected()
+        val target = WhisperTargetChannel(ChannelState(0, "Root"), false, true, null)
+        h.session.actions.whisperTo(target, activate = false)
+
+        h.session.actions.stopWhispering()
+
         assertThat(h.session.actions.whisperTarget).isNull()
     }
 
