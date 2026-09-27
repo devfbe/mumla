@@ -53,10 +53,7 @@ import se.lublin.humla.audio.routing.AndroidCommunicationDevices
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.audio.routing.CommunicationDevices
 import se.lublin.humla.exception.HumlaException
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IUser
 import se.lublin.humla.model.LocalUserSettings
-import se.lublin.humla.model.LocalVolumes
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.ServerSettings
@@ -154,8 +151,6 @@ class HumlaSession(
     /** Guards the check that a snapshot comes from the live [modelHandler] together with its publication. */
     private val modelLock = Any()
 
-    private var localVolumes: LocalVolumes? = null
-
     private val mutableModel = MutableStateFlow<ServerState?>(null)
 
     override val model: StateFlow<ServerState?> = mutableModel.asStateFlow()
@@ -172,11 +167,7 @@ class HumlaSession(
     @Volatile
     private var playbackParams = PlaybackParams.DEFAULT
 
-    private val mutableTalkStates = TalkStates(mainHandler.looper) { session, state ->
-        val user = modelHandler?.getUser(session) ?: return@TalkStates
-        user.talkState = state
-        emit(HumlaEvent.UserTalkStateUpdated(user))
-    }
+    private val mutableTalkStates = TalkStates(mainHandler.looper)
 
     override val talkStates: StateFlow<Map<Int, TalkState>> get() = mutableTalkStates.states
 
@@ -239,8 +230,6 @@ class HumlaSession(
 
     override val state: StateFlow<SessionState> get() = lifecycle.state
 
-    override val audioRoute: StateFlow<Int?> get() = audioSession.route
-
     override val targetServer: Server? get() = config.connection.server
 
     init {
@@ -277,15 +266,10 @@ class HumlaSession(
         connection.setKeys(config.certificate?.pkcs12, config.certificate?.password)
         connection.setTrustStore(config.trustStorePath, config.trustStorePassword, config.trustStoreFormat)
 
-        val localVolumes = LocalVolumes(server, this.config.localVolumes)
-        this.localVolumes = localVolumes
         val publisher = SnapshotPublisher(connection)
         val commands = ServerCommands(connection::sendTCPMessage)
         this.commands = commands
-        val modelHandler = ModelHandler(
-            ::emit, config.localMuteHistory, config.localIgnoreHistory, localVolumes,
-            ServerState.empty(localUsers), publisher, commands::requestAvatar,
-        )
+        val modelHandler = ModelHandler(ServerState.empty(localUsers), ::emit, publisher, commands::requestAvatar)
         publisher.handler = modelHandler
         this.modelHandler = modelHandler
         connection.addTcpHandler(modelHandler)
@@ -331,7 +315,7 @@ class HumlaSession(
     internal fun onConnectionEstablished() {
         val connection = config.connection
         val server = checkNotNull(connection.server) { "Connected without a target server" }
-        commands().handshake(
+        checkNotNull(commands) { "Connected without a connection" }.handshake(
             connection.clientName,
             Build.VERSION.RELEASE,
             server.username,
@@ -376,7 +360,7 @@ class HumlaSession(
 
     internal fun onConnectionDisconnected(e: HumlaException?) {
         if (e != null) Log.e(TAG, "Error: ${e.message} (reason: ${e.reason.name})") else Log.v(TAG, "Disconnected")
-        val reason = e?.let { error -> disconnectReasonOf(error) { modelHandler?.getUser(it)?.name } }
+        val reason = e?.let { error -> disconnectReasonOf(error) { mutableModel.value?.user(it)?.name } }
         lost(reason ?: tlsFailure)
     }
 
@@ -427,85 +411,6 @@ class HumlaSession(
         mutableEvents.tryEmit(event)
     }
 
-    private fun conn(): HumlaConnection = checkNotNull(connection) { "Not connected" }
-
-    private fun commands(): ServerCommands = checkNotNull(commands) { "Not connected" }
-
-    /** The synchronized session's model; [IllegalStateException] outside of one. */
-    private fun model(): ModelHandler {
-        check(connection?.isSynchronized == true) { "Not synchronized with the server" }
-        return checkNotNull(modelHandler) { "No model for the synchronized session" }
-    }
-
-    override val tcpLatency: Long get() = conn().getTCPLatency()
-
-    override val udpLatency: Long get() = conn().getUDPLatency()
-
-    override val maxBandwidth: Int get() = conn().getMaxBandwidth()
-
-    /** The pipeline starts and stops asynchronously around the session, so this does not throw. */
-    override val currentBandwidth: Int get() = audioSession.currentBandwidth
-
-    override val serverVersion: Int get() = conn().getServerVersion()
-
-    override val serverRelease: String? get() = conn().getServerRelease()
-
-    override val serverOSName: String? get() = conn().getServerOSName()
-
-    override val serverOSVersion: String? get() = conn().getServerOSVersion()
-
-    override val sessionId: Int get() = conn().getSession()
-
-    override val sessionUser: IUser? get() = model().getUser(sessionId)
-
-    override val sessionChannel: IChannel?
-        get() = checkNotNull(sessionUser) { "Session user should be set post-synchronization!" }.channel
-
-    override fun getUser(session: Int): IUser? = model().getUser(session)
-
-    override fun getChannel(id: Int): IChannel? = model().getChannel(id)
-
-    override val rootChannel: IChannel? get() = getChannel(0)
-
-    override val permissions: Int get() = model().permissions
-
-    override val serverSettings: ServerSettings? get() = model().serverSettings
-
-    override val codec: HumlaUDPMessageType? get() = conn().getCodec()
-
-    override val transmitMode: TransmitMode get() = config.audio.transmitMode
-
-    override val audioDevices: List<CommunicationDevice> get() = audioSession.devices
-
-    override val activeAudioDevice: CommunicationDevice? get() = audioSession.activeDevice
-
-    override val isEchoCancellationEnabled: Boolean get() = audioSession.isEchoCancellationEnabled
-
-    override fun selectAudioDevice(id: Int) = audioSession.router.choose(id)
-
-    override fun selectAutomaticAudioDevice() = audioSession.router.forgetChoice()
-
-    override val isTalking: Boolean get() = audioSession.isTalking
-
-    override fun setTalkingState(talking: Boolean) = audioSession.setTalking(talking)
-
-    override fun joinChannel(channel: Int) = moveUserToChannel(sessionId, channel)
-
-    override fun setLocalVolume(session: Int, volume: Float) {
-        modelHandler?.getUser(session)?.let { localVolumes?.set(it, volume) }
-        local(LocalInput.Volume(session, volume))
-    }
-
-    override fun setLocalMuted(session: Int, muted: Boolean) {
-        modelHandler?.getUser(session)?.isLocalMuted = muted
-        local(LocalInput.Mute(session, muted))
-    }
-
-    override fun setLocalIgnored(session: Int, ignored: Boolean) {
-        modelHandler?.getUser(session)?.isLocalIgnored = ignored
-        local(LocalInput.Ignore(session, ignored))
-    }
-
     /** Hands [input] to the model's writer; ignored without a connection. */
     private fun local(input: LocalInput) {
         val handler = modelHandler ?: return
@@ -518,85 +423,28 @@ class HumlaSession(
 
         override fun post(block: () -> Unit) = connection.post(block)
 
-        override fun publish(state: ServerState) = synchronized(modelLock) {
-            if (modelHandler !== handler) return
-            val previous = mutableModel.value
-            if (previous == null || previous.users !== state.users) {
-                playbackParams = PlaybackParams.of(state.users.values)
+        override fun publish(state: ServerState) {
+            synchronized(modelLock) {
+                if (modelHandler !== handler) return
+                val previous = mutableModel.value
+                if (previous == null || previous.users !== state.users) {
+                    playbackParams = PlaybackParams.of(state.users.values)
+                }
+                mutableModel.value = state
             }
-            mutableModel.value = state
         }
     }
 
-    override fun setListening(channel: Int, listen: Boolean) = commands().setListening(sessionId, channel, listen)
-
-    override fun moveUserToChannel(session: Int, channel: Int) = commands().moveUser(session, channel)
-
-    override fun createChannel(parent: Int, name: String, description: String, position: Int, temporary: Boolean) =
-        commands().createChannel(parent, name, description, position, temporary)
-
-    override fun sendAccessTokens(tokens: List<String>) = commands().sendAccessTokens(tokens)
-
-    override fun requestPermissions(channel: Int) = commands().requestPermissions(channel)
-
-    override fun requestComment(session: Int) = commands().requestComment(session)
-
-    override fun requestAvatar(session: Int) = commands().requestAvatar(session)
-
-    override fun requestChannelDescription(channel: Int) = commands().requestChannelDescription(channel)
-
-    override fun requestUserStats(session: Int) = commands().requestUserStats(session)
-
-    override fun registerUser(session: Int) = commands().registerUser(session)
-
-    override fun kickBanUser(session: Int, reason: String?, ban: Boolean) = commands().kickBanUser(session, reason, ban)
-
-    override fun setUserComment(session: Int, comment: String?) = commands().setComment(session, comment)
-
-    override fun setPrioritySpeaker(session: Int, priority: Boolean) = commands().setPrioritySpeaker(session, priority)
-
-    override fun removeChannel(channel: Int) = commands().removeChannel(channel)
-
-    override fun setMuteDeafState(session: Int, mute: Boolean, deaf: Boolean) =
-        commands().setMuteDeaf(session, mute, deaf)
-
-    override fun setSelfMuteDeafState(mute: Boolean, deaf: Boolean) = commands().setSelfMuteDeaf(mute, deaf)
-
-    override fun linkChannels(channelA: IChannel, channelB: IChannel) =
-        commands().linkChannels(channelA.id, channelB.id)
-
-    override fun unlinkChannels(channelA: IChannel, channelB: IChannel) =
-        commands().unlinkChannels(channelA.id, listOf(channelB.id))
-
-    override fun unlinkAllChannels(channel: IChannel) =
-        commands().unlinkChannels(channel.id, channel.links.map { it.id })
-
-    override fun sendUserTextMessage(session: Int, message: String): Message {
-        model()
-        return checkNotNull(actions.sendUserTextMessage(session, message)) { NOT_SYNCHRONIZED }
-    }
-
-    override fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message {
-        model()
-        return checkNotNull(actions.sendChannelTextMessage(channel, message, tree)) { NOT_SYNCHRONIZED }
-    }
-
-    override fun registerWhisperTarget(target: WhisperTarget): Byte {
-        val id = whisperTargetList.append(target)
-        if (id < 0) return -1
-        commands().registerVoiceTarget(id.toInt(), target.createTarget())
-        return id
-    }
-
-    override fun unregisterWhisperTarget(targetId: Byte) = whisperTargetList.free(targetId)
-
-    override var voiceTargetId: Byte
+    /**
+     * The active voice target: 0 is normal speech, 1-30 are whisper targets, 31 is the server
+     * loopback. Also reaches the running pipeline, so the next rebuild keeps targeting it.
+     */
+    internal var voiceTargetId: Byte
         get() = currentVoiceTargetId
         set(targetId) {
             // `!= 0` rather than `> 0`: a negative byte masks to a negative value.
             require((targetId.toInt() and 0x1F.inv()) == 0) { "Target ID must be at most 5 bits." }
             currentVoiceTargetId = targetId
-            // Also reaches the running pipeline, so the next rebuild keeps targeting it.
             audioSession.setVoiceTargetId(targetId)
             emit(HumlaEvent.VoiceTargetChanged(VoiceTargetMode.fromId(targetId)))
         }
@@ -735,16 +583,16 @@ class HumlaSession(
             return build(model, commands).also { emit(HumlaEvent.MessageSent(it)) }
         }
 
-        override fun setLocalMuted(session: Int, muted: Boolean) = this@HumlaSession.setLocalMuted(session, muted)
+        override fun setLocalMuted(session: Int, muted: Boolean) = local(LocalInput.Mute(session, muted))
 
-        override fun setLocalIgnored(session: Int, ignored: Boolean) =
-            this@HumlaSession.setLocalIgnored(session, ignored)
+        override fun setLocalIgnored(session: Int, ignored: Boolean) = local(LocalInput.Ignore(session, ignored))
 
-        override fun setLocalVolume(session: Int, volume: Float) = this@HumlaSession.setLocalVolume(session, volume)
+        override fun setLocalVolume(session: Int, volume: Float) = local(LocalInput.Volume(session, volume))
 
-        override val voiceTargetMode: VoiceTargetMode get() = this@HumlaSession.voiceTargetMode
+        override val voiceTargetMode: VoiceTargetMode get() = VoiceTargetMode.fromId(currentVoiceTargetId)
 
-        override val whisperTarget: WhisperTarget? get() = this@HumlaSession.whisperTarget
+        override val whisperTarget: WhisperTarget?
+            get() = if (voiceTargetMode == VoiceTargetMode.WHISPER) whisperTargetList[currentVoiceTargetId] else null
 
         override fun whisperTo(target: WhisperTarget): Boolean {
             val commands = synced() ?: return false
@@ -787,11 +635,6 @@ class HumlaSession(
         override val currentBandwidth: Int get() = audioSession.currentBandwidth
     }
 
-    override val voiceTargetMode: VoiceTargetMode get() = VoiceTargetMode.fromId(currentVoiceTargetId)
-
-    override val whisperTarget: WhisperTarget?
-        get() = if (voiceTargetMode == VoiceTargetMode.WHISPER) whisperTargetList.get(currentVoiceTargetId) else null
-
     /**
      * The callbacks of one connection. A connection replaced by a retry or a new attempt may still
      * report its end; only the current one reaches the session.
@@ -829,7 +672,6 @@ class HumlaSession(
     companion object {
         private const val TAG = "HumlaSession"
         private val dnsLookupInstalled = AtomicBoolean()
-        private const val NOT_SYNCHRONIZED = "Not synchronized with the server"
 
         /** Events a collector may fall behind before the oldest are dropped. */
         const val EVENT_BUFFER = 8_192

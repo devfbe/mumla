@@ -668,8 +668,15 @@ class HumlaConnection(
         try {
             // Parsed once, so every handler receives the same message object.
             val message = type.parse(data)
-            handleConnectionMessage(message)
-            for (handler in tcpHandlers) handler.onMessage(message)
+            if (message is Mumble.UserRemove) {
+                // Handlers first: a removal of our own session ends the connection, and the model
+                // must still name the actor when that end is reported.
+                for (handler in tcpHandlers) handler.onMessage(message)
+                handleConnectionMessage(message)
+            } else {
+                handleConnectionMessage(message)
+                for (handler in tcpHandlers) handler.onMessage(message)
+            }
         } catch (e: InvalidProtocolBufferException) {
             Log.w(TAG, "Could not parse $type", e)
         } catch (e: RuntimeException) {

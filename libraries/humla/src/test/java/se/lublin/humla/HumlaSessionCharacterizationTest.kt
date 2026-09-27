@@ -79,18 +79,18 @@ class HumlaSessionCharacterizationTest {
         assertThat(session.connection).isNull()
         assertThat(session.modelHandler).isNull()
         assertThat(session.targetServer).isSameInstanceAs(server)
-        assertThat(session.audioRoute.value).isNull()
+        assertThat(session.audio.route.value).isNull()
     }
 
     @Test
     fun startsWithVoiceActivityTransmitAndNoVoiceTarget() {
         val session = session()
 
-        assertThat(session.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
+        assertThat(session.audio.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
         assertThat(session.voiceTargetId).isEqualTo(0.toByte())
-        assertThat(session.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
-        assertThat(session.whisperTarget).isNull()
-        assertThat(session.isTalking).isFalse()
+        assertThat(session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
+        assertThat(session.actions.whisperTarget).isNull()
+        assertThat(session.audio.isTalking).isFalse()
     }
 
     /** SCO state comes from `AudioRouter`, not from an `ACTION_SCO_AUDIO_STATE_UPDATED` receiver. */
@@ -173,7 +173,7 @@ class HumlaSessionCharacterizationTest {
             configured.configure(SessionConfig(audio = AudioSettings(transmitMode = mode)))
             val constructed = session(SessionConfig(audio = AudioSettings(transmitMode = mode)))
 
-            assertThat(configured.transmitMode).isEqualTo(mode)
+            assertThat(configured.audio.transmitMode).isEqualTo(mode)
             assertThat(configured.audioSession.inputMode).isInstanceOf(type)
             assertThat(constructed.audioSession.inputMode).isInstanceOf(type)
         }
@@ -184,11 +184,11 @@ class HumlaSessionCharacterizationTest {
     fun thePushToTalkModeHandedToTheAudioPipelineIsTheOneIsTalkingReads() {
         val session = session(SessionConfig(audio = AudioSettings(transmitMode = TransmitMode.PUSH_TO_TALK)))
 
-        session.setTalkingState(true)
+        session.audio.setTalking(true)
 
         val mode = session.audioSession.inputMode as ToggleInputMode
         assertThat(mode.isTalkingOn).isTrue()
-        assertThat(session.isTalking).isTrue()
+        assertThat(session.audio.isTalking).isTrue()
     }
 
     /** Access tokens are kept even with no connection to send them on; nothing throws. */
@@ -261,7 +261,7 @@ class HumlaSessionCharacterizationTest {
         session.onConnectionDisconnected(null)
 
         assertThat(session.voiceTargetId).isEqualTo(0.toByte())
-        assertThat(session.whisperTarget).isNull()
+        assertThat(session.actions.whisperTarget).isNull()
     }
 
     /** Info is dropped before synchronization; warnings and errors are not. */
@@ -288,11 +288,11 @@ class HumlaSessionCharacterizationTest {
 
         session.emit(HumlaEvent.UserJoinedServer("Ann"))
         session.emit(HumlaEvent.SelfKicked("Mod", "spam", ban = false))
-        session.emit(HumlaEvent.UserConnected(se.lublin.humla.model.User(2, "Ann")))
+        session.emit(HumlaEvent.VoiceTargetChanged(VoiceTargetMode.NORMAL))
 
         assertThat(recorder.events.map { it::class }).containsExactly(
             HumlaEvent.SelfKicked::class,
-            HumlaEvent.UserConnected::class,
+            HumlaEvent.VoiceTargetChanged::class,
         ).inOrder()
     }
 
@@ -322,73 +322,15 @@ class HumlaSessionCharacterizationTest {
         assertThat(recorder.of<HumlaEvent.LogMessage>().map { it.text }).containsExactly("first")
     }
 
-    /** Freeing a slot that was never taken is harmless, and whispering is off while disconnected. */
+    /** Stopping a whisper that never started is harmless, and whispering is off while disconnected. */
     @Test
-    fun unregisteringAWhisperTargetThatWasNeverRegisteredIsHarmless() {
+    fun stoppingAWhisperThatNeverStartedIsHarmless() {
         val session = session()
 
-        session.unregisterWhisperTarget(3)
+        session.actions.stopWhispering()
 
-        assertThat(session.whisperTarget).isNull()
-        assertThat(session.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
-    }
-
-    /** Every model and request call fails with the same, explicit error while disconnected. */
-    @Test
-    fun everySessionCallThrowsIllegalStateWhileDisconnected() {
-        val session = session()
-
-        val calls = listOf<Pair<String, () -> Unit>>(
-            "tcpLatency" to { session.tcpLatency },
-            "udpLatency" to { session.udpLatency },
-            "maxBandwidth" to { session.maxBandwidth },
-            "serverVersion" to { session.serverVersion },
-            "serverRelease" to { session.serverRelease },
-            "serverOSName" to { session.serverOSName },
-            "serverOSVersion" to { session.serverOSVersion },
-            "sessionId" to { session.sessionId },
-            "codec" to { session.codec },
-            "moveUserToChannel" to { session.moveUserToChannel(1, 2) },
-            "joinChannel" to { session.joinChannel(2) },
-            "createChannel" to { session.createChannel(0, "n", "d", 0, false) },
-            "sendAccessTokens" to { session.sendAccessTokens(listOf("t")) },
-            "requestPermissions" to { session.requestPermissions(0) },
-            "requestComment" to { session.requestComment(1) },
-            "requestAvatar" to { session.requestAvatar(1) },
-            "requestChannelDescription" to { session.requestChannelDescription(0) },
-            "registerUser" to { session.registerUser(1) },
-            "kickBanUser" to { session.kickBanUser(1, "r", false) },
-            "setUserComment" to { session.setUserComment(1, "c") },
-            "setPrioritySpeaker" to { session.setPrioritySpeaker(1, true) },
-            "removeChannel" to { session.removeChannel(1) },
-            "setMuteDeafState" to { session.setMuteDeafState(1, true, false) },
-            "setSelfMuteDeafState" to { session.setSelfMuteDeafState(true, false) },
-            "sessionUser" to { session.sessionUser },
-            "sessionChannel" to { session.sessionChannel },
-            "getUser" to { session.getUser(1) },
-            "getChannel" to { session.getChannel(1) },
-            "rootChannel" to { session.rootChannel },
-            "permissions" to { session.permissions },
-            "serverSettings" to { session.serverSettings },
-            "sendUserTextMessage" to { session.sendUserTextMessage(1, "m") },
-            "sendChannelTextMessage" to { session.sendChannelTextMessage(1, "m", false) },
-        )
-
-        val wrong = calls.mapNotNull { (name, call) ->
-            val thrown = try {
-                call()
-                null
-            } catch (t: Throwable) {
-                t
-            }
-            when (thrown) {
-                null -> "$name threw nothing"
-                is IllegalStateException -> null
-                else -> "$name threw ${thrown.javaClass.simpleName}"
-            }
-        }
-
-        assertThat(wrong).isEmpty()
+        assertThat(session.actions.whisperTarget).isNull()
+        assertThat(session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
     }
 
     /** The calls that answer while disconnected instead of throwing. */
@@ -396,17 +338,17 @@ class HumlaSessionCharacterizationTest {
     fun theSessionCallsThatDoNotDependOnAConnectionStillAnswer() {
         val session = session()
 
-        assertThat(session.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
-        assertThat(session.isTalking).isFalse()
+        assertThat(session.audio.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
+        assertThat(session.audio.isTalking).isFalse()
         assertThat(session.voiceTargetId).isEqualTo(0.toByte())
-        assertThat(session.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
-        assertThat(session.whisperTarget).isNull()
-        session.setTalkingState(true)
-        assertThat(session.isTalking).isTrue()
+        assertThat(session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
+        assertThat(session.actions.whisperTarget).isNull()
+        session.audio.setTalking(true)
+        assertThat(session.audio.isTalking).isTrue()
         // The pipeline is asynchronous: -1 while none is up.
-        assertThat(session.currentBandwidth).isEqualTo(-1)
-        assertThat(session.audioDevices).isEmpty()
-        assertThat(session.activeAudioDevice).isNull()
+        assertThat(session.audio.currentBandwidth).isEqualTo(-1)
+        assertThat(session.audio.devices).isEmpty()
+        assertThat(session.audio.activeDevice).isNull()
         session.disconnect()
         session.cancelReconnect()
         assertThat(session.state.value).isEqualTo(SessionState.Disconnected())

@@ -52,7 +52,7 @@ internal class TalkStates(looper: Looper, private val onChanged: (Int, TalkState
 
     private fun apply(session: Int, state: TalkState) {
         val current = mutableStates.value
-        val next = if (state == TalkState.PASSIVE) current.remove(session) else current.put(session, state)
+        val next = if (state == TalkState.PASSIVE) current.removing(session) else current.putting(session, state)
         if (next === current) return
         mutableStates.value = next
         onChanged(session, state)

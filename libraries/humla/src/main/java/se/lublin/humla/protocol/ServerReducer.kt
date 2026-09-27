@@ -62,7 +62,8 @@ internal object ServerReducer {
  */
 @Suppress("TooManyFunctions") // One step per message kind and field group.
 internal class ServerWriter(private var published: ServerState) {
-    private var selfSession = published.selfSession
+    var selfSession = published.selfSession
+        private set
     private var permissions = published.permissions
     private var serverSettings = published.serverSettings
     private var local = published.local
@@ -418,12 +419,12 @@ private fun insert(index: PersistentMap.Builder<Int, PersistentList<Int>>, key: 
         val mid = (low + high) ushr 1
         if (order.compare(list[mid], id) < 0) low = mid + 1 else high = mid
     }
-    index[key] = list.add(low, id)
+    index[key] = list.addingAt(low, id)
 }
 
 private fun remove(index: PersistentMap.Builder<Int, PersistentList<Int>>, key: Int, id: Int) {
     val list = index[key] ?: return
-    val next = list.remove(id)
+    val next = list.removing(id)
     if (next.isEmpty()) index.remove(key) else index[key] = next
 }
 

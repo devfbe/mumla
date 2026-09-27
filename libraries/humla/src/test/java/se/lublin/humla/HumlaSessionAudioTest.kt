@@ -73,7 +73,7 @@ class HumlaSessionAudioTest {
         assertThat(h.audioFactory.createThreads.single()).isEqualTo(AudioController.THREAD_NAME)
         assertThat(h.audioFactory.sessionParams[0].self.name).isEqualTo("me")
         assertThat(h.audioFactory.sessionParams[0].maxBandwidth).isEqualTo(72_000)
-        assertThat(h.session.currentBandwidth).isEqualTo(FAKE_BANDWIDTH)
+        assertThat(h.session.audio.currentBandwidth).isEqualTo(FAKE_BANDWIDTH)
     }
 
     /** The voice format the server's Version picked reaches the pipeline, before any voice is sent. */
@@ -115,7 +115,7 @@ class HumlaSessionAudioTest {
         // By identity: the toggle the capture loop consults is the toggle a key press writes.
         assertThat(h.audioFactory.sessionParams[0].inputMode)
             .isSameInstanceAs(inputModeOf(h))
-        h.session.setTalkingState(true)
+        h.session.audio.setTalking(true)
         assertThat(
             (h.audioFactory.sessionParams[0].inputMode as se.lublin.humla.audio.inputmode.ToggleInputMode)
                 .isTalkingOn
@@ -180,12 +180,11 @@ class HumlaSessionAudioTest {
             se.lublin.humla.protobuf.Mumble.ServerSync.newBuilder()
                 .setSession(4242).setMaxBandwidth(72_000).build().toByteArray(),
         )
-        awaitUntil(description = "the sync is reported") {
+        // The pipeline waits for the snapshot of the sync, which knows no user of this session.
+        awaitUntil(description = "the missing session user is reported") {
             h.mainLooper.idle()
-            h.session.state.value == SessionState.Connected
+            h.session.state.value == SessionState.Connected && h.string(R.string.no_session_user) in h.warnings
         }
-
-        assertThat(h.warnings).contains(h.string(R.string.no_session_user))
         assertThat(h.audioFactory.created).isEmpty()
     }
 
@@ -234,7 +233,7 @@ class HumlaSessionAudioTest {
         )
 
         awaitUntil(description = "pipeline stopped") { h.audioFactory.created[0].shutdownCalls.get() == 1 }
-        assertThat(h.session.currentBandwidth).isEqualTo(-1)
+        assertThat(h.session.audio.currentBandwidth).isEqualTo(-1)
     }
 
     /**
@@ -331,7 +330,7 @@ class HumlaSessionAudioTest {
         val sourceInUse = h.audioFactory.configs[0].settings.audioSource
 
         h.configurePipeline { copy(audioSource = sourceInUse) }
-        awaitUntil(description = "the reconfigure was processed") { h.session.currentBandwidth == FAKE_BANDWIDTH }
+        awaitUntil(description = "the reconfigure was processed") { h.session.audio.currentBandwidth == FAKE_BANDWIDTH }
 
         assertThat(h.audioFactory.created).hasSize(1)
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
@@ -411,7 +410,7 @@ class HumlaSessionAudioTest {
         h.session.voiceTargetId = 3
 
         assertThat(h.session.voiceTargetId).isEqualTo(3.toByte())
-        assertThat(h.session.voiceTargetMode)
+        assertThat(h.session.actions.voiceTargetMode)
             .isEqualTo(se.lublin.humla.util.VoiceTargetMode.WHISPER)
     }
 

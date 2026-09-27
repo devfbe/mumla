@@ -67,8 +67,8 @@ class HumlaSessionModelTest {
         tcp.userJoins(2, "Ann")
         awaitModel("Ann") { it.user(2) != null }
 
-        h.session.setLocalMuted(2, true)
-        h.session.setLocalVolume(2, 0.5f)
+        h.session.actions.setLocalMuted(2, true)
+        h.session.actions.setLocalVolume(2, 0.5f)
 
         val model = awaitModel("Ann muted at half volume") { it.user(2)!!.localVolume == 0.5f }
         assertThat(model.user(2)!!.isLocalMuted).isTrue()
@@ -81,7 +81,7 @@ class HumlaSessionModelTest {
 
     @Test
     fun aLocalChoiceWithoutAConnectionIsIgnored() {
-        h.session.setLocalMuted(2, true)
+        h.session.actions.setLocalMuted(2, true)
 
         assertThat(h.session.model.value).isNull()
     }

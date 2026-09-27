@@ -37,6 +37,7 @@ import se.lublin.humla.session.ClientCertificate
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaSessionHarness
 import se.lublin.humla.testutil.awaitUntil
@@ -131,8 +132,8 @@ class HumlaSessionConnectionTest {
         val h = start()
         val tcp = h.connectAndSynchronize()
 
-        h.session.setListening(5, true)
-        h.session.setListening(6, false)
+        h.session.actions.setListening(5, true)
+        h.session.actions.setListening(6, false)
 
         val states = tcp.sentMessages.filterIsInstance<Mumble.UserState>()
         assertThat(states.map { it.session }).containsExactly(1, 1)
@@ -499,27 +500,24 @@ class HumlaSessionConnectionTest {
         WhisperTargetChannel(ChannelState(0, "Root"), false, false, null)
 
     /**
-     * The thirty whisper slots are the connection's, not the session's; without the clear on
-     * disconnect, a session connected again and again runs out of them.
+     * The whisper slots are the connection's, not the session's: a new connection starts with
+     * normal speech and the slots cleared.
      */
     @Test
-    fun aNewSessionGetsItsWhisperSlotsBack() {
+    fun aNewConnectionStartsWithoutThePreviousWhisperTarget() {
         val h = start()
         h.connectAndSynchronize()
-        repeat(WhisperTargetList.TARGET_MAX - WhisperTargetList.TARGET_MIN + 1) {
-            assertThat(h.session.registerWhisperTarget(whisperTarget()))
-                .isNotEqualTo((-1).toByte())
-        }
-        assertThat(h.session.registerWhisperTarget(whisperTarget()))
-            .isEqualTo((-1).toByte())
+        assertThat(h.session.actions.whisperTo(whisperTarget())).isTrue()
+        assertThat(h.session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.WHISPER)
 
         h.session.disconnect()
         h.mainLooper.idle()
+        assertThat(h.session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
+        assertThat(h.session.actions.whisperTarget).isNull()
         h.session.connect()
         h.synchronize(h.openSocket(1))
 
-        assertThat(h.session.registerWhisperTarget(whisperTarget()))
-            .isNotEqualTo((-1).toByte())
+        assertThat(h.session.actions.whisperTo(whisperTarget())).isTrue()
     }
 
     /**
@@ -702,7 +700,7 @@ class HumlaSessionConnectionTest {
         h.connectAndSynchronize()
         val recorder = EventRecorder(h.session)
 
-        val returned = h.session.sendChannelTextMessage(0, "hi", tree = false)
+        val returned = h.session.actions.sendChannelTextMessage(0, "hi", tree = false)
 
         val published = recorder.of<HumlaEvent.MessageSent>().single().message
         assertThat(published).isSameInstanceAs(returned)
