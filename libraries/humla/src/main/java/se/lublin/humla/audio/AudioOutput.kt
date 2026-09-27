@@ -177,16 +177,21 @@ internal class AudioOutput(
         track.play()
 
         val pcm = ShortArray(bufferSize)
+        val drainMixes = (track.bufferSizeInFrames + bufferSize - 1) / bufferSize
+        // Zero at the start, so the first silent mixes fill the new track.
+        var silentMixes = 0
 
         while (running) {
             if (fetchAudio(pcm, 0, bufferSize)) {
-                // Feed the canceller before write(), which blocks: a late reference misaligns
-                // the echo estimate. The chunker copies, so the APM cannot modify this buffer.
-                farEnd?.push(pcm, bufferSize)
-                track.write(pcm, 0, bufferSize)
+                silentMixes = 0
+            } else if (silentMixes < drainMixes) {
+                // Silence behind the last mix plays it out rather than flushing it, and leaves
+                // the track full: the next talk spurt's writes block from its first mix, so its
+                // packets are pulled in real time, not a whole track ahead of their arrival.
+                silentMixes++
             } else {
                 synchronized(inactiveLock) {
-                    track.flush()
+                    // Only silence is queued; it stays and keeps the track full for play().
                     track.pause()
 
                     try {
@@ -195,7 +200,7 @@ internal class AudioOutput(
                             // otherwise the first fragment of a word leaks after a silence. Feed
                             // silence at the real-time rate. `woken` tells a real frame from the
                             // timeout and keeps a notify() sent before this block from being lost.
-                            Arrays.fill(pcm, 0.toShort())
+                            // `pcm` holds the silence fetchAudio left in it.
                             val tickMs = maxOf(1L, (bufferSize * MS_PER_SECOND) / AudioHandler.SAMPLE_RATE)
                             woken = false
                             while (running && !woken) {
@@ -217,7 +222,12 @@ internal class AudioOutput(
                     woken = false
                     track.play()
                 }
+                continue
             }
+            // Feed the canceller before write(), which blocks: a late reference misaligns the
+            // echo estimate. The chunker copies, so the APM cannot modify this buffer.
+            farEnd?.push(pcm, bufferSize)
+            track.write(pcm, 0, bufferSize)
         }
 
         track.flush()
@@ -295,6 +305,9 @@ internal class AudioOutput(
 
         private const val BYTES_PER_SAMPLE = 2 // ENCODING_PCM_16BIT, CHANNEL_OUT_MONO
 
+        /** The fewest mixes the track holds, so a late wakeup of the playback thread does not underrun it. */
+        private const val MIN_TRACK_MIXES = 4
+
         /**
          * The attributes a track on [stream] had with the legacy stream-type constructor. The
          * voice-call stream is spelled out as voice communication, the usage that follows the
@@ -311,14 +324,17 @@ internal class AudioOutput(
             }
 
         /**
-         * [minBufferBytes] is [AudioTrack.getMinBufferSize], in **bytes**. The track gets it in
-         * full; a mix is at most what it holds and never more than twelve frames (120 ms), which
-         * is what the far-end chunker and the decoders are sized for.
+         * [minBufferBytes] is [AudioTrack.getMinBufferSize], in **bytes**. A mix is one frame
+         * (10 ms) whatever the track size: the step desktop Mumble pulls, which the jitter
+         * buffer's prebuffering and its count of misses before a stream ends are made for. A
+         * larger mix takes several frames of a talker at once, before their packets can have
+         * arrived. The track holds at least the minimum and [MIN_TRACK_MIXES] mixes; its blocking
+         * write paces the playback thread.
          */
         fun playbackBuffer(minBufferBytes: Int): PlaybackBuffer {
-            val maxMix = AudioHandler.FRAME_SIZE * AudioHandler.MAX_PACKET_FRAMES
-            val mixSamples = minOf(minBufferBytes / BYTES_PER_SAMPLE, maxMix)
-            return PlaybackBuffer(mixSamples = mixSamples, trackBytes = minBufferBytes)
+            val mixSamples = AudioHandler.FRAME_SIZE
+            val trackBytes = maxOf(minBufferBytes, MIN_TRACK_MIXES * mixSamples * BYTES_PER_SAMPLE)
+            return PlaybackBuffer(mixSamples = mixSamples, trackBytes = trackBytes)
         }
     }
 }
