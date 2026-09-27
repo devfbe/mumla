@@ -188,6 +188,7 @@
     <string name="invalid_password">Wrong password.</string>
     <string name="send_message">Send message</string>
     <string name="channel_menu_view_description">View Description</string>
+    <string name="channel_add_subchannel">Add sub-channel</string>
     <string name="untrusted_certificate">Untrusted Certificate</string>
     <string name="allow">Allow</string>
     <string name="trust_added">Added certificate to trust store</string>

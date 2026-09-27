@@ -21,6 +21,7 @@ import android.content.Context
 import android.view.Menu
 import android.view.View
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.view.MenuCompat
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,6 +46,7 @@ class PermissionsPopupMenu(
 
     private val menu = PopupMenu(context, anchor).apply {
         inflate(menuRes)
+        MenuCompat.setGroupDividerEnabled(menu, true)
         setOnDismissListener(this@PermissionsPopupMenu)
         setOnMenuItemClickListener(prepareListener)
     }
