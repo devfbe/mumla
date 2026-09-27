@@ -265,7 +265,16 @@ internal class AudioOutputSpeech(
         } else {
             synchronized(jitterLock) { jitterBuffer.updateDelay() }
             missCount++
-            if (missCount > MAX_MISSES_ALIVE) nextAlive = false
+            if (missCount > MAX_MISSES_ALIVE) {
+                if (nextAlive) {
+                    se.lublin.humla.util.HumlaLog.d(
+                        "StutterDiag",
+                        "session $session: stream ends after $missCount misses; available=$availPackets " +
+                            "average=${averageAvailable[0]} requested=$requestedSamples filled=$bufferFilled",
+                    )
+                }
+                nextAlive = false
+            }
         }
     }
 
