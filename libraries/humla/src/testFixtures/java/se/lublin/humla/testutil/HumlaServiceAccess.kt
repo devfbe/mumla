@@ -35,9 +35,9 @@ fun HumlaService.testEmit(event: HumlaEvent) {
 
 val HumlaService.testStateMachine: SessionStateMachine get() = stateMachine
 
-val HumlaService.testRouter: AudioRouter get() = router
+val HumlaService.testRouter: AudioRouter get() = audio.router
 
-val HumlaService.testActivityInputMode: ActivityInputMode get() = activityInputMode
+val HumlaService.testActivityInputMode: ActivityInputMode get() = audio.activityInputMode
 
 /** Replaces the live connection, e.g. with a mock, to reach a session state without a server. */
 var HumlaService.testConnection: HumlaConnection?

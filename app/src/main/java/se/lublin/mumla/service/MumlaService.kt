@@ -229,7 +229,8 @@ class MumlaService : HumlaService(),
             PreferenceManager.getDefaultSharedPreferences(this@MumlaService).changes(OBSERVED_KEYS)
                 .collect(::onPreferenceChanged)
         }
-        applyBluetoothPreference()
+        // The stored audio settings, the Bluetooth wish among them, before any connection.
+        configure(SessionSettings.withAudioSettings(sessionConfig, settings))
 
         // Overlay views need the theme set manually; the <application> theme does not apply.
         setTheme(R.style.Theme_Mumla)
@@ -384,7 +385,6 @@ class MumlaService : HumlaService(),
             setSelfMuteDeafState(settings.isMuted, settings.isDeafened)
         }
 
-        // Bluetooth is not restored here: applyBluetoothPreference hands the wish to the router.
         ContextCompat.registerReceiver(
             this, talkReceiver,
             IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK), ContextCompat.RECEIVER_EXPORTED,
@@ -423,7 +423,6 @@ class MumlaService : HumlaService(),
                 shortTtsMessagesEnabled = settings.isShortTextToSpeechMessagesEnabled
             Settings.PTT_SOUND.key ->
                 pttSoundEnabled = settings.isPttSoundEnabled
-            Settings.BLUETOOTH_SCO.key -> applyBluetoothPreference()
         }
         if (key in SessionSettings.AUDIO_KEYS) {
             // The result is ignored: audio settings never require a reconnect.
@@ -443,14 +442,6 @@ class MumlaService : HumlaService(),
             current.shutdown()
             tts = null
         }
-    }
-
-    /**
-     * Hands the stored Bluetooth wish to the router at any time, connected or not; the router only
-     * routes while a session is synchronized.
-     */
-    private fun applyBluetoothPreference() {
-        if (settings.isBluetoothScoEnabled) enableBluetoothSco() else disableBluetoothSco()
     }
 
     /** Earpiece route (chosen or default) turns the proximity sensor on; anything else turns it off. */
@@ -621,7 +612,6 @@ class MumlaService : HumlaService(),
             Settings.USE_TTS.key,
             Settings.SHORT_TTS_MESSAGES.key,
             Settings.PTT_SOUND.key,
-            Settings.BLUETOOTH_SCO.key,
         )
     }
 }

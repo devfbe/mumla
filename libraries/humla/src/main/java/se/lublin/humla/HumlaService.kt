@@ -29,6 +29,9 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
@@ -37,9 +40,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import org.minidns.dnsserverlookup.android21.AndroidUsingLinkProperties
 import se.lublin.humla.audio.AudioConfig
-import se.lublin.humla.audio.AudioController
 import se.lublin.humla.audio.AudioHandler
 import se.lublin.humla.audio.AudioHandlerFactory
 import se.lublin.humla.audio.AudioHost
@@ -47,14 +51,7 @@ import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.AudioSessionParams
 import se.lublin.humla.audio.DefaultAudioHandlerFactory
 import se.lublin.humla.audio.TransmitMode
-import se.lublin.humla.audio.capture.EchoCancellationMode
-import se.lublin.humla.audio.capture.IInputMode
-import se.lublin.humla.audio.capture.VoiceActivityDetector
-import se.lublin.humla.audio.inputmode.ActivityInputMode
-import se.lublin.humla.audio.inputmode.ContinuousInputMode
-import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.audio.routing.AndroidCommunicationDevices
-import se.lublin.humla.audio.routing.AudioRouter
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.audio.routing.CommunicationDevices
 import se.lublin.humla.exception.HumlaDisconnectedException
@@ -77,6 +74,7 @@ import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.protocol.ServerCommands
 import se.lublin.humla.session.AndroidNetworkMonitor
 import se.lublin.humla.session.AndroidSessionWakeLock
+import se.lublin.humla.session.AudioSession
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionLifecycle
@@ -97,21 +95,12 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     final override var sessionConfig = SessionConfig()
         private set
 
-    /** The `AudioDeviceInfo` type the router routes voice to; null while the platform decides. */
-    private var routedDeviceType: Int? = null
-
-    private val audioConfig: AudioConfig get() = sessionConfig.audio.toAudioConfig(routedDeviceType)
-
-    /** Held by identity: the audio thread and `isTalking` must see the same toggle object. */
-    @VisibleForTesting
-    internal lateinit var inputMode: IInputMode
-        private set
-
     private var _voiceTargetId: Byte = 0
     private lateinit var whisperTargetList: WhisperTargetList
 
     private lateinit var handler: Handler
     private lateinit var scope: CoroutineScope
+    private lateinit var routeUpdates: Job
 
     /**
      * Emitted from any thread without suspending. Beyond [EVENT_BUFFER] events not yet collected
@@ -131,32 +120,21 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     @VisibleForTesting
     internal var connection: HumlaConnection? = null
 
-    /** The requests of [connection]; kept with it after it ends. */
-    private var commands: ServerCommands? = null
+    /** The requests over [connection]. */
+    private val commands: ServerCommands? get() = connection?.let { ServerCommands(it::sendTCPMessage) }
 
     @Volatile
     @VisibleForTesting
     internal var modelHandler: ModelHandler? = null
     private var localVolumes: LocalVolumes? = null
-    /** Owns the audio pipeline's lifecycle on its own thread, so nothing here joins on main. */
+    /** Input modes, routing and the pipeline; created in [onCreate], released in [onDestroy]. */
     @VisibleForTesting
-    internal lateinit var audioController: AudioController
-        private set
-
-    /** Engaged only while a session is synchronized. */
-    @VisibleForTesting
-    internal lateinit var router: AudioRouter
+    internal lateinit var audio: AudioSession
         private set
 
     /** Last warning logged, so a refusal repeated per reconnect attempt is logged once. */
     @Volatile
     private var lastWarning: String? = null
-
-    @VisibleForTesting
-    internal lateinit var activityInputMode: ActivityInputMode
-        private set
-    private lateinit var toggleInputMode: ToggleInputMode
-    private lateinit var continuousInputMode: ContinuousInputMode
 
     /**
      * The session lifecycle. Confined to the main thread, where binder calls, connection callbacks,
@@ -179,22 +157,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
     /** A test may set a fake before [onCreate]; otherwise [onCreate] creates the Android one. */
     var communicationDevices: CommunicationDevices? = null
-
-    private val routerListener = object : AudioRouter.Listener {
-        override fun onRouteChanged(type: Int?) = setRoutedDevice(type)
-
-        override fun onRouteRefused() = logWarningOnce(getString(R.string.audio_route_refused))
-    }
-
-    private val audioControllerListener = object : AudioController.Listener {
-        override fun onAudioStarted() = Unit
-
-        /** A pipeline that cannot start becomes a chat-log warning. */
-        override fun onAudioFailed(message: String) = logWarning(message)
-
-        /** Microphone silencing and decoder errors reach the chat log. */
-        override fun onAudioWarning(message: String) = logWarning(message)
-    }
 
     private val audioInputListener: AudioHandler.AudioEncodeListener =
         object : AudioHandler.AudioEncodeListener {
@@ -249,21 +211,23 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             handler,
         ) { logWarningOnce(getString(R.string.bluetooth_sco_denied)) }
         communicationDevices = devices
-        router = AudioRouter(devices, routerListener)
-        router.preferred = sessionConfig.audio.preferredDevice
-        toggleInputMode = ToggleInputMode()
-        activityInputMode = ActivityInputMode(VoiceActivityDetector(sessionConfig.audio.vad))
-        continuousInputMode = ContinuousInputMode()
-        inputMode = activityInputMode
         whisperTargetList = WhisperTargetList()
-        // Eagerly, and for the life of the service: one controller, one thread, quit in onDestroy.
         // `{ audioFactory }` and not `audioFactory`, so a factory set after onCreate still takes.
-        audioController = AudioController(
+        audio = AudioSession(
             AudioHost(this, this, audioInputListener, audioOutputListener),
             { audioFactory },
-            audioControllerListener,
+            devices,
             handler,
+            sessionConfig.audio,
+            object : AudioSession.Listener {
+                override fun onRouteRefused() = logWarningOnce(getString(R.string.audio_route_refused))
+
+                override fun onAudioWarning(message: String) = logWarning(message)
+            },
         )
+        routeUpdates = CoroutineScope(Dispatchers.Main.immediate).launch(start = CoroutineStart.UNDISPATCHED) {
+            audio.route.drop(1).collect(::onAudioRouteChanged)
+        }
 
         // initialize minidns dns lookup mechanisms
         AndroidUsingLinkProperties.setup(this)
@@ -277,10 +241,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         disconnect()
         lifecycle.release()
         scope.cancel()
-        router.disengage()
-        router.release()
-        // Posts the teardown and quits the looper without waiting for either.
-        audioController.quit()
+        routeUpdates.cancel()
+        audio.release()
     }
 
     override fun onBind(intent: Intent?): IBinder = HumlaBinder(this)
@@ -320,7 +282,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         val connection = connectionFactory(this)
         this.connection = connection
-        commands = ServerCommands(connection::sendTCPMessage)
         connection.setForceTCP(config.forceTcp)
         connection.setUseTor(config.useTor)
         connection.setKeys(config.certificate?.pkcs12, config.certificate?.password)
@@ -387,23 +348,21 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
 
         Log.v(TAG, "Connected")
 
-        // Restore the route the user asked for; onConnectionDisconnected drops it.
-        router.engage()
-
         startAudio(connection, modelHandler)
 
         emit(HumlaEvent.Connected)
     }
 
     /**
-     * Hands the session's inputs to the audio controller, which builds the pipeline on its own
-     * thread. A pipeline that cannot start arrives as [AudioController.Listener.onAudioFailed].
+     * Restores the route the user asked for and builds the pipeline on the audio thread; a pipeline
+     * that cannot start becomes a warning.
      */
     private fun startAudio(connection: HumlaConnection, modelHandler: ModelHandler) {
         val self = modelHandler.getUser(connection.getSession())
         if (self == null) {
             // ServerSync named no known user: keep the session up without a microphone.
             Log.e(TAG, "No session user after ServerSync; audio not started")
+            audio.engageRoute()
             logWarning(getString(R.string.no_session_user))
             return
         }
@@ -412,10 +371,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             maxBandwidth = connection.getMaxBandwidth(),
             codec = connection.getCodec(),
             targetId = _voiceTargetId,
-            inputMode = inputMode,
+            inputMode = audio.inputMode,
             udpProtocol = connection.udpProtocol,
         )
-        audioController.start(audioConfig, params, connection)
+        audio.start(params, connection)
     }
 
     override fun onConnectionHandshakeFailed(chain: Array<X509Certificate>) {
@@ -427,10 +386,8 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     override fun onConnectionDisconnected(e: HumlaException?) {
-        // Clear push-to-talk first: the toggle outlives the connection, so an auto-reconnect would
-        // otherwise transmit without a key press. An event collector can't do it: isConnected is
-        // already false by then.
-        toggleInputMode.setTalkingOn(false)
+        // First: an event collector can't clear push-to-talk, isConnected is already false by then.
+        audio.stop()
 
         if (e != null) {
             Log.e(TAG, "Error: " + e.message + " (reason: " + e.reason.name + ")")
@@ -441,12 +398,6 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         val autoReconnect = sessionConfig.autoReconnect && e != null &&
             e.reason == HumlaException.HumlaDisconnectReason.CONNECTION_ERROR
         val next = lifecycle.lost(autoReconnect, e)
-
-        // The route is a session resource and the wish is not, so this runs on every disconnect,
-        // auto-reconnect included; onConnectionSynchronized is where it comes back.
-        router.disengage()
-        // Asynchronous: the audio threads are joined on humla-audio-control, never on main.
-        audioController.shutdown()
 
         // Readers throw once disconnected; this only lets the channel tree and users be collected.
         modelHandler = null
@@ -503,11 +454,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         get() = mutableEvents.asSharedFlow()
 
     /** Gives back what the session held beyond [lifecycle]'s share. Only a Disconnected state reaches this. */
-    private fun releaseSessionResources() {
-        // The chooser's pick belongs to this session, as a pick in the phone app belongs to one
-        // call; a dropped connection keeps it, the end of the session does not.
-        router.forgetChoice()
-    }
+    private fun releaseSessionResources() = audio.endSession()
 
     /**
      * Applies [config] as a whole. Audio, voice-activity and routing settings take effect live;
@@ -515,42 +462,13 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * @return true if a reconnect is required for the changes to take effect.
      */
     override fun configure(config: SessionConfig): Boolean {
-        val audio = config.audio
-        val inputMode = when (audio.transmitMode) {
-            TransmitMode.PUSH_TO_TALK -> toggleInputMode
-            TransmitMode.CONTINUOUS -> continuousInputMode
-            TransmitMode.VOICE_ACTIVITY -> activityInputMode
-        }
         val previous = sessionConfig
         sessionConfig = config
-        this.inputMode = inputMode
-        // Applied live: the input mode outlives pipeline rebuilds.
-        activityInputMode.setVadConfig(audio.vad)
-
-        if (config.accessTokens != previous.accessTokens) {
-            if (connection?.isConnected == true) commands?.sendAccessTokens(config.accessTokens)
+        if (config.accessTokens != previous.accessTokens && connection?.isConnected == true) {
+            commands?.sendAccessTokens(config.accessTokens)
         }
-        if (audio.preferredDevice != previous.audio.preferredDevice) {
-            // Live: the next apply routes it, and a user's explicit choice is left standing.
-            router.preferred = audio.preferredDevice
-            router.apply()
-        }
-
-        // Unconditional: AudioController skips a config equal by value and an input mode equal
-        // by identity.
-        audioController.reconfigure(audioConfig, inputMode)
+        audio.apply(config.audio)
         return config.needsReconnectAfter(previous)
-    }
-
-    /**
-     * The routed device changed, so the pipeline is rebuilt for its stream (and, for SCO, its
-     * sample rate). A redundant event is dropped by [AudioController.reconfigure].
-     */
-    private fun setRoutedDevice(type: Int?) {
-        routedDeviceType = type
-        // Posts to humla-audio-control; never joins on main.
-        audioController.reconfigure(audioConfig, inputMode)
-        onAudioRouteChanged(type)
     }
 
     /**
@@ -637,7 +555,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * stops asynchronously around the session, so this does not throw while disconnected.
      */
     override val currentBandwidth: Int
-        get() = audioController.currentBandwidth
+        get() = audio.currentBandwidth
 
     override val serverVersion: Int
         get() = conn().getServerVersion()
@@ -680,45 +598,23 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     override val codec: HumlaUDPMessageType?
         get() = conn().getCodec()
 
-    /**
-     * What the user asked for, independent of the current route. Survives a lost connection, a
-     * headset going away and a platform refusal.
-     */
-    override fun usingBluetoothSco(): Boolean = router.bluetoothAutomatic
-
-    /** What the platform actually routes right now. */
-    override val isBluetoothScoActive: Boolean
-        get() = router.isBluetoothActive
-
-    override fun enableBluetoothSco() {
-        router.bluetoothAutomatic = true
-        router.apply()
-    }
-
-    override fun disableBluetoothSco() {
-        router.bluetoothAutomatic = false
-        router.apply()
-    }
-
     override val audioDevices: List<CommunicationDevice>
-        get() = router.availableDevices()
+        get() = audio.devices
 
     override val isEchoCancellationEnabled: Boolean
-        get() = audioConfig.echoCancellation != EchoCancellationMode.NONE
+        get() = audio.isEchoCancellationEnabled
 
     override val activeAudioDevice: CommunicationDevice?
-        get() = router.activeDevice()
+        get() = audio.activeDevice
 
-    override fun selectAudioDevice(id: Int) = router.choose(id)
+    override fun selectAudioDevice(id: Int) = audio.router.choose(id)
 
-    override fun selectAutomaticAudioDevice() = router.forgetChoice()
+    override fun selectAutomaticAudioDevice() = audio.router.forgetChoice()
 
     override val isTalking: Boolean
-        get() = toggleInputMode.isTalkingOn
+        get() = audio.isTalking
 
-    override fun setTalkingState(talking: Boolean) {
-        toggleInputMode.setTalkingOn(talking)
-    }
+    override fun setTalkingState(talking: Boolean) = audio.setTalking(talking)
 
     override fun joinChannel(channel: Int) {
         moveUserToChannel(sessionId, channel)
@@ -819,7 +715,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     }
 
     /** Test seam: the settings the next pipeline would be built with (public for the app's tests). */
-    fun getAudioConfigForTest(): AudioConfig = audioConfig
+    fun getAudioConfigForTest(): AudioConfig = audio.config
 
     override var voiceTargetId: Byte
         get() = _voiceTargetId
@@ -828,7 +724,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
             require((targetId.toInt() and 0x1F.inv()) == 0) { "Target ID must be at most 5 bits." }
             _voiceTargetId = targetId
             // Also reaches the running pipeline, so the next rebuild keeps targeting it.
-            audioController.setVoiceTargetId(targetId)
+            audio.setVoiceTargetId(targetId)
             emit(HumlaEvent.VoiceTargetChanged(VoiceTargetMode.fromId(targetId)))
         }
 

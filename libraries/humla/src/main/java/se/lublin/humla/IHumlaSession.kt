@@ -56,12 +56,6 @@ interface IHumlaSession {
     val codec: HumlaUDPMessageType?
 
     /**
-     * True if voice is routed over a Bluetooth headset right now, as opposed to
-     * [usingBluetoothSco], which reports what the user asked for.
-     */
-    val isBluetoothScoActive: Boolean
-
-    /**
      * Every device voice can be routed to right now, in the platform's order: earpiece, speaker,
      * wired and USB headsets, Bluetooth headsets with their own names. Empty while no session is
      * synchronized.
@@ -101,18 +95,6 @@ interface IHumlaSession {
 
     /** The channel with this id, or null if there is none. */
     fun getChannel(id: Int): IChannel?
-
-    /**
-     * Whether a connected Bluetooth headset is taken automatically: the standing wish the app keeps
-     * in its preference, not the route.
-     */
-    fun usingBluetoothSco(): Boolean
-
-    /** Take a connected Bluetooth headset automatically, now and whenever one connects. */
-    fun enableBluetoothSco()
-
-    /** Stop taking Bluetooth headsets automatically; a route taken for one is given back. */
-    fun disableBluetoothSco()
 
     /**
      * Routes voice to the device with this id from [audioDevices], as the user's explicit choice,

@@ -70,7 +70,7 @@ class MumlaServiceBluetoothTest {
 
     @Test
     fun aHeadsetIsTakenByDefault() {
-        assertThat(service.usingBluetoothSco()).isTrue()
+        assertThat(service.sessionConfig.audio.bluetoothAutomatic).isTrue()
 
         connect()
 
@@ -83,7 +83,7 @@ class MumlaServiceBluetoothTest {
         settings.isBluetoothScoEnabled = false
         service = create()
 
-        assertThat(service.usingBluetoothSco()).isFalse()
+        assertThat(service.sessionConfig.audio.bluetoothAutomatic).isFalse()
         connect()
         assertThat(receiver.selectCalls.size).isEqualTo(0)
     }
@@ -147,9 +147,9 @@ class MumlaServiceBluetoothTest {
     @Test
     fun thePreferenceMovesTheWishButTouchesNothingWhileDisconnected() {
         settings.isBluetoothScoEnabled = false
-        assertThat(service.usingBluetoothSco()).isFalse()
+        assertThat(service.sessionConfig.audio.bluetoothAutomatic).isFalse()
         settings.isBluetoothScoEnabled = true
-        assertThat(service.usingBluetoothSco()).isTrue()
+        assertThat(service.sessionConfig.audio.bluetoothAutomatic).isTrue()
 
         assertThat(receiver.selectCalls.size).isEqualTo(0)
         assertThat(receiver.clearCalls).isEqualTo(0)

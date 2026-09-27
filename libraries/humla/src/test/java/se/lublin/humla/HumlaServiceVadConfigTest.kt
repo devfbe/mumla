@@ -35,7 +35,7 @@ class HumlaServiceVadConfigTest {
         Robolectric.buildService(HumlaService::class.java).create().get()
 
     private fun inputMode(service: HumlaService) =
-        service.activityInputMode
+        service.audio.activityInputMode
 
     @Test
     fun `the whole vad configuration reaches the live detector`() {

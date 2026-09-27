@@ -197,3 +197,8 @@ class HumlaServiceHarness(
         }
     }
 }
+
+/** Stores the Bluetooth wish the way the app's preference does: as part of the audio settings. */
+fun HumlaService.setBluetoothAutomatic(on: Boolean) {
+    configure(sessionConfig.copy(audio = sessionConfig.audio.copy(bluetoothAutomatic = on)))
+}

@@ -46,6 +46,7 @@ import se.lublin.humla.net.ConnectionWarning
 import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
+import se.lublin.humla.testutil.setBluetoothAutomatic
 import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.onEvents
@@ -69,7 +70,7 @@ class HumlaServiceCharacterizationTest {
         return controller.get()
     }
 
-    private fun inputMode(service: HumlaService): Any = service.inputMode
+    private fun inputMode(service: HumlaService): Any = service.audio.inputMode
 
     /** A fresh service is disconnected and has no session; `session` gates the binder API. */
     @Test
@@ -429,11 +430,11 @@ class HumlaServiceCharacterizationTest {
         // The pipeline is asynchronous: -1 while none is up.
         assertThat(service.currentBandwidth).isEqualTo(-1)
         // The Bluetooth wish outlives every session, so these answer while disconnected.
-        assertThat(service.usingBluetoothSco()).isFalse()
-        assertThat(service.isBluetoothScoActive).isFalse()
-        service.enableBluetoothSco()
-        assertThat(service.usingBluetoothSco()).isTrue()
-        service.disableBluetoothSco()
-        assertThat(service.usingBluetoothSco()).isFalse()
+        assertThat(service.audio.router.bluetoothAutomatic).isFalse()
+        assertThat(service.audio.router.isBluetoothActive).isFalse()
+        service.setBluetoothAutomatic(true)
+        assertThat(service.audio.router.bluetoothAutomatic).isTrue()
+        service.setBluetoothAutomatic(false)
+        assertThat(service.audio.router.bluetoothAutomatic).isFalse()
     }
 }
