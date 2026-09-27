@@ -643,12 +643,6 @@ class HumlaConnection(
         sendTCPMessage(utb.build(), HumlaTCPMessageType.UDPTunnel)
     }
 
-    fun sendAccessTokens(tokens: Collection<String>) {
-        val ab = Mumble.Authenticate.newBuilder()
-        ab.addAllTokens(tokens)
-        sendTCPMessage(ab.build(), HumlaTCPMessageType.Authenticate)
-    }
-
     private fun startUdp() {
         val transport = transports.createUdp(cryptState, this, scope)
         udp = transport
