@@ -183,8 +183,11 @@ class ChannelChatFragment : Fragment(), MenuProvider {
         return true
     }
 
-    /** Empties the session's chat log, and with it the list. */
-    fun clear() = chat.clear()
+    /** Empties the session's chat log, and with it the list, offering to undo it. */
+    fun clear() {
+        val undo = chat.clear()
+        showSnackbar(R.string.chat_cleared, R.string.undo) { undo() }
+    }
 
     /** Updates the compose hint that shows where the next message goes. */
     private fun updateChatTargetText(target: ChatTarget?) {

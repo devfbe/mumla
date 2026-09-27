@@ -18,6 +18,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.menu.MenuBuilder
+import androidx.appcompat.view.menu.MenuItemImpl
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -61,6 +62,7 @@ import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.TestImages
 import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.testing.snackbarAction
 import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
@@ -482,6 +484,29 @@ class ChannelChatFragmentTest {
         controller.resume()
         idleMainLooper()
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
+    }
+
+    @Test
+    fun clearingOffersToUndoIt() {
+        add(info("older"))
+        launch()
+
+        fragment.clear()
+        drainMainUntil { itemCount() == 0 }
+        assertThat(activity.snackbarText()).isEqualTo(activity.getString(R.string.chat_cleared))
+        snackbarAction(fragment.requireView()).performClick()
+        drainMainUntil { itemCount() == 1 }
+
+        assertThat(chat.messages.value.map { it.body }).containsExactly("older")
+    }
+
+    @Test
+    fun theClearItemIsInTheOverflow() {
+        launch()
+        val menu = MenuBuilder(activity)
+        activity.onCreatePanelMenu(Window.FEATURE_OPTIONS_PANEL, menu)
+
+        assertThat((menu.findItem(R.id.menu_clear_chat) as MenuItemImpl).requiresOverflow()).isTrue()
     }
 
     @Test

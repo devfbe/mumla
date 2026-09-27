@@ -111,7 +111,8 @@ class ChatViewModel(
         selected.value = target
     }
 
-    fun clear() = sessions.chat.clear()
+    /** Empties the session's chat log; the returned function undoes it. */
+    fun clear(): () -> Unit = sessions.chat.clearWithUndo()
 
     /** Sends what the user typed, formatted as the settings say; false without a connection. */
     fun send(text: String): Boolean = sendHtml(outgoingMessageHtml(text, Settings.getInstance(app).isMarkdownEnabled))

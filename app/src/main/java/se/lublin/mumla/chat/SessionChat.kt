@@ -43,6 +43,9 @@ class SessionChat(
     private val unreadCount = MutableStateFlow(0)
     private var shown = false
 
+    /** Counts the times the log started over, for a session or at its end. */
+    private var starts = 0
+
     /** The history, newest last; a new list per change. */
     val messages: StateFlow<List<IChatMessage>> get() = log.messages
 
@@ -58,19 +61,35 @@ class SessionChat(
     /** Starts over with [session]; subscribed before this returns, so nothing it emits is missed. */
     fun follow(session: IHumlaSession) {
         following?.cancel()
-        clear()
+        startOver()
         following = scope.launch(Dispatchers.Main.immediate, CoroutineStart.UNDISPATCHED) {
             launch(start = CoroutineStart.UNDISPATCHED) {
                 // Not on a lost connection: the log survives automatic reconnects.
-                session.state.collect { if (it is SessionState.Disconnected) clear() }
+                session.state.collect { if (it is SessionState.Disconnected) startOver() }
             }
             session.events.inMainThreadSlices().collect(::onEvent)
         }
     }
 
-    fun clear() {
+    private fun clear() {
         log.clear()
         unreadCount.value = 0
+    }
+
+    /**
+     * Empties the log at the user's request. The returned function puts the messages back, unless
+     * the log started over since.
+     */
+    fun clearWithUndo(): () -> Unit {
+        val cleared = log.snapshot()
+        val at = starts
+        clear()
+        return { if (starts == at) log.restore(cleared) }
+    }
+
+    private fun startOver() {
+        starts++
+        clear()
     }
 
     /** Adds a warning of the app's own, unless it repeats the last line. */
