@@ -28,7 +28,7 @@
         android:title="@string/theme"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:key="dynamic_colors"
         android:defaultValue="false"
         android:title="@string/pref_dynamic_colors"
@@ -42,7 +42,7 @@
         app:useSimpleSummaryProvider="true"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:key="show_user_count"
         android:defaultValue="false"
         android:title="@string/pref_show_user_count"

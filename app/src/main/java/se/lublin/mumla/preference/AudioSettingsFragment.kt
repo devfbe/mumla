@@ -26,7 +26,6 @@ import android.media.audiofx.NoiseSuppressor
 import android.os.Bundle
 import android.view.View
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
@@ -56,9 +55,9 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
 
         labelAudioFormats()
 
-        findPreference<CheckBoxPreference>(Settings.ANDROID_NOISE_SUPPRESSOR.key)
+        findPreference<SwitchPreferenceCompat>(Settings.ANDROID_NOISE_SUPPRESSOR.key)
             ?.let { markAvailability(it, NoiseSuppressor.isAvailable()) }
-        findPreference<CheckBoxPreference>(Settings.ANDROID_AGC.key)
+        findPreference<SwitchPreferenceCompat>(Settings.ANDROID_AGC.key)
             ?.let { markAvailability(it, AutomaticGainControl.isAvailable()) }
 
         val noisePref = requireNotNull(findPreference<ListPreference>(Settings.NOISE_SUPPRESSION_METHOD.key))
@@ -73,7 +72,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             applyVadDependents(VadMode.fromPreferenceValue(newValue as String))
             true
         }
-        findPreference<CheckBoxPreference>(Settings.VAD_ADAPTIVE_FLOOR.key)
+        findPreference<SwitchPreferenceCompat>(Settings.VAD_ADAPTIVE_FLOOR.key)
             ?.setOnPreferenceChangeListener { _, newValue ->
                 applyFloorDependents(currentVadMode(), newValue as Boolean)
                 true
@@ -219,7 +218,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     protected fun currentVadMode(): VadMode =
         VadMode.fromPreferenceValue(findPreference<ListPreference>(Settings.VAD_MODE.key)?.value)
 
-    private fun markAvailability(pref: CheckBoxPreference, available: Boolean) {
+    private fun markAvailability(pref: SwitchPreferenceCompat, available: Boolean) {
         if (available) return
         pref.isEnabled = false
         pref.isChecked = false
@@ -246,7 +245,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         findPreference<Preference>(KEY_RECALIBRATE)?.isVisible = dependents.adaptive
         applyFloorDependents(
             mode,
-            findPreference<CheckBoxPreference>(Settings.VAD_ADAPTIVE_FLOOR.key)?.isChecked
+            findPreference<SwitchPreferenceCompat>(Settings.VAD_ADAPTIVE_FLOOR.key)?.isChecked
                 ?: Settings.VAD_ADAPTIVE_FLOOR.default,
         )
     }

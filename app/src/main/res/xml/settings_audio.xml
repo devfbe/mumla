@@ -84,7 +84,7 @@
             android:title="@string/vadSensitivity"
             app:iconSpaceReserved="false"/>
 
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:key="vad_adaptive_floor"
             android:defaultValue="true"
             android:title="@string/vadAdaptiveFloor"
@@ -186,19 +186,19 @@
             android:title="@string/hotCorner"
             app:iconSpaceReserved="false"/>
 
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:defaultValue="false"
             android:key="ptt_sound"
             android:summary="@string/pttSoundSum"
             android:title="@string/pttSound"
             app:iconSpaceReserved="false"/>
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:defaultValue="false"
             android:key="hidePtt"
             android:summary="@string/hidePttSum"
             android:title="@string/hidePtt"
             app:iconSpaceReserved="false"/>
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:defaultValue="false"
             android:key="togglePtt"
             android:summary="@string/togglePttSum"
@@ -210,13 +210,13 @@
             android:summary="@string/holdToWhisperSum"
             android:title="@string/hold_to_whisper"
             app:iconSpaceReserved="false"/>
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:defaultValue="false"
             android:key="allow_external_ptt"
             android:summary="@string/allowExternalPttSum"
             android:title="@string/allowExternalPtt"
             app:iconSpaceReserved="false"/>
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:defaultValue="false"
             android:key="half_duplex"
             android:title="@string/halfDuplex"
@@ -274,14 +274,14 @@
             android:summary="@string/speexNoiseSuppressSum"
             app:iconSpaceReserved="false"/>
 
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:key="android_noise_suppressor"
             android:defaultValue="false"
             android:title="@string/androidNoiseSuppressor"
             android:summary="@string/androidNoiseSuppressorSum"
             app:iconSpaceReserved="false"/>
 
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:key="android_agc"
             android:defaultValue="false"
             android:title="@string/androidAgc"

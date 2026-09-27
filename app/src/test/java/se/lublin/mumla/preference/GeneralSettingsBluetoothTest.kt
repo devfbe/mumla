@@ -3,10 +3,10 @@ package se.lublin.mumla.preference
 import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
-import androidx.preference.CheckBoxPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceGroup
+import androidx.preference.SwitchPreferenceCompat
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -46,15 +46,15 @@ class GeneralSettingsBluetoothTest {
         open()
     }
 
-    private fun checkBox(): CheckBoxPreference {
+    private fun checkBox(): SwitchPreferenceCompat {
         val preference = fragment.preferenceScreen
             .findPreference<Preference>(Settings.BLUETOOTH_SCO.key)
         assertWithMessage(
             "no preference with key '%s' on the general settings screen",
             Settings.BLUETOOTH_SCO.key,
         ).that(preference).isNotNull()
-        assertThat(preference).isInstanceOf(CheckBoxPreference::class.java)
-        return preference as CheckBoxPreference
+        assertThat(preference).isInstanceOf(SwitchPreferenceCompat::class.java)
+        return preference as SwitchPreferenceCompat
     }
 
     private fun lastRequestedPermissions(): List<String> =

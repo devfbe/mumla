@@ -19,49 +19,49 @@
 
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:defaultValue="true"
         android:key="chatNotify"
         android:summary="@string/chatNotificationsSum"
         android:title="@string/chatNotifications"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:key="stay_awake"
         android:defaultValue="false"
         android:title="@string/stay_awake"
         android:summary="@string/stay_awake_sum"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:defaultValue="true"
         android:key="useTts"
         android:summary="@string/useTtsSum"
         android:title="@string/useTts"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:defaultValue="false"
         android:key="shortTtsMessages"
         android:summary="@string/shortTtsMessagesSum"
         android:title="@string/shortTtsMessages"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:defaultValue="true"
         android:key="markdown_messages"
         android:summary="@string/markdownMessagesSum"
         android:title="@string/markdownMessages"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:defaultValue="true"
         android:key="load_images"
         android:summary="@string/loadImagesSum"
         android:title="@string/loadImages"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:defaultValue="true"
         android:key="autoReconnect"
         android:summary="@string/autoReconnectSum"
@@ -74,21 +74,21 @@
         android:title="@string/battery_optimization_title"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:defaultValue="false"
         android:key="forceTcp"
         android:summary="@string/forceTcpSum"
         android:title="@string/forceTcp"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:defaultValue="false"
         android:key="useTor"
         android:summary="@string/useTorSum"
         android:title="@string/useTor"
         app:iconSpaceReserved="false" />
 
-    <CheckBoxPreference
+    <SwitchPreferenceCompat
         android:defaultValue="false"
         android:key="startUpInPinnedMode"
         android:summary="@string/pref_start_upIn_pinned_mode_sum"
@@ -100,7 +100,7 @@
         android:title="@string/controls"
         app:iconSpaceReserved="false">
         <!-- android:defaultValue must equal Settings.DEFAULT_BLUETOOTH_SCO. -->
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             android:defaultValue="true"
             android:key="pref_bluetooth_sco"
             android:summary="@string/bluetoothScoSum"

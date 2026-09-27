@@ -4,8 +4,8 @@ import android.Manifest
 import android.os.Bundle
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.preference.CheckBoxPreference
 import androidx.preference.Preference
+import androidx.preference.SwitchPreferenceCompat
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.BluetoothScoToggle
@@ -20,9 +20,9 @@ class GeneralSettingsFragment : MumlaPreferenceFragment(R.xml.settings_general) 
     // Registered at construction: a fragment may not register a launcher once created.
     private val bluetoothPermissionRequester: ActivityResultLauncher<String> =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            // The answer does not decide the wish (see BluetoothScoToggle); the box follows it.
+            // The answer does not decide the wish (see BluetoothScoToggle); the switch follows it.
             bluetoothToggle.onPermissionAnswered()
-            findPreference<CheckBoxPreference>(Settings.BLUETOOTH_SCO.key)?.isChecked =
+            findPreference<SwitchPreferenceCompat>(Settings.BLUETOOTH_SCO.key)?.isChecked =
                 bluetoothToggle.isEnabled
             if (!granted) {
                 requireActivity().showPermissionDeniedSnackbar(R.string.bluetooth_perm_denied)
@@ -53,14 +53,14 @@ class GeneralSettingsFragment : MumlaPreferenceFragment(R.xml.settings_general) 
             requireContext().applicationContext,
             Settings.getInstance(requireContext()),
         )
-        val bluetoothPreference: CheckBoxPreference =
+        val bluetoothPreference: SwitchPreferenceCompat =
             requireNotNull(preferenceScreen.findPreference(Settings.BLUETOOTH_SCO.key))
         bluetoothPreference.setOnPreferenceChangeListener { _, newValue ->
             when (bluetoothToggle.request(newValue as Boolean)) {
                 BluetoothScoToggle.Result.Enabled, BluetoothScoToggle.Result.Disabled -> true
                 BluetoothScoToggle.Result.PermissionNeeded -> {
                     bluetoothPermissionRequester.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                    // Keep the box empty until the dialog is answered; the callback writes the wish.
+                    // Keep the switch off until the dialog is answered; the callback writes the wish.
                     false
                 }
             }
