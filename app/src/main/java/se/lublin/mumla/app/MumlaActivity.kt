@@ -191,7 +191,8 @@ class MumlaActivity :
     private fun offerServerFromUrl(url: String?) {
         try {
             val server = MumbleURLParser.parseURL(url)
-            ServerEditFragment.newInstance(server, ServerEditFragment.Mode.LINK).show(supportFragmentManager, "url_edit")
+            ServerEditFragment.newInstance(server, ServerEditFragment.Mode.LINK)
+                .show(supportFragmentManager, "url_edit")
         } catch (e: MalformedURLException) {
             onBadUrl(e)
         } catch (e: NumberFormatException) {

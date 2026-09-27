@@ -107,6 +107,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:hint="@string/server_password"
+            app:endIconContentDescription="@string/server_password_show"
             app:endIconMode="password_toggle">
 
             <com.google.android.material.textfield.TextInputEditText

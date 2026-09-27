@@ -26,7 +26,8 @@ class ServerEditFragmentTest {
     private val results = mutableListOf<ServerEditFragment.Result>()
 
     private fun listen() {
-        activity.supportFragmentManager.setFragmentResultListener(ServerEditFragment.REQUEST_KEY, activity) { _, bundle ->
+        val fragments = activity.supportFragmentManager
+        fragments.setFragmentResultListener(ServerEditFragment.REQUEST_KEY, activity) { _, bundle ->
             results += ServerEditFragment.Result.from(bundle)
         }
     }
@@ -45,7 +46,8 @@ class ServerEditFragmentTest {
 
     private fun AlertDialog.error(layoutId: Int): CharSequence? = findViewById<TextInputLayout>(layoutId)!!.error
 
-    private fun AlertDialog.title(): String = findViewById<TextView>(androidx.appcompat.R.id.alertTitle)!!.text.toString()
+    private fun AlertDialog.title(): String =
+        findViewById<TextView>(androidx.appcompat.R.id.alertTitle)!!.text.toString()
 
     private fun AlertDialog.buttonText(button: Int): String? =
         getButton(button).takeIf { it.visibility == View.VISIBLE }?.text?.toString()

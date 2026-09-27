@@ -61,8 +61,10 @@ class MumlaActivityServerDialogTest {
     }
 
     /** A connect starts by asking for the microphone, which the test never grants. */
-    private fun MumlaActivity.connectStarted() =
-        shadowOf(this).lastRequestedPermission?.requestedPermissions?.toList() == listOf(Manifest.permission.RECORD_AUDIO)
+    private fun MumlaActivity.connectStarted(): Boolean {
+        val requested = shadowOf(this).lastRequestedPermission?.requestedPermissions?.toList()
+        return requested == listOf(Manifest.permission.RECORD_AUDIO)
+    }
 
     private fun MumlaActivity.shownScreen() = supportFragmentManager.findFragmentById(R.id.content_frame)
 

@@ -87,6 +87,7 @@
     <string name="server_connect_only">Connect only</string>
     <string name="server_save_and_connect">Save &amp; connect</string>
     <string name="server_password">Password</string>
+    <string name="server_password_show">Show password</string>
     <string name="server_username">Username</string>
     <string name="server_port">Port</string>
     <string name="server_host">Address</string>
