@@ -6,14 +6,13 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import se.lublin.humla.util.Constants
 
 /**
  * [AudioConfig] carries two decisions of its own: the half-duplex rule and, because HumlaService
  * reconfigures the pipeline on `config != previous`, structural equality over every field it holds.
  */
 class AudioConfigTest {
-    private fun config(requested: Boolean, transmitMode: Int) =
+    private fun config(requested: Boolean, transmitMode: TransmitMode) =
         AudioConfig(halfDuplexRequested = requested, transmitMode = transmitMode)
 
     /**
@@ -22,12 +21,12 @@ class AudioConfigTest {
      */
     @Test
     fun halfDuplexHoldsOnlyWhenItWasRequestedAndTheModeIsPushToTalk() {
-        assertThat(config(true, Constants.TRANSMIT_PUSH_TO_TALK).halfDuplex).isTrue()
-        assertThat(config(true, Constants.TRANSMIT_VOICE_ACTIVITY).halfDuplex).isFalse()
-        assertThat(config(true, Constants.TRANSMIT_CONTINUOUS).halfDuplex).isFalse()
-        assertThat(config(false, Constants.TRANSMIT_PUSH_TO_TALK).halfDuplex).isFalse()
-        assertThat(config(false, Constants.TRANSMIT_VOICE_ACTIVITY).halfDuplex).isFalse()
-        assertThat(config(false, Constants.TRANSMIT_CONTINUOUS).halfDuplex).isFalse()
+        assertThat(config(true, TransmitMode.PUSH_TO_TALK).halfDuplex).isTrue()
+        assertThat(config(true, TransmitMode.VOICE_ACTIVITY).halfDuplex).isFalse()
+        assertThat(config(true, TransmitMode.CONTINUOUS).halfDuplex).isFalse()
+        assertThat(config(false, TransmitMode.PUSH_TO_TALK).halfDuplex).isFalse()
+        assertThat(config(false, TransmitMode.VOICE_ACTIVITY).halfDuplex).isFalse()
+        assertThat(config(false, TransmitMode.CONTINUOUS).halfDuplex).isFalse()
     }
 
     /**
@@ -36,9 +35,9 @@ class AudioConfigTest {
      */
     @Test
     fun theRequestIsRememberedWhileTheModeSuppressesIt() {
-        val requested = config(true, Constants.TRANSMIT_VOICE_ACTIVITY)
+        val requested = config(true, TransmitMode.VOICE_ACTIVITY)
         assertThat(requested.halfDuplex).isFalse()
-        assertThat(requested.copy(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK).halfDuplex).isTrue()
+        assertThat(requested.copy(transmitMode = TransmitMode.PUSH_TO_TALK).halfDuplex).isTrue()
     }
 
     /**
@@ -91,6 +90,7 @@ class AudioConfigTest {
         is Int -> value + 1
         is Float -> value + 1f
         is String -> value + "-other"
+        is Enum<*> -> value.declaringJavaClass.enumConstants.first { it != value }
         else -> error("AudioConfig gained a ${value.javaClass} field; teach this test to vary it")
     }
 }

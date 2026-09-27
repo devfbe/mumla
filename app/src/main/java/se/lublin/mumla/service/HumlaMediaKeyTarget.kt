@@ -1,13 +1,14 @@
 package se.lublin.mumla.service
 
 import se.lublin.humla.IHumlaService
+import se.lublin.humla.audio.TransmitMode
 
 /** [MediaKeyTarget] backed by the live Humla session of [service]. */
 class HumlaMediaKeyTarget(private val service: IHumlaService) : MediaKeyTarget {
     override val isConnected: Boolean
         get() = service.isConnected
 
-    override val transmitMode: Int
+    override val transmitMode: TransmitMode
         get() = service.session.transmitMode
 
     override val isTalking: Boolean

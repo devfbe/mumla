@@ -15,18 +15,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-@file:Suppress("DEPRECATION") // se.lublin.humla.util.Constants is deprecated; TRANSMIT_* has no successor yet.
-
 package se.lublin.humla.session
 
 import android.media.AudioManager
 import android.media.MediaRecorder
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.model.Server
-import se.lublin.humla.util.Constants
 
 /**
  * Everything a client configures a session with, handed to `HumlaService.configure` as a whole.
@@ -57,8 +55,7 @@ data class SessionConfig(
     val autoReconnect: Boolean = false,
     /** Sent to the server right away while connected. */
     val accessTokens: List<String> = emptyList(),
-    /** One of `Constants.TRANSMIT_*`. */
-    val transmitMode: Int = Constants.TRANSMIT_VOICE_ACTIVITY,
+    val transmitMode: TransmitMode = TransmitMode.VOICE_ACTIVITY,
     val vadConfig: VadConfig = VadConfig.DEFAULT,
     val amplitudeBoost: Float = 1.0f,
     val inputSampleRate: Int = 48_000,

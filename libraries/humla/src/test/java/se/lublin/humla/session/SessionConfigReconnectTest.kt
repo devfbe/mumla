@@ -22,11 +22,11 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.model.Server
-import se.lublin.humla.util.Constants
 import java.lang.reflect.Modifier
 
 /** Whether changing one field of a [SessionConfig] needs a reconnect to take effect. */
@@ -68,7 +68,7 @@ class SessionConfigReconnectTest(
             "localVolumes" to (false to { c -> c.copy(localVolumes = mapOf("cert:abc" to 0.5f)) }),
             "autoReconnect" to (false to { c -> c.copy(autoReconnect = true) }),
             "accessTokens" to (false to { c -> c.copy(accessTokens = listOf("token")) }),
-            "transmitMode" to (false to { c -> c.copy(transmitMode = Constants.TRANSMIT_CONTINUOUS) }),
+            "transmitMode" to (false to { c -> c.copy(transmitMode = TransmitMode.CONTINUOUS) }),
             "vadConfig" to (false to { c -> c.copy(vadConfig = VadConfig.amplitude(0.25f)) }),
             "amplitudeBoost" to (false to { c -> c.copy(amplitudeBoost = 1.5f) }),
             "inputSampleRate" to (false to { c -> c.copy(inputSampleRate = 16_000) }),

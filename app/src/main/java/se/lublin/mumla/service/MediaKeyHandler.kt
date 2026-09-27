@@ -1,7 +1,7 @@
 package se.lublin.mumla.service
 
 import android.view.KeyEvent
-import se.lublin.humla.util.Constants
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.mumla.MediaButtonAction
 import se.lublin.mumla.Settings
 
@@ -30,7 +30,7 @@ class MediaKeyHandler(
 
         when (action) {
             MediaButtonAction.AUTO ->
-                if (target.transmitMode == Constants.TRANSMIT_PUSH_TO_TALK) {
+                if (target.transmitMode == TransmitMode.PUSH_TO_TALK) {
                     target.setTalking(!target.isTalking)
                 } else {
                     target.toggleSelfMute()

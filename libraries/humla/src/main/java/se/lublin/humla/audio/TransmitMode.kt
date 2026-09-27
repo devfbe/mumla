@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Andrew Comminos
+ * Copyright (C) 2026 The Mumla Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,14 +14,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package se.lublin.humla.util
 
-/** Protocol constants. Prefer keeping new constants with the class that uses them. */
-object Constants {
-    const val PROTOCOL_MAJOR = 1
-    const val PROTOCOL_MINOR = 5
-    const val PROTOCOL_PATCH = 0
+package se.lublin.humla.audio
 
-    const val PROTOCOL_STRING = "$PROTOCOL_MAJOR.$PROTOCOL_MINOR.$PROTOCOL_PATCH"
-    const val DEFAULT_PORT = 64738
+/** When the microphone is sent. */
+enum class TransmitMode {
+    VOICE_ACTIVITY,
+    PUSH_TO_TALK,
+    CONTINUOUS,
 }

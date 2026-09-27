@@ -39,6 +39,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import se.lublin.humla.HumlaService
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
@@ -46,7 +47,6 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.util.Constants
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.ChatMessageLog
@@ -212,7 +212,7 @@ class MumlaService : HumlaService(),
         }
 
         val selfStartedTalking = user.session == selfSession && user.talkState == TalkState.TALKING
-        val pttClick = pttSoundEnabled && transmitMode == Constants.TRANSMIT_PUSH_TO_TALK
+        val pttClick = pttSoundEnabled && transmitMode == TransmitMode.PUSH_TO_TALK
         if (pttClick && selfStartedTalking && isConnectionEstablished) {
             keyClickSound()
         }
@@ -413,7 +413,7 @@ class MumlaService : HumlaService(),
     internal fun onPreferenceChanged(key: String) {
         when (key) {
             Settings.INPUT_METHOD.key ->
-                channelOverlay.setPushToTalkShown(settings.humlaInputMethod == Constants.TRANSMIT_PUSH_TO_TALK)
+                channelOverlay.setPushToTalkShown(settings.transmitMode == TransmitMode.PUSH_TO_TALK)
             Settings.HOT_CORNER.key -> {
                 hotCorner.gravity = settings.hotCornerGravity
                 hotCorner.isShown = isConnectionEstablished && settings.isHotCornerEnabled

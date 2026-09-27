@@ -44,6 +44,7 @@ import se.lublin.humla.audio.AudioHost
 import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.AudioSessionParams
 import se.lublin.humla.audio.DefaultAudioHandlerFactory
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.inputmode.ActivityInputMode
@@ -77,7 +78,6 @@ import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.SessionStateMachine
-import se.lublin.humla.util.Constants
 import se.lublin.humla.util.HumlaLogger
 import se.lublin.humla.util.MumbleVersion
 import se.lublin.humla.util.VoiceTargetMode
@@ -584,10 +584,9 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      */
     override fun configure(config: SessionConfig): Boolean {
         val inputMode = when (config.transmitMode) {
-            Constants.TRANSMIT_PUSH_TO_TALK -> toggleInputMode
-            Constants.TRANSMIT_CONTINUOUS -> continuousInputMode
-            Constants.TRANSMIT_VOICE_ACTIVITY -> activityInputMode
-            else -> throw IllegalArgumentException("Unknown transmit mode ${config.transmitMode}")
+            TransmitMode.PUSH_TO_TALK -> toggleInputMode
+            TransmitMode.CONTINUOUS -> continuousInputMode
+            TransmitMode.VOICE_ACTIVITY -> activityInputMode
         }
         val previous = sessionConfig
         sessionConfig = config
@@ -769,7 +768,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     override val permissions: Int
         get() = model().permissions
 
-    override val transmitMode: Int
+    override val transmitMode: TransmitMode
         get() = sessionConfig.transmitMode
 
     override val codec: HumlaUDPMessageType?

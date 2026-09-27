@@ -11,6 +11,7 @@ import androidx.core.app.RemoteInput
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.protobuf.MessageLite as ProtoMessage
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -26,6 +27,7 @@ import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.HumlaService
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IMessage
@@ -49,7 +51,6 @@ import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.testing.createMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.util.HtmlUtils
-import com.google.protobuf.MessageLite as ProtoMessage
 
 /**
  * Characterizes MumlaService: session events, lifecycle hooks, non-audio preference arms and
@@ -1055,7 +1056,7 @@ class MumlaServiceCharacterizationTest {
     /** All five clauses true; each test below turns exactly one of them false. */
     private fun clickReady(): User {
         service.keyClickSound = { clicks++ }
-        service.configure(SessionConfig(transmitMode = se.lublin.humla.util.Constants.TRANSMIT_PUSH_TO_TALK))
+        service.configure(SessionConfig(transmitMode = TransmitMode.PUSH_TO_TALK))
         preferences().edit().putBoolean(Settings.PTT_SOUND.key, true).commit()
         connect()
         val talking = user(SELF)
@@ -1094,7 +1095,7 @@ class MumlaServiceCharacterizationTest {
     @Test
     fun noClickOutsidePushToTalk() {
         val u = clickReady()
-        service.configure(SessionConfig(transmitMode = se.lublin.humla.util.Constants.TRANSMIT_VOICE_ACTIVITY))
+        service.configure(SessionConfig(transmitMode = TransmitMode.VOICE_ACTIVITY))
         talk(u)
         assertThat(clicks).isEqualTo(0)
     }

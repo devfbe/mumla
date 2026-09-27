@@ -15,14 +15,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-@file:Suppress("DEPRECATION") // se.lublin.humla.util.Constants is deprecated; TRANSMIT_* has no successor yet.
-
 package se.lublin.humla.audio
 
 import android.media.AudioManager
 import android.media.MediaRecorder
 import se.lublin.humla.audio.capture.SpeexPreprocessor
-import se.lublin.humla.util.Constants
 
 /**
  * Everything the audio pipeline is configured with. Immutable; [AudioController] rebuilds the
@@ -35,7 +32,7 @@ data class AudioConfig(
     val targetBitrate: Int = 40_000,
     val targetFramesPerPacket: Int = 2,
     val amplitudeBoost: Float = 1.0f,
-    val transmitMode: Int = Constants.TRANSMIT_VOICE_ACTIVITY,
+    val transmitMode: TransmitMode = TransmitMode.VOICE_ACTIVITY,
     val halfDuplexRequested: Boolean = false,
     val preprocessorEnabled: Boolean = false,
     /** Whether WebRTC's AEC3 runs; derived by `HumlaService` from the routed device category. */
@@ -57,7 +54,7 @@ data class AudioConfig(
     val androidAgc: Boolean = false,
 ) {
     /** Half duplex only applies to push-to-talk, as per this config's transmit mode. */
-    val halfDuplex: Boolean get() = halfDuplexRequested && transmitMode == Constants.TRANSMIT_PUSH_TO_TALK
+    val halfDuplex: Boolean get() = halfDuplexRequested && transmitMode == TransmitMode.PUSH_TO_TALK
 
     /**
      * The stream the playback track is opened on: [audioStream] while nothing is routed, the

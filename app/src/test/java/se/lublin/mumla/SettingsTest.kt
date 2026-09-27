@@ -11,6 +11,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.audio.TransmitMode
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsTest {
@@ -25,28 +26,28 @@ class SettingsTest {
     }
 
     @Test
-    fun `voice activity maps to humla transmit mode 0`() {
+    fun `voice activity maps to the voice activity transmit mode`() {
         prefs.edit().putString("audioInputMethod", "voiceActivity").commit()
-        assertThat(settings.humlaInputMethod).isEqualTo(0)
+        assertThat(settings.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
     }
 
     @Test
-    fun `push to talk maps to humla transmit mode 1`() {
+    fun `push to talk maps to the push to talk transmit mode`() {
         prefs.edit().putString("audioInputMethod", "ptt").commit()
-        assertThat(settings.humlaInputMethod).isEqualTo(1)
+        assertThat(settings.transmitMode).isEqualTo(TransmitMode.PUSH_TO_TALK)
     }
 
     @Test
-    fun `continuous maps to humla transmit mode 2`() {
+    fun `continuous maps to the continuous transmit mode`() {
         prefs.edit().putString("audioInputMethod", "continuous").commit()
-        assertThat(settings.humlaInputMethod).isEqualTo(2)
+        assertThat(settings.transmitMode).isEqualTo(TransmitMode.CONTINUOUS)
     }
 
     @Test
     fun `an unknown stored input method falls back to voice activity`() {
         prefs.edit().putString("audioInputMethod", "handset").commit()
         assertThat(settings.inputMethod).isEqualTo("voiceActivity")
-        assertThat(settings.humlaInputMethod).isEqualTo(0)
+        assertThat(settings.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
     }
 
     @Test

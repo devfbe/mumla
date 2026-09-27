@@ -26,6 +26,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.AudioController
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.net.HumlaTCPMessageType
@@ -34,7 +35,6 @@ import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.testutil.FAKE_BANDWIDTH
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.Constants
 import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
@@ -97,7 +97,7 @@ class HumlaServiceAudioTest {
     fun theFirstPipelineIsBuiltFromTheSettingsInForce() {
         val h = start()
         h.configure {
-            copy(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK, halfDuplex = true, inputQuality = 24_000)
+            copy(transmitMode = TransmitMode.PUSH_TO_TALK, halfDuplex = true, inputQuality = 24_000)
         }
 
         h.connectAndSynchronize()
@@ -105,7 +105,7 @@ class HumlaServiceAudioTest {
 
         val config = h.audioFactory.configs[0]
         assertThat(config.targetBitrate).isEqualTo(24_000)
-        assertThat(config.transmitMode).isEqualTo(Constants.TRANSMIT_PUSH_TO_TALK)
+        assertThat(config.transmitMode).isEqualTo(TransmitMode.PUSH_TO_TALK)
         assertThat(config.halfDuplex).isTrue()
         assertThat(config.halfDuplexRequested).isTrue()
         // By identity: the toggle the capture loop consults is the toggle a key press writes.
@@ -369,10 +369,10 @@ class HumlaServiceAudioTest {
     fun halfDuplexOnlyAppliesToPushToTalk() {
         val h = start()
 
-        h.configure { copy(halfDuplex = true, transmitMode = Constants.TRANSMIT_VOICE_ACTIVITY) }
+        h.configure { copy(halfDuplex = true, transmitMode = TransmitMode.VOICE_ACTIVITY) }
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
 
-        h.configure { copy(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK) }
+        h.configure { copy(transmitMode = TransmitMode.PUSH_TO_TALK) }
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isTrue()
 
         // Both directions: the flag is what the caller wrote, not a constant.

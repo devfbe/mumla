@@ -19,7 +19,6 @@ import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.testutil.SilentLogger
-import se.lublin.humla.util.Constants
 import se.lublin.humla.util.HumlaLogger
 
 /**
@@ -128,7 +127,7 @@ class DefaultAudioHandlerFactoryTest {
             targetBitrate = 24_000,
             targetFramesPerPacket = 4,
             amplitudeBoost = 2.5f,
-            transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+            transmitMode = TransmitMode.PUSH_TO_TALK,
             halfDuplexRequested = true,
             preprocessorEnabled = true,
             echoCancellation = true,
@@ -177,7 +176,7 @@ class DefaultAudioHandlerFactoryTest {
             booleansOf(
                 AudioConfig(
                     preprocessorEnabled = false,
-                    halfDuplexRequested = true, transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+                    halfDuplexRequested = true, transmitMode = TransmitMode.PUSH_TO_TALK,
                 ),
             ),
         ).isEqualTo(false to true)
@@ -223,7 +222,7 @@ class DefaultAudioHandlerFactoryTest {
     @Test
     fun halfDuplexReachesTheBuilderThroughTheRule() {
         val requestedButNotPushToTalk = AudioConfig(
-            halfDuplexRequested = true, transmitMode = Constants.TRANSMIT_VOICE_ACTIVITY,
+            halfDuplexRequested = true, transmitMode = TransmitMode.VOICE_ACTIVITY,
         )
         assertThat(built(requestedButNotPushToTalk)["setHalfDuplexEnabled"]).isEqualTo(false)
     }

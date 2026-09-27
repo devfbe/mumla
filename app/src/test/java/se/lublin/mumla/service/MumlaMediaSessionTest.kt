@@ -22,8 +22,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.IHumlaService
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.util.Constants
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.idleMainLooper
 
@@ -31,7 +31,7 @@ import se.lublin.mumla.testing.idleMainLooper
 class MumlaMediaSessionTest {
     private class FakeTarget : MediaKeyTarget {
         override var isConnected = true
-        override var transmitMode = Constants.TRANSMIT_PUSH_TO_TALK
+        override var transmitMode = TransmitMode.PUSH_TO_TALK
         // Backed by a private field on purpose: `override var isTalking` would generate a JVM
         // setTalking(Z)V that clashes with the interface's own setTalking.
         private var talking = false

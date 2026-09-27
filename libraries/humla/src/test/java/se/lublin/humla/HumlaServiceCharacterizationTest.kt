@@ -31,6 +31,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import se.lublin.humla.audio.AudioConfig
+import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
@@ -43,7 +44,6 @@ import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.onEvents
-import se.lublin.humla.util.Constants
 
 /**
  * Characterization of [HumlaService] without a live connection: lifecycle, configuration, and the
@@ -87,7 +87,7 @@ class HumlaServiceCharacterizationTest {
     fun startsWithVoiceActivityTransmitAndNoVoiceTarget() {
         val service = service()
 
-        assertThat(service.transmitMode).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
+        assertThat(service.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
         assertThat(service.voiceTargetId).isEqualTo(0.toByte())
         assertThat(service.voiceTargetMode).isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
         assertThat(service.whisperTarget).isNull()
@@ -180,7 +180,7 @@ class HumlaServiceCharacterizationTest {
                 speexNoiseSuppressDb = -40,
                 androidNoiseSuppressor = true,
                 androidAgc = true,
-                transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+                transmitMode = TransmitMode.PUSH_TO_TALK,
                 halfDuplex = true,
             )
         )
@@ -198,7 +198,7 @@ class HumlaServiceCharacterizationTest {
                 speexNoiseSuppressDb = -40,
                 androidNoiseSuppressor = true,
                 androidAgc = true,
-                transmitMode = Constants.TRANSMIT_PUSH_TO_TALK,
+                transmitMode = TransmitMode.PUSH_TO_TALK,
                 halfDuplexRequested = true,
             )
         )
@@ -207,13 +207,13 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.getAudioConfigForTest().echoCancellation).isFalse()
     }
 
-    /** The transmit mode picks one of the three input modes by identity; a fourth value is refused. */
+    /** The transmit mode picks one of the three input modes by identity. */
     @Test
     fun theTransmitModeSelectsTheInputModeByIdentity() {
         val expected = mapOf(
-            Constants.TRANSMIT_PUSH_TO_TALK to ToggleInputMode::class.java,
-            Constants.TRANSMIT_CONTINUOUS to ContinuousInputMode::class.java,
-            Constants.TRANSMIT_VOICE_ACTIVITY to ActivityInputMode::class.java,
+            TransmitMode.PUSH_TO_TALK to ToggleInputMode::class.java,
+            TransmitMode.CONTINUOUS to ContinuousInputMode::class.java,
+            TransmitMode.VOICE_ACTIVITY to ActivityInputMode::class.java,
         )
 
         for ((mode, type) in expected) {
@@ -225,21 +225,11 @@ class HumlaServiceCharacterizationTest {
         }
     }
 
-    @Test
-    fun anUnknownTransmitModeIsRefusedAndChangesNothing() {
-        val service = service()
-
-        assertThrows(IllegalArgumentException::class.java) {
-            service.configure(SessionConfig(transmitMode = 99, server = server))
-        }
-        assertThat(service.sessionConfig).isEqualTo(SessionConfig())
-    }
-
     /** The chosen input mode is the instance `isTalking()` reads, not a fresh copy. */
     @Test
     fun thePushToTalkModeHandedToTheAudioPipelineIsTheOneIsTalkingReads() {
         val service = service()
-        service.configure(SessionConfig(transmitMode = Constants.TRANSMIT_PUSH_TO_TALK))
+        service.configure(SessionConfig(transmitMode = TransmitMode.PUSH_TO_TALK))
 
         service.setTalkingState(true)
 
@@ -441,7 +431,7 @@ class HumlaServiceCharacterizationTest {
     fun theSessionCallsThatDoNotDependOnAConnectionStillAnswer() {
         val service = service()
 
-        assertThat(service.transmitMode).isEqualTo(Constants.TRANSMIT_VOICE_ACTIVITY)
+        assertThat(service.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
         assertThat(service.isTalking).isFalse()
         assertThat(service.voiceTargetId).isEqualTo(0.toByte())
         assertThat(service.voiceTargetMode)

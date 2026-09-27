@@ -61,7 +61,7 @@ object SessionSettings {
     fun withAudioSettings(base: SessionConfig, settings: Settings): SessionConfig {
         val effects = settings.androidAudioEffects
         return base.copy(
-            transmitMode = settings.humlaInputMethod,
+            transmitMode = settings.transmitMode,
             vadConfig = settings.vadConfig,
             amplitudeBoost = settings.amplitudeBoostMultiplier,
             inputSampleRate = settings.inputSampleRate,
