@@ -17,6 +17,10 @@
 package se.lublin.humla
 
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -187,6 +191,28 @@ class HumlaSessionActionsTest {
         h.session.actions.stopWhispering()
 
         assertThat(h.session.actions.whisperTarget).isNull()
+    }
+
+    /**
+     * A collector that reads the target as the change is published (the app's view model runs on
+     * Main.immediate, so it does exactly that) sees the target gone, not the one just stopped.
+     */
+    @Test
+    fun theTargetIsGoneWhenItsStopIsPublished() {
+        connected()
+        h.session.actions.whisperTo(WhisperTargetChannel(ChannelState(0, "Root"), false, true, null))
+        val seen = mutableListOf<String?>()
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        scope.launch {
+            h.session.events.collect {
+                if (it is HumlaEvent.VoiceTargetChanged) seen += h.session.actions.whisperTarget?.name
+            }
+        }
+
+        h.session.actions.stopWhispering()
+        scope.cancel()
+
+        assertThat(seen).containsExactly(null)
     }
 
     @Test
