@@ -1,17 +1,13 @@
 package se.lublin.humla.net
 
-import android.os.Handler
-import android.os.HandlerThread
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.testutil.awaitUntil
 import java.io.IOException
 import java.net.DatagramPacket
@@ -19,18 +15,19 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
-@RunWith(RobolectricTestRunner::class)
 class HumlaUDPTest {
     private val key = ByteArray(16) { it.toByte() }
     private val clientNonce = ByteArray(16) { (0x10 + it).toByte() }
     private val serverNonce = ByteArray(16) { (0x20 + it).toByte() }
-    private val callbackThread = HandlerThread("test-udp-callbacks").apply { start() }
+    private val callbackDispatcher =
+        Executors.newSingleThreadExecutor { Thread(it, "test-udp-callbacks") }.asCoroutineDispatcher()
 
-    /** Like the connection's scope, dispatching the callbacks on [callbackThread]. */
-    private val scope = CoroutineScope(SupervisorJob() + Handler(callbackThread.looper).asCoroutineDispatcher())
+    /** Like the connection's scope, dispatching the callbacks on [callbackDispatcher]. */
+    private val scope = CoroutineScope(SupervisorJob() + callbackDispatcher)
     private val server = DatagramSocket(0, InetAddress.getLoopbackAddress()).apply { soTimeout = 200 }
     private val serverCrypt = CryptState().apply { setKeys(key, serverNonce, clientNonce) }
     private val listener = RecordingListener()
@@ -80,7 +77,7 @@ class HumlaUDPTest {
         }
         server.close()
         scope.cancel()
-        callbackThread.quitSafely()
+        callbackDispatcher.close()
     }
 
     @Test
@@ -95,7 +92,7 @@ class HumlaUDPTest {
     }
 
     @Test
-    fun receivedDatagramIsDecryptedAndDeliveredOnTheCallbackHandler() {
+    fun receivedDatagramIsDecryptedAndDeliveredOnTheCallbackThread() {
         val client = startClient()
         val (hello, _) = sendUntilReceived(client, byteArrayOf(0x20)) // lets the server learn the address
         val payload = byteArrayOf(0x20, 9, 8, 7)
