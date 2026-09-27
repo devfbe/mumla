@@ -48,6 +48,7 @@ fun channelRow(
     lock: ChannelRow.Lock = ChannelRow.Lock.NONE,
 ) = ChannelRow.Channel(id, name, depth, userCount, expanded, expandable, isOwn, isLinked, lock)
 
+@Suppress("LongParameterList") // One per field, all defaulted.
 fun userRow(
     session: Int,
     depth: Int = 1,
