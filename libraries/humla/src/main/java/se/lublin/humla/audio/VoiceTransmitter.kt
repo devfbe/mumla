@@ -61,6 +61,9 @@ internal class VoiceTransmitter(
     private var encoder: IEncoder? = null
     private var frameCounter = 0
 
+    /** An encoder that keeps failing would otherwise log from the capture loop every frame. */
+    private var encodeFailureLogged = false
+
     /** The last observed talking state. False if muted, or the input mode is not active. */
     private var talking = false
 
@@ -79,6 +82,7 @@ internal class VoiceTransmitter(
             this.codec = codec
             encoder?.close()
             encoder = null
+            encodeFailureLogged = false
             if (codec != null) encoder = create(codec) else HumlaLog.w(TAG, "No codec, input disabled.")
         }
     }
@@ -121,7 +125,10 @@ internal class VoiceTransmitter(
                     encoder.terminate()
                 }
             } catch (e: NativeAudioException) {
-                HumlaLog.e(TAG, "Encoding failed", e)
+                if (!encodeFailureLogged) {
+                    encodeFailureLogged = true
+                    HumlaLog.e(TAG, "Encoding failed", e)
+                }
             }
             if (encoder.isReady) send(encoder)
         }

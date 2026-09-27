@@ -185,7 +185,6 @@ internal class AudioOutput(
                 farEnd?.push(pcm, bufferSize)
                 track.write(pcm, 0, bufferSize)
             } else {
-                HumlaLog.v(TAG, "Pausing thread.")
                 synchronized(inactiveLock) {
                     track.flush()
                     track.pause()
@@ -218,7 +217,6 @@ internal class AudioOutput(
                     woken = false
                     track.play()
                 }
-                HumlaLog.v(TAG, "Resuming thread.")
             }
         }
 

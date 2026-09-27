@@ -29,6 +29,9 @@ internal class PlaybackMix(private val mixer: IAudioMixer<FloatArray, ShortArray
     private val speeches = ArrayList<AudioOutputSpeech>()
     private val sources = ArrayList<IAudioMixerSource<FloatArray>>()
 
+    /** A decoder that keeps failing would otherwise log from the playback loop every frame. */
+    private var decodeFailureLogged = false
+
     val size: Int get() = speeches.size
 
     fun add(speech: AudioOutputSpeech) {
@@ -49,7 +52,10 @@ internal class PlaybackMix(private val mixer: IAudioMixer<FloatArray, ShortArray
                 speech.decode()
             } catch (@Suppress("TooGenericExceptionCaught") e: RuntimeException) {
                 // Skip this talker for one mix rather than stop the playback thread.
-                HumlaLog.e(TAG, "Decoding failed for session ${speech.session}", e)
+                if (!decodeFailureLogged) {
+                    decodeFailureLogged = true
+                    HumlaLog.e(TAG, "Decoding failed for session ${speech.session}", e)
+                }
                 continue
             }
             if (alive) {
