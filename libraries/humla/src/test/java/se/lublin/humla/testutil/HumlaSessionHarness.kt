@@ -136,12 +136,14 @@ internal class HumlaSessionHarness(
 
     /**
      * Feeds the root channel, the session user and ServerSync, i.e. exactly what a server sends
-     * before the session is usable, and drains the main looper.
+     * before the session is usable, and drains the main looper until the session has started its
+     * audio. Connected alone is not enough: the connection reports ServerSync before the model has
+     * read it, so the route is engaged only once the model's snapshot reaches the main looper.
      */
     fun synchronize(tcp: FakeTcpTransport, session: Int = 1) {
         feedSync(tcp, session)
-        drainUntil("server sync delivered") {
-            this.session.state.value == SessionState.Connected
+        drainUntil("server sync delivered and audio started") {
+            this.session.state.value == SessionState.Connected && this.session.audioSession.router.isEngaged
         }
     }
 
@@ -179,7 +181,12 @@ internal class HumlaSessionHarness(
         return tcp
     }
 
-    /** Fails connection [index] the way a dropped socket does, including the late close report. */
+    /**
+     * Fails connection [index] the way a dropped socket does, including the late close report, and
+     * waits for that report to have moved the session on. The report is posted from the protocol
+     * thread after the connection is already closed, and a retry that never synchronized is in
+     * Reconnecting, not Connected, so only the state the report leads to shows it arrived.
+     */
     fun failConnection(index: Int, error: HumlaException) {
         val connection = session.connection
         transports.tcps[index].simulateFailure(error)
@@ -188,7 +195,8 @@ internal class HumlaSessionHarness(
         }
         transports.tcps[index].simulateSocketClosed()
         drainUntil("disconnect report delivered") {
-            session.state.value != SessionState.Connected
+            val state = session.state.value
+            state is SessionState.ConnectionLost || state is SessionState.Disconnected
         }
     }
 }
