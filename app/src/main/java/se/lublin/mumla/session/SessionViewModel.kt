@@ -34,7 +34,6 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.mumla.service.toggleSelfDeafen
 import se.lublin.mumla.service.toggleSelfMute
 
@@ -46,6 +45,9 @@ data class SelfState(
     val cannotTalk: Boolean,
     val isTalking: Boolean,
 )
+
+/** A whisper target's name, and whether it is the one currently receiving voice. */
+private data class WhisperSnapshot(val targetName: String?, val active: Boolean)
 
 /**
  * The session as the channel screens act on it: our own state, the whisper target, and the
@@ -82,20 +84,30 @@ class SessionViewModel(private val sessions: SessionManager) : ViewModel() {
         }
     }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    /** The name of the whisper target while whispering in a synchronized session; null otherwise. */
-    val whisperTarget: StateFlow<String?> = sessions.session.flatMapLatest { session ->
+    /** The registered whisper target and whether it is active, while synchronized; null otherwise. */
+    private val whisperSnapshot: StateFlow<WhisperSnapshot> = sessions.session.flatMapLatest { session ->
         if (session == null) {
-            flowOf(null)
+            flowOf(WhisperSnapshot(null, false))
         } else {
             val targetChanges = session.events.filterIsInstance<HumlaEvent.VoiceTargetChanged>()
                 .map { }.onStart { emit(Unit) }
             combine(session.state, targetChanges) { state, _ ->
-                session.actions.whisperTarget?.name.takeIf {
-                    state == SessionState.Connected && session.actions.voiceTargetMode == VoiceTargetMode.WHISPER
+                if (state != SessionState.Connected) {
+                    WhisperSnapshot(null, false)
+                } else {
+                    WhisperSnapshot(session.actions.whisperTarget?.name, session.actions.isWhisperActive)
                 }
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, WhisperSnapshot(null, false))
+
+    /** The name of the registered whisper target, armed or active; null while none is registered. */
+    val whisperTarget: StateFlow<String?> =
+        whisperSnapshot.map { it.targetName }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Whether [whisperTarget] is receiving voice right now, rather than only armed. */
+    val isWhisperActive: StateFlow<Boolean> =
+        whisperSnapshot.map { it.active }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val connected: IHumlaSession? get() = sessions.connected
 
@@ -117,5 +129,10 @@ class SessionViewModel(private val sessions: SessionManager) : ViewModel() {
 
     fun stopWhispering() {
         connected?.actions?.stopWhispering()
+    }
+
+    /** A no-op without a whisper target armed. */
+    fun setWhisperActive(active: Boolean) {
+        connected?.actions?.setWhisperActive(active)
     }
 }

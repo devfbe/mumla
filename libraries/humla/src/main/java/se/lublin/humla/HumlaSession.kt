@@ -185,6 +185,9 @@ public class HumlaSession internal constructor(
     private var currentVoiceTargetId: Byte = 0
     private val whisperTargetList = WhisperTargetList()
 
+    /** The registered whisper target's slot, armed or active; 0 while none is registered. */
+    private var armedWhisperId: Byte = 0
+
     /** Last warning logged, so a refusal repeated per reconnect attempt is logged once. */
     @Volatile
     private var lastWarning: String? = null
@@ -396,6 +399,7 @@ public class HumlaSession internal constructor(
         }
         mutableTalkStates.clear()
         currentVoiceTargetId = 0
+        armedWhisperId = 0
         whisperTargetList.clear()
         if (next is SessionState.Disconnected) {
             // A late, reason-free report after cancelReconnect keeps the cancelled session's reason
@@ -593,24 +597,35 @@ public class HumlaSession internal constructor(
         override val voiceTargetMode: VoiceTargetMode get() = VoiceTargetMode.fromId(currentVoiceTargetId)
 
         override val whisperTarget: WhisperTarget?
-            get() = if (voiceTargetMode == VoiceTargetMode.WHISPER) whisperTargetList[currentVoiceTargetId] else null
+            get() = armedWhisperId.takeIf { it > 0 }?.let { whisperTargetList[it] }
 
-        override fun whisperTo(target: WhisperTarget): Boolean {
+        override val isWhisperActive: Boolean
+            get() = armedWhisperId > 0 && currentVoiceTargetId == armedWhisperId
+
+        override fun whisperTo(target: WhisperTarget, activate: Boolean): Boolean {
             val commands = synced() ?: return false
-            if (voiceTargetMode == VoiceTargetMode.WHISPER) whisperTargetList.free(currentVoiceTargetId)
+            if (armedWhisperId > 0) whisperTargetList.free(armedWhisperId)
             val id = whisperTargetList.append(target)
             if (id >= 0) {
                 commands.registerVoiceTarget(id.toInt(), target.createTarget())
-                voiceTargetId = id
+                armedWhisperId = id
+                voiceTargetId = if (activate) id else 0
             }
             return id >= 0
         }
 
+        override fun setWhisperActive(active: Boolean) {
+            val id = armedWhisperId
+            if (id <= 0) return
+            voiceTargetId = if (active) id else 0
+        }
+
         override fun stopWhispering() {
-            if (voiceTargetMode != VoiceTargetMode.WHISPER) return
-            val target = currentVoiceTargetId
+            val id = armedWhisperId
+            if (id <= 0) return
             voiceTargetId = 0
-            whisperTargetList.free(target)
+            whisperTargetList.free(id)
+            armedWhisperId = 0
         }
     }
 

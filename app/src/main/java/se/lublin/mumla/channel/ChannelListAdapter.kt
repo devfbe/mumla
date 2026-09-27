@@ -222,6 +222,7 @@ class ChannelListAdapter(
         private val holder: LinearLayout = binding.userRowTitle
         private val talkHighlight: ImageView = binding.userRowTalkHighlight
         private val name: TextView = binding.userRowName
+        private val volume: TextView = binding.userRowVolume
         private val more: ImageView = binding.userRowMore
 
         init {
@@ -239,8 +240,16 @@ class ChannelListAdapter(
         fun bind(row: ChannelRow.User) {
             name.text = row.name
             name.setTypeface(null, if (row.isSelf) Typeface.BOLD else Typeface.NORMAL)
+            bindVolume(row.localVolumePercent)
             bindIcon(row)
             indent(holder, row.depth)
+        }
+
+        private fun bindVolume(percent: Int?) {
+            volume.visibility = if (percent != null) View.VISIBLE else View.GONE
+            percent ?: return
+            volume.text = context.getString(R.string.local_volume_percent, percent)
+            volume.contentDescription = context.getString(R.string.a11y_local_volume, percent)
         }
 
         /** The state icon, and for accessibility services the row's state in words. */

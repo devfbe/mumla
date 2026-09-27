@@ -18,13 +18,4 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
       xmlns:mumla="http://schemas.android.com/apk/res-auto">
     <item android:id="@+id/menu_search" android:title="@string/search" mumla:actionViewClass="androidx.appcompat.widget.SearchView" mumla:showAsAction="ifRoom|collapseActionView" android:icon="@drawable/ic_action_search"></item>
-    <item android:id="@+id/menu_noise" android:title="@string/noiseSuppression" mumla:showAsAction="never">
-        <menu>
-            <group android:checkableBehavior="single">
-                <item android:id="@+id/menu_noise_none" android:title="@string/noiseSuppressionNone"/>
-                <item android:id="@+id/menu_noise_speex" android:title="Speex"/>
-                <item android:id="@+id/menu_noise_rnnoise" android:title="RNNoise"/>
-            </group>
-        </menu>
-    </item>
 </menu>

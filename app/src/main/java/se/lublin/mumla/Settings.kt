@@ -116,6 +116,13 @@ class Settings private constructor(private val context: Context) {
 
     val pttButtonHeight: Int by pref(PTT_BUTTON_HEIGHT)
 
+    /** Whether the channel screen's control bar sits at the bottom, around push-to-talk, or under the tabs. */
+    var isControlBarAtBottom: Boolean
+        get() = preferences.read(CONTROL_BAR_POSITION) != ARRAY_CONTROL_BAR_TOP
+        set(value) = preferences.edit {
+            write(CONTROL_BAR_POSITION, if (value) ARRAY_CONTROL_BAR_BOTTOM else ARRAY_CONTROL_BAR_TOP)
+        }
+
     /** Database id of the default certificate, or negative if none is set. */
     var defaultCertificateId: Long
         get() = preferences.read(CERT_ID)
@@ -130,6 +137,9 @@ class Settings private constructor(private val context: Context) {
     val defaultUsername: String by pref(DEFAULT_USERNAME)
 
     val isPushToTalkToggle: Boolean by pref(PTT_TOGGLE)
+
+    /** Whether picking a whisper target only arms it, transmitting only while the hold button is held. */
+    val isHoldToWhisper: Boolean by pref(HOLD_TO_WHISPER)
 
     /** Whether other apps may start and stop transmission through the talk broadcast. */
     val isExternalPushToTalkAllowed: Boolean by pref(ALLOW_EXTERNAL_PTT)
@@ -332,6 +342,8 @@ class Settings private constructor(private val context: Context) {
 
         val PTT_TOGGLE = Pref("togglePtt", false)
 
+        val HOLD_TO_WHISPER = Pref("holdToWhisper", false)
+
         val ALLOW_EXTERNAL_PTT = Pref("allow_external_ptt", false)
 
         val INPUT_RATE = Pref("input_quality", "48000")
@@ -353,6 +365,10 @@ class Settings private constructor(private val context: Context) {
         val LANGUAGE = Pref("language", "system")
 
         val PTT_BUTTON_HEIGHT = Pref("pttButtonHeight", 150)
+
+        val CONTROL_BAR_POSITION = Pref("controlBarPosition", ARRAY_CONTROL_BAR_BOTTOM)
+        const val ARRAY_CONTROL_BAR_TOP = "top"
+        const val ARRAY_CONTROL_BAR_BOTTOM = "bottom"
 
         /** Database id of the default certificate; see [se.lublin.mumla.db.DatabaseCertificate]. */
         val CERT_ID = Pref("certificateId", NO_CERTIFICATE)

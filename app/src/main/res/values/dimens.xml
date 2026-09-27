@@ -24,6 +24,11 @@
     <dimen name="target_panel_text_size">13sp</dimen>
     <!-- Tablet split (layout-sw600dp): share of the width the channel list takes next to the chat. -->
     <item name="channel_list_weight" format="float" type="dimen">1</item>
+    <!-- Channel screen control bar: its sides (two 48dp buttons with a gap, and an 8dp margin to
+         push-to-talk) are equally wide, so push-to-talk is centred; it is never lower than this. -->
+    <dimen name="control_bar_side_width">120dp</dimen>
+    <dimen name="control_bar_ptt_min_height">56dp</dimen>
+    <dimen name="control_bar_ptt_corner_radius">28dp</dimen>
 
     <!-- Chat -->
     <dimen name="chat_thumbnail_max">240dp</dimen>

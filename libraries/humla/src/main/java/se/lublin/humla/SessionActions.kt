@@ -91,14 +91,22 @@ public interface SessionActions {
 
     public val voiceTargetMode: VoiceTargetMode
 
-    /** The whisper target in use, or null when not whispering. */
+    /** The registered whisper target, armed or active; null while none is registered. */
     public val whisperTarget: WhisperTarget?
 
+    /** Whether [whisperTarget] is the active voice target right now, rather than only armed. */
+    public val isWhisperActive: Boolean
+
     /**
-     * Whispers to [target] from now on, in place of a whisper target in use.
+     * Registers [target] in place of a whisper target already registered, and with [activate]
+     * (the default) makes it the active voice target too; with it false, [target] is only armed,
+     * ready for [setWhisperActive] to switch to without registering it again.
      * @return false if the server's 30 voice target slots are taken.
      */
-    public fun whisperTo(target: WhisperTarget): Boolean
+    public fun whisperTo(target: WhisperTarget, activate: Boolean = true): Boolean
+
+    /** Switches transmission to [whisperTarget] or back to normal speech; a no-op without one registered. */
+    public fun setWhisperActive(active: Boolean)
 
     /** Back to normal speech; the whisper target's slot is freed. */
     public fun stopWhispering()

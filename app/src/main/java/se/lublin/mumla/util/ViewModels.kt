@@ -32,3 +32,4 @@ inline fun <reified VM : ViewModel> Fragment.appViewModels(crossinline create: (
 /** The activity's view model, shared by its fragments, made from the application on first use. */
 inline fun <reified VM : ViewModel> Fragment.activityAppViewModels(crossinline create: (Application) -> VM): Lazy<VM> =
     activityViewModels { viewModelFactory { initializer { create(requireActivity().application) } } }
+

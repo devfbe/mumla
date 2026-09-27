@@ -133,6 +133,7 @@
     <string name="shortTtsMessagesSum">Read only the domain names of links</string>
     <string name="togglePtt">Sticky Push-to-talk button</string>
     <string name="togglePttSum">Tap to start and stop transmitting instead of holding</string>
+    <string name="holdToWhisperSum">Whisper only while holding the whisper button</string>
     <string name="autoReconnect">Auto-reconnect</string>
     <string name="autoReconnectSum">Reconnect when the connection is lost</string>
     <string name="useTor">Connect via Tor</string>
@@ -141,6 +142,9 @@
     <string name="inputQualitySum">Preferred bitrate in bits per second</string>
     <string name="pttButtonHeight">Push-to-talk button height</string>
     <string name="pttButtonHeightSum">Height of the push-to-talk button</string>
+    <string name="controlBarPosition">Control bar position</string>
+    <string name="controlBarPositionTop">Top</string>
+    <string name="controlBarPositionBottom">Bottom</string>
     <string name="pressKey">Press a physical key to use it for push-to-talk.</string>
     <string name="pressKeyInfo">The app must be open to use this (due to Android restrictions).</string>
     <string name="loadImagesSum">Downloads and shows pictures in chat.</string>

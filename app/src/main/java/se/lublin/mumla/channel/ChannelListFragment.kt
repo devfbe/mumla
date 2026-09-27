@@ -42,7 +42,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.ChannelState
 import se.lublin.mumla.R
-import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.comment.ChannelDescriptionFragment
 import se.lublin.mumla.channel.comment.UserCommentFragment
 import se.lublin.mumla.databinding.FragmentChannelListBinding
@@ -59,7 +58,7 @@ class ChannelListFragment :
     MenuProvider,
     ChannelListAdapter.Listener,
     ChannelMenu.Actions,
-    UserMenu.Actions {
+    UserActionsSheet.Actions {
 
     private val tree by appViewModels { ChannelTreeViewModel.create(it, requireArguments().getBoolean(ARG_PINNED)) }
     private val chat by parentChatViewModel()
@@ -67,15 +66,9 @@ class ChannelListFragment :
     private lateinit var channelView: RecyclerView
     private var adapter: ChannelListAdapter? = null
     private var actionMode: ActionMode? = null
-    private lateinit var settings: Settings
 
     /** The channel we were in when the list last showed it; the list follows us when it changes. */
     private var shownOwnChannel: Int? = null
-
-    override fun onAttach(context: Context) {
-        super.onAttach(context)
-        settings = Settings.getInstance(context)
-    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val binding = FragmentChannelListBinding.inflate(inflater, container, false)
@@ -122,16 +115,6 @@ class ChannelListFragment :
         if (position >= 0) channelView.scrollToPosition(position)
     }
 
-    override fun onPrepareMenu(menu: Menu) {
-        // Writing the preference reconfigures the session's audio live.
-        when (settings.noiseSuppressionMethod) {
-            "speex" -> menu.findItem(R.id.menu_noise_speex)
-            "none" -> menu.findItem(R.id.menu_noise_none)
-            else -> menu.findItem(R.id.menu_noise_rnnoise)
-        }?.isChecked = true
-
-    }
-
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
         menuInflater.inflate(R.menu.fragment_channel_list, menu)
 
@@ -161,14 +144,7 @@ class ChannelListFragment :
         })
     }
 
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when (menuItem.itemId) {
-        in NOISE_METHODS -> {
-            settings.noiseSuppressionMethod = NOISE_METHODS.getValue(menuItem.itemId)
-            menuItem.isChecked = true
-            true
-        }
-        else -> false
-    }
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean = false
 
     // The rows
 
@@ -186,7 +162,7 @@ class ChannelListFragment :
         ChannelMenu(requireContext(), row.channel, { tree.channelMenuState(row.channel) }, this).showPopup(anchor)
 
     override fun onUserMore(anchor: View, row: ChannelRow.User) =
-        UserMenu(requireContext(), row.session, { tree.userMenuState(row.session) }, this).showPopup(anchor)
+        UserActionsSheet.newInstance(row.session).show(childFragmentManager, "UserActions")
 
     override fun onStopListening(row: ChannelRow.Listener) = tree.setListening(row.channel, false)
 
@@ -234,6 +210,8 @@ class ChannelListFragment :
 
     override fun unlinkAll(channel: Int) = tree.unlinkAll(channel)
 
+    override fun channelName(channel: Int): String? = tree.channelName(channel)
+
     override fun shout(channel: Int, includeLinked: Boolean, includeSubchannels: Boolean) {
         if (!tree.shout(channel, includeLinked, includeSubchannels)) {
             showSnackbar(R.string.shout_failed)
@@ -258,17 +236,21 @@ class ChannelListFragment :
 
     override fun register(session: Int) = tree.register(session)
 
+    override fun whisperTo(session: Int) {
+        if (!tree.whisperToUser(session)) showSnackbar(R.string.shout_failed)
+    }
+
     override fun setLocalMuted(session: Int, muted: Boolean) = tree.setLocalMuted(session, muted)
 
     override fun setLocalIgnored(session: Int, ignored: Boolean) = tree.setLocalIgnored(session, ignored)
 
-    override fun showLocalVolume(session: Int, name: String?) {
-        showLocalVolumeDialog(
-            requireContext(), name, tree.localVolume(session),
-            preview = { tree.previewLocalVolume(session, it) },
-            keep = { tree.setLocalVolume(session, it) },
-        )
-    }
+    override fun previewLocalVolume(session: Int, volume: Float) = tree.previewLocalVolume(session, volume)
+
+    override fun setLocalVolume(session: Int, volume: Float) = tree.setLocalVolume(session, volume)
+
+    override fun userMenuState(session: Int): UserMenuState? = tree.userMenuState(session)
+
+    override fun userMenuStates(session: Int): Flow<UserMenuState?> = tree.userMenuStates(session)
 
     override fun showInfo(session: Int, name: String?) {
         showUserInfoDialog(requireContext(), name, tree.userStats(session))
@@ -279,12 +261,5 @@ class ChannelListFragment :
 
         /** The whole channel tree, or with [pinned] only the pinned channels. */
         fun newInstance(pinned: Boolean) = ChannelListFragment().apply { arguments = bundleOf(ARG_PINNED to pinned) }
-
-        /** The noise suppression items and the methods they pick. */
-        private val NOISE_METHODS = mapOf(
-            R.id.menu_noise_none to "none",
-            R.id.menu_noise_speex to "speex",
-            R.id.menu_noise_rnnoise to "rnnoise",
-        )
     }
 }

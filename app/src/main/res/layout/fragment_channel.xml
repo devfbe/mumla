@@ -30,64 +30,167 @@
         app:tabMode="fixed"
         app:tabTextAppearance="@style/TextAppearance.Mumla.ChannelTab" />
 
+    <LinearLayout
+        android:id="@+id/control_bar_top"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurfaceContainer"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp"
+        android:visibility="gone">
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/channel_view_pager"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <FrameLayout
+    <LinearLayout
         android:id="@+id/target_panel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:minHeight="48dp"
-        android:background="?attr/colorSecondaryContainer">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="?attr/colorErrorContainer"
+        android:paddingStart="12dp"
+        android:paddingEnd="4dp">
+
+        <ImageView
+            android:id="@+id/target_panel_icon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_marginEnd="12dp"
+            android:importantForAccessibility="no"
+            app:srcCompat="@drawable/ic_action_microphone"
+            app:tint="?attr/colorOnErrorContainer"/>
 
         <TextView
             android:id="@+id/target_panel_warning"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            tools:text="Shouting to Channel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            tools:text="Whispering to Channel"
             android:textSize="@dimen/target_panel_text_size"
-            android:textColor="?attr/colorOnSecondaryContainer"
+            android:textColor="?attr/colorOnErrorContainer"
             android:singleLine="true"
+            android:textStyle="bold"
             android:gravity="start|center_vertical"
-            android:textStyle="italic"
-            android:padding="8dp"/>
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"/>
 
-        <ImageView
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/target_panel_hold"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:minHeight="48dp"
+            android:visibility="gone"
+            tools:visibility="visible"
+            android:text="@string/hold_to_whisper"
+            android:textColor="?attr/colorOnErrorContainer"
+            app:strokeColor="?attr/colorOnErrorContainer"/>
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/target_panel_cancel"
-            android:layout_width="48dp"
-            android:padding="12dp"
-            android:contentDescription="@string/a11y_stop_shouting"
-            android:layout_height="match_parent"
-            app:srcCompat="@drawable/ic_action_delete_dark"
-            app:tint="?attr/colorOnSecondaryContainer"
-            android:layout_gravity="center_vertical|end"
-            android:background="?attr/selectableItemBackgroundBorderless"/>
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:text="@string/a11y_stop_shouting"
+            android:textColor="?attr/colorOnErrorContainer"
+            app:icon="@drawable/ic_action_delete_dark"
+            app:iconTint="?attr/colorOnErrorContainer"
+            app:strokeColor="?attr/colorOnErrorContainer"/>
 
-    </FrameLayout>
+    </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/pushtotalk_view"
+        android:id="@+id/control_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
-        android:orientation="vertical">
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/pushtotalk"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:text="@string/ptt"
-            android:textColor="@color/ptt_text"
-            android:textAllCaps="true"
-            android:textStyle="bold"
-            android:textSize="14sp"
-            app:backgroundTint="@color/ptt_background"
-            app:cornerRadius="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp" />
+        <LinearLayout
+            android:id="@+id/control_bar_start"
+            android:layout_width="@dimen/control_bar_side_width"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:paddingHorizontal="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/control_mute"
+                style="@style/ControlBarButton"
+                android:contentDescription="@string/mute"
+                app:icon="@drawable/ic_action_microphone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/control_deafen"
+                style="@style/ControlBarButton"
+                android:layout_marginStart="8dp"
+                android:contentDescription="@string/deafen"
+                app:icon="@drawable/ic_action_audio" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/control_bar_center"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/pushtotalk_view"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <Button
+                    android:id="@+id/pushtotalk"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:text="@string/ptt"
+                    android:textColor="@color/ptt_text"
+                    android:textAllCaps="true"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    app:backgroundTint="@color/ptt_background"
+                    app:cornerRadius="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/control_talk_state"
+                style="@style/ControlBarTalkState"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/control_bar_end"
+            android:layout_width="@dimen/control_bar_side_width"
+            android:layout_height="wrap_content"
+            android:gravity="end|center_vertical"
+            android:paddingHorizontal="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/control_audio"
+                style="@style/ControlBarButton"
+                android:contentDescription="@string/audio_panel"
+                android:tooltipText="@string/audio_panel"
+                app:icon="@drawable/ic_action_audio_device" />
+        </LinearLayout>
     </LinearLayout>
 
 </LinearLayout>

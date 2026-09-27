@@ -16,13 +16,9 @@
   ~ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   -->
 
-<!-- Audio device chooser, filled by AudioDeviceMenu. Ordered after the screens' own items. -->
-<menu xmlns:android="http://schemas.android.com/apk/res/android"
-      xmlns:mumla="http://schemas.android.com/apk/res-auto">
-    <item android:id="@+id/menu_audio_device" android:title="@string/audio_device" android:icon="@drawable/ic_action_audio_device" mumla:showAsAction="ifRoom" android:orderInCategory="50">
-        <menu>
-            <group android:id="@+id/menu_audio_device_group" android:checkableBehavior="single"/>
-            <item android:id="@+id/menu_audio_echo" android:title="@string/echo_cancellation" android:checkable="true" android:orderInCategory="1000"/>
-        </menu>
-    </item>
-</menu>
+<!-- One device in the audio panel's chooser. -->
+<com.google.android.material.radiobutton.MaterialRadioButton xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="48dp"
+    android:textAppearance="?attr/textAppearanceBodyLarge" />

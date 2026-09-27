@@ -75,36 +75,8 @@ class InputLevelMeterPreference(context: Context, attrs: AttributeSet?) : Prefer
     private fun apply() {
         val view = meter ?: return
         val current = reading
-        if (current == null) {
-            view.level = 0f
-            view.voice = false
-            view.holding = false
-            view.floorMark = null
-            view.speechMark = null
-            caption?.text = message.orEmpty()
-            return
-        }
-        view.level = MeterScale.position(current.levelDbfs)
-        view.voice = current.voice
-        view.holding = current.holding
-        view.floorMark = current.floorDbfs?.let { MeterScale.position(it) }
-        view.speechMark = current.speechDbfs?.let { MeterScale.position(it) }
-        // No level threshold in this mode: zero both so the whole range paints as "speech".
-        val threshold = current.thresholdDbfs
-        view.startThreshold = threshold?.let { MeterScale.position(it) } ?: 0f
-        view.stopThreshold = threshold?.let { MeterScale.position(it - hysteresisDb) } ?: 0f
-        caption?.text = captionFor(current)
-    }
-
-    private fun captionFor(reading: MeterReading): CharSequence {
-        if (reading.tooClose) return context.getString(R.string.inputLevelMeterTooClose)
-        return context.getString(
-            R.string.inputLevelMeterReading,
-            MeterScaleText.db(reading.levelDbfs),
-            MeterScaleText.dbOrDash(reading.floorDbfs),
-            MeterScaleText.dbOrDash(reading.thresholdDbfs),
-            MeterScaleText.dbOrDash(reading.speechDbfs),
-        )
+        view.show(current, hysteresisDb)
+        caption?.text = if (current == null) message.orEmpty() else MeterScaleText.caption(context, current)
     }
 }
 
@@ -115,4 +87,16 @@ object MeterScaleText {
     fun db(dbfs: Float): String = "${dbfs.roundToInt()}"
 
     fun dbOrDash(dbfs: Float?): String = dbfs?.let { db(it) } ?: NONE
+
+    /** The line under the bar: the levels, or the warning that the voice is too close to the room. */
+    fun caption(context: Context, reading: MeterReading): String {
+        if (reading.tooClose) return context.getString(R.string.inputLevelMeterTooClose)
+        return context.getString(
+            R.string.inputLevelMeterReading,
+            db(reading.levelDbfs),
+            dbOrDash(reading.floorDbfs),
+            dbOrDash(reading.thresholdDbfs),
+            dbOrDash(reading.speechDbfs),
+        )
+    }
 }

@@ -18,8 +18,6 @@
 package se.lublin.mumla.channel
 
 import android.annotation.SuppressLint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffColorFilter
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
@@ -33,6 +31,8 @@ import androidx.core.os.bundleOf
 import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
+import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -45,6 +45,7 @@ import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.launch
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.audio.AudioPanelSheet
 import se.lublin.mumla.databinding.FragmentChannelBinding
 import se.lublin.mumla.session.PushToTalk
 import se.lublin.mumla.session.SelfState
@@ -69,12 +70,19 @@ class ChannelFragment :
     private val pushToTalk get() = PushToTalk(requireContext())
 
     private var binding: FragmentChannelBinding? = null
+    private var controlBar: ControlBar? = null
 
     /** True while a touch is down on the talk button, i.e. while this fragment holds transmission. */
     private var talkButtonHeld = false
 
+    /** True while a touch is down on the hold-to-whisper button. */
+    private var whisperHeld = false
+
     /** Our own state as last shown; null while not synchronized. */
     private var shownSelf: SelfState? = null
+
+    /** The whisper target as last shown; null while not whispering. Drives the start/stop a11y announce. */
+    private var shownWhisperTarget: String? = null
 
     private val settings get() = Settings.getInstance(requireActivity())
 
@@ -92,9 +100,7 @@ class ChannelFragment :
         val previous = shownSelf
         shownSelf = self
         configureInput()
-        if (previous?.isSelfMuted != self?.isSelfMuted || previous?.isSelfDeafened != self?.isSelfDeafened) {
-            requireActivity().invalidateMenu()
-        }
+        controlBar?.showSelf(self)
         if (self == null) return
         if (previous == null) announcer.reset()
         announcer.onMuteState(self.isSelfMuted, self.isSelfDeafened)
@@ -117,8 +123,13 @@ class ChannelFragment :
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val binding = FragmentChannelBinding.inflate(inflater, container, false)
         this.binding = binding
+        controlBar = ControlBar(binding)
         setUpTalkButton(binding.pushtotalk)
+        setUpWhisperHoldButton(binding.targetPanelHold)
         binding.targetPanelCancel.setOnClickListener { session.stopWhispering() }
+        binding.controlMute.setOnClickListener { session.toggleMute() }
+        binding.controlDeafen.setOnClickListener { session.toggleDeafen() }
+        binding.controlAudio.setOnClickListener { AudioPanelSheet.show(parentFragmentManager) }
         configureInput()
         return binding.root
     }
@@ -133,17 +144,43 @@ class ChannelFragment :
     }
 
     /**
-     * Talks while held. An accessibility service cannot hold, so its click toggles transmission
-     * instead, and a pause releases what it started.
+     * Wires [button] for a press-and-hold action: [onDown] on touch down, [onUp] on touch up, and
+     * on cancel (a parent taking the gesture over, e.g. a drawer drag or the system back gesture)
+     * [onUp] too, unless [releaseOnCancel] says otherwise — a toggle mode where release is the
+     * whole action must not perform it on an aborted gesture, just as a Button does not click on
+     * cancel. An accessibility service cannot hold, so [onAccessibilityClick] replaces the single
+     * click it sends in place of one.
      */
     @SuppressLint("ClickableViewAccessibility") // A hold is not a click; the click action is below.
-    private fun setUpTalkButton(button: View) {
-        button.setOnTouchListener { _, event -> onTalkButtonTouch(event) }
+    private fun setUpHoldButton(
+        button: View,
+        releaseOnCancel: () -> Boolean = { true },
+        onDown: () -> Unit,
+        onUp: () -> Unit,
+        onAccessibilityClick: () -> Unit,
+    ) {
+        button.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> onDown()
+                MotionEvent.ACTION_UP -> onUp()
+                MotionEvent.ACTION_CANCEL -> if (releaseOnCancel()) onUp()
+            }
+            true
+        }
         ViewCompat.replaceAccessibilityAction(button, AccessibilityActionCompat.ACTION_CLICK, null) { _, _ ->
-            toggleTalkingForAccessibility()
+            onAccessibilityClick()
             true
         }
     }
+
+    /** Talks while held; a pause releases what it started. */
+    private fun setUpTalkButton(button: View) = setUpHoldButton(
+        button,
+        releaseOnCancel = { !settings.isPushToTalkToggle },
+        onDown = { talkButtonHeld = true; pushToTalk.onKeyDown() },
+        onUp = { talkButtonHeld = false; pushToTalk.onKeyUp() },
+        onAccessibilityClick = ::toggleTalkingForAccessibility,
+    )
 
     private fun toggleTalkingForAccessibility() {
         if (shownSelf == null) return
@@ -160,26 +197,24 @@ class ChannelFragment :
         }
     }
 
-    private fun onTalkButtonTouch(event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                talkButtonHeld = true
-                pushToTalk.onKeyDown()
-            }
-            MotionEvent.ACTION_UP -> {
-                talkButtonHeld = false
-                pushToTalk.onKeyUp()
-            }
-            // A parent taking over the gesture (drawer drag, system back gesture) sends
-            // ACTION_CANCEL. In hold mode that must still release the press or transmission
-            // sticks; in toggle mode the release is the action itself, and an aborted
-            // gesture must not perform it, just as a Button does not click on cancel.
-            MotionEvent.ACTION_CANCEL -> {
-                talkButtonHeld = false
-                if (!settings.isPushToTalkToggle) pushToTalk.onKeyUp()
-            }
-        }
-        return true
+    /** Transmits to the armed whisper target while held; a pause releases what it started. */
+    private fun setUpWhisperHoldButton(button: View) = setUpHoldButton(
+        button,
+        onDown = ::startWhisperHold,
+        onUp = ::stopWhisperHold,
+        onAccessibilityClick = { if (whisperHeld) stopWhisperHold() else startWhisperHold() },
+    )
+
+    private fun startWhisperHold() {
+        whisperHeld = true
+        session.setWhisperActive(true)
+        session.setTalking(true)
+    }
+
+    private fun stopWhisperHold() {
+        whisperHeld = false
+        session.setTalking(false)
+        session.setWhisperActive(false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -220,52 +255,19 @@ class ChannelFragment :
     override fun onDestroyView() {
         announcer.reset()
         shownSelf = null
+        controlBar = null
         binding = null
         super.onDestroyView()
     }
 
-    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        menuInflater.inflate(R.menu.channel_menu, menu)
-    }
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) = Unit
 
+    /** The control bar has the audio panel here. */
     override fun onPrepareMenu(menu: Menu) {
-        val self = shownSelf
-        val muteItem = menu.findItem(R.id.menu_mute_button)
-        val deafenItem = menu.findItem(R.id.menu_deafen_button)
-        muteItem.isVisible = self != null
-        deafenItem.isVisible = self != null
-        if (self == null) return
-        muteItem.setIcon(
-            if (self.isSelfMuted) R.drawable.ic_action_microphone_muted else R.drawable.ic_action_microphone,
-        )
-        deafenItem.setIcon(if (self.isSelfDeafened) R.drawable.ic_action_audio_muted else R.drawable.ic_action_audio)
-        // The action a tap takes, which is also what accessibility services read.
-        muteItem.setTitle(if (self.isSelfMuted) R.string.unmute else R.string.mute)
-        deafenItem.setTitle(if (self.isSelfDeafened) R.string.undeafen else R.string.deafen)
-        // Tinted like the app bar title.
-        val tint = PorterDuffColorFilter(requireActivity().getColor(R.color.on_app_bar), PorterDuff.Mode.MULTIPLY)
-        muteItem.icon?.mutate()?.colorFilter = tint
-        deafenItem.icon?.mutate()?.colorFilter = tint
+        menu.findItem(R.id.menu_audio_panel)?.isVisible = false
     }
 
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        when (menuItem.itemId) {
-            R.id.menu_mute_button -> session.toggleMute()
-            R.id.menu_deafen_button -> session.toggleDeafen()
-            else -> return selectInputMethod(menuItem)
-        }
-        return true
-    }
-
-    private fun selectInputMethod(menuItem: MenuItem): Boolean {
-        settings.inputMethod = when (menuItem.itemId) {
-            R.id.menu_input_voice -> Settings.ARRAY_INPUT_METHOD_VOICE
-            R.id.menu_input_ptt -> Settings.ARRAY_INPUT_METHOD_PTT
-            R.id.menu_input_continuous -> Settings.ARRAY_INPUT_METHOD_CONTINUOUS
-            else -> return false
-        }
-        return true
-    }
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean = false
 
     /** The server as the title, where we are and our own mute state as the subtitle. */
     private fun showInAppBar(summary: SelfSummary?) {
@@ -285,27 +287,52 @@ class ChannelFragment :
         // A talk state set elsewhere (e.g. a headset key with the screen off) is not ours to clear.
         if (talkButtonHeld && !settings.isPushToTalkToggle) session.setTalking(false)
         talkButtonHeld = false
+        if (whisperHeld) stopWhisperHold()
     }
 
+    /** Shows the panel, and announces it starting or stopping so a screen reader notices either. */
     private fun showWhisperTarget(name: String?) {
         val binding = binding ?: return
+        val started = shownWhisperTarget == null && name != null
+        val stopped = shownWhisperTarget != null && name == null
+        shownWhisperTarget = name
         binding.targetPanel.visibility = if (name != null) View.VISIBLE else View.GONE
         if (name != null) binding.targetPanelWarning.text = getString(R.string.shout_target, name)
+        configureInput()
+        @Suppress("DEPRECATION") // No view shows this for a live region to carry.
+        when {
+            started -> binding.root.announceForAccessibility(getString(R.string.shout_target, name))
+            stopped -> binding.root.announceForAccessibility(getString(R.string.a11y_stop_shouting))
+        }
     }
 
-    /** Applies the user's interface preferences and mute state to the push-to-talk button. */
+    /**
+     * Applies the user's interface preferences and mute state to the control bar and the
+     * push-to-talk button: at the bottom, the bar shows our talk state where the button is not.
+     */
     private fun configureInput() {
         val binding = binding ?: return
         val settings = settings
-        val params = binding.pushtotalkView.layoutParams
-        params.height = settings.pttButtonHeight
-        binding.pushtotalk.layoutParams = params
+        val atBottom = settings.isControlBarAtBottom
+        controlBar?.place(atBottom)
+        val minHeight = if (atBottom) resources.getDimensionPixelSize(R.dimen.control_bar_ptt_min_height) else 0
+        val pttHeight = maxOf(settings.pttButtonHeight, minHeight)
+        // Runs on every talk state change; a layout pass only when the height changes.
+        if (binding.pushtotalk.layoutParams.height != pttHeight) {
+            binding.pushtotalk.updateLayoutParams { height = pttHeight }
+        }
 
         val muted = shownSelf?.cannotTalk == true
         val showPttButton = !muted &&
             settings.isPushToTalkButtonShown &&
             settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT
-        binding.pushtotalkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
+        binding.pushtotalkView.isVisible = showPttButton
+        binding.controlTalkState.isVisible = atBottom && !showPttButton
+        binding.controlBar.isVisible = atBottom || showPttButton
+        controlBar?.showTalkState(settings.inputMethod, shownSelf?.isTalking == true)
+
+        val showHoldButton = !muted && shownWhisperTarget != null && settings.isHoldToWhisper
+        binding.targetPanelHold.visibility = if (showHoldButton) View.VISIBLE else View.GONE
     }
 
     private fun showUnread(tabs: TabLayout, count: Int) {
@@ -345,6 +372,8 @@ class ChannelFragment :
             Settings.INPUT_METHOD.key,
             Settings.PUSH_BUTTON_HIDE.key,
             Settings.PTT_BUTTON_HEIGHT.key,
+            Settings.HOLD_TO_WHISPER.key,
+            Settings.CONTROL_BAR_POSITION.key,
         )
     }
 }

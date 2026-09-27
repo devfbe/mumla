@@ -165,6 +165,19 @@ class ChannelListAdapterTest {
     }
 
     @Test
+    fun aUserRowShowsItsLocalVolumeOnlyWhenItIsNotOneHundredPercent() {
+        show(userRow(1, localVolumePercent = null), userRow(2, localVolumePercent = 60))
+
+        val unchanged = row(ChannelRow.USER_ID_MASK or 1L)
+        val changed = row(ChannelRow.USER_ID_MASK or 2L)
+        assertThat(unchanged.findViewById<View>(R.id.user_row_volume).visibility).isEqualTo(View.GONE)
+        assertThat(changed.findViewById<View>(R.id.user_row_volume).visibility).isEqualTo(View.VISIBLE)
+        assertThat(changed.text(R.id.user_row_volume)).isEqualTo(context.getString(R.string.local_volume_percent, 60))
+        assertThat(changed.findViewById<View>(R.id.user_row_volume).contentDescription)
+            .isEqualTo(context.getString(R.string.a11y_local_volume, 60))
+    }
+
+    @Test
     fun aListenerRowNamesTheUserAndOnlyTheOwnOneCanBeStopped() {
         show(ChannelRow.Listener(5, 1, "Ann", 1, isOwn = false), ChannelRow.Listener(5, 2, "Me", 1, isOwn = true))
 
@@ -314,6 +327,24 @@ class ChannelListAdapterTest {
         assertThat(changed).containsExactly(0 to false)
         assertThat(adapter.positionOf(ChannelRow.USER_ID_MASK or 2L)).isEqualTo(1)
         assertThat(adapter.positionOf(ChannelRow.USER_ID_MASK or 99L)).isEqualTo(-1)
+    }
+
+    @Test
+    fun aChangedLocalVolumeIsARebindNotAnIconRepaint() {
+        show(userRow(2))
+        val changed = mutableListOf<Boolean>()
+        adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int) { changed += false }
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int, payload: Any?) {
+                changed += (payload != null)
+            }
+        })
+
+        show(userRow(2, localVolumePercent = 60))
+
+        assertThat(changed).containsExactly(false)
+        assertThat(row(ChannelRow.USER_ID_MASK or 2L).findViewById<View>(R.id.user_row_volume).visibility)
+            .isEqualTo(View.VISIBLE)
     }
 
     private companion object {

@@ -49,6 +49,15 @@
         android:summary="@string/pref_show_user_count_summary"
         app:iconSpaceReserved="false" />
 
+    <ListPreference
+        android:key="controlBarPosition"
+        android:defaultValue="bottom"
+        android:entries="@array/controlBarPositionNames"
+        android:entryValues="@array/controlBarPositionValues"
+        app:useSimpleSummaryProvider="true"
+        android:title="@string/controlBarPosition"
+        app:iconSpaceReserved="false" />
+
     <se.lublin.mumla.preference.SeekBarDialogPreference
         android:key="pttButtonHeight"
         android:title="@string/pttButtonHeight"

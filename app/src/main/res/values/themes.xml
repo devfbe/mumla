@@ -73,6 +73,48 @@
         <item name="android:textAllCaps">true</item>
     </style>
 
+    <!-- The audio panel's section labels and its segmented buttons, which share a row equally. -->
+    <style name="AudioPanelLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:layout_marginBottom">4dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="AudioPanelSegment" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+    </style>
+
+    <!-- The channel screen's control bar actions: 48dp tonal icon buttons. -->
+    <style name="ControlBarButton" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+
+    <!-- Where push-to-talk would be, while nothing needs pressing: the transmit mode, and whether we transmit. -->
+    <style name="ControlBarTalkState">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/control_bar_ptt_min_height</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:drawablePadding">8dp</item>
+        <item name="android:background">@drawable/control_talk_state_background</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="android:textColor">@color/control_talk_state_content</item>
+        <item name="drawableStartCompat">@drawable/ic_action_microphone</item>
+        <item name="drawableTint">@color/control_talk_state_content</item>
+    </style>
+
     <style name="App.Widget.ActionMode" parent="Widget.AppCompat.ActionMode">
     </style>
 

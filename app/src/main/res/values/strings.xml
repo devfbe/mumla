@@ -46,6 +46,7 @@
     <string name="user_menu_view_comment">View Comment</string>
     <string name="user_menu_reset_comment">Reset Comment</string>
     <string name="user_menu_register">Register</string>
+    <string name="user_menu_whisper">Whisper</string>
 
     <!-- Channel menu -->
     <string name="channel_menu_pin">Pin</string>
@@ -220,12 +221,13 @@
     <string name="allowExternalPttSum">Let other apps, e.g. Tasker, start and stop transmitting</string>
     <string name="context_channel_link">Link</string>
     <string name="context_channel_unlink_all">Unlink All</string>
-    <string name="context_channel_shout">Set Voice Target</string>
-    <string name="shout_include_linked">Shout to linked channels</string>
-    <string name="shout_include_subchannels">Shout to subchannels</string>
+    <string name="context_channel_shout">Whisper…</string>
+    <string name="shout_include_linked">Whisper to linked channels</string>
+    <string name="shout_include_subchannels">Whisper to subchannels</string>
     <string name="shout_failed">Could not create voice target.</string>
-    <string name="shout_target">Shouting to %s</string>
-    <string name="shout_configure">Configure Voice Target</string>
+    <string name="shout_target">Whispering to %1$s</string>
+    <string name="shout_configure">Whisper to channel</string>
+    <string name="hold_to_whisper">Hold to whisper</string>
     <string name="grant_perm_microphone">Please grant microphone permission.</string>
     <string name="microphone_permission_rationale">Mumla needs the microphone so that others on the server can hear you.</string>
     <string name="microphone_permission_settings">Microphone access is turned off for Mumla. To connect to a server, allow it in the app settings.</string>
@@ -333,6 +335,7 @@
     <string name="a11y_listener">%1$s is listening</string>
     <string name="user_menu_local_volume">Local volume</string>
     <string name="local_volume_percent">%1$d%%</string>
+    <string name="a11y_local_volume">Local volume %1$d percent</string>
     <string name="local_volume_reset">Reset</string>
     <string name="local_volume_title">Local volume: %1$s</string>
     <string name="user_menu_information">User information</string>
@@ -362,7 +365,7 @@
     <string name="a11y_channel_level">%1$s, level %2$d</string>
     <string name="a11y_user_options">User options</string>
     <string name="a11y_server_options">Server options</string>
-    <string name="a11y_stop_shouting">Stop shouting</string>
+    <string name="a11y_stop_shouting">Stop whispering</string>
     <string name="a11y_resize_overlay">Resize</string>
     <string name="a11y_collapse">Collapse</string>
     <string name="a11y_state_talking">Talking</string>
@@ -385,6 +388,17 @@
     <string name="audioTestMicrophone">Test microphone</string>
     <string name="audioTestMicrophoneSum">Show your live input level; may quiet other apps</string>
     <string name="inputLevelMeterIdle">Turn on “Test microphone” to see your input level.</string>
+    <string name="audio_panel">Audio</string>
+    <string name="mic_check">Microphone check</string>
+    <string name="mic_check_hint">See whether you would transmit, and how loud your room is, before you connect. Other apps may get quieter while the test runs.</string>
+    <string name="mic_check_connected">Disconnect to test your microphone. The test would take it from the call.</string>
+    <string name="mic_check_start">Start test</string>
+    <string name="mic_check_stop">Stop test</string>
+    <string name="mic_check_would_transmit">Would transmit</string>
+    <string name="mic_check_would_not_transmit">Would not transmit</string>
+    <string name="mic_check_ptt">Push-to-talk: transmits only while you hold the button</string>
+    <string name="mic_check_continuous">Continuous: transmits everything</string>
+    <string name="mic_check_level_state">Level %1$s dB. %2$s</string>
     <string name="battery_optimization_title">Background connection</string>
     <string name="battery_optimization_unrestricted">Unrestricted</string>
     <string name="battery_optimization_optimized">Optimized – tap to allow background use</string>

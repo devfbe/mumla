@@ -53,6 +53,7 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.model.WhisperTargetChannel
+import se.lublin.humla.model.WhisperTargetUsers
 import se.lublin.humla.model.localVolumeKey
 import se.lublin.humla.model.localVolumeScope
 import se.lublin.humla.session.HumlaEvent
@@ -94,6 +95,7 @@ class ChannelTreeViewModel(
     private val repository: MumlaRepository,
     private val pinnedOnly: Boolean,
     showUserCount: Flow<Boolean>,
+    private val settings: Settings,
     buildDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
@@ -176,8 +178,12 @@ class ChannelTreeViewModel(
         )
     }
 
-    fun userMenuState(session: Int): UserMenuState? {
-        val model = current
+    fun userMenuState(session: Int): UserMenuState? = userMenuStateOf(current, session)
+
+    /** [session]'s menu state, live; null once they are gone from the model. */
+    fun userMenuStates(session: Int): Flow<UserMenuState?> = model.map { userMenuStateOf(it, session) }
+
+    private fun userMenuStateOf(model: ServerState?, session: Int): UserMenuState? {
         val user = model?.user(session) ?: return null
         return UserMenuState(
             user = user,
@@ -214,11 +220,29 @@ class ChannelTreeViewModel(
         connected?.actions?.setListening(channel, listen)
     }
 
-    /** Whispers to [channel]; false if the server has no voice target slot left. */
+    /**
+     * Whispers to [channel]; with hold-to-whisper on, only arms it, ready for the hold button.
+     * False if the server has no voice target slot left.
+     */
     fun shout(channel: Int, includeLinked: Boolean, includeSubchannels: Boolean): Boolean {
         val session = connected
         val target = session?.model?.value?.channel(channel) ?: return true
-        return session.actions.whisperTo(WhisperTargetChannel(target, includeLinked, includeSubchannels, null))
+        return session.actions.whisperTo(
+            WhisperTargetChannel(target, includeLinked, includeSubchannels, null),
+            activate = !settings.isHoldToWhisper,
+        )
+    }
+
+    /**
+     * Whispers to the user at [session]; with hold-to-whisper on, only arms it. False if the
+     * server has no voice target slot left, or true without a session to whisper to.
+     */
+    fun whisperToUser(session: Int): Boolean {
+        val (humla, user) = userOf(session) ?: return true
+        return humla.actions.whisperTo(
+            WhisperTargetUsers(listOf(session), user.name),
+            activate = !settings.isHoldToWhisper,
+        )
     }
 
     fun kickBan(session: Int, reason: String, ban: Boolean) {
@@ -276,8 +300,6 @@ class ChannelTreeViewModel(
         repository.launchIo { setLocalVolume(key, volume) }
     }
 
-    fun localVolume(session: Int): Float = current?.user(session)?.localVolume ?: 1f
-
     /** [channel]'s description, or null while only its hash is known. */
     fun description(channel: Int): String? = current?.channel(channel)?.description
 
@@ -323,7 +345,13 @@ class ChannelTreeViewModel(
             val showUserCount = preferences.changes(Settings.SHOW_USER_COUNT.key)
                 .map { Settings.getInstance(app).shouldShowUserCount }
                 .onStart { emit(Settings.getInstance(app).shouldShowUserCount) }
-            return ChannelTreeViewModel(SessionManager.get(app), MumlaRepository.get(app), pinnedOnly, showUserCount)
+            return ChannelTreeViewModel(
+                SessionManager.get(app),
+                MumlaRepository.get(app),
+                pinnedOnly,
+                showUserCount,
+                Settings.getInstance(app),
+            )
         }
     }
 }

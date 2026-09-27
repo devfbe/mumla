@@ -40,6 +40,7 @@ import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.net.Permissions
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.idleMainLooper
+import se.lublin.mumla.Settings
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.session.SessionManager
@@ -60,6 +61,7 @@ class ChannelTreeViewModelTest {
     private val model = session.stubModel(tree())
     private val actions = session.stubActions()
     private val showUserCount = MutableStateFlow(true)
+    private val settings = mockk<Settings>(relaxed = true) { every { isHoldToWhisper } returns false }
 
     init {
         installSession(session)
@@ -81,7 +83,9 @@ class ChannelTreeViewModelTest {
 
     /** A view model with a screen collecting its rows and talk states. */
     private fun viewModel(pinnedOnly: Boolean = false) =
-        ChannelTreeViewModel(SessionManager.get(app), repository, pinnedOnly, showUserCount, Dispatchers.Unconfined)
+        ChannelTreeViewModel(
+            SessionManager.get(app), repository, pinnedOnly, showUserCount, settings, Dispatchers.Unconfined,
+        )
             .also { tree ->
                 val screen = CoroutineScope(UnconfinedTestDispatcher())
                 screen.launch { tree.tree.collect {} }
@@ -209,11 +213,45 @@ class ChannelTreeViewModelTest {
     @Test
     fun aShoutWhispersToTheChannelAndSaysWhenNoSlotIsLeft() {
         val tree = viewModel()
-        every { actions.whisperTo(any()) } returns false
+        every { actions.whisperTo(any(), any()) } returns false
 
         assertThat(tree.shout(2, includeLinked = true, includeSubchannels = false)).isFalse()
 
-        verify { actions.whisperTo(match<WhisperTarget> { it.name == "Games" }) }
+        verify { actions.whisperTo(match<WhisperTarget> { it.name == "Games" }, activate = true) }
+    }
+
+    /** With hold-to-whisper on, a shout only arms the target; the hold button starts it. */
+    @Test
+    fun aShoutOnlyArmsTheTargetWithHoldToWhisperOn() {
+        every { settings.isHoldToWhisper } returns true
+        val tree = viewModel()
+        every { actions.whisperTo(any(), any()) } returns true
+
+        tree.shout(2, includeLinked = false, includeSubchannels = false)
+
+        verify { actions.whisperTo(match<WhisperTarget> { it.name == "Games" }, activate = false) }
+    }
+
+    @Test
+    fun whisperToUserWhispersToThatUserAndSaysWhenNoSlotIsLeft() {
+        val tree = viewModel()
+        every { actions.whisperTo(any(), any()) } returns false
+
+        assertThat(tree.whisperToUser(2)).isFalse()
+
+        verify { actions.whisperTo(match<WhisperTarget> { it.name == "Ann" }, activate = true) }
+    }
+
+    /** With hold-to-whisper on, whispering to a user only arms the target. */
+    @Test
+    fun whisperToUserOnlyArmsTheTargetWithHoldToWhisperOn() {
+        every { settings.isHoldToWhisper } returns true
+        val tree = viewModel()
+        every { actions.whisperTo(any(), any()) } returns true
+
+        tree.whisperToUser(2)
+
+        verify { actions.whisperTo(match<WhisperTarget> { it.name == "Ann" }, activate = false) }
     }
 
     @Test
