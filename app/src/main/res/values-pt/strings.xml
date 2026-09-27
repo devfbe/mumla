@@ -124,9 +124,6 @@
     <string name="decrypt_certificate">Descriptografar certificado</string>
     <string name="no_certificate">Sem certificado</string>
     <string name="change_requires_reconnect">Reconecte-se para usar as novas configurações.</string>
-    <string name="attempting_reconnect">Erro: %s.
-\n
-\nReconectando…</string>
     <string name="cancel_reconnect">Cancelar reconexão</string>
     <string name="invalid_port_range">Porta inválida (1-65535)</string>
     <string name="invalid_host">Host inválido</string>
@@ -146,7 +143,6 @@
 \n%5$s</string>
     <string name="channel_join">Entrar</string>
     <string name="current_chat_target">Alvo atual do chat</string>
-    <string name="cancelled">Cancelado</string>
     <string name="trust_cleared">Lista de certificados confiáveis limpa</string>
     <string name="trust_add_failed">Não foi possível adicionar o certificado para a lista de certificados confiáveis.</string>
     <string name="trust_added">Certificado adicionado à lista de certificados confiáveis</string>
@@ -154,7 +150,6 @@
     <string name="untrusted_certificate">Certificado não confiável</string>
     <string name="channel_menu_view_description">Ver descrição</string>
     <string name="send_message">Enviar mensagem</string>
-    <string name="invalid_password">Senha incorreta.</string>
     <string name="generate">Gerar</string>
     <string name="first_run_generate_certificate">Gerar um certificado é altamente recomendado e necessário para se conectar em alguns servidores.</string>
     <string name="first_run_generate_certificate_title">Bem-vindo(a) ao Mumla</string>

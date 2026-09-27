@@ -37,9 +37,6 @@
     <string name="decrypt_certificate">Sertifikanın Şifresini Çöz</string>
     <string name="no_certificate">Sertifika Yok</string>
     <string name="change_requires_reconnect">Yeni ayarları kullanmak için yeniden bağlanın.</string>
-    <string name="attempting_reconnect">Hata: %s.
-\n
-\nYeniden bağlanılıyor…</string>
     <string name="cancel_reconnect">Yeniden bağlanmayı iptal et</string>
     <string name="invalid_port_range">Geçersiz bağlantı noktası (1-65535)</string>
     <string name="invalid_host">Geçersiz ana makine</string>
@@ -59,7 +56,6 @@
 \n%5$s</string>
     <string name="channel_join">Katıl</string>
     <string name="current_chat_target">Geçerli sohbet hedefi</string>
-    <string name="cancelled">İptal edildi</string>
     <string name="trust_cleared">Güven veri tabanı temizlendi</string>
     <string name="trust_add_failed">Sertifika güven deposuna eklenemedi.</string>
     <string name="trust_added">Sertifika güven deposuna eklendi</string>
@@ -67,7 +63,6 @@
     <string name="untrusted_certificate">Güvenilmeyen Sertifika</string>
     <string name="channel_menu_view_description">Açıklamayı Görüntüle</string>
     <string name="send_message">Mesaj gönder</string>
-    <string name="invalid_password">Yanlış parola.</string>
     <string name="generate">Oluştur</string>
     <string name="first_run_generate_certificate">Sertifika oluşturulması şiddetle tavsiye edilir ve bazı sunuculara bağlanmak için gereklidir.</string>
     <string name="first_run_generate_certificate_title">Mumla\'ya hoş geldiniz</string>

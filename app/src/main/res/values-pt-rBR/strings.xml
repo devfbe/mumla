@@ -56,19 +56,14 @@
     <string name="invalid_certificate">O certificado inválido não pôde ser carregado.</string>
     <string name="password">Senha</string>
     <string name="no_certificate">Nenhum Certificado</string>
-    <string name="attempting_reconnect">Erro: %s.
-\n
-\nReconectando…</string>
     <string name="cancel_reconnect">Cancelar reconexão</string>
     <string name="invalid_port_range">Porta inválida (1-65535)</string>
-    <string name="cancelled">Cancelado</string>
     <string name="trust_add_failed">Não foi possível adicionar o certificado ao armazenamento confiável.</string>
     <string name="trust_added">Certificado adicionado ao armazenamento confiável</string>
     <string name="allow">Permitir</string>
     <string name="untrusted_certificate">Certificado Não Confiável</string>
     <string name="channel_menu_view_description">Ver Descrição</string>
     <string name="send_message">Enviar mensagem</string>
-    <string name="invalid_password">Senha incorreta.</string>
     <string name="generate">Gerar</string>
     <string name="first_run_generate_certificate">A geração de um certificado é altamente recomendável e necessária para a conexão com alguns servidores.</string>
     <string name="tts_failed">Não foi possível iniciar o TTS</string>

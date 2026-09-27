@@ -108,12 +108,10 @@
     <string name="first_run_generate_certificate_title">مرحبًا غي موملا</string>
     <string name="first_run_generate_certificate">يُنصح بتوليد شهادة، فهي إلزامية في بعض الخوادم.</string>
     <string name="generate">ولّد</string>
-    <string name="invalid_password">كلمة السر خاطئة.</string>
     <string name="send_message">أرسل رسالة</string>
     <string name="channel_menu_view_description">اعرض الوصف</string>
     <string name="untrusted_certificate">شهادة غير موثوقة</string>
     <string name="allow">اسمح</string>
-    <string name="cancelled">أُلغي</string>
     <string name="channel_join">انضم</string>
     <string name="certificate_info">الموضوع:
 \n%1$s
@@ -132,9 +130,6 @@
     <string name="invalid_host">مستضيف غير صالح</string>
     <string name="invalid_port_range">منفذ غير صالح (1-65535)</string>
     <string name="cancel_reconnect">ألغ إعادة الاتصال</string>
-    <string name="attempting_reconnect">خطأ: %s
-\n
-\nيعيد الاتصال…</string>
     <string name="change_requires_reconnect">أعد الاتصال لتطبيق الاعدادات الجديدة.</string>
     <string name="no_certificate">بدون شهادة</string>
     <string name="decrypt_certificate">فك تشفير الشهادة</string>

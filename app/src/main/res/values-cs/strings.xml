@@ -32,9 +32,6 @@
     <string name="decrypt_certificate">Dešifrovat certifikát</string>
     <string name="no_certificate">Žádný certifikát</string>
     <string name="change_requires_reconnect">Pro použití nových nastavení se znovu připojte.</string>
-    <string name="attempting_reconnect">Chyba: %s.
-\n
-\nOpětovné připojování…</string>
     <string name="cancel_reconnect">Zrušit opětovné připojení</string>
     <string name="invalid_port_range">Neplatný port (1-65535)</string>
     <string name="invalid_host">Neplatný hostitel</string>
@@ -54,7 +51,6 @@
 \n%5$s</string>
     <string name="channel_join">Připojit</string>
     <string name="current_chat_target">Aktuální cíl chatu</string>
-    <string name="cancelled">Zrušeno</string>
     <string name="trust_cleared">Databáze důvěryhodných údajů vymazána</string>
     <string name="trust_add_failed">Nepodařilo se přidat certifikát do úložiště důvěryhodných certifikátů.</string>
     <string name="trust_added">Certifikát přidán do úložiště důvěryhodných certifikátů</string>
@@ -62,7 +58,6 @@
     <string name="untrusted_certificate">Nedůvěryhodný certifikát</string>
     <string name="channel_menu_view_description">Zobrazit popis</string>
     <string name="send_message">Odeslat zprávu</string>
-    <string name="invalid_password">Nesprávné heslo.</string>
     <string name="generate">Vygenerovat</string>
     <string name="first_run_generate_certificate">Generování certifikátu se důrazně doporučuje a je nezbytné pro připojení k některým serverům.</string>
     <string name="first_run_generate_certificate_title">Vítejte v Mumla</string>

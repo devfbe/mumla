@@ -115,14 +115,12 @@
     <string name="shareMessage">Accediu a aquest servidor amb el Mumla. %s</string>
     <string name="share">Comparteix</string>
     <string name="generateCertSuccess">El vostre certificat s\'ha generat y s\'ha guardar com a %s!</string>
-    <string name="cancelled">Cancel·lat</string>
     <string name="trust_cleared">S\'ha buidat la Base de dades de confiança</string>
     <string name="trust_add_failed">No s\'ha pogut afegir el certificat a la base de dades de confiança.</string>
     <string name="trust_added">S\'ha afegit el certificat a la base de dades de confiança</string>
     <string name="untrusted_certificate">Certificat és sospitós</string>
     <string name="channel_menu_view_description">Mostra la descripció</string>
     <string name="send_message">Envia un missatge</string>
-    <string name="invalid_password">Contrasenya no vàlida.</string>
     <string name="generate">Genera</string>
     <string name="first_run_generate_certificate">Es recomana generar un certificat. Alguns servidors demanen un certificat.</string>
     <string name="first_run_generate_certificate_title">Benvinguts al Mumla</string>
@@ -164,9 +162,6 @@
     <string name="decrypt_certificate">Desxifrar certificat</string>
     <string name="no_certificate">Cap certificat</string>
     <string name="change_requires_reconnect">Torneu a establir la connexió per a fer servir la nova configuració.</string>
-    <string name="attempting_reconnect">Error: %s.
-\n
-\n Proveu de tornar-vos a connectar…</string>
     <string name="cancel_reconnect">Cancel·lar reconnexió</string>
     <string name="invalid_port_range">Port no vàlid (1-65535)</string>
     <string name="invalid_host">Host no vàlid</string>

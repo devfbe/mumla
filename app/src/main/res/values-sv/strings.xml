@@ -19,11 +19,9 @@
     <string name="add">Lägg till</string>
     <string name="information">Information</string>
     <string name="action_settings">Inställningar</string>
-    <string name="cancelled">Avbröts</string>
     <string name="invalid_port_range">Ogiltig port (1-65535)</string>
     <string name="change_requires_reconnect">Återansluter för att använda nya inställningar.</string>
     <string name="temporary">Tillfällig</string>
-    <string name="invalid_password">Fel lösenord.</string>
     <string name="send_message">Skicka meddelande</string>
     <string name="shout_include_subchannels">Ropa till underkanaler</string>
     <string name="shout_failed">Kunde inte skapa röstmål.</string>
@@ -81,9 +79,6 @@
     <string name="channel_menu_view_description">Visa beskrivning</string>
     <string name="untrusted_certificate">Ej betrott certifikat</string>
     <string name="allow">Tillåt</string>
-    <string name="attempting_reconnect">Fel: %s.
-\n
-\nÅteransluter…</string>
     <string name="no_certificate">Inget certifikat</string>
     <string name="password">Lösenord</string>
     <string name="certificate_load_failed">Kunde inte ladda arkivets certifikat.</string>

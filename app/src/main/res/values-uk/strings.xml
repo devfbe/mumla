@@ -80,9 +80,6 @@
     <string name="channel_join">Приєднатися</string>
     <string name="invalid_port_range">Неправильний порт (1-65535)</string>
     <string name="password">Пароль</string>
-    <string name="attempting_reconnect">Помилка: %s
-\n
-\nПовторне підключення…</string>
     <string name="invalid_certificate">Неможливо завантажити недійсний сертифікат.</string>
     <string name="certificate_load_failed">Не вдалося зберегти сертифікат.</string>
     <string name="certificate_import_success">Імпортовано сертифікат %s.</string>
@@ -108,14 +105,12 @@
     <string name="first_run_generate_certificate_title">Ласкаво просимо до Mumla</string>
     <string name="first_run_generate_certificate">Наполягаємо на створенні сертифіката, так як він необхідний для підключення до деяких серверів.</string>
     <string name="generate">Згенерувати</string>
-    <string name="invalid_password">Невірний пароль.</string>
     <string name="send_message">Надіслати повідомлення</string>
     <string name="untrusted_certificate">Ненадійний сертифікат</string>
     <string name="allow">Дозволити</string>
     <string name="trust_added">Сертифікат додано до бази довірених сертифікатів</string>
     <string name="trust_add_failed">Не вдалося додати сертифікат до бази довірених сертифікатів.</string>
     <string name="trust_cleared">База даних довірених сертифікатів була очищена</string>
-    <string name="cancelled">Скасовано</string>
     <string name="current_chat_target">Поточний одержувач повідомлень</string>
     <string name="certificate_info">Одержувач:
 \n%1$s

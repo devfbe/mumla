@@ -128,7 +128,6 @@
     <string name="first_run_generate_certificate_title">Welkom bij Mumla</string>
     <string name="first_run_generate_certificate">Certificaat generen is ten zeerste aangeraden en nodig voor verbinden met bepaalde servers.</string>
     <string name="generate">Genereer</string>
-    <string name="invalid_password">Ongeldig wachtwoord.</string>
     <string name="send_message">Verstuur bericht</string>
     <string name="channel_menu_view_description">Bekijk Beschrijving</string>
     <string name="untrusted_certificate">Onvertrouwd Certificaat</string>
@@ -136,7 +135,6 @@
     <string name="trust_added">Certificaat toegevoegd aan vertrouwde opslag</string>
     <string name="trust_add_failed">Certificaat kon niet toegevoegd worden aan vertrouwde opslag.</string>
     <string name="trust_cleared">Vertrouwde opslag database geleegd</string>
-    <string name="cancelled">Geannuleerd</string>
     <string name="current_chat_target">Huidig chat doelwit</string>
     <string name="channel_join">Aansluiten</string>
     <string name="certificate_info">Onderwerp:\n%1$s\n\nGeldig van:\n%2$s\n\nGeldig tot:\n%3$s\n\nDigest (SHA-1):\n%4$s\n\nDigest (SHA-256):\n%5$s</string>
@@ -172,9 +170,6 @@
     <string name="decrypt_certificate">Decodeer certificaat</string>
     <string name="no_certificate">Geen certificaat</string>
     <string name="change_requires_reconnect">Maak opnieuw verbinding om de nieuwe instellingen te gebruiken.</string>
-    <string name="attempting_reconnect">Fout: %s.
-\n
-\nOpnieuw verbinden…</string>
     <string name="chat_message_tts_short_link">(Link naar %1$s)</string>
     <string name="connection_lost_reconnecting">Verbinding verbroken – opnieuw verbinden…</string>
     <string name="foreground_start_failed">Mumla kon niet actief blijven op de achtergrond. De spraak kan stoppen wanneer het scherm uitgaat.</string>

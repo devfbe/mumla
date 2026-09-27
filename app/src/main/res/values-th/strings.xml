@@ -28,16 +28,12 @@
     <string name="decrypt_certificate">ถอดรหัสใบรับรอง</string>
     <string name="no_certificate">ไม่มีใบรับรอง</string>
     <string name="change_requires_reconnect">กำลังเชื่อมต่อจากการตั้งค่าใหม่</string>
-    <string name="attempting_reconnect">Error: %s.
-\n
-\nกำลังเชื่อมต่อใหม่…</string>
     <string name="cancel_reconnect">ยกเลิกการเชื่อมต่อ</string>
     <string name="invalid_port_range">พอร์ตไม่ถูกต้อง (1-65535)</string>
     <string name="invalid_host">โฮสต์ไม่ถูกต้อง</string>
     <string name="certificate_info">หัวข้อ: \n%1$s \n \nใช้ได้ตั้งแต่: \n%2$s \n \nใช้ได้ถึง: \n%3$s \n \nสรุป(SHA-1): \n%4$s \n \nสรุป(SHA-256): \n%5$s</string>
     <string name="channel_join">เข้าร่วม</string>
     <string name="current_chat_target">เป้าหมายแชทปัจจุบัน</string>
-    <string name="cancelled">ยกเลิก</string>
     <string name="trust_cleared">ล้างฐานข้อมูลความน่าเชื่อถือ</string>
     <string name="trust_add_failed">ไม่สามารถเพิ่มใบรับรองไปยังที่เก็บที่เชื่อถือได้</string>
     <string name="trust_added">เพิ่มใบรับรองไปยังที่เก็บที่เชื่อถือได้</string>
@@ -45,7 +41,6 @@
     <string name="untrusted_certificate">ใบรับรองไม่น่าเชื่อถือ</string>
     <string name="channel_menu_view_description">ดูรายละเอียด</string>
     <string name="send_message">ส่งข้อความ</string>
-    <string name="invalid_password">รหัสผ่านผิด</string>
     <string name="generate">สร้าง</string>
     <string name="first_run_generate_certificate">ขอแนะนำให้สร้างใบรับรอง และมันจำเป็นสำหรับการเชื่อมต่อกับบางเซิร์ฟเวอร์</string>
     <string name="first_run_generate_certificate_title">ยินดีต้อนรับสู่ Mumla</string>

@@ -37,7 +37,6 @@
     <string name="expand">Simɣur</string>
     <string name="generate">Sarew</string>
     <string name="allow">Sireg</string>
-    <string name="cancelled">Yettwasemmet</string>
     <string name="channel_join">Ttekki</string>
     <string name="password">Awal n uɛeddi</string>
     <string name="default_">Amezwer</string>
@@ -62,7 +61,6 @@
     <string name="sortBy">Semyizzwer s…</string>
     <string name="channel_edit">Ẓreg abadu</string>
     <string name="channel_add">Rnu abadu</string>
-    <string name="invalid_password">Awal n uɛeddi d arameɣtu.</string>
     <string name="send_message">Azen izen</string>
     <string name="channel_menu_view_description">Wali aglam</string>
     <string name="no_certificate">Ulac aselkin</string>
@@ -99,7 +97,6 @@
     <string name="no_ptt_key">Ula d yiwet n tqeffalt</string>
     <string name="mumlaDisconnected">Tekkes-as tuqqna i Mumla</string>
     <string name="addFavorite">Rnu amenyaf</string>
-    <string name="attempting_reconnect">Tuccḍa: %s.\n\nAllus n tuqqna…</string>
     <string name="certificate_import_success">Aselkin yettwakter-d %s.</string>
     <string name="searchHint">Nadi ibuda akked iseqdacen</string>
     <string name="tts_failed">Ulamek asekker n TTS</string>

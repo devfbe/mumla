@@ -127,7 +127,6 @@
     <string name="first_run_generate_certificate_title">Mumla にようこそ</string>
     <string name="first_run_generate_certificate">証明書を生成することが非常に推奨されます。いくつかのサーバへ接続するために必要です。</string>
     <string name="generate">生成</string>
-    <string name="invalid_password">パスワードが正しくありません。</string>
     <string name="send_message">メッセージを送信</string>
     <string name="channel_menu_view_description">説明を表示</string>
     <string name="untrusted_certificate">信頼できない証明書</string>
@@ -135,14 +134,12 @@
     <string name="trust_added">トラストストアに証明書を追加しました</string>
     <string name="trust_add_failed">トラストストアへの証明書の追加に失敗しました</string>
     <string name="trust_cleared">トラストデータベースがクリアされました</string>
-    <string name="cancelled">キャンセルされました</string>
     <string name="current_chat_target">現在のチャット対象</string>
     <string name="channel_join">参加</string>
     <string name="certificate_info">サブジェクト:\n%1$s\n\n有効期限開始:\n%2$s\n\n有効期限終了:\n%3$s\n\nダイジェスト (SHA-1):\n%4$sダイジェスト (SHA-256):\n%5$s</string>
     <string name="invalid_host">ホストが正しくありません</string>
     <string name="invalid_port_range">ポートが正しくありません (1-65535)</string>
     <string name="cancel_reconnect">再接続をキャンセル</string>
-    <string name="attempting_reconnect">エラー: %s.\n\n再接続の試行中.</string>
     <plurals name="search_channel_users">
         <item quantity="other">%d ユーザー</item>
     </plurals>

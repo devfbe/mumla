@@ -183,7 +183,6 @@
     <string name="first_run_generate_certificate_title">Welcome to Mumla</string>
     <string name="first_run_generate_certificate">Generating a certificate is highly recommended, and necessary for connection to some servers.</string>
     <string name="generate">Generate</string>
-    <string name="invalid_password">Wrong password.</string>
     <string name="send_message">Send message</string>
     <string name="channel_menu_view_description">View Description</string>
     <string name="channel_add_subchannel">Add sub-channel</string>
@@ -195,14 +194,12 @@
     <string name="certificate_changed_message">%1$s now presents a different certificate from the one you trusted before. Someone may be intercepting your connection. Only continue if the server administrator told you the certificate was replaced.</string>
     <string name="certificate_changed_accept">Trust new certificate</string>
     <string name="trust_cleared">Trust database cleared</string>
-    <string name="cancelled">Canceled</string>
     <string name="current_chat_target">Current chat target</string>
     <string name="channel_join">Join</string>
     <string name="certificate_info">Subject:\n%1$s\n\nValid from:\n%2$s\n\nValid to:\n%3$s\n\nDigest (SHA-1):\n%4$s\n\nDigest (SHA-256):\n%5$s</string>
     <string name="invalid_host">Invalid host</string>
     <string name="invalid_port_range">Invalid port (1-65535)</string>
     <string name="cancel_reconnect">Cancel reconnect</string>
-    <string name="attempting_reconnect">Error: %s.\n\nReconnecting…</string>
     <string name="connection_reconnecting_to">Reconnecting to %1$s…</string>
     <string name="connection_lost">Connection lost</string>
     <!-- A countdown in seconds under "Connection lost", e.g. "Retrying in 5 s". -->

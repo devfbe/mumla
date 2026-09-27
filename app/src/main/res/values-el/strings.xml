@@ -93,7 +93,6 @@
     <string name="trust_added">Προστέθηκε πιστοποιητικό στο trust store</string>
     <string name="trust_add_failed">Δεν ήταν δυνατή η προσθήκη πιστοποιητικού στο trust store.</string>
     <string name="trust_cleared">Καθαρίστηκε η βάση δεδομένων εμπιστοσύνης</string>
-    <string name="cancelled">Ακυρώθηκε</string>
     <string name="current_chat_target">Τρέχων στόχος συνομιλίας</string>
     <string name="channel_join">Εγγραφή</string>
     <string name="certificate_info">Θέμα:
@@ -113,9 +112,6 @@
     <string name="invalid_host">Μη έγκυρος απομακρυσμένος κεντρικός υπολογιστής</string>
     <string name="invalid_port_range">Μη έγκυρη θύρα (1-65535)</string>
     <string name="cancel_reconnect">Ακύρωση επανασύνδεσης</string>
-    <string name="attempting_reconnect">Σφάλμα: %s.
-\n
-\nΕπανασύνδεση…</string>
     <string name="no_certificate">Έλλειψη πιστοποιητικού</string>
     <string name="decrypt_certificate">Αποκρυπτογράφηση πιστοποιητικού</string>
     <string name="certificate_load_failed">Δεν ήταν δυνατή η αποθήκευση του πιστοποιητικού.</string>
@@ -172,7 +168,6 @@
     <string name="channel_edit">Επεξεργασία Καναλιού</string>
     <string name="channel_add">Προσθήκη καναλιού</string>
     <string name="first_run_generate_certificate">Η δημιουργία πιστοποιητικού συνιστάται ιδιαίτερα και είναι απαραίτητη για σύνδεση με ορισμένους διακομιστές.</string>
-    <string name="invalid_password">Λάθος κωδικός πρόσβασης.</string>
     <string name="send_message">Αποστολή μηνύματος</string>
     <string name="password">Κωδικός πρόσβασης</string>
     <string name="invalid_certificate">Δεν ήταν δυνατή η φόρτωση μη έγκυρου πιστοποιητικού.</string>

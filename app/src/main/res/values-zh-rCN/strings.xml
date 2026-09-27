@@ -133,7 +133,6 @@
     <string name="first_run_generate_certificate_title">欢迎使用 Mumla</string>
     <string name="first_run_generate_certificate">强烈推荐您生成证书，部分服务器要求您必须有证书。</string>
     <string name="generate">生成</string>
-    <string name="invalid_password">密码错误。</string>
     <string name="send_message">发送消息</string>
     <string name="channel_menu_view_description">查看描述</string>
     <string name="untrusted_certificate">不被信任的证书</string>
@@ -141,14 +140,12 @@
     <string name="trust_added">添加此证书为信任</string>
     <string name="trust_add_failed">无法添加此证书为信任。</string>
     <string name="trust_cleared">信任数据库已清空</string>
-    <string name="cancelled">已取消</string>
     <string name="current_chat_target">当前聊天目标</string>
     <string name="channel_join">加入</string>
     <string name="certificate_info">通用名称：\n%1$s\n\n有效期始于：\n%2$s\n\n有效期止于：\n%3$s\n\n摘要（SHA-1）：\n%4$s\n\n摘要（SHA-256）：\n%5$s</string>
     <string name="invalid_host">无效主机</string>
     <string name="invalid_port_range">无效端口（1-65535）</string>
     <string name="cancel_reconnect">取消重新连接</string>
-    <string name="attempting_reconnect">错误：%s。\n\n正在重新连接…</string>
     <string name="change_requires_reconnect">重新连接以使用新设置。</string>
     <string name="no_certificate">无证书</string>
     <string name="decrypt_certificate">解密证书</string>

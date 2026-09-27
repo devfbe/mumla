@@ -80,9 +80,6 @@
     <string name="decrypt_certificate">Dekrypter sertifikat</string>
     <string name="no_certificate">Inget sertifikat</string>
     <string name="change_requires_reconnect">Koble til igjen for at endringene skal tre i effekt.</string>
-    <string name="attempting_reconnect">Feil: %s
-\n
-\nKobler til igjen …</string>
     <string name="cancel_reconnect">Avbryt forsøk på å koble til igjen</string>
     <string name="invalid_port_range">Ugyldig port (1-65535)</string>
     <string name="invalid_host">Ugyldig vert</string>
@@ -102,7 +99,6 @@
 \n%5$s</string>
     <string name="channel_join">Ta del</string>
     <string name="current_chat_target">Nåværende sludremål</string>
-    <string name="cancelled">Avbrutt</string>
     <string name="trust_cleared">Tillitsbunke tømt</string>
     <string name="trust_add_failed">Kunne ikke legge til sertifikat i tillitsbunken.</string>
     <string name="trust_added">Sertifikat lagt til i tillitsbunken</string>
@@ -110,7 +106,6 @@
     <string name="untrusted_certificate">Ubetrodd sertifikat</string>
     <string name="channel_menu_view_description">Vis beskrivelse</string>
     <string name="send_message">Send melding</string>
-    <string name="invalid_password">Feil passord.</string>
     <string name="generate">Generer</string>
     <string name="first_run_generate_certificate">Generering av sertifikat anbefales sterkt, og er påkrevd for tilkobling til noen tjenere.</string>
     <string name="first_run_generate_certificate_title">Velkommen</string>

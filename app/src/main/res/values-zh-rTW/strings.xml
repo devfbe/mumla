@@ -59,7 +59,6 @@
     <string name="connected">已連線</string>
     <string name="quickConnect">快速連線</string>
     <string name="reconnect">重新連線</string>
-    <string name="attempting_reconnect">錯誤: %s\n\n重新連線中…</string>
     <string name="change_requires_reconnect">重新連線以套用新的設定。</string>
     <string name="first_run_generate_certificate">強烈建議產生憑證，部份伺服器需要憑證才能進行連線。</string>
     <string name="reconnect_dialog_message">你已連線至伺服器。確定要改為連線至這個伺服器嗎？</string>
@@ -124,12 +123,10 @@
     <string name="mumble_url_parse_failed">Mumble URL 無效。</string>
     <string name="first_run_generate_certificate_title">歡迎來到 Mumla</string>
     <string name="generate">產生</string>
-    <string name="invalid_password">密碼錯誤。</string>
     <string name="send_message">傳送訊息</string>
     <string name="channel_menu_view_description">檢視描述</string>
     <string name="untrusted_certificate">未受信任的憑證</string>
     <string name="allow">允許</string>
-    <string name="cancelled">已取消</string>
     <string name="current_chat_target">目前聊天對象</string>
     <string name="channel_join">加入</string>
     <string name="invalid_host">無效主機</string>
