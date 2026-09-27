@@ -105,10 +105,11 @@ class SliderPreferenceTest {
                 if (parser.eventType != XmlPullParser.START_TAG) continue
                 assertWithMessage("a literal suffix in ${parser.name}")
                     .that(parser.getAttributeValue(ANDROID_NS, "text")).isNull()
-                if (!parser.name.endsWith(SliderPreference::class.java.simpleName)) continue
-                val key = parser.getAttributeValue(ANDROID_NS, "key")
-                assertWithMessage("the unit of $key")
-                    .that(parser.getAttributeResourceValue(APP_NS, "valueFormat", 0)).isNotEqualTo(0)
+                if (parser.name.endsWith(SliderPreference::class.java.simpleName)) {
+                    val key = parser.getAttributeValue(ANDROID_NS, "key")
+                    assertWithMessage("the unit of $key")
+                        .that(parser.getAttributeResourceValue(APP_NS, "valueFormat", 0)).isNotEqualTo(0)
+                }
             }
         }
     }
