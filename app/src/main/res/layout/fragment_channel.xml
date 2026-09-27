@@ -30,6 +30,23 @@
         app:tabMode="fixed"
         app:tabTextAppearance="@style/TextAppearance.Mumla.ChannelTab" />
 
+    <LinearLayout
+        android:id="@+id/control_bar_top"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurfaceContainer"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp"
+        android:visibility="gone">
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/channel_view_pager"
         android:layout_width="match_parent"
@@ -99,25 +116,81 @@
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/pushtotalk_view"
+        android:id="@+id/control_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
-        android:orientation="vertical">
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/pushtotalk"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:text="@string/ptt"
-            android:textColor="@color/ptt_text"
-            android:textAllCaps="true"
-            android:textStyle="bold"
-            android:textSize="14sp"
-            app:backgroundTint="@color/ptt_background"
-            app:cornerRadius="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp" />
+        <LinearLayout
+            android:id="@+id/control_bar_start"
+            android:layout_width="@dimen/control_bar_side_width"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:paddingHorizontal="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/control_mute"
+                style="@style/ControlBarButton"
+                android:contentDescription="@string/mute"
+                app:icon="@drawable/ic_action_microphone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/control_deafen"
+                style="@style/ControlBarButton"
+                android:layout_marginStart="8dp"
+                android:contentDescription="@string/deafen"
+                app:icon="@drawable/ic_action_audio" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/control_bar_center"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/pushtotalk_view"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <Button
+                    android:id="@+id/pushtotalk"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:text="@string/ptt"
+                    android:textColor="@color/ptt_text"
+                    android:textAllCaps="true"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    app:backgroundTint="@color/ptt_background"
+                    app:cornerRadius="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/control_talk_state"
+                style="@style/ControlBarTalkState"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/control_bar_end"
+            android:layout_width="@dimen/control_bar_side_width"
+            android:layout_height="wrap_content"
+            android:gravity="end|center_vertical"
+            android:paddingHorizontal="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/control_audio"
+                style="@style/ControlBarButton"
+                android:contentDescription="@string/audio_panel"
+                android:tooltipText="@string/audio_panel"
+                app:icon="@drawable/ic_action_audio_device" />
+        </LinearLayout>
     </LinearLayout>
 
 </LinearLayout>

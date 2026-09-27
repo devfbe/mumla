@@ -24,7 +24,10 @@ import androidx.fragment.app.FragmentManager
 import se.lublin.mumla.R
 import se.lublin.mumla.audio.AudioPanelSheet
 
-/** The toolbar's audio action, on every main screen: it opens the [AudioPanelSheet]. */
+/**
+ * The toolbar's audio action, which opens the [AudioPanelSheet]; the channel screen hides it for
+ * the one in its control bar.
+ */
 class AudioPanelMenu(private val fragmentManager: FragmentManager) : MenuProvider {
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -33,9 +36,7 @@ class AudioPanelMenu(private val fragmentManager: FragmentManager) : MenuProvide
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
         if (menuItem.itemId != R.id.menu_audio_panel) return false
-        if (fragmentManager.findFragmentByTag(AudioPanelSheet.TAG) == null) {
-            AudioPanelSheet().show(fragmentManager, AudioPanelSheet.TAG)
-        }
+        AudioPanelSheet.show(fragmentManager)
         return true
     }
 }

@@ -72,11 +72,4 @@ class ChannelListFragmentMenuTest {
 
         assertThat((0 until menu.size()).map { menu.getItem(it).itemId }).containsExactly(R.id.menu_search)
     }
-
-    /** They are the channel screen's, so the chat tab has them too. */
-    @Test
-    fun muteAndDeafenAreNotTheListsAnyMore() {
-        assertThat(prepared().findItem(R.id.menu_mute_button)).isNull()
-        assertThat(prepared().findItem(R.id.menu_deafen_button)).isNull()
-    }
 }

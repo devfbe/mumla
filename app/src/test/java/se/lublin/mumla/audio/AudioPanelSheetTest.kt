@@ -174,16 +174,19 @@ class AudioPanelSheetTest {
         openPanel()
     }
 
+    /** In its control bar, so not in the toolbar too. */
     @Test
-    fun theChannelScreenOffersThePanel() {
+    fun theChannelScreenOffersThePanelInItsControlBar() {
         state.value = SessionState.Connected
         launch(DrawerAdapter.ITEM_SERVER)
-        assertThat(shownScreen()).isInstanceOf(ChannelFragment::class.java)
+        val screen = shownScreen()
+        assertThat(screen).isInstanceOf(ChannelFragment::class.java)
 
-        assertThat(menu().titles()).containsAtLeastElementsIn(
-            titles(R.string.search, R.string.audio_panel, R.string.disconnect),
-        ).inOrder()
-        openPanel()
+        assertThat(menu().titles()).containsAtLeastElementsIn(titles(R.string.search, R.string.disconnect)).inOrder()
+        assertThat(menu().titles()).doesNotContain(app.getString(R.string.audio_panel))
+        screen!!.requireView().findViewById<View>(R.id.control_audio).performClick()
+        drainMainUntil { sheet()?.view != null }
+        assertThat(sheet()).isNotNull()
     }
 
     @Test

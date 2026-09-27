@@ -53,13 +53,16 @@ fun showSnackbar(
         show()
     }
 
-/** Above the push-to-talk button while it is shown, so a snackbar never covers it. */
+/**
+ * Above the channel screen's bottom bar (its control bar, or push-to-talk alone) while it is shown,
+ * so a snackbar never covers it.
+ */
 fun Activity.showSnackbar(text: CharSequence, @StringRes action: Int = 0, onAction: () -> Unit = {}): Snackbar =
     showSnackbar(
         findViewById(android.R.id.content),
         text,
         action,
-        findViewById<View>(R.id.pushtotalk_view)?.takeIf { it.isShown },
+        findViewById<View>(R.id.control_bar)?.takeIf { it.isShown },
         onAction,
     )
 
