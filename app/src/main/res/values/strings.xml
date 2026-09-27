@@ -388,6 +388,17 @@
     <string name="audioTestMicrophone">Test microphone</string>
     <string name="audioTestMicrophoneSum">Show your live input level; may quiet other apps</string>
     <string name="inputLevelMeterIdle">Turn on “Test microphone” to see your input level.</string>
+    <string name="audio_panel">Audio</string>
+    <string name="mic_check">Microphone check</string>
+    <string name="mic_check_hint">See whether you would transmit, and how loud your room is, before you connect. Other apps may get quieter while the test runs.</string>
+    <string name="mic_check_connected">Disconnect to test your microphone. The test would take it from the call.</string>
+    <string name="mic_check_start">Start test</string>
+    <string name="mic_check_stop">Stop test</string>
+    <string name="mic_check_would_transmit">Would transmit</string>
+    <string name="mic_check_would_not_transmit">Would not transmit</string>
+    <string name="mic_check_ptt">Push-to-talk: transmits only while you hold the button</string>
+    <string name="mic_check_continuous">Continuous: transmits everything</string>
+    <string name="mic_check_level_state">Level %1$s dB. %2$s</string>
     <string name="battery_optimization_title">Background connection</string>
     <string name="battery_optimization_unrestricted">Unrestricted</string>
     <string name="battery_optimization_optimized">Optimized – tap to allow background use</string>

@@ -61,8 +61,8 @@ class ChannelListFragmentMenuTest {
     }
 
     @Test
-    fun theAudioChooserIsNotTheListsAnyMore() {
-        assertThat(prepared().findItem(R.id.menu_audio_device)).isNull()
+    fun theAudioPanelIsNotTheLists() {
+        assertThat(prepared().findItem(R.id.menu_audio_panel)).isNull()
     }
 
     /** They are the channel screen's, so the chat tab has them too. */

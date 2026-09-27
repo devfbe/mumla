@@ -73,6 +73,24 @@
         <item name="android:textAllCaps">true</item>
     </style>
 
+    <!-- The audio panel's section labels and its segmented buttons, which share a row equally. -->
+    <style name="AudioPanelLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:layout_marginBottom">4dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="AudioPanelSegment" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+    </style>
+
     <style name="App.Widget.ActionMode" parent="Widget.AppCompat.ActionMode">
     </style>
 

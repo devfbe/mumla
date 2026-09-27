@@ -190,16 +190,15 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         loopback: Boolean = findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.isChecked ?: false,
     ) {
         val meter = findPreference<InputLevelMeterPreference>(KEY_METER) ?: return
-        val check = micCheck ?: return
         // The loopback plays out loud, so apply the speaker's canceller as the user has it.
-        val vad = check.start(loopback, AudioDeviceCategory.SPEAKER)
+        val vad = micCheck?.start(loopback, AudioDeviceCategory.SPEAKER)
         if (vad == null) {
             meter.setMessage(getString(R.string.inputLevelMeterUnavailable))
-            return
+        } else {
+            meter.setHysteresisDb(vad.hysteresisDb)
+            // Clear the idle hint; the first reading follows within a few frames.
+            meter.setReading(null)
         }
-        meter.setHysteresisDb(vad.hysteresisDb)
-        // Clear the idle hint; the first reading follows within a few frames.
-        meter.setReading(null)
     }
 
     private fun stopPreview() {
