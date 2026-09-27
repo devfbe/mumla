@@ -44,6 +44,7 @@ class ChannelMenu(
 ) : PermissionsPopupMenu.IOnMenuPrepareListener {
 
     /** What the items do, for the channel they were picked on. */
+    @Suppress("TooManyFunctions") // One per item.
     interface Actions : MenuPermissions {
         fun join(channel: Int)
         fun addChannel(parent: Int)
@@ -107,7 +108,8 @@ class ChannelMenu(
             addView(linkedBox)
         }
         MaterialAlertDialogBuilder(context)
-            .setTitle(context.getString(R.string.shout_configure, actions.channelName(channel).orEmpty()))
+            .setTitle(R.string.shout_configure)
+            .setMessage(actions.channelName(channel))
             .setView(layout)
             .setPositiveButton(R.string.confirm) { _, _ ->
                 actions.shout(channel, linkedBox.isChecked, subchannelBox.isChecked)

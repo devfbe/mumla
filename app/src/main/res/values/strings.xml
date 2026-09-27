@@ -226,7 +226,7 @@
     <string name="shout_include_subchannels">Whisper to subchannels</string>
     <string name="shout_failed">Could not create voice target.</string>
     <string name="shout_target">Whispering to %1$s</string>
-    <string name="shout_configure">Whisper to %1$s</string>
+    <string name="shout_configure">Whisper to channel</string>
     <string name="hold_to_whisper">Hold to whisper</string>
     <string name="grant_perm_microphone">Please grant microphone permission.</string>
     <string name="microphone_permission_rationale">Mumla needs the microphone so that others on the server can hear you.</string>

@@ -204,8 +204,8 @@ class UserActionsSheet : BottomSheetDialogFragment() {
             container.removeAllViews()
             for (row in rows) {
                 val item = ItemUserActionBinding.inflate(layoutInflater, container, false)
-                item.userActionIcon.setImageResource(iconOf(row.action))
-                item.userActionTitle.setText(titleOf(row.action))
+                item.userActionIcon.setImageResource(row.action.icon)
+                item.userActionTitle.setText(row.action.title)
                 item.root.setOnClickListener { onAction(row.action) }
                 bindRowState(item, row)
                 container.addView(item.root)
@@ -293,38 +293,6 @@ class UserActionsSheet : BottomSheetDialogFragment() {
         val channels = actions.channels()
         if (channels.isEmpty()) return
         showChannelMoveDialog(requireContext(), channels) { actions.moveUser(session, it) }
-    }
-
-    private fun iconOf(action: UserAction): Int = when (action) {
-        UserAction.KICK -> R.drawable.ic_action_delete_dark
-        UserAction.BAN -> R.drawable.ic_action_error
-        UserAction.MUTE -> R.drawable.ic_action_microphone
-        UserAction.DEAFEN -> R.drawable.ic_action_headphones
-        UserAction.MOVE -> R.drawable.ic_action_move
-        UserAction.PRIORITY -> R.drawable.ic_action_audio
-        UserAction.LOCAL_MUTE -> R.drawable.ic_action_audio_muted
-        UserAction.IGNORE_MESSAGES -> R.drawable.ic_action_bad
-        UserAction.VIEW_COMMENT, UserAction.CHANGE_COMMENT, UserAction.RESET_COMMENT -> R.drawable.ic_action_comment
-        UserAction.INFO -> R.drawable.ic_action_info_dark
-        UserAction.WHISPER -> R.drawable.ic_action_send
-        UserAction.REGISTER -> R.drawable.ic_registered
-    }
-
-    private fun titleOf(action: UserAction): Int = when (action) {
-        UserAction.KICK -> R.string.user_menu_kick
-        UserAction.BAN -> R.string.user_menu_ban
-        UserAction.MUTE -> R.string.user_menu_mute
-        UserAction.DEAFEN -> R.string.user_menu_deafen
-        UserAction.MOVE -> R.string.user_menu_move
-        UserAction.PRIORITY -> R.string.user_menu_priority_speaker
-        UserAction.LOCAL_MUTE -> R.string.user_menu_local_mute
-        UserAction.IGNORE_MESSAGES -> R.string.user_menu_ignore_messages
-        UserAction.VIEW_COMMENT -> R.string.user_menu_view_comment
-        UserAction.CHANGE_COMMENT -> R.string.user_menu_change_comment
-        UserAction.RESET_COMMENT -> R.string.user_menu_reset_comment
-        UserAction.INFO -> R.string.user_menu_information
-        UserAction.WHISPER -> R.string.user_menu_whisper
-        UserAction.REGISTER -> R.string.user_menu_register
     }
 
     companion object {

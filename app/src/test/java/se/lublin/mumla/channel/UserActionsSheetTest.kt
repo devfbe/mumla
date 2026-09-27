@@ -228,8 +228,9 @@ class UserActionsSheetTest {
         val sheet = show(1)
 
         assertThat(rows(sheet).childCount).isGreaterThan(0)
+        val whisper = controller.get().getString(R.string.user_menu_whisper)
         val hasWhisperRow = (0 until rows(sheet).childCount).map(rows(sheet)::getChildAt)
-            .any { it.findViewById<TextView>(R.id.user_action_title).text == controller.get().getString(R.string.user_menu_whisper) }
+            .any { it.findViewById<TextView>(R.id.user_action_title).text == whisper }
         assertThat(hasWhisperRow).isFalse()
     }
 
