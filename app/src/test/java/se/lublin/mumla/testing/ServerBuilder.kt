@@ -47,6 +47,12 @@ class ServerBuilder {
 fun serverState(self: Int? = null, permissions: Int = 0, build: ServerBuilder.() -> Unit): ServerState =
     ServerBuilder().apply(build).let { ServerState.of(it.channels, it.users, self, permissions) }
 
+/** A server with only [self], as the own session, in its root channel. */
+fun selfServerState(self: UserState): ServerState = serverState(self = self.session) {
+    channel(0, "Root")
+    user(self)
+}
+
 private val modelFlows = WeakHashMap<IHumlaSession, MutableStateFlow<ServerState?>>()
 private val talkFlows = WeakHashMap<IHumlaSession, MutableStateFlow<Map<Int, TalkState>>>()
 

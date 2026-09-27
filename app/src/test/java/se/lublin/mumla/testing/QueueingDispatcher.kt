@@ -17,11 +17,24 @@
 
 package se.lublin.mumla.testing
 
-import se.lublin.humla.model.Message
-import se.lublin.mumla.chat.IChatMessage
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlin.coroutines.CoroutineContext
 
-/** A text message without targets. */
-fun textMessage(body: String, actor: Int = -1, actorName: String? = null, receivedTime: Long = 0L) =
-    Message(actor, actorName, emptyList(), emptyList(), emptyList(), body, receivedTime)
+/** Runs nothing until told to, and then in the order asked for. */
+class QueueingDispatcher : CoroutineDispatcher() {
+    private val queued = ArrayDeque<Runnable>()
 
-fun info(body: String) = IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        queued.addLast(block)
+    }
+
+    fun drain() {
+        while (queued.isNotEmpty()) queued.removeFirst().run()
+    }
+
+    fun drainNewestFirst() {
+        while (queued.isNotEmpty()) queued.removeLast().run()
+    }
+
+    fun pending(): Int = queued.size
+}

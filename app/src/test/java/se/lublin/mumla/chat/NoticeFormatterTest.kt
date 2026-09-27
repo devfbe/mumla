@@ -5,9 +5,9 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.model.Message
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.HumlaEvent.DenyType
+import se.lublin.mumla.testing.textMessage
 
 /** The exact English lines the chat log and the refusal dialog show. */
 @RunWith(RobolectricTestRunner::class)
@@ -123,8 +123,8 @@ class NoticeFormatterTest {
 
     @Test
     fun aMessageWithoutASenderIsFromTheServer() {
-        val fromAnn = Message(2, "Ann", emptyList(), emptyList(), emptyList(), "hi")
-        val fromServer = Message(0, null, emptyList(), emptyList(), emptyList(), "motd")
+        val fromAnn = textMessage("hi", actor = 2, actorName = "Ann")
+        val fromServer = textMessage("motd", actor = 0)
 
         assertThat(formatter.senderName(fromAnn)).isEqualTo("Ann")
         assertThat(formatter.senderName(fromServer)).isEqualTo("Server")

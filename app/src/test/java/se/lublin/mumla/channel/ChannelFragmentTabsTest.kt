@@ -6,21 +6,20 @@ import androidx.appcompat.view.menu.MenuBuilder
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.addNow
+import se.lublin.mumla.testing.channelRow
+import se.lublin.mumla.testing.hostWith
 import se.lublin.mumla.testing.stubConnected
-import se.lublin.mumla.testing.stubEvents
 
 /**
  * The channel screen's tabs: its menu has its own items first, then those of the shown tab, and
@@ -36,11 +35,8 @@ class ChannelFragmentTabsTest {
     @Before
     fun setUp() {
         session.stubConnected()
-        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        controller.get().bind(session)
-        fragment = ChannelFragment()
-        controller.get().supportFragmentManager.beginTransaction()
-            .add(android.R.id.content, fragment, "channel").commitNow()
+        controller = hostWith(session)
+        fragment = controller.get().addNow(ChannelFragment(), "channel", inContent = true)
         idleMainLooper()
     }
 
@@ -91,7 +87,7 @@ class ChannelFragmentTabsTest {
 
     @Test
     fun `a target picked in the channel tab is where the chat tab sends`() {
-        val lounge = ChannelRow.Channel(5, "Lounge", 0, null, true, true, false, false, ChannelRow.Lock.NONE)
+        val lounge = channelRow(5, "Lounge", userCount = null)
         val list = fragment.childFragmentManager.fragments.filterIsInstance<ChannelListFragment>().single()
         list.onChannelClick(lounge)
 

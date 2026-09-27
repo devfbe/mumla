@@ -38,9 +38,9 @@ import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.FileProviderCache
+import se.lublin.mumla.testing.QueueingDispatcher
 import se.lublin.mumla.testing.tapThrough
 import java.io.File
-import kotlin.coroutines.CoroutineContext
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -50,18 +50,6 @@ class ImageViewerDialogFragmentTest {
 
     // printf 'https://x.org/a.png' | sha1sum
     private val keyOfA = "c03da97f398e3f951d29689263e7fa31bf3c163d"
-
-    /** Runs nothing until it is told to. */
-    private class ParkingDispatcher : CoroutineDispatcher() {
-        private val parked = ArrayDeque<Runnable>()
-        override fun dispatch(context: CoroutineContext, block: Runnable) {
-            parked += block
-        }
-
-        fun release() {
-            while (parked.isNotEmpty()) parked.removeFirst().run()
-        }
-    }
 
     private var loader: ChatImageLoader? = null
 
@@ -123,6 +111,14 @@ class ImageViewerDialogFragmentTest {
 
     private fun ImageViewerDialogFragment.share(): View =
         requireView().findViewById(R.id.image_viewer_share)
+
+    private fun ImageViewerDialogFragment.assertShowsTheFailure() {
+        assertThat(progress().visibility).isEqualTo(View.GONE)
+        assertThat(status().visibility).isEqualTo(View.VISIBLE)
+        assertThat(status().text.toString()).isEqualTo(getString(R.string.chat_image_load_failed))
+        assertThat(share().isEnabled).isFalse()
+        assertThat(image().drawable).isNull()
+    }
 
     /** The ACTION_SEND the chooser was built around, or an assertion failure if nothing was started. */
     private fun sentIntent(fragment: ImageViewerDialogFragment): Intent {
@@ -192,12 +188,7 @@ class ImageViewerDialogFragmentTest {
         installLoader { throw ImageFetchException(ImageError.NETWORK) }
         launched { fragment ->
             idleMainLooper()
-            assertThat(fragment.progress().visibility).isEqualTo(View.GONE)
-            assertThat(fragment.status().visibility).isEqualTo(View.VISIBLE)
-            assertThat(fragment.status().text.toString())
-                .isEqualTo(fragment.getString(R.string.chat_image_load_failed))
-            assertThat(fragment.share().isEnabled).isFalse()
-            assertThat(fragment.image().drawable).isNull()
+            fragment.assertShowsTheFailure()
         }
     }
 
@@ -290,12 +281,12 @@ class ImageViewerDialogFragmentTest {
      */
     @Test
     fun theZoomSurvivesTwoRecreationsWhileTheImageIsStillLoading() {
-        val parked = ParkingDispatcher()
+        val parked = QueueingDispatcher()
         installLoader(ioDispatcher = parked) { TestImages.png(400, 400) }
         val scenario = launch()
 
         scenario.onFragment { fragment ->
-            parked.release()
+            parked.drain()
             idleMainLooper()
             fragment.layOutTheImage()
             // Asks for four; this image earns a ceiling of two, and two is what it gets.
@@ -315,7 +306,7 @@ class ImageViewerDialogFragmentTest {
             assertThat(fragment.progress().visibility).isEqualTo(View.VISIBLE)
             fragment.layOutTheImage()
 
-            parked.release()
+            parked.drain()
             idleMainLooper()
 
             assertThat(fragment.image().drawable).isNotNull()
@@ -345,12 +336,7 @@ class ImageViewerDialogFragmentTest {
             ChatImageLoaders.setForTests(mocked)
             launched { fragment ->
                 idleMainLooper()
-                assertThat(fragment.progress().visibility).isEqualTo(View.GONE)
-                assertThat(fragment.status().visibility).isEqualTo(View.VISIBLE)
-                assertThat(fragment.status().text.toString())
-                    .isEqualTo(fragment.getString(R.string.chat_image_load_failed))
-                assertThat(fragment.share().isEnabled).isFalse()
-                assertThat(fragment.image().drawable).isNull()
+                fragment.assertShowsTheFailure()
             }
         }
     }
@@ -362,7 +348,7 @@ class ImageViewerDialogFragmentTest {
      */
     @Test
     fun aSecondTapWhileTheFirstShareIsStillWritingIsRefused() {
-        val exporting = ParkingDispatcher()
+        val exporting = QueueingDispatcher()
         installLoader { TestImages.png(40, 40) }
         launched { fragment ->
             fragment.ioDispatcher = exporting
@@ -372,7 +358,7 @@ class ImageViewerDialogFragmentTest {
             assertThat(fragment.share().isEnabled).isFalse()
             fragment.tap(R.id.image_viewer_share)
 
-            exporting.release()
+            exporting.drain()
             idleMainLooper()
 
             val activity = fragment.requireActivity()
@@ -477,7 +463,7 @@ class ImageViewerDialogFragmentTest {
     /** The close button works while the load (which has no timeout) is still pending. */
     @Test
     fun theCloseButtonWorksWhileTheImageIsStillLoading() {
-        val parked = ParkingDispatcher()
+        val parked = QueueingDispatcher()
         installLoader(ioDispatcher = parked) { TestImages.png(8, 8) }
         launched { fragment ->
             idleMainLooper()

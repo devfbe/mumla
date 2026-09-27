@@ -21,25 +21,22 @@ import android.app.Application
 import android.service.quicksettings.Tile
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.UserState
-import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.selfServerState
 import se.lublin.mumla.testing.stubState
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
-import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.testing.stubModel
 
@@ -49,10 +46,8 @@ class MuteTileServiceTest {
     private val session = mockk<IHumlaSession>(relaxed = true)
     private val model = session.stubModel(model(muted = false))
 
-    private fun model(muted: Boolean, deafened: Boolean = false) = serverState(self = 1) {
-        channel(0, "Root")
-        user(UserState(1, "me", 0, isSelfMuted = muted, isSelfDeafened = deafened))
-    }
+    private fun model(muted: Boolean, deafened: Boolean = false) =
+        selfServerState(UserState(1, "me", 0, isSelfMuted = muted, isSelfDeafened = deafened))
 
     /** The tile service, listening, with [session] as the current session if [withSession]. */
     private fun listeningTile(withSession: Boolean = true): MuteTileService {

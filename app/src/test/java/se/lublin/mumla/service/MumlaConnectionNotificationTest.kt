@@ -12,6 +12,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -26,6 +27,8 @@ import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
 import se.lublin.mumla.app.DrawerAdapter
 import se.lublin.mumla.app.MumlaActivity
+import se.lublin.mumla.testing.assertOwnImmutableBroadcast
+import se.lublin.mumla.testing.refuseForegroundStarts
 
 /**
  * The foreground notification: what it shows, what its buttons reach, and when it holds the
@@ -188,13 +191,8 @@ class MumlaConnectionNotificationTest {
             R.drawable.ic_action_audio,
             R.drawable.ic_action_channels,
         ).inOrder()
-        for (action in actions) {
-            val pending = shadowOf(action.actionIntent)
-            assertThat(pending.isBroadcast).isTrue()
-            assertThat(pending.isImmutable).isTrue()
-            // Addressed to this app only, so no other app's receiver can see the button press.
-            assertThat(pending.savedIntent.`package`).isEqualTo(service.packageName)
-        }
+        // Addressed to this app only, so no other app's receiver can see the button press.
+        for (action in actions) assertOwnImmutableBroadcast(action.actionIntent, service.packageName)
     }
 
     /** Fires each button's own PendingIntent, i.e. both halves of the wiring at once. */
@@ -236,10 +234,7 @@ class MumlaConnectionNotificationTest {
         val action = posted().actions.single()
         assertThat(action.title.toString()).isEqualTo(service.getString(R.string.cancel_reconnect))
         assertThat(action.icon).isEqualTo(R.drawable.ic_action_delete_dark)
-        val pending = shadowOf(action.actionIntent)
-        assertThat(pending.isBroadcast).isTrue()
-        assertThat(pending.isImmutable).isTrue()
-        assertThat(pending.savedIntent.`package`).isEqualTo(service.packageName)
+        assertOwnImmutableBroadcast(action.actionIntent, service.packageName)
     }
 
     @Test
@@ -300,27 +295,21 @@ class MumlaConnectionNotificationTest {
         assertThat(notification.isForeground).isTrue()
     }
 
+    /** A refusal, or a missing FOREGROUND_SERVICE_MICROPHONE, leaves no notification to press. */
     @Test
     fun aRefusedForegroundStartIsReportedInsteadOfCrashing() {
-        shadowOf(service).setThrowInStartForeground(
+        val refusals = listOf(
             ForegroundServiceStartNotAllowedException("not allowed from the background"),
+            SecurityException("missing FOREGROUND_SERVICE_MICROPHONE"),
         )
-        val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
+        for (refusal in refusals) {
+            shadowOf(service).setThrowInStartForeground(refusal)
+            val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
 
-        assertThat(notification.show()).isFalse()
-        assertThat(notification.isForeground).isFalse()
-        // Nothing can press a button on a notification that is not there.
-        assertThat(ourReceivers()).isEmpty()
-    }
-
-    @Test
-    fun aSecurityExceptionIsReportedInsteadOfCrashing() {
-        shadowOf(service).setThrowInStartForeground(SecurityException("missing FOREGROUND_SERVICE_MICROPHONE"))
-        val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
-
-        assertThat(notification.show()).isFalse()
-        assertThat(notification.isForeground).isFalse()
-        assertThat(ourReceivers()).isEmpty()
+            assertWithMessage("$refusal").that(notification.show()).isFalse()
+            assertWithMessage("$refusal").that(notification.isForeground).isFalse()
+            assertWithMessage("$refusal").that(ourReceivers()).isEmpty()
+        }
     }
 
     /**
@@ -344,9 +333,7 @@ class MumlaConnectionNotificationTest {
     fun aSecondShowUpdatesTheNotificationWithoutAnotherForegroundStart() {
         val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
         notification.show()
-        shadowOf(service).setThrowInStartForeground(
-            ForegroundServiceStartNotAllowedException("not allowed from the background"),
-        )
+        service.refuseForegroundStarts()
 
         notification.configure("Connected", actions = true)
 

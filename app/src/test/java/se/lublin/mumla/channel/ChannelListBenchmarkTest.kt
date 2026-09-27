@@ -17,8 +17,6 @@
 
 package se.lublin.mumla.channel
 
-import android.view.View
-import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -33,6 +31,8 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.channelListAdapter
+import se.lublin.mumla.testing.layOut
 import java.lang.management.ManagementFactory
 
 /**
@@ -48,16 +48,6 @@ class ChannelListBenchmarkTest {
 
     private fun allocated() = threads.getThreadAllocatedBytes(Thread.currentThread().id)
 
-    private val noTaps = object : ChannelListAdapter.Listener {
-        override fun onChannelClick(row: ChannelRow.Channel) = Unit
-        override fun onUserClick(row: ChannelRow.User) = Unit
-        override fun onExpandClick(row: ChannelRow.Channel) = Unit
-        override fun onJoinClick(row: ChannelRow.Channel) = Unit
-        override fun onChannelMore(anchor: View, row: ChannelRow.Channel) = Unit
-        override fun onUserMore(anchor: View, row: ChannelRow.User) = Unit
-        override fun onStopListening(row: ChannelRow.Listener) = Unit
-    }
-
     private fun model(moverChannel: Int): ServerState = ServerState.of(
         (0 until CHANNELS).map { ChannelState(it, "channel-$it", if (it == 0) null else (it - 1) / 4) },
         (1..USERS).map { UserState(it, "user-$it", (it * 5) % CHANNELS) } + UserState(MOVER, "mover", moverChannel),
@@ -68,19 +58,12 @@ class ChannelListBenchmarkTest {
     @Suppress("LongMethod") // One measurement after the other.
     fun measure() {
         val context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
-        val config = AsyncDifferConfig.Builder(ChannelListAdapter.DIFF).setBackgroundThreadExecutor { it.run() }.build()
-        val adapter = ChannelListAdapter(context, noTaps, config)
+        val adapter = channelListAdapter(context)
         val list = RecyclerView(context).apply {
             layoutManager = LinearLayoutManager(context)
             this.adapter = adapter
         }
-        fun layOut() {
-            list.measure(
-                View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY),
-            )
-            list.layout(0, 0, 1080, 1920)
-        }
+        fun layOut() = list.layOut()
         val models = listOf(model(0), model(1))
         val rows = models.map { channelRows(it, listOf(0), emptyMap(), true) }
         adapter.submitList(rows[0])

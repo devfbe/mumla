@@ -1,6 +1,5 @@
 package se.lublin.mumla.service
 
-import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationManager
 import android.os.Looper
@@ -23,6 +22,7 @@ import se.lublin.mumla.app.AppContainer
 import se.lublin.mumla.app.MumlaApplication
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.createMumlaService
+import se.lublin.mumla.testing.refuseForegroundStarts
 import java.time.Duration
 
 /**
@@ -89,13 +89,6 @@ class MumlaServiceForegroundTest {
 
     private fun log() = sessions.chat.messages.value.map { it.body }
 
-    /** From here on the platform refuses every foreground start, as with the screen off. */
-    private fun screenOff() {
-        shadowOf(service).setThrowInStartForeground(
-            ForegroundServiceStartNotAllowedException("startForeground() not allowed from the background"),
-        )
-    }
-
     private fun pressCancelReconnect() {
         shadowOf(notificationManager).getNotification(1)!!.actions
             .single { it.title.toString() == app.getString(R.string.cancel_reconnect) }
@@ -107,7 +100,7 @@ class MumlaServiceForegroundTest {
     fun aConnectionLossThatWillBeRetriedKeepsTheServiceInTheForeground() {
         synchronize()
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
-        screenOff()
+        service.refuseForegroundStarts()
 
         loseConnection()
 
@@ -119,7 +112,7 @@ class MumlaServiceForegroundTest {
 
     @Test
     fun theReconnectAttemptItselfStaysInTheForegroundWithoutStartingItAgain() {
-        screenOff()
+        service.refuseForegroundStarts()
         loseConnection()
 
         mainLooper.idleFor(Duration.ofMillis(2_000))
@@ -140,7 +133,7 @@ class MumlaServiceForegroundTest {
 
     @Test
     fun theForegroundFallsOnlyWhenThePolicyGivesUp() {
-        screenOff()
+        service.refuseForegroundStarts()
         loseConnection() // attempt 1 of 2: retried
         mainLooper.idleFor(Duration.ofMillis(2_000))
         loseConnection() // attempt 2 of 2: retried
@@ -173,7 +166,7 @@ class MumlaServiceForegroundTest {
 
     @Test
     fun theCancelActionEndsAWaitingReconnectAndLeavesTheForeground() {
-        screenOff()
+        service.refuseForegroundStarts()
         loseConnection()
 
         pressCancelReconnect()
@@ -187,7 +180,7 @@ class MumlaServiceForegroundTest {
 
     @Test
     fun theCancelActionDuringAnAttemptInFlightDisconnectsIt() {
-        screenOff()
+        service.refuseForegroundStarts()
         loseConnection()
         mainLooper.idleFor(Duration.ofMillis(2_000)) // Reconnecting: attempt 2 is in flight
         assertThat(server.attempts).isEqualTo(2)

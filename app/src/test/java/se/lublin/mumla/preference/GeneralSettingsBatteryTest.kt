@@ -35,6 +35,7 @@ import org.robolectric.android.controller.ActivityController
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.host
 
 /** The "Background connection" row shows and changes the battery optimisation exemption. */
 @RunWith(RobolectricTestRunner::class)
@@ -45,10 +46,7 @@ class GeneralSettingsBatteryTest {
 
     private fun open() {
         controller = Robolectric.buildActivity(ThemedActivity::class.java).setup()
-        fragment = GeneralSettingsFragment()
-        controller.get().supportFragmentManager.beginTransaction()
-            .add(android.R.id.content, fragment)
-            .commitNow()
+        fragment = controller.get().host(GeneralSettingsFragment())
     }
 
     private fun exempt(value: Boolean) {

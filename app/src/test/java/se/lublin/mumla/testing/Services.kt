@@ -17,7 +17,12 @@
 
 package se.lublin.mumla.testing
 
+import android.app.ForegroundServiceStartNotAllowedException
+import android.app.PendingIntent
+import android.app.Service
+import com.google.common.truth.Truth.assertThat
 import org.robolectric.Robolectric
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import se.lublin.mumla.service.MumlaService
 
@@ -27,3 +32,18 @@ import se.lublin.mumla.service.MumlaService
  */
 fun createMumlaService(beforeCreate: MumlaService.() -> Unit = {}): ServiceController<MumlaService> =
     Robolectric.buildService(MumlaService::class.java).also { it.get().beforeCreate() }.create()
+
+/** From here on the platform refuses every foreground start, as with the screen off. */
+fun Service.refuseForegroundStarts() {
+    shadowOf(this).setThrowInStartForeground(
+        ForegroundServiceStartNotAllowedException("startForeground() not allowed from the background"),
+    )
+}
+
+/** [intent] is a broadcast only this app ([packageName]) receives, and nobody can alter it. */
+fun assertOwnImmutableBroadcast(intent: PendingIntent, packageName: String) {
+    val pending = shadowOf(intent)
+    assertThat(pending.isBroadcast).isTrue()
+    assertThat(pending.isImmutable).isTrue()
+    assertThat(pending.savedIntent.`package`).isEqualTo(packageName)
+}

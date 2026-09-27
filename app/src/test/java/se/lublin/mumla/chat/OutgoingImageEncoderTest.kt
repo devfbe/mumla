@@ -2,6 +2,7 @@ package se.lublin.mumla.chat
 
 import android.graphics.Bitmap
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -58,19 +59,16 @@ class OutgoingImageEncoderTest {
         assertThat(source.bytes).isEqualTo(jpeg)
     }
 
+    /** Zero is the server declaring no limit; a negative one is no limit too, not unsendable. */
     @Test
-    fun zeroMeansTheServerDeclaredNoLimit() {
-        val jpeg = OutgoingImageEncoder.compressToFit(noisyBitmap(), 0)
-        assertThat(jpeg).isNotNull()
-        // Not merely non-null: no rung was climbed down, so it is the best quality the ladder has.
-        assertThat(jpeg!!.size).isEqualTo(jpegAt(noisyBitmap(), OutgoingImageEncoder.START_QUALITY).size)
-    }
-
-    @Test
-    fun aNegativeLimitIsTreatedAsNoLimitRatherThanAsUnsendable() {
-        val jpeg = OutgoingImageEncoder.compressToFit(noisyBitmap(), -1)
-        assertThat(jpeg).isNotNull()
-        assertThat(jpeg!!.size).isEqualTo(jpegAt(noisyBitmap(), OutgoingImageEncoder.START_QUALITY).size)
+    fun aLimitOfZeroOrLessIsNoLimit() {
+        for (limit in listOf(0, -1)) {
+            val jpeg = OutgoingImageEncoder.compressToFit(noisyBitmap(), limit)
+            assertWithMessage("limit $limit").that(jpeg).isNotNull()
+            // Not merely non-null: no rung was climbed down, so it is the best quality the ladder has.
+            assertWithMessage("limit $limit").that(jpeg!!.size)
+                .isEqualTo(jpegAt(noisyBitmap(), OutgoingImageEncoder.START_QUALITY).size)
+        }
     }
 
     /**

@@ -21,7 +21,6 @@ import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.media.AudioManager
-import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 import androidx.preference.SwitchPreferenceCompat
 import androidx.test.core.app.ApplicationProvider
@@ -39,6 +38,7 @@ import se.lublin.humla.testutil.TestPlaybackSink
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.openScreen
 
 /** The live meter only takes the microphone, and the audio mode, while the user asks for it. */
 @RunWith(RobolectricTestRunner::class)
@@ -63,18 +63,7 @@ class AudioSettingsFragmentTest {
 
     private val activity by lazy { Robolectric.buildActivity(SettingsActivity::class.java).setup().get() }
 
-    private fun screen(): PreferenceFragmentCompat =
-        activity.supportFragmentManager.findFragmentById(R.id.settings_container) as PreferenceFragmentCompat
-
-    private fun openAudio(): AudioSettingsFragment {
-        val root = screen()
-        val entry = (0 until root.preferenceScreen.preferenceCount)
-            .map { root.preferenceScreen.getPreference(it) }
-            .single { it.fragment == AudioSettingsFragment::class.java.name }
-        root.onPreferenceTreeClick(entry)
-        idleMainLooper()
-        return screen() as AudioSettingsFragment
-    }
+    private fun openAudio() = activity.openScreen(AudioSettingsFragment::class.java)
 
     private fun AudioSettingsFragment.switch(key: String) = requireNotNull(findPreference<SwitchPreferenceCompat>(key))
     private fun AudioSettingsFragment.testSwitch() = switch("audio_test_microphone")

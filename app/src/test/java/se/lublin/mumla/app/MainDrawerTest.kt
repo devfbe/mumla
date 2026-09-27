@@ -1,16 +1,15 @@
 package se.lublin.mumla.app
 
 import android.widget.TextView
-import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ActivityMainBinding
 import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.laidOutRows
 
 @RunWith(RobolectricTestRunner::class)
 class MainDrawerTest {
@@ -22,18 +21,8 @@ class MainDrawerTest {
         activity, binding.drawerLayout, binding.leftDrawer, binding.toolbar, { serverName }, { selected += it },
     )
 
-    private fun layOut(): RecyclerView {
-        idleMainLooper()
-        val list = binding.leftDrawer
-        list.measure(0, 0)
-        list.layout(0, 0, 480, 4000)
-        return list
-    }
-
-    private fun rowTitled(title: String) = layOut().let { list ->
-        (0 until list.childCount).map { list.getChildAt(it) }.single { row ->
-            row.findViewById<TextView>(R.id.drawer_item_title)?.text == title
-        }
+    private fun rowTitled(title: String) = binding.leftDrawer.laidOutRows().single { row ->
+        row.findViewById<TextView>(R.id.drawer_item_title)?.text == title
     }
 
     @Test
@@ -48,9 +37,8 @@ class MainDrawerTest {
         assertThat(rowTitled(activity.getString(R.string.drawer_server)).isEnabled).isTrue()
         rowTitled(activity.getString(R.string.drawer_server)).performClick()
         assertThat(selected).containsExactly(DrawerAdapter.ITEM_SERVER)
-        val list = layOut()
-        val headers = (0 until list.childCount).mapNotNull {
-            list.getChildAt(it).findViewById<TextView>(R.id.drawer_header_title)?.text?.toString()
+        val headers = binding.leftDrawer.laidOutRows().mapNotNull {
+            it.findViewById<TextView>(R.id.drawer_header_title)?.text?.toString()
         }
         assertThat(headers).contains("Example")
     }

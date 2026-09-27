@@ -1,6 +1,5 @@
 package se.lublin.mumla.service
 
-import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Intent
@@ -45,6 +44,7 @@ import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.createMumlaService
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.refuseForegroundStarts
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.testing.stubModel
@@ -158,13 +158,6 @@ class MumlaServiceTest {
 
     private val lost = DisconnectReason.Network("socket reset", null)
 
-    /** From here on the platform refuses every foreground start, as with the screen off. */
-    private fun screenOff() {
-        shadowOf(service).setThrowInStartForeground(
-            ForegroundServiceStartNotAllowedException("startForeground() not allowed from the background"),
-        )
-    }
-
     // The foreground notification
 
     @Test
@@ -212,7 +205,7 @@ class MumlaServiceTest {
     @Test
     fun aLossAndTheRetryStayInTheForegroundWithoutStartingItAgain() {
         move(SessionState.Connected)
-        screenOff()
+        service.refuseForegroundStarts()
 
         move(SessionState.ConnectionLost(2_000, 1, lost))
         move(SessionState.Reconnecting(lost))
@@ -272,7 +265,7 @@ class MumlaServiceTest {
     /** The next session starts with the screen off, where the platform refuses the foreground. */
     private fun connectWithTheScreenOff() {
         move(SessionState.Disconnected())
-        screenOff()
+        service.refuseForegroundStarts()
         installSession(mockk<IHumlaSession>(relaxed = true).also { it.stubState(SessionState.Connecting) })
         idleMainLooper()
     }
@@ -301,7 +294,7 @@ class MumlaServiceTest {
     @Test
     fun aRefusalPromptReplacesAnOlderPromptIncludingItsReceiver() {
         move(SessionState.Disconnected(lost))
-        screenOff()
+        service.refuseForegroundStarts()
 
         move(SessionState.Connecting)
         move(SessionState.Connected)

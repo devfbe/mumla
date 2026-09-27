@@ -14,6 +14,7 @@ import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,10 +35,7 @@ class ZoomImageViewTest {
             layout(0, 0, side, side)
         }
 
-    private var eventTime = 0L
     private var downTime = 0L
-
-    private fun at(delta: Long): Long = downTime + delta
 
     private fun pointers(action: Int, at: Long, xs: FloatArray, ys: FloatArray): MotionEvent {
         val props = Array(xs.size) { i ->
@@ -54,14 +52,20 @@ class ZoomImageViewTest {
 
     private fun ZoomImageView.touch(action: Int, at: Long, x: Float, y: Float) {
         if (action == MotionEvent.ACTION_DOWN) downTime = at
-        eventTime = at
         dispatchTouchEvent(MotionEvent.obtain(downTime, at, action, x, y, 0))
     }
 
     private fun ZoomImageView.touchAll(action: Int, at: Long, xs: FloatArray, ys: FloatArray) {
         if (action == MotionEvent.ACTION_DOWN) downTime = at
-        eventTime = at
         dispatchTouchEvent(pointers(action, at, xs, ys))
+    }
+
+    /** Two taps at (100, 100) from [t0]; without [finish] the second finger stays down. */
+    private fun ZoomImageView.doubleTap(t0: Long, finish: Boolean = true) {
+        touch(MotionEvent.ACTION_DOWN, t0, 100f, 100f)
+        touch(MotionEvent.ACTION_UP, t0 + 20, 100f, 100f)
+        touch(MotionEvent.ACTION_DOWN, t0 + 80, 100f, 100f)
+        if (finish) touch(MotionEvent.ACTION_UP, t0 + 100, 100f, 100f)
     }
 
     private fun pointerDown(index: Int) =
@@ -72,9 +76,7 @@ class ZoomImageViewTest {
 
     @Test
     fun fitsTheImageCenteredAndAppliesZoomAndPan() {
-        val view = ZoomImageView(context)
-        view.setImageBitmap(Bitmap.createBitmap(200, 100, Bitmap.Config.ARGB_8888))
-        view.layout(0, 0, 400, 400)
+        val view = viewWith()
 
         val fit = values(view)
         assertThat(fit[Matrix.MSCALE_X]).isEqualTo(2f)
@@ -92,45 +94,23 @@ class ZoomImageViewTest {
         assertThat(view.state).isEqualTo(ZoomState(2f, -200f, 0f))
     }
 
+    /**
+     * A new bitmap, drawable or resource resets the zoom: setImageBitmap and ImageView's resource
+     * path both reach the reset through setImageDrawable.
+     */
     @Test
-    fun aSingleTapDispatchesAClick() {
-        val view = viewWith()
-        var clicks = 0
-        view.setOnClickListener { clicks++ }
-
-        val down = SystemClock.uptimeMillis()
-        view.touch(MotionEvent.ACTION_DOWN, down, 10f, 10f)
-        view.touch(MotionEvent.ACTION_UP, down + 20, 10f, 10f)
-        // onSingleTapConfirmed only fires once the double-tap window has passed.
-        idleMainLooperFor(Duration.ofMillis(500))
-
-        assertThat(clicks).isEqualTo(1)
-    }
-
-    @Test
-    fun newImageResetsTheState() {
-        val view = viewWith()
-        view.zoomBy(3f, 0f, 0f)
-        view.setImageBitmap(Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888))
-        assertThat(view.state).isEqualTo(ZoomState())
-    }
-
-    /** setImageBitmap reaches the reset through setImageDrawable. */
-    @Test
-    fun aNewDrawableResetsTheStateToo() {
-        val view = viewWith()
-        view.zoomBy(3f, 0f, 0f)
-        view.setImageDrawable(ColorDrawable(0xFF00FF00.toInt()))
-        assertThat(view.state).isEqualTo(ZoomState())
-    }
-
-    /** So does a resource: ImageView routes it through setImageDrawable as well. */
-    @Test
-    fun aNewResourceResetsTheStateToo() {
-        val view = viewWith()
-        view.zoomBy(3f, 0f, 0f)
-        view.setImageResource(se.lublin.mumla.R.drawable.ic_stat_notify)
-        assertThat(view.state).isEqualTo(ZoomState())
+    fun aNewImageResetsTheState() {
+        val replacements = listOf<ZoomImageView.() -> Unit>(
+            { setImageBitmap(Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)) },
+            { setImageDrawable(ColorDrawable(0xFF00FF00.toInt())) },
+            { setImageResource(se.lublin.mumla.R.drawable.ic_stat_notify) },
+        )
+        for ((index, replace) in replacements.withIndex()) {
+            val view = viewWith()
+            view.zoomBy(3f, 0f, 0f)
+            view.replace()
+            assertWithMessage("replacement $index").that(view.state).isEqualTo(ZoomState())
+        }
     }
 
     /**
@@ -230,18 +210,12 @@ class ZoomImageViewTest {
     fun aDoubleTapZoomsInAndTheNextOneZoomsOut() {
         val view = viewWith(200, 200)
 
-        view.touch(MotionEvent.ACTION_DOWN, 1000, 100f, 100f)
-        view.touch(MotionEvent.ACTION_UP, 1020, 100f, 100f)
-        view.touch(MotionEvent.ACTION_DOWN, 1080, 100f, 100f)
-        view.touch(MotionEvent.ACTION_UP, 1100, 100f, 100f)
+        view.doubleTap(1000)
 
         // 2, not DOUBLE_TAP_SCALE: 200 px of source in a 400 px view caps this image's ceiling at 2.
         assertThat(view.state).isEqualTo(ZoomState(2f, 100f, 100f))
 
-        view.touch(MotionEvent.ACTION_DOWN, 2000, 100f, 100f)
-        view.touch(MotionEvent.ACTION_UP, 2020, 100f, 100f)
-        view.touch(MotionEvent.ACTION_DOWN, 2080, 100f, 100f)
-        view.touch(MotionEvent.ACTION_UP, 2100, 100f, 100f)
+        view.doubleTap(2000)
 
         assertThat(view.state).isEqualTo(ZoomState()) // back to the fit, recentred
     }
@@ -279,9 +253,7 @@ class ZoomImageViewTest {
     fun draggingOnAfterADoubleTapDoesNotKeepZooming() {
         val view = viewWith(2000, 2000)
 
-        view.touch(MotionEvent.ACTION_DOWN, 1000, 100f, 100f)
-        view.touch(MotionEvent.ACTION_UP, 1020, 100f, 100f)
-        view.touch(MotionEvent.ACTION_DOWN, 1080, 100f, 100f)
+        view.doubleTap(1000, finish = false)
         view.touch(MotionEvent.ACTION_MOVE, 1100, 100f, 180f)
         view.touch(MotionEvent.ACTION_MOVE, 1120, 100f, 260f)
         view.touch(MotionEvent.ACTION_MOVE, 1140, 100f, 340f)
@@ -299,9 +271,7 @@ class ZoomImageViewTest {
     fun aCancelDuringADoubleTapDoesNotDeafenTheNextDrag() {
         val view = viewWith(2000, 2000)
 
-        view.touch(MotionEvent.ACTION_DOWN, 1000, 100f, 100f)
-        view.touch(MotionEvent.ACTION_UP, 1020, 100f, 100f)
-        view.touch(MotionEvent.ACTION_DOWN, 1080, 100f, 100f) // onDoubleTap fires here
+        view.doubleTap(1000, finish = false) // onDoubleTap fires here
         assertThat(view.state).isEqualTo(ZoomState(2.5f, 150f, 150f))
         view.touch(MotionEvent.ACTION_CANCEL, 1100, 100f, 100f)
 
@@ -320,9 +290,7 @@ class ZoomImageViewTest {
     fun aCancelDuringADoubleTapDoesNotTurnTheNextDragIntoAZoom() {
         val view = viewWith(2000, 2000)
 
-        view.touch(MotionEvent.ACTION_DOWN, 1000, 100f, 100f)
-        view.touch(MotionEvent.ACTION_UP, 1020, 100f, 100f)
-        view.touch(MotionEvent.ACTION_DOWN, 1080, 100f, 100f)
+        view.doubleTap(1000, finish = false)
         view.touch(MotionEvent.ACTION_CANCEL, 1100, 100f, 100f)
 
         view.touch(MotionEvent.ACTION_DOWN, 2000, 100f, 100f)
@@ -439,6 +407,7 @@ class ZoomImageViewTest {
         val down = SystemClock.uptimeMillis()
         view.touch(MotionEvent.ACTION_DOWN, down, 10f, 10f)
         view.touch(MotionEvent.ACTION_UP, down + 20, 10f, 10f)
+        // onSingleTapConfirmed only fires once the double-tap window has passed.
         idleMainLooperFor(Duration.ofMillis(500))
 
         assertThat(clicks).isEqualTo(1)

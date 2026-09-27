@@ -17,6 +17,7 @@ import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
+import se.lublin.mumla.testing.host
 
 @RunWith(RobolectricTestRunner::class)
 class FavouriteServerListFragmentTest {
@@ -25,8 +26,7 @@ class FavouriteServerListFragmentTest {
 
     private fun show(servers: List<Server>): FavouriteServerListFragment {
         every { activity.database.getServers() } returns servers
-        val fragment = FavouriteServerListFragment()
-        activity.supportFragmentManager.beginTransaction().add(android.R.id.content, fragment).commitNow()
+        val fragment = activity.host(FavouriteServerListFragment())
         idleMainLooper()
         return fragment
     }

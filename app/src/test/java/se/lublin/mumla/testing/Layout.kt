@@ -17,11 +17,13 @@
 
 package se.lublin.mumla.testing
 
-import se.lublin.humla.model.Message
-import se.lublin.mumla.chat.IChatMessage
+import android.view.View
 
-/** A text message without targets. */
-fun textMessage(body: String, actor: Int = -1, actorName: String? = null, receivedTime: Long = 0L) =
-    Message(actor, actorName, emptyList(), emptyList(), emptyList(), body, receivedTime)
-
-fun info(body: String) = IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
+/** Measures and lays this view out at [width] x [height], as a window of that size would. */
+fun View.layOut(width: Int = 1080, height: Int = 1920, heightMode: Int = View.MeasureSpec.EXACTLY) {
+    measure(
+        View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+        View.MeasureSpec.makeMeasureSpec(height, heightMode),
+    )
+    layout(0, 0, width, height)
+}

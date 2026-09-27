@@ -33,7 +33,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.AudioControls
@@ -43,6 +42,8 @@ import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.addNow
+import se.lublin.mumla.testing.hostWith
 import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
@@ -68,11 +69,8 @@ class ChannelFragmentAccessibilityTest {
         session.stubModel(serverState(self = SESSION) { channel(0, "Root"); user(SESSION, "me") })
         talkStates = session.stubTalkStates()
         session.stubConnected()
-        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        val activity = controller.get()
-        activity.bind(session)
-        fragment = ChannelFragment()
-        activity.supportFragmentManager.beginTransaction().add(fragment, "channel").commitNow()
+        controller = hostWith(session)
+        fragment = controller.get().addNow(ChannelFragment(), "channel")
         idleMainLooper()
     }
 

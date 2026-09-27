@@ -2,59 +2,21 @@ package se.lublin.mumla.service
 
 import android.content.Context
 import android.view.KeyEvent
-import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.FakeMediaKeyTarget
+import se.lublin.mumla.testing.setMediaButtonAction
 
 @RunWith(RobolectricTestRunner::class)
 class MediaKeyHandlerTest {
-    private class FakeTarget(
-        override var isConnected: Boolean = true,
-        override var transmitMode: TransmitMode = TransmitMode.PUSH_TO_TALK,
-    ) : MediaKeyTarget {
-        // A mutable `var isTalking` here would generate a JVM `setTalking(boolean)` accessor that
-        // clashes with the interface's own `fun setTalking`; back it with a private field instead.
-        private var talking: Boolean = false
-        override val isTalking: Boolean
-            get() = talking
-        var muteToggles = 0
-
-        override fun setTalking(talking: Boolean) {
-            this.talking = talking
-        }
-
-        override fun stopTalking() {
-            talking = false
-        }
-
-        override fun toggleSelfMute() {
-            muteToggles++
-        }
-    }
-
-    private lateinit var context: Context
-    private lateinit var settings: Settings
-    private lateinit var target: FakeTarget
-    private lateinit var handler: MediaKeyHandler
-
-    @Before
-    fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-        settings = Settings.getInstance(context)
-        target = FakeTarget()
-        handler = MediaKeyHandler(settings, target)
-    }
-
-    private fun setAction(prefValue: String) {
-        PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putString(Settings.MEDIA_BUTTON_ACTION.key, prefValue).commit()
-    }
+    private val context: Context = ApplicationProvider.getApplicationContext()
+    private val target = FakeMediaKeyTarget()
+    private val handler = MediaKeyHandler(Settings.getInstance(context), target)
 
     private fun press(keyCode: Int): Boolean {
         val down = handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
@@ -113,28 +75,19 @@ class MediaKeyHandlerTest {
         assertThat(target.muteToggles).isEqualTo(0)
     }
 
-    @Test
-    fun repeatedKeyDownIsConsumedWithoutToggling() {
-        val repeatedDown = KeyEvent(0L, 0L, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK, 1)
-
-        assertThat(handler.onKeyEvent(repeatedDown)).isTrue()
-
-        assertThat(target.isTalking).isFalse()
-        assertThat(target.muteToggles).isEqualTo(0)
-    }
-
     /**
-     * A canceled event never acts. MediaSessionService already drops canceled events, but this
-     * class is a pure function of the KeyEvent and the failure is an unattended open microphone.
+     * A repeated or canceled DOWN is consumed but never acts. MediaSessionService already drops
+     * canceled events, but this class is a pure function of the KeyEvent and the failure is an
+     * unattended open microphone.
      */
     @Test
-    fun canceledKeyDownIsConsumedWithoutToggling() {
-        val canceledDown = KeyEvent(
+    fun aRepeatedOrCanceledKeyDownIsConsumedWithoutToggling() {
+        val repeated = KeyEvent(0L, 0L, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK, 1)
+        val canceled = KeyEvent(
             0L, 0L, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK, 0, 0, 0, 0,
             KeyEvent.FLAG_CANCELED,
         )
-
-        assertThat(handler.onKeyEvent(canceledDown)).isTrue()
+        for (event in listOf(repeated, canceled)) assertThat(handler.onKeyEvent(event)).isTrue()
 
         assertThat(target.isTalking).isFalse()
         assertThat(target.muteToggles).isEqualTo(0)
@@ -165,7 +118,7 @@ class MediaKeyHandlerTest {
 
     @Test
     fun muteSettingAlwaysTogglesMuteEvenInPushToTalkMode() {
-        setAction("mute")
+        setMediaButtonAction(context, "mute")
 
         press(KeyEvent.KEYCODE_HEADSETHOOK)
 
@@ -173,11 +126,10 @@ class MediaKeyHandlerTest {
         assertThat(target.isTalking).isFalse()
     }
 
-    @Test
-    fun noneSettingDoesNotConsumeTheKey() {
-        setAction("none")
-
-        assertThat(handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK))).isFalse()
+    private fun assertNeitherHalfOfAPressIsConsumed(keyCode: Int) {
+        for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+            assertThat(handler.onKeyEvent(KeyEvent(action, keyCode))).isFalse()
+        }
         assertThat(target.isTalking).isFalse()
         assertThat(target.muteToggles).isEqualTo(0)
     }
@@ -187,30 +139,16 @@ class MediaKeyHandlerTest {
      * once any part of it is claimed, so consuming the DOWN breaks the media button for other apps.
      */
     @Test
-    fun noneSettingDoesNotConsumeTheKeyDownEither() {
-        setAction("none")
-
-        assertThat(handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK))).isFalse()
-        assertThat(target.isTalking).isFalse()
-        assertThat(target.muteToggles).isEqualTo(0)
-    }
-
-    @Test
-    fun ignoredWhileDisconnected() {
-        target.isConnected = false
-
-        assertThat(handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))).isFalse()
-        assertThat(target.muteToggles).isEqualTo(0)
+    fun noneSettingConsumesNoKey() {
+        setMediaButtonAction(context, "none")
+        assertNeitherHalfOfAPressIsConsumed(KeyEvent.KEYCODE_HEADSETHOOK)
     }
 
     /** Same contract while disconnected: Mumla has no business claiming any part of the gesture. */
     @Test
-    fun ignoredWhileDisconnectedForKeyDownToo() {
+    fun ignoredWhileDisconnected() {
         target.isConnected = false
-
-        assertThat(handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))).isFalse()
-        assertThat(target.isTalking).isFalse()
-        assertThat(target.muteToggles).isEqualTo(0)
+        assertNeitherHalfOfAPressIsConsumed(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
     }
 
     @Test

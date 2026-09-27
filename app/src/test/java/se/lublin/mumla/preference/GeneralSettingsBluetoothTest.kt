@@ -10,7 +10,6 @@ import androidx.preference.PreferenceGroup
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -20,6 +19,7 @@ import org.robolectric.shadows.ShadowToast
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.host
 
 /**
  * `BLUETOOTH_CONNECT` is asked for when the user ticks the Bluetooth switch. The box is driven
@@ -28,26 +28,14 @@ import se.lublin.mumla.testing.ThemedActivity
  */
 @RunWith(RobolectricTestRunner::class)
 class GeneralSettingsBluetoothTest {
-    private lateinit var app: Application
+    private val app: Application = ApplicationProvider.getApplicationContext()
+    private val settings = Settings.getInstance(app)
     private lateinit var activity: ThemedActivity
     private lateinit var fragment: GeneralSettingsFragment
-    private lateinit var settings: Settings
-
-    @Before
-    fun setUp() {
-        app = ApplicationProvider.getApplicationContext()
-        // Preferences survive between test methods in one JVM, and a stored value shadows the
-        // XML default.
-        settings = Settings.getInstance(app)
-        ShadowToast.reset()
-    }
 
     private fun open() {
         activity = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
-        fragment = GeneralSettingsFragment()
-        activity.supportFragmentManager.beginTransaction()
-            .add(android.R.id.content, fragment)
-            .commitNow()
+        fragment = activity.host(GeneralSettingsFragment())
     }
 
     /** The default is on; ticking the box is the gesture that asks for the permission. */

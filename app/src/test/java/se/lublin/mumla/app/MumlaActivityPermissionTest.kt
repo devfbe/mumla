@@ -21,16 +21,13 @@ import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowDialog
@@ -39,8 +36,9 @@ import se.lublin.humla.model.Server
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.launchMumlaActivity
+import se.lublin.mumla.testing.message
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.ServerRequest
@@ -53,17 +51,7 @@ class MumlaActivityPermissionTest {
     private val settings = Settings.getInstance(app)
     private val server = Server(1, "Home", "example.org", 64738, "me", null)
 
-    @Before
-    fun setUp() {
-        installDatabase(mockk(relaxed = true))
-    }
-
-    private fun launch(): MumlaActivity {
-        val activity = Robolectric.buildActivity(MumlaActivity::class.java).setup().get()
-        idleMainLooper()
-        ShadowDialog.getLatestDialog()?.dismiss() // the first-run guide
-        return activity
-    }
+    private fun launch(): MumlaActivity = launchMumlaActivity()
 
     private fun MumlaActivity.requestConnect() {
         ViewModelProvider(this)[ConnectRequests::class.java].request(ServerRequest.Favourite(server))
@@ -87,8 +75,6 @@ class MumlaActivityPermissionTest {
     }
 
     private fun latestDialog() = ShadowDialog.getLatestDialog() as AlertDialog
-
-    private fun AlertDialog.message() = findViewById<TextView>(android.R.id.message)!!.text.toString()
 
     private fun rationale(permission: String, show: Boolean) {
         shadowOf(app.packageManager).setShouldShowRequestPermissionRationale(permission, show)

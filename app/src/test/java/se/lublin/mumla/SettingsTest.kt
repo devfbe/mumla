@@ -6,8 +6,8 @@ import android.view.Gravity
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -15,32 +15,21 @@ import se.lublin.humla.audio.TransmitMode
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsTest {
-    private lateinit var prefs: SharedPreferences
-    private lateinit var settings: Settings
-
-    @Before
-    fun setUp() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        settings = Settings.getInstance(context)
-    }
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val prefs: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
+    private val settings = Settings.getInstance(context)
 
     @Test
-    fun `voice activity maps to the voice activity transmit mode`() {
-        prefs.edit().putString("audioInputMethod", "voiceActivity").commit()
-        assertThat(settings.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
-    }
-
-    @Test
-    fun `push to talk maps to the push to talk transmit mode`() {
-        prefs.edit().putString("audioInputMethod", "ptt").commit()
-        assertThat(settings.transmitMode).isEqualTo(TransmitMode.PUSH_TO_TALK)
-    }
-
-    @Test
-    fun `continuous maps to the continuous transmit mode`() {
-        prefs.edit().putString("audioInputMethod", "continuous").commit()
-        assertThat(settings.transmitMode).isEqualTo(TransmitMode.CONTINUOUS)
+    fun `each input method maps to its transmit mode`() {
+        val cases = mapOf(
+            "voiceActivity" to TransmitMode.VOICE_ACTIVITY,
+            "ptt" to TransmitMode.PUSH_TO_TALK,
+            "continuous" to TransmitMode.CONTINUOUS,
+        )
+        for ((stored, mode) in cases) {
+            prefs.edit().putString("audioInputMethod", stored).commit()
+            assertWithMessage(stored).that(settings.transmitMode).isEqualTo(mode)
+        }
     }
 
     @Test

@@ -17,8 +17,6 @@
 package se.lublin.mumla.preference
 
 import android.content.Context
-import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
@@ -26,12 +24,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.shadows.ShadowDialog
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.MumlaSQLiteDatabase
 import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.installDatabase
+import se.lublin.mumla.testing.latestAlertMessage
 
 @RunWith(RobolectricTestRunner::class)
 class CertificateGenerateActivityTest {
@@ -47,14 +45,11 @@ class CertificateGenerateActivityTest {
         val database = installDatabase()
 
         Robolectric.buildActivity(CertificateGenerateActivity::class.java).setup()
-        drainMainUntil { database.getCertificates().isNotEmpty() && !latestMessage().isNullOrEmpty() }
+        drainMainUntil { database.getCertificates().isNotEmpty() && !latestAlertMessage().isNullOrEmpty() }
 
         val stored = database.getCertificates().single()
-        assertThat(latestMessage()).isEqualTo(context.getString(R.string.generateCertSuccess, stored.name))
+        assertThat(latestAlertMessage()).isEqualTo(context.getString(R.string.generateCertSuccess, stored.name))
         assertThat(Settings.getInstance(context).defaultCertificateId).isEqualTo(stored.id)
         assertThat(database.getCertificateData(stored.id)).isNotEmpty()
     }
-
-    private fun latestMessage(): String? =
-        (ShadowDialog.getLatestDialog() as? AlertDialog)?.findViewById<TextView>(android.R.id.message)?.text?.toString()
 }

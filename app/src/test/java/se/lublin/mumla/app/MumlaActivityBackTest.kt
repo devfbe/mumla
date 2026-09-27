@@ -16,7 +16,6 @@
  */
 package se.lublin.mumla.app
 
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
@@ -24,7 +23,6 @@ import io.mockk.mockk
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowDialog
 import se.lublin.humla.IHumlaSession
@@ -32,8 +30,9 @@ import se.lublin.humla.model.Server
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
-import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.launchMumlaActivity
+import se.lublin.mumla.testing.message
 import se.lublin.mumla.testing.stubState
 
 /** Back asks before leaving a connected server, and only then: predictive back works otherwise. */
@@ -48,10 +47,7 @@ class MumlaActivityBackTest {
 
     @Before
     fun setUp() {
-        installDatabase(mockk(relaxed = true))
-        activity = Robolectric.buildActivity(MumlaActivity::class.java).setup().get()
-        idleMainLooper()
-        ShadowDialog.getLatestDialog()?.dismiss() // the first-run guide
+        activity = launchMumlaActivity()
         installSession(session)
         idleMainLooper()
     }
@@ -83,7 +79,7 @@ class MumlaActivityBackTest {
         idleMainLooper()
 
         val dialog = ShadowDialog.getLatestDialog() as AlertDialog
-        assertThat(dialog.findViewById<TextView>(android.R.id.message)!!.text.toString())
+        assertThat(dialog.message())
             .isEqualTo(activity.getString(R.string.disconnectSure, "Home"))
         assertThat(activity.isFinishing).isFalse()
     }

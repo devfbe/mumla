@@ -5,31 +5,19 @@ import android.content.pm.PackageInfo
 import androidx.preference.Preference
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.mumla.R
-import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.hostInThemedActivity
 
 /** "Connect via Tor" is greyed out unless the Orbot package is installed. */
 @RunWith(RobolectricTestRunner::class)
 class GeneralSettingsOrbotTest {
-    private lateinit var app: Application
-
-    @Before
-    fun setUp() {
-        app = ApplicationProvider.getApplicationContext()
-    }
+    private val app: Application = ApplicationProvider.getApplicationContext()
 
     private fun torPreference(): Preference {
-        val fragment = GeneralSettingsFragment()
-        val activity = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
-        activity.supportFragmentManager.beginTransaction()
-            .add(android.R.id.content, fragment)
-            .commitNow()
+        val fragment = hostInThemedActivity(GeneralSettingsFragment())
         return requireNotNull(fragment.preferenceScreen.findPreference("useTor")) {
             "no preference with key 'useTor' on the general settings screen"
         }

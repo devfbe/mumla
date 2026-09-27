@@ -18,24 +18,13 @@ import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.currentScreen
+import se.lublin.mumla.testing.openScreen
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsActivityTest {
     private val activity = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
     private val preferences = PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
-
-    private fun screen(): PreferenceFragmentCompat =
-        activity.supportFragmentManager.findFragmentById(R.id.settings_container) as PreferenceFragmentCompat
-
-    private fun open(fragmentClass: Class<*>): PreferenceFragmentCompat {
-        val root = screen()
-        val entry = (0 until root.preferenceScreen.preferenceCount)
-            .map { root.preferenceScreen.getPreference(it) }
-            .single { it.fragment == fragmentClass.name }
-        root.onPreferenceTreeClick(entry)
-        idleMainLooper()
-        return screen()
-    }
 
     private fun showDialog(fragment: PreferenceFragmentCompat, key: String): AlertDialog {
         fragment.onDisplayPreferenceDialog(requireNotNull(fragment.findPreference<Preference>(key)))
@@ -46,7 +35,7 @@ class SettingsActivityTest {
 
     @Test
     fun `a screen opens on top of the index with its title, and back returns`() {
-        val general = open(GeneralSettingsFragment::class.java)
+        val general = activity.openScreen(GeneralSettingsFragment::class.java)
 
         assertThat(general).isInstanceOf(GeneralSettingsFragment::class.java)
         assertThat(activity.supportActionBar?.title).isEqualTo(activity.getString(R.string.general))
@@ -54,7 +43,7 @@ class SettingsActivityTest {
         activity.onBackPressedDispatcher.onBackPressed()
         idleMainLooper()
 
-        assertThat(screen()).isInstanceOf(SettingsActivity.RootPreferenceFragment::class.java)
+        assertThat(activity.currentScreen()).isInstanceOf(SettingsActivity.RootPreferenceFragment::class.java)
         assertThat(activity.supportActionBar?.title).isEqualTo(activity.getString(R.string.action_settings))
         assertThat(activity.isFinishing).isFalse()
     }
@@ -68,7 +57,7 @@ class SettingsActivityTest {
 
     @Test
     fun `the slider stores the multiplied value on ok, and nothing on cancel`() {
-        val appearance = open(AppearanceSettingsFragment::class.java)
+        val appearance = activity.openScreen(AppearanceSettingsFragment::class.java)
 
         var dialog = showDialog(appearance, Settings.PTT_BUTTON_HEIGHT.key)
         val seekBar = dialog.findViewById<SeekBar>(R.id.seek_bar)!!
@@ -92,7 +81,7 @@ class SettingsActivityTest {
 
     @Test
     fun `the key picker stores the pressed key on ok, and resets it with the neutral button`() {
-        val audio = open(AudioSettingsFragment::class.java)
+        val audio = activity.openScreen(AudioSettingsFragment::class.java)
 
         var dialog = showDialog(audio, Settings.TALK_KEY.key)
         val content = dialog.findViewById<TextView>(R.id.key_select_value_view)!!

@@ -20,21 +20,19 @@ import android.app.Application
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import androidx.preference.ListPreference
-import androidx.preference.PreferenceFragmentCompat
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
-import io.mockk.mockk
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.audio.routing.PreferredAudioDevice
-import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.assertUntouched
+import se.lublin.mumla.testing.offerCommunicationDevices
+import se.lublin.mumla.testing.openScreen
 
 /**
  * The audio device setting: "Automatic", the devices the platform offers now and the saved one even
@@ -48,38 +46,12 @@ class AudioDevicePreferenceTest {
 
     @Before
     fun devices() {
-        shadowOf(audioManager).setAvailableCommunicationDevices(
-            listOf(
-                platformDevice(11, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, ""),
-                platformDevice(12, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, ""),
-                platformDevice(17, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "AA", "Sony WH"),
-            ),
-        )
+        audioManager.offerCommunicationDevices()
     }
-
-    /** `AudioDeviceInfoBuilder` can set neither an id nor an address. */
-    private fun platformDevice(id: Int, type: Int, address: String, name: String = "Robolectric") =
-        mockk<AudioDeviceInfo> {
-            every { this@mockk.id } returns id
-            every { this@mockk.type } returns type
-            every { this@mockk.address } returns address
-            every { productName } returns name
-        }
 
     private val activity by lazy { Robolectric.buildActivity(SettingsActivity::class.java).setup().get() }
 
-    private fun screen(): PreferenceFragmentCompat =
-        activity.supportFragmentManager.findFragmentById(R.id.settings_container) as PreferenceFragmentCompat
-
-    private fun openAudio(): AudioSettingsFragment {
-        val root = screen()
-        val entry = (0 until root.preferenceScreen.preferenceCount)
-            .map { root.preferenceScreen.getPreference(it) }
-            .single { it.fragment == AudioSettingsFragment::class.java.name }
-        root.onPreferenceTreeClick(entry)
-        idleMainLooper()
-        return screen() as AudioSettingsFragment
-    }
+    private fun openAudio() = activity.openScreen(AudioSettingsFragment::class.java)
 
     private fun AudioSettingsFragment.device() =
         requireNotNull(findPreference<ListPreference>(Settings.AUDIO_DEVICE.key))
@@ -90,11 +62,6 @@ class AudioDevicePreferenceTest {
     private fun ListPreference.pick(label: String) {
         val value = entryValues[labels().indexOf(label)].toString()
         if (callChangeListener(value)) this.value = value
-    }
-
-    private fun assertAudioManagerUntouched() {
-        assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
-        assertThat(audioManager.communicationDevice).isNull()
     }
 
     @Test
@@ -143,7 +110,7 @@ class AudioDevicePreferenceTest {
         assertThat(settings.preferredAudioDevice)
             .isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "AA"))
         assertThat(device.summary.toString()).isEqualTo("Sony WH")
-        assertAudioManagerUntouched()
+        audioManager.assertUntouched()
     }
 
     @Test
