@@ -23,6 +23,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -70,6 +71,17 @@ class SessionViewModel(private val sessions: SessionManager) : ViewModel() {
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** Where we are and our own mute state while the session is synchronized; null otherwise. */
+    val selfSummary: StateFlow<SelfSummary?> = sessions.session.flatMapLatest { session ->
+        if (session == null) {
+            flowOf(null)
+        } else {
+            combine(session.state, session.model) { state, model ->
+                SelfSummary.of(model).takeIf { state == SessionState.Connected }
+            }
+        }
+    }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     /** The name of the whisper target while whispering in a synchronized session; null otherwise. */
     val whisperTarget: StateFlow<String?> = sessions.session.flatMapLatest { session ->
         if (session == null) {
@@ -86,6 +98,8 @@ class SessionViewModel(private val sessions: SessionManager) : ViewModel() {
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val connected: IHumlaSession? get() = sessions.connected
+
+    val serverName: String? get() = connected?.serverName
 
     val isTalking: Boolean get() = connected?.audio?.isTalking == true
 

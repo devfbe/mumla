@@ -28,6 +28,7 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.os.bundleOf
 import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
@@ -46,6 +47,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.FragmentChannelBinding
 import se.lublin.mumla.session.PushToTalk
 import se.lublin.mumla.session.SelfState
+import se.lublin.mumla.session.SelfSummary
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.session.SessionViewModel
 import se.lublin.mumla.util.activityAppViewModels
@@ -202,6 +204,7 @@ class ChannelFragment :
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { session.self.collect(::onSelf) }
+                launch { session.selfSummary.collect(::showInAppBar) }
                 session.whisperTarget.collect(::showWhisperTarget)
             }
         }
@@ -255,6 +258,18 @@ class ChannelFragment :
             else -> return false
         }
         return true
+    }
+
+    /** The server as the title, where we are and our own mute state as the subtitle. */
+    private fun showInAppBar(summary: SelfSummary?) {
+        val appBar = (requireActivity() as AppCompatActivity).supportActionBar ?: return
+        session.serverName?.let { appBar.title = it }
+        appBar.subtitle = summary?.text(requireContext())
+    }
+
+    override fun onStop() {
+        super.onStop()
+        (requireActivity() as AppCompatActivity).supportActionBar?.subtitle = null
     }
 
     override fun onPause() {
