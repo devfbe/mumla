@@ -180,4 +180,15 @@
     <string name="mediaButtonActionMute">Toggle mute</string>
     <string name="bluetoothSco">Use Bluetooth headset automatically</string>
     <string name="bluetoothScoSum">Use a connected Bluetooth headset; asks for Nearby devices</string>
+
+    <!-- Units of the values on the settings screens -->
+    <string name="unitPercent">%1$d%%</string>
+    <string name="unitMilliseconds">%1$d ms</string>
+    <string name="unitKilobitsPerSecond">%1$d kbit/s</string>
+    <string name="unitDp">%1$d dp</string>
+    <string name="unitHertz">%1$d Hz</string>
+    <!-- A level below full scale; the value is positive, the sign is part of the text. -->
+    <string name="unitDbfsBelow">−%1$d dBFS</string>
+    <!-- %1$s is a sample rate with its unit. -->
+    <string name="audioSampleRateUnsupported">%1$s (unsupported)</string>
 </resources>

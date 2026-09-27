@@ -58,15 +58,14 @@
         android:title="@string/controlBarPosition"
         app:iconSpaceReserved="false" />
 
-    <se.lublin.mumla.preference.SeekBarDialogPreference
+    <se.lublin.mumla.preference.SliderPreference
         android:key="pttButtonHeight"
         android:title="@string/pttButtonHeight"
-        app:useSimpleSummaryProvider="true"
         android:summary="@string/pttButtonHeightSum"
-        app:multiplier="10"
-        app:max="100"
-        app:min="15"
-        android:defaultValue="15"
-        android:text=" dp"
+        app:min="150"
+        app:max="1000"
+        app:valueStep="10"
+        android:defaultValue="150"
+        app:valueFormat="@string/unitDp"
         app:iconSpaceReserved="false" />
 </PreferenceScreen>

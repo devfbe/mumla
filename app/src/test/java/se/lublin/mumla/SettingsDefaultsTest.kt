@@ -55,9 +55,7 @@ class SettingsDefaultsTest {
         val value = if (resId != 0) context.getString(resId) else getAttributeValue(ANDROID_NS, "defaultValue")
         val persistent = getAttributeBooleanValue(ANDROID_NS, "persistent", true)
         if (key == null || value == null || !persistent) return null
-        // A SeekBarDialogPreference shows its value divided by the multiplier.
-        val multiplier = getAttributeIntValue(APP_NS, "multiplier", 1)
-        return key to (value.toIntOrNull()?.let { (it * multiplier).toString() } ?: value)
+        return key to value
     }
 
     @Test
@@ -78,7 +76,6 @@ class SettingsDefaultsTest {
 
     private companion object {
         const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
-        const val APP_NS = "http://schemas.android.com/apk/res-auto"
 
         /** Unset, the method follows the legacy `preprocessor_enabled` switch, which is on by default. */
         val UNSET_BY_DESIGN = setOf(Settings.NOISE_SUPPRESSION_METHOD.key)

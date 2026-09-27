@@ -54,14 +54,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             true
         }
 
-        // Scan each sample rate and mark the ones this device cannot open.
-        val inputQualityPreference = requireNotNull(findPreference<ListPreference>(Settings.INPUT_RATE.key))
-        inputQualityPreference.entries = inputQualityPreference.entryValues.map { value ->
-            val rate = value.toString().toInt()
-            val supported =
-                AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) > 0
-            "${rate}Hz" + if (supported) "" else " (unsupported)"
-        }.toTypedArray()
+        labelAudioFormats()
 
         findPreference<CheckBoxPreference>(Settings.ANDROID_NOISE_SUPPRESSOR.key)
             ?.let { markAvailability(it, NoiseSuppressor.isAvailable()) }
@@ -113,6 +106,22 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     }
 
     private var audioDeviceChoices: AudioDeviceChoices? = null
+
+    /** Names the sample rates, marking the ones this device cannot open, and the packet lengths. */
+    private fun labelAudioFormats() {
+        val rates = requireNotNull(findPreference<ListPreference>(Settings.INPUT_RATE.key))
+        rates.entries = rates.entryValues.map { value ->
+            val rate = value.toString().toInt()
+            val label = getString(R.string.unitHertz, rate)
+            val supported =
+                AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) > 0
+            if (supported) label else getString(R.string.audioSampleRateUnsupported, label)
+        }.toTypedArray()
+        val packets = requireNotNull(findPreference<ListPreference>(Settings.FRAMES_PER_PACKET.key))
+        packets.entries = packets.entryValues
+            .map { frames -> getString(R.string.unitMilliseconds, frames.toString().toInt() * FRAME_MS) }
+            .toTypedArray()
+    }
 
     /** Lists the devices there now, read without routing, and shows the saved choice. */
     private fun refreshAudioDevices() {
@@ -259,5 +268,8 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         private const val KEY_TEST = "audio_test_microphone"
         private const val KEY_LOOPBACK = "audio_loopback_test"
         private const val KEY_RECALIBRATE = "vad_recalibrate"
+
+        /** The length of one audio frame; a packet holds a whole number of them. */
+        private const val FRAME_MS = 10
     }
 }

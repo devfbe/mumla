@@ -28,13 +28,13 @@
         android:title="@string/audioInputMethod"
         app:iconSpaceReserved="false"/>
 
-    <se.lublin.mumla.preference.SeekBarDialogPreference
+    <se.lublin.mumla.preference.SliderPreference
         android:title="@string/audioInputVolume"
         android:summary="@string/audioInputVolumeSum"
         android:key="inputVolume"
         app:max="200"
         android:defaultValue="100"
-        android:text="%"
+        app:valueFormat="@string/unitPercent"
         app:iconSpaceReserved="false"/>
 
     <!-- Filled and saved by AudioSettingsFragment through Settings.preferredAudioDevice. -->
@@ -74,13 +74,12 @@
             app:iconSpaceReserved="false"/>
 
         <!-- Adaptive mode: a fraction of the measured speech-to-floor gap, not a loudness. -->
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
+        <se.lublin.mumla.preference.SliderPreference
             android:defaultValue="65"
             android:key="vad_sensitivity"
             app:min="0"
             app:max="100"
-            android:text="%"
+            app:valueFormat="@string/unitPercent"
             android:summary="@string/vadSensitivitySum"
             android:title="@string/vadSensitivity"
             app:iconSpaceReserved="false"/>
@@ -92,44 +91,41 @@
             android:summary="@string/vadAdaptiveFloorSum"
             app:iconSpaceReserved="false"/>
 
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
+        <se.lublin.mumla.preference.SliderPreference
             android:defaultValue="45"
             android:key="vad_floor_db"
             app:min="20"
             app:max="90"
-            android:text=" dB below full scale"
+            app:valueFormat="@string/unitDbfsBelow"
             android:summary="@string/vadFloorSum"
             android:title="@string/vadFloor"
             app:iconSpaceReserved="false"/>
 
         <!-- Classic mode: the legacy level slider, left on disk so switching back restores it. -->
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
+        <se.lublin.mumla.preference.SliderPreference
             android:defaultValue="50"
             android:key="vadThreshold"
             app:max="100"
+            app:valueFormat="@string/unitPercent"
             android:summary="@string/detectionThresholdSum"
             android:title="@string/detectionThreshold"
             app:iconSpaceReserved="false"/>
 
         <!-- Speech-model mode. -->
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
+        <se.lublin.mumla.preference.SliderPreference
             android:defaultValue="60"
             android:key="vad_start"
             app:max="100"
-            android:text="%"
+            app:valueFormat="@string/unitPercent"
             android:summary="@string/vadStartSum"
             android:title="@string/vadStart"
             app:iconSpaceReserved="false"/>
 
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="1"
+        <se.lublin.mumla.preference.SliderPreference
             android:defaultValue="30"
             android:key="vad_stop"
             app:max="100"
-            android:text="%"
+            app:valueFormat="@string/unitPercent"
             android:summary="@string/vadStopSum"
             android:title="@string/vadStop"
             app:iconSpaceReserved="false"/>
@@ -160,13 +156,13 @@
             android:summary="@string/audioLoopbackTestSum"
             app:iconSpaceReserved="false"/>
 
-        <se.lublin.mumla.preference.SeekBarDialogPreference
-            app:multiplier="10"
-            android:defaultValue="25"
+        <se.lublin.mumla.preference.SliderPreference
+            android:defaultValue="250"
             android:key="vad_hold_ms"
             app:min="0"
-            app:max="200"
-            android:text=" ms"
+            app:max="2000"
+            app:valueStep="10"
+            app:valueFormat="@string/unitMilliseconds"
             android:summary="@string/vadHoldSum"
             android:title="@string/vadHold"
             app:iconSpaceReserved="false"/>
@@ -240,15 +236,16 @@
             android:entryValues="@array/audioSampleRateValues"
             app:iconSpaceReserved="false"/>
 
-        <se.lublin.mumla.preference.SeekBarDialogPreference
+        <se.lublin.mumla.preference.SliderPreference
             android:key="input_bitrate"
             android:title="@string/inputQuality"
             android:summary="@string/inputQualitySum"
-            app:multiplier="1000"
-            app:max="96"
-            app:min="8"
-            android:defaultValue="40"
-            android:text=" bps"
+            app:min="8000"
+            app:max="96000"
+            app:valueStep="1000"
+            android:defaultValue="40000"
+            app:valueFormat="@string/unitKilobitsPerSecond"
+            app:valueDivisor="1000"
             app:iconSpaceReserved="false"/>
 
         <ListPreference
@@ -256,7 +253,6 @@
             android:title="@string/audio_per_packet"
             android:summary="@string/audio_per_packet_sum"
             android:defaultValue="2"
-            android:entries="@array/audio_per_packet_names"
             android:entryValues="@array/audio_per_packet_values"
             app:iconSpaceReserved="false"/>
 

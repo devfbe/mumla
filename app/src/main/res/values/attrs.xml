@@ -19,11 +19,13 @@
 <resources>
     <attr name="popupOverlay" format="reference" />
 
-    <declare-styleable name="SeekBarDialogPreference">
-        <attr name="max" format="integer" />
+    <declare-styleable name="SliderPreference">
         <attr name="min" format="integer" />
-        <attr name="multiplier" format="integer" />
-        <attr name="android:text" format="string" />
-        <attr name="android:defaultValue" />
+        <attr name="max" format="integer" />
+        <!-- The distance between two positions, in stored units. -->
+        <attr name="valueStep" format="integer" />
+        <!-- A string with one integer placeholder, the stored value divided by valueDivisor. -->
+        <attr name="valueFormat" format="reference" />
+        <attr name="valueDivisor" format="integer" />
     </declare-styleable>
 </resources>

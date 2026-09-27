@@ -2,7 +2,6 @@ package se.lublin.mumla.preference
 
 import android.content.DialogInterface
 import android.view.KeyEvent
-import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
@@ -10,6 +9,7 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
+import com.google.android.material.slider.Slider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,6 +20,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.currentScreen
 import se.lublin.mumla.testing.openScreen
+import se.lublin.mumla.testing.rowOf
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsActivityTest {
@@ -56,27 +57,18 @@ class SettingsActivityTest {
     }
 
     @Test
-    fun `the slider stores the multiplied value on ok, and nothing on cancel`() {
+    fun `a slider shows its value with the unit and stores a moved thumb as it is shown`() {
         val appearance = activity.openScreen(AppearanceSettingsFragment::class.java)
+        val row = appearance.rowOf(Settings.PTT_BUTTON_HEIGHT.key)
+        val value = row.findViewById<TextView>(R.id.slider_value)
+        assertThat(value.text.toString()).isEqualTo(activity.getString(R.string.unitDp, 150))
 
-        var dialog = showDialog(appearance, Settings.PTT_BUTTON_HEIGHT.key)
-        val seekBar = dialog.findViewById<SeekBar>(R.id.seek_bar)!!
-        val value = dialog.findViewById<TextView>(R.id.seek_bar_value_view)!!
-        assertThat(value.text.toString()).isEqualTo("150 dp")
-        seekBar.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
-        val expected = (15 + seekBar.progress) * 10
-        assertThat(value.text.toString()).isEqualTo("$expected dp")
-
-        dialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
-        idleMainLooper()
-        assertThat(preferences.contains(Settings.PTT_BUTTON_HEIGHT.key)).isFalse()
-
-        dialog = showDialog(appearance, Settings.PTT_BUTTON_HEIGHT.key)
-        dialog.findViewById<SeekBar>(R.id.seek_bar)!!
+        row.findViewById<Slider>(R.id.slider)
             .onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
-        dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        idleMainLooper()
-        assertThat(preferences.getInt(Settings.PTT_BUTTON_HEIGHT.key, 0)).isEqualTo(expected)
+
+        assertThat(value.text.toString()).isEqualTo(activity.getString(R.string.unitDp, 160))
+        assertThat(preferences.getInt(Settings.PTT_BUTTON_HEIGHT.key, 0)).isEqualTo(160)
+        assertThat(Settings.getInstance(activity).pttButtonHeight).isEqualTo(160)
     }
 
     @Test
