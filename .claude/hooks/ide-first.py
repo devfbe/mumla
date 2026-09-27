@@ -109,9 +109,8 @@ def bash_hits_sources(cmd: str, cwd: str) -> bool:
     rest = GIT_CMD.sub(" ", cmd)
     paths = [t for t in PATH_TOKEN.findall(rest) if not re.fullmatch(r"[.\d]+|-.*|\*?\.\w+", t)]
     for token in paths:
-        if indexed_source(token, cwd) and (
-            SOURCE_EXT.search(token) or os.path.isdir(os.path.join(cwd, os.path.expanduser(token)))
-        ):
+        full = os.path.realpath(os.path.join(cwd, os.path.expanduser(token)))
+        if indexed_source(token, cwd) and (SOURCE_EXT.search(token) or (os.path.isdir(full) and full != INDEXED_ROOT)):
             return True
     if RECURSIVE_SEARCH.search(rest) and indexed_source(".", cwd):
         explicit_elsewhere = [p for p in paths if p.startswith(("/", "~")) and not indexed_source(p, cwd)]
@@ -159,7 +158,7 @@ def gradle_outside_verify(cmd: str) -> bool:
                 skip = False
             elif token in GRADLE_VALUE_OPTIONS:
                 skip = True
-            elif not token.startswith("-"):
+            elif not token.startswith("-") and not token.isdigit():
                 tasks.append(token)
         if any(task not in GRADLE_ALLOWED_TASKS for task in tasks):
             return True
