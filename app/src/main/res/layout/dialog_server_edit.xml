@@ -32,7 +32,8 @@
             style="?attr/textInputOutlinedStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/server_label">
+            android:hint="@string/server_label"
+            app:endIconMode="clear_text">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/server_edit_name"
@@ -54,7 +55,8 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="2"
-                android:hint="@string/server_host">
+                android:hint="@string/server_host"
+                app:endIconMode="clear_text">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/server_edit_host"
@@ -72,6 +74,7 @@
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:hint="@string/server_port"
+                app:endIconMode="clear_text"
                 app:placeholderText="@string/default_">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -90,7 +93,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:hint="@string/server_username">
+            android:hint="@string/server_username"
+            app:endIconMode="clear_text">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/server_edit_username"
