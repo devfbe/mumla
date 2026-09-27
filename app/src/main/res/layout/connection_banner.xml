@@ -21,18 +21,34 @@
         app:indicatorSize="20dp"
         app:trackThickness="2dp" />
 
-    <TextView
-        android:id="@+id/connection_banner_text"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="8dp"
         android:layout_weight="1"
-        android:accessibilityLiveRegion="polite"
+        android:orientation="vertical"
         android:paddingTop="8dp"
-        android:paddingBottom="8dp"
-        android:textAppearance="?attr/textAppearanceBodyMedium"
-        android:textColor="?attr/colorOnSecondaryContainer" />
+        android:paddingBottom="8dp">
+
+        <!-- The phase is announced when it changes; the countdown below ticks silently. -->
+        <TextView
+            android:id="@+id/connection_banner_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:accessibilityLiveRegion="polite"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSecondaryContainer" />
+
+        <TextView
+            android:id="@+id/connection_banner_countdown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSecondaryContainer"
+            android:visibility="gone" />
+
+    </LinearLayout>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/connection_banner_cancel"

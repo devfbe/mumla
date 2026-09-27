@@ -71,25 +71,30 @@ class ConnectionBanner(
     /** Shows [text] with the server's host; not its port, which the SRV lookup that comes later may change. */
     private fun showProgress(@StringRes text: Int) {
         val host = sessions.session.value?.targetServer?.host
-        showText(activity.getString(text, host) + if (settings.isTorEnabled) " (Tor)" else "")
+        showPhase(activity.getString(text, host) + if (settings.isTorEnabled) " (Tor)" else "")
     }
 
-    /** Counts the seconds down to the reconnect; returns when it is due. */
+    /** Counts the seconds down to the reconnect, outside the announced phase; returns when it is due. */
     private suspend fun countDown(state: SessionState.ConnectionLost) {
+        showPhase(activity.getString(R.string.connection_lost))
+        val countdownText = binding.connectionBannerCountdown
         val deadline = countdown.deadline(state, SystemClock.elapsedRealtime())
         while (true) {
             val left = deadline - SystemClock.elapsedRealtime()
             if (left <= 0) break
             val seconds = (left + SECOND_MS - 1) / SECOND_MS
-            showText(activity.getString(R.string.connection_lost_retrying_in, seconds))
+            countdownText.text = activity.getString(R.string.connection_retrying_in, seconds)
+            countdownText.isVisible = true
             delay(left - (seconds - 1) * SECOND_MS)
         }
         // Due now, or later once the session sees the network again.
-        showText(activity.getString(R.string.connection_lost_reconnecting))
+        countdownText.isVisible = false
     }
 
-    private fun showText(text: String) {
+    /** Shows [text] as the phase, which is announced when it changes, and nothing else. */
+    private fun showPhase(text: String) {
         if (binding.connectionBannerText.text.toString() != text) binding.connectionBannerText.text = text
+        binding.connectionBannerCountdown.isVisible = false
         binding.root.isVisible = true
     }
 

@@ -204,8 +204,9 @@
     <string name="cancel_reconnect">Cancel reconnect</string>
     <string name="attempting_reconnect">Error: %s.\n\nReconnecting…</string>
     <string name="connection_reconnecting_to">Reconnecting to %1$s…</string>
-    <!-- A countdown in seconds, e.g. "Connection lost – retrying in 5 s". -->
-    <string name="connection_lost_retrying_in">Connection lost – retrying in %1$d s</string>
+    <string name="connection_lost">Connection lost</string>
+    <!-- A countdown in seconds under "Connection lost", e.g. "Retrying in 5 s". -->
+    <string name="connection_retrying_in">Retrying in %1$d s</string>
     <string name="edit_server">Edit server</string>
     <string name="failure_generic_title">Could not connect</string>
     <string name="failure_generic">The connection to the server failed.</string>

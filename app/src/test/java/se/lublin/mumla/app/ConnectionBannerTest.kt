@@ -85,6 +85,8 @@ class ConnectionBannerTest {
 
     private fun text() = banner.connectionBannerText.text.toString()
 
+    private fun countdown() = banner.connectionBannerCountdown.text.toString()
+
     @Test
     fun itShowsWhileConnectingAndHidesWhenConnectedOrDisconnected() {
         assertThat(banner.root.visibility).isEqualTo(View.GONE)
@@ -92,6 +94,7 @@ class ConnectionBannerTest {
         show(SessionState.Connecting)
         assertThat(banner.root.visibility).isEqualTo(View.VISIBLE)
         assertThat(text()).isEqualTo(context.getString(R.string.connecting_to_server, "example.org"))
+        assertThat(banner.connectionBannerCountdown.visibility).isEqualTo(View.GONE)
 
         show(SessionState.Connected)
         assertThat(banner.root.visibility).isEqualTo(View.GONE)
@@ -104,15 +107,18 @@ class ConnectionBannerTest {
     }
 
     @Test
-    fun aLostConnectionCountsDownToTheRetry() {
+    fun aLostConnectionCountsDownToTheRetryUnderAFixedPhase() {
         show(SessionState.ConnectionLost(5_000L, 1, null))
-        assertThat(text()).isEqualTo(context.getString(R.string.connection_lost_retrying_in, 5))
+        assertThat(text()).isEqualTo(context.getString(R.string.connection_lost))
+        assertThat(countdown()).isEqualTo(context.getString(R.string.connection_retrying_in, 5))
 
-        advance(2_000L)
-        assertThat(text()).isEqualTo(context.getString(R.string.connection_lost_retrying_in, 3))
+        advance(2_500L)
+        assertThat(text()).isEqualTo(context.getString(R.string.connection_lost))
+        assertThat(countdown()).isEqualTo(context.getString(R.string.connection_retrying_in, 3))
 
-        advance(3_000L)
-        assertThat(text()).isEqualTo(context.getString(R.string.connection_lost_reconnecting))
+        advance(2_500L)
+        assertThat(text()).isEqualTo(context.getString(R.string.connection_lost))
+        assertThat(banner.connectionBannerCountdown.visibility).isEqualTo(View.GONE)
     }
 
     @Test
@@ -123,7 +129,7 @@ class ConnectionBannerTest {
         controller.recreate()
         idleMainLooper()
 
-        assertThat(text()).isEqualTo(context.getString(R.string.connection_lost_retrying_in, 3))
+        assertThat(countdown()).isEqualTo(context.getString(R.string.connection_retrying_in, 3))
     }
 
     @Test
@@ -148,10 +154,14 @@ class ConnectionBannerTest {
     }
 
     @Test
-    fun itIsAPoliteLiveRegionWithAFullSizeCancel() {
+    fun onlyThePhaseIsAPoliteLiveRegionAndCancelIsFullSize() {
         val minTouch = 48 * context.resources.displayMetrics.density
 
-        assertThat(banner.connectionBannerText.accessibilityLiveRegion).isEqualTo(View.ACCESSIBILITY_LIVE_REGION_POLITE)
+        assertThat(banner.connectionBannerText.accessibilityLiveRegion)
+            .isEqualTo(View.ACCESSIBILITY_LIVE_REGION_POLITE)
+        assertThat(banner.connectionBannerCountdown.accessibilityLiveRegion)
+            .isEqualTo(View.ACCESSIBILITY_LIVE_REGION_NONE)
+        assertThat(banner.root.accessibilityLiveRegion).isEqualTo(View.ACCESSIBILITY_LIVE_REGION_NONE)
         assertThat(banner.connectionBannerCancel.minHeight.toFloat()).isAtLeast(minTouch)
     }
 }
