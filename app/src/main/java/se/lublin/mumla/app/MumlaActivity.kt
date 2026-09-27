@@ -111,6 +111,7 @@ class MumlaActivity :
         val binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.appBar.padForSystemBars(Edge.START, Edge.TOP, Edge.END)
+        binding.connectionBanner.root.padForSystemBars(Edge.START, Edge.END)
         binding.contentFrame.padForSystemBars(Edge.START, Edge.END, Edge.BOTTOM, ime = true)
         binding.leftDrawer.padForSystemBars(Edge.START, Edge.TOP, Edge.BOTTOM)
         setSupportActionBar(binding.toolbar)
@@ -129,6 +130,7 @@ class MumlaActivity :
             onItemSelected = ::showDrawerFragment,
         )
         dialogs = ConnectionDialogs(this, settings, this, sessions)
+        ConnectionBanner(this, binding.connectionBanner, settings, sessions)
         connectFlow = ConnectFlow(this, settings, sessions)
         batteryPrompt = BatteryOptimizationPrompt(this, settings)
         addMenuProvider(AudioPanelMenu(supportFragmentManager))

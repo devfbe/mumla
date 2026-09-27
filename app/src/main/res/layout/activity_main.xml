@@ -44,6 +44,10 @@
 
         </com.google.android.material.appbar.AppBarLayout>
 
+        <include
+            android:id="@+id/connection_banner"
+            layout="@layout/connection_banner" />
+
         <FrameLayout
             android:id="@+id/content_frame"
             android:layout_width="match_parent"
