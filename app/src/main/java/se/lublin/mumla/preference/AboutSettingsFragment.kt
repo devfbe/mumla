@@ -2,7 +2,6 @@ package se.lublin.mumla.preference
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +18,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import se.lublin.mumla.ui.showSnackbar
 
 private const val TAG = "AboutSettings"
 private const val VERSION_KEY = "version"
@@ -52,7 +52,7 @@ class AboutSettingsFragment : MumlaPreferenceFragment(R.xml.settings_about) {
                 withContext(Dispatchers.IO) { AppLog.export(context, AppLog.report()) }
             } catch (e: IOException) {
                 HumlaLog.w(TAG, "Could not write the log", e)
-                Toast.makeText(context, R.string.share_log_failed, Toast.LENGTH_LONG).show()
+                showSnackbar(R.string.share_log_failed)
                 return@launch
             }
             val title = getString(R.string.share_log)

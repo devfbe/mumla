@@ -19,6 +19,7 @@ import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.MumlaSQLiteDatabase
 import se.lublin.mumla.log.AppLog
 import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.ui.AppMessages
 import se.lublin.mumla.util.ApplicationScope
 import se.lublin.mumla.util.changes
 
@@ -26,7 +27,8 @@ class MumlaApplication :
     Application(),
     MumlaRepository.Owner,
     ApplicationScope.Owner,
-    SessionManager.Owner {
+    SessionManager.Owner,
+    AppMessages.Owner {
 
     override val scope: CoroutineScope = MainScope()
 
@@ -41,6 +43,8 @@ class MumlaApplication :
     }
 
     override val sessionManager: SessionManager get() = container.sessionManager
+
+    override val appMessages: AppMessages get() = container.appMessages
 
     @Volatile
     private var installedRepository: MumlaRepository? = null

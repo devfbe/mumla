@@ -155,13 +155,10 @@
     <string name="connect">اتصل</string>
     <string name="search_name">الاسم</string>
     <string name="connectToServer">اتصل بخادم</string>
-    <string name="remove">أزل</string>
     <string name="delete">احذف</string>
     <string name="connected">متصل</string>
     <string name="mumlaConnecting">موملا يتصل…</string>
     <string name="mumlaDisconnected">موملا غير متصل</string>
-    <string name="status_notify_muted">مكتوم.</string>
-    <string name="status_notify_muted_and_deafened">مكتوم وأصم.</string>
     <string name="close">أغلق</string>
     <string name="search_country">البلد</string>
     <string name="channel_add">أضف قناة</string>

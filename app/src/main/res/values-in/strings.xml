@@ -70,7 +70,6 @@
     <string name="quickConnect">Sambung Cepat</string>
     <string name="connectToServer">Sambung ke Server</string>
     <string name="edit">Edit</string>
-    <string name="remove">Hapus</string>
     <string name="delete">Hapus Permanen</string>
     <string name="messageToUser">Tulis pesan untuk user \'%s\'</string>
     <string name="messageToChannel">Tulis pesan pada channel \'%s\'</string>
@@ -85,7 +84,6 @@
     <string name="sortBy">Sortir berdasarkan…</string>
     <string name="country">Negara</string>
     <string name="description">Deskripsi</string>
-    <string name="status_notify_muted_and_deafened">Suara masuk dan mikrofon berhasil dimatikan.</string>
     <string name="search_name">Nama</string>
     <string name="search_country">Negara</string>
     <string name="error_fetching_servers">Tidak dapat mencari server.\nApakah anda tersambung dengan internet?</string>
@@ -149,7 +147,6 @@
     <string name="unknown">Tidak Diketahui</string>
     <string name="name">Nama</string>
     <string name="close">Tutup</string>
-    <string name="status_notify_muted">Mikrofon berhasil dimatikan.</string>
     <string name="shareMessage">Bergabunglah ke server Mumble ini dengan Mumla. %s</string>
     <string name="reconnect">Sambung Ulang</string>
     <string name="action_settings">Pengaturan</string>

@@ -173,8 +173,8 @@ class MumlaActivityAudioDeviceMenuTest {
 
         assertThat(all).containsExactlyElementsIn(
             titles(
-                R.string.audioInputMethod, R.string.mute, R.string.deafen, R.string.search,
-                R.string.noiseSuppression, R.string.audio_device, R.string.disconnect,
+                R.string.mute, R.string.deafen, R.string.audioInputMethod, R.string.search,
+                R.string.noiseSuppression, R.string.audio_device, R.string.overlay, R.string.disconnect,
             ),
         ).inOrder()
     }

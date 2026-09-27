@@ -18,6 +18,8 @@
 package se.lublin.mumla.channel
 
 import android.annotation.SuppressLint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
@@ -26,11 +28,13 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.os.bundleOf
 import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -44,6 +48,7 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.FragmentChannelBinding
 import se.lublin.mumla.session.PushToTalk
 import se.lublin.mumla.session.SelfState
+import se.lublin.mumla.session.SelfSummary
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.session.SessionViewModel
 import se.lublin.mumla.util.activityAppViewModels
@@ -60,6 +65,7 @@ class ChannelFragment :
     MenuProvider {
 
     private val session by activityAppViewModels { SessionViewModel(SessionManager.get(it)) }
+    private val chat by viewModels<ChatViewModel> { ChatViewModel.Factory }
     private val pushToTalk get() = PushToTalk(requireContext())
 
     private var binding: FragmentChannelBinding? = null
@@ -86,6 +92,9 @@ class ChannelFragment :
         val previous = shownSelf
         shownSelf = self
         configureInput()
+        if (previous?.isSelfMuted != self?.isSelfMuted || previous?.isSelfDeafened != self?.isSelfDeafened) {
+            requireActivity().invalidateMenu()
+        }
         if (self == null) return
         if (previous == null) announcer.reset()
         announcer.onMuteState(self.isSelfMuted, self.isSelfDeafened)
@@ -187,6 +196,11 @@ class ChannelFragment :
             styleTabs(tabs)
             pager.adapter = TabsAdapter()
             TabLayoutMediator(tabs, pager) { tab, position -> tab.text = tabTitle(position) }.attach()
+            viewLifecycleOwner.lifecycleScope.launch {
+                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    chat.unread.collect { showUnread(tabs, it) }
+                }
+            }
         } else {
             childFragmentManager.beginTransaction()
                 .replace(R.id.list_fragment, newListFragment())
@@ -197,6 +211,7 @@ class ChannelFragment :
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { session.self.collect(::onSelf) }
+                launch { session.selfSummary.collect(::showInAppBar) }
                 session.whisperTarget.collect(::showWhisperTarget)
             }
         }
@@ -213,7 +228,36 @@ class ChannelFragment :
         menuInflater.inflate(R.menu.channel_menu, menu)
     }
 
+    override fun onPrepareMenu(menu: Menu) {
+        val self = shownSelf
+        val muteItem = menu.findItem(R.id.menu_mute_button)
+        val deafenItem = menu.findItem(R.id.menu_deafen_button)
+        muteItem.isVisible = self != null
+        deafenItem.isVisible = self != null
+        if (self == null) return
+        muteItem.setIcon(
+            if (self.isSelfMuted) R.drawable.ic_action_microphone_muted else R.drawable.ic_action_microphone,
+        )
+        deafenItem.setIcon(if (self.isSelfDeafened) R.drawable.ic_action_audio_muted else R.drawable.ic_action_audio)
+        // The action a tap takes, which is also what accessibility services read.
+        muteItem.setTitle(if (self.isSelfMuted) R.string.unmute else R.string.mute)
+        deafenItem.setTitle(if (self.isSelfDeafened) R.string.undeafen else R.string.deafen)
+        // Tinted like the app bar title.
+        val tint = PorterDuffColorFilter(requireActivity().getColor(R.color.on_app_bar), PorterDuff.Mode.MULTIPLY)
+        muteItem.icon?.mutate()?.colorFilter = tint
+        deafenItem.icon?.mutate()?.colorFilter = tint
+    }
+
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+        when (menuItem.itemId) {
+            R.id.menu_mute_button -> session.toggleMute()
+            R.id.menu_deafen_button -> session.toggleDeafen()
+            else -> return selectInputMethod(menuItem)
+        }
+        return true
+    }
+
+    private fun selectInputMethod(menuItem: MenuItem): Boolean {
         settings.inputMethod = when (menuItem.itemId) {
             R.id.menu_input_voice -> Settings.ARRAY_INPUT_METHOD_VOICE
             R.id.menu_input_ptt -> Settings.ARRAY_INPUT_METHOD_PTT
@@ -221,6 +265,18 @@ class ChannelFragment :
             else -> return false
         }
         return true
+    }
+
+    /** The server as the title, where we are and our own mute state as the subtitle. */
+    private fun showInAppBar(summary: SelfSummary?) {
+        val appBar = (requireActivity() as AppCompatActivity).supportActionBar ?: return
+        session.serverName?.let { appBar.title = it }
+        appBar.subtitle = summary?.text(requireContext())
+    }
+
+    override fun onStop() {
+        super.onStop()
+        (requireActivity() as AppCompatActivity).supportActionBar?.subtitle = null
     }
 
     override fun onPause() {
@@ -252,6 +308,18 @@ class ChannelFragment :
         binding.pushtotalkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
     }
 
+    private fun showUnread(tabs: TabLayout, count: Int) {
+        val tab = tabs.getTabAt(TAB_CHAT) ?: return
+        if (count == 0) {
+            tab.removeBadge()
+            return
+        }
+        tab.orCreateBadge.apply {
+            number = count
+            setContentDescriptionQuantityStringsResource(R.plurals.unread_messages)
+        }
+    }
+
     private fun newListFragment() = ChannelListFragment.newInstance(isShowingPinnedChannels)
 
     private fun tabTitle(position: Int): String =
@@ -271,6 +339,7 @@ class ChannelFragment :
             ChannelFragment().apply { arguments = bundleOf(ARG_PINNED to pinned) }
 
         private const val TAB_CHANNEL = 0
+        private const val TAB_CHAT = 1
         private const val ARG_PINNED = "pinned"
         private val INPUT_PREFERENCES = setOf(
             Settings.INPUT_METHOD.key,

@@ -36,7 +36,6 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts.GetContent
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.annotation.VisibleForTesting
@@ -58,6 +57,8 @@ import se.lublin.mumla.chat.ChatImageLoaders
 import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.databinding.FragmentChatBinding
+import se.lublin.mumla.ui.showPermissionDeniedSnackbar
+import se.lublin.mumla.ui.showSnackbar
 
 /** The image preview takes at most a third of the screen height. */
 private const val PREVIEW_SCREEN_FRACTION = 3
@@ -94,7 +95,7 @@ class ChannelChatFragment : Fragment(), MenuProvider {
         if (granted) {
             imagePicker.launch(IMAGE_MIME)
         } else {
-            Toast.makeText(requireContext(), R.string.permission_denied_storage, Toast.LENGTH_LONG).show()
+            requireActivity().showPermissionDeniedSnackbar(R.string.permission_denied_storage)
         }
     }
 
@@ -157,6 +158,16 @@ class ChannelChatFragment : Fragment(), MenuProvider {
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
     }
 
+    override fun onResume() {
+        super.onResume()
+        chat.setShown(true)
+    }
+
+    override fun onPause() {
+        chat.setShown(false)
+        super.onPause()
+    }
+
     override fun onDestroyView() {
         chatList.adapter = null
         super.onDestroyView()
@@ -172,8 +183,11 @@ class ChannelChatFragment : Fragment(), MenuProvider {
         return true
     }
 
-    /** Empties the session's chat log, and with it the list. */
-    fun clear() = chat.clear()
+    /** Empties the session's chat log, and with it the list, offering to undo it. */
+    fun clear() {
+        val undo = chat.clear()
+        showSnackbar(R.string.chat_cleared, R.string.undo) { undo() }
+    }
 
     /** Updates the compose hint that shows where the next message goes. */
     private fun updateChatTargetText(target: ChatTarget?) {
@@ -225,12 +239,12 @@ class ChannelChatFragment : Fragment(), MenuProvider {
     @VisibleForTesting
     internal fun onImagePicked(uri: Uri) = chat.prepareImage(uri)
 
-    private fun onImageEvent(event: ChatViewModel.ImageEvent) = when (event) {
-        is ChatViewModel.ImageEvent.Confirm -> confirmImage(event.bitmap)
-        ChatViewModel.ImageEvent.Unreadable ->
-            Toast.makeText(requireContext(), R.string.image_decode_failed, Toast.LENGTH_LONG).show()
-        ChatViewModel.ImageEvent.TooLarge ->
-            Toast.makeText(requireContext(), R.string.image_too_large, Toast.LENGTH_LONG).show()
+    private fun onImageEvent(event: ChatViewModel.ImageEvent) {
+        when (event) {
+            is ChatViewModel.ImageEvent.Confirm -> confirmImage(event.bitmap)
+            ChatViewModel.ImageEvent.Unreadable -> showSnackbar(R.string.image_decode_failed)
+            ChatViewModel.ImageEvent.TooLarge -> showSnackbar(R.string.image_too_large)
+        }
     }
 
     @VisibleForTesting

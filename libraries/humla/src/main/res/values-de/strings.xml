@@ -12,4 +12,5 @@
     <string name="no_target_server">Für diese Verbindung wurde kein Server festgelegt.</string>
     <string name="udp_warning_thread_failed">Die UDP-Verbindung ist fehlgeschlagen. Sprache wird über TCP getunnelt, während UDP erneut versucht wird.</string>
     <string name="audio_route_refused">Das Gerät hat den Wechsel des Audiogeräts abgelehnt. Der Ton bleibt, wo er war.</string>
+    <string name="codec_warning_no_opus">Dieser Server unterstützt den Opus-Codec nicht. Sprache wird nicht funktionieren.</string>
 </resources>

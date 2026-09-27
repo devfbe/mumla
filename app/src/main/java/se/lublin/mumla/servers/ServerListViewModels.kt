@@ -143,9 +143,17 @@ class PublicServersViewModel(
     private var all: List<PublicServer> = emptyList()
 
     init {
+        load()
+    }
+
+    /** Downloads the list again, e.g. after it failed. */
+    fun retry() = load()
+
+    private fun load() {
         if (torEnabled()) {
             mutableState.value = State.TorBlocked
         } else {
+            mutableState.value = State.Loading
             viewModelScope.launch {
                 val servers = fetcher.fetch()
                 if (servers != null) all = servers

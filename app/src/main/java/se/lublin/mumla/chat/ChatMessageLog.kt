@@ -50,6 +50,14 @@ class ChatMessageLog(private val capacity: Int = MAX_ENTRIES) {
     /** A read-only copy of the list; later additions do not change it. */
     fun snapshot(): List<IChatMessage> = published.value
 
+    /** Puts [earlier] back before the current entries, dropping the oldest beyond [capacity]. */
+    fun restore(earlier: List<IChatMessage>) {
+        val merged = earlier + entries
+        entries.clear()
+        entries.addAll(merged.takeLast(capacity))
+        publish()
+    }
+
     fun clear() {
         entries.clear()
         publish()

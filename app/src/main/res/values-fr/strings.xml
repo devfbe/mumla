@@ -91,7 +91,6 @@
     <string name="connect">Connexion</string>
     <string name="connectToServer">Connexion au serveur</string>
     <string name="edit">Modifier</string>
-    <string name="remove">Retirer</string>
     <string name="delete">Supprimer</string>
     <string name="messageToUser">Écrire un message à l\'utilisateur « %s »</string>
     <string name="messageToChannel">Écrire un message dans le salon « %s »</string>
@@ -111,8 +110,6 @@
     <string name="share">Partager</string>
     <string name="description">Description</string>
     <string name="shareMessage">Rejoindre ce serveur Mumble avec Mumla. %s</string>
-    <string name="status_notify_muted_and_deafened">Muet et sourd.</string>
-    <string name="status_notify_muted">Muet.</string>
     <string name="close">Fermer</string>
     <string name="search_name">Nom</string>
     <string name="search_country">Pays</string>

@@ -89,7 +89,6 @@
     <string name="connect">Csatlakozás</string>
     <string name="connectToServer">Kapcsolódás szerverhez</string>
     <string name="edit">Szerkesztés</string>
-    <string name="remove">Eltávolítás</string>
     <string name="messageToChannel">Üzenet a csatornának: \'%s\'</string>
     <string name="online">Elérhető</string>
     <string name="clearChat">Chat üzenetek törlése</string>
@@ -105,8 +104,6 @@
     <string name="description">Leírás</string>
     <string name="search_name">Név</string>
     <string name="shareMessage">Csatlakozz Mumlával ehhez a Mumble szerverhez. %s</string>
-    <string name="status_notify_muted_and_deafened">Némítva és süketítve.</string>
-    <string name="status_notify_muted">Némítva.</string>
     <string name="close">Bezárás</string>
     <string name="search_country">Ország</string>
     <string name="information">Információ</string>

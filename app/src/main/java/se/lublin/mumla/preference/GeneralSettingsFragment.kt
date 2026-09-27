@@ -2,7 +2,6 @@ package se.lublin.mumla.preference
 
 import android.Manifest
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.preference.CheckBoxPreference
@@ -10,6 +9,7 @@ import androidx.preference.Preference
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.BluetoothScoToggle
+import se.lublin.mumla.ui.showPermissionDeniedSnackbar
 import se.lublin.mumla.util.BatteryOptimization
 import se.lublin.mumla.util.Orbot
 
@@ -25,8 +25,7 @@ class GeneralSettingsFragment : MumlaPreferenceFragment(R.xml.settings_general) 
             findPreference<CheckBoxPreference>(Settings.BLUETOOTH_SCO.key)?.isChecked =
                 bluetoothToggle.isEnabled
             if (!granted) {
-                Toast.makeText(requireContext(), R.string.bluetooth_perm_denied, Toast.LENGTH_LONG)
-                    .show()
+                requireActivity().showPermissionDeniedSnackbar(R.string.bluetooth_perm_denied)
             }
         }
 

@@ -60,7 +60,6 @@
     <string name="connect">Σύνδεση</string>
     <string name="connectToServer">Σύνδεση στο διακομιστή</string>
     <string name="edit">Επεξεργασία</string>
-    <string name="remove">Αφαίρεση</string>
     <string name="delete">Διαγραφή</string>
     <string name="messageToUser">Πληκτρολογήστε ένα μήνυμα στο χρήστη \'%s\'</string>
     <string name="messageToChannel">Πληκτρολογήστε ένα μήνυμα στο κανάλι \'%s\'</string>
@@ -74,8 +73,6 @@
     <string name="country">Χώρα</string>
     <string name="share">Κοινοποίηση</string>
     <string name="description">Περιγραφή</string>
-    <string name="status_notify_muted_and_deafened">Φιμώθηκε και κωφώθηκε.</string>
-    <string name="status_notify_muted">Σιωπηλός.</string>
     <string name="close">Κλείσιμο</string>
     <string name="search_name">Όνομα</string>
     <string name="search_country">Χώρα</string>

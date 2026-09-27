@@ -34,9 +34,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
+import se.lublin.mumla.testing.resetSnackbars
+import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.FileProviderCache
 import se.lublin.mumla.testing.QueueingDispatcher
 import se.lublin.mumla.testing.tapThrough
@@ -83,6 +84,7 @@ class ImageViewerDialogFragmentTest {
     @Before
     fun resetTheFileProviderRoots() {
         FileProviderCache.clear()
+        resetSnackbars()
     }
 
     @After
@@ -489,7 +491,7 @@ class ImageViewerDialogFragmentTest {
 
             fragment.tap(R.id.image_viewer_share)
 
-            assertThat(ShadowToast.getTextOfLatestToast())
+            assertThat(snackbarText(fragment.requireView()))
                 .isEqualTo(fragment.getString(R.string.chat_image_load_failed))
             assertThat(shadowOf(fragment.requireActivity()).nextStartedActivity).isNull()
             // ...and the button comes back.

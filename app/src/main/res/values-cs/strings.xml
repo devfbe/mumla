@@ -86,8 +86,6 @@
     <string name="search_country">Země</string>
     <string name="search_name">Název</string>
     <string name="close">Zavřít</string>
-    <string name="status_notify_muted">Ztlumen.</string>
-    <string name="status_notify_muted_and_deafened">Ztlumen a ohlušen.</string>
     <string name="shareMessage">Připojte se k tomuto Mumble serveru pomocí Mumla. %s</string>
     <string name="description">Popis</string>
     <string name="share">Sdílet</string>
@@ -107,7 +105,6 @@
     <string name="messageToChannel">Napište zprávu do kanálu „%s“</string>
     <string name="messageToUser">Napište zprávu uživateli „%s“</string>
     <string name="delete">Odstranit</string>
-    <string name="remove">Odebrat</string>
     <string name="edit">Upravit</string>
     <string name="connectToServer">Připojit k serveru</string>
     <string name="connect">Připojit</string>

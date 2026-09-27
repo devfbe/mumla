@@ -85,8 +85,6 @@
     <string name="search_country">Maa</string>
     <string name="search_name">Nimi</string>
     <string name="close">Sulje</string>
-    <string name="status_notify_muted">Mykistetty.</string>
-    <string name="status_notify_muted_and_deafened">Mykistetty ja hiljennetty.</string>
     <string name="shareMessage">Liity tähän Mumble-palvelimeen Mumlan kanssa. %s</string>
     <string name="description">Kuvaus</string>
     <string name="share">Jaa</string>
@@ -105,7 +103,6 @@
     <string name="messageToChannel">Kirjoita viesti kanavalle %s</string>
     <string name="messageToUser">Kirjoita viesti käyttäjälle %s</string>
     <string name="delete">Poista</string>
-    <string name="remove">Poista</string>
     <string name="edit">Muokkaa</string>
     <string name="connectToServer">Yhdistä palvelimeen</string>
     <string name="connect">Yhdistä</string>

@@ -35,7 +35,7 @@ interface MenuPermissions {
     fun requestPermissions(channel: Int)
 }
 
-/** The popup menu of a channel's row: join, edit, pin, link, shout and so on. */
+/** The popup menu of a channel's row: the everyday actions, then below a divider its management. */
 class ChannelMenu(
     private val context: Context,
     private val channel: Int,
@@ -58,8 +58,8 @@ class ChannelMenu(
     }
 
     override fun onMenuPrepare(menu: Menu, permissions: Int) {
-        // TODO This breaks uMurmur ACL. Put in a fix based on server version perhaps?
-        // menu_channel_add visible with (permissions & (Permissions.MAKE_CHANNEL | Permissions.MAKE_TEMP_CHANNEL)) > 0
+        menu.findItem(R.id.context_channel_add).isVisible =
+            permissions and (Permissions.MAKE_CHANNEL or Permissions.MAKE_TEMP_CHANNEL) != 0
         val canWrite = permissions and Permissions.WRITE > 0
         menu.findItem(R.id.context_channel_edit).isVisible = canWrite
         menu.findItem(R.id.context_channel_remove).isVisible = canWrite

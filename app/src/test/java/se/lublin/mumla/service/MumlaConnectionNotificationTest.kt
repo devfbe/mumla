@@ -53,8 +53,8 @@ class MumlaConnectionNotificationTest {
             calls += "deafen"
         }
 
-        override fun onOverlayToggled() {
-            calls += "overlay"
+        override fun onDisconnectRequested() {
+            calls += "disconnect"
         }
 
         override fun onReconnectCancelled() {
@@ -95,6 +95,18 @@ class MumlaConnectionNotificationTest {
         assertThat(shadow.lastForegroundNotificationId).isEqualTo(NOTIFICATION_ID)
         assertThat(shadow.lastForegroundNotification.extras.getString(Notification.EXTRA_TEXT))
             .isEqualTo("Connecting")
+    }
+
+    @Test
+    fun theTitleIsTheServerOnceKnown() {
+        val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
+        notification.show()
+        assertThat(posted().extras.getCharSequence(Notification.EXTRA_TITLE)).isNull()
+
+        notification.title = "Home"
+        notification.show()
+
+        assertThat(posted().extras.getCharSequence(Notification.EXTRA_TITLE).toString()).isEqualTo("Home")
     }
 
     @Test
@@ -175,7 +187,7 @@ class MumlaConnectionNotificationTest {
     }
 
     @Test
-    fun theThreeActionsAreMuteDeafenAndOverlayInThatOrder() {
+    fun theThreeActionsAreMuteDeafenAndDisconnectInThatOrder() {
         val notification = MumlaConnectionNotification.create(service, "Connecting", listener)
         notification.configure("Connected", actions = true)
         notification.show()
@@ -184,15 +196,48 @@ class MumlaConnectionNotificationTest {
         assertThat(actions.map { it.title.toString() }).containsExactly(
             service.getString(R.string.mute),
             service.getString(R.string.deafen),
-            service.getString(R.string.overlay),
+            service.getString(R.string.disconnect),
         ).inOrder()
         assertThat(actions.map { it.icon }).containsExactly(
             R.drawable.ic_action_microphone,
             R.drawable.ic_action_audio,
-            R.drawable.ic_action_channels,
+            R.drawable.ic_close,
         ).inOrder()
         // Addressed to this app only, so no other app's receiver can see the button press.
         for (action in actions) assertOwnImmutableBroadcast(action.actionIntent, service.packageName)
+    }
+
+    @Test
+    fun whileMutedAndDeafenedTheActionsOfferToUndoBoth() {
+        val notification = MumlaConnectionNotification.create(service, "Connected", listener)
+        notification.configure("Connected", actions = true)
+        notification.muted = true
+        notification.deafened = true
+        notification.show()
+
+        val actions = posted().actions
+        assertThat(actions.take(2).map { it.title.toString() }).containsExactly(
+            service.getString(R.string.unmute),
+            service.getString(R.string.undeafen),
+        ).inOrder()
+        assertThat(actions.take(2).map { it.icon }).containsExactly(
+            R.drawable.ic_action_microphone_muted,
+            R.drawable.ic_action_audio_muted,
+        ).inOrder()
+    }
+
+    @Test
+    fun theActionLabelsFollowAStateChange() {
+        val notification = MumlaConnectionNotification.create(service, "Connected", listener)
+        notification.configure("Connected", actions = true)
+        notification.show()
+        notification.muted = true
+        notification.show()
+
+        assertThat(posted().actions.take(2).map { it.title.toString() }).containsExactly(
+            service.getString(R.string.unmute),
+            service.getString(R.string.deafen),
+        ).inOrder()
     }
 
     /** Fires each button's own PendingIntent, i.e. both halves of the wiring at once. */
@@ -202,7 +247,7 @@ class MumlaConnectionNotificationTest {
         notification.configure("Connected", actions = true)
         notification.show()
 
-        for ((index, expected) in listOf("mute", "deafen", "overlay").withIndex()) {
+        for ((index, expected) in listOf("mute", "deafen", "disconnect").withIndex()) {
             listener.calls.clear()
             shadowOf(service).lastForegroundNotification.actions[index].actionIntent.send()
             idleMainLooper()
@@ -218,7 +263,7 @@ class MumlaConnectionNotificationTest {
         assertThat(receivers).hasSize(1)
         assertThat(receivers.single().flags and Context.RECEIVER_NOT_EXPORTED).isNotEqualTo(0)
         assertThat(receivers.single().intentFilter.actionsIterator().asSequence().toList())
-            .containsExactly("b_mute", "b_deafen", "b_overlay", "b_foreground_cancel_reconnect")
+            .containsExactly("b_mute", "b_deafen", "b_disconnect", "b_foreground_cancel_reconnect")
     }
 
     // ---- ConnectionLost / Reconnecting: the only thing to offer is giving up ----------------

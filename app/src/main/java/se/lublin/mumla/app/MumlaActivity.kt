@@ -25,12 +25,12 @@ import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
 import android.view.WindowManager
-import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentTransaction
 import androidx.lifecycle.Lifecycle
@@ -63,11 +63,15 @@ import se.lublin.mumla.preference.generateDefaultCertificate
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
 import se.lublin.mumla.servers.ServerEditFragment
+import se.lublin.mumla.service.MumlaService
 import se.lublin.mumla.session.PushToTalk
 import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.session.serverName
 import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.showConfirmDialog
+import se.lublin.mumla.ui.showAppMessages
+import se.lublin.mumla.ui.showSnackbar
 import se.lublin.mumla.util.Edge
 import se.lublin.mumla.util.changes
 import se.lublin.mumla.util.padForSystemBars
@@ -111,6 +115,7 @@ class MumlaActivity :
         binding.leftDrawer.padForSystemBars(Edge.START, Edge.TOP, Edge.BOTTOM)
         setSupportActionBar(binding.toolbar)
         onBackPressedDispatcher.addCallback(this, backCallback)
+        showAppMessages()
 
         setStayAwake(settings.shouldStayAwake)
         lifecycleScope.launch {
@@ -181,7 +186,7 @@ class MumlaActivity :
 
     private fun onBadUrl(e: Exception) {
         HumlaLog.w(TAG, "Could not parse the mumble:// URL", e)
-        Toast.makeText(this, getString(R.string.mumble_url_parse_failed), Toast.LENGTH_LONG).show()
+        showSnackbar(R.string.mumble_url_parse_failed)
     }
 
     override fun onPostCreate(savedInstanceState: Bundle?) {
@@ -252,10 +257,7 @@ class MumlaActivity :
             else -> false
         }
 
-    private fun connectedServerName(): String? {
-        val server = sessions.connected?.targetServer ?: return null
-        return server.name.ifEmpty { server.host }
-    }
+    private fun connectedServerName(): String? = sessions.connected?.serverName
 
     /** Enabled only while connected, so that back otherwise leaves with the predictive animation. */
     private val backCallback = object : OnBackPressedCallback(false) {
@@ -272,7 +274,9 @@ class MumlaActivity :
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.findItem(R.id.action_disconnect).isVisible = sessions.connected != null
+        val connected = sessions.connected != null
+        menu.findItem(R.id.action_disconnect).isVisible = connected
+        menu.findItem(R.id.action_overlay).isVisible = connected
         return super.onPrepareOptionsMenu(menu)
     }
 
@@ -287,7 +291,23 @@ class MumlaActivity :
             sessions.disconnect()
             true
         }
+        item.itemId == R.id.action_overlay -> {
+            toggleOverlay()
+            true
+        }
         else -> false
+    }
+
+    private fun toggleOverlay() {
+        if (android.provider.Settings.canDrawOverlays(this)) {
+            MumlaService.toggleOverlay(this)
+            return
+        }
+        showConfirmDialog(getString(R.string.grant_perm_draw_over_apps), R.string.open_settings) {
+            startActivity(
+                Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri()),
+            )
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

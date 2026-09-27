@@ -97,6 +97,36 @@ class RowMenusTest {
         assertThat(writable.findItem(R.id.context_channel_remove).isVisible).isTrue()
     }
 
+    /** Everyday actions first; below a divider what changes the channel. */
+    @Test
+    fun theChannelMenuPutsTheEverydayActionsBeforeTheManagement() {
+        val items = inflated(R.menu.context_channel)
+        val order = (0 until items.size()).map { items.getItem(it) }
+
+        assertThat(order.map { it.itemId }).containsExactly(
+            R.id.context_channel_join, R.id.context_channel_listen, R.id.context_channel_pin,
+            R.id.context_channel_shout, R.id.context_channel_view_description,
+            R.id.context_channel_add, R.id.context_channel_edit, R.id.context_channel_link,
+            R.id.context_channel_unlink_all, R.id.context_channel_remove,
+        ).inOrder()
+        val everyday = order.take(5).map { it.groupId }.distinct()
+        val management = order.drop(5).map { it.groupId }.distinct()
+        assertThat(everyday).hasSize(1)
+        assertThat(management).hasSize(1)
+        assertThat(everyday).isNotEqualTo(management)
+    }
+
+    @Test
+    fun addingASubchannelNeedsThePermissionToMakeOne() {
+        fun addVisible(permissions: Int) =
+            channelMenu(channelState(), permissions).second.findItem(R.id.context_channel_add).isVisible
+
+        assertThat(inflated(R.menu.context_channel).findItem(R.id.context_channel_add).isVisible).isFalse()
+        assertThat(addVisible(Permissions.ENTER)).isFalse()
+        assertThat(addVisible(Permissions.MAKE_CHANNEL)).isTrue()
+        assertThat(addVisible(Permissions.MAKE_TEMP_CHANNEL)).isTrue()
+    }
+
     @Test
     fun withoutAStateTheChannelMenuDoesNothing() {
         val (menu, items) = channelMenu(null, Permissions.WRITE)

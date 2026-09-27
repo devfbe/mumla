@@ -90,8 +90,6 @@
     <string name="search_country">Ülke</string>
     <string name="search_name">Ad</string>
     <string name="close">Kapat</string>
-    <string name="status_notify_muted">Sesi kapatıldı.</string>
-    <string name="status_notify_muted_and_deafened">Sesi kapatıldı ve duyması engellendi.</string>
     <string name="shareMessage">Bu Mumble sunucusuna Mumla ile katılın. %s</string>
     <string name="description">Açıklama</string>
     <string name="share">Paylaş</string>
@@ -111,7 +109,6 @@
     <string name="messageToChannel">\'%s\' kanalına mesaj yazın</string>
     <string name="messageToUser">\'%s\' kullanıcısına bir mesaj yazın</string>
     <string name="delete">Sil</string>
-    <string name="remove">Kaldır</string>
     <string name="edit">Düzenle</string>
     <string name="connectToServer">Sunucuya Bağlan</string>
     <string name="connect">Bağlan</string>

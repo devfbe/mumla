@@ -116,7 +116,7 @@ class SessionChatTest {
     fun clearEmptiesIt() {
         emit(HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, "one"))
 
-        chat.clear()
+        chat.clearWithUndo()
 
         assertThat(chat.messages.value).isEmpty()
     }
@@ -133,6 +133,87 @@ class SessionChatTest {
 
         state.value = SessionState.Disconnected()
         idleMainLooper()
+        assertThat(chat.messages.value).isEmpty()
+    }
+
+    @Test
+    fun receivedMessagesCountAsUnreadWhileTheChatIsNotShown() {
+        emit(
+            HumlaEvent.TextMessage(message("one")),
+            HumlaEvent.MessageSent(message("mine")),
+            HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, "a notice"),
+            HumlaEvent.TextMessage(message("two")),
+        )
+
+        assertThat(chat.unread.value).isEqualTo(2)
+    }
+
+    @Test
+    fun showingTheChatReadsEverythingAndNothingCountsWhileShown() {
+        emit(HumlaEvent.TextMessage(message("one")))
+
+        chat.setShown(true)
+        assertThat(chat.unread.value).isEqualTo(0)
+        emit(HumlaEvent.TextMessage(message("two")))
+        assertThat(chat.unread.value).isEqualTo(0)
+
+        chat.setShown(false)
+        emit(HumlaEvent.TextMessage(message("three")))
+        assertThat(chat.unread.value).isEqualTo(1)
+    }
+
+    @Test
+    fun theUnreadCountStartsOverWithTheLog() {
+        emit(HumlaEvent.TextMessage(message("one")))
+        chat.clearWithUndo()
+        assertThat(chat.unread.value).isEqualTo(0)
+
+        emit(HumlaEvent.TextMessage(message("two")))
+        chat.follow(mockk<IHumlaSession>(relaxed = true).also { it.stubState(SessionState.Connected); it.stubEvents() })
+        assertThat(chat.unread.value).isEqualTo(0)
+
+        chat.follow(session)
+        emit(HumlaEvent.TextMessage(message("three")))
+        state.value = SessionState.Disconnected()
+        idleMainLooper()
+        assertThat(chat.unread.value).isEqualTo(0)
+    }
+
+    private fun warning(body: String) = HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, body)
+
+    @Test
+    fun undoingAClearPutsTheMessagesBackBeforeAnyNewerOnes() {
+        emit(warning("one"), warning("two"))
+
+        val undo = chat.clearWithUndo()
+        assertThat(chat.messages.value).isEmpty()
+        emit(HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, "three"))
+        undo()
+
+        assertThat(chat.messages.value.map { it.body }).containsExactly("one", "two", "three").inOrder()
+    }
+
+    @Test
+    fun anUndoKeepsTheLogWithinItsCapacity() {
+        emit(warning("one"), warning("two"))
+        val undo = chat.clearWithUndo()
+        emit(warning("three"), warning("four"))
+
+        undo()
+
+        assertThat(chat.messages.value.map { it.body }).containsExactly("two", "three", "four").inOrder()
+    }
+
+    /** The cleared messages belong to a session that is over; they do not come back into the next. */
+    @Test
+    fun anUndoAfterTheLogStartedOverDoesNothing() {
+        emit(HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, "one"))
+        val undo = chat.clearWithUndo()
+
+        state.value = SessionState.Disconnected()
+        idleMainLooper()
+        undo()
+
         assertThat(chat.messages.value).isEmpty()
     }
 }

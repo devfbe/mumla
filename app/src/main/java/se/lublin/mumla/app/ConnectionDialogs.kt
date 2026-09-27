@@ -16,7 +16,6 @@
  */
 package se.lublin.mumla.app
 
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.DialogFragment
 import se.lublin.humla.model.Server
@@ -31,6 +30,7 @@ import se.lublin.mumla.app.ConnectionErrorDialogFragment.Kind
 import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.ui.MessageDialogFragment
+import se.lublin.mumla.ui.showSnackbar
 import se.lublin.mumla.util.MumlaTrustStore
 import java.io.IOException
 import java.security.GeneralSecurityException
@@ -64,7 +64,7 @@ class ConnectionDialogs(
     init {
         fragments.setFragmentResultListener(ConnectingDialogFragment.REQUEST_CANCELLED, activity) { _, _ ->
             sessions.disconnect()
-            Toast.makeText(activity, R.string.cancelled, Toast.LENGTH_SHORT).show()
+            activity.showSnackbar(R.string.cancelled)
         }
         fragments.setFragmentResultListener(ConnectionErrorDialogFragment.REQUEST_KEY, activity) { _, result ->
             onErrorAction(
@@ -202,13 +202,13 @@ class ConnectionDialogs(
             onTrustFailed(e)
             return
         }
-        Toast.makeText(activity, R.string.trust_added, Toast.LENGTH_LONG).show()
+        activity.showSnackbar(R.string.trust_added)
         listener.reconnect(server)
     }
 
     private fun onTrustFailed(e: Exception) {
         HumlaLog.w(TAG, "Could not trust the certificate", e)
-        Toast.makeText(activity, R.string.trust_add_failed, Toast.LENGTH_LONG).show()
+        activity.showSnackbar(R.string.trust_add_failed)
     }
 
     private companion object {

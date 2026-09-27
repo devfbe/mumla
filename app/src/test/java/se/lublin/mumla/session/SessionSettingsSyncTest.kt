@@ -30,7 +30,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.shadows.ShadowToast
 import org.xmlpull.v1.XmlPullParser
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.capture.AndroidAudioEffects
@@ -42,6 +41,8 @@ import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.ui.AppMessages
+import se.lublin.mumla.testing.nextMessage
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubState
 
@@ -238,17 +239,16 @@ class SessionSettingsSyncTest {
     @Test
     fun `a setting that needs a reconnect says so while connected`() {
         for (key in listOf(Settings.CERT_ID.key, Settings.FORCE_TCP.key, Settings.USE_TOR.key)) {
-            ShadowToast.reset()
+            val messages = AppMessages()
             session.stubState(SessionState.Connecting)
-            SessionSettingsSync(context, SessionManager.get(context))
+            SessionSettingsSync(context, SessionManager.get(context), messages)
                 .onPreferenceChanged(key)
-            assertThat(ShadowToast.getLatestToast()).isNull()
+            assertThat(nextMessage(messages)).isNull()
 
             session.stubState(SessionState.Connected)
-            SessionSettingsSync(context, SessionManager.get(context))
+            SessionSettingsSync(context, SessionManager.get(context), messages)
                 .onPreferenceChanged(key)
-            assertThat(ShadowToast.getTextOfLatestToast())
-                .isEqualTo(context.getString(R.string.change_requires_reconnect))
+            assertThat(nextMessage(messages)).isEqualTo(context.getString(R.string.change_requires_reconnect))
         }
         verify(exactly = 0) { session.disconnect() }
     }

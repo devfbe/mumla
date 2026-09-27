@@ -24,7 +24,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
-import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.model.Message
@@ -144,6 +143,16 @@ class MumlaServiceTest {
     private fun postedActions(): List<String> =
         shadowOf(notificationManager).getNotification(FOREGROUND_ID)?.actions.orEmpty().map { it.title.toString() }
 
+    private fun postedTitle(): String? = shadowOf(notificationManager).getNotification(FOREGROUND_ID)
+        ?.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+
+    /** Delivers the app's request the way the platform would. */
+    private fun toggleOverlay() {
+        MumlaService.toggleOverlay(app)
+        service.onStartCommand(shadowOf(app).nextStartedService, 0, 1)
+        idleMainLooper()
+    }
+
     private fun reconnectPrompt(): Notification? = shadowOf(notificationManager).getNotification(RECONNECT_ID)
 
     private fun promptReceivers() =
@@ -179,11 +188,45 @@ class MumlaServiceTest {
     }
 
     @Test
-    fun connectedShowsTheConnectedTextAndTheActions() {
+    fun connectedShowsTheServerOurChannelAndTheActions() {
         move(SessionState.Connected)
 
-        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
-        assertThat(postedActions()).hasSize(3)
+        assertThat(postedTitle()).isEqualTo("Home")
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo("Lobby")
+        assertThat(postedActions()).containsExactly(
+            app.getString(R.string.mute), app.getString(R.string.deafen), app.getString(R.string.disconnect),
+        ).inOrder()
+    }
+
+    @Test
+    fun theServerIsTheTitleWhileConnectingToo() {
+        assertThat(postedTitle()).isEqualTo("Home")
+    }
+
+    @Test
+    fun movingToAnotherChannelIsShown() {
+        move(SessionState.Connected)
+
+        model.value = serverState(self = SELF) {
+            channel(0, "Root")
+            channel(LOBBY, "Lobby")
+            channel(LOBBY + 1, "Games")
+            user(UserState(SELF, "user$SELF", LOBBY + 1))
+        }
+        idleMainLooper()
+
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo("Games")
+    }
+
+    @Test
+    fun theDisconnectActionEndsTheSession() {
+        move(SessionState.Connected)
+
+        shadowOf(notificationManager).getNotification(FOREGROUND_ID)!!.actions
+            .single { it.title.toString() == app.getString(R.string.disconnect) }.actionIntent.send()
+        idleMainLooper()
+
+        verify { session.disconnect() }
     }
 
     /** A lost connection shows only "Cancel reconnect": there is no session to mute. */
@@ -309,17 +352,38 @@ class MumlaServiceTest {
         move(SessionState.Connected)
 
         self(user(SELF, muted = true, deafened = false))
-        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.status_notify_muted))
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo("Lobby · " + app.getString(R.string.self_status_muted))
         assertThat(Settings.getInstance(app).isMuted).isTrue()
         assertThat(Settings.getInstance(app).isDeafened).isFalse()
 
         self(user(SELF, muted = true, deafened = true))
-        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.status_notify_muted_and_deafened))
+        assertThat(postedText(FOREGROUND_ID))
+            .isEqualTo("Lobby · " + app.getString(R.string.self_status_muted_deafened))
         assertThat(Settings.getInstance(app).isDeafened).isTrue()
 
         self(user(SELF))
-        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo("Lobby")
         assertThat(Settings.getInstance(app).isMuted).isFalse()
+    }
+
+    @Test
+    fun theActionsOfferToUndoOurOwnMuteAndDeafness() {
+        move(SessionState.Connected)
+
+        self(user(SELF, muted = true, deafened = true))
+        assertThat(postedActions()).containsAtLeast(app.getString(R.string.unmute), app.getString(R.string.undeafen))
+
+        self(user(SELF))
+        assertThat(postedActions()).containsAtLeast(app.getString(R.string.mute), app.getString(R.string.deafen))
+    }
+
+    @Test
+    fun aSessionSynchronizedMutedOffersToUnmute() {
+        self(user(SELF, muted = true, deafened = true))
+
+        move(SessionState.Connected)
+
+        assertThat(postedActions()).containsAtLeast(app.getString(R.string.unmute), app.getString(R.string.undeafen))
     }
 
     /** What the server says at synchronization is not a change: the stored state is restored instead. */
@@ -334,27 +398,29 @@ class MumlaServiceTest {
     }
 
     @Test
-    fun deafenedWithoutMuteReadsAsConnected() {
+    fun deafenedWithoutMuteReadsAsDeafened() {
         move(SessionState.Connected)
 
         self(user(SELF, muted = false, deafened = true))
 
-        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo("Lobby · " + app.getString(R.string.self_status_deafened))
     }
 
     @Test
     fun somebodyElsesStateChangesNothing() {
         move(SessionState.Connected)
 
+        val me = user(SELF)
+        val other = user(SELF + 1, muted = true, deafened = true)
         model.value = serverState(self = SELF) {
             channel(0, "Root")
             channel(LOBBY, "Lobby")
-            user(user(SELF))
-            user(user(SELF + 1, muted = true, deafened = true))
+            user(me)
+            user(other)
         }
         idleMainLooper()
 
-        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo("Lobby")
         assertThat(Settings.getInstance(app).isMuted).isFalse()
     }
 
@@ -499,7 +565,7 @@ class MumlaServiceTest {
         preferences().edit().putBoolean(Settings.USE_TOR.key, true).commit()
 
         move(SessionState.Connected)
-        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected) + " (Tor)")
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo("Lobby (Tor)")
 
         move(SessionState.Disconnected(lost))
         assertThat(reconnectPrompt()!!.extras.getString(Notification.EXTRA_TEXT)).isEqualTo("socket reset (Tor)")
@@ -900,34 +966,31 @@ class MumlaServiceTest {
 
     @Test
     fun theOverlayToggleShowsAHiddenOverlayWhenAllowed() {
+        move(SessionState.Connected)
         every { overlay.isShown } returns false
         org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true)
 
-        service.onOverlayToggled()
+        toggleOverlay()
 
         verify(exactly = 1) { overlay.show() }
     }
 
     @Test
-    fun theOverlayToggleAsksForThePermissionFirst() {
+    fun theOverlayToggleShowsNothingWithoutThePermission() {
+        move(SessionState.Connected)
         every { overlay.isShown } returns false
         org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(false)
 
-        service.onOverlayToggled()
+        toggleOverlay()
 
         verify(exactly = 0) { overlay.show() }
-        val started = shadowOf(app).nextStartedActivity
-        assertThat(started.action).isEqualTo(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
-        assertThat(started.data.toString()).isEqualTo("package:" + app.packageName)
-        assertThat(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK).isNotEqualTo(0)
-        assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo(app.getString(R.string.grant_perm_draw_over_apps))
     }
 
     @Test
     fun theOverlayToggleHidesAShownOverlay() {
         every { overlay.isShown } returns true
 
-        service.onOverlayToggled()
+        toggleOverlay()
 
         verify(exactly = 1) { overlay.hide() }
         verify(exactly = 0) { overlay.show() }

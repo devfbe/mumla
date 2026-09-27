@@ -68,6 +68,18 @@ class PublicServersViewModelTest {
     }
 
     @Test
+    fun `a retry after a failed download downloads again`() {
+        val fetcher = mockk<PublicServerFetcher> { coEvery { fetch() } returnsMany listOf(null, servers) }
+        val list = PublicServersViewModel(repository, fetcher, { false }).also { idleMainLooper() }
+        assertThat(list.state.value).isEqualTo(PublicServersViewModel.State.DownloadFailed)
+
+        list.retry()
+        idleMainLooper()
+
+        assertThat(list.shown()).containsExactly("Bravo", "alpha", "Charlie").inOrder()
+    }
+
+    @Test
     fun `a favourite is stored with the username given`() {
         val database = mockk<MumlaDatabase>(relaxed = true)
         val repository = MumlaRepository(database, Dispatchers.Unconfined)
