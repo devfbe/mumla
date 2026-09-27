@@ -71,7 +71,7 @@
     <string name="server_info_current_bandwidth">Current %.1f kbit/s</string>
 
     <!-- Server matching -->
-    <string name="server_match">Find Server</string>
+    <string name="server_match">Find empty server</string>
     <string name="server_match_progress">Finding a server…</string>
     <string name="server_match_found">Server found</string>
     <string name="server_match_not_found">Couldn\'t find server</string>
@@ -171,6 +171,18 @@
     <string name="information">Information</string>
     <string name="error_fetching_servers">Could not fetch servers.\nAre you connected to the Internet?</string>
     <string name="public_server_list_tor_disabled">The public server list is not loaded while Tor is on, because it would be downloaded without Tor.</string>
+    <string name="public_server_list_error_title">Couldn\'t load the server list</string>
+    <string name="public_server_list_empty">No servers match your search.</string>
+    <string name="public_server_search_hint">Search by name or country</string>
+    <string name="public_server_country_all">All</string>
+    <string name="public_server_countries">Countries</string>
+    <string name="public_server_sort">Sort servers</string>
+    <string name="public_server_sort_users">Most users</string>
+    <string name="public_server_sort_ping">Lowest ping</string>
+    <plurals name="public_server_count">
+        <item quantity="one">%d server</item>
+        <item quantity="other">%d servers</item>
+    </plurals>
     <string name="overlay">Overlay</string>
     <string name="hint_reason">Reason</string>
     <string name="action_settings">Settings</string>

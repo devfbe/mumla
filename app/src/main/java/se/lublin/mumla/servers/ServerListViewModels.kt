@@ -18,22 +18,27 @@
 package se.lublin.mumla.servers
 
 import android.app.Application
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.model.Server
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
-import java.util.Locale
 
 /** Where a server answers pings; servers at one address share a reply. */
 data class ServerAddress(val host: String, val port: Int)
@@ -112,13 +117,16 @@ class FavouriteServersViewModel(
 
 /**
  * The public server list: downloaded once (never over Tor, which the download would bypass),
- * filtered and sorted as the user asks, pinged, matched and favourited. Main thread.
+ * filtered and sorted as the user asks (kept in [savedState]), pinged, matched and favourited. The
+ * list is arranged on [arrangeDispatcher]. Main thread.
  */
 class PublicServersViewModel(
     private val repository: MumlaRepository,
     private val fetcher: PublicServerFetcher,
     private val torEnabled: () -> Boolean,
+    private val savedState: SavedStateHandle,
     pinger: ServerPinger = ServerPinger(),
+    arrangeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
     /** How far the list got. */
@@ -130,17 +138,30 @@ class PublicServersViewModel(
 
         data object DownloadFailed : State
 
-        data class Shown(val servers: List<PublicServer>) : State
+        /** The [servers] the filter lets through, in its order, and all the downloaded ones' [countries]. */
+        data class Shown(val servers: List<PublicServer>, val countries: List<String>) : State
     }
-
-    enum class Order { NAME, COUNTRY }
 
     val pings = ServerPings(viewModelScope, { !torEnabled() }, pinger)
 
-    private val mutableState = MutableStateFlow<State>(State.Loading)
-    val state: StateFlow<State> = mutableState.asStateFlow()
+    private val mutableFilter = MutableStateFlow(
+        PublicServerFilter(
+            query = savedState[KEY_QUERY] ?: "",
+            countries = savedState.get<ArrayList<String>>(KEY_COUNTRIES).orEmpty().toSet(),
+            sort = savedState.get<String>(KEY_SORT)?.let(PublicServerSort::valueOf) ?: PublicServerSort.USERS,
+        ),
+    )
+    val filter: StateFlow<PublicServerFilter> = mutableFilter.asStateFlow()
 
-    private var all: List<PublicServer> = emptyList()
+    /** The download's state; [State.Shown] holds every server here, unfiltered. */
+    private val download = MutableStateFlow<State>(State.Loading)
+
+    val state: StateFlow<State> = combine(download, mutableFilter, pings.replies) { download, filter, replies ->
+        when (download) {
+            is State.Shown -> download.copy(servers = arrangePublicServers(download.servers, filter, replies))
+            else -> download
+        }
+    }.flowOn(arrangeDispatcher).stateIn(viewModelScope, SharingStarted.Eagerly, State.Loading)
 
     init {
         load()
@@ -151,38 +172,36 @@ class PublicServersViewModel(
 
     private fun load() {
         if (torEnabled()) {
-            mutableState.value = State.TorBlocked
+            download.value = State.TorBlocked
         } else {
-            mutableState.value = State.Loading
+            download.value = State.Loading
             viewModelScope.launch {
                 val servers = fetcher.fetch()
-                if (servers != null) all = servers
-                mutableState.value = if (servers == null) State.DownloadFailed else State.Shown(servers)
+                download.value = if (servers == null) State.DownloadFailed else State.Shown(servers, countriesOf(servers))
             }
         }
     }
 
-    private val shown: List<PublicServer> get() = (mutableState.value as? State.Shown)?.servers.orEmpty()
+    private val shown: List<PublicServer> get() = (state.value as? State.Shown)?.servers.orEmpty()
 
     /** The shown entry of [server], or null. */
     fun shownEntryOf(server: Server): PublicServer? = shown.firstOrNull { it.server == server }
 
-    /** Shows only servers whose name and country contain the queries, ignoring case, in list order. */
-    fun filter(name: String, country: String) {
-        if (mutableState.value !is State.Shown) return
-        val nameQuery = name.uppercase(Locale.US)
-        val countryQuery = country.uppercase(Locale.US)
-        mutableState.value = State.Shown(
-            all.filter {
-                it.name.uppercase(Locale.US).contains(nameQuery) &&
-                    it.country.orEmpty().uppercase(Locale.US).contains(countryQuery)
-            },
-        )
-    }
+    fun setQuery(query: String) = updateFilter { it.copy(query = query) }
 
-    fun sort(order: Order) {
-        if (mutableState.value !is State.Shown) return
-        mutableState.value = State.Shown(shown.sortedWith(if (order == Order.NAME) NAME_ORDER else COUNTRY_ORDER))
+    fun setCountry(country: String, selected: Boolean) =
+        updateFilter { it.copy(countries = if (selected) it.countries + country else it.countries - country) }
+
+    /** Shows the servers of every country again. */
+    fun clearCountries() = updateFilter { it.copy(countries = emptySet()) }
+
+    fun setSort(sort: PublicServerSort) = updateFilter { it.copy(sort = sort) }
+
+    private fun updateFilter(change: (PublicServerFilter) -> PublicServerFilter) {
+        val filter = mutableFilter.updateAndGet(change)
+        savedState[KEY_QUERY] = filter.query
+        savedState[KEY_COUNTRIES] = ArrayList(filter.countries)
+        savedState[KEY_SORT] = filter.sort.name
     }
 
     /** An empty, nearby server among those shown, in [countryCode] (anywhere when null); null if none. */
@@ -195,18 +214,17 @@ class PublicServersViewModel(
     }
 
     companion object {
-        private val NAME_ORDER = Comparator<PublicServer> { lhs, rhs -> lhs.name.compareTo(rhs.name) }
+        private const val KEY_QUERY = "query"
+        private const val KEY_COUNTRIES = "countries"
+        private const val KEY_SORT = "sort"
 
-        private val COUNTRY_ORDER = Comparator<PublicServer> { lhs, rhs ->
-            when {
-                rhs.country == null -> -1
-                lhs.country == null -> 1
-                else -> lhs.country.compareTo(rhs.country)
-            }
-        }
-
-        fun create(app: Application, fetcher: PublicServerFetcher) = PublicServersViewModel(
-            MumlaRepository.get(app), fetcher, { Settings.getInstance(app).isTorEnabled },
+        fun create(
+            app: Application,
+            fetcher: PublicServerFetcher,
+            pinger: ServerPinger,
+            savedState: SavedStateHandle,
+        ) = PublicServersViewModel(
+            MumlaRepository.get(app), fetcher, { Settings.getInstance(app).isTorEnabled }, savedState, pinger,
         )
     }
 }
