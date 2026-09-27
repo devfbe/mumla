@@ -168,16 +168,11 @@
     <string name="error_fetching_servers">Não foi possível obter a lista de servidores.
 \nVocê está conectado à internet\?</string>
     <string name="information">Informação</string>
-    <string name="search_country">País</string>
-    <string name="search_name">Nome</string>
     <string name="close">Fechar</string>
     <string name="shareMessage">Entre nesse servidor Mumble com o Mumla. %s</string>
     <string name="description">Descrição</string>
     <string name="share">Compartilhar</string>
-    <string name="country">País</string>
     <string name="name">Nome</string>
-    <string name="sortBy">Ordenar por…</string>
-    <string name="sort">Ordenar</string>
     <string name="unknown">Desconhecido</string>
     <string name="image_confirm_send">Enviar esta imagem\?</string>
     <string name="connection_lost_reconnecting">Conexão perdida – reconectando…</string>

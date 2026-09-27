@@ -97,16 +97,11 @@
     <string name="channel">Kanał</string>
     <string name="user">Użytkownik</string>
     <string name="unknown">Nieznany</string>
-    <string name="sort">Sortuj</string>
-    <string name="sortBy">Sortuj według…</string>
     <string name="name">Nazwa</string>
-    <string name="country">Kraj</string>
     <string name="share">Udostępnij</string>
     <string name="description">Opis</string>
     <string name="shareMessage">Dołącz do tego serwera Mumble za pomocą Mumli. %s</string>
     <string name="close">Zamknij</string>
-    <string name="search_name">Nazwa</string>
-    <string name="search_country">Kraj</string>
     <string name="information">Informacje</string>
     <string name="error_fetching_servers">Nie udało się pobrać serwerów.
 \nCzy masz połączenie z internetem\?</string>

@@ -101,16 +101,11 @@
     <string name="channel">Salon</string>
     <string name="user">Utilisateur</string>
     <string name="unknown">Inconnu</string>
-    <string name="sort">Trier</string>
-    <string name="sortBy">Trier par…</string>
     <string name="name">Nom</string>
-    <string name="country">Pays</string>
     <string name="share">Partager</string>
     <string name="description">Description</string>
     <string name="shareMessage">Rejoindre ce serveur Mumble avec Mumla. %s</string>
     <string name="close">Fermer</string>
-    <string name="search_name">Nom</string>
-    <string name="search_country">Pays</string>
     <string name="information">Information</string>
     <string name="error_fetching_servers">Erreur du chargement des serveurs.
 \nVérifiez votre connexion internet.</string>

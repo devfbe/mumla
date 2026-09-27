@@ -102,16 +102,11 @@
     <string name="channel">Канал</string>
     <string name="user">Пользователь</string>
     <string name="unknown">Неизвестный</string>
-    <string name="sort">Сортировка</string>
-    <string name="sortBy">Сортировать по…</string>
     <string name="name">Название</string>
-    <string name="country">Страна</string>
     <string name="share">Поделиться</string>
     <string name="description">Описание</string>
     <string name="shareMessage">Присоединяйся к этому Mumble-серверу с помощью Mumla. %s</string>
     <string name="close">Закрыть</string>
-    <string name="search_name">Название</string>
-    <string name="search_country">Страна</string>
     <string name="information">Информация</string>
     <string name="error_fetching_servers">Не удалось получить список.\nВы подключены к интернету?</string>
     <string name="overlay">Накладка</string>

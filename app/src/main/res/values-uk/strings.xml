@@ -83,8 +83,6 @@
     <string name="certificate_load_failed">Не вдалося зберегти сертифікат.</string>
     <string name="certificate_import_success">Імпортовано сертифікат %s.</string>
     <string name="close">Закрити</string>
-    <string name="search_name">Назва</string>
-    <string name="search_country">Країна</string>
     <string name="information">Інформація</string>
     <string name="error_fetching_servers">Не вдалося отримати список серверів.
 \nВи підключені до Інтернету?</string>
@@ -176,10 +174,7 @@
     <string name="channel">Канал</string>
     <string name="user">Користувач</string>
     <string name="unknown">Невідомий</string>
-    <string name="sort">Сортування</string>
-    <string name="sortBy">Сортувати за…</string>
     <string name="name">Назва</string>
-    <string name="country">Країна</string>
     <string name="share">Поділитися</string>
     <string name="description">Опис</string>
     <string name="shareMessage">Приєднайтеся до цього Mumble-сервера за допомогою Mumla. %s</string>

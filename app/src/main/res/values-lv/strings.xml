@@ -26,8 +26,6 @@
     <string name="server_match_info">Nosaukums: %1$s\nResursdatora adrese: %2$s:%3$d\nLietotāji: %4$d / %5$d\nVersija: %6$s \nValsts: %7$s \nAizture: %8$d ms</string>
     <string name="server_match_description">Mumla var automātiski atrast jums tukšu serveri, kas optimizēts pēc tā atrašanās vietas, versijas un aiztures.</string>
     <string name="server_match_expand_country">Nevarēja atrast optimālo serveri jūsu valstī. Vai meklēt pa visu pasauli?</string>
-    <string name="country">Valsts</string>
-    <string name="search_country">Valsts</string>
     <string name="connection_lost_reconnecting">Savienojums zaudēts – atkārtoti savienojas…</string>
     <string name="foreground_start_failed">Neizdevās uzturēt Mumla darbību fonā. Balss var apstāties, kad ekrāns izslēdzas.</string>
     <string name="bluetooth_perm_denied">Bluetooth austiņas paliek ieslēgtas. Bez atļaujas „Tuvumā esošās ierīces” dažas ierīces atteiksies uz tām novirzīt skaņu.</string>

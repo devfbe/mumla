@@ -66,14 +66,10 @@
     <string name="mumlaConnecting">Το Mumla συνδέεται…</string>
     <string name="mumlaDisconnected">Το Mumla αποσυνδέθηκε</string>
     <string name="unknown">Άγνωστο</string>
-    <string name="sort">Ταξινόμηση</string>
     <string name="name">Όνομα</string>
-    <string name="country">Χώρα</string>
     <string name="share">Κοινοποίηση</string>
     <string name="description">Περιγραφή</string>
     <string name="close">Κλείσιμο</string>
-    <string name="search_name">Όνομα</string>
-    <string name="search_country">Χώρα</string>
     <string name="information">Πληροφορίες</string>
     <string name="hint_reason">Λόγος</string>
     <string name="action_settings">Ρυθμίσεις</string>
@@ -155,7 +151,6 @@
     <string name="user">Χρήστης</string>
     <string name="clearChat">Καθάρισμα συζήτησης</string>
     <string name="connected">Συνδέθηκε</string>
-    <string name="sortBy">Ταξινόμηση κατά…</string>
     <string name="shareMessage">Εγγραφείτε σε αυτόν τον διακομιστή Mumble με το Mumla. %s</string>
     <string name="error_fetching_servers">Δεν μπόρεσα να φέρω διακομιστές.
 \nΕίστε συνδεδεμένοι στο Διαδίκτυο;</string>

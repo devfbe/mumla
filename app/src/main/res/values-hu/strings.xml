@@ -94,16 +94,11 @@
     <string name="mumlaConnecting">Mumla csatlakozás…</string>
     <string name="mumlaDisconnected">Mumla leválasztva</string>
     <string name="channel">Csatorna</string>
-    <string name="sort">Válogatás</string>
-    <string name="sortBy">Válogatás a következő szerint…</string>
     <string name="name">Név</string>
-    <string name="country">Ország</string>
     <string name="share">Megosztás</string>
     <string name="description">Leírás</string>
-    <string name="search_name">Név</string>
     <string name="shareMessage">Csatlakozz Mumlával ehhez a Mumble szerverhez. %s</string>
     <string name="close">Bezárás</string>
-    <string name="search_country">Ország</string>
     <string name="information">Információ</string>
     <string name="overlay">Átfedés</string>
     <string name="hint_reason">Indok</string>

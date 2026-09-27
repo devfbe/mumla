@@ -78,12 +78,7 @@
     <string name="mumlaDisconnected">Mumla terputus</string>
     <string name="channel">Channel</string>
     <string name="user">User</string>
-    <string name="sort">Sortir</string>
-    <string name="sortBy">Sortir berdasarkan…</string>
-    <string name="country">Negara</string>
     <string name="description">Deskripsi</string>
-    <string name="search_name">Nama</string>
-    <string name="search_country">Negara</string>
     <string name="error_fetching_servers">Tidak dapat mencari server.\nApakah anda tersambung dengan internet?</string>
     <string name="overlay">Overlay</string>
     <string name="hint_reason">Alasan</string>

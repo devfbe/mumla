@@ -87,16 +87,11 @@
     <string name="channel">தடம்</string>
     <string name="user">பயனர்</string>
     <string name="unknown">தெரியவில்லை</string>
-    <string name="sort">வரிசைப்படுத்து</string>
-    <string name="sortBy">இதன்மூலம் வரிசைப்படுத்தவும்…</string>
     <string name="name">பெயர்</string>
-    <string name="country">நாடு</string>
     <string name="share">பங்கு</string>
     <string name="description">விவரம்</string>
     <string name="shareMessage">மும்லாவுடன் இந்த முணுமுணுப்பு சேவையகத்தில் சேரவும். %s</string>
     <string name="close">மூடு</string>
-    <string name="search_name">பெயர்</string>
-    <string name="search_country">நாடு</string>
     <string name="information">தகவல்</string>
     <string name="error_fetching_servers">சேவையகங்களைப் பெற முடியவில்லை.\n நீங்கள் இணையத்துடன் இணைக்கப்பட்டுள்ளீர்களா?</string>
     <string name="overlay">மேலடுக்கு</string>

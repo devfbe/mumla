@@ -22,14 +22,10 @@
     <string name="connected">Iqqen</string>
     <string name="channel">Abadu</string>
     <string name="unknown">D arussin</string>
-    <string name="sort">Semyizwer</string>
     <string name="name">Isem</string>
-    <string name="country">Tamurt</string>
     <string name="share">Bḍu</string>
     <string name="description">Aglam</string>
     <string name="close">Mdel</string>
-    <string name="search_name">Isem</string>
-    <string name="search_country">Tamurt</string>
     <string name="information">Talɣut</string>
     <string name="hint_reason">Taɣẓint</string>
     <string name="reconnect">Ales tuqqna</string>
@@ -57,7 +53,6 @@
     <string name="generateCertProgress">Asarew n uselkin…</string>
     <string name="clearChat">Sfeḍ adiwenni</string>
     <string name="mumlaConnecting">Mumla iteqqen…</string>
-    <string name="sortBy">Semyizzwer s…</string>
     <string name="channel_edit">Ẓreg abadu</string>
     <string name="channel_add">Rnu abadu</string>
     <string name="send_message">Azen izen</string>

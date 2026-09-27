@@ -61,16 +61,11 @@
     <string name="error_fetching_servers">ไม่สามารถดึงข้อมูลเซิฟเวอร์.
 \nเชื่อมต่ออินเตอร์เน็ตแล้วหรือยัง\?</string>
     <string name="information">ข้อมูล</string>
-    <string name="search_country">ประเทศ</string>
-    <string name="search_name">ชื่อ</string>
     <string name="close">ปิด</string>
     <string name="shareMessage">เข้าร่วมเซิฟเวอร์ Mumble ด้วย Mumla. %s</string>
     <string name="description">รายละเอียด</string>
     <string name="share">แชร์</string>
-    <string name="country">ประเทศ</string>
     <string name="name">ชื่อ</string>
-    <string name="sortBy">จัดเรียงโดย…</string>
-    <string name="sort">จัดเรียง</string>
     <string name="unknown">ไม่ระบุ</string>
     <string name="user">ผู้ใช้</string>
     <string name="channel">แชทเนล</string>

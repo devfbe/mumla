@@ -104,16 +104,11 @@
     <string name="channel">Kanal</string>
     <string name="user">Benutzer</string>
     <string name="unknown">Unbekannt</string>
-    <string name="sort">Sortierung</string>
-    <string name="sortBy">Sortieren nach…</string>
     <string name="name">Name</string>
-    <string name="country">Land</string>
     <string name="share">Teilen</string>
     <string name="description">Beschreibung</string>
     <string name="shareMessage">Treten Sie diesem Server mit Mumla bei. %s</string>
     <string name="close">Schließen</string>
-    <string name="search_name">Name</string>
-    <string name="search_country">Land</string>
     <string name="information">Informationen</string>
     <string name="error_fetching_servers">Server konnten nicht abgerufen werden.\nBitte prüfen Sie Ihre Internetverbindung.</string>
     <string name="overlay">Overlay</string>

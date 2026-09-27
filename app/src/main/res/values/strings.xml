@@ -147,10 +147,7 @@
     <string name="channel">Channel</string>
     <string name="user">User</string>
     <string name="unknown">Unknown</string>
-    <string name="sort">Sort</string>
-    <string name="sortBy">Sort by…</string>
     <string name="name">Name</string>
-    <string name="country">Country</string>
     <string name="share">Share</string>
     <string name="description">Description</string>
     <string name="shareMessage">Join this Mumble server with Mumla. %s</string>
@@ -166,8 +163,6 @@
     <string name="chat_cleared">Chat cleared</string>
     <string name="undo">Undo</string>
     <string name="close">Close</string>
-    <string name="search_name">Name</string>
-    <string name="search_country">Country</string>
     <string name="information">Information</string>
     <string name="error_fetching_servers">Could not fetch servers.\nAre you connected to the Internet?</string>
     <string name="public_server_list_tor_disabled">The public server list is not loaded while Tor is on, because it would be downloaded without Tor.</string>

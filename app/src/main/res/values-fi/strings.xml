@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="sortBy">Järjestä…</string>
     <string name="connecting_to_server">Yhdistetään %s…</string>
     <plurals name="search_channel_users">
         <item quantity="one">%d käyttäjä</item>
@@ -77,15 +76,11 @@
     <string name="error_fetching_servers">Palvelimia ei voitu noutaa.
 \nOletko yhteydessä Internetiin\?</string>
     <string name="information">Tiedot</string>
-    <string name="search_country">Maa</string>
-    <string name="search_name">Nimi</string>
     <string name="close">Sulje</string>
     <string name="shareMessage">Liity tähän Mumble-palvelimeen Mumlan kanssa. %s</string>
     <string name="description">Kuvaus</string>
     <string name="share">Jaa</string>
-    <string name="country">Maa</string>
     <string name="name">Nimi</string>
-    <string name="sort">Järjestä</string>
     <string name="unknown">Tuntematon</string>
     <string name="user">Käyttäjä</string>
     <string name="channel">Kanava</string>

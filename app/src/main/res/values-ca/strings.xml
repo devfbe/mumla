@@ -6,14 +6,9 @@
     <string name="action_settings">Configuració</string>
     <string name="hint_reason">Motiu</string>
     <string name="information">Informació</string>
-    <string name="search_country">País</string>
-    <string name="search_name">Nom</string>
     <string name="close">Tanca</string>
     <string name="description">Descripció</string>
-    <string name="country">País</string>
     <string name="name">Nom</string>
-    <string name="sortBy">Ordena per…</string>
-    <string name="sort">Ordena</string>
     <string name="unknown">Desconegut</string>
     <string name="user">Usuari</string>
     <string name="channel">Canal</string>

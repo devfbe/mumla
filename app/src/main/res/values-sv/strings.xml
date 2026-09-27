@@ -97,10 +97,7 @@
     <string name="channel">Kanal</string>
     <string name="user">Användare</string>
     <string name="unknown">Okänt</string>
-    <string name="sort">Sortera</string>
-    <string name="sortBy">Sortera efter…</string>
     <string name="name">Name</string>
-    <string name="country">Land</string>
     <string name="share">Dela</string>
     <string name="description">Beskrivning</string>
     <string name="trust_added">Certifikatet lades till i databasen för betrodda certifikat</string>
@@ -140,8 +137,6 @@
     <string name="mumlaDisconnected">Mumla nedkopplad</string>
     <string name="shareMessage">Anslut till denna Mumble-server med Mumla. %s</string>
     <string name="close">Stäng</string>
-    <string name="search_name">Namn</string>
-    <string name="search_country">Land</string>
     <string name="error_fetching_servers">Kan inte hämta servrar.
 \nÄr du ansluten till Internet?</string>
     <string name="overlay">Överlagring</string>

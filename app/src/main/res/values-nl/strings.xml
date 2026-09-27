@@ -96,16 +96,11 @@
     <string name="channel">Kanaal</string>
     <string name="user">Gebruiker</string>
     <string name="unknown">Ongekend</string>
-    <string name="sort">Sorteren</string>
-    <string name="sortBy">Sorteren op…</string>
     <string name="name">Naam</string>
-    <string name="country">Land</string>
     <string name="share">Delen</string>
     <string name="description">Beschrijving</string>
     <string name="shareMessage">Verbind met deze Mumble server met Mumla. %s</string>
     <string name="close">Sluit</string>
-    <string name="search_name">Naam</string>
-    <string name="search_country">Land</string>
     <string name="information">Informatie</string>
     <string name="error_fetching_servers">Error servers ophalen.
 \nControleer internet verbinding.</string>

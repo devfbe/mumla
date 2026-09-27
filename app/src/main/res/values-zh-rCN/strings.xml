@@ -102,16 +102,11 @@
     <string name="channel">频道</string>
     <string name="user">用户</string>
     <string name="unknown">未知</string>
-    <string name="sort">排序</string>
-    <string name="sortBy">排序方式…</string>
     <string name="name">名称</string>
-    <string name="country">区域</string>
     <string name="share">分享</string>
     <string name="description">描述</string>
     <string name="shareMessage">用 Mumla 加入这个 Mumble 服务器。%s</string>
     <string name="close">关闭</string>
-    <string name="search_name">名称</string>
-    <string name="search_country">区域</string>
     <string name="information">信息</string>
     <string name="error_fetching_servers">无法获取服务器。\n您确定已连接互联网吗？</string>
     <string name="overlay">浮窗</string>
