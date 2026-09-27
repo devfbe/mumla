@@ -1,6 +1,5 @@
 package se.lublin.mumla.app
 
-import android.os.Looper
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
@@ -8,7 +7,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ActivityMainBinding
 import se.lublin.mumla.testing.ThemedActivity
@@ -24,7 +23,7 @@ class MainDrawerTest {
     )
 
     private fun layOut(): RecyclerView {
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         val list = binding.leftDrawer
         list.measure(0, 0)
         list.layout(0, 0, 480, 4000)

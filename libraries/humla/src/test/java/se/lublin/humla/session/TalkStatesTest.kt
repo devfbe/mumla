@@ -21,16 +21,14 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.testutil.idleMainLooper
 
 @RunWith(RobolectricTestRunner::class)
 class TalkStatesTest {
 
     private val changes = mutableListOf<Pair<Int, TalkState>>()
     private val talkStates = TalkStates(Looper.getMainLooper()) { session, state -> changes += session to state }
-
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     @Test
     fun onlyTalkersAreKeptAndOnlyChangesArePublished() {
@@ -39,7 +37,7 @@ class TalkStatesTest {
         talkStates.report(3, TalkState.TALKING)
         talkStates.report(4, TalkState.WHISPERING)
         talkStates.report(4, TalkState.PASSIVE)
-        idle()
+        idleMainLooper()
 
         assertThat(talkStates.states.value).containsExactly(3, TalkState.TALKING)
         assertThat(changes).containsExactly(3 to TalkState.TALKING, 4 to TalkState.WHISPERING, 4 to TalkState.PASSIVE)
@@ -50,11 +48,11 @@ class TalkStatesTest {
     @Test
     fun clearingDropsTheReportsStillOnTheirWay() {
         talkStates.report(3, TalkState.TALKING)
-        idle()
+        idleMainLooper()
         talkStates.report(4, TalkState.TALKING)
 
         talkStates.clear()
-        idle()
+        idleMainLooper()
 
         assertThat(talkStates.states.value).isEmpty()
     }

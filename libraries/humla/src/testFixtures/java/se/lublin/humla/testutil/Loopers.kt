@@ -15,17 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.testing
+package se.lublin.humla.testutil
 
-import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.testutil.idleMainLooper
+import android.os.Looper
+import org.robolectric.Shadows.shadowOf
+import java.time.Duration
 
-/**
- * Drains the main looper until [condition] holds, for work that hops to a background thread and
- * back, where one [idleMainLooper] is not enough.
- */
-fun drainMainUntil(timeoutMillis: Long = 10_000L, description: String = "condition", condition: () -> Boolean) =
-    awaitUntil(timeoutMillis, description) {
-        idleMainLooper()
-        condition()
-    }
+/** Runs everything queued on Robolectric's paused main looper. */
+public fun idleMainLooper(): Unit = shadowOf(Looper.getMainLooper()).idle()
+
+/** Moves the paused main looper's clock on by [duration], running everything that comes due. */
+public fun idleMainLooperFor(duration: Duration): Unit = shadowOf(Looper.getMainLooper()).idleFor(duration)

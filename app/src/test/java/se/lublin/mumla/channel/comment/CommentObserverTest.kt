@@ -10,8 +10,8 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.UserState
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.testing.ServiceHostActivity
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubModel

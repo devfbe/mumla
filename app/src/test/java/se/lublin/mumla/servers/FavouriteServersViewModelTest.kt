@@ -26,9 +26,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.Server
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.testing.idleMainLooper
 
 @RunWith(RobolectricTestRunner::class)
 class FavouriteServersViewModelTest {

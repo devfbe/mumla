@@ -33,8 +33,8 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.UserState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubState
 import se.lublin.mumla.testing.stubConnected

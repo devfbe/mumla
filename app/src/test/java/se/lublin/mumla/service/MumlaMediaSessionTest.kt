@@ -22,8 +22,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.Settings
-import se.lublin.mumla.testing.idleMainLooper
 
 @RunWith(RobolectricTestRunner::class)
 class MumlaMediaSessionTest {

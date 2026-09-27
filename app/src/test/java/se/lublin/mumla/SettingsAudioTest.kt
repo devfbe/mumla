@@ -30,6 +30,7 @@ import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
+import se.lublin.humla.testutil.idleMainLooper
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsAudioTest {
@@ -64,7 +65,7 @@ class SettingsAudioTest {
         prefs.registerOnSharedPreferenceChangeListener(listener)
         try {
             settings.noiseSuppressionMethod = "speex"
-            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            idleMainLooper()
         } finally {
             prefs.unregisterOnSharedPreferenceChangeListener(listener)
         }

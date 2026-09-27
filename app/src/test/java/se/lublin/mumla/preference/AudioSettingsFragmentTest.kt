@@ -21,7 +21,6 @@ import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.media.AudioManager
-import android.os.Looper
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 import androidx.preference.SwitchPreferenceCompat
@@ -37,6 +36,7 @@ import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.testutil.TestCaptureSource
 import se.lublin.humla.testutil.TestPlaybackSink
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 
@@ -72,11 +72,9 @@ class AudioSettingsFragmentTest {
             .map { root.preferenceScreen.getPreference(it) }
             .single { it.fragment == AudioSettingsFragment::class.java.name }
         root.onPreferenceTreeClick(entry)
-        idle()
+        idleMainLooper()
         return screen() as AudioSettingsFragment
     }
-
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     private fun AudioSettingsFragment.switch(key: String) = requireNotNull(findPreference<SwitchPreferenceCompat>(key))
     private fun AudioSettingsFragment.testSwitch() = switch("audio_test_microphone")
@@ -101,7 +99,7 @@ class AudioSettingsFragmentTest {
         val audio = openAudio()
 
         audio.testSwitch().performClick()
-        idle()
+        idleMainLooper()
 
         assertThat(capture.request).isNotNull()
         assertThat(source.events).contains("start")
@@ -115,11 +113,11 @@ class AudioSettingsFragmentTest {
         val audio = openAudio()
         audio.testSwitch().performClick()
         audio.loopbackSwitch().performClick()
-        idle()
+        idleMainLooper()
         assertThat(sink.openedWith).isNotNull()
 
         audio.testSwitch().performClick()
-        idle()
+        idleMainLooper()
 
         assertThat(source.events.last()).isEqualTo("release")
         assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
@@ -134,7 +132,7 @@ class AudioSettingsFragmentTest {
         val audio = openAudio()
         audio.testSwitch().performClick()
         audio.loopbackSwitch().performClick()
-        idle()
+        idleMainLooper()
 
         audio.onPause()
 
@@ -150,7 +148,7 @@ class AudioSettingsFragmentTest {
 
         PreferenceManager.getDefaultSharedPreferences(app).edit()
             .putString(Settings.VAD_MODE.key, "amplitude").commit()
-        idle()
+        idleMainLooper()
 
         assertThat(capture.request).isNull()
         assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
@@ -160,12 +158,12 @@ class AudioSettingsFragmentTest {
     fun `an audio setting changed while testing restarts the meter`() {
         val audio = openAudio()
         audio.testSwitch().performClick()
-        idle()
+        idleMainLooper()
         val first = capture.request
 
         PreferenceManager.getDefaultSharedPreferences(app).edit()
             .putString(Settings.VAD_MODE.key, "amplitude").commit()
-        idle()
+        idleMainLooper()
 
         assertThat(capture.request).isNotSameInstanceAs(first)
         assertThat(audio.testSwitch().isChecked).isTrue()
@@ -177,7 +175,7 @@ class AudioSettingsFragmentTest {
         val audio = openAudio()
 
         audio.testSwitch().performClick()
-        idle()
+        idleMainLooper()
 
         assertThat(capture.request).isNull()
         assertThat(audio.meter().message).isEqualTo(app.getString(R.string.inputLevelMeterUnavailable))

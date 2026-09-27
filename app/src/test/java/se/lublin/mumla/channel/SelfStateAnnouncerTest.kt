@@ -17,12 +17,11 @@
 
 package se.lublin.mumla.channel
 
-import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
+import se.lublin.humla.testutil.idleMainLooperFor
 import se.lublin.mumla.R
 import java.time.Duration
 
@@ -31,7 +30,7 @@ class SelfStateAnnouncerTest {
     private val spoken = mutableListOf<Int>()
     private val announcer = SelfStateAnnouncer { spoken += it }
 
-    private fun settle() = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SelfStateAnnouncer.SETTLE_MS))
+    private fun settle() = idleMainLooperFor(Duration.ofMillis(SelfStateAnnouncer.SETTLE_MS))
 
     @Test
     fun theFirstStateIsABaselineAndAChangeIsSpokenOnceSettled() {

@@ -37,8 +37,8 @@ import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.UserState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
-import se.lublin.mumla.testing.idleMainLooper
 import java.util.Collections
 import kotlin.coroutines.CoroutineContext
 

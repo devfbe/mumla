@@ -1,6 +1,5 @@
 package se.lublin.mumla.channel
 
-import android.os.Looper
 import android.view.Window
 import android.widget.EditText
 import androidx.appcompat.view.menu.MenuBuilder
@@ -15,9 +14,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.stubConnected
@@ -42,7 +41,7 @@ class ChannelFragmentTabsTest {
         fragment = ChannelFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(android.R.id.content, fragment, "channel").commitNow()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
     }
 
     private fun menuTitles(): List<String> {
@@ -60,7 +59,7 @@ class ChannelFragmentTabsTest {
 
     private fun showTab(position: Int) {
         fragment.requireView().findViewById<ViewPager2>(R.id.channel_view_pager).currentItem = position
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
     }
 
     @Test

@@ -20,9 +20,9 @@ package se.lublin.humla.audio
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
-import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.SpeexJitterApi
 import se.lublin.humla.audio.native.SpeexJitterNative
+import se.lublin.humla.testutil.FakeOpusDecoder
 import java.lang.management.ManagementFactory
 
 /**
@@ -62,27 +62,8 @@ class PlaybackAllocationTest {
         override fun updateDelay(handle: Long): Int = 0
     }
 
-    private class SilentOpus : OpusDecoderApi {
-        override fun create(sampleRate: Int, channels: Int, error: IntArray): Long = 1L
-        override fun decodeFloat(
-            state: Long,
-            data: ByteArray?,
-            offset: Int,
-            len: Int,
-            out: FloatArray,
-            frameSize: Int,
-            decodeFec: Int,
-        ): Int {
-            out[0] = 0.1f
-            return AudioHandler.FRAME_SIZE
-        }
-        override fun destroy(state: Long) = Unit
-        override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = 1
-        override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int = AudioHandler.FRAME_SIZE
-    }
-
     private fun speech(session: Int) =
-        AudioOutputSpeech(session, MIX_SAMPLES, { _, _ -> }, SilentOpus(), SilentJitter())
+        AudioOutputSpeech(session, MIX_SAMPLES, { _, _ -> }, FakeOpusDecoder(fill = 0.1f), SilentJitter())
 
     @Test
     fun `decoding one talker allocates under half an object per mix`() {

@@ -21,11 +21,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
 import se.lublin.mumla.app.DrawerAdapter
 import se.lublin.mumla.app.MumlaActivity
-import se.lublin.mumla.testing.idleMainLooper
 
 /**
  * The foreground notification: what it shows, what its buttons reach, and when it holds the

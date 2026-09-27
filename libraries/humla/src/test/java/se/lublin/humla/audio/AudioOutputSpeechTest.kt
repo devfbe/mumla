@@ -2,44 +2,13 @@ package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.net.VoicePacket
+import se.lublin.humla.testutil.FakeOpusDecoder
 import java.nio.ByteBuffer
 
 class AudioOutputSpeechTest {
-
-    private class FakeOpusDecoder(
-        private val nbFrames: Int = 1,
-        private val samplesPerFrame: Int = AudioHandler.FRAME_SIZE,
-        /** Written to every decoded sample, if set. */
-        private val fill: Float? = null,
-    ) : OpusDecoderApi {
-        var destroys = 0
-        override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {
-            error[0] = 0
-            return 1L
-        }
-        override fun decodeFloat(
-            state: Long,
-            data: ByteArray?,
-            offset: Int,
-            len: Int,
-            out: FloatArray,
-            frameSize: Int,
-            decodeFec: Int,
-        ): Int {
-            fill?.let { out.fill(it, 0, AudioHandler.FRAME_SIZE) }
-            return AudioHandler.FRAME_SIZE
-        }
-        override fun destroy(state: Long) {
-            destroys++
-        }
-        override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = nbFrames
-        override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int = samplesPerFrame
-    }
-
     /** A packet as the jitter buffer holds it: opus frame, volume adjustment bits, terminator flag. */
     private fun jitterPacket(payload: ByteArray, volume: Float = 1f, terminator: Boolean = false): ByteArray =
         payload + ByteBuffer.allocate(4).putFloat(volume).array() + byteArrayOf(if (terminator) 1 else 0)
@@ -62,7 +31,7 @@ class AudioOutputSpeechTest {
             42,
             AudioHandler.FRAME_SIZE,
             { _, _ -> },
-            FakeOpusDecoder(nbFrames = 2, samplesPerFrame = 480),
+            FakeOpusDecoder(framesPerPacket = 2, samplesPerFrame = 480),
             jitter,
         )
 
@@ -78,7 +47,7 @@ class AudioOutputSpeechTest {
     @Test
     fun `a packet the opus parser refuses never reaches the jitter buffer`() {
         val jitter = FakeJitter()
-        val refusing = FakeOpusDecoder(nbFrames = -4)
+        val refusing = FakeOpusDecoder(framesPerPacket = -4)
         val speech = AudioOutputSpeech(42, AudioHandler.FRAME_SIZE, { _, _ -> }, refusing, jitter)
 
         speech.addFrameToBuffer(voicePacket(byteArrayOf(0x41), frameNumber = 1))

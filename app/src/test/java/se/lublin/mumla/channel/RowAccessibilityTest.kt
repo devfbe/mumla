@@ -32,10 +32,10 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.service.OverlayUserAdapter
 import se.lublin.mumla.testing.ThemedActivity
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.util.UserStatus
 
 /** What the channel list and the overlay tell accessibility services about their rows. */

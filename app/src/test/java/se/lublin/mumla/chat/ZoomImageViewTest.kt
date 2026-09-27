@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
-import android.os.Looper
 import android.os.Parcelable
 import android.os.SystemClock
 import android.util.SparseArray
@@ -20,7 +19,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
-import org.robolectric.Shadows.shadowOf
+import se.lublin.humla.testutil.idleMainLooperFor
 import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
@@ -103,7 +102,7 @@ class ZoomImageViewTest {
         view.touch(MotionEvent.ACTION_DOWN, down, 10f, 10f)
         view.touch(MotionEvent.ACTION_UP, down + 20, 10f, 10f)
         // onSingleTapConfirmed only fires once the double-tap window has passed.
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+        idleMainLooperFor(Duration.ofMillis(500))
 
         assertThat(clicks).isEqualTo(1)
     }
@@ -425,7 +424,7 @@ class ZoomImageViewTest {
 
         val down = SystemClock.uptimeMillis()
         view.touch(MotionEvent.ACTION_DOWN, down, 10f, 10f)
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1000))
+        idleMainLooperFor(Duration.ofMillis(1000))
 
         assertThat(longClicks).isEqualTo(1)
     }
@@ -440,7 +439,7 @@ class ZoomImageViewTest {
         val down = SystemClock.uptimeMillis()
         view.touch(MotionEvent.ACTION_DOWN, down, 10f, 10f)
         view.touch(MotionEvent.ACTION_UP, down + 20, 10f, 10f)
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+        idleMainLooperFor(Duration.ofMillis(500))
 
         assertThat(clicks).isEqualTo(1)
     }

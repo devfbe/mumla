@@ -24,12 +24,12 @@ import se.lublin.humla.model.Server
 import se.lublin.humla.model.ServerState
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubActions

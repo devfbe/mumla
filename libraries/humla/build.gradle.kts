@@ -85,4 +85,5 @@ dependencies {
 
     testImplementation(libs.bundles.unit.test)
     testFixturesApi(testFixtures(project(":libraries:humla-protocol")))
+    testFixturesImplementation(libs.robolectric)
 }

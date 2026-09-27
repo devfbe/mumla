@@ -19,7 +19,6 @@ package se.lublin.mumla.preference
 import android.app.Application
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.os.Looper
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.test.core.app.ApplicationProvider
@@ -33,6 +32,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.audio.routing.PreferredAudioDevice
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 
@@ -77,7 +77,7 @@ class AudioDevicePreferenceTest {
             .map { root.preferenceScreen.getPreference(it) }
             .single { it.fragment == AudioSettingsFragment::class.java.name }
         root.onPreferenceTreeClick(entry)
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         return screen() as AudioSettingsFragment
     }
 

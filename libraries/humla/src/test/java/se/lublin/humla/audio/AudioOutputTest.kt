@@ -11,11 +11,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowAudioTrack
-import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
+import se.lublin.humla.testutil.FakeOpusDecoder
 import se.lublin.humla.testutil.LogRecorder
 import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.TimeUnit
@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit
 class AudioOutputTest {
     @get:Rule
     val log = LogRecorder()
-
 
     private val listener = object : AudioOutput.AudioOutputListener {
         override val playbackParams: PlaybackParams = PlaybackParams.DEFAULT
@@ -161,7 +160,7 @@ class AudioOutputTest {
         var built = 0
         val o = startedOutput { u, samples, l, _ ->
             built++
-            AudioOutputSpeech(u, samples, l, NoOpusDecoder(), FakeJitter())
+            AudioOutputSpeech(u, samples, l, FakeOpusDecoder(), FakeJitter())
         }
         log.clear()
 
@@ -213,26 +212,6 @@ class AudioOutputTest {
 
     private fun awaitTrue(what: String, condition: () -> Boolean) =
         awaitUntil(description = what, condition = condition)
-
-    private class NoOpusDecoder : OpusDecoderApi {
-        override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {
-            error[0] = 0
-            return 1L
-        }
-        override fun decodeFloat(
-            state: Long,
-            data: ByteArray?,
-            offset: Int,
-            len: Int,
-            out: FloatArray,
-            frameSize: Int,
-            decodeFec: Int,
-        ): Int =
-            AudioHandler.FRAME_SIZE
-        override fun destroy(state: Long) = Unit
-        override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = 1
-        override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int = AudioHandler.FRAME_SIZE
-    }
 
     private companion object {
         const val SESSION = 7

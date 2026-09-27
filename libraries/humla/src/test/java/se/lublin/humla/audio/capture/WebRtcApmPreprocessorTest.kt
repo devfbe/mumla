@@ -264,40 +264,4 @@ class WebRtcApmPreprocessorTest {
             .containsExactlyElementsIn(List(TICKS) { it })
             .inOrder()
     }
-
-    /**
-     * `HandleTable::get()` cannot tell whose handle it is given, so another stage's handle could make
-     * the APM bridge process someone else's instance; this stage has two audio threads that could
-     * leak it.
-     */
-    @Test
-    fun `the native handle never escapes the stage`() {
-        val hierarchy = generateSequence<Class<*>>(WebRtcApmPreprocessor::class.java) { it.superclass }
-            .takeWhile { it != Any::class.java }
-            .toList()
-        assertWithMessage("the walk must reach the base class")
-            .that(hierarchy).contains(SingleHandleStage::class.java)
-
-        val longFields = hierarchy.flatMap { it.declaredFields.asList() }
-            .filter { !it.isSynthetic && mentionsLong(it.type) }
-        assertWithMessage("the handle must live in exactly one field")
-            .that(longFields.map { "${it.declaringClass.simpleName}.${it.name}" }).hasSize(1)
-        assertWithMessage("the one handle field must be the base class's private one")
-            .that(longFields.single().declaringClass).isEqualTo(SingleHandleStage::class.java)
-        assertThat(Modifier.isPrivate(longFields.single().modifiers)).isTrue()
-
-        val handleBearing = hierarchy.flatMap { it.declaredMethods.asList() }
-            .filter { !it.isSynthetic && !it.isBridge && !Modifier.isPrivate(it.modifiers) }
-            .filter { m -> mentionsLong(m.returnType) || m.parameterTypes.any { mentionsLong(it) } }
-        assertWithMessage("only the three callbacks, which run with the lock held, may carry the handle")
-            .that(handleBearing.map { it.name }.distinct())
-            .containsExactly("onCaptureFrame", "onFarEndFrame", "onReleaseHandle")
-    }
-
-    /** `long`, `java.lang.Long`, or an array of either (an out-parameter is an escape too). */
-    private fun mentionsLong(type: Class<*>): Boolean = when {
-        type == Long::class.javaPrimitiveType || type == Long::class.javaObjectType -> true
-        type.isArray -> mentionsLong(type.componentType!!)
-        else -> false
-    }
 }

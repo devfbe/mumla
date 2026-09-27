@@ -51,6 +51,7 @@ import se.lublin.humla.model.ServerState
 import se.lublin.humla.model.UserState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.ChatAdapter
@@ -67,7 +68,6 @@ import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubActions
 import se.lublin.mumla.testing.stubConnected

@@ -41,13 +41,13 @@ import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.ChannelFragment
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.installSession

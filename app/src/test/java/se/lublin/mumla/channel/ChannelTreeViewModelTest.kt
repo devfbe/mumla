@@ -39,10 +39,10 @@ import se.lublin.humla.model.UserState
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.net.Permissions
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.session.SessionManager
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubActions

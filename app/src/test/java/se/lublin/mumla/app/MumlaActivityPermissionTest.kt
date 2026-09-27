@@ -36,9 +36,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowDialog
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Server
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubConnected
