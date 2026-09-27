@@ -37,6 +37,10 @@
           cmakeVersions = [ cmakeVersion ];
         };
 
+        # Android Studio wired to the same SDK/NDK the command-line build uses (unfree; opt-in via
+        # `nix run .#android-studio` or `nix develop .#studio`, so plain `nix develop` stays small).
+        androidStudio = pkgs.android-studio.withSdk androidSdk.androidsdk;
+
         # Java/JDK 21
         jdk = pkgs.jdk21;
 
@@ -76,10 +80,30 @@
           echo "  JAVA_HOME: $JAVA_HOME"
         '';
 
+        studioLauncher = pkgs.writeShellScriptBin "mumla-android-studio" ''
+          export PATH="${pkgs.lib.makeBinPath buildInputs}:$PATH"
+          ${shellHook}
+          exec ${androidStudio}/bin/android-studio "$@"
+        '';
       in {
         devShells.default = pkgs.mkShell {
           name = "mumla-android-dev";
           inherit buildInputs shellHook;
+        };
+
+        devShells.studio = pkgs.mkShell {
+          name = "mumla-android-studio";
+          buildInputs = buildInputs ++ [ androidStudio ];
+          inherit shellHook;
+        };
+
+        packages.android-studio = androidStudio;
+
+        # Same environment as `nix develop` (SDK/NDK paths, JDK, the NixOS aapt2 override, build
+        # tools on PATH), so a Gradle sync inside Studio behaves like the command-line build.
+        apps.android-studio = {
+          type = "app";
+          program = "${studioLauncher}/bin/mumla-android-studio";
         };
       }
     );
