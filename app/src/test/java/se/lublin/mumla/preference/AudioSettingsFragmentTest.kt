@@ -38,6 +38,7 @@ import se.lublin.humla.testutil.TestPlaybackSink
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.audio.MicCheck
 import se.lublin.mumla.testing.openScreen
 
 /** The live meter only takes the microphone, and the audio mode, while the user asks for it. */
@@ -51,14 +52,14 @@ class AudioSettingsFragmentTest {
 
     @Before
     fun seams() {
-        AudioSettingsFragment.captureFactory = capture
-        AudioSettingsFragment.sinkFactory = sink
+        MicCheck.captureFactory = capture
+        MicCheck.sinkFactory = sink
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
     }
 
     @After
     fun resetSeams() {
-        AudioSettingsFragment.resetFactories()
+        MicCheck.resetFactories()
     }
 
     private val activity by lazy { Robolectric.buildActivity(SettingsActivity::class.java).setup().get() }

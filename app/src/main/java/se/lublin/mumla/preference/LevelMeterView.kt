@@ -24,6 +24,7 @@ import android.util.AttributeSet
 import android.view.View
 import androidx.annotation.ColorRes
 import androidx.core.content.ContextCompat
+import se.lublin.humla.audio.MeterReading
 import se.lublin.mumla.R
 
 private const val MARK_WIDTH_PX = 4f
@@ -137,5 +138,29 @@ class LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attribut
         floorMark?.let { canvas.drawLine(w * it, 0f, w * it, h, floorPaint) }
         speechMark?.let { canvas.drawLine(w * it, 0f, w * it, h, speechPaint) }
         canvas.drawLine(w * startThreshold, 0f, w * startThreshold, h, thresholdPaint)
+    }
+
+    /**
+     * Shows [reading], or an empty bar for null. [hysteresisDb] is how far below the start threshold
+     * the gate closes again, so the middle zone has a width.
+     */
+    fun show(reading: MeterReading?, hysteresisDb: Float) {
+        if (reading == null) {
+            level = 0f
+            voice = false
+            holding = false
+            floorMark = null
+            speechMark = null
+            return
+        }
+        level = MeterScale.position(reading.levelDbfs)
+        voice = reading.voice
+        holding = reading.holding
+        floorMark = reading.floorDbfs?.let { MeterScale.position(it) }
+        speechMark = reading.speechDbfs?.let { MeterScale.position(it) }
+        // No level threshold in this mode: zero both so the whole range paints as "speech".
+        val threshold = reading.thresholdDbfs
+        startThreshold = threshold?.let { MeterScale.position(it) } ?: 0f
+        stopThreshold = threshold?.let { MeterScale.position(it - hysteresisDb) } ?: 0f
     }
 }
