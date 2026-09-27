@@ -28,11 +28,11 @@ import org.robolectric.shadows.ShadowPowerManager
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.TransmitMode
+import se.lublin.humla.model.Message
 import se.lublin.humla.model.Channel
-import se.lublin.humla.model.IMessage
+import se.lublin.humla.model.User
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.model.User
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
@@ -148,15 +148,8 @@ class MumlaServiceTest {
         it.intentFilter.hasAction(TalkBroadcastReceiver.BROADCAST_TALK)
     }
 
-    private fun textMessage(body: String, actor: String? = "alice"): IMessage = object : IMessage {
-        override val actor: Int = 1
-        override val actorName: String? = actor
-        override val targetChannels: List<Channel> = emptyList()
-        override val targetTrees: List<Channel> = emptyList()
-        override val targetUsers: List<User> = emptyList()
-        override val message: String = body
-        override val receivedTime: Long = 0L
-    }
+    private fun textMessage(body: String, actor: String? = "alice") =
+        Message(1, actor, emptyList(), emptyList(), emptyList(), body, receivedTime = 0L)
 
     private val lost = DisconnectReason.Network("socket reset", null)
 

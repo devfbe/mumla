@@ -45,7 +45,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.TransmitMode
-import se.lublin.humla.model.IMessage
+import se.lublin.humla.model.Message
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.DisconnectReason
@@ -306,7 +306,7 @@ class MumlaService :
         requestAvatarIfMissing(session, user)
     }
 
-    private fun onTextMessage(session: IHumlaSession, message: IMessage) {
+    private fun onTextMessage(session: IHumlaSession, message: Message) {
         val strippedMessage = HtmlUtils.toPlainText(message.message)
         val ttsMessage = if (settings.isShortTextToSpeechMessagesEnabled) {
             HtmlUtils.toPlainTextWithShortLinks(message.message) { host ->

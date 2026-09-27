@@ -154,7 +154,7 @@ class HumlaSessionCharacterizationTest {
             ),
         )
 
-        val config = session.audio.config
+        val config = session.audioSession.config
         assertThat(config.settings).isSameInstanceAs(pipeline)
         assertThat(config).isEqualTo(AudioConfig(pipeline, halfDuplex = true))
     }
@@ -174,8 +174,8 @@ class HumlaSessionCharacterizationTest {
             val constructed = session(SessionConfig(audio = AudioSettings(transmitMode = mode)))
 
             assertThat(configured.transmitMode).isEqualTo(mode)
-            assertThat(configured.audio.inputMode).isInstanceOf(type)
-            assertThat(constructed.audio.inputMode).isInstanceOf(type)
+            assertThat(configured.audioSession.inputMode).isInstanceOf(type)
+            assertThat(constructed.audioSession.inputMode).isInstanceOf(type)
         }
     }
 
@@ -186,7 +186,7 @@ class HumlaSessionCharacterizationTest {
 
         session.setTalkingState(true)
 
-        val mode = session.audio.inputMode as ToggleInputMode
+        val mode = session.audioSession.inputMode as ToggleInputMode
         assertThat(mode.isTalkingOn).isTrue()
         assertThat(session.isTalking).isTrue()
     }

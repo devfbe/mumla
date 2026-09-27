@@ -28,6 +28,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowNetwork
 import se.lublin.humla.exception.HumlaException
+import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.model.WhisperTargetList
 import se.lublin.humla.net.HumlaTCPMessageType
@@ -494,8 +495,8 @@ class HumlaSessionConnectionTest {
         assertThat(networkCallbacks()).isEmpty()
     }
 
-    private fun whisperTarget(h: HumlaSessionHarness) =
-        WhisperTargetChannel(h.session.rootChannel!!, false, false, null)
+    private fun whisperTarget() =
+        WhisperTargetChannel(ChannelState(0, "Root"), false, false, null)
 
     /**
      * The thirty whisper slots are the connection's, not the session's; without the clear on
@@ -506,10 +507,10 @@ class HumlaSessionConnectionTest {
         val h = start()
         h.connectAndSynchronize()
         repeat(WhisperTargetList.TARGET_MAX - WhisperTargetList.TARGET_MIN + 1) {
-            assertThat(h.session.registerWhisperTarget(whisperTarget(h)))
+            assertThat(h.session.registerWhisperTarget(whisperTarget()))
                 .isNotEqualTo((-1).toByte())
         }
-        assertThat(h.session.registerWhisperTarget(whisperTarget(h)))
+        assertThat(h.session.registerWhisperTarget(whisperTarget()))
             .isEqualTo((-1).toByte())
 
         h.session.disconnect()
@@ -517,7 +518,7 @@ class HumlaSessionConnectionTest {
         h.session.connect()
         h.synchronize(h.openSocket(1))
 
-        assertThat(h.session.registerWhisperTarget(whisperTarget(h)))
+        assertThat(h.session.registerWhisperTarget(whisperTarget()))
             .isNotEqualTo((-1).toByte())
     }
 

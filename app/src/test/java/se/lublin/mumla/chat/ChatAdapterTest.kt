@@ -34,9 +34,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.model.Channel
+import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.Message
-import se.lublin.humla.model.User
+import se.lublin.humla.model.UserState
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.idleMainLooper
 import java.util.Collections
@@ -260,14 +260,14 @@ class ChatAdapterTest {
 
     // Input sweep: every input ChatAdapter.kt branches on.
 
-    private fun channel(name: String?) = Channel().also { it.name = name }
+    private fun channel(name: String?) = ChannelState(0, name)
 
     private fun text(
         actor: Int = 7,
         actorName: String? = "alice",
-        channels: List<Channel> = emptyList(),
-        trees: List<Channel> = emptyList(),
-        users: List<User> = emptyList(),
+        channels: List<ChannelState> = emptyList(),
+        trees: List<ChannelState> = emptyList(),
+        users: List<UserState> = emptyList(),
         body: String = "hi",
     ) = IChatMessage.TextMessage(Message(actor, actorName, channels, trees, users, body))
 
@@ -296,14 +296,14 @@ class ChatAdapterTest {
         val messages = listOf(
             text(channels = listOf(channel("Root"))),
             text(trees = listOf(channel("Sub"))),
-            text(users = listOf(User(3, "bob"))),
+            text(users = listOf(UserState(3, "bob", 0))),
             text(),
             text(actorName = null),
             // Present but nameless.
-            text(channels = listOf(channel(null)), users = listOf(User(3, "bob"))),
+            text(channels = listOf(channel(null)), users = listOf(UserState(3, "bob", 0))),
             // A user that is there but has no name must not render "alice -> null".
-            text(users = listOf(User(3, null))),
-            text(actorName = null, users = listOf(User(3, null))),
+            text(users = listOf(UserState(3, null, 0))),
+            text(actorName = null, users = listOf(UserState(3, null, 0))),
         )
         adapter.submitMessages(messages)
         idleMainLooper()
@@ -323,8 +323,9 @@ class ChatAdapterTest {
 
     @Test
     fun aMessageNeverHandsOutANullTargetList() = runTest {
-        val full = Message(7, "alice", listOf(channel("Root")), listOf(channel("Sub")), listOf(User(3, "bob")), "hi")
-        val empty = Message("just a body")
+        val full =
+            Message(7, "alice", listOf(channel("Root")), listOf(channel("Sub")), listOf(UserState(3, "bob", 0)), "hi")
+        val empty = Message(-1, null, emptyList(), emptyList(), emptyList(), "just a body")
         for (message in listOf(full, empty)) {
             assertThat(message.targetChannels).isNotNull()
             assertThat(message.targetTrees).isNotNull()

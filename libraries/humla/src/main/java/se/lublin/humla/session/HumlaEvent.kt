@@ -17,7 +17,7 @@
 package se.lublin.humla.session
 
 import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IMessage
+import se.lublin.humla.model.Message
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.util.VoiceTargetMode
@@ -81,10 +81,10 @@ sealed interface HumlaEvent {
     data class UserStatsReceived(val stats: UserStats) : HumlaEvent
 
     /** A text message from the server or another user. */
-    data class TextMessage(val message: IMessage) : HumlaEvent
+    data class TextMessage(val message: Message) : HumlaEvent
 
     /** The local user sent [message]. */
-    data class MessageSent(val message: IMessage) : HumlaEvent
+    data class MessageSent(val message: Message) : HumlaEvent
 
     data class VoiceTargetChanged(val mode: VoiceTargetMode) : HumlaEvent
 

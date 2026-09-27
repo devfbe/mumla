@@ -87,6 +87,10 @@ internal class ServerWriter(private var published: ServerState) {
         }
     }
 
+    fun channel(id: Int): ChannelState? = channels[id]
+
+    fun user(session: Int): UserState? = users[session]
+
     /** The current state, or the last snapshot again if nothing changed since. */
     fun snapshot(): ServerState {
         val next = ServerState(

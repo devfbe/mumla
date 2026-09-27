@@ -44,10 +44,10 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.model.Message
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
-import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.User
 import se.lublin.humla.session.HumlaEvent
@@ -73,6 +73,7 @@ import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.textMessage
 import se.lublin.mumla.testing.stubState
 
 /**
@@ -274,7 +275,7 @@ class ChannelChatFragmentTest {
 
     @Test
     fun sendingTextMarksItUpAndGoesToTheSessionChannel() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         editor.setText("see http://x.example/ ok")
         sendButton.performClick()
@@ -290,7 +291,7 @@ class ChannelChatFragmentTest {
 
     @Test
     fun typedMarkdownIsSentAsHtmlAndTypedHtmlIsEscaped() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         editor.setText("**hi** <b>there</b>")
         sendButton.performClick()
@@ -301,7 +302,7 @@ class ChannelChatFragmentTest {
     fun withoutMarkdownTheTextIsSentAsBefore() {
         PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
             .edit().putBoolean(Settings.MARKDOWN.key, false).commit()
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         editor.setText("**hi** <b>there</b>")
         sendButton.performClick()
@@ -310,7 +311,7 @@ class ChannelChatFragmentTest {
 
     @Test
     fun sendingWithAUserTargetGoesToThatUser() {
-        every { session.sendUserTextMessage(any(), any()) } returns Message("out")
+        every { session.sendUserTextMessage(any(), any()) } returns textMessage("out")
         launch()
         selectTarget(ChatTarget.User(user("Ann", session = 42)))
         editor.setText("hi")
@@ -320,7 +321,7 @@ class ChannelChatFragmentTest {
 
     @Test
     fun sendingWithAChannelTargetGoesToThatChannel() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         selectTarget(ChatTarget.Channel(channel("Lounge", id = 9)))
         editor.setText("hi")
@@ -398,13 +399,13 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * "No session" must be a value no actor can take: `Message(String)` sets its actor to -1, so
-     * -1 would render actorless messages as the local user's.
+     * "No session" must be a value no actor can take: a message without a sender has the actor -1,
+     * so -1 would render actorless messages as the local user's.
      */
     @Test
     fun theAbsentSessionIdCannotCollideWithAMessageActor() {
         launch(withSession = false)
-        assertThat(fragment.sessionId()).isNotEqualTo(Message("server said so").actor)
+        assertThat(fragment.sessionId()).isNotEqualTo(-1)
     }
 
     private val progress: View get() = fragment.requireView().findViewById(R.id.chat_image_progress)
@@ -414,7 +415,7 @@ class ChannelChatFragmentTest {
     @Test
     fun aConfirmedImageIsSentAsADataUriAndTheSpinnerGoesAway() {
         every { session.serverSettings } returns settings(0)
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         fragment.sendImage(smallBitmap())
         val sent = slot<String>()
@@ -551,7 +552,7 @@ class ChannelChatFragmentTest {
     @Test
     fun theConfirmationShowsThePickedImageAndSendsOnlyOnOk() {
         every { session.serverSettings } returns settings(0)
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         val bitmap = smallBitmap()
         fragment.confirmImage(bitmap)
@@ -575,7 +576,7 @@ class ChannelChatFragmentTest {
     @Test
     fun theConfirmationSendsOnOk() {
         every { session.serverSettings } returns settings(0)
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         fragment.confirmImage(smallBitmap())
         idleMainLooper()
@@ -613,7 +614,7 @@ class ChannelChatFragmentTest {
     @Test
     fun aSentMessageAppearsInTheListImmediately() {
         every { session.sendChannelTextMessage(any(), any(), any()) } answers {
-            Message("hi there").also { session.stubEvents().tryEmit(HumlaEvent.MessageSent(it)) }
+            textMessage("hi there").also { session.stubEvents().tryEmit(HumlaEvent.MessageSent(it)) }
         }
         launch()
         editor.setText("hi there")
@@ -955,7 +956,7 @@ class ChannelChatFragmentTest {
     @Test
     fun theSpinnerIsUpWhileAnImageIsBeingEncoded() {
         every { session.serverSettings } returns settings(0)
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         assertThat(progress.visibility).isEqualTo(View.GONE)
         fragment.sendImage(smallBitmap())
@@ -1000,7 +1001,7 @@ class ChannelChatFragmentTest {
      */
     @Test
     fun aHardwareEnterInTheEditorSendsTheMessage() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { session.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         layOutHost()
         editor.requestFocus()

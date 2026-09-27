@@ -208,12 +208,7 @@ class ChannelFragment :
     }
 
     private fun cancelWhisper() {
-        val session = sessions.connected ?: return
-        if (session.voiceTargetMode == VoiceTargetMode.WHISPER) {
-            val target = session.voiceTargetId
-            session.voiceTargetId = 0
-            session.unregisterWhisperTarget(target)
-        }
+        sessions.connected?.actions?.stopWhispering()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

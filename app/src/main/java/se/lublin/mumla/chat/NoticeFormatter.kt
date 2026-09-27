@@ -17,7 +17,7 @@
 package se.lublin.mumla.chat
 
 import android.content.Context
-import se.lublin.humla.model.IMessage
+import se.lublin.humla.model.Message
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
@@ -105,7 +105,7 @@ class NoticeFormatter(private val context: Context) {
         is DisconnectReason.Failed -> reason.message
     }
 
-    fun senderName(message: IMessage): String = message.actorName ?: string(R.string.server)
+    fun senderName(message: Message): String = message.actorName ?: string(R.string.server)
 
     /** Whoever moved a user: [actor], or the server when null. */
     private fun mover(actor: String?): String = actor?.let(::highlight) ?: string(R.string.the_server)

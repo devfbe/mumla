@@ -79,6 +79,7 @@ import se.lublin.humla.session.AudioSession
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.NetworkMonitor
+import se.lublin.humla.session.ServerInfo
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionLifecycle
 import se.lublin.humla.session.SessionState
@@ -218,7 +219,7 @@ class HumlaSession(
         override fun onTalkStateUpdated(session: Int, state: TalkState) = mutableTalkStates.report(session, state)
     }
 
-    internal val audio = AudioSession(
+    internal val audioSession = AudioSession(
         AudioHost(context, logger, audioInputListener, audioOutputListener),
         audioFactory,
         // One instance per session, so a platform refusal is reported once rather than on every
@@ -238,7 +239,7 @@ class HumlaSession(
 
     override val state: StateFlow<SessionState> get() = lifecycle.state
 
-    override val audioRoute: StateFlow<Int?> get() = audio.route
+    override val audioRoute: StateFlow<Int?> get() = audioSession.route
 
     override val targetServer: Server? get() = config.connection.server
 
@@ -295,14 +296,14 @@ class HumlaSession(
 
     override fun disconnect() {
         // While a reconnect waits out its backoff no connection will report the end.
-        if (lifecycle.disconnectRequested()) audio.endSession()
+        if (lifecycle.disconnectRequested()) audioSession.endSession()
         connection?.disconnect()
     }
 
     override fun cancelReconnect() {
         // An attempt in flight is stopped too, so it cannot synchronize a session the user ended.
         if (lifecycle.cancelReconnect()) {
-            audio.endSession()
+            audioSession.endSession()
             connection?.disconnect()
         }
     }
@@ -313,7 +314,7 @@ class HumlaSession(
         disconnect()
         lifecycle.release()
         scope.cancel()
-        audio.release()
+        audioSession.release()
     }
 
     override fun configure(config: SessionConfig): Boolean {
@@ -322,7 +323,7 @@ class HumlaSession(
         if (config.accessTokens != previous.accessTokens && connection?.isConnected == true) {
             commands?.sendAccessTokens(config.accessTokens)
         }
-        audio.apply(config.audio)
+        audioSession.apply(config.audio)
         return config.needsReconnectAfter(previous)
     }
 
@@ -357,7 +358,7 @@ class HumlaSession(
         if (self == null) {
             // ServerSync named no known user: keep the session up without a microphone.
             Log.e(TAG, "No session user after ServerSync; audio not started")
-            audio.engageRoute()
+            audioSession.engageRoute()
             warn(context.getString(R.string.no_session_user))
             return
         }
@@ -366,10 +367,10 @@ class HumlaSession(
             maxBandwidth = connection.getMaxBandwidth(),
             codec = connection.getCodec(),
             targetId = currentVoiceTargetId,
-            inputMode = audio.inputMode,
+            inputMode = audioSession.inputMode,
             udpProtocol = connection.udpProtocol,
         )
-        audio.start(params, connection)
+        audioSession.start(params, connection)
     }
 
     internal fun onConnectionDisconnected(e: HumlaException?) {
@@ -382,7 +383,7 @@ class HumlaSession(
     private fun lost(reason: DisconnectReason?) {
         // First: push-to-talk must be off before anything could reconnect.
         audioStart?.cancel()
-        audio.stop()
+        audioSession.stop()
         val autoReconnect = config.autoReconnect && reason is DisconnectReason.Network
         val next = lifecycle.lost(autoReconnect, reason)
         synchronized(modelLock) {
@@ -398,7 +399,7 @@ class HumlaSession(
             // A late, reason-free report after cancelReconnect keeps the cancelled session's reason
             // and must not claim to have given up.
             if (autoReconnect && next.reason === reason) warn(context.getString(R.string.reconnect_gave_up))
-            audio.endSession()
+            audioSession.endSession()
         }
     }
 
@@ -442,7 +443,7 @@ class HumlaSession(
     override val maxBandwidth: Int get() = conn().getMaxBandwidth()
 
     /** The pipeline starts and stops asynchronously around the session, so this does not throw. */
-    override val currentBandwidth: Int get() = audio.currentBandwidth
+    override val currentBandwidth: Int get() = audioSession.currentBandwidth
 
     override val serverVersion: Int get() = conn().getServerVersion()
 
@@ -473,19 +474,19 @@ class HumlaSession(
 
     override val transmitMode: TransmitMode get() = config.audio.transmitMode
 
-    override val audioDevices: List<CommunicationDevice> get() = audio.devices
+    override val audioDevices: List<CommunicationDevice> get() = audioSession.devices
 
-    override val activeAudioDevice: CommunicationDevice? get() = audio.activeDevice
+    override val activeAudioDevice: CommunicationDevice? get() = audioSession.activeDevice
 
-    override val isEchoCancellationEnabled: Boolean get() = audio.isEchoCancellationEnabled
+    override val isEchoCancellationEnabled: Boolean get() = audioSession.isEchoCancellationEnabled
 
-    override fun selectAudioDevice(id: Int) = audio.router.choose(id)
+    override fun selectAudioDevice(id: Int) = audioSession.router.choose(id)
 
-    override fun selectAutomaticAudioDevice() = audio.router.forgetChoice()
+    override fun selectAutomaticAudioDevice() = audioSession.router.forgetChoice()
 
-    override val isTalking: Boolean get() = audio.isTalking
+    override val isTalking: Boolean get() = audioSession.isTalking
 
-    override fun setTalkingState(talking: Boolean) = audio.setTalking(talking)
+    override fun setTalkingState(talking: Boolean) = audioSession.setTalking(talking)
 
     override fun joinChannel(channel: Int) = moveUserToChannel(sessionId, channel)
 
@@ -570,26 +571,14 @@ class HumlaSession(
         commands().unlinkChannels(channel.id, channel.links.map { it.id })
 
     override fun sendUserTextMessage(session: Int, message: String): Message {
-        val model = model()
-        commands().textToUser(session, message)
-        // A message to an unknown session carries no user.
-        val users = listOfNotNull(model.getUser(session))
-        return sent(Message(sessionId, selfName(model), emptyList(), emptyList(), users, message))
+        model()
+        return checkNotNull(actions.sendUserTextMessage(session, message)) { NOT_SYNCHRONIZED }
     }
 
     override fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message {
-        val model = model()
-        commands().textToChannel(channel, message, tree)
-        // An unknown channel is left out, as above.
-        val channels = listOfNotNull(model.getChannel(channel))
-        val trees = if (tree) channels else emptyList()
-        return sent(Message(sessionId, selfName(model), channels, trees, emptyList(), message))
+        model()
+        return checkNotNull(actions.sendChannelTextMessage(channel, message, tree)) { NOT_SYNCHRONIZED }
     }
-
-    private fun sent(message: Message): Message = message.also { emit(HumlaEvent.MessageSent(it)) }
-
-    private fun selfName(model: ModelHandler): String? =
-        checkNotNull(model.getUser(sessionId)) { "No user for our own session" }.name
 
     override fun registerWhisperTarget(target: WhisperTarget): Byte {
         val id = whisperTargetList.append(target)
@@ -607,9 +596,195 @@ class HumlaSession(
             require((targetId.toInt() and 0x1F.inv()) == 0) { "Target ID must be at most 5 bits." }
             currentVoiceTargetId = targetId
             // Also reaches the running pipeline, so the next rebuild keeps targeting it.
-            audio.setVoiceTargetId(targetId)
+            audioSession.setVoiceTargetId(targetId)
             emit(HumlaEvent.VoiceTargetChanged(VoiceTargetMode.fromId(targetId)))
         }
+
+    override val serverInfo: ServerInfo?
+        get() {
+            val connection = connection?.takeIf { it.isSynchronized } ?: return null
+            return try {
+                ServerInfo(
+                    release = connection.getServerRelease(),
+                    osName = connection.getServerOSName(),
+                    osVersion = connection.getServerOSVersion(),
+                    version = connection.getServerVersion(),
+                    maxBandwidth = connection.getMaxBandwidth(),
+                    codec = connection.getCodec(),
+                    tcpLatency = connection.getTCPLatency(),
+                    udpLatency = connection.getUDPLatency(),
+                )
+            } catch (e: IllegalStateException) {
+                Log.d(TAG, "The connection ended while its server info was read", e)
+                null
+            }
+        }
+
+    override val actions: SessionActions = Actions()
+
+    override val audio: AudioControls = Audio()
+
+    /** The requests of the synchronized connection; null outside of one. */
+    private fun synced(): ServerCommands? = commands.takeIf { connection?.isSynchronized == true }
+
+    @Suppress("TooManyFunctions") // SessionActions, one request each.
+    private inner class Actions : SessionActions {
+        private val model: ServerState? get() = mutableModel.value
+
+        override fun joinChannel(channel: Int) {
+            val self = model?.selfSession ?: return
+            synced()?.moveUser(self, channel)
+        }
+
+        override fun moveUser(session: Int, channel: Int) {
+            synced()?.moveUser(session, channel)
+        }
+
+        override fun createChannel(parent: Int, name: String, description: String, position: Int, temporary: Boolean) {
+            synced()?.createChannel(parent, name, description, position, temporary)
+        }
+
+        override fun removeChannel(channel: Int) {
+            synced()?.removeChannel(channel)
+        }
+
+        override fun linkChannels(channel: Int, other: Int) {
+            synced()?.linkChannels(channel, other)
+        }
+
+        override fun unlinkChannels(channel: Int, other: Int) {
+            synced()?.unlinkChannels(channel, listOf(other))
+        }
+
+        override fun unlinkAllChannels(channel: Int) {
+            val links = model?.channel(channel)?.links ?: return
+            synced()?.unlinkChannels(channel, links.toList())
+        }
+
+        override fun setListening(channel: Int, listen: Boolean) {
+            val self = model?.selfSession ?: return
+            synced()?.setListening(self, channel, listen)
+        }
+
+        override fun sendAccessTokens(tokens: List<String>) {
+            synced()?.sendAccessTokens(tokens)
+        }
+
+        override fun requestPermissions(channel: Int) {
+            synced()?.requestPermissions(channel)
+        }
+
+        override fun requestComment(session: Int) {
+            synced()?.requestComment(session)
+        }
+
+        override fun requestChannelDescription(channel: Int) {
+            synced()?.requestChannelDescription(channel)
+        }
+
+        override fun requestUserStats(session: Int) {
+            synced()?.requestUserStats(session)
+        }
+
+        override fun registerUser(session: Int) {
+            synced()?.registerUser(session)
+        }
+
+        override fun kickBanUser(session: Int, reason: String?, ban: Boolean) {
+            synced()?.kickBanUser(session, reason, ban)
+        }
+
+        override fun setUserComment(session: Int, comment: String?) {
+            synced()?.setComment(session, comment)
+        }
+
+        override fun setPrioritySpeaker(session: Int, priority: Boolean) {
+            synced()?.setPrioritySpeaker(session, priority)
+        }
+
+        override fun setMuteDeafState(session: Int, mute: Boolean, deaf: Boolean) {
+            synced()?.setMuteDeaf(session, mute, deaf)
+        }
+
+        override fun setSelfMuteDeafState(mute: Boolean, deaf: Boolean) {
+            synced()?.setSelfMuteDeaf(mute, deaf)
+        }
+
+        override fun sendUserTextMessage(session: Int, message: String): Message? = send { model, commands ->
+            commands.textToUser(session, message)
+            // A message to an unknown session carries no user.
+            val users = listOfNotNull(model.user(session))
+            Message(model.selfSession!!, model.self?.name, emptyList(), emptyList(), users, message)
+        }
+
+        override fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message? =
+            send { model, commands ->
+                commands.textToChannel(channel, message, tree)
+                // An unknown channel is left out, as above.
+                val channels = listOfNotNull(model.channel(channel))
+                val trees = if (tree) channels else emptyList()
+                Message(model.selfSession!!, model.self?.name, channels, trees, emptyList(), message)
+            }
+
+        /** Sends and publishes what [build] makes, once the own session is known; null otherwise. */
+        private inline fun send(build: (ServerState, ServerCommands) -> Message): Message? {
+            val commands = synced()
+            val model = model?.takeIf { it.selfSession != null }
+            if (commands == null || model == null) return null
+            return build(model, commands).also { emit(HumlaEvent.MessageSent(it)) }
+        }
+
+        override fun setLocalMuted(session: Int, muted: Boolean) = this@HumlaSession.setLocalMuted(session, muted)
+
+        override fun setLocalIgnored(session: Int, ignored: Boolean) =
+            this@HumlaSession.setLocalIgnored(session, ignored)
+
+        override fun setLocalVolume(session: Int, volume: Float) = this@HumlaSession.setLocalVolume(session, volume)
+
+        override val voiceTargetMode: VoiceTargetMode get() = this@HumlaSession.voiceTargetMode
+
+        override val whisperTarget: WhisperTarget? get() = this@HumlaSession.whisperTarget
+
+        override fun whisperTo(target: WhisperTarget): Boolean {
+            val commands = synced() ?: return false
+            if (voiceTargetMode == VoiceTargetMode.WHISPER) whisperTargetList.free(currentVoiceTargetId)
+            val id = whisperTargetList.append(target)
+            if (id >= 0) {
+                commands.registerVoiceTarget(id.toInt(), target.createTarget())
+                voiceTargetId = id
+            }
+            return id >= 0
+        }
+
+        override fun stopWhispering() {
+            if (voiceTargetMode != VoiceTargetMode.WHISPER) return
+            val target = currentVoiceTargetId
+            voiceTargetId = 0
+            whisperTargetList.free(target)
+        }
+    }
+
+    private inner class Audio : AudioControls {
+        override val route: StateFlow<Int?> get() = audioSession.route
+
+        override val transmitMode: TransmitMode get() = config.audio.transmitMode
+
+        override val isTalking: Boolean get() = audioSession.isTalking
+
+        override fun setTalking(talking: Boolean) = audioSession.setTalking(talking)
+
+        override val devices: List<CommunicationDevice> get() = audioSession.devices
+
+        override val activeDevice: CommunicationDevice? get() = audioSession.activeDevice
+
+        override val isEchoCancellationEnabled: Boolean get() = audioSession.isEchoCancellationEnabled
+
+        override fun selectDevice(id: Int) = audioSession.router.choose(id)
+
+        override fun selectAutomaticDevice() = audioSession.router.forgetChoice()
+
+        override val currentBandwidth: Int get() = audioSession.currentBandwidth
+    }
 
     override val voiceTargetMode: VoiceTargetMode get() = VoiceTargetMode.fromId(currentVoiceTargetId)
 
@@ -653,6 +828,7 @@ class HumlaSession(
     companion object {
         private const val TAG = "HumlaSession"
         private val dnsLookupInstalled = AtomicBoolean()
+        private const val NOT_SYNCHRONIZED = "Not synchronized with the server"
 
         /** Events a collector may fall behind before the oldest are dropped. */
         const val EVENT_BUFFER = 8_192

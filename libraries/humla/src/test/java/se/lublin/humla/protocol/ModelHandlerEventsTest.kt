@@ -332,7 +332,7 @@ class ModelHandlerEventsTest {
 
     @Test
     fun aLocallyIgnoredSendersMessageIsDropped() {
-        handler.getUser(2)!!.isLocalIgnored = true
+        handler.onLocal(LocalInput.Ignore(2, true))
 
         handler.onMessage(Mumble.TextMessage.newBuilder().setActor(2).setMessage("hi").build())
 

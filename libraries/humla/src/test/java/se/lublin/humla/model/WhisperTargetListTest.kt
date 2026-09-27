@@ -6,7 +6,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class WhisperTargetListTest {
-    private val root = Channel(0, false)
+    private val root = ChannelState(0)
     private fun target() = WhisperTargetChannel(root, false, false, null)
 
     @Test

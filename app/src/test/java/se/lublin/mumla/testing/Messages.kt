@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Andrew Comminos <andrew@comminos.com>
+ * Copyright (C) 2026 The Mumla authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,21 +15,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.humla.model
+package se.lublin.mumla.testing
 
-/** A text message from the server or another user. */
-interface IMessage {
-    /** The sender's session. Prefer [actorName]: the sender may have left the server. */
-    val actor: Int
+import se.lublin.humla.model.Message
 
-    /** The sender's name, or null for a message from the server itself (or a nameless sender). */
-    val actorName: String?
-
-    val targetChannels: List<Channel>
-    val targetTrees: List<Channel>
-    val targetUsers: List<User>
-    val message: String
-
-    /** When the message arrived, in milliseconds since the epoch. */
-    val receivedTime: Long
-}
+/** A text message without targets. */
+fun textMessage(body: String, actor: Int = -1, actorName: String? = null, receivedTime: Long = 0L) =
+    Message(actor, actorName, emptyList(), emptyList(), emptyList(), body, receivedTime)

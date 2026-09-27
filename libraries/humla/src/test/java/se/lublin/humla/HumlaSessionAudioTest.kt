@@ -122,7 +122,7 @@ class HumlaSessionAudioTest {
         ).isTrue()
     }
 
-    private fun inputModeOf(h: HumlaSessionHarness): Any = h.session.audio.inputMode
+    private fun inputModeOf(h: HumlaSessionHarness): Any = h.session.audioSession.inputMode
 
     /**
      * A voice target set while the socket is up but before synchronization reaches the pipeline
@@ -255,7 +255,7 @@ class HumlaSessionAudioTest {
         awaitUntil(description = "the control thread ended") { !controller.thread.isAlive }
     }
 
-    private fun controllerOf(h: HumlaSessionHarness): AudioController = h.session.audio.controller
+    private fun controllerOf(h: HumlaSessionHarness): AudioController = h.session.audioSession.controller
 
     /**
      * A disconnect between the server's sync and its delivery on the main looper: no pipeline is
@@ -370,14 +370,14 @@ class HumlaSessionAudioTest {
         val h = start()
 
         h.configureAudio { copy(halfDuplex = true, transmitMode = TransmitMode.VOICE_ACTIVITY) }
-        assertThat(h.session.audio.config.halfDuplex).isFalse()
+        assertThat(h.session.audioSession.config.halfDuplex).isFalse()
 
         h.configureAudio { copy(transmitMode = TransmitMode.PUSH_TO_TALK) }
-        assertThat(h.session.audio.config.halfDuplex).isTrue()
+        assertThat(h.session.audioSession.config.halfDuplex).isTrue()
 
         // Both directions: the flag is what the caller wrote, not a constant.
         h.configureAudio { copy(halfDuplex = false) }
-        assertThat(h.session.audio.config.halfDuplex).isFalse()
+        assertThat(h.session.audioSession.config.halfDuplex).isFalse()
     }
 
     /**

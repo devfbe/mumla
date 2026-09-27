@@ -30,7 +30,6 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.net.Permissions
-import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.mumla.R
 import se.lublin.mumla.channel.comment.ChannelDescriptionFragment
 import se.lublin.mumla.db.PinnedChannels
@@ -141,14 +140,8 @@ class ChannelMenu(
 
     private fun shout(includeLinked: Boolean, includeSubchannels: Boolean) {
         if (!session.isConnected) return
-        // Replaces any whisper target we registered before.
-        if (session.voiceTargetMode == VoiceTargetMode.WHISPER) {
-            session.unregisterWhisperTarget(session.voiceTargetId)
-        }
-        val id = session.registerWhisperTarget(WhisperTargetChannel(channel, includeLinked, includeSubchannels, null))
-        if (id > 0) {
-            session.voiceTargetId = id
-        } else {
+        val target = session.model.value?.channel(channel.id) ?: return
+        if (!session.actions.whisperTo(WhisperTargetChannel(target, includeLinked, includeSubchannels, null))) {
             Toast.makeText(context, R.string.shout_failed, Toast.LENGTH_LONG).show()
         }
     }

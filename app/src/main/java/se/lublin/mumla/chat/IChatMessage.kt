@@ -17,7 +17,7 @@
 
 package se.lublin.mumla.chat
 
-import se.lublin.humla.model.IMessage
+import se.lublin.humla.model.Message
 
 /** A general chat message, either a text message from a user or an informational notice. */
 interface IChatMessage {
@@ -34,7 +34,7 @@ interface IChatMessage {
     fun accept(visitor: Visitor)
 
     /** A text message from a user. */
-    class TextMessage(val message: IMessage) : IChatMessage {
+    class TextMessage(val message: Message) : IChatMessage {
         override val body: String get() = message.message
         override val receivedTime: Long get() = message.receivedTime
         @Volatile override var content: ChatContent? = null

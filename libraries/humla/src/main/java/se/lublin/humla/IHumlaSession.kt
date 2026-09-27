@@ -14,6 +14,7 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.ServerInfo
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.inMainThreadSlices
@@ -53,6 +54,15 @@ interface IHumlaSession : AutoCloseable {
 
     /** The talk state of every user who is not silent, by session; updated on the main thread. */
     val talkStates: StateFlow<Map<Int, TalkState>>
+
+    /** What the synchronized connection knows about its server; null outside of one. */
+    val serverInfo: ServerInfo?
+
+    /** Requests to the server, voice targets and local choices about other users. */
+    val actions: SessionActions
+
+    /** Transmitting and routing. */
+    val audio: AudioControls
 
     /**
      * Replaces the configuration. Audio settings apply live, connection settings on the next

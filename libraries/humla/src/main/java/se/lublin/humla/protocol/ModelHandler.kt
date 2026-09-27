@@ -207,15 +207,15 @@ class ModelHandler(
     }
 
     private fun textMessage(msg: Mumble.TextMessage) {
-        val sender = users[msg.actor]
+        val sender = writer.user(msg.actor)
         if (sender != null && sender.isLocalIgnored) return
 
         val message = Message(
             msg.actor,
             sender?.name,
-            msg.channelIdList.mapNotNull { channels[it] },
-            msg.treeIdList.mapNotNull { channels[it] },
-            msg.sessionList.mapNotNull { users[it] },
+            msg.channelIdList.mapNotNull(writer::channel),
+            msg.treeIdList.mapNotNull(writer::channel),
+            msg.sessionList.mapNotNull(writer::user),
             msg.message,
         )
         events(HumlaEvent.TextMessage(message))

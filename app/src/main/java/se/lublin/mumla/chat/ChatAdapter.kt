@@ -36,7 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import se.lublin.humla.model.IMessage
+import se.lublin.humla.model.Message
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ListChatItemBinding
 import se.lublin.mumla.databinding.ListChatItemImageBinding
@@ -183,17 +183,11 @@ class ChatAdapter(
      * First named target channel/tree, then user, then the actor alone; a target without a name
      * falls through to the next kind.
      */
-    private fun targetLabel(context: Context, message: IMessage): String {
+    private fun targetLabel(context: Context, message: Message): String {
         val sender = NoticeFormatter(context).senderName(message)
         val channel = message.targetChannels.firstOrNull() ?: message.targetTrees.firstOrNull()
-        if (channel?.name != null) {
-            return context.getString(R.string.chat_message_to, sender, channel.name)
-        }
-        val user = message.targetUsers.firstOrNull()
-        if (user?.name != null) {
-            return context.getString(R.string.chat_message_to, sender, user.name)
-        }
-        return sender
+        val target = channel?.name ?: message.targetUsers.firstOrNull()?.name
+        return if (target == null) sender else context.getString(R.string.chat_message_to, sender, target)
     }
 
     private fun TextView.setTextOrGone(value: CharSequence?) {
