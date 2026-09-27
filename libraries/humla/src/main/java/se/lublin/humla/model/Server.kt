@@ -19,11 +19,11 @@ package se.lublin.humla.model
 import android.net.InetAddresses
 import android.os.Parcel
 import android.os.Parcelable
-import android.util.Log
 import androidx.annotation.VisibleForTesting
 import org.minidns.hla.ResolverApi
 import org.minidns.util.SrvUtil
 import se.lublin.humla.util.Constants
+import se.lublin.humla.util.HumlaLog
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicReference
@@ -139,7 +139,7 @@ open class Server(
                 thread.start()
                 thread.join()
             } catch (e: InterruptedException) {
-                Log.d(TAG, "resolveSRV() $e")
+                HumlaLog.d(TAG, "resolveSRV() $e")
             }
             return target.get()?.let { it.hostString to it.port }
         }
@@ -150,21 +150,21 @@ open class Server(
                 val res = ResolverApi.INSTANCE.resolveSrv(lookup)
                 val answers = if (res.wasSuccessful()) res.answersOrEmptySet else null
                 when {
-                    answers == null -> null.also { Log.d(TAG, "resolveSrv $lookup: ${res.responseCode}") }
-                    answers.isEmpty() -> null.also { Log.d(TAG, "resolveSrv $lookup: empty answer") }
+                    answers == null -> null.also { HumlaLog.d(TAG, "resolveSrv $lookup: ${res.responseCode}") }
+                    answers.isEmpty() -> null.also { HumlaLog.d(TAG, "resolveSrv $lookup: empty answer") }
                     else -> {
                         // TODO SRV just picking the first record.
                         val srv = SrvUtil.sortSrvRecords(answers)[0]
-                        Log.d(TAG, "resolved $lookup SRV: $srv")
+                        HumlaLog.d(TAG, "resolved $lookup SRV: $srv")
                         InetSocketAddress.createUnresolved(srv.target.toString(), srv.port)
                     }
                 }
             } catch (e: IOException) {
-                Log.d(TAG, "exception in srvResolve: $e")
+                HumlaLog.d(TAG, "exception in srvResolve: $e")
                 null
             } catch (e: IllegalArgumentException) {
                 // java.net.IDN.toASCII inside resolveSrv() throws IAE (MiniDNS issue 104).
-                Log.d(TAG, "exception in srvResolve: $e")
+                HumlaLog.d(TAG, "exception in srvResolve: $e")
                 null
             }
         }

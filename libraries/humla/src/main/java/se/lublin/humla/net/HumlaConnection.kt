@@ -20,7 +20,6 @@ package se.lublin.humla.net
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
-import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.google.protobuf.ByteString
 import com.google.protobuf.InvalidProtocolBufferException
@@ -36,6 +35,7 @@ import kotlinx.coroutines.launch
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
 import java.net.ConnectException
@@ -241,11 +241,11 @@ class HumlaConnection(
         udpRestartAttempt += 1
         // No jitter: this is one socket in a live session. Null means the policy gave up.
         val delayMillis = udpRestartPolicy.delayFor(udpRestartAttempt, 0.0) ?: return
-        Log.i(TAG, "UDP restart scheduled in $delayMillis ms")
+        HumlaLog.i(TAG, "UDP restart scheduled in $delayMillis ms")
         scope.launch {
             delay(delayMillis)
             if (shouldForceTCP()) return@launch
-            Log.i(TAG, "Restarting UDP transport, attempt $udpRestartAttempt")
+            HumlaLog.i(TAG, "Restarting UDP transport, attempt $udpRestartAttempt")
             startUdp()
         }
     }
@@ -559,7 +559,7 @@ class HumlaConnection(
     private fun handleFatalException(e: HumlaException) {
         if (!exceptionHandled.compareAndSet(false, true)) return
         lastError = e
-        Log.e(TAG, "Fatal connection error: ${e.message}", e)
+        HumlaLog.e(TAG, "Fatal connection error: ${e.message}", e)
         disconnect()
     }
 
@@ -570,7 +570,7 @@ class HumlaConnection(
     private fun warn(warning: ConnectionWarning) {
         val now = elapsed
         if (warning == lastWarning && now - lastWarnedMicros < WARNING_REPEAT_MICROS) {
-            Log.d(TAG, "Suppressing a repeat of $warning")
+            HumlaLog.d(TAG, "Suppressing a repeat of $warning")
             return
         }
         lastWarning = warning
@@ -659,7 +659,7 @@ class HumlaConnection(
     override fun onTCPMessageReceived(type: HumlaTCPMessageType, length: Int, data: ByteArray) {
         // Drop frames that arrive during teardown; the consumer's audio path is already gone.
         if (closed) return
-        if (!UNLOGGED_MESSAGES.contains(type)) Log.v(TAG, "IN: $type")
+        if (!UNLOGGED_MESSAGES.contains(type)) HumlaLog.v(TAG, "IN: $type")
 
         if (type == HumlaTCPMessageType.UDPTunnel) {
             onUDPDataReceived(data)
@@ -678,10 +678,10 @@ class HumlaConnection(
                 for (handler in tcpHandlers) handler.onMessage(message)
             }
         } catch (e: InvalidProtocolBufferException) {
-            Log.w(TAG, "Could not parse $type", e)
+            HumlaLog.w(TAG, "Could not parse $type", e)
         } catch (e: RuntimeException) {
             // A single bad message must not kill the protocol thread, and with it the session.
-            Log.e(TAG, "Handler failed for $type", e)
+            HumlaLog.e(TAG, "Handler failed for $type", e)
         }
     }
 
@@ -721,7 +721,7 @@ class HumlaConnection(
         try {
             if (udpProtocol == UdpProtocol.PROTOBUF) onProtobufUdp(data) else onLegacyUdp(data)
         } catch (e: RuntimeException) {
-            Log.e(TAG, "UDP handler failed", e)
+            HumlaLog.e(TAG, "UDP handler failed", e)
         }
     }
 
@@ -747,7 +747,7 @@ class HumlaConnection(
     }
 
     override fun onUDPConnectionError(e: Exception) {
-        Log.w(TAG, "UDP connection thread failed", e)
+        HumlaLog.w(TAG, "UDP connection thread failed", e)
         usingUdp = false
         warn(ConnectionWarning.UDP_THREAD_FAILED)
         enableForceTCP()

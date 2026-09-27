@@ -16,8 +16,8 @@
  */
 package se.lublin.humla.model
 
-import android.util.Log
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.MumbleVersion
 import java.net.InetAddress
 import java.net.UnknownHostException
@@ -91,7 +91,7 @@ data class UserStats(
             val factory = CertificateFactory.getInstance("X.509")
             msg.certificatesList.map { factory.generateCertificate(it.newInput()) as X509Certificate }
         } catch (e: CertificateException) {
-            Log.w(TAG, "Unreadable client certificate", e)
+            HumlaLog.w(TAG, "Unreadable client certificate", e)
             emptyList()
         }
 
@@ -99,7 +99,7 @@ data class UserStats(
         private fun address(bytes: ByteArray): String? = try {
             InetAddress.getByAddress(bytes).hostAddress
         } catch (e: UnknownHostException) {
-            Log.w(TAG, "Unreadable client address", e)
+            HumlaLog.w(TAG, "Unreadable client address", e)
             null
         }
     }

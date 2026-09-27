@@ -20,9 +20,9 @@ package se.lublin.humla.audio
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
-import android.util.Log
 import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.net.MessageHandlerRegistry
+import se.lublin.humla.util.HumlaLog
 
 /**
  * Owns the audio pipeline's lifecycle on the [THREAD_NAME] HandlerThread.
@@ -131,7 +131,7 @@ class AudioController(
         } catch (e: Exception) {
             // Exception, not AudioException: AudioTrack/AudioRecord construction can throw
             // unchecked, which would kill the control thread and silently drop all later messages.
-            Log.e(TAG, "Audio initialization failed", e)
+            HumlaLog.e(TAG, "Audio initialization failed", e)
             mainHandler.post { onFailed(e.message ?: e.javaClass.simpleName) }
         }
     }

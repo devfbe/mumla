@@ -22,7 +22,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Handler
 import android.os.PowerManager
-import android.util.Log
+import se.lublin.humla.util.HumlaLog
 
 /** Whether a network is up, and a one-shot wait for one. Confined to the session's thread. */
 interface NetworkMonitor {
@@ -70,7 +70,7 @@ class AndroidNetworkMonitor(
             callback = next
         } catch (@Suppress("TooGenericExceptionCaught") e: RuntimeException) {
             // Includes the platform's hidden TooManyRequestsException for too many callbacks.
-            Log.e(TAG, "Error registering the network callback", e)
+            HumlaLog.e(TAG, "Error registering the network callback", e)
         }
     }
 
@@ -80,7 +80,7 @@ class AndroidNetworkMonitor(
         try {
             connectivity.unregisterNetworkCallback(registered)
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "The network callback was not registered", e)
+            HumlaLog.w(TAG, "The network callback was not registered", e)
         }
     }
 

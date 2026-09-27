@@ -24,7 +24,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
-import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -56,16 +55,14 @@ import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.LocalUserSettings
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.Server
-import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.ServerState
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
-import se.lublin.humla.model.localVolumeScope
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.model.WhisperTargetList
+import se.lublin.humla.model.localVolumeScope
 import se.lublin.humla.net.ConnectionWarning
 import se.lublin.humla.net.HumlaConnection
-import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.protocol.LocalInput
 import se.lublin.humla.protocol.ModelHandler
@@ -83,6 +80,7 @@ import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.SessionWakeLock
 import se.lublin.humla.session.TalkStates
 import se.lublin.humla.session.disconnectReasonOf
+import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.HumlaLogger
 import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
@@ -252,7 +250,7 @@ class HumlaSession(
         val config = config.connection
         val server = config.server
         if (server == null) {
-            Log.e(TAG, "connect() without a target server")
+            HumlaLog.e(TAG, "connect() without a target server")
             lost(DisconnectReason.Failed(context.getString(R.string.no_target_server), null))
             return
         }
@@ -327,7 +325,7 @@ class HumlaSession(
     internal fun onConnectionSynchronized() {
         val connection = connection?.takeIf { it.isConnected }
         if (connection == null || modelHandler == null || !lifecycle.synchronized()) return
-        Log.v(TAG, "Connected")
+        HumlaLog.v(TAG, "Connected")
         // The connection reports ServerSync before the model has read it; its snapshot follows.
         audioStart = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             val synced = mutableModel.first { it?.selfSession != null }
@@ -342,7 +340,7 @@ class HumlaSession(
     private fun startAudio(connection: HumlaConnection, self: UserState?) {
         if (self == null) {
             // ServerSync named no known user: keep the session up without a microphone.
-            Log.e(TAG, "No session user after ServerSync; audio not started")
+            HumlaLog.e(TAG, "No session user after ServerSync; audio not started")
             audioSession.engageRoute()
             warn(context.getString(R.string.no_session_user))
             return
@@ -359,7 +357,11 @@ class HumlaSession(
     }
 
     internal fun onConnectionDisconnected(e: HumlaException?) {
-        if (e != null) Log.e(TAG, "Error: ${e.message} (reason: ${e.reason.name})") else Log.v(TAG, "Disconnected")
+        if (e != null) {
+            HumlaLog.e(TAG, "Error: ${e.message} (reason: ${e.reason.name})")
+        } else {
+            HumlaLog.v(TAG, "Disconnected")
+        }
         val reason = e?.let { error -> disconnectReasonOf(error) { mutableModel.value?.user(it)?.name } }
         lost(reason ?: tlsFailure)
     }
@@ -464,7 +466,7 @@ class HumlaSession(
                     udpLatency = connection.getUDPLatency(),
                 )
             } catch (e: IllegalStateException) {
-                Log.d(TAG, "The connection ended while its server info was read", e)
+                HumlaLog.d(TAG, "The connection ended while its server info was read", e)
                 null
             }
         }

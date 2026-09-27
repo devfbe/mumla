@@ -19,14 +19,14 @@ package se.lublin.humla.audio
 
 import android.Manifest
 import android.os.Process
-import android.util.Log
 import androidx.annotation.RequiresPermission
-import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.AndroidAudioEffects
+import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.CaptureRequest
 import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.PcmCaptureSource
+import se.lublin.humla.util.HumlaLog
 
 /**
  * Owns the capture thread and pumps 10 ms frames from a [PcmCaptureSource] to [listener].
@@ -115,7 +115,7 @@ class AudioInput(
             Thread.currentThread().interrupt()
         }
         val exited = !t.isAlive
-        if (!exited) Log.e(TAG, "capture thread still running after $joinTimeoutMs ms; releasing anyway")
+        if (!exited) HumlaLog.e(TAG, "capture thread still running after $joinTimeoutMs ms; releasing anyway")
         thread = if (exited) null else t
         source.setSilenceListener(null)
         return exited
@@ -137,18 +137,18 @@ class AudioInput(
         try {
             source.start()
         } catch (e: IllegalStateException) {
-            Log.e(TAG, "capture could not be started", e)
+            HumlaLog.e(TAG, "capture could not be started", e)
             stateListener?.invoke(CaptureState.Error("capture could not be started: ${e.message}"))
             return
         }
-        Log.i(TAG, "capturing at $sampleRate Hz in frames of $frameSize")
+        HumlaLog.i(TAG, "capturing at $sampleRate Hz in frames of $frameSize")
         val buffer = ShortArray(frameSize)
         while (recording) {
             val read = source.read(buffer, frameSize)
             if (read < 0) {
                 // A read racing our own shutdown fails too; don't report that to the user.
                 if (recording) {
-                    Log.e(TAG, "capture read error $read")
+                    HumlaLog.e(TAG, "capture read error $read")
                     stateListener?.invoke(CaptureState.Error("capture read error $read"))
                 }
                 break
@@ -160,7 +160,7 @@ class AudioInput(
             listener.onAudioInputReceived(buffer, frameSize)
         }
         source.stop()
-        Log.i(TAG, "capture stopped")
+        HumlaLog.i(TAG, "capture stopped")
     }
 
     companion object {

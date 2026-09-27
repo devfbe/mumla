@@ -20,10 +20,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
-import android.util.Log
 import com.google.protobuf.MessageLite
 import se.lublin.humla.R
-import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.AudioSourcePolicy
 import se.lublin.humla.audio.capture.CapturePipeline
 import se.lublin.humla.audio.encoder.IEncoder
@@ -37,6 +35,7 @@ import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.net.VoicePacketHandler
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.HumlaLogger
 
 /**
@@ -142,7 +141,7 @@ class AudioHandler(
         HumlaUDPMessageType.UDPVoiceOpus ->
             OpusEncoder(SAMPLE_RATE, 1, FRAME_SIZE, framesPerPacket, bitrate, MAX_BUFFER_SIZE)
         else -> {
-            Log.w(TAG, "Unsupported codec, input disabled.")
+            HumlaLog.w(TAG, "Unsupported codec, input disabled.")
             null
         }
     }
@@ -195,7 +194,7 @@ class AudioHandler(
         try {
             transmitter.setCodecIfChanged(newCodec, ::createEncoder)
         } catch (e: NativeAudioException) {
-            Log.e(TAG, "Could not create the encoder", e)
+            HumlaLog.e(TAG, "Could not create the encoder", e)
         }
     }
 

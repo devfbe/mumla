@@ -17,7 +17,6 @@
 
 package se.lublin.humla.audio
 
-import android.util.Log
 import se.lublin.humla.audio.capture.CapturePipeline
 import se.lublin.humla.audio.capture.CapturePreprocessorFactory
 import se.lublin.humla.audio.capture.EchoCancellationMode
@@ -28,6 +27,7 @@ import se.lublin.humla.audio.capture.NoopPreprocessor
 import se.lublin.humla.audio.capture.Resampler
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.SpeexResampler
+import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.HumlaLogger
 
 /**
@@ -56,7 +56,7 @@ object CaptureWiring {
         newResampler: (Int, Int) -> Resampler = { from, to -> SpeexResampler(from, to) },
     ): Wiring {
         val log: (String) -> Unit = { message ->
-            Log.w(TAG, message)
+            HumlaLog.w(TAG, message)
             logger?.logWarning(message)
         }
         val chain = (factory ?: CapturePreprocessorFactory(log = log)).create(noise, echo, speexNoiseSuppressDb)
