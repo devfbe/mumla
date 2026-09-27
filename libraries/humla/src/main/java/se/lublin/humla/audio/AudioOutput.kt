@@ -261,7 +261,6 @@ internal class AudioOutput(
     /** The decoder chain for a new talker; null if it cannot be built. Under [packetLock]. */
     private fun newSpeech(session: Int): AudioOutputSpeech? = try {
         val average = averageAvailable.getOrPut(session) { FloatArray(1) }
-        HumlaLog.d("StutterDiag", "session $session: new stream, mix=$bufferSize average=${average[0]}")
         speechFactory.create(session, bufferSize, speechListener, average).also {
             audioOutputs[session] = it
             mix.add(it)
