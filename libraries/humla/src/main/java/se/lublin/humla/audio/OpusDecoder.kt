@@ -22,7 +22,7 @@ import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.OpusDecoderNative
 import se.lublin.humla.exception.NativeAudioException
 
-class OpusDecoder(
+internal class OpusDecoder(
     sampleRate: Int,
     channels: Int,
     private val api: OpusDecoderApi = OpusDecoderNative,

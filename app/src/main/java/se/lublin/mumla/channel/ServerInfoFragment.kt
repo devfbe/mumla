@@ -29,7 +29,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.FragmentServerInfoBinding
 import se.lublin.mumla.session.SessionManager
@@ -80,19 +79,18 @@ class ServerInfoFragment : Fragment() {
     }
 
     private fun updateData(session: IHumlaSession) {
-        val server = session.targetServer
         val info = session.serverInfo ?: return
+        val latency = session.latency ?: return
 
         protocolView.text = getString(R.string.server_info_protocol, info.release)
         osVersionView.text = getString(R.string.server_info_version, info.osName, info.osVersion)
-        tcpLatencyView.text = getString(R.string.server_info_latency, info.tcpLatency * MICROS_TO_MILLIS)
-        udpLatencyView.text = getString(R.string.server_info_latency, info.udpLatency * MICROS_TO_MILLIS)
-        hostView.text = getString(R.string.server_info_host, server?.srvHost, server?.srvPort)
+        tcpLatencyView.text = getString(R.string.server_info_latency, latency.tcpMicros * MICROS_TO_MILLIS)
+        udpLatencyView.text = getString(R.string.server_info_latency, latency.udpMicros * MICROS_TO_MILLIS)
+        hostView.text = getString(R.string.server_info_host, info.host, info.port)
         maxBandwidthView.text = getString(R.string.server_info_max_bandwidth, info.maxBandwidth / KILO)
         currentBandwidthView.text =
             getString(R.string.server_info_current_bandwidth, session.audio.currentBandwidth / KILO)
-        // Opus is the only codec; null means the server offers none this client can use.
-        val codecName = if (info.codec == HumlaUDPMessageType.UDPVoiceOpus) "Opus" else "<null>"
+        val codecName = if (info.opus) "Opus" else "<null>"
         codecView.text = getString(R.string.server_info_codec, codecName)
     }
 }

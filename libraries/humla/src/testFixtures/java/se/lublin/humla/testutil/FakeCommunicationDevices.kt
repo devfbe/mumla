@@ -29,7 +29,7 @@ import se.lublin.humla.audio.routing.CommunicationDevices
  * the main looper, so `select` and `clear` return with the route changed and the event still
  * queued.
  */
-class FakeCommunicationDevices : CommunicationDevices {
+internal class FakeCommunicationDevices : CommunicationDevices {
     /** device id -> AudioDeviceInfo type, in the order the platform would report them. */
     val available = linkedMapOf<Int, Int>()
 

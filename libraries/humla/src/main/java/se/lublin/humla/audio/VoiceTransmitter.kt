@@ -17,7 +17,6 @@
 
 package se.lublin.humla.audio
 
-import android.util.Log
 import se.lublin.humla.audio.capture.CapturePipeline
 import se.lublin.humla.audio.encoder.IEncoder
 import se.lublin.humla.exception.NativeAudioException
@@ -25,6 +24,7 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.net.UdpAudioEncoder
 import se.lublin.humla.net.UdpProtocol
+import se.lublin.humla.util.HumlaLog
 
 private const val TAG = "VoiceTransmitter"
 private const val PACKET_SIZE = 1024
@@ -79,7 +79,7 @@ internal class VoiceTransmitter(
             this.codec = codec
             encoder?.close()
             encoder = null
-            if (codec != null) encoder = create(codec) else Log.w(TAG, "No codec, input disabled.")
+            if (codec != null) encoder = create(codec) else HumlaLog.w(TAG, "No codec, input disabled.")
         }
     }
 
@@ -121,7 +121,7 @@ internal class VoiceTransmitter(
                     encoder.terminate()
                 }
             } catch (e: NativeAudioException) {
-                Log.e(TAG, "Encoding failed", e)
+                HumlaLog.e(TAG, "Encoding failed", e)
             }
             if (encoder.isReady) send(encoder)
         }

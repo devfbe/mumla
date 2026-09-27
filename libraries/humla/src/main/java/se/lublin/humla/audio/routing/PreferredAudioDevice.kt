@@ -24,19 +24,19 @@ import android.media.AudioDeviceInfo
  * Bluetooth and USB, where several of a type exist, its [address]. Platform ids are not kept: they
  * change every time a device reconnects.
  */
-data class PreferredAudioDevice(val type: Int, val address: String? = null) {
+public data class PreferredAudioDevice(val type: Int, val address: String? = null) {
     /** Same type, and same address if one was saved. */
-    fun matches(device: CommunicationDevice): Boolean =
+    public fun matches(device: CommunicationDevice): Boolean =
         device.type == type && (address == null || device.address == address)
 
-    companion object {
+    public companion object {
         private val ADDRESSED: Set<Int> = AudioRouter.BLUETOOTH + setOf(
             AudioDeviceInfo.TYPE_USB_HEADSET,
             AudioDeviceInfo.TYPE_USB_DEVICE,
             AudioDeviceInfo.TYPE_USB_ACCESSORY,
         )
 
-        fun of(device: CommunicationDevice) = PreferredAudioDevice(
+        public fun of(device: CommunicationDevice): PreferredAudioDevice = PreferredAudioDevice(
             device.type,
             device.address.takeIf { it.isNotEmpty() && device.type in ADDRESSED },
         )

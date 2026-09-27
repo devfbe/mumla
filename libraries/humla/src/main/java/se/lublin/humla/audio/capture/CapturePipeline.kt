@@ -24,7 +24,7 @@ package se.lublin.humla.audio.capture
  *
  * [length] is always `samples.size`: short frames are zero-padded, and the encoder sees the padding.
  */
-class CaptureFrame internal constructor(val samples: ShortArray) {
+internal class CaptureFrame internal constructor(val samples: ShortArray) {
     var length: Int = 0
         internal set
 
@@ -46,7 +46,7 @@ class CaptureFrame internal constructor(val samples: ShortArray) {
  * tail, and the detector gets the resampler's actual count (0 is legal and yields
  * [VoiceActivityDetector.NO_SIGNAL]).
  */
-class CapturePipeline(
+internal class CapturePipeline(
     resampler: Resampler?,
     private val preprocessor: CapturePreprocessor,
     private val inputMode: IInputMode,

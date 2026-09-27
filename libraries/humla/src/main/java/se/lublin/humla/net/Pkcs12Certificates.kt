@@ -48,24 +48,24 @@ import java.security.cert.X509Certificate
  * The bundled BouncyCastle provider is passed explicitly rather than registered globally, so the
  * parse never depends on whatever "BC" provider the device ROM ships.
  */
-object Pkcs12Certificates {
+public object Pkcs12Certificates {
 
     /**
      * Kept around: constructing a provider is expensive and this runs on every connection attempt.
      */
     private val PROVIDER = BouncyCastleProvider()
 
-    fun load(pkcs12: ByteArray, password: String?): KeyStore =
+    public fun load(pkcs12: ByteArray, password: String?): KeyStore =
         load(ByteArrayInputStream(pkcs12), password?.toCharArray() ?: CharArray(0))
 
-    fun load(input: InputStream, password: CharArray): KeyStore {
+    public fun load(input: InputStream, password: CharArray): KeyStore {
         val store = KeyStore.getInstance("PKCS12", PROVIDER)
         store.load(input, password)
         return store
     }
 
     /** True if [bytes] parse as a PKCS#12 PFX structure, whether or not its password is known. */
-    fun isPkcs12(bytes: ByteArray): Boolean = try {
+    public fun isPkcs12(bytes: ByteArray): Boolean = try {
         Pfx.getInstance(ASN1Primitive.fromByteArray(bytes))
         true
     } catch (e: Exception) {
@@ -80,7 +80,7 @@ object Pkcs12Certificates {
      * AES-256-CBC shrouded key bags, certificates in PBES2 AES-256-CBC encrypted data, and a
      * SHA-256 MAC, the layout OpenSSL 3 writes by default.
      */
-    fun exportWithPassword(stored: ByteArray, password: CharArray): ByteArray {
+    public fun exportWithPassword(stored: ByteArray, password: CharArray): ByteArray {
         require(password.isNotEmpty()) { "an export needs a password" }
         val source = load(stored, null)
         val keyBags = mutableListOf<PKCS12SafeBag>()

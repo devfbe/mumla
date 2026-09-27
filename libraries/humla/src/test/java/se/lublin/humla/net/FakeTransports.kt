@@ -1,6 +1,5 @@
 package se.lublin.humla.net
 
-import android.os.Looper
 import com.google.protobuf.MessageLite
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -14,11 +13,17 @@ import java.util.concurrent.atomic.AtomicInteger
  * A TCP transport that never opens a socket; tests push frames through it as the read thread would.
  *
  * Like HumlaTCP, every callback, including the terminal one [disconnect] reports, is dispatched on
- * [scope] rather than called inline.
+ * [scope] rather than called inline. [inProtocolContext] tells whether the caller runs there.
  */
-class FakeTcpTransport(private val scope: CoroutineScope) : TcpTransport {
+internal class FakeTcpTransport(
+    private val scope: CoroutineScope,
+    private val inProtocolContext: () -> Boolean,
+) : TcpTransport {
     @Volatile var listener: HumlaTCP.TCPConnectionListener? = null
-    @Volatile var connectThread: String? = null
+
+    /** Whether [connect] ran on the protocol context; null before it ran. */
+    @Volatile var connectedInProtocolContext: Boolean? = null
+    val isConnectCalled: Boolean get() = connectedInProtocolContext != null
     @Volatile var connectHost: String? = null
     @Volatile var connectPort: Int = 0
     @Volatile var connectUseTor: Boolean = false
@@ -32,22 +37,22 @@ class FakeTcpTransport(private val scope: CoroutineScope) : TcpTransport {
     val sentFrames = CopyOnWriteArrayList<ByteArray>()
 
     /**
-     * Called from [sendMessage], on whichever thread sends. Lets a test park the protocol thread in
-     * the middle of a message handler.
+     * Called from [sendMessage], on whichever thread sends. Lets a test act while the protocol
+     * context is in the middle of a message handler.
      */
     @Volatile var onSend: ((HumlaTCPMessageType) -> Unit)? = null
 
     /** Whether the terminal callback [disconnect] dispatched actually ran. */
     val terminalDelivered = AtomicBoolean(false)
 
-    override val isRunning: Boolean get() = connectThread != null && disconnectCalls == 0
+    override val isRunning: Boolean get() = isConnectCalled && disconnectCalls == 0
     override fun setTCPConnectionListener(listener: HumlaTCP.TCPConnectionListener?) { this.listener = listener }
     override fun connect(host: String, port: Int, useTor: Boolean) {
         connectHost = host
         connectPort = port
         connectUseTor = useTor
         // Published last: tests wait on this field, so everything else must be in place first.
-        connectThread = Thread.currentThread().name
+        connectedInProtocolContext = inProtocolContext()
     }
     override fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType) {
         sentMessages += message
@@ -101,14 +106,17 @@ class FakeTcpTransport(private val scope: CoroutineScope) : TcpTransport {
  * so [simulateDatagram] counts the packet the way a successful decrypt would, which makes the
  * [UdpHealthMonitor] decisions that depend on `localGood` reachable.
  */
-class FakeUdpTransport(
+internal class FakeUdpTransport(
     private val scope: CoroutineScope,
     private val listener: HumlaUDP.UDPConnectionListener,
-    private val cryptState: CryptState = CryptState(),
+    private val cryptState: CryptState,
+    private val inProtocolContext: () -> Boolean,
 ) : UdpTransport {
     val connectCalls = AtomicInteger()
     val disconnectCalls = AtomicInteger()
-    @Volatile var connectThread: String? = null
+
+    /** Whether [connect] ran on the protocol context; null before it ran. */
+    @Volatile var connectedInProtocolContext: Boolean? = null
     /**
      * Recorded so tests can check where UDP is pointed; InetAddress.getByName("") would silently
      * resolve to loopback.
@@ -121,7 +129,7 @@ class FakeUdpTransport(
     override fun connect(host: String, port: Int) {
         connectHost = host
         connectPort = port
-        connectThread = Thread.currentThread().name
+        connectedInProtocolContext = inProtocolContext()
         // Published last: tests wait on this counter.
         connectCalls.incrementAndGet()
     }
@@ -137,22 +145,28 @@ class FakeUdpTransport(
     }
 }
 
-class FakeTransports : HumlaConnection.TransportFactory {
+/** [inProtocolContext] tells the fakes whether their caller runs on the protocol context. */
+internal class FakeTransports(
+    private val inProtocolContext: () -> Boolean = { true },
+) : HumlaConnection.TransportFactory {
     val tcps = CopyOnWriteArrayList<FakeTcpTransport>()
     val udps = CopyOnWriteArrayList<FakeUdpTransport>()
 
     override fun createTcp(socketFactory: HumlaSSLSocketFactory, scope: CoroutineScope): TcpTransport =
-        FakeTcpTransport(scope).also { tcps += it }
+        FakeTcpTransport(scope, inProtocolContext).also { tcps += it }
 
     override fun createUdp(
         cryptState: CryptState,
         listener: HumlaUDP.UDPConnectionListener,
         scope: CoroutineScope,
     ): UdpTransport =
-        FakeUdpTransport(scope, listener, cryptState).also { udps += it }
+        FakeUdpTransport(scope, listener, cryptState, inProtocolContext).also { udps += it }
 }
 
-class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
+/** [onCallbackThread] tells whether a callback runs where the connection's callbacks belong. */
+internal class RecordingConnectionListener(
+    private val onCallbackThread: () -> Boolean = { true },
+) : HumlaConnection.Listener {
     /**
      * One entry per callback, in delivery order, so tests can check that onConnectionDisconnected
      * is terminal.
@@ -166,11 +180,10 @@ class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
     val handshakeFailures = CopyOnWriteArrayList<Array<X509Certificate>>()
     val certificateChanges = CopyOnWriteArrayList<Array<X509Certificate>>()
 
-    /** One entry per callback: the looper it ran on. */
-    val callbackLoopers = CopyOnWriteArrayList<Looper?>()
+    /** One entry per callback: whether it ran on the callback thread. */
+    private val onCallbackThreads = CopyOnWriteArrayList<Boolean>()
 
-    val allOnMainLooper: Boolean
-        get() = callbackLoopers.isNotEmpty() && callbackLoopers.all { it == Looper.getMainLooper() }
+    val allOnCallbackThread: Boolean get() = onCallbackThreads.isNotEmpty() && onCallbackThreads.all { it }
 
     override fun onConnectionEstablished() { record("established"); established.incrementAndGet() }
     override fun onConnectionSynchronized() { record("synchronized"); synchronizedCount.incrementAndGet() }
@@ -186,7 +199,7 @@ class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
     override fun onConnectionWarning(warning: ConnectionWarning) { record("warning:$warning"); warnings += warning }
 
     private fun record(event: String) {
-        callbackLoopers += Looper.myLooper()
+        onCallbackThreads += onCallbackThread()
         events += event
     }
 }

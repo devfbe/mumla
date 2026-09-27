@@ -25,7 +25,8 @@ interface MumlaDatabase {
     fun close()
 
     fun getServers(): List<Server>
-    fun addServer(server: Server)
+    /** Stores [server] and returns it with its new id. */
+    fun addServer(server: Server): Server
     fun updateServer(server: Server)
     fun removeServer(server: Server)
 

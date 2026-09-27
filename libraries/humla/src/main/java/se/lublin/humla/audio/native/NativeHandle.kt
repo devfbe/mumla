@@ -21,7 +21,7 @@ package se.lublin.humla.audio.native
  * which [value] is 0. Not thread-safe: the owner confines it to one thread or locks around it.
  * Reading [value] allocates nothing, so it is fit for the audio threads.
  */
-class NativeHandle(create: () -> Long, private val destroy: (Long) -> Unit) : AutoCloseable {
+internal class NativeHandle(create: () -> Long, private val destroy: (Long) -> Unit) : AutoCloseable {
     var value: Long = create()
         private set
 

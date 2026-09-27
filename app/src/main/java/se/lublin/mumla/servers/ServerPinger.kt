@@ -19,6 +19,7 @@ package se.lublin.mumla.servers
 
 import android.util.Log
 import se.lublin.humla.model.Server
+import se.lublin.humla.net.ServerResolver
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -32,14 +33,16 @@ private const val RECEIVE_BUFFER_BYTES = 1024
 private const val NANOS_PER_MILLI = 1_000_000
 
 /** Pings Mumble servers over UDP. [ping] blocks for up to a second, so call it off the main thread. */
-class ServerPinger(private val createSocket: () -> DatagramSocket = { DatagramSocket() }) {
+class ServerPinger(
+    private val resolver: ServerResolver = ServerResolver(),
+    private val createSocket: () -> DatagramSocket = { DatagramSocket() },
+) {
 
     /** Returns [server]'s ping reply, or a dummy response when there is none. */
-    fun ping(server: Server): ServerInfoResponse = try {
+    suspend fun ping(server: Server): ServerInfoResponse = try {
+        val endpoint = resolver.resolve(server)
         val request = ByteBuffer.allocate(REQUEST_SIZE).putInt(0).putLong(server.id).array()
-        val requestPacket = DatagramPacket(
-            request, request.size, InetAddress.getByName(server.srvHost), server.srvPort,
-        )
+        val requestPacket = DatagramPacket(request, request.size, InetAddress.getByName(endpoint.host), endpoint.port)
         createSocket().use { socket ->
             socket.soTimeout = TIMEOUT_MS
             socket.receiveBufferSize = RECEIVE_BUFFER_BYTES

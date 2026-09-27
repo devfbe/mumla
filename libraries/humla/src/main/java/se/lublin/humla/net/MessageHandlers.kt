@@ -20,12 +20,12 @@ package se.lublin.humla.net
 import com.google.protobuf.MessageLite
 
 /** Receives every parsed TCP message from the server; handlers pick types with `is` checks. */
-fun interface TcpMessageHandler {
+internal fun interface TcpMessageHandler {
     fun onMessage(msg: MessageLite)
 }
 
 /** Receives voice packets, whether they arrived over UDP or tunnelled through TCP. */
-fun interface VoicePacketHandler {
+internal fun interface VoicePacketHandler {
     /** [packet] is reused for the next packet: valid only until this call returns. */
     fun onVoicePacket(packet: VoicePacket)
 }

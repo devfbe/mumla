@@ -44,7 +44,7 @@ class ServerAdapterTest {
 
     private val clicked = mutableListOf<Server>()
 
-    private inner class TestAdapter(pings: ServerPings) : ServerAdapter<Server>(pings, { clicked += it }) {
+    private inner class TestAdapter(pings: ServerPings) : ServerAdapter<Server>(pings, { clicked += it }, { it }) {
         override val rowLayout: Int get() = R.layout.server_list_row
 
         override val popupMenuResource: Int get() = R.menu.popup_favourite_server

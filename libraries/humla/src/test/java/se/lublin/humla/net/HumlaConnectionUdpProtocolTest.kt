@@ -16,35 +16,22 @@
  */
 package se.lublin.humla.net
 
-import android.os.Handler
-import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import com.google.protobuf.ByteString
 import org.junit.After
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protobuf.MumbleUDP
-import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.MumbleVersion
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 /**
  * A fake server that announces 1.4 or 1.5 and then talks in the matching UDP format, over UDP and
  * through the TCP tunnel: which format the connection picks, and that voice and pings use it.
  */
-@RunWith(RobolectricTestRunner::class)
 class HumlaConnectionUdpProtocolTest {
-    private val mainLooper = shadowOf(Looper.getMainLooper())
-    private val transports = FakeTransports()
-    private val clock = AtomicLong(0L)
-    private val connection =
-        HumlaConnection(RecordingConnectionListener(), transports, Handler(Looper.getMainLooper()), clock::get)
+    private lateinit var h: ConnectionHarness
+    private val connection: HumlaConnection get() = h.connection
 
     /** Copies of what the voice handler saw, since the packet object is reused. */
     private data class Heard(
@@ -60,15 +47,10 @@ class HumlaConnectionUdpProtocolTest {
     private val heard = CopyOnWriteArrayList<Heard>()
 
     @After
-    fun tearDown() {
-        connection.disconnect()
-        mainLooper.idle()
-        awaitUntil(description = "connection terminated") { connection.isTerminated }
-    }
+    fun tearDown() = h.close()
 
-    private fun connect(clientV2: Long? = null, forceTcp: Boolean = false): FakeTcpTransport {
-        if (clientV2 != null) connection.clientVersion = clientV2
-        connection.setForceTCP(forceTcp)
+    private fun connect(clientV2: Long = MumbleVersion.CLIENT_V2, forceTcp: Boolean = false): FakeTcpTransport {
+        h = ConnectionHarness(forceTcp = forceTcp, clientVersion = clientV2)
         connection.addVoiceHandler { p ->
             heard += Heard(
                 p.codec, p.context, p.session, p.frameNumber,
@@ -76,33 +58,18 @@ class HumlaConnectionUdpProtocolTest {
                 p.isTerminator, p.volumeAdjustment,
             )
         }
-        connection.connect(Server(-1, "test", "127.0.0.1", 64738, "user", ""))
-        awaitUntil(description = "tcp connect") {
-            transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null
-        }
-        val tcp = transports.tcps[0]
-        tcp.simulateConnected()
-        awaitUntil(description = "connection established") { connection.isConnected }
-        return tcp
+        return h.establish()
     }
 
+    @Suppress("UnusedReceiverParameter") // Reads as what the server sends over its socket.
     private fun FakeTcpTransport.announce(version: Mumble.Version) {
-        simulateMessage(HumlaTCPMessageType.Version, version.toByteArray())
-        val sync = Mumble.ServerSync.newBuilder().setSession(1).build()
-        simulateMessage(HumlaTCPMessageType.ServerSync, sync.toByteArray())
-        awaitUntil(description = "synchronized") { connection.isSynchronized }
+        h.receive(HumlaTCPMessageType.Version, version)
+        h.synchronize()
     }
 
-    private fun drain() {
-        val drained = AtomicBoolean(false)
-        check(connection.protocolHandler.post { drained.set(true) })
-        awaitUntil(description = "protocol queue drained") { drained.get() }
-    }
+    private fun drain() = h.runCurrent()
 
-    private fun udp(): FakeUdpTransport {
-        awaitUntil(description = "udp started") { transports.udps.isNotEmpty() }
-        return transports.udps[0]
-    }
+    private fun udp(): FakeUdpTransport = h.transports.udps.single()
 
     private fun v2Version(major: Int, minor: Int, patch: Int) =
         Mumble.Version.newBuilder().setVersionV2(MumbleVersion.v2(major, minor, patch)).build()
@@ -135,22 +102,21 @@ class HumlaConnectionUdpProtocolTest {
     fun `a 1_5 server and a 1_5 client speak protobuf over UDP`() {
         val tcp = connect(clientV2 = MumbleVersion.v2(1, 5, 0))
         val udp = udp()
-        clock.set(2_000_000_000L) // 2 s: the ping carries 2 000 000 us
+        h.clock.set(2_000_000_000L) // 2 s: the ping carries 2 000 000 us
 
         tcp.announce(v2Version(1, 5, 735))
 
         assertThat(connection.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
-        awaitUntil(description = "udp ping") { udp.sent.isNotEmpty() }
         val ping = MumbleUDP.Ping.parseFrom(udp.sent[0].copyOfRange(1, udp.sent[0].size))
         assertThat(udp.sent[0][0]).isEqualTo(1.toByte())
         assertThat(ping.timestamp).isEqualTo(2_000_000L)
 
-        clock.set(2_050_000_000L)
+        h.clock.set(2_050_000_000L)
         udp.simulateDatagram(protobufPingReply(2_000_000L))
         udp.simulateDatagram(protobufAudio(byteArrayOf(0x11, 0x22)))
         drain()
 
-        assertThat(connection.getUDPLatency()).isEqualTo(50_000L)
+        assertThat(connection.latency!!.udpMicros).isEqualTo(50_000L)
         assertThat(heard).containsExactly(
             Heard(HumlaUDPMessageType.UDPVoiceOpus, 3, 7, 42, listOf<Byte>(0x11, 0x22), true, 0.5f),
         )
@@ -180,7 +146,7 @@ class HumlaConnectionUdpProtocolTest {
         drain()
 
         assertThat(heard).isEmpty()
-        assertThat(connection.getUDPLatency()).isEqualTo(0L)
+        assertThat(connection.latency!!.udpMicros).isEqualTo(0L)
     }
 
     @Test
@@ -190,7 +156,6 @@ class HumlaConnectionUdpProtocolTest {
         tcp.announce(Mumble.Version.newBuilder().setVersionV1(0x010404).build())
 
         assertThat(connection.udpProtocol).isEqualTo(UdpProtocol.LEGACY)
-        awaitUntil(description = "udp ping") { udp.sent.isNotEmpty() }
         assertThat(udp.sent[0][0]).isEqualTo(0x20.toByte())
 
         udp.simulateDatagram(legacyAudio(byteArrayOf(0x55)))

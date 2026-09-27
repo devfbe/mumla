@@ -45,8 +45,8 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.DialogServerSearchBinding
 import se.lublin.mumla.databinding.FragmentPublicServerListBinding
 import se.lublin.mumla.db.PublicServer
-import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.ConnectRequests
+import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.util.appViewModels
 import java.util.Locale
@@ -170,13 +170,13 @@ class PublicServerListFragment :
     }
 
     private fun showMatchResult(response: ServerInfoResponse?) {
-        val server = response?.server as PublicServer?
+        val server = response?.server?.let(publicServers::shownEntryOf)
         if (response != null && server != null) {
             val info = getString(
                 R.string.server_match_info,
                 server.name,
-                server.host,
-                server.port,
+                server.server.host,
+                server.server.port,
                 response.currentUsers,
                 response.maximumUsers,
                 response.versionString,

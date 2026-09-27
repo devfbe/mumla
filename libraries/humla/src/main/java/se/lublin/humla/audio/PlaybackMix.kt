@@ -17,7 +17,7 @@
 
 package se.lublin.humla.audio
 
-import android.util.Log
+import se.lublin.humla.util.HumlaLog
 
 private const val TAG = "PlaybackMix"
 
@@ -49,7 +49,7 @@ internal class PlaybackMix(private val mixer: IAudioMixer<FloatArray, ShortArray
                 speech.decode()
             } catch (@Suppress("TooGenericExceptionCaught") e: RuntimeException) {
                 // Skip this talker for one mix rather than stop the playback thread.
-                Log.e(TAG, "Decoding failed for session ${speech.session}", e)
+                HumlaLog.e(TAG, "Decoding failed for session ${speech.session}", e)
                 continue
             }
             if (alive) {

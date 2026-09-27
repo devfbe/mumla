@@ -21,7 +21,7 @@ package se.lublin.humla.model
  * A text message, with its targets as they were when it was sent or received. Channels and users
  * the model did not know are left out of the targets.
  */
-data class Message(
+public data class Message(
     /** The sender's session. Prefer [actorName]: the sender may have left the server. */
     val actor: Int,
     /** The sender's name, or null for a message from the server itself (or a nameless sender). */

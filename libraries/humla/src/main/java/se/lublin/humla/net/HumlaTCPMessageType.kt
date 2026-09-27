@@ -26,7 +26,7 @@ import se.lublin.humla.protobuf.Mumble
  * TCP message types of the Mumble protocol. The ordinal is the wire id, so entries are never
  * reordered. [parser] is null for types the server never sends.
  */
-enum class HumlaTCPMessageType(private val parser: Parser<out MessageLite>?) {
+internal enum class HumlaTCPMessageType(private val parser: Parser<out MessageLite>?) {
     Version(Mumble.Version.parser()),
     UDPTunnel(Mumble.UDPTunnel.parser()),
     Authenticate(Mumble.Authenticate.parser()),
@@ -54,6 +54,9 @@ enum class HumlaTCPMessageType(private val parser: Parser<out MessageLite>?) {
     ServerConfig(Mumble.ServerConfig.parser()),
     SuggestConfig(Mumble.SuggestConfig.parser()),
     PluginDataTransmission(Mumble.PluginDataTransmission.parser());
+
+    /** Whether traffic of this type is logged; the frequent voice and ping frames are not. */
+    val isLogged: Boolean get() = this != UDPTunnel && this != Ping
 
     fun parse(data: ByteArray): MessageLite =
         parser?.parseFrom(data) ?: throw InvalidProtocolBufferException("$name is never sent by a server")

@@ -69,3 +69,15 @@ fun syncFrames(channels: Int, users: Int): List<MessageLite> = buildList {
     }
     add(serverSync(1, "hi"))
 }
+
+/**
+ * The model as a pure function: a snapshot and one message make the next snapshot. Notices for the
+ * chat log go to `emit` as they arise.
+ */
+internal object ServerReducer {
+    fun reduce(state: ServerState, msg: MessageLite, emit: (HumlaEvent) -> Unit): ServerState =
+        ServerWriter(state).apply { onMessage(msg, emit) }.snapshot()
+
+    fun reduce(state: ServerState, input: LocalInput): ServerState =
+        ServerWriter(state).apply { onLocal(input) }.snapshot()
+}

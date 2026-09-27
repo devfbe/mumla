@@ -32,7 +32,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
-import se.lublin.humla.net.HumlaConnection
+import se.lublin.humla.net.TorProxy
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.PublicServer
@@ -76,8 +76,8 @@ class ConnectFlow(
             .setView(layout)
             .setTitle(R.string.connectToServer)
             .setPositiveButton(R.string.connect) { _, _ ->
-                server.username = usernameField.text.toString().ifEmpty { settings.defaultUsername }
-                connect(server)
+                val username = usernameField.text.toString().ifEmpty { settings.defaultUsername }
+                connect(server.server.copy(username = username))
             }
             .show()
     }
@@ -155,10 +155,10 @@ class ConnectFlow(
 
     private fun startOverTor(server: Server) {
         activity.lifecycleScope.launch {
-            if (isPortOpen(HumlaConnection.TOR_HOST, HumlaConnection.TOR_PORT, TOR_PROBE_TIMEOUT_MS)) {
+            if (isPortOpen(TorProxy.HOST, TorProxy.PORT, TOR_PROBE_TIMEOUT_MS)) {
                 start(server)
             } else {
-                showMessage(activity.getString(R.string.orbot_tor_failed, HumlaConnection.TOR_PORT))
+                showMessage(activity.getString(R.string.orbot_tor_failed, TorProxy.PORT))
             }
         }
     }

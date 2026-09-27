@@ -14,12 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package se.lublin.humla.session
+package se.lublin.humla.model
 
-import se.lublin.humla.net.HumlaUDPMessageType
-
-/** What the synchronized connection knows about its server, as of the moment it was read. */
-data class ServerInfo(
+/** What the connection learned about its server up to ServerSync; replaced if the codec changes. */
+public data class ServerInfo(
+    /** Where the connection went: the entered host, or the target of its SRV record. */
+    val host: String,
+    val port: Int,
     /** The server's Mumble release, user-readable. */
     val release: String?,
     val osName: String?,
@@ -28,10 +29,9 @@ data class ServerInfo(
     val version: Int,
     /** The server's maximum audio bandwidth in bps, or -1 if not set. */
     val maxBandwidth: Int,
-    /** The voice codec; null if the server offers none this client can use. */
-    val codec: HumlaUDPMessageType?,
-    /** The TCP round trip in microseconds. */
-    val tcpLatency: Long,
-    /** The UDP round trip in microseconds. */
-    val udpLatency: Long,
+    /** Whether the server offers Opus, the only codec this client has; without it there is no voice. */
+    val opus: Boolean,
 )
+
+/** The round trips of the latest pings, in microseconds. */
+public data class Latency(val tcpMicros: Long, val udpMicros: Long)

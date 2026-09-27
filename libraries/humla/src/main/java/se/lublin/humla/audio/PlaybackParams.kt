@@ -24,7 +24,7 @@ import java.util.Arrays
  * either. Immutable and swapped whole; a lookup is a binary search over primitive arrays, so the
  * network and playback threads read it without allocating.
  */
-class PlaybackParams private constructor(
+internal class PlaybackParams private constructor(
     private val sessions: IntArray,
     private val volumes: FloatArray,
     private val muted: BooleanArray,

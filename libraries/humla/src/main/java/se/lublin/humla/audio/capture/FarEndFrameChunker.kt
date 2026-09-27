@@ -25,7 +25,7 @@ package se.lublin.humla.audio.capture
  * and always copies, because the APM's render processing may modify the frame in place and must not
  * touch the buffer headed for the speaker. The sink gets the same array each time and must not keep it.
  */
-class FarEndFrameChunker(private val frameSize: Int, private val sink: FarEndSink) {
+internal class FarEndFrameChunker(private val frameSize: Int, private val sink: FarEndSink) {
     private val pending = ShortArray(frameSize)
     private var filled = 0
 

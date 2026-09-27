@@ -17,7 +17,6 @@
 
 package se.lublin.humla.net
 
-import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.google.protobuf.MessageLite
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +29,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import se.lublin.humla.exception.HumlaException
+import se.lublin.humla.util.HumlaLog
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLSocket
 
-class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
+internal class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
 
 /**
  * The TLS/TCP connection to a Mumble server, framing protobuf messages. Single-use.
@@ -50,7 +50,7 @@ class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
  * onTCPConnectionDisconnect is delivered exactly once and is terminal: no later callback is
  * delivered (checked at delivery time). Cancelling [scope] closes the socket.
  */
-class HumlaTCP(
+internal class HumlaTCP(
     private val socketFactory: HumlaSSLSocketFactory,
     private val scope: CoroutineScope,
 ) : TcpTransport {
@@ -106,7 +106,7 @@ class HumlaTCP(
         val context = currentCoroutineContext()
         var input: DataInputStream? = null
         try {
-            Log.i(TAG, "Connecting")
+            HumlaLog.i(TAG, "Connecting")
             val tcpSocket = openSocket(host, port, useTor)
             socket = tcpSocket
             // disconnect() or cancellation raced the connect; finally closes the socket.
@@ -114,14 +114,14 @@ class HumlaTCP(
 
             tcpSocket.keepAlive = true
             tcpSocket.startHandshake()
-            Log.v(TAG, "Started handshake")
+            HumlaLog.v(TAG, "Started handshake")
 
             val dataInput = DataInputStream(tcpSocket.inputStream)
             input = dataInput
             output = DataOutputStream(tcpSocket.outputStream)
             if (!running || !context.isActive) return
 
-            Log.v(TAG, "Now listening")
+            HumlaLog.v(TAG, "Now listening")
             post { it.onTCPConnectionEstablished() }
 
             while (running) {
@@ -139,7 +139,7 @@ class HumlaTCP(
                 input?.close()
                 output?.close()
             } catch (e: IOException) {
-                Log.w(TAG, "Error closing TCP streams", e)
+                HumlaLog.w(TAG, "Error closing TCP streams", e)
             }
             closeSocket()
             output = null
@@ -150,7 +150,7 @@ class HumlaTCP(
     }
 
     private fun openSocket(host: String, port: Int, useTor: Boolean): SSLSocket = if (useTor) {
-        socketFactory.createTorSocket(host, port, HumlaConnection.TOR_HOST, HumlaConnection.TOR_PORT)
+        socketFactory.createTorSocket(host, port, TorProxy.HOST, TorProxy.PORT)
     } else {
         socketFactory.createSocket(host, port)
     }
@@ -173,14 +173,14 @@ class HumlaTCP(
         try {
             socket?.close()
         } catch (e: IOException) {
-            Log.w(TAG, "Error closing TCP socket", e)
+            HumlaLog.w(TAG, "Error closing TCP socket", e)
         }
     }
 
     /** Thread-safe; writes in order after everything queued before. */
     override fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType) {
         enqueueSend {
-            if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) Log.v(TAG, "OUT: $messageType")
+            if (messageType.isLogged) HumlaLog.v(TAG, "OUT: $messageType")
             val out = output ?: return@enqueueSend logNoStream(messageType)
             out.writeShort(messageType.ordinal)
             out.writeInt(message.serializedSize)
@@ -192,7 +192,7 @@ class HumlaTCP(
     override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) {
         val bytes = data.copyOf(length)
         enqueueSend {
-            if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) Log.v(TAG, "OUT: $messageType")
+            if (messageType.isLogged) HumlaLog.v(TAG, "OUT: $messageType")
             val out = output ?: return@enqueueSend logNoStream(messageType)
             out.writeShort(messageType.ordinal)
             out.writeInt(length)
@@ -201,7 +201,7 @@ class HumlaTCP(
     }
 
     private fun logNoStream(messageType: HumlaTCPMessageType) {
-        Log.w(TAG, "Dropping $messageType, the TCP connection has no stream")
+        HumlaLog.w(TAG, "Dropping $messageType, the TCP connection has no stream")
     }
 
     /**
@@ -227,10 +227,10 @@ class HumlaTCP(
             try {
                 block()
             } catch (e: IOException) {
-                Log.w(TAG, "TCP send failed", e)
+                HumlaLog.w(TAG, "TCP send failed", e)
             }
         }
-        if (sendQueue.trySend(write).isFailure) Log.w(TAG, "TCP send rejected after shutdown")
+        if (sendQueue.trySend(write).isFailure) HumlaLog.w(TAG, "TCP send rejected after shutdown")
     }
 
     private fun error(description: String, cause: Exception) {
@@ -281,7 +281,7 @@ class HumlaTCP(
             input.readFully(data)
             val types = HumlaTCPMessageType.values()
             if (messageType < 0 || messageType >= types.size) {
-                Log.w(TAG, "Got unsupported messageType: $messageType")
+                HumlaLog.w(TAG, "Got unsupported messageType: $messageType")
                 return null
             }
             return TcpFrame(types[messageType], data)

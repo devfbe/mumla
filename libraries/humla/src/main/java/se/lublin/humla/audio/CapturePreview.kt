@@ -15,12 +15,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.audio
+package se.lublin.humla.audio
 
 import android.media.AudioManager
 import android.media.MediaRecorder
-import android.util.Log
-import se.lublin.humla.audio.AudioHandler
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.AudioSourcePolicy
@@ -37,40 +35,55 @@ import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.inputmode.ActivityInputMode
+import se.lublin.humla.util.HumlaLog
 
 /** Capture runs in 10 ms frames. */
 private const val FRAMES_PER_SECOND = 100
+
+private const val TAG = "CapturePreview"
+private const val THREAD_NAME = "humla-capture-preview"
+
+/**
+ * Half of `AudioInput`'s, because this join happens on the main thread (`onPause` and every
+ * settings change). `source.stop()` has already unblocked the read; if the thread has not
+ * returned by then the recorder is wedged, so log and release anyway.
+ */
+private const val JOIN_TIMEOUT_MS = 500L
+
+/** Five frames is 50 ms, i.e. 20 readings a second -- above what a bar can show anyway. */
+private const val DEFAULT_READING_INTERVAL_FRAMES = 5
 
 /**
  * One frame's worth of everything the level meter draws. Levels are dBFS; `null` means the mode
  * has no such level (the speech-model mode compares a probability, not a dBFS threshold).
  */
-data class MeterReading(
-    val levelDbfs: Float,
-    val floorDbfs: Float?,
-    val speechDbfs: Float?,
-    val thresholdDbfs: Float?,
+public data class MeterReading(
+    public val levelDbfs: Float,
+    public val floorDbfs: Float?,
+    public val speechDbfs: Float?,
+    public val thresholdDbfs: Float?,
     /** True while the gate is open, i.e. while this frame would be transmitted. */
-    val voice: Boolean,
+    public val voice: Boolean,
     /** True while the gate is open only because of the hold. */
-    val holding: Boolean,
+    public val holding: Boolean,
     /** True while the talker is not far enough above the room for the gate to do its job. */
-    val tooClose: Boolean,
+    public val tooClose: Boolean,
 )
 
 /**
- * A short-lived capture session for the settings screen.
+ * A short-lived capture of the microphone for a settings screen's level meter.
  *
  * Runs the same pipeline a session runs, from the same factories and settings, so the meter shows
  * what the microphone will actually do. Reports one [MeterReading] every [readingIntervalFrames]
  * frames and, with [loopback] on, plays back the frames that would have been transmitted.
  * One bare thread, released by [stop]. Not reusable: [start] twice throws.
  *
- * While a call is running this takes the microphone: `SettingsActivity` leaves the session alone.
- * On API 31+ the newer client wins, the session's capture reports `CaptureState.Silenced`, and its
- * retry re-opens capture after `onPause` stops this one.
+ * While a call is running this takes the microphone from its session: on API 31+ the newer client
+ * wins, the session's capture reports `CaptureState.Silenced`, and its retry re-opens capture once
+ * this preview has stopped.
  */
-class AudioTestSession(
+@Suppress("LongParameterList") // The settings a session captures with, and the platform seams.
+public class CapturePreview internal constructor(
     private val audioManager: AudioManager,
     private val vadConfig: VadConfig,
     private val noiseSuppression: NoiseSuppressionMode,
@@ -79,13 +92,33 @@ class AudioTestSession(
     private val effects: AndroidAudioEffects,
     private val loopback: Boolean,
     private val onReading: (MeterReading) -> Unit,
-    private val readingIntervalFrames: Int = DEFAULT_READING_INTERVAL_FRAMES,
-    private val captureFactory: PcmCaptureSourceFactory = AndroidAudioRecordSource.Factory(),
-    private val sinkFactory: PcmPlaybackSinkFactory = AndroidAudioTrackSink.Factory(),
-    private val preprocessorFactory: CapturePreprocessorFactory =
-        CapturePreprocessorFactory(log = { Log.w(TAG, it) }),
-    private val resamplerFactory: (Int, Int) -> Resampler = { from, to -> SpeexResampler(from, to) },
+    private val readingIntervalFrames: Int,
+    private val captureFactory: PcmCaptureSourceFactory,
+    private val sinkFactory: PcmPlaybackSinkFactory,
+    private val preprocessorFactory: CapturePreprocessorFactory,
+    private val resamplerFactory: (Int, Int) -> Resampler,
 ) {
+    /**
+     * [onReading] is called on the capture thread. [captureFactory] and [sinkFactory] replace the
+     * microphone and the speaker.
+     */
+    public constructor(
+        audioManager: AudioManager,
+        vadConfig: VadConfig,
+        noiseSuppression: NoiseSuppressionMode,
+        speexNoiseSuppressDb: Int,
+        echoCancellation: EchoCancellationMode,
+        effects: AndroidAudioEffects,
+        loopback: Boolean,
+        onReading: (MeterReading) -> Unit,
+        captureFactory: PcmCaptureSourceFactory = AndroidAudioRecordSource.Factory(),
+        sinkFactory: PcmPlaybackSinkFactory = AndroidAudioTrackSink.Factory(),
+    ) : this(
+        audioManager, vadConfig, noiseSuppression, speexNoiseSuppressDb, echoCancellation, effects, loopback,
+        onReading, DEFAULT_READING_INTERVAL_FRAMES, captureFactory, sinkFactory,
+        CapturePreprocessorFactory(log = { HumlaLog.w(TAG, it) }), { from, to -> SpeexResampler(from, to) },
+    )
+
     private var source: PcmCaptureSource? = null
     private var sink: PcmPlaybackSink? = null
     private var pipeline: CapturePipeline? = null
@@ -99,9 +132,9 @@ class AudioTestSession(
     private var running = false
 
     /** Forgets what the tracker has learned, which is the screen's "measure again". */
-    fun recalibrate() = detector.recalibrate()
+    public fun recalibrate(): Unit = detector.recalibrate()
 
-    fun start() {
+    public fun start() {
         check(thread == null) { "already started" }
         // Route capture exactly like a session will, or the preview calibrates a different setup.
         if (AudioSourcePolicy.needsCommunicationMode(effects, echoCancellation)) {
@@ -111,6 +144,7 @@ class AudioTestSession(
         val src = captureFactory.open(
             CaptureRequest(MediaRecorder.AudioSource.MIC, AudioHandler.SAMPLE_RATE, effects, echoCancellation)
         )
+        var started = false
         try {
             val chain = preprocessorFactory.create(noiseSuppression, echoCancellation, speexNoiseSuppressDb)
             val rate = AudioHandler.SAMPLE_RATE
@@ -124,11 +158,13 @@ class AudioTestSession(
             pipeline = pipe
             running = true
             thread = Thread({ loop(src, snk, pipe) }, THREAD_NAME).also { it.start() }
-        } catch (e: Throwable) {
-            // The recorder is open and nothing else holds it, so an exception here would leak it.
-            src.release()
-            restoreCommunicationMode()
-            throw e
+            started = true
+        } finally {
+            // The recorder is open and nothing else holds it, so a failure here would leak it.
+            if (!started) {
+                src.release()
+                restoreCommunicationMode()
+            }
         }
     }
 
@@ -142,10 +178,11 @@ class AudioTestSession(
         while (running) {
             val read = src.read(buffer, frameSize)
             if (read < 0) break
-            if (read == 0) continue
-            val frame = pipe.process(buffer, read)
-            if (++count % readingIntervalFrames == 0) onReading(currentReading())
-            snk?.write(if (frame.transmit) frame.samples else silence, frame.length)
+            if (read > 0) {
+                val frame = pipe.process(buffer, read)
+                if (++count % readingIntervalFrames == 0) onReading(currentReading())
+                snk?.write(if (frame.transmit) frame.samples else silence, frame.length)
+            }
         }
         src.stop()
     }
@@ -196,7 +233,7 @@ class AudioTestSession(
         }
     }
 
-    fun stop() {
+    public fun stop() {
         running = false
         source?.stop()
         thread?.join(JOIN_TIMEOUT_MS)
@@ -219,19 +256,5 @@ class AudioTestSession(
         if (!ownsCommunicationMode) return
         audioManager.mode = AudioManager.MODE_NORMAL
         ownsCommunicationMode = false
-    }
-
-    companion object {
-        private const val TAG = "AudioTestSession"
-        private const val THREAD_NAME = "mumla-audio-test"
-        /**
-         * Half of `AudioInput`'s, because this join happens on the main thread (`onPause` and every
-         * settings change). `source.stop()` has already unblocked the read; if the thread has not
-         * returned by then the recorder is wedged, so log and release anyway.
-         */
-        private const val JOIN_TIMEOUT_MS = 500L
-
-        /** Five frames is 50 ms, i.e. 20 readings a second -- above what a bar can show anyway. */
-        const val DEFAULT_READING_INTERVAL_FRAMES = 5
     }
 }

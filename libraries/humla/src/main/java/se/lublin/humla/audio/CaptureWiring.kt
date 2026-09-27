@@ -17,7 +17,6 @@
 
 package se.lublin.humla.audio
 
-import android.util.Log
 import se.lublin.humla.audio.capture.CapturePipeline
 import se.lublin.humla.audio.capture.CapturePreprocessorFactory
 import se.lublin.humla.audio.capture.EchoCancellationMode
@@ -28,13 +27,14 @@ import se.lublin.humla.audio.capture.NoopPreprocessor
 import se.lublin.humla.audio.capture.Resampler
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.SpeexResampler
+import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.HumlaLogger
 
 /**
  * Assembles the capture chain for `AudioHandler`. Echo cancellation has two ends, the near-end stage
  * and [Wiring.farEnd] fed by `AudioOutput` on the playback thread: both or neither.
  */
-object CaptureWiring {
+internal object CaptureWiring {
     private const val TAG = "CaptureWiring"
 
     /** @param farEnd null whenever the WebRTC canceller is not in the chain. */
@@ -56,7 +56,7 @@ object CaptureWiring {
         newResampler: (Int, Int) -> Resampler = { from, to -> SpeexResampler(from, to) },
     ): Wiring {
         val log: (String) -> Unit = { message ->
-            Log.w(TAG, message)
+            HumlaLog.w(TAG, message)
             logger?.logWarning(message)
         }
         val chain = (factory ?: CapturePreprocessorFactory(log = log)).create(noise, echo, speexNoiseSuppressDb)

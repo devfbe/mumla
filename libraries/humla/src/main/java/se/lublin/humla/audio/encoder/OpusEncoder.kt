@@ -26,7 +26,7 @@ import se.lublin.humla.audio.native.OpusEncoderNative
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.PacketBuffer
 
-class OpusEncoder(
+internal class OpusEncoder(
     sampleRate: Int,
     channels: Int,
     private val frameSize: Int,

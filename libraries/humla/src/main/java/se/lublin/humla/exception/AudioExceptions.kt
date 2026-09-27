@@ -17,21 +17,21 @@
 package se.lublin.humla.exception
 
 /** Audio could not be set up or processed. */
-open class AudioException : Exception {
-    constructor(message: String) : super(message)
-    constructor(cause: Throwable) : super(cause)
-    constructor(message: String, cause: Throwable) : super(message, cause)
+public open class AudioException : Exception {
+    public constructor(message: String) : super(message)
+    public constructor(cause: Throwable) : super(cause)
+    public constructor(message: String, cause: Throwable) : super(message, cause)
 }
 
 /** The audio device or a native audio component could not be opened. */
-class AudioInitializationException : AudioException {
-    constructor(message: String) : super(message)
-    constructor(cause: Throwable) : super(cause)
-    constructor(message: String, cause: Throwable) : super(message, cause)
+public class AudioInitializationException : AudioException {
+    public constructor(message: String) : super(message)
+    public constructor(cause: Throwable) : super(cause)
+    public constructor(message: String, cause: Throwable) : super(message, cause)
 }
 
 /** A native codec or processing call failed. */
-class NativeAudioException : AudioException {
+internal class NativeAudioException : AudioException {
     constructor(message: String) : super(message)
     constructor(cause: Throwable) : super(cause)
     constructor(message: String, cause: Throwable) : super(message, cause)

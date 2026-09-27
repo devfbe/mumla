@@ -18,7 +18,7 @@
 package se.lublin.humla.audio.capture
 
 /** A talk state engine, providing information regarding when it is appropriate to send audio. */
-interface IInputMode {
+internal interface IInputMode {
     /**
      * Called for every frame after preprocessing, never gated on the talking state.
      *

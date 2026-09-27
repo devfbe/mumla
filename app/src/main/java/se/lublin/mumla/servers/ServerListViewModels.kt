@@ -156,6 +156,9 @@ class PublicServersViewModel(
 
     private val shown: List<PublicServer> get() = (mutableState.value as? State.Shown)?.servers.orEmpty()
 
+    /** The shown entry of [server], or null. */
+    fun shownEntryOf(server: Server): PublicServer? = shown.firstOrNull { it.server == server }
+
     /** Shows only servers whose name and country contain the queries, ignoring case, in list order. */
     fun filter(name: String, country: String) {
         if (mutableState.value !is State.Shown) return
@@ -175,12 +178,12 @@ class PublicServersViewModel(
     }
 
     /** An empty, nearby server among those shown, in [countryCode] (anywhere when null); null if none. */
-    suspend fun match(countryCode: String?): ServerInfoResponse? = matchServer(shown, countryCode, pings::ping)
+    suspend fun match(countryCode: String?): ServerInfoResponse? =
+        matchServer(shown, countryCode, ping = { pings.ping(it.server) })
 
     /** Stores [server] as a favourite, logging in as [username]. */
     fun favourite(server: PublicServer, username: String) {
-        server.username = username
-        repository.launchIo { addServer(server) }
+        repository.launchIo { addServer(server.server.copy(username = username)) }
     }
 
     companion object {

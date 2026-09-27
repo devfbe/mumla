@@ -6,9 +6,6 @@ import android.app.NotificationManager
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -16,15 +13,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
-import se.lublin.humla.HumlaSession
-import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
-import se.lublin.humla.net.HumlaConnection
-import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.testutil.FakeCommunicationDevices
+import se.lublin.humla.testutil.ScriptedConnections
 import se.lublin.mumla.R
 import se.lublin.mumla.app.AppContainer
 import se.lublin.mumla.app.MumlaApplication
@@ -44,28 +37,13 @@ class MumlaServiceForegroundTest {
     private lateinit var service: MumlaService
     private lateinit var sessions: SessionManager
     private val mainLooper = shadowOf(Looper.getMainLooper())
-    private val connections = mutableListOf<HumlaConnection>()
-    private val listeners = mutableListOf<HumlaConnection.HumlaConnectionListener>()
+    private val server = ScriptedConnections(reconnectBaseDelayMillis = 2_000L, reconnectAttempts = 2)
 
     @Before
     fun setUp() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         app.installContainer(
-            AppContainer(app, app.scope) { config ->
-                HumlaSession(
-                    app, config,
-                    communicationDevices = FakeCommunicationDevices(),
-                    connectionFactory = { listener ->
-                        listeners += listener
-                        mockk<HumlaConnection>(relaxed = true).also { connections += it }
-                    },
-                    reconnectPolicy = ReconnectPolicy(
-                        baseDelayMillis = 2_000L,
-                        maxAttempts = 2,
-                        maxJitterFraction = 0.0,
-                    ),
-                )
-            },
+            AppContainer(app, app.scope) { config -> server.session(app, config) },
         )
         sessions = SessionManager.get(app)
         sessions.connect(
@@ -88,18 +66,14 @@ class MumlaServiceForegroundTest {
 
     private val state: SessionState get() = sessions.currentState
 
-    private fun lost() = HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
-
     /** The current connection reports its end, as a dropped socket does. */
     private fun loseConnection() {
-        listeners.last().onConnectionDisconnected(lost())
+        server.loseLatest("socket reset")
         mainLooper.idle()
     }
 
     private fun synchronize() {
-        every { connections.last().isConnected } returns true
-        every { connections.last().isSynchronized } returns true
-        listeners.last().onConnectionSynchronized()
+        server.synchronizeLatest()
         mainLooper.idle()
     }
 
@@ -150,7 +124,7 @@ class MumlaServiceForegroundTest {
 
         mainLooper.idleFor(Duration.ofMillis(2_000))
 
-        assertThat(connections).hasSize(2) // the backoff timer fired and a new attempt started
+        assertThat(server.attempts).isEqualTo(2) // the backoff timer fired and a new attempt started
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
         assertThat(log()).doesNotContain(app.getString(R.string.foreground_start_failed))
     }
@@ -208,7 +182,7 @@ class MumlaServiceForegroundTest {
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
         assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
         mainLooper.idleFor(Duration.ofMillis(10_000))
-        assertThat(connections).hasSize(1) // the backoff timer no longer retries
+        assertThat(server.attempts).isEqualTo(1) // the backoff timer no longer retries
     }
 
     @Test
@@ -216,12 +190,12 @@ class MumlaServiceForegroundTest {
         screenOff()
         loseConnection()
         mainLooper.idleFor(Duration.ofMillis(2_000)) // Reconnecting: attempt 2 is in flight
-        assertThat(connections).hasSize(2)
+        assertThat(server.attempts).isEqualTo(2)
         assertThat(foregroundActions()).containsExactly(app.getString(R.string.cancel_reconnect))
 
         pressCancelReconnect()
 
-        verify { connections[1].disconnect() }
+        assertThat(server.disconnectCalls(1)).isEqualTo(1)
         assertThat(state).isInstanceOf(SessionState.Disconnected::class.java)
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }

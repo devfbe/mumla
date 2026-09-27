@@ -14,7 +14,7 @@ class ServerMatcherTest {
 
     private fun reply(server: PublicServer, users: Int, latency: Int, version: Int = 0x10400) =
         ServerInfoResponse(
-            server,
+            server.server,
             ByteBuffer.allocate(24).putInt(version).putLong(0).putInt(users).putInt(10).putInt(0).array(),
             latency,
         )
@@ -34,7 +34,7 @@ class ServerMatcherTest {
 
         val match = matchServer(listOf(a, b, busy, abroad), "SE", { replies.getValue(it) })
 
-        assertThat(match!!.server).isSameInstanceAs(b)
+        assertThat(match!!.server).isSameInstanceAs(b.server)
     }
 
     @Test

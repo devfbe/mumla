@@ -17,7 +17,7 @@
 package se.lublin.humla.model
 
 /** A user as one [ServerState] saw them, with what this device keeps for them locally. */
-data class UserState(
+public data class UserState(
     val session: Int,
     val name: String?,
     val channel: Int,

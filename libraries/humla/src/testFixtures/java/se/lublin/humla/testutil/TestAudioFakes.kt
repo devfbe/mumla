@@ -15,8 +15,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package se.lublin.mumla.audio
+package se.lublin.humla.testutil
 
+import se.lublin.humla.audio.PcmPlaybackSink
+import se.lublin.humla.audio.PcmPlaybackSinkFactory
 import se.lublin.humla.audio.capture.CaptureRequest
 import se.lublin.humla.audio.capture.PcmCaptureSource
 import se.lublin.humla.audio.capture.PcmCaptureSourceFactory
@@ -28,14 +30,14 @@ import java.util.concurrent.TimeUnit
  * A microphone that hands out a scripted list of frames and then blocks, like the real one does
  * between frames. Varies sample rate, contents and length so no input dimension is constant.
  */
-class TestCaptureSource(
+public class TestCaptureSource(
     frames: List<ShortArray>,
     override val sampleRate: Int = 48000,
     /** Repeats the last frame forever instead of blocking, for tests that need a steady stream. */
     private val loopLastFrame: Boolean = false,
 ) : PcmCaptureSource {
-    override val audioSessionId = 1
-    val events = CopyOnWriteArrayList<String>()
+    override val audioSessionId: Int = 1
+    public val events: MutableList<String> = CopyOnWriteArrayList()
     private val queue = LinkedBlockingQueue(frames.ifEmpty { listOf(ShortArray(0)) })
     private var last: ShortArray? = null
 
@@ -48,12 +50,13 @@ class TestCaptureSource(
 
     override fun read(buffer: ShortArray, length: Int): Int {
         while (!stopped) {
-            val frame = queue.poll(2, TimeUnit.MILLISECONDS) ?: last?.takeIf { loopLastFrame } ?: continue
-            if (frame.isEmpty()) continue
-            last = frame
-            val n = minOf(frame.size, length)
-            System.arraycopy(frame, 0, buffer, 0, n)
-            return n
+            val frame = queue.poll(2, TimeUnit.MILLISECONDS) ?: last?.takeIf { loopLastFrame }
+            if (frame != null && frame.isNotEmpty()) {
+                last = frame
+                val n = minOf(frame.size, length)
+                System.arraycopy(frame, 0, buffer, 0, n)
+                return n
+            }
         }
         return 0
     }
@@ -67,10 +70,10 @@ class TestCaptureSource(
         events += "release"
     }
 
-    override fun setSilenceListener(listener: ((Boolean) -> Unit)?) = Unit
+    override fun setSilenceListener(listener: ((Boolean) -> Unit)?): Unit = Unit
 
-    class Factory(private val source: PcmCaptureSource) : PcmCaptureSourceFactory {
-        var request: CaptureRequest? = null
+    public class Factory(private val source: PcmCaptureSource) : PcmCaptureSourceFactory {
+        public var request: CaptureRequest? = null
         override fun open(request: CaptureRequest): PcmCaptureSource {
             this.request = request
             return source
@@ -78,9 +81,9 @@ class TestCaptureSource(
     }
 }
 
-class TestPlaybackSink : PcmPlaybackSink {
-    val events = CopyOnWriteArrayList<String>()
-    val written = CopyOnWriteArrayList<ShortArray>()
+public class TestPlaybackSink : PcmPlaybackSink {
+    public val events: MutableList<String> = CopyOnWriteArrayList()
+    public val written: MutableList<ShortArray> = CopyOnWriteArrayList()
 
     override fun play() {
         events += "play"
@@ -107,8 +110,8 @@ class TestPlaybackSink : PcmPlaybackSink {
         events += "release"
     }
 
-    class Factory(private val sink: PcmPlaybackSink) : PcmPlaybackSinkFactory {
-        var openedWith: Pair<Int, Int>? = null
+    public class Factory(private val sink: PcmPlaybackSink) : PcmPlaybackSinkFactory {
+        public var openedWith: Pair<Int, Int>? = null
         override fun open(audioStream: Int, sampleRate: Int): PcmPlaybackSink {
             openedWith = audioStream to sampleRate
             return sink

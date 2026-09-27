@@ -19,11 +19,7 @@ package se.lublin.mumla
 
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
-import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
-import se.lublin.humla.audio.capture.AndroidAudioEffects
-import se.lublin.humla.audio.capture.AudioSourcePolicy
-import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 
 /**
@@ -33,22 +29,13 @@ import se.lublin.humla.audio.routing.AudioDeviceCategory
  * voice-call stream. Whether the route is audible is for device QA.
  */
 class EchoCancellationDefaultRouteTest {
-    private companion object {
-        val NO_EFFECTS = AndroidAudioEffects(false, false)
-    }
-
     @Test
     fun `playback is always on the voice call stream`() {
         assertThat(Settings.PLAYBACK_STREAM).isEqualTo(AudioManager.STREAM_VOICE_CALL)
     }
 
-    /** The speaker's default canceller asks for communication mode, and the stream follows it. */
     @Test
-    fun `the speaker's default canceller asks for the mode the voice call stream follows`() {
+    fun `the speaker cancels echo by default`() {
         assertThat(AudioDeviceCategory.SPEAKER.echoCancellationByDefault).isTrue()
-        assertWithMessage("WebRTC's canceller must run in communication mode")
-            .that(AudioSourcePolicy.needsCommunicationMode(NO_EFFECTS, EchoCancellationMode.WEBRTC))
-            .isTrue()
-        assertThat(Settings.PLAYBACK_STREAM).isEqualTo(AudioManager.STREAM_VOICE_CALL)
     }
 }

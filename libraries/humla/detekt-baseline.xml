@@ -2,7 +2,6 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ComplexCondition:HumlaConnection.kt$HumlaConnection$!force &amp;&amp; (shouldForceTCP() || !usingUdp) &amp;&amp; tcpTransport != null</ID>
     <ID>ComplexCondition:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$wasOn &amp;&amp; expectedOn &amp;&amp; detected &amp;&amp; score &lt; config.startThreshold</ID>
     <ID>CyclomaticComplexMethod:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
     <ID>CyclomaticComplexMethod:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
@@ -10,7 +9,6 @@
     <ID>CyclomaticComplexMethod:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$@Test fun `a long score sequence agrees with the state machine on every frame`()</ID>
     <ID>EmptyFunctionBlock:HumlaUDPTest.kt$HumlaUDPTest.RecordingListener${}</ID>
     <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @return true if the buffer contains audio data.</ID>
-    <ID>ForbiddenComment:HumlaConnection.kt$HumlaConnection.Companion$// FIXME: assumes worst-case using TCP</ID>
     <ID>LongParameterList:CaptureWiring.kt$CaptureWiring$( inputSampleRate: Int, inputMode: IInputMode, amplitudeBoost: Float, noise: NoiseSuppressionMode, echo: EchoCancellationMode, speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB, logger: HumlaLogger? = null, factory: CapturePreprocessorFactory? = null, newResampler: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
     <ID>LongParameterList:OpusDecoderNative.kt$OpusDecoderApi$( state: Long, data: ByteArray?, offset: Int, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int, )</ID>
     <ID>LongParameterList:OpusEncoder.kt$OpusEncoder$( sampleRate: Int, channels: Int, private val frameSize: Int, private val framesPerPacket: Int, bitrate: Int, maxBufferSize: Int, private val api: OpusEncoderApi = OpusEncoderNative, )</ID>
@@ -43,17 +41,14 @@
     <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: CertificateParsingException</ID>
     <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
     <ID>SwallowedException:UdpPing.kt$UdpPing$e: BufferUnderflowException</ID>
-    <ID>ThrowsCount:HumlaConnection.kt$HumlaConnection$private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory</ID>
     <ID>TooGenericExceptionCaught:AudioController.kt$AudioController$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CapturePreprocessorFactory.kt$CapturePreprocessorFactory$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:CommunicationDevices.kt$AndroidCommunicationDevices$e: RuntimeException</ID>
     <ID>TooGenericExceptionCaught:HumlaConnection.kt$HumlaConnection$e: RuntimeException</ID>
     <ID>TooGenericExceptionCaught:Pkcs12Certificates.kt$Pkcs12Certificates$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
-    <ID>TooGenericExceptionThrown:HumlaConnection.kt$HumlaConnection$throw RuntimeException("We use BouncyCastle- what? ", e)</ID>
     <ID>TooManyFunctions:AudioRouter.kt$AudioRouter</ID>
     <ID>TooManyFunctions:CommunicationDevices.kt$AndroidCommunicationDevices : CommunicationDevices</ID>
-    <ID>TooManyFunctions:HumlaConnection.kt$HumlaConnection : TCPConnectionListenerUDPConnectionListenerMessageHandlerRegistry</ID>
     <ID>TooManyFunctions:HumlaTCP.kt$HumlaTCP : TcpTransport</ID>
     <ID>UseCheckOrError:FakeCaptureSource.kt$FakeCaptureSource$throw IllegalStateException("startRecording failed")</ID>
     <ID>UseRequire:OpusEncoder.kt$OpusEncoder$throw IllegalArgumentException("This Opus encoder implementation requires a constant frame size.")</ID>

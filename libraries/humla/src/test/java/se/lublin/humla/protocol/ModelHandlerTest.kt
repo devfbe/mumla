@@ -43,7 +43,7 @@ class ModelHandlerTest {
 
     private val handler = ModelHandler(ServerState.empty(), {}, publisher, avatars::add)
 
-    /** Runs what is queued on the "protocol thread", as its looper would after the frames before it. */
+    /** Runs what is queued on the protocol context, as it would after the frames before it. */
     private fun drain() {
         while (posted.isNotEmpty()) posted.removeFirst()()
     }

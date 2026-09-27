@@ -28,7 +28,7 @@ private const val WHAT = "the rnnoise denoiser"
  * The bridge rejects frames of the wrong length with -1 (no exception on the capture thread); this
  * stage counts those in [rejectedFrames]. Allocates one `Float` box per frame.
  */
-class RnnoisePreprocessor(private val api: RnnoiseApi) : SingleHandleStage(api.create(), WHAT) {
+internal class RnnoisePreprocessor(private val api: RnnoiseApi) : SingleHandleStage(api.create(), WHAT) {
     /**
      * Frames rnnoise did not answer for (refused with -1, or an answer outside `[0, 1]`). The only way
      * to tell "refused" from "no opinion", since both yield null. Written under the stage lock.

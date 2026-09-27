@@ -61,6 +61,11 @@ android {
     }
 }
 
+kotlin {
+    // What the app does not use stays internal; what is public is so on purpose.
+    explicitApi()
+}
+
 // The plugin would copy Mumble.proto into the AAR's Java resources and so into the APK; only the
 // generated classes are needed.
 tasks.configureEach {

@@ -25,7 +25,7 @@ package se.lublin.humla.audio.native
  * someone else.
  * Each 10 ms tick, call [processRender] before [processCapture] with the frame containing its echo.
  */
-interface WebRtcApmApi {
+internal interface WebRtcApmApi {
     /**
      * @param sampleRate 8000, 16000, 32000 or 48000; any other rate returns 0.
      * @param noiseSuppressionLevel 0 low .. 3 very high; out-of-range values are clamped.
@@ -69,7 +69,7 @@ interface WebRtcApmApi {
  * lock and may run concurrently, each from one thread per handle. [create] and [destroy] lock and allocate; keep
  * them off the audio threads.
  */
-object WebRtcApmNative : WebRtcApmApi {
+internal object WebRtcApmNative : WebRtcApmApi {
     init {
         HumlaNativeLibrary.load()
     }

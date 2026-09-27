@@ -30,20 +30,19 @@ import org.robolectric.shadows.ShadowNetwork
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.WhisperTargetChannel
-import se.lublin.humla.model.WhisperTargetList
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.ClientCertificate
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaSessionHarness
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.testutil.collectOnMain
 import se.lublin.humla.testutil.isReconnecting
 import se.lublin.humla.testutil.reason
+import se.lublin.humla.util.VoiceTargetMode
 import java.util.concurrent.TimeUnit
 
 /**
@@ -104,8 +103,8 @@ class HumlaSessionConnectionTest {
         h.session.connect()
         h.mainLooper.idle()
 
-        // `getConnection()` rather than `transports.tcps.size`: a transport appears on the
-        // protocol thread only later, so a size check would pass either way.
+        // `connection` rather than `transports.tcps.size`: a transport appears on the protocol
+        // context only later, so a size check would pass either way.
         assertThat(h.session.connection).isSameInstanceAs(connection)
         assertThat(h.session.state.value).isEqualTo(SessionState.Connected)
         assertThat(h.transports.tcps).hasSize(1)
@@ -145,15 +144,15 @@ class HumlaSessionConnectionTest {
     }
 
     /**
-     * Four settings the session writes into a `HumlaConnection` it does not own. The certificate
-     * and trust store matter only once a TLS socket opens, so the connection's fields are read back.
+     * The settings the session opens a `HumlaConnection` with. The certificate and trust store
+     * matter only once a TLS socket opens, so the connection's parameters are read back.
      */
     @Test
     fun everyConnectionSettingReachesTheConnection() {
         val h = start()
         h.configure {
-            // Force TCP without Tor, so the two fields differ: with both true, Tor masks a missing
-            // `setForceTCP` through `shouldForceTCP()`.
+            // Force TCP without Tor, so the two fields differ: with both true, Tor would mask a
+            // missing forceTcp through `tunnelVoice`.
             copy(connection = connection.copy(
                 forceTcp = true,
                 useTor = false,
@@ -168,13 +167,13 @@ class HumlaSessionConnectionTest {
         h.mainLooper.idle()
         val connection = h.session.connection!!
 
-        assertThat(connection.forceTcp).isEqualTo(true)
-        assertThat(connection.useTor).isEqualTo(false)
-        assertThat(connection.certificate).isEqualTo(byteArrayOf(1, 2, 3))
-        assertThat(connection.certificatePassword).isEqualTo("cert-pw")
-        assertThat(connection.trustStorePath).isEqualTo("/store")
-        assertThat(connection.trustStorePassword).isEqualTo("store-pw")
-        assertThat(connection.trustStoreFormat).isEqualTo("BKS")
+        assertThat(connection.params.forceTcp).isEqualTo(true)
+        assertThat(connection.params.useTor).isEqualTo(false)
+        assertThat(connection.params.certificate).isEqualTo(byteArrayOf(1, 2, 3))
+        assertThat(connection.params.certificatePassword).isEqualTo("cert-pw")
+        assertThat(connection.params.trustStore?.path).isEqualTo("/store")
+        assertThat(connection.params.trustStore?.password).isEqualTo("store-pw")
+        assertThat(connection.params.trustStore?.format).isEqualTo("BKS")
     }
 
     /** The other configuration, where Tor is on: `useTor` is what carries it to the connection. */
@@ -186,7 +185,7 @@ class HumlaSessionConnectionTest {
         h.session.connect()
         h.mainLooper.idle()
 
-        assertThat(h.session.connection!!.useTor).isEqualTo(true)
+        assertThat(h.session.connection!!.params.useTor).isEqualTo(true)
     }
 
     @Test
@@ -325,7 +324,7 @@ class HumlaSessionConnectionTest {
 
         h.session.disconnect()
         // The report the socket had already queued when the user pressed disconnect. Delivered
-        // directly, because disconnect() quits the protocol looper.
+        // directly, because the closed connection reports nothing more.
         h.session.onConnectionDisconnected(connectionError())
         h.mainLooper.idle()
 
@@ -386,7 +385,7 @@ class HumlaSessionConnectionTest {
         h.failConnection(0, connectionError())
         awaitUntil(description = "the retry opened a second socket") {
             h.mainLooper.idleFor(10, TimeUnit.MILLISECONDS)
-            h.transports.tcps.size > 1 && h.transports.tcps[1].connectThread != null
+            h.transports.tcps.size > 1 && h.transports.tcps[1].isConnectCalled
         }
         assertThat(h.session.state.value).isInstanceOf(SessionState.Reconnecting::class.java)
 
@@ -555,7 +554,7 @@ class HumlaSessionConnectionTest {
         // Reconnecting is still "reconnecting" to the UI, and it still knows why.
         assertThat(h.session.isReconnecting).isTrue()
         assertThat(h.session.reason).isNotNull()
-        // The socket is opened on the protocol thread, so the transport appears after the post.
+        // The socket is opened on the protocol context, so the transport appears later.
         awaitUntil(description = "second connection attempt") { h.transports.tcps.size == 2 }
     }
 

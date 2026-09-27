@@ -19,7 +19,7 @@ package se.lublin.humla.exception
 import se.lublin.humla.protobuf.Mumble
 
 /** Why a connection ended, with the server's reject or kick message when it sent one. */
-class HumlaException private constructor(
+internal class HumlaException private constructor(
     message: String?,
     cause: Throwable?,
     val reason: HumlaDisconnectReason,

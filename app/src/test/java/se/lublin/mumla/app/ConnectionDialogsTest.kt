@@ -115,8 +115,7 @@ class ConnectionDialogsTest {
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
         idleMainLooper()
 
-        assertThat(server.password).isEqualTo("sec")
-        verify { listener.reconnectWithPassword(server) }
+        verify { listener.reconnectWithPassword(server.copy(password = "sec")) }
     }
 
     /** A lost connection that is being retried says so, with the network's reason. */

@@ -18,6 +18,7 @@
 package se.lublin.mumla.servers
 
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import se.lublin.humla.model.Server
 import java.io.IOException
@@ -49,7 +50,7 @@ class ServerPingerTest {
     private val server = Server(1, "s", "127.0.0.1", 64738, "me", "")
 
     @Test
-    fun aSuccessfulPingClosesItsSocket() {
+    fun aSuccessfulPingClosesItsSocket() = runTest {
         val socket = RecordingSocket(ByteArray(24))
 
         val response = pingerWith(socket).ping(server)
@@ -59,7 +60,7 @@ class ServerPingerTest {
     }
 
     @Test
-    fun aFailedPingClosesItsSocket() {
+    fun aFailedPingClosesItsSocket() = runTest {
         val socket = RecordingSocket(null)
 
         val response = pingerWith(socket).ping(server)

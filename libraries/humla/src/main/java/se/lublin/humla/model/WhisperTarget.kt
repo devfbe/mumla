@@ -19,10 +19,10 @@ package se.lublin.humla.model
 
 import se.lublin.humla.protobuf.Mumble
 
-/** Where a whisper goes. */
-interface WhisperTarget {
+/** Where a whisper goes; built by this library, which alone knows the wire form. */
+public abstract class WhisperTarget internal constructor() {
     /** A user-readable name for the UI: a channel name or a list of users. */
-    val name: String?
+    public abstract val name: String?
 
-    fun createTarget(): Mumble.VoiceTarget.Target
+    internal abstract fun createTarget(): Mumble.VoiceTarget.Target
 }

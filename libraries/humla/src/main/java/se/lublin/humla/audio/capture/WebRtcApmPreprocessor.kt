@@ -20,7 +20,7 @@ package se.lublin.humla.audio.capture
 import se.lublin.humla.audio.native.WebRtcApmApi
 
 /** How the APM is configured for one chain (the sample rate belongs to the stage). */
-data class WebRtcApmConfig(
+internal data class WebRtcApmConfig(
     val echoCancellation: Boolean,
     val noiseSuppression: Boolean,
     val gainControl: Boolean,
@@ -41,7 +41,7 @@ data class WebRtcApmConfig(
  * (0) and [FULL_DBFS] (1). A loudness threshold, not a speech model; AGC2 holds the non-speech floor
  * near -45 dBFS regardless of input level.
  */
-object LevelToProbability {
+internal object LevelToProbability {
     const val SILENCE_DBFS = -45f
 
     const val FULL_DBFS = -23.3f
@@ -56,7 +56,7 @@ object LevelToProbability {
  * far-end frame must go in before the near-end frame containing its echo, or cancellation silently
  * degrades. AEC3 estimates the stream delay itself.
  */
-class WebRtcApmPreprocessor private constructor(
+internal class WebRtcApmPreprocessor private constructor(
     private val api: WebRtcApmApi,
     handle: Long,
     sampleRate: Int,

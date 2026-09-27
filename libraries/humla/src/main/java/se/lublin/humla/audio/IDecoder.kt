@@ -19,7 +19,7 @@ package se.lublin.humla.audio
 import se.lublin.humla.exception.NativeAudioException
 
 /** A native voice decoder producing float PCM. */
-interface IDecoder : AutoCloseable {
+internal interface IDecoder : AutoCloseable {
     /**
      * Decodes [length] bytes of [input] from [offset] into [output], which holds at least
      * [frameSize] samples. A null [input] asks for loss concealment.

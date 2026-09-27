@@ -46,8 +46,8 @@ class MumlaSQLiteDatabaseTest {
     @Test
     fun serversRoundTripAndUpdateAndRemove() {
         assertThat(db.getServers()).isEmpty()
-        val a = server("a").also { db.addServer(it) }
-        val b = server("b").also { db.addServer(it) }
+        val a = db.addServer(server("a"))
+        val b = db.addServer(server("b"))
         assertThat(a.id).isNotEqualTo(b.id)
 
         db.updateServer(Server(a.id, "renamed", a.host, a.port, a.username, a.password))
@@ -68,7 +68,7 @@ class MumlaSQLiteDatabaseTest {
 
     @Test
     fun removingAServerRemovesItsPinsTokensMutesAndIgnores() {
-        val s = server("s").also { db.addServer(it) }
+        val s = db.addServer(server("s"))
         db.addPinnedChannel(s.id, 4)
         db.addAccessToken(s.id, "tok")
         db.addLocalMutedUser(s.id, 7)

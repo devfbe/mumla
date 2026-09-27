@@ -17,7 +17,6 @@
 
 package se.lublin.humla.net
 
-import android.util.Log
 import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -27,6 +26,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import se.lublin.humla.util.HumlaLog
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -50,7 +50,7 @@ private const val RESYNC_AFTER_MICROS = 5_000_000
  * @param scope The connection's scope; its dispatcher delivers the callbacks.
  * @param socketFactory Creates the datagram socket the loops run on.
  */
-class HumlaUDP(
+internal class HumlaUDP(
     private val cryptState: CryptState,
     private val listener: UDPConnectionListener,
     private val scope: CoroutineScope,
@@ -87,7 +87,7 @@ class HumlaUDP(
             udpSocket = socketFactory()
             socket = udpSocket
             udpSocket.connect(address, port)
-            Log.d(TAG, "Created socket")
+            HumlaLog.d(TAG, "Created socket")
 
             // Undispatched, so it is started, and closes the socket, even if the scope is cancelled now.
             sender = launch(start = CoroutineStart.UNDISPATCHED) { sendLoop(udpSocket) }
@@ -102,10 +102,10 @@ class HumlaUDP(
         } catch (e: IOException) {
             // If a stop was requested, then this is a user-triggered disconnection. Report no error.
             if (!stopRequested) {
-                Log.d(TAG, "UDP socket closed unexpectedly")
+                HumlaLog.d(TAG, "UDP socket closed unexpectedly")
                 post { listener.onUDPConnectionError(e) }
             } else {
-                Log.d(TAG, "UDP socket closed in response to user disconnect")
+                HumlaLog.d(TAG, "UDP socket closed in response to user disconnect")
             }
         } finally {
             connected = false
@@ -118,11 +118,11 @@ class HumlaUDP(
 
     private fun onDatagram(data: ByteArray, length: Int) {
         if (!cryptState.isValid) {
-            Log.d(TAG, "CryptState invalid, discarding packet")
+            HumlaLog.d(TAG, "CryptState invalid, discarding packet")
             return
         }
         if (length < MIN_DATAGRAM_BYTES) {
-            Log.d(TAG, "Packet too short, discarding")
+            HumlaLog.d(TAG, "Packet too short, discarding")
             return
         }
         try {
@@ -135,12 +135,12 @@ class HumlaUDP(
             ) {
                 cryptState.resetLastRequestTime()
                 post { listener.resyncCryptState() }
-                Log.d(TAG, "Packet failed to decrypt, discarding and requesting crypt state resync")
+                HumlaLog.d(TAG, "Packet failed to decrypt, discarding and requesting crypt state resync")
             } else {
-                Log.d(TAG, "Packet failed to decrypt, discarding")
+                HumlaLog.d(TAG, "Packet failed to decrypt, discarding")
             }
         } catch (e: GeneralSecurityException) {
-            Log.d(TAG, "Discarding packet", e)
+            HumlaLog.d(TAG, "Discarding packet", e)
         }
     }
 
@@ -151,7 +151,7 @@ class HumlaUDP(
                 try {
                     udpSocket.send(packet)
                 } catch (e: IOException) {
-                    Log.w(TAG, "UDP send failed", e)
+                    HumlaLog.w(TAG, "UDP send failed", e)
                 }
             }
         } finally {
@@ -165,13 +165,13 @@ class HumlaUDP(
 
     override fun sendMessage(data: ByteArray, length: Int) {
         if (!cryptState.isValid) {
-            Log.w(TAG, "Invalid cryptstate prior to sendMessage call.")
+            HumlaLog.w(TAG, "Invalid cryptstate prior to sendMessage call.")
             return
         }
         if (!connected) {
             // Drop before encrypt(): encrypt() consumes an OCB2 sequence number, so a packet that is
             // never sent would punch a hole in the server's replay window.
-            Log.w(TAG, "Tried to send UDP message without an active connection.")
+            HumlaLog.w(TAG, "Tried to send UDP message without an active connection.")
             return
         }
         val address = resolvedHost ?: return
@@ -179,7 +179,7 @@ class HumlaUDP(
             val encrypted = cryptState.encrypt(data, length)
             sendQueue.trySend(DatagramPacket(encrypted, encrypted.size, address, port))
         } catch (e: GeneralSecurityException) {
-            Log.w(TAG, "Could not encrypt UDP packet", e)
+            HumlaLog.w(TAG, "Could not encrypt UDP packet", e)
         }
     }
 

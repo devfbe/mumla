@@ -102,7 +102,7 @@
         <item>@string/speexNoiseSuppressHigh</item>
     </string-array>
 
-    <!-- Must stay in lockstep with SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB. -->
+    <!-- Must stay in lockstep with PipelineSettings.SPEEX_NOISE_SUPPRESS_DB. -->
     <string-array name="speexNoiseSuppressValues">
         <item>-15</item>
         <item>-25</item>

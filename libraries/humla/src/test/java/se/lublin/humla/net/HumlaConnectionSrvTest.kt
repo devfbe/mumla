@@ -1,71 +1,45 @@
 package se.lublin.humla.net
 
-import android.os.Handler
-import android.os.Looper
 import com.google.common.truth.Truth.assertThat
-import org.junit.After
-import org.junit.Before
+import kotlinx.coroutines.Dispatchers
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.Server
-import se.lublin.humla.testutil.awaitUntil
-import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
 
-@RunWith(RobolectricTestRunner::class)
+/** The connection opens its socket where the resolver says; over Tor the proxy resolves the host. */
 class HumlaConnectionSrvTest {
-    private val transports = FakeTransports()
     private val lookups = CopyOnWriteArrayList<String>()
-    private lateinit var originalLookup: Server.SrvLookup
-    private var connection: HumlaConnection? = null
+    private val resolver = ServerResolver({ host ->
+        lookups += host
+        Endpoint("srv-target.example", 1234)
+    }, Dispatchers.Unconfined)
 
-    @Before
-    fun setUp() {
-        originalLookup = Server.srvLookup
-        Server.srvLookup = Server.SrvLookup { host ->
-            lookups += host
-            InetSocketAddress.createUnresolved("srv-target.example", 1234)
-        }
-    }
-
-    @After
-    fun tearDown() {
-        Server.srvLookup = originalLookup
-        connection?.let { c ->
-            c.disconnect()
-            shadowOf(Looper.getMainLooper()).idle()
-            awaitUntil(description = "connection terminated") { c.isTerminated }
-        }
-    }
-
-    private fun connect(useTor: Boolean): FakeTcpTransport {
-        val c = HumlaConnection(RecordingConnectionListener(), transports, Handler(Looper.getMainLooper()), { 0L })
-        connection = c
-        c.setUseTor(useTor)
-        c.connect(Server(-1, "test", "mumble.example", 0, "user", ""))
-        awaitUntil(description = "tcp connect") {
-            transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null
-        }
-        return transports.tcps[0]
+    private fun connect(useTor: Boolean): ConnectionHarness {
+        val server = Server(-1, "test", "mumble.example", 0, "user", "")
+        val h = ConnectionHarness(useTor = useTor, server = server, resolver = resolver)
+        h.establish()
+        return h
     }
 
     @Test
     fun withoutTorTheSrvRecordPicksTheEndpoint() {
-        val tcp = connect(useTor = false)
+        val h = connect(useTor = false)
 
         assertThat(lookups).containsExactly("mumble.example")
-        assertThat(tcp.connectHost).isEqualTo("srv-target.example")
-        assertThat(tcp.connectPort).isEqualTo(1234)
+        assertThat(h.tcp.connectHost).isEqualTo("srv-target.example")
+        assertThat(h.tcp.connectPort).isEqualTo(1234)
+        assertThat(h.transports.udps.single().connectHost).isEqualTo("srv-target.example")
+        h.close()
     }
 
     @Test
     fun overTorNoSrvLookupIsMadeAndTheProxyGetsTheEnteredHost() {
-        val tcp = connect(useTor = true)
+        val h = connect(useTor = true)
 
         assertThat(lookups).isEmpty()
-        assertThat(tcp.connectHost).isEqualTo("mumble.example")
-        assertThat(tcp.connectPort).isEqualTo(64738)
+        assertThat(h.tcp.connectHost).isEqualTo("mumble.example")
+        assertThat(h.tcp.connectPort).isEqualTo(64738)
+        assertThat(h.tcp.connectUseTor).isTrue()
+        h.close()
     }
 }

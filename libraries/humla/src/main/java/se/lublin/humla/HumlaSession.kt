@@ -24,7 +24,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
-import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -53,20 +52,23 @@ import se.lublin.humla.audio.routing.AndroidCommunicationDevices
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.audio.routing.CommunicationDevices
 import se.lublin.humla.exception.HumlaException
+import se.lublin.humla.model.Latency
 import se.lublin.humla.model.LocalUserSettings
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.Server
-import se.lublin.humla.model.ServerSettings
+import se.lublin.humla.model.ServerInfo
 import se.lublin.humla.model.ServerState
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
-import se.lublin.humla.model.localVolumeScope
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.model.WhisperTargetList
+import se.lublin.humla.model.localVolumeScope
+import se.lublin.humla.net.ConnectionParams
 import se.lublin.humla.net.ConnectionWarning
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.ReconnectPolicy
+import se.lublin.humla.net.TrustStore
 import se.lublin.humla.protocol.LocalInput
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.protocol.ServerCommands
@@ -76,13 +78,13 @@ import se.lublin.humla.session.AudioSession
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.NetworkMonitor
-import se.lublin.humla.session.ServerInfo
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionLifecycle
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.SessionWakeLock
 import se.lublin.humla.session.TalkStates
 import se.lublin.humla.session.disconnectReasonOf
+import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.HumlaLogger
 import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
@@ -94,12 +96,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * and the audio pipeline and routing ([AudioSession]).
  *
  * Confined to [mainHandler]'s thread: every call, connection callback, reconnect timer and network
- * callback runs there. The model is written on the protocol thread and the pipeline runs on its
+ * callback runs there. The model is written on the protocol context and the pipeline runs on its
  * own threads; [state] and [events] may be collected anywhere. The parameters after [config] are
  * the platform, replaceable for tests.
  */
 @Suppress("TooManyFunctions", "LongParameterList") // The protocol's whole client API; the platform seams.
-class HumlaSession(
+public class HumlaSession internal constructor(
     private val context: Context,
     config: SessionConfig,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
@@ -109,11 +111,13 @@ class HumlaSession(
     ),
     wakeLock: SessionWakeLock = AndroidSessionWakeLock(context.getSystemService(PowerManager::class.java)),
     communicationDevices: CommunicationDevices? = null,
-    private val connectionFactory: (HumlaConnection.HumlaConnectionListener) -> HumlaConnection =
-        { HumlaConnection(it, mainHandler = mainHandler) },
+    private val connectionFactory: (ConnectionParams, HumlaConnection.Listener) -> HumlaConnection =
+        { params, listener -> HumlaConnection(params, listener, mainHandler::post) },
     audioFactory: AudioHandlerFactory = DefaultAudioHandlerFactory,
     reconnectPolicy: ReconnectPolicy = ReconnectPolicy(),
 ) : IHumlaSession {
+
+    public constructor(context: Context, config: SessionConfig) : this(context, config, Handler(Looper.getMainLooper()))
 
     override var config: SessionConfig = config
         private set
@@ -135,7 +139,7 @@ class HumlaSession(
 
     /**
      * The connection of the latest attempt, kept after it ends. Written on the main thread, read on
-     * the protocol thread ([emit] checks it).
+     * the protocol context ([emit] checks it).
      */
     @Volatile
     internal var connection: HumlaConnection? = null
@@ -163,7 +167,7 @@ class HumlaSession(
         serverScope = config.connection.server?.localVolumeScope,
     )
 
-    /** Written on the protocol thread with every snapshot, read by the network and playback threads. */
+    /** Written on the protocol context with every snapshot, read by the network and playback threads. */
     @Volatile
     private var playbackParams = PlaybackParams.DEFAULT
 
@@ -252,19 +256,25 @@ class HumlaSession(
         val config = config.connection
         val server = config.server
         if (server == null) {
-            Log.e(TAG, "connect() without a target server")
+            HumlaLog.e(TAG, "connect() without a target server")
             lost(DisconnectReason.Failed(context.getString(R.string.no_target_server), null))
             return
         }
 
+        val params = ConnectionParams(
+            server = server,
+            forceTcp = config.forceTcp,
+            useTor = config.useTor,
+            certificate = config.certificate?.pkcs12,
+            certificatePassword = config.certificate?.password,
+            trustStore = config.trustStorePath?.let {
+                TrustStore(it, config.trustStorePassword, config.trustStoreFormat)
+            },
+        )
         val callbacks = ConnectionCallbacks()
-        val connection = connectionFactory(callbacks)
+        val connection = connectionFactory(params, callbacks)
         callbacks.connection = connection
         this.connection = connection
-        connection.setForceTCP(config.forceTcp)
-        connection.setUseTor(config.useTor)
-        connection.setKeys(config.certificate?.pkcs12, config.certificate?.password)
-        connection.setTrustStore(config.trustStorePath, config.trustStorePassword, config.trustStoreFormat)
 
         val publisher = SnapshotPublisher(connection)
         val commands = ServerCommands(connection::sendTCPMessage)
@@ -274,9 +284,9 @@ class HumlaSession(
         this.modelHandler = modelHandler
         connection.addTcpHandler(modelHandler)
 
-        // Resolves the host (SRV lookup included) and opens the socket on the protocol thread;
+        // Resolves the host (SRV lookup included) and opens the socket on the protocol context;
         // every failure, certificate errors included, arrives at onConnectionDisconnected.
-        connection.connect(server)
+        connection.connect()
     }
 
     override fun disconnect() {
@@ -327,7 +337,7 @@ class HumlaSession(
     internal fun onConnectionSynchronized() {
         val connection = connection?.takeIf { it.isConnected }
         if (connection == null || modelHandler == null || !lifecycle.synchronized()) return
-        Log.v(TAG, "Connected")
+        HumlaLog.v(TAG, "Connected")
         // The connection reports ServerSync before the model has read it; its snapshot follows.
         audioStart = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             val synced = mutableModel.first { it?.selfSession != null }
@@ -342,15 +352,17 @@ class HumlaSession(
     private fun startAudio(connection: HumlaConnection, self: UserState?) {
         if (self == null) {
             // ServerSync named no known user: keep the session up without a microphone.
-            Log.e(TAG, "No session user after ServerSync; audio not started")
+            HumlaLog.e(TAG, "No session user after ServerSync; audio not started")
             audioSession.engageRoute()
             warn(context.getString(R.string.no_session_user))
             return
         }
+        // Read on the main thread after ServerSync; a connection that ended since has no info.
+        val info = connection.serverInfo ?: return
         val params = AudioSessionParams(
             self = self,
-            maxBandwidth = connection.getMaxBandwidth(),
-            codec = connection.getCodec(),
+            maxBandwidth = info.maxBandwidth,
+            codec = if (info.opus) HumlaUDPMessageType.UDPVoiceOpus else null,
             targetId = currentVoiceTargetId,
             inputMode = audioSession.inputMode,
             udpProtocol = connection.udpProtocol,
@@ -359,7 +371,11 @@ class HumlaSession(
     }
 
     internal fun onConnectionDisconnected(e: HumlaException?) {
-        if (e != null) Log.e(TAG, "Error: ${e.message} (reason: ${e.reason.name})") else Log.v(TAG, "Disconnected")
+        if (e != null) {
+            HumlaLog.e(TAG, "Error: ${e.message} (reason: ${e.reason.name})")
+        } else {
+            HumlaLog.v(TAG, "Disconnected")
+        }
         val reason = e?.let { error -> disconnectReasonOf(error) { mutableModel.value?.user(it)?.name } }
         lost(reason ?: tlsFailure)
     }
@@ -449,25 +465,9 @@ class HumlaSession(
             emit(HumlaEvent.VoiceTargetChanged(VoiceTargetMode.fromId(targetId)))
         }
 
-    override val serverInfo: ServerInfo?
-        get() {
-            val connection = connection?.takeIf { it.isSynchronized } ?: return null
-            return try {
-                ServerInfo(
-                    release = connection.getServerRelease(),
-                    osName = connection.getServerOSName(),
-                    osVersion = connection.getServerOSVersion(),
-                    version = connection.getServerVersion(),
-                    maxBandwidth = connection.getMaxBandwidth(),
-                    codec = connection.getCodec(),
-                    tcpLatency = connection.getTCPLatency(),
-                    udpLatency = connection.getUDPLatency(),
-                )
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "The connection ended while its server info was read", e)
-                null
-            }
-        }
+    override val serverInfo: ServerInfo? get() = connection?.serverInfo
+
+    override val latency: Latency? get() = connection?.latency
 
     override val actions: SessionActions = Actions()
 
@@ -639,7 +639,7 @@ class HumlaSession(
      * The callbacks of one connection. A connection replaced by a retry or a new attempt may still
      * report its end; only the current one reaches the session.
      */
-    private inner class ConnectionCallbacks : HumlaConnection.HumlaConnectionListener {
+    private inner class ConnectionCallbacks : HumlaConnection.Listener {
         lateinit var connection: HumlaConnection
 
         private val isCurrent: Boolean get() = this@HumlaSession.connection === connection
@@ -669,7 +669,7 @@ class HumlaSession(
         }
     }
 
-    companion object {
+    private companion object {
         private const val TAG = "HumlaSession"
         private val dnsLookupInstalled = AtomicBoolean()
 

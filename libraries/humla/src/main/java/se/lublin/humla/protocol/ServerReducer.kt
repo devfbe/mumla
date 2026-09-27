@@ -16,7 +16,6 @@
  */
 package se.lublin.humla.protocol
 
-import android.util.Log
 import com.google.protobuf.MessageLite
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.PersistentMap
@@ -30,6 +29,7 @@ import se.lublin.humla.model.UserState
 import se.lublin.humla.model.localVolumeKey
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.util.HumlaLog
 
 /** A change the client makes to its own view of other users, applied by the model's writer. */
 internal sealed interface LocalInput {
@@ -40,18 +40,6 @@ internal sealed interface LocalInput {
     data class Ignore(override val session: Int, val ignored: Boolean) : LocalInput
 
     data class Volume(override val session: Int, val volume: Float) : LocalInput
-}
-
-/**
- * The model as a pure function: a snapshot and one message make the next snapshot. Notices for the
- * chat log go to `emit` as they arise.
- */
-internal object ServerReducer {
-    fun reduce(state: ServerState, msg: MessageLite, emit: (HumlaEvent) -> Unit): ServerState =
-        ServerWriter(state).apply { onMessage(msg, emit) }.snapshot()
-
-    fun reduce(state: ServerState, input: LocalInput): ServerState =
-        ServerWriter(state).apply { onLocal(input) }.snapshot()
 }
 
 /**
@@ -164,7 +152,7 @@ internal class ServerWriter(private var published: ServerState) {
             }
             above = channels[above]?.parent
         }
-        refusal?.let { Log.w(TAG, it) }
+        refusal?.let { HumlaLog.w(TAG, it) }
         return refusal == null
     }
 
@@ -286,7 +274,7 @@ internal class ServerWriter(private var published: ServerState) {
             val target = channels[msg.channelId]
             if (target == null) {
                 // The rest of a frame naming an unknown channel is dropped.
-                Log.e(TAG, "Invalid channel for user!")
+                HumlaLog.e(TAG, "Invalid channel for user!")
                 return
             }
             val old = user.channel

@@ -22,7 +22,6 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Process
-import android.util.Log
 import androidx.annotation.VisibleForTesting
 import se.lublin.humla.audio.capture.FarEndFrameChunker
 import se.lublin.humla.exception.AudioInitializationException
@@ -30,6 +29,7 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
+import se.lublin.humla.util.HumlaLog
 import java.util.Arrays
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
@@ -44,7 +44,7 @@ private const val MS_PER_SECOND = 1000L
  * @param farEnd receives every mixed buffer as the AEC3 far-end reference, or null when the
  *               WebRTC canceller is not in the capture chain. Used only by the playback thread.
  */
-class AudioOutput(
+internal class AudioOutput(
     private val listener: AudioOutputListener,
     private val farEnd: FarEndFrameChunker?,
     /** Builds one user's decoder chain; the seam JVM tests use to run without native codecs. */
@@ -106,7 +106,7 @@ class AudioOutput(
         }
         val sizes = playbackBuffer(minBufferSize)
         bufferSize = sizes.mixSamples
-        Log.v(
+        HumlaLog.v(
             TAG,
             "Mixing ${sizes.mixSamples} samples per write into a ${sizes.trackBytes}-byte track " +
                 "(system minimum $minBufferSize bytes)",
@@ -171,7 +171,7 @@ class AudioOutput(
     internal fun playbackTrack(): AudioTrack? = audioTrack
 
     override fun run() {
-        Log.v(TAG, "Started thread.")
+        HumlaLog.v(TAG, "Started thread.")
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         val track = audioTrack!!
         track.play()
@@ -185,7 +185,7 @@ class AudioOutput(
                 farEnd?.push(pcm, bufferSize)
                 track.write(pcm, 0, bufferSize)
             } else {
-                Log.v(TAG, "Pausing thread.")
+                HumlaLog.v(TAG, "Pausing thread.")
                 synchronized(inactiveLock) {
                     track.flush()
                     track.pause()
@@ -218,7 +218,7 @@ class AudioOutput(
                     woken = false
                     track.play()
                 }
-                Log.v(TAG, "Resuming thread.")
+                HumlaLog.v(TAG, "Resuming thread.")
             }
         }
 
@@ -241,7 +241,7 @@ class AudioOutput(
         if (messageType == HumlaUDPMessageType.UDPVoiceOpus) return true
         if (!loggedUnsupportedCodec) {
             loggedUnsupportedCodec = true
-            Log.w(TAG, "Dropping $messageType voice packets: only Opus is supported")
+            HumlaLog.w(TAG, "Dropping $messageType voice packets: only Opus is supported")
         }
         return false
     }
@@ -268,7 +268,7 @@ class AudioOutput(
             mix.add(it)
         }
     } catch (e: NativeAudioException) {
-        Log.w(TAG, "Could not create the decoder for session $session", e)
+        HumlaLog.w(TAG, "Could not create the decoder for session $session", e)
         null
     }
 

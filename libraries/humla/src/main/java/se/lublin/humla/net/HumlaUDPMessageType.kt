@@ -20,7 +20,7 @@ package se.lublin.humla.net
  * UDP packet types. The ordinals are the wire IDs, so the CELT and Speex entries stay although
  * only Opus is decoded.
  */
-enum class HumlaUDPMessageType {
+internal enum class HumlaUDPMessageType {
     UDPVoiceCELTAlpha,
     UDPPing,
     UDPVoiceSpeex,

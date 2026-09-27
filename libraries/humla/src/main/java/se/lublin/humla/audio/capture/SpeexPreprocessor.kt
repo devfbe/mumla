@@ -27,7 +27,7 @@ private const val MAX_PROBABILITY_PERCENT = 100
  * out in the `FIXED_POINT` build; the stage reports `GET_PROB` and ignores Speex's own VAD verdict.
  * The frame path allocates nothing.
  */
-class SpeexPreprocessor(
+internal class SpeexPreprocessor(
     private val api: SpeexPreprocessApi,
     frameSize: Int = DEFAULT_FRAME_SIZE,
     sampleRate: Int = DEFAULT_SAMPLE_RATE,

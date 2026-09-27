@@ -22,7 +22,6 @@ import android.os.Bundle
 import android.text.InputType
 import android.util.Log
 import android.widget.EditText
-import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
@@ -30,6 +29,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.CertificateInfoBinding
+import se.lublin.mumla.util.getServer
+import se.lublin.mumla.util.putServer
 import se.lublin.mumla.util.toHex
 import java.io.ByteArrayInputStream
 import java.security.GeneralSecurityException
@@ -131,10 +132,13 @@ class ConnectionErrorDialogFragment : DialogFragment() {
 class CertificateTrustDialogFragment : DialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val args = requireArguments()
-        val server = requireNotNull(BundleCompat.getParcelable(args, ARG_SERVER, Server::class.java))
+        val server = requireNotNull(args.getServer(ARG_SERVER))
         val encoded = requireNotNull(args.getByteArray(ARG_CERTIFICATE))
         val accept = DialogInterface.OnClickListener { _, _ ->
-            setFragmentResult(REQUEST_KEY, bundleOf(ARG_SERVER to server, ARG_CERTIFICATE to encoded))
+            setFragmentResult(
+                REQUEST_KEY,
+                bundleOf(ARG_CERTIFICATE to encoded).apply { putServer(ARG_SERVER, server) },
+            )
         }
         val builder = MaterialAlertDialogBuilder(requireContext()).setView(certificateInfoView(encoded))
         return if (args.getBoolean(ARG_CHANGED)) {
@@ -177,15 +181,14 @@ class CertificateTrustDialogFragment : DialogFragment() {
         fun newInstance(server: Server, certificate: X509Certificate, changed: Boolean) =
             CertificateTrustDialogFragment().apply {
                 arguments = bundleOf(
-                    ARG_SERVER to server,
                     ARG_CERTIFICATE to certificate.encoded,
                     ARG_CHANGED to changed,
-                )
+                ).apply { putServer(ARG_SERVER, server) }
             }
 
         /** The server and certificate of a [REQUEST_KEY] result. */
         fun parseResult(result: Bundle): Pair<Server, X509Certificate> = Pair(
-            requireNotNull(BundleCompat.getParcelable(result, ARG_SERVER, Server::class.java)),
+            requireNotNull(result.getServer(ARG_SERVER)),
             decodeCertificate(requireNotNull(result.getByteArray(ARG_CERTIFICATE))),
         )
 

@@ -25,7 +25,7 @@ import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 
 /** The user's settings the audio pipeline is built from, handed through unchanged. */
-data class PipelineSettings(
+public data class PipelineSettings(
     val audioStream: Int = AudioManager.STREAM_MUSIC,
     val audioSource: Int = MediaRecorder.AudioSource.MIC,
     val inputSampleRate: Int = 48_000,
@@ -34,17 +34,22 @@ data class PipelineSettings(
     val framesPerPacket: Int = 2,
     val amplitudeBoost: Float = 1.0f,
     val noiseSuppression: NoiseSuppressionMode = NoiseSuppressionMode.NONE,
-    /** One of [SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB]. */
+    /** One of [SPEEX_NOISE_SUPPRESS_DB]. */
     val speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB,
     val androidEffects: AndroidAudioEffects = AndroidAudioEffects(),
-)
+) {
+    public companion object {
+        /** The maximum suppressions in dB Speex's denoiser is offered at. */
+        public val SPEEX_NOISE_SUPPRESS_DB: List<Int> get() = SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB
+    }
+}
 
 /**
  * Everything a pipeline is built from: [settings] plus what the transmit mode and the route decide,
  * see [AudioSettings.toAudioConfig]. [AudioController] rebuilds the pipeline when a new value
  * differs, so structural equality over every field matters.
  */
-data class AudioConfig(
+internal data class AudioConfig(
     val settings: PipelineSettings = PipelineSettings(),
     /** Whether outgoing audio mutes playback; only ever true in push-to-talk. */
     val halfDuplex: Boolean = false,

@@ -24,7 +24,7 @@ import se.lublin.humla.util.MumbleVersion
  * speak the protobuf format (MumbleUDP.proto) with clients from 1.5.0 on and the legacy one with
  * everybody else; OCB2 encryption wraps either packet unchanged.
  */
-enum class UdpProtocol {
+internal enum class UdpProtocol {
     /** A header byte with the type in its top three bits, then Mumble varints. */
     LEGACY,
 

@@ -30,53 +30,54 @@ import kotlinx.collections.immutable.toPersistentMap
  * users in a channel and its listeners by name, ignoring case.
  */
 @Suppress("LongParameterList", "TooManyFunctions") // One persistent structure per index; the tree's read API.
-class ServerState internal constructor(
+public class ServerState internal constructor(
     /** The local user's session, known from ServerSync on; null before. */
-    val selfSession: Int?,
+    public val selfSession: Int?,
     internal val channelMap: PersistentMap<Int, ChannelState>,
     internal val userMap: PersistentMap<Int, UserState>,
     internal val children: PersistentMap<Int, PersistentList<Int>>,
     internal val members: PersistentMap<Int, PersistentList<Int>>,
     internal val listeners: PersistentMap<Int, PersistentList<Int>>,
     /** The server-wide permissions: those of the root channel, see `se.lublin.humla.net.Permissions`. */
-    val permissions: Int,
+    public val permissions: Int,
     /** The server's `ServerConfig`, or null before it arrived. */
-    val serverSettings: ServerSettings?,
+    public val serverSettings: ServerSettings?,
     /** What this device remembers about users; applied as they appear. */
-    val local: LocalUserSettings,
+    internal val local: LocalUserSettings,
 ) {
-    val channels: Map<Int, ChannelState> get() = channelMap
-    val users: Map<Int, UserState> get() = userMap
+    public val channels: Map<Int, ChannelState> get() = channelMap
+    public val users: Map<Int, UserState> get() = userMap
 
-    val root: ChannelState? get() = channelMap[ROOT_CHANNEL_ID]
-    val self: UserState? get() = selfSession?.let(userMap::get)
-    val selfChannel: ChannelState? get() = self?.let { channelMap[it.channel] }
+    public val root: ChannelState? get() = channelMap[ROOT_CHANNEL_ID]
+    public val self: UserState? get() = selfSession?.let(userMap::get)
+    public val selfChannel: ChannelState? get() = self?.let { channelMap[it.channel] }
 
-    fun channel(id: Int): ChannelState? = channelMap[id]
+    public fun channel(id: Int): ChannelState? = channelMap[id]
 
-    fun user(session: Int): UserState? = userMap[session]
+    public fun user(session: Int): UserState? = userMap[session]
 
-    fun subchannelIds(channel: Int): List<Int> = children[channel].orEmpty()
+    internal fun subchannelIds(channel: Int): List<Int> = children[channel].orEmpty()
 
-    fun userIds(channel: Int): List<Int> = members[channel].orEmpty()
+    internal fun userIds(channel: Int): List<Int> = members[channel].orEmpty()
 
-    fun listenerIds(channel: Int): List<Int> = listeners[channel].orEmpty()
+    internal fun listenerIds(channel: Int): List<Int> = listeners[channel].orEmpty()
 
-    fun subchannels(channel: Int): List<ChannelState> = subchannelIds(channel).mapNotNull(channelMap::get)
+    public fun subchannels(channel: Int): List<ChannelState> = subchannelIds(channel).mapNotNull(channelMap::get)
 
-    fun usersIn(channel: Int): List<UserState> = userIds(channel).mapNotNull(userMap::get)
+    public fun usersIn(channel: Int): List<UserState> = userIds(channel).mapNotNull(userMap::get)
 
-    fun listenersOf(channel: Int): List<UserState> = listenerIds(channel).mapNotNull(userMap::get)
+    public fun listenersOf(channel: Int): List<UserState> = listenerIds(channel).mapNotNull(userMap::get)
 
     /** The users in [channel] and every channel below it. */
-    fun subtreeUserCount(channel: Int): Int = userIds(channel).size + subchannelIds(channel).sumOf(::subtreeUserCount)
+    public fun subtreeUserCount(channel: Int): Int =
+        userIds(channel).size + subchannelIds(channel).sumOf(::subtreeUserCount)
 
     /** The permissions in [channel]; the root's are the server-wide ones. */
-    fun permissionsIn(channel: Int): Int =
+    public fun permissionsIn(channel: Int): Int =
         if (channel == ROOT_CHANNEL_ID) permissions else channelMap[channel]?.permissions ?: 0
 
     /** [channel] and every channel below it, depth first, each parent before its subchannels. */
-    fun flatten(channel: Int = ROOT_CHANNEL_ID): List<ChannelState> = buildList {
+    public fun flatten(channel: Int = ROOT_CHANNEL_ID): List<ChannelState> = buildList {
         fun visit(id: Int) {
             channelMap[id]?.let(::add) ?: return
             subchannelIds(id).forEach(::visit)
@@ -84,9 +85,9 @@ class ServerState internal constructor(
         visit(channel)
     }
 
-    companion object {
+    public companion object {
         /** The id Mumble gives the root channel. */
-        const val ROOT_CHANNEL_ID = 0
+        public const val ROOT_CHANNEL_ID: Int = 0
 
         /** Subchannel order: position, then name, with nameless stubs first. */
         internal fun compareChannels(a: ChannelState?, b: ChannelState?): Int {
@@ -102,7 +103,7 @@ class ServerState internal constructor(
          * The snapshot of these channels and users, with the tree derived from their parents,
          * channels and listening channels, for a client that assembles one itself.
          */
-        fun of(
+        public fun of(
             channels: Collection<ChannelState>,
             users: Collection<UserState> = emptyList(),
             selfSession: Int? = null,
@@ -124,8 +125,11 @@ class ServerState internal constructor(
             )
         }
 
+        /** A server nothing is known of yet. */
+        public fun empty(): ServerState = empty(LocalUserSettings())
+
         /** A server nothing is known of yet, with what this device remembers about users. */
-        fun empty(local: LocalUserSettings = LocalUserSettings()): ServerState = ServerState(
+        internal fun empty(local: LocalUserSettings): ServerState = ServerState(
             selfSession = null,
             channelMap = persistentMapOf(),
             userMap = persistentMapOf(),
@@ -143,7 +147,7 @@ class ServerState internal constructor(
  * What this device keeps for other users across their sessions: local mutes and message ignores
  * of registered users by user id, and playback volumes by [localVolumeKey].
  */
-data class LocalUserSettings(
+internal data class LocalUserSettings(
     val volumes: Map<String, Float> = emptyMap(),
     val mutedUserIds: Set<Int> = emptySet(),
     val ignoredUserIds: Set<Int> = emptySet(),
@@ -155,7 +159,7 @@ data class LocalUserSettings(
  * Identifies [user] across sessions: by certificate hash when the server sent one, else by name
  * on the server of [serverScope] ("host:port"). Null if neither is known.
  */
-fun localVolumeKey(user: UserState, serverScope: String?): String? {
+public fun localVolumeKey(user: UserState, serverScope: String?): String? {
     val hash = user.hash
     val name = user.name
     return when {
@@ -166,4 +170,4 @@ fun localVolumeKey(user: UserState, serverScope: String?): String? {
 }
 
 /** The scope [localVolumeKey] keys names by on [server]. */
-val Server.localVolumeScope: String get() = "$host:$port"
+public val Server.localVolumeScope: String get() = "$host:$port"

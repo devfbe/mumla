@@ -58,7 +58,7 @@ private const val BYTE_MASK = 0xFF
  * native libraries; they default to the `*Native` objects, which load the native library on first
  * touch.
  */
-class AudioOutputSpeech(
+internal class AudioOutputSpeech(
     val session: Int,
     private val requestedSamples: Int,
     private val listener: Listener,

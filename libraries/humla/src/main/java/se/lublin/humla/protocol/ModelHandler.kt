@@ -28,14 +28,14 @@ import se.lublin.humla.session.HumlaEvent
 /**
  * The model's single writer: reduces the frames about channels, users and permissions into
  * [ServerState] snapshots, published through [publisher] once per burst (after the frames already
- * queued on the protocol thread when the first of them arrived), and hands what happens to
+ * queued on the protocol context when the first of them arrived), and hands what happens to
  * [events]: chat log notices, text messages, refusals and user statistics. Every avatar the server
  * announces only by its hash is asked for through [requestAvatar] at once, so the snapshots fill in
  * with the pictures the channel list shows.
  *
- * Confined to the "humla-protocol" thread: [onMessage] and [onLocal] run there.
+ * Confined to the connection's protocol context: [onMessage] and [onLocal] run there.
  */
-class ModelHandler(
+internal class ModelHandler(
     initial: ServerState,
     private val events: (HumlaEvent) -> Unit,
     private val publisher: Publisher,
@@ -44,10 +44,10 @@ class ModelHandler(
 
     /** Where the snapshots go. */
     interface Publisher {
-        /** Runs [block] on the protocol thread, after what is queued there already. */
+        /** Runs [block] on the protocol context, after what is queued there already. */
         fun post(block: () -> Unit)
 
-        /** Called on the protocol thread. */
+        /** Called on the protocol context. */
         fun publish(state: ServerState)
     }
 

@@ -1,24 +1,18 @@
 package se.lublin.humla.net
 
-import android.os.Handler
-import android.os.HandlerThread
-import android.os.Looper
-import android.os.Message
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.unmockkAll
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.testutil.awaitUntil
 import java.io.ByteArrayOutputStream
@@ -30,12 +24,15 @@ import java.io.PipedInputStream
 import java.io.PipedOutputStream
 import java.net.ConnectException
 import java.security.cert.X509Certificate
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLSocket
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Covers the TCP transport's lifecycle: which thread callbacks arrive on, that a failed or aborted
@@ -45,9 +42,9 @@ import javax.net.ssl.SSLSocket
  * The real read loop is reachable here too: a mocked SSLSocket carrying a piped stream drives
  * readFrame and the frame callbacks for real.
  */
-@RunWith(RobolectricTestRunner::class)
 class HumlaTCPTest {
-    private val callbackThread = HandlerThread("test-tcp-callbacks").apply { start() }
+    private val callbackExecutor = Executors.newSingleThreadExecutor { Thread(it, "test-tcp-callbacks") }
+    private val callbackDispatcher = callbackExecutor.asCoroutineDispatcher()
     private val listener = RecordingListener()
     private val socketFactory = mockk<HumlaSSLSocketFactory>()
     private var tcp: HumlaTCP? = null
@@ -75,28 +72,26 @@ class HumlaTCPTest {
             awaitUntil(description = "no coroutine of the transport left by this test") { tcp?.isFinished != false }
         } finally {
             scopes.forEach { it.cancel() }
-            callbackThread.quitSafely()
+            callbackDispatcher.close()
             unmockkAll()
         }
     }
 
-    /** A scope like the connection's, dispatching the callbacks on [handler]. */
-    private fun scopeOn(handler: Handler) =
-        CoroutineScope(SupervisorJob() + handler.asCoroutineDispatcher()).also { scopes += it }
+    /** A scope like the connection's, dispatching the callbacks on [dispatcher]. */
+    private fun scopeOn(dispatcher: CoroutineDispatcher) =
+        CoroutineScope(SupervisorJob() + dispatcher).also { scopes += it }
 
     private fun newTransport(
-        handler: Handler = Handler(callbackThread.looper),
-        scope: CoroutineScope = scopeOn(handler),
+        dispatcher: CoroutineDispatcher = callbackDispatcher,
+        scope: CoroutineScope = scopeOn(dispatcher),
     ) = HumlaTCP(socketFactory, scope).also { it.setTCPConnectionListener(listener); tcp = it }
 
     private fun awaitFinished(transport: HumlaTCP) =
         awaitUntil(description = "every coroutine of the transport finished") { transport.isFinished }
 
-    /** Waits until everything already queued on the callback handler has been delivered. */
+    /** Waits until everything already queued on the callback thread has been delivered. */
     private fun drainCallbacks() {
-        val drained = CountDownLatch(1)
-        Handler(callbackThread.looper).post { drained.countDown() }
-        assertThat(drained.await(5, TimeUnit.SECONDS)).isTrue()
+        callbackExecutor.submit {}.get(5, TimeUnit.SECONDS)
     }
 
     /** Counts down as soon as the read thread is inside a blocking read on the socket. */
@@ -106,15 +101,21 @@ class HumlaTCPTest {
     }
 
     /**
-     * Delivers for real, but runs [beforeQueueing] with the running post count first - between
-     * post() deciding to deliver and handing the callback to the handler (Handler.post is final, so
-     * the hook sits on the funnel every post goes through). [posts] is the same count afterwards.
+     * Queues the callbacks for the test to run, but runs [beforeQueueing] with the running dispatch
+     * count first - between post() deciding to deliver and the callback being queued. [posts] is the
+     * same count afterwards.
      */
-    private class HookedHandler(looper: Looper, private val beforeQueueing: (Int) -> Unit) : Handler(looper) {
+    private class HookedDispatcher(private val beforeQueueing: (Int) -> Unit) : CoroutineDispatcher() {
         val posts = AtomicInteger()
-        override fun sendMessageAtTime(msg: Message, uptimeMillis: Long): Boolean {
+        private val queue = ConcurrentLinkedQueue<Runnable>()
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
             beforeQueueing(posts.incrementAndGet())
-            return super.sendMessageAtTime(msg, uptimeMillis)
+            queue += block
+        }
+
+        fun runQueued() {
+            while (true) (queue.poll() ?: return).run()
         }
     }
 
@@ -125,7 +126,7 @@ class HumlaTCPTest {
     }
 
     @Test
-    fun aFailedConnectReportsFailureThenExactlyOneDisconnectOnTheCallbackHandler() {
+    fun aFailedConnectReportsFailureThenExactlyOneDisconnectOnTheCallbackThread() {
         every { socketFactory.createSocket(any(), any()) } throws IOException("no route")
         val transport = newTransport()
 
@@ -290,8 +291,8 @@ class HumlaTCPTest {
      * queues the callback as two steps, and a disconnect() in between would queue the terminal
      * callback ahead of the frame. Reproduced by disconnecting from inside the frame's own post.
      *
-     * Robolectric's main looper is paused, so the delivery order below is exactly the order the
-     * transport handed the callbacks over in.
+     * The callbacks wait in the hooked dispatcher's queue, so the delivery order below is exactly
+     * the order the transport handed them over in.
      */
     @Test
     fun aFrameQueuedWhileTheDisconnectRunsIsStillNotDelivered() {
@@ -306,13 +307,13 @@ class HumlaTCPTest {
         lateinit var transport: HumlaTCP
         // Post 1 is onTCPConnectionEstablished, post 2 the frame, post 3 the disconnect the hook
         // itself triggers - after the frame passed the check in post(), before it is queued.
-        val handler = HookedHandler(Looper.getMainLooper()) { post ->
+        val dispatcher = HookedDispatcher { post ->
             when (post) {
                 1 -> queuedEstablished.countDown()
                 2 -> transport.disconnect()
             }
         }
-        transport = newTransport(handler)
+        transport = newTransport(dispatcher)
 
         transport.connect("example.invalid", 64738, false)
         assertThat(queuedEstablished.await(5, TimeUnit.SECONDS)).isTrue()
@@ -321,14 +322,14 @@ class HumlaTCPTest {
         toClient.flush()
 
         awaitFinished(transport)
-        shadowOf(Looper.getMainLooper()).idle()
-        val main = Looper.getMainLooper().thread.name
-        assertThat(listener.next()).isEqualTo("established" to main)
-        assertThat(listener.next()).isEqualTo("disconnect" to main)
+        dispatcher.runQueued()
+        val test = Thread.currentThread().name
+        assertThat(listener.next()).isEqualTo("established" to test)
+        assertThat(listener.next()).isEqualTo("disconnect" to test)
         assertThat(listener.events).isEmpty() // the frame was queued behind the disconnect, not delivered
         assertThat(listener.disconnects.get()).isEqualTo(1)
         // Pins the numbering the hook keys on.
-        assertThat(handler.posts.get()).isEqualTo(3)
+        assertThat(dispatcher.posts.get()).isEqualTo(3)
     }
 
     @Test
@@ -381,7 +382,7 @@ class HumlaTCPTest {
         every { socket.outputStream } returns ByteArrayOutputStream()
         every { socket.close() } answers { closed.countDown(); toClient.close() }
         every { socketFactory.createSocket(any(), any()) } returns socket
-        val scope = scopeOn(Handler(callbackThread.looper))
+        val scope = scopeOn(callbackDispatcher)
         val transport = newTransport(scope = scope)
         transport.connect("example.invalid", 64738, false)
         assertThat(listener.next()).isEqualTo("established" to "test-tcp-callbacks")
@@ -397,7 +398,7 @@ class HumlaTCPTest {
 
     @Test
     fun aConnectIntoACancelledScopeOpensNoSocket() {
-        val scope = scopeOn(Handler(callbackThread.looper)).also { it.cancel() }
+        val scope = scopeOn(callbackDispatcher).also { it.cancel() }
         val transport = newTransport(scope = scope)
 
         transport.connect("example.invalid", 64738, false)

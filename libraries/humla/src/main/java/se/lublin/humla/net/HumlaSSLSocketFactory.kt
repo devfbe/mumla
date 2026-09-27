@@ -16,8 +16,8 @@
  */
 package se.lublin.humla.net
 
-import android.util.Log
 import androidx.annotation.VisibleForTesting
+import se.lublin.humla.util.HumlaLog
 import java.io.FileInputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -40,7 +40,7 @@ import javax.net.ssl.X509TrustManager
  * @param peerHost The host name the user entered: certificates are verified against it, it is sent
  *        as SNI and it selects the pins, even when an SRV record points the connection at another host.
  */
-class HumlaSSLSocketFactory @VisibleForTesting internal constructor(
+internal class HumlaSSLSocketFactory @VisibleForTesting internal constructor(
     keystore: KeyStore?,
     keystorePassword: String?,
     trustStore: KeyStore?,
@@ -55,7 +55,7 @@ class HumlaSSLSocketFactory @VisibleForTesting internal constructor(
         kmf.init(keystore, keystorePassword?.toCharArray() ?: CharArray(0))
 
         val pins = if (trustStore != null) CertificatePins.forHost(trustStore, peerHost) else emptySet()
-        Log.i(TAG, if (pins.isEmpty()) "No pinned certificate for this host" else "Using pinned certificate(s)")
+        HumlaLog.i(TAG, if (pins.isEmpty()) "No pinned certificate for this host" else "Using pinned certificate(s)")
         trustManager = ServerTrustManager(systemTrust, peerHost, pins)
         context.init(kmf.keyManagers, arrayOf(trustManager), null)
     }
@@ -101,7 +101,7 @@ class HumlaSSLSocketFactory @VisibleForTesting internal constructor(
             try {
                 socket.sslParameters = socket.sslParameters.apply { serverNames = listOf(SNIHostName(peerHost)) }
             } catch (e: IllegalArgumentException) {
-                Log.w(TAG, "Not sending SNI for a host name SNI cannot carry", e)
+                HumlaLog.w(TAG, "Not sending SNI for a host name SNI cannot carry", e)
             }
         }
         return socket

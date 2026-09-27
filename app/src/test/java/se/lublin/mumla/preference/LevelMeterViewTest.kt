@@ -24,8 +24,7 @@ import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.audio.capture.AdaptiveVadTracker
-import se.lublin.humla.audio.capture.VoiceActivityDetector
+import se.lublin.humla.audio.capture.VadConfig
 
 @RunWith(RobolectricTestRunner::class)
 class LevelMeterViewTest {
@@ -43,15 +42,15 @@ class LevelMeterViewTest {
         assertThat(MeterScale.position(-200f)).isEqualTo(0f)
         assertThat(MeterScale.position(20f)).isEqualTo(1f)
         // The two levels the pipeline can really produce at the extremes both land inside.
-        assertThat(MeterScale.position(VoiceActivityDetector.NO_SIGNAL_DBFS)).isEqualTo(0f)
-        assertThat(MeterScale.position(AdaptiveVadTracker.MIN_FLOOR_DBFS)).isEqualTo(0f)
-        assertThat(MeterScale.position(AdaptiveVadTracker.MAX_FLOOR_DBFS)).isGreaterThan(0f)
+        assertThat(MeterScale.position(VadConfig.NO_SIGNAL_DBFS)).isEqualTo(0f)
+        assertThat(MeterScale.position(VadConfig.MIN_FLOOR_DBFS)).isEqualTo(0f)
+        assertThat(MeterScale.position(VadConfig.MAX_FLOOR_DBFS)).isGreaterThan(0f)
     }
 
     /** The measured floor and a normal talker sit apart from each other and away from both ends. */
     @Test
     fun `the default floor and a normal talker are far apart in the middle of the bar`() {
-        val floor = MeterScale.position(AdaptiveVadTracker.DEFAULT_FLOOR_DBFS)
+        val floor = MeterScale.position(VadConfig.DEFAULT_FLOOR_DBFS)
         val talker = MeterScale.position(-20f)
         assertThat(floor).isIn(com.google.common.collect.Range.closed(0.2f, 0.5f))
         assertThat(talker).isIn(com.google.common.collect.Range.closed(0.6f, 0.9f))

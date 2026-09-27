@@ -26,19 +26,19 @@ import android.media.AudioRecordingConfiguration
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
-import android.util.Log
 import se.lublin.humla.exception.AudioInitializationException
+import se.lublin.humla.util.HumlaLog
 import java.util.concurrent.Executor
 
 /** Blocking 16-bit mono PCM capture; the hardware edge of the capture path (fakeable for tests). */
-interface PcmCaptureSource {
+public interface PcmCaptureSource {
     /** The rate the source actually opened at (may differ from the requested one). */
-    val sampleRate: Int
+    public val sampleRate: Int
 
     /** The `AudioRecord` session the android audio effects are attached to. */
-    val audioSessionId: Int
+    public val audioSessionId: Int
 
-    fun start()
+    public fun start()
 
     /**
      * Blocking read of at most [length] samples into [buffer], starting at index 0.
@@ -46,24 +46,24 @@ interface PcmCaptureSource {
      * @return samples written (never more than [length]; callers rely on it), `0` when the source
      *   produced nothing, or a negative error code.
      */
-    fun read(buffer: ShortArray, length: Int): Int
+    public fun read(buffer: ShortArray, length: Int): Int
 
     /** Stops capture so a blocked [read] returns. Idempotent, and safe after [release]. */
-    fun stop()
+    public fun stop()
 
     /** Frees the native recorder. Idempotent. After it, [read] answers a negative code. */
-    fun release()
+    public fun release()
 
     /**
      * @param listener called with `true` when the platform silences this client and `false` when it
      *   becomes audible again; `null` unregisters. Delivered on a platform thread, not the capture
      *   thread.
      */
-    fun setSilenceListener(listener: ((Boolean) -> Unit)?)
+    public fun setSilenceListener(listener: ((Boolean) -> Unit)?)
 }
 
 /** Everything needed to open a recorder. [AudioSourcePolicy] may override [audioSource]. */
-data class CaptureRequest(
+public data class CaptureRequest(
     val audioSource: Int,
     val targetSampleRate: Int,
     val effects: AndroidAudioEffects = AndroidAudioEffects(),
@@ -72,12 +72,12 @@ data class CaptureRequest(
     val preferredDevice: AudioDeviceInfo? = null,
 )
 
-fun interface PcmCaptureSourceFactory {
-    fun open(request: CaptureRequest): PcmCaptureSource
+public fun interface PcmCaptureSourceFactory {
+    public fun open(request: CaptureRequest): PcmCaptureSource
 }
 
 /** The real source: one `AudioRecord` plus the `android.media.audiofx` effects on its session. */
-class AndroidAudioRecordSource internal constructor(
+public class AndroidAudioRecordSource internal constructor(
     internal val record: AudioRecord,
     internal val effects: List<AudioEffect>,
 ) : PcmCaptureSource {
@@ -95,7 +95,7 @@ class AndroidAudioRecordSource internal constructor(
     @Volatile
     private var released = false
 
-    override fun start() = record.startRecording()
+    override fun start(): Unit = record.startRecording()
 
     override fun read(buffer: ShortArray, length: Int): Int {
         if (released) return ERROR_RELEASED
@@ -133,7 +133,7 @@ class AndroidAudioRecordSource internal constructor(
         recordingCallback = callback
     }
 
-    class Factory : PcmCaptureSourceFactory {
+    public class Factory : PcmCaptureSourceFactory {
         // RECORD_AUDIO is requested by the app; AudioHandler's constructor checks it before this.
         @SuppressLint("MissingPermission")
         override fun open(request: CaptureRequest): PcmCaptureSource {
@@ -142,7 +142,7 @@ class AndroidAudioRecordSource internal constructor(
             val record = rates.firstNotNullOfOrNull { tryOpen(source, it) }
                 ?: throw AudioInitializationException("Unable to open AudioRecord at any of $rates Hz")
             request.preferredDevice?.let { record.preferredDevice = it }
-            Log.i(TAG, "capturing from source $source at ${record.sampleRate} Hz")
+            HumlaLog.i(TAG, "capturing from source $source at ${record.sampleRate} Hz")
             return AndroidAudioRecordSource(record, attachEffects(record.audioSessionId, request))
         }
 
@@ -164,10 +164,10 @@ class AndroidAudioRecordSource internal constructor(
                     .setBufferSizeInBytes(minBufferSize)
                     .build()
             } catch (e: IllegalArgumentException) {
-                Log.w(TAG, "no AudioRecord at $rate Hz: ${e.message}")
+                HumlaLog.w(TAG, "no AudioRecord at $rate Hz: ${e.message}")
                 return null
             } catch (e: UnsupportedOperationException) {
-                Log.w(TAG, "no AudioRecord at $rate Hz: ${e.message}")
+                HumlaLog.w(TAG, "no AudioRecord at $rate Hz: ${e.message}")
                 return null
             }
             if (record.state != AudioRecord.STATE_INITIALIZED) {
@@ -185,17 +185,17 @@ class AndroidAudioRecordSource internal constructor(
             val attached = mutableListOf<AudioEffect>()
             fun attach(name: String, available: Boolean, create: () -> AudioEffect?) {
                 if (!available) {
-                    Log.w(TAG, "$name not available on this device")
+                    HumlaLog.w(TAG, "$name not available on this device")
                     return
                 }
                 val effect = create()
                 if (effect == null) {
-                    Log.w(TAG, "$name creation failed")
+                    HumlaLog.w(TAG, "$name creation failed")
                     return
                 }
                 effect.enabled = true
                 attached += effect
-                Log.i(TAG, "$name enabled")
+                HumlaLog.i(TAG, "$name enabled")
             }
             if (request.effects.noiseSuppressor) {
                 attach("NoiseSuppressor", NoiseSuppressor.isAvailable()) { NoiseSuppressor.create(sessionId) }
@@ -209,13 +209,13 @@ class AndroidAudioRecordSource internal constructor(
         }
     }
 
-    companion object {
+    internal companion object {
         private const val TAG = "AndroidAudioRecordSource"
 
         /** What [read] answers after [release]; `AudioInput` maps it like any other negative read. */
-        const val ERROR_RELEASED = -100
+        internal const val ERROR_RELEASED: Int = -100
 
         /** Probed in order after the requested rate, which is tried first. */
-        val SAMPLE_RATES = intArrayOf(48000, 44100, 16000, 8000)
+        internal val SAMPLE_RATES: IntArray = intArrayOf(48000, 44100, 16000, 8000)
     }
 }

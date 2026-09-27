@@ -25,7 +25,6 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.audio.capture.AdaptiveVadTracker
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
@@ -250,8 +249,7 @@ class SettingsAudioTest {
         assertThat(settings.vadMode).isEqualTo(VadMode.ADAPTIVE)
         val config = settings.vadConfig
         assertThat(config.mode).isEqualTo(VadMode.ADAPTIVE)
-        assertThat(config.snrFraction).isWithin(0.001f).of(AdaptiveVadTracker.DEFAULT_FRACTION)
-        assertThat(config.snrFraction * AdaptiveVadTracker.DEFAULT_GAP_DB).isWithin(0.01f).of(13.0f)
+        assertThat(config.snrFraction).isWithin(0.001f).of(VadConfig.DEFAULT_SNR_FRACTION)
         assertThat(config.holdTimeMs).isEqualTo(250L)
         assertThat(config.adaptiveFloor).isTrue()
     }
@@ -290,9 +288,9 @@ class SettingsAudioTest {
     @Test
     fun `a hand-set floor outside what a microphone can produce is clamped, not thrown`() {
         prefs.edit().putBoolean(Settings.VAD_ADAPTIVE_FLOOR.key, false).putInt(Settings.VAD_FLOOR_DB.key, 5).commit()
-        assertThat(settings.vadConfig.manualFloorDbfs).isEqualTo(AdaptiveVadTracker.MAX_FLOOR_DBFS)
+        assertThat(settings.vadConfig.manualFloorDbfs).isEqualTo(VadConfig.MAX_FLOOR_DBFS)
         prefs.edit().putInt(Settings.VAD_FLOOR_DB.key, 400).commit()
-        assertThat(settings.vadConfig.manualFloorDbfs).isEqualTo(AdaptiveVadTracker.MIN_FLOOR_DBFS)
+        assertThat(settings.vadConfig.manualFloorDbfs).isEqualTo(VadConfig.MIN_FLOOR_DBFS)
     }
 
     @Test

@@ -24,9 +24,9 @@ package se.lublin.humla.net
  * servers never answer UDP pings although voice works both ways). A decision is not reversed within
  * one window of taking it.
  *
- * Times are microseconds on the connection's monotonic clock. Not thread-safe: protocol thread only.
+ * Times are microseconds on the connection's monotonic clock. Not thread-safe: protocol context only.
  */
-class UdpHealthMonitor(
+internal class UdpHealthMonitor(
     private val windowMicros: Long = 20_000_000L,
     private val pingTimeoutMicros: Long = 15_000_000L,
     private val restoreThreshold: Int = 1,

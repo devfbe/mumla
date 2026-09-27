@@ -17,7 +17,7 @@
 package se.lublin.humla.util
 
 /** Reports user-readable information. */
-interface HumlaLogger {
+internal interface HumlaLogger {
     fun logInfo(message: String)
     fun logWarning(message: String)
     fun logError(message: String)

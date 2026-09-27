@@ -17,11 +17,11 @@
 package se.lublin.humla.model
 
 /** Immutable bytes compared by content, so they can sit in a snapshot's data classes. */
-class Bytes private constructor(private val data: ByteArray) {
-    val size: Int get() = data.size
+public class Bytes private constructor(private val data: ByteArray) {
+    public val size: Int get() = data.size
 
     /** A copy the caller may keep and change. */
-    fun toByteArray(): ByteArray = data.copyOf()
+    public fun toByteArray(): ByteArray = data.copyOf()
 
     override fun equals(other: Any?): Boolean = this === other || (other is Bytes && data.contentEquals(other.data))
 
@@ -29,8 +29,8 @@ class Bytes private constructor(private val data: ByteArray) {
 
     override fun toString(): String = "Bytes(${data.size})"
 
-    companion object {
-        fun of(bytes: ByteArray): Bytes = Bytes(bytes.copyOf())
+    public companion object {
+        public fun of(bytes: ByteArray): Bytes = Bytes(bytes.copyOf())
 
         internal fun wrap(bytes: ByteArray): Bytes = Bytes(bytes)
     }

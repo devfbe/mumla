@@ -34,7 +34,7 @@ private const val FRAMES_PER_SECOND = 100
  * [createdWith] reassembles the flat parameters into a rate and a [WebRtcApmConfig]; see
  * `WebRtcApmPreprocessorTest` for how swapped booleans are still caught.
  */
-class FakeWebRtcApmApi(
+internal class FakeWebRtcApmApi(
     var levelDbfs: Float = SILENCE_DBFS,
     var captureError: Int = 0,
     var renderError: Int = 0,

@@ -26,80 +26,80 @@ import se.lublin.humla.util.VoiceTargetMode
  * synchronized; nothing here throws.
  */
 @Suppress("TooManyFunctions") // The protocol's client requests.
-interface SessionActions {
-    fun joinChannel(channel: Int)
+public interface SessionActions {
+    public fun joinChannel(channel: Int)
 
-    fun moveUser(session: Int, channel: Int)
+    public fun moveUser(session: Int, channel: Int)
 
-    fun createChannel(parent: Int, name: String, description: String, position: Int, temporary: Boolean)
+    public fun createChannel(parent: Int, name: String, description: String, position: Int, temporary: Boolean)
 
-    fun removeChannel(channel: Int)
+    public fun removeChannel(channel: Int)
 
-    fun linkChannels(channel: Int, other: Int)
+    public fun linkChannels(channel: Int, other: Int)
 
-    fun unlinkChannels(channel: Int, other: Int)
+    public fun unlinkChannels(channel: Int, other: Int)
 
     /** Unlinks every channel linked to [channel]. */
-    fun unlinkAllChannels(channel: Int)
+    public fun unlinkAllChannels(channel: Int)
 
     /** Starts or stops listening to [channel] without joining it. */
-    fun setListening(channel: Int, listen: Boolean)
+    public fun setListening(channel: Int, listen: Boolean)
 
-    fun sendAccessTokens(tokens: List<String>)
+    public fun sendAccessTokens(tokens: List<String>)
 
     /** Asks for the local user's permissions in [channel]; they arrive in the model. */
-    fun requestPermissions(channel: Int)
+    public fun requestPermissions(channel: Int)
 
     /** Asks for a comment only its hash was sent for; it arrives in the model. */
-    fun requestComment(session: Int)
+    public fun requestComment(session: Int)
 
     /** Asks for a description only its hash was sent for; it arrives in the model. */
-    fun requestChannelDescription(channel: Int)
+    public fun requestChannelDescription(channel: Int)
 
     /** Asks for [session]'s connection statistics; they arrive as `HumlaEvent.UserStatsReceived`. */
-    fun requestUserStats(session: Int)
+    public fun requestUserStats(session: Int)
 
-    fun registerUser(session: Int)
+    public fun registerUser(session: Int)
 
-    fun kickBanUser(session: Int, reason: String?, ban: Boolean)
+    public fun kickBanUser(session: Int, reason: String?, ban: Boolean)
 
-    fun setUserComment(session: Int, comment: String?)
+    public fun setUserComment(session: Int, comment: String?)
 
-    fun setPrioritySpeaker(session: Int, priority: Boolean)
+    public fun setPrioritySpeaker(session: Int, priority: Boolean)
 
-    fun setMuteDeafState(session: Int, mute: Boolean, deaf: Boolean)
+    public fun setMuteDeafState(session: Int, mute: Boolean, deaf: Boolean)
 
-    fun setSelfMuteDeafState(mute: Boolean, deaf: Boolean)
+    public fun setSelfMuteDeafState(mute: Boolean, deaf: Boolean)
 
     /** Sends [message] to [session]; the message is also published as `MessageSent`. Null if not sent. */
-    fun sendUserTextMessage(session: Int, message: String): Message?
+    public fun sendUserTextMessage(session: Int, message: String): Message?
 
     /** Sends [message] to [channel], and with [tree] to its subchannels; like [sendUserTextMessage]. */
-    fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message?
+    public fun sendChannelTextMessage(channel: Int, message: String, tree: Boolean): Message?
 
     /** Mutes [session] on this device only; kept for a registered user's later sessions. */
-    fun setLocalMuted(session: Int, muted: Boolean)
+    public fun setLocalMuted(session: Int, muted: Boolean)
 
     /** Ignores [session]'s text messages on this device only; kept like [setLocalMuted]. */
-    fun setLocalIgnored(session: Int, ignored: Boolean)
+    public fun setLocalIgnored(session: Int, ignored: Boolean)
 
     /**
      * Plays [session] at [volume], a linear gain, on this device only, and keeps it for users of
      * the same identity. Storing it beyond the session is up to the client.
      */
-    fun setLocalVolume(session: Int, volume: Float)
+    public fun setLocalVolume(session: Int, volume: Float)
 
-    val voiceTargetMode: VoiceTargetMode
+    public val voiceTargetMode: VoiceTargetMode
 
     /** The whisper target in use, or null when not whispering. */
-    val whisperTarget: WhisperTarget?
+    public val whisperTarget: WhisperTarget?
 
     /**
      * Whispers to [target] from now on, in place of a whisper target in use.
      * @return false if the server's 30 voice target slots are taken.
      */
-    fun whisperTo(target: WhisperTarget): Boolean
+    public fun whisperTo(target: WhisperTarget): Boolean
 
     /** Back to normal speech; the whisper target's slot is freed. */
-    fun stopWhispering()
+    public fun stopWhispering()
 }

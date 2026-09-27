@@ -16,8 +16,8 @@
  */
 package se.lublin.humla.model
 
-import android.util.Log
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.MumbleVersion
 import java.net.InetAddress
 import java.net.UnknownHostException
@@ -29,7 +29,7 @@ import java.security.cert.X509Certificate
  * A user's connection statistics from the server's `UserStats`. A value the server did not send,
  * typically because the local user may not see it, is null.
  */
-data class UserStats(
+public data class UserStats(
     val session: Int,
     /** The client's version, "major.minor.patch". */
     val version: String?,
@@ -55,12 +55,12 @@ data class UserStats(
     val opus: Boolean,
 ) {
     /** Ping round trips in milliseconds. */
-    data class Ping(val packets: Int, val averageMillis: Float, val varianceMillis: Float)
+    public data class Ping(val packets: Int, val averageMillis: Float, val varianceMillis: Float)
 
-    data class Packets(val good: Int, val late: Int, val lost: Int, val resync: Int)
+    public data class Packets(val good: Int, val late: Int, val lost: Int, val resync: Int)
 
-    companion object {
-        fun from(msg: Mumble.UserStats): UserStats {
+    internal companion object {
+        internal fun from(msg: Mumble.UserStats): UserStats {
             val version = msg.version.takeIf { msg.hasVersion() }
             return UserStats(
                 session = msg.session,
@@ -91,7 +91,7 @@ data class UserStats(
             val factory = CertificateFactory.getInstance("X.509")
             msg.certificatesList.map { factory.generateCertificate(it.newInput()) as X509Certificate }
         } catch (e: CertificateException) {
-            Log.w(TAG, "Unreadable client certificate", e)
+            HumlaLog.w(TAG, "Unreadable client certificate", e)
             emptyList()
         }
 
@@ -99,7 +99,7 @@ data class UserStats(
         private fun address(bytes: ByteArray): String? = try {
             InetAddress.getByAddress(bytes).hostAddress
         } catch (e: UnknownHostException) {
-            Log.w(TAG, "Unreadable client address", e)
+            HumlaLog.w(TAG, "Unreadable client address", e)
             null
         }
     }

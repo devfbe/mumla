@@ -20,10 +20,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
-import android.util.Log
 import com.google.protobuf.MessageLite
 import se.lublin.humla.R
-import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.AudioSourcePolicy
 import se.lublin.humla.audio.capture.CapturePipeline
 import se.lublin.humla.audio.encoder.IEncoder
@@ -31,12 +29,12 @@ import se.lublin.humla.audio.encoder.OpusEncoder
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.exception.NativeAudioException
-import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.net.VoicePacketHandler
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.HumlaLogger
 
 /**
@@ -48,7 +46,7 @@ import se.lublin.humla.util.HumlaLogger
  *   sending as somebody else.
  * @throws AudioInitializationException without the RECORD_AUDIO permission.
  */
-class AudioHandler(
+internal class AudioHandler(
     host: AudioHost,
     config: AudioConfig,
     private val params: AudioSessionParams,
@@ -142,7 +140,7 @@ class AudioHandler(
         HumlaUDPMessageType.UDPVoiceOpus ->
             OpusEncoder(SAMPLE_RATE, 1, FRAME_SIZE, framesPerPacket, bitrate, MAX_BUFFER_SIZE)
         else -> {
-            Log.w(TAG, "Unsupported codec, input disabled.")
+            HumlaLog.w(TAG, "Unsupported codec, input disabled.")
             null
         }
     }
@@ -162,7 +160,7 @@ class AudioHandler(
     }
 
     val currentBandwidth: Int
-        get() = HumlaConnection.calculateAudioBandwidth(bitrate, framesPerPacket)
+        get() = audioBandwidth(bitrate, framesPerPacket)
 
     @Synchronized
     fun shutdown() {
@@ -195,7 +193,7 @@ class AudioHandler(
         try {
             transmitter.setCodecIfChanged(newCodec, ::createEncoder)
         } catch (e: NativeAudioException) {
-            Log.e(TAG, "Could not create the encoder", e)
+            HumlaLog.e(TAG, "Could not create the encoder", e)
         }
     }
 
@@ -236,18 +234,30 @@ class AudioHandler(
 internal fun fitToBandwidth(bitrate: Int, framesPerPacket: Int, maxBandwidth: Int): Pair<Int, Int> {
     var newBitrate = bitrate
     var newFramesPerPacket = framesPerPacket
-    if (HumlaConnection.calculateAudioBandwidth(newBitrate, newFramesPerPacket) > maxBandwidth) {
+    if (audioBandwidth(newBitrate, newFramesPerPacket) > maxBandwidth) {
         newFramesPerPacket = when {
             newFramesPerPacket <= 4 && maxBandwidth <= 32_000 -> 4
             newFramesPerPacket == 1 && maxBandwidth <= 64_000 -> 2
             newFramesPerPacket == 2 && maxBandwidth <= 48_000 -> 4
             else -> newFramesPerPacket
         }
-        while (HumlaConnection.calculateAudioBandwidth(newBitrate, newFramesPerPacket) > maxBandwidth &&
+        while (audioBandwidth(newBitrate, newFramesPerPacket) > maxBandwidth &&
             newBitrate > 8_000
         ) {
             newBitrate -= 1_000
         }
     }
     return maxOf(8_000, newBitrate) to newFramesPerPacket
+}
+
+/** As desktop Mumble counts it: IP 20, UDP 8, crypt 4, header 1, sequence 2, TCP 12. */
+private const val PACKET_OVERHEAD_BYTES = 20 + 8 + 4 + 1 + 2 + 12
+private const val BITS_PER_BYTE = 8
+private const val FRAMES_PER_SECOND = 100
+
+/** Bandwidth in bps for audio with these parameters, including packet overhead. */
+internal fun audioBandwidth(bitrate: Int, framesPerPacket: Int): Int {
+    // The TCP overhead, the worst case, whichever transport carries the voice.
+    val overheadBytes = PACKET_OVERHEAD_BYTES + framesPerPacket
+    return overheadBytes * (BITS_PER_BYTE * FRAMES_PER_SECOND / framesPerPacket) + bitrate
 }

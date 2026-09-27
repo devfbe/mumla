@@ -24,7 +24,7 @@ import se.lublin.humla.model.Server
  * Everything a client configures a session with, handed to `IHumlaSession.configure` as a whole.
  * [connection] takes effect on the next connection; everything else applies live.
  */
-data class SessionConfig(
+public data class SessionConfig(
     val connection: ConnectionConfig = ConnectionConfig(),
     val audio: AudioSettings = AudioSettings(),
     /**
@@ -37,11 +37,11 @@ data class SessionConfig(
     val accessTokens: List<String> = emptyList(),
 ) {
     /** Whether going from [previous] to this config only takes effect after a reconnect. */
-    fun needsReconnectAfter(previous: SessionConfig): Boolean = connection != previous.connection
+    internal fun needsReconnectAfter(previous: SessionConfig): Boolean = connection != previous.connection
 }
 
 /** What a connection is opened with; a change only takes effect on the next connection. */
-data class ConnectionConfig(
+public data class ConnectionConfig(
     val server: Server? = null,
     /** Sent to the server as the client's release name. */
     val clientName: String = "",
@@ -60,7 +60,7 @@ data class ConnectionConfig(
 )
 
 /** A PKCS#12 client certificate; equal by content. */
-class ClientCertificate(val pkcs12: ByteArray, val password: String? = null) {
+public class ClientCertificate(public val pkcs12: ByteArray, public val password: String? = null) {
     override fun equals(other: Any?): Boolean =
         other is ClientCertificate && pkcs12.contentEquals(other.pkcs12) && password == other.password
 

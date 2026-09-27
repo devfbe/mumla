@@ -21,35 +21,35 @@ import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.routing.CommunicationDevice
 
 /** The session's audio: transmitting, and where voice is routed. Main thread; nothing here throws. */
-interface AudioControls {
+public interface AudioControls {
     /** The `AudioDeviceInfo` type voice is routed to; null while the platform decides. */
-    val route: StateFlow<Int?>
+    public val route: StateFlow<Int?>
 
-    val transmitMode: TransmitMode
+    public val transmitMode: TransmitMode
 
     /** Whether push-to-talk is on. */
-    val isTalking: Boolean
+    public val isTalking: Boolean
 
-    fun setTalking(talking: Boolean)
+    public fun setTalking(talking: Boolean)
 
     /**
      * Every device voice can be routed to right now, in the platform's order: earpiece, speaker,
      * wired and USB headsets, Bluetooth headsets with their own names. Empty while no session is
      * synchronized.
      */
-    val devices: List<CommunicationDevice>
+    public val devices: List<CommunicationDevice>
 
     /**
      * The device voice goes to right now, whether it was chosen, taken automatically or is simply
      * where the platform plays; null while no session is synchronized.
      */
-    val activeDevice: CommunicationDevice?
+    public val activeDevice: CommunicationDevice?
 
     /**
      * Whether the echo canceller runs for the device voice goes to right now: its kind's default
      * or the user's override for that kind.
      */
-    val isEchoCancellationEnabled: Boolean
+    public val isEchoCancellationEnabled: Boolean
 
     /**
      * Routes voice to the device with this id from [devices], as the user's explicit choice, like
@@ -57,11 +57,11 @@ interface AudioControls {
      * session, when the device goes away, or when a newly connected headset takes over. Choosing
      * the device the default would give anyway returns to the default.
      */
-    fun selectDevice(id: Int)
+    public fun selectDevice(id: Int)
 
     /** Drops the choice [selectDevice] made: the saved device or the automatic default applies. */
-    fun selectAutomaticDevice()
+    public fun selectAutomaticDevice()
 
     /** The bandwidth in bps of the audio sent now, or a negative value while none is sent. */
-    val currentBandwidth: Int
+    public val currentBandwidth: Int
 }

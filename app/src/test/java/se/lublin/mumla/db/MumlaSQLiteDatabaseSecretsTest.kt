@@ -66,7 +66,7 @@ class MumlaSQLiteDatabaseSecretsTest {
     @Test
     fun secretsRoundTripAndAreNotStoredInPlainText() {
         val db = open()
-        val server = Server(-1, "s", "s.example", 64738, "me", "hunter2").also { db.addServer(it) }
+        val server = db.addServer(Server(-1, "s", "s.example", 64738, "me", "hunter2"))
         db.addAccessToken(server.id, "tok")
         val cert = db.addCertificate("me.p12", p12)
 
@@ -160,7 +160,7 @@ class MumlaSQLiteDatabaseSecretsTest {
     @Test
     fun secretsSealedUnderAnotherKeyReadAsAbsent() {
         val db = open()
-        val server = Server(-1, "s", "s.example", 64738, "me", "hunter2").also { db.addServer(it) }
+        val server = db.addServer(Server(-1, "s", "s.example", 64738, "me", "hunter2"))
         db.addAccessToken(server.id, "tok")
         val cert = db.addCertificate("me.p12", p12)
         db.close()
@@ -176,7 +176,7 @@ class MumlaSQLiteDatabaseSecretsTest {
     @Test
     fun withoutAWorkingKeySecretsAreKeptInPlainTextRatherThanLost() {
         val db = open(BrokenCipher)
-        val server = Server(-1, "s", "s.example", 64738, "me", "hunter2").also { db.addServer(it) }
+        val server = db.addServer(Server(-1, "s", "s.example", 64738, "me", "hunter2"))
         db.addAccessToken(server.id, "tok")
         val cert = db.addCertificate("me.p12", p12)
 

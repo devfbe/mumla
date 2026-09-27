@@ -21,7 +21,7 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Handler
-import android.util.Log
+import se.lublin.humla.util.HumlaLog
 import java.util.concurrent.Executor
 
 /**
@@ -29,17 +29,17 @@ import java.util.concurrent.Executor
  * by, its [AudioDeviceInfo] [type], its product [name] and its [address] (each empty if unknown,
  * never null). The id changes whenever the device reconnects; the address does not.
  */
-data class CommunicationDevice(val id: Int, val type: Int, val name: String, val address: String = "")
+public data class CommunicationDevice(val id: Int, val type: Int, val name: String, val address: String = "")
 
 /**
  * What [AndroidCommunicationDevices.available] lists, for showing without a session: reads only,
  * never routes or changes the audio mode. Empty if the platform refuses.
  */
-fun listCommunicationDevices(audioManager: AudioManager): List<CommunicationDevice> =
+public fun listCommunicationDevices(audioManager: AudioManager): List<CommunicationDevice> =
     try {
         audioManager.availableCommunicationDevices.map { it.toCommunicationDevice() }
     } catch (e: SecurityException) {
-        Log.w("CommunicationDevices", "The platform refused the communication device list", e)
+        HumlaLog.w("CommunicationDevices", "The platform refused the communication device list", e)
         emptyList()
     }
 
@@ -47,7 +47,7 @@ private fun AudioDeviceInfo.toCommunicationDevice() =
     CommunicationDevice(id, type, productName?.toString().orEmpty(), address.orEmpty())
 
 /** The subset of `AudioManager`'s communication-device API (API 31) that routing needs. */
-interface CommunicationDevices {
+internal interface CommunicationDevices {
     fun available(): List<CommunicationDevice>
 
     /** Routes voice to the device; false if the platform refused or the id is gone. */
@@ -72,7 +72,7 @@ interface CommunicationDevices {
  * require `BLUETOOTH_CONNECT` for these calls, but some OEMs enforce more, so a [SecurityException]
  * yields the "no headset" value and [onSecurityDenial] is invoked once per instance.
  */
-class AndroidCommunicationDevices(
+internal class AndroidCommunicationDevices(
     private val audioManager: AudioManager,
     private val mainHandler: Handler,
     private val onSecurityDenial: (SecurityException) -> Unit,
@@ -161,7 +161,7 @@ class AndroidCommunicationDevices(
             reportDenial(e)
             fallback
         } catch (e: RuntimeException) {
-            Log.w(TAG, warning, e)
+            HumlaLog.w(TAG, warning, e)
             fallback
         }
 
@@ -174,7 +174,7 @@ class AndroidCommunicationDevices(
         }
 
     private fun reportDenial(e: SecurityException) {
-        Log.w(TAG, "The platform refused a communication-device call", e)
+        HumlaLog.w(TAG, "The platform refused a communication-device call", e)
         if (denialReported) return
         denialReported = true
         onSecurityDenial(e)

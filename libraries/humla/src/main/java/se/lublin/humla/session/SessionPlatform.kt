@@ -22,10 +22,10 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Handler
 import android.os.PowerManager
-import android.util.Log
+import se.lublin.humla.util.HumlaLog
 
 /** Whether a network is up, and a one-shot wait for one. Confined to the session's thread. */
-interface NetworkMonitor {
+internal interface NetworkMonitor {
     val isOnline: Boolean
 
     /** Calls [onAvailable] once, on the session's thread, when a default network is up. Replaces an earlier wait. */
@@ -36,7 +36,7 @@ interface NetworkMonitor {
 }
 
 /** The partial wake lock a session holds from its first synchronization until it ends. */
-interface SessionWakeLock {
+internal interface SessionWakeLock {
     val isHeld: Boolean
 
     fun acquire()
@@ -45,7 +45,7 @@ interface SessionWakeLock {
 }
 
 /** A [NetworkMonitor] over the platform's default network callback, delivered on [handler]. */
-class AndroidNetworkMonitor(
+internal class AndroidNetworkMonitor(
     private val connectivity: ConnectivityManager,
     private val handler: Handler,
 ) : NetworkMonitor {
@@ -70,7 +70,7 @@ class AndroidNetworkMonitor(
             callback = next
         } catch (@Suppress("TooGenericExceptionCaught") e: RuntimeException) {
             // Includes the platform's hidden TooManyRequestsException for too many callbacks.
-            Log.e(TAG, "Error registering the network callback", e)
+            HumlaLog.e(TAG, "Error registering the network callback", e)
         }
     }
 
@@ -80,7 +80,7 @@ class AndroidNetworkMonitor(
         try {
             connectivity.unregisterNetworkCallback(registered)
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "The network callback was not registered", e)
+            HumlaLog.w(TAG, "The network callback was not registered", e)
         }
     }
 
@@ -90,7 +90,7 @@ class AndroidNetworkMonitor(
 }
 
 /** A partial [PowerManager] wake lock tagged [tag]; reference counted, as the platform's is. */
-class AndroidSessionWakeLock(powerManager: PowerManager, tag: String = "Humla:Session") : SessionWakeLock {
+internal class AndroidSessionWakeLock(powerManager: PowerManager, tag: String = "Humla:Session") : SessionWakeLock {
     private val lock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, tag)
 
     override val isHeld: Boolean get() = lock.isHeld

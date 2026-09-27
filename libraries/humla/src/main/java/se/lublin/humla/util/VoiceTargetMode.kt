@@ -16,16 +16,16 @@
  */
 package se.lublin.humla.util
 
-enum class VoiceTargetMode {
+public enum class VoiceTargetMode {
     NORMAL,
     WHISPER,
     SERVER_LOOPBACK;
 
-    companion object {
+    internal companion object {
         private const val LOOPBACK_ID: Byte = 31
 
         /** @throws IllegalArgumentException for an id outside 0..31. */
-        fun fromId(targetId: Byte): VoiceTargetMode = when (targetId) {
+        internal fun fromId(targetId: Byte): VoiceTargetMode = when (targetId) {
             0.toByte() -> NORMAL
             in 1 until LOOPBACK_ID -> WHISPER
             LOOPBACK_ID -> SERVER_LOOPBACK
