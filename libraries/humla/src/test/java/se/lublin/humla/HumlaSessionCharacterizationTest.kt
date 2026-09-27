@@ -126,7 +126,7 @@ class HumlaSessionCharacterizationTest {
         assertThat(h.session.state.value).isEqualTo(SessionState.Connecting)
         awaitUntil(description = "socket opened") {
             h.mainLooper.idle()
-            h.transports.tcps.firstOrNull()?.connectThread != null
+            h.transports.tcps.firstOrNull()?.isConnectCalled == true
         }
         assertThat(h.transports.tcps[0].connectHost).isEqualTo("127.0.0.1")
         assertThat(h.transports.tcps[0].connectPort).isEqualTo(64738)
@@ -240,7 +240,7 @@ class HumlaSessionCharacterizationTest {
         h.session.connect()
         awaitUntil(description = "socket opened") {
             h.mainLooper.idle()
-            h.transports.tcps.firstOrNull()?.connectThread != null
+            h.transports.tcps.firstOrNull()?.isConnectCalled == true
         }
 
         h.transports.tcps[0].simulateHandshakeFailure(chain)

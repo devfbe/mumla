@@ -55,6 +55,9 @@ enum class HumlaTCPMessageType(private val parser: Parser<out MessageLite>?) {
     SuggestConfig(Mumble.SuggestConfig.parser()),
     PluginDataTransmission(Mumble.PluginDataTransmission.parser());
 
+    /** Whether traffic of this type is logged; the frequent voice and ping frames are not. */
+    val isLogged: Boolean get() = this != UDPTunnel && this != Ping
+
     fun parse(data: ByteArray): MessageLite =
         parser?.parseFrom(data) ?: throw InvalidProtocolBufferException("$name is never sent by a server")
 }

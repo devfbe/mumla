@@ -150,7 +150,7 @@ class HumlaTCP(
     }
 
     private fun openSocket(host: String, port: Int, useTor: Boolean): SSLSocket = if (useTor) {
-        socketFactory.createTorSocket(host, port, HumlaConnection.TOR_HOST, HumlaConnection.TOR_PORT)
+        socketFactory.createTorSocket(host, port, TorProxy.HOST, TorProxy.PORT)
     } else {
         socketFactory.createSocket(host, port)
     }
@@ -180,7 +180,7 @@ class HumlaTCP(
     /** Thread-safe; writes in order after everything queued before. */
     override fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType) {
         enqueueSend {
-            if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) HumlaLog.v(TAG, "OUT: $messageType")
+            if (messageType.isLogged) HumlaLog.v(TAG, "OUT: $messageType")
             val out = output ?: return@enqueueSend logNoStream(messageType)
             out.writeShort(messageType.ordinal)
             out.writeInt(message.serializedSize)
@@ -192,7 +192,7 @@ class HumlaTCP(
     override fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType) {
         val bytes = data.copyOf(length)
         enqueueSend {
-            if (!HumlaConnection.UNLOGGED_MESSAGES.contains(messageType)) HumlaLog.v(TAG, "OUT: $messageType")
+            if (messageType.isLogged) HumlaLog.v(TAG, "OUT: $messageType")
             val out = output ?: return@enqueueSend logNoStream(messageType)
             out.writeShort(messageType.ordinal)
             out.writeInt(length)

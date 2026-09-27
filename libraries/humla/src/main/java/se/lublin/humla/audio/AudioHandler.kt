@@ -29,7 +29,6 @@ import se.lublin.humla.audio.encoder.OpusEncoder
 import se.lublin.humla.exception.AudioException
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.exception.NativeAudioException
-import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.VoicePacket
@@ -161,7 +160,7 @@ class AudioHandler(
     }
 
     val currentBandwidth: Int
-        get() = HumlaConnection.calculateAudioBandwidth(bitrate, framesPerPacket)
+        get() = audioBandwidth(bitrate, framesPerPacket)
 
     @Synchronized
     fun shutdown() {
@@ -235,18 +234,30 @@ class AudioHandler(
 internal fun fitToBandwidth(bitrate: Int, framesPerPacket: Int, maxBandwidth: Int): Pair<Int, Int> {
     var newBitrate = bitrate
     var newFramesPerPacket = framesPerPacket
-    if (HumlaConnection.calculateAudioBandwidth(newBitrate, newFramesPerPacket) > maxBandwidth) {
+    if (audioBandwidth(newBitrate, newFramesPerPacket) > maxBandwidth) {
         newFramesPerPacket = when {
             newFramesPerPacket <= 4 && maxBandwidth <= 32_000 -> 4
             newFramesPerPacket == 1 && maxBandwidth <= 64_000 -> 2
             newFramesPerPacket == 2 && maxBandwidth <= 48_000 -> 4
             else -> newFramesPerPacket
         }
-        while (HumlaConnection.calculateAudioBandwidth(newBitrate, newFramesPerPacket) > maxBandwidth &&
+        while (audioBandwidth(newBitrate, newFramesPerPacket) > maxBandwidth &&
             newBitrate > 8_000
         ) {
             newBitrate -= 1_000
         }
     }
     return maxOf(8_000, newBitrate) to newFramesPerPacket
+}
+
+/** As desktop Mumble counts it: IP 20, UDP 8, crypt 4, header 1, sequence 2, TCP 12. */
+private const val PACKET_OVERHEAD_BYTES = 20 + 8 + 4 + 1 + 2 + 12
+private const val BITS_PER_BYTE = 8
+private const val FRAMES_PER_SECOND = 100
+
+/** Bandwidth in bps for audio with these parameters, including packet overhead. */
+internal fun audioBandwidth(bitrate: Int, framesPerPacket: Int): Int {
+    // The TCP overhead, the worst case, whichever transport carries the voice.
+    val overheadBytes = PACKET_OVERHEAD_BYTES + framesPerPacket
+    return overheadBytes * (BITS_PER_BYTE * FRAMES_PER_SECOND / framesPerPacket) + bitrate
 }

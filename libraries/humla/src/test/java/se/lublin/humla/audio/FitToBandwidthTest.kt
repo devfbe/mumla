@@ -5,6 +5,14 @@ import org.junit.Test
 
 class FitToBandwidthTest {
     @Test
+    fun `the bandwidth includes the overhead of every packet`() {
+        // overhead per packet = 20+8+4+1+2+12+framesPerPacket bytes, 800/framesPerPacket packets per second
+        assertThat(audioBandwidth(40_000, 2)).isEqualTo(59_600)
+        assertThat(audioBandwidth(40_000, 1)).isEqualTo(78_400)
+        assertThat(audioBandwidth(40_000, 4)).isEqualTo(50_200)
+    }
+
+    @Test
     fun `a stream within the limit is left alone`() {
         assertThat(fitToBandwidth(40_000, 2, 72_000)).isEqualTo(40_000 to 2)
     }

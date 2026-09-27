@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Andrew Comminos
+ * Copyright (C) 2026 The Mumla authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,17 +17,8 @@
 
 package se.lublin.humla.net
 
-
-/**
- * Registration of protocol message handlers, implemented by [HumlaConnection].
- *
- * Registering and unregistering is safe from any thread. A handler runs on the protocol context, so
- * it must not block: everything behind it - parsing, the model, voice routing - waits on it.
- * A handler removed while a message is being dispatched may still see that dispatch.
- */
-interface MessageHandlerRegistry {
-    fun addTcpHandler(handler: TcpMessageHandler)
-    fun removeTcpHandler(handler: TcpMessageHandler)
-    fun addVoiceHandler(handler: VoicePacketHandler)
-    fun removeVoiceHandler(handler: VoicePacketHandler)
+/** The SOCKS proxy of a local Orbot, through which connections go when Tor is on. */
+object TorProxy {
+    const val HOST = "localhost"
+    const val PORT = 9050
 }

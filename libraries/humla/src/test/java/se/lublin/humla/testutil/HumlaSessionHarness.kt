@@ -30,6 +30,7 @@ import se.lublin.humla.audio.PipelineSettings
 import se.lublin.humla.audio.routing.CommunicationDevices
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
+import se.lublin.humla.net.ConnectionParams
 import se.lublin.humla.net.FakeTcpTransport
 import se.lublin.humla.net.FakeTransports
 import se.lublin.humla.net.HumlaConnection
@@ -49,8 +50,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * and the wake lock are the platform's, as Robolectric shadows them.
  *
  * Under Robolectric the test thread is the main thread with a paused looper, while the protocol
- * thread is real. Waits poll protocol-thread state and drain the main looper explicitly; polling
- * main-thread state would deadlock.
+ * context runs on the IO pool for real. Waits poll protocol-side state and drain the main looper
+ * explicitly; polling main-thread state would deadlock.
  */
 class HumlaSessionHarness(
     autoReconnect: Boolean = false,
@@ -74,7 +75,9 @@ class HumlaSessionHarness(
         SessionConfig(ConnectionConfig(server = server, clientName = "harness"), autoReconnect = autoReconnect),
         devices,
         reconnectPolicy,
-        connectionFactory = { listener -> HumlaConnection(listener, transports, Handler(Looper.getMainLooper())) },
+        connectionFactory = { params, listener ->
+            HumlaConnection(params, listener, Handler(Looper.getMainLooper())::post, transports = transports)
+        },
         audioFactory = audioFactory,
     )
 
@@ -111,7 +114,7 @@ class HumlaSessionHarness(
     fun openSocket(index: Int): FakeTcpTransport {
         awaitUntil(description = "tcp transport $index") {
             mainLooper.idle()
-            transports.tcps.size > index && transports.tcps[index].connectThread != null
+            transports.tcps.size > index && transports.tcps[index].isConnectCalled
         }
         val tcp = transports.tcps[index]
         tcp.simulateConnected()
@@ -188,11 +191,11 @@ class HumlaSessionHarness(
 }
 
 /** A session on Robolectric's platform with fakes where a test needs them. */
-fun testSession(
+internal fun testSession(
     config: SessionConfig = SessionConfig(),
     devices: CommunicationDevices? = FakeCommunicationDevices(),
     reconnectPolicy: ReconnectPolicy = ReconnectPolicy(),
-    connectionFactory: ((HumlaConnection.HumlaConnectionListener) -> HumlaConnection)? = null,
+    connectionFactory: ((ConnectionParams, HumlaConnection.Listener) -> HumlaConnection)? = null,
     audioFactory: FakeAudioFactory = FakeAudioFactory(),
 ): HumlaSession {
     val main = Handler(Looper.getMainLooper())

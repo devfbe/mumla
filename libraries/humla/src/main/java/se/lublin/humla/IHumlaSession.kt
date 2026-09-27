@@ -2,11 +2,12 @@ package se.lublin.humla
 
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import se.lublin.humla.model.Latency
 import se.lublin.humla.model.Server
+import se.lublin.humla.model.ServerInfo
 import se.lublin.humla.model.ServerState
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.session.ServerInfo
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.inMainThreadSlices
@@ -38,6 +39,9 @@ interface IHumlaSession : AutoCloseable {
 
     /** What the synchronized connection knows about its server; null outside of one. */
     val serverInfo: ServerInfo?
+
+    /** The round trips of the synchronized connection's latest pings; null outside of one. */
+    val latency: Latency?
 
     /** Requests to the server, voice targets and local choices about other users. */
     val actions: SessionActions
