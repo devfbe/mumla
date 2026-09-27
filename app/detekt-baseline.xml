@@ -36,7 +36,6 @@
     <ID>ReturnCount:MumlaConnectionNotification.kt$MumlaConnectionNotification$fun show(): Boolean</ID>
     <ID>ReturnCount:PublicServerListFragment.kt$PublicServerListFragment$override fun onMenuItemSelected(menuItem: MenuItem): Boolean</ID>
     <ID>ReturnCount:ZoomImageView.kt$ZoomImageView$private fun canFit(): Boolean</ID>
-    <ID>SwallowedException:ChannelChatFragment.kt$ChannelChatFragment$e: IllegalStateException</ID>
     <ID>SwallowedException:HtmlUtils.kt$HtmlUtils$e: IllegalArgumentException</ID>
     <ID>SwallowedException:ImageSource.kt$ImageSource.Companion$e: IllegalArgumentException</ID>
     <ID>SwallowedException:ImageViewerDialogFragment.kt$ImageViewerDialogFragment$e: IOException</ID>
@@ -52,7 +51,7 @@
     <ID>TooGenericExceptionCaught:SecretCipher.kt$SecretCodec$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ServerPinger.kt$ServerPinger$e: Exception</ID>
     <ID>TooManyFunctions:AudioSettingsFragment.kt$AudioSettingsFragment : MumlaPreferenceFragment</ID>
-    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentSessionClientMenuProvider</ID>
+    <ID>TooManyFunctions:ChannelChatFragment.kt$ChannelChatFragment : FragmentMenuProvider</ID>
     <ID>TooManyFunctions:ChannelListAdapter.kt$ChannelListAdapter : Adapter</ID>
     <ID>TooManyFunctions:ChannelListFragment.kt$ChannelListFragment : FragmentSessionClientMenuProvider</ID>
     <ID>TooManyFunctions:MumlaSQLiteDatabase.kt$MumlaSQLiteDatabase : SQLiteOpenHelperMumlaDatabase</ID>

@@ -118,7 +118,7 @@ class ChannelListFragment :
 
     private lateinit var channelView: RecyclerView
     private var channelListAdapter: ChannelListAdapter? = null
-    private val chatTargets by parentChatTargets()
+    private val chat by parentChatViewModel()
     private var actionMode: ActionMode? = null
     private lateinit var settings: Settings
 
@@ -289,18 +289,18 @@ class ChannelListFragment :
     private val isShowingPinnedChannels: Boolean get() = requireArguments().getBoolean(ARG_PINNED)
 
     /** Makes [channel] the chat target, or closes the target if it is [channel] already. */
-    fun onChannelClick(channel: IChannel) = toggleTarget(ChatTarget.Channel(channel))
+    fun onChannelClick(channel: IChannel) = toggleTarget(ChatTarget.Channel(channel.id, channel.name))
 
     /** Makes [user] the chat target, or closes the target if it is [user] already. */
-    fun onUserClick(user: IUser) = toggleTarget(ChatTarget.User(user))
+    fun onUserClick(user: IUser) = toggleTarget(ChatTarget.User(user.session, user.name))
 
     private fun toggleTarget(target: ChatTarget) {
         val mode = actionMode
-        if (mode != null && chatTargets.target.value == target) {
+        if (mode != null && chat.target.value == target) {
             // Tapped the open target again.
             mode.finish()
         } else {
-            val callback = ChatTargetActionModeCallback(chatTargets, target) { actionMode = null }
+            val callback = ChatTargetActionModeCallback(chat::select, target) { actionMode = null }
             actionMode = (requireActivity() as AppCompatActivity).startSupportActionMode(callback)
         }
     }

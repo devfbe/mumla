@@ -26,7 +26,7 @@ import se.lublin.mumla.R
  * (to the user's current channel) when it closes; then [onDestroyed] runs.
  */
 class ChatTargetActionModeCallback(
-    private val targets: ChatTargetViewModel,
+    private val select: (ChatTarget?) -> Unit,
     private val target: ChatTarget,
     private val onDestroyed: () -> Unit,
 ) : ActionMode.Callback {
@@ -34,7 +34,7 @@ class ChatTargetActionModeCallback(
     override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
         mode.title = target.name
         mode.setSubtitle(R.string.current_chat_target)
-        targets.select(target)
+        select(target)
         return true
     }
 
@@ -43,7 +43,7 @@ class ChatTargetActionModeCallback(
     override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean = false
 
     override fun onDestroyActionMode(mode: ActionMode) {
-        targets.select(null)
+        select(null)
         onDestroyed()
     }
 }

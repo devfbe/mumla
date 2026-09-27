@@ -52,7 +52,7 @@ import java.util.Locale
 
 /**
  * Holds a [ChannelListFragment] and a [ChannelChatFragment], as tabs or side by side, which share
- * the chat target through this fragment's [ChatTargetViewModel].
+ * the chat target through this fragment's [ChatViewModel].
  */
 @Suppress("TooManyFunctions") // Framework callbacks, each delegating.
 class ChannelFragment :

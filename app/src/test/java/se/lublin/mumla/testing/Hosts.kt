@@ -28,7 +28,7 @@ import androidx.lifecycle.ViewModelProvider
 import io.mockk.mockk
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.R
-import se.lublin.mumla.channel.ChatTargetViewModel
+import se.lublin.mumla.channel.ChatViewModel
 import se.lublin.mumla.db.MumlaDatabase
 
 /** An activity in the app theme, for fragments that need nothing from their host. */
@@ -62,7 +62,7 @@ class ServiceHostActivity : ThemedActivity() {
  * shows an empty container with id [CONTAINER_ID] to add children into.
  */
 class ChatTargetParentFragment : Fragment() {
-    val chatTargets: ChatTargetViewModel get() = ViewModelProvider(this)[ChatTargetViewModel::class.java]
+    val chat: ChatViewModel get() = ViewModelProvider(this, ChatViewModel.Factory)[ChatViewModel::class.java]
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         FrameLayout(requireContext()).also { it.id = CONTAINER_ID }

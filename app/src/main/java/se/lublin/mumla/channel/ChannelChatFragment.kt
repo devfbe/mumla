@@ -25,7 +25,6 @@ import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.Menu
@@ -43,6 +42,7 @@ import androidx.activity.result.contract.ActivityResultContracts.RequestPermissi
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.core.view.MenuProvider
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -50,41 +50,27 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
-import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatContentParser
 import se.lublin.mumla.chat.ChatImageLoaders
 import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.ImageViewerDialogFragment
-import se.lublin.mumla.chat.OutgoingImageEncoder
-import se.lublin.mumla.chat.OutgoingImagePreparer
-import se.lublin.mumla.chat.outgoingMessageHtml
 import se.lublin.mumla.databinding.FragmentChatBinding
-import se.lublin.mumla.session.SessionClient
-import se.lublin.mumla.session.SessionManager
-import se.lublin.mumla.session.bindClient
 
 /** The image preview takes at most a third of the screen height. */
 private const val PREVIEW_SCREEN_FRACTION = 3
 
 /**
- * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. Parsing and rendering
- * live in [ChatAdapter], images in `ChatImageLoader`/[OutgoingImagePreparer]. [openImageViewer]
- * is the uniqueness gate `ChatAdapter.onImageClicked` requires, [sessionId] never throws, and the
- * adapter gets a `lifecycleScope` (`Dispatchers.Main.immediate`) because its coroutines touch views.
+ * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row, over the parent's
+ * [ChatViewModel]. Parsing and rendering live in [ChatAdapter]. [openImageViewer] is the uniqueness
+ * gate `ChatAdapter.onImageClicked` requires, and the adapter gets a `lifecycleScope`
+ * (`Dispatchers.Main.immediate`) because its coroutines touch views.
  */
-class ChannelChatFragment : Fragment(), SessionClient, MenuProvider {
+class ChannelChatFragment : Fragment(), MenuProvider {
 
-    private val sessions get() = SessionManager.get(requireContext())
-    private var bound = false
-
-    private val chatTargets by parentChatTargets()
+    private val chat by parentChatViewModel()
     private lateinit var chatList: RecyclerView
     private lateinit var chatTextEdit: EditText
     private lateinit var sendButton: ImageButton
@@ -109,15 +95,6 @@ class ChannelChatFragment : Fragment(), SessionClient, MenuProvider {
             imagePicker.launch(IMAGE_MIME)
         } else {
             Toast.makeText(requireContext(), R.string.permission_denied_storage, Toast.LENGTH_LONG).show()
-        }
-    }
-
-    override fun onSessionEvent(event: HumlaEvent) {
-        if (event !is HumlaEvent.UserJoinedChannel) return
-        val session = sessions.connected ?: return
-        if (event.user == session.sessionUser && chatTargets.target.value == null) {
-            // The user changed channels without a target: follow them.
-            updateChatTargetText(null)
         }
     }
 
@@ -164,23 +141,20 @@ class ChannelChatFragment : Fragment(), SessionClient, MenuProvider {
         // android:enabled does not apply to an ImageButton, and the watcher only fires on change.
         sendButton.isEnabled = chatTextEdit.text.isNotEmpty()
 
-        updateChatTargetText(chatTargets.target.value)
         viewLifecycleOwner.lifecycleScope.launch {
-            // While resumed, as the target changes; catching up on resumption.
+            // While resumed, as the destination changes; catching up on resumption.
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                chatTargets.target.collect(::updateChatTargetText)
+                chat.destination.collect(::updateChatTargetText)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                sessions.chat.messages.collect { submit(adapter, it) }
+                launch { chat.imageBusy.collect { imageProgress.isVisible = it } }
+                launch { chat.imageEvents.collect(::onImageEvent) }
+                chat.messages.collect { submit(adapter, it) }
             }
         }
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
-        if (!bound) {
-            bound = true
-            sessions.bindClient(this, this)
-        }
     }
 
     override fun onDestroyView() {
@@ -199,26 +173,15 @@ class ChannelChatFragment : Fragment(), SessionClient, MenuProvider {
     }
 
     /** Empties the session's chat log, and with it the list. */
-    fun clear() {
-        sessions.chat.clear()
-    }
-
-    override fun onSessionState(state: SessionState) {
-        // onCreateView may have run before the session was synchronized, so set the hint here too.
-        if (state == SessionState.Connected) updateChatTargetText(chatTargets.target.value)
-    }
+    fun clear() = chat.clear()
 
     /** Updates the compose hint that shows where the next message goes. */
-    fun updateChatTargetText(target: ChatTarget?) {
-        if (!this::chatTextEdit.isInitialized) return
-        val session = sessions.connected ?: return
-        val sessionChannel = session.sessionChannel
-        val hint = when (target) {
+    private fun updateChatTargetText(target: ChatTarget?) {
+        chatTextEdit.hint = when (target) {
             is ChatTarget.User -> getString(R.string.messageToUser, target.name)
             is ChatTarget.Channel -> getString(R.string.messageToChannel, target.name)
-            null -> sessionChannel?.let { getString(R.string.messageToChannel, it.name) }
+            null -> null
         }
-        chatTextEdit.hint = hint
         chatTextEdit.requestLayout() // Needed to update bounds after a hint change.
     }
 
@@ -243,16 +206,9 @@ class ChannelChatFragment : Fragment(), SessionClient, MenuProvider {
         chatList.post { if (adapter.itemCount > 0) chatList.scrollToPosition(adapter.itemCount - 1) }
     }
 
-    /**
-     * The local session id, or [NO_SESSION] when there is none. Must not throw (the adapter calls
-     * this on every bind, also after a disconnect).
-     */
+    /** Our session id, or [ChatViewModel.NO_SESSION]; the adapter asks on every bind. */
     @VisibleForTesting
-    internal fun sessionId(): Int = try {
-        sessions.connected?.sessionId ?: NO_SESSION
-    } catch (e: IllegalStateException) {
-        NO_SESSION
-    }
+    internal fun sessionId(): Int = chat.selfSession
 
     private fun pickImage() {
         // Android 12L and below need the storage permission for the picker.
@@ -267,21 +223,14 @@ class ChannelChatFragment : Fragment(), SessionClient, MenuProvider {
     }
 
     @VisibleForTesting
-    internal fun onImagePicked(uri: Uri) {
-        if (sessions.connected == null) return
-        imageProgress.visibility = View.VISIBLE
-        viewLifecycleOwner.lifecycleScope.launch {
-            val bitmap = try {
-                OutgoingImagePreparer(requireContext()).prepare(uri)
-            } finally {
-                imageProgress.visibility = View.GONE
-            }
-            if (bitmap == null) {
-                Toast.makeText(requireContext(), R.string.image_decode_failed, Toast.LENGTH_LONG).show()
-                return@launch
-            }
-            confirmImage(bitmap)
-        }
+    internal fun onImagePicked(uri: Uri) = chat.prepareImage(uri)
+
+    private fun onImageEvent(event: ChatViewModel.ImageEvent) = when (event) {
+        is ChatViewModel.ImageEvent.Confirm -> confirmImage(event.bitmap)
+        ChatViewModel.ImageEvent.Unreadable ->
+            Toast.makeText(requireContext(), R.string.image_decode_failed, Toast.LENGTH_LONG).show()
+        ChatViewModel.ImageEvent.TooLarge ->
+            Toast.makeText(requireContext(), R.string.image_too_large, Toast.LENGTH_LONG).show()
     }
 
     @VisibleForTesting
@@ -301,63 +250,16 @@ class ChannelChatFragment : Fragment(), SessionClient, MenuProvider {
             .show()
     }
 
-    /**
-     * Encodes and sends a confirmed image. The session is fetched again because it can be gone by
-     * the time the confirmation dialog is dismissed.
-     */
+    /** Sends a confirmed image; the session may be gone by the time the dialog is dismissed. */
     @VisibleForTesting
-    internal fun sendImage(bitmap: Bitmap) {
-        val session = sessions.connected ?: return
-        imageProgress.visibility = View.VISIBLE
-        viewLifecycleOwner.lifecycleScope.launch {
-            val html = try {
-                // Without the server's limit there is nothing to fit the image to.
-                val maxLength = session.serverSettings?.imageMessageLength
-                if (maxLength == null) null
-                else withContext(Dispatchers.Default) { OutgoingImageEncoder.encode(bitmap, maxLength) }
-            } catch (e: IllegalStateException) {
-                Log.d(TAG, "disconnected while encoding an image: $e")
-                null
-            } finally {
-                imageProgress.visibility = View.GONE
-            }
-            if (html == null) {
-                Toast.makeText(requireContext(), R.string.image_too_large, Toast.LENGTH_LONG).show()
-                return@launch
-            }
-            sendHtml(html)
-        }
-    }
+    internal fun sendImage(bitmap: Bitmap) = chat.sendImage(bitmap)
 
     private fun sendMessageFromEditor() {
         if (chatTextEdit.length() == 0) return
-        if (sendMessage(chatTextEdit.text.toString())) chatTextEdit.setText("")
-    }
-
-    /** Sends what the user typed, formatted as the settings say; false without a connection. */
-    private fun sendMessage(message: String): Boolean =
-        sendHtml(outgoingMessageHtml(message, Settings.getInstance(requireContext()).isMarkdownEnabled))
-
-    /** The session publishes the sent message, and its chat log shows it. */
-    private fun sendHtml(html: String): Boolean {
-        val session = sessions.connected ?: return false
-        when (val target = chatTargets.target.value) {
-            is ChatTarget.User -> session.sendUserTextMessage(target.user.session, html)
-            is ChatTarget.Channel -> session.sendChannelTextMessage(target.channel.id, html, false)
-            null -> session.sessionChannel?.let { session.sendChannelTextMessage(it.id, html, false) }
-        }
-        return true
+        if (chat.send(chatTextEdit.text.toString())) chatTextEdit.setText("")
     }
 
     private companion object {
-        val TAG: String = ChannelChatFragment::class.java.name
         const val IMAGE_MIME = "image/*"
-
-        /**
-         * What [sessionId] answers with when there is no session. Not -1: `Message(String)` uses
-         * -1 as its actor, which would render actorless messages as our own. Mumble session ids are
-         * unsigned, so `Int.MIN_VALUE` never collides.
-         */
-        const val NO_SESSION = Int.MIN_VALUE
     }
 }

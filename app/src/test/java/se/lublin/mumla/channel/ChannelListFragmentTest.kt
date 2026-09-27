@@ -236,15 +236,15 @@ class ChannelListFragmentTest {
 
         // No target yet: opens one.
         fragment.onChannelClick(first)
-        assertThat((parent.chatTargets.target.value as? ChatTarget.Channel)?.channel).isEqualTo(first)
+        assertThat((parent.chat.target.value as? ChatTarget.Channel)?.id).isEqualTo(first.id)
 
         // A target, but not this channel: switches it.
         fragment.onChannelClick(second)
-        assertThat((parent.chatTargets.target.value as? ChatTarget.Channel)?.channel).isEqualTo(second)
+        assertThat((parent.chat.target.value as? ChatTarget.Channel)?.id).isEqualTo(second.id)
 
         // The open target, tapped again.
         fragment.onChannelClick(second)
-        assertThat(parent.chatTargets.target.value).isNull()
+        assertThat(parent.chat.target.value).isNull()
     }
 
     /**
@@ -254,16 +254,16 @@ class ChannelListFragmentTest {
     @Test
     fun tappingTheChannelOfATargetThisFragmentDidNotOpenOpensAModeForIt() {
         val channel = FakeChannel(1)
-        parent.chatTargets.select(ChatTarget.Channel(channel))
+        parent.chat.select(ChatTarget.Channel(channel.id, channel.name))
 
         fragment.onChannelClick(channel)
 
-        assertThat((parent.chatTargets.target.value as? ChatTarget.Channel)?.channel).isEqualTo(channel)
+        assertThat((parent.chat.target.value as? ChatTarget.Channel)?.id).isEqualTo(channel.id)
 
         // Now there is one to dismiss, proving a mode was opened above.
         fragment.onChannelClick(channel)
 
-        assertThat(parent.chatTargets.target.value).isNull()
+        assertThat(parent.chat.target.value).isNull()
     }
 
     @Test
@@ -272,27 +272,27 @@ class ChannelListFragmentTest {
         val second = FakeUser(2)
 
         fragment.onUserClick(first)
-        assertThat((parent.chatTargets.target.value as? ChatTarget.User)?.user).isEqualTo(first)
+        assertThat((parent.chat.target.value as? ChatTarget.User)?.session).isEqualTo(first.session)
 
         fragment.onUserClick(second)
-        assertThat((parent.chatTargets.target.value as? ChatTarget.User)?.user).isEqualTo(second)
+        assertThat((parent.chat.target.value as? ChatTarget.User)?.session).isEqualTo(second.session)
 
         fragment.onUserClick(second)
-        assertThat(parent.chatTargets.target.value).isNull()
+        assertThat(parent.chat.target.value).isNull()
     }
 
     @Test
     fun tappingTheUserOfATargetThisFragmentDidNotOpenOpensAModeForIt() {
         val user = FakeUser(1)
-        parent.chatTargets.select(ChatTarget.User(user))
+        parent.chat.select(ChatTarget.User(user.session, user.name))
 
         fragment.onUserClick(user)
 
-        assertThat((parent.chatTargets.target.value as? ChatTarget.User)?.user).isEqualTo(user)
+        assertThat((parent.chat.target.value as? ChatTarget.User)?.session).isEqualTo(user.session)
 
         fragment.onUserClick(user)
 
-        assertThat(parent.chatTargets.target.value).isNull()
+        assertThat(parent.chat.target.value).isNull()
     }
 
     /**
@@ -306,7 +306,7 @@ class ChannelListFragmentTest {
         fragment.onUserClick(FakeUser(1))
         fragment.onChannelClick(channel)
 
-        assertThat((parent.chatTargets.target.value as? ChatTarget.Channel)?.channel).isSameInstanceAs(channel)
+        assertThat((parent.chat.target.value as? ChatTarget.Channel)?.id).isEqualTo(channel.id)
     }
 
     @Test
@@ -316,6 +316,6 @@ class ChannelListFragmentTest {
         fragment.onChannelClick(FakeChannel(1))
         fragment.onUserClick(user)
 
-        assertThat((parent.chatTargets.target.value as? ChatTarget.User)?.user).isSameInstanceAs(user)
+        assertThat((parent.chat.target.value as? ChatTarget.User)?.session).isEqualTo(user.session)
     }
 }
