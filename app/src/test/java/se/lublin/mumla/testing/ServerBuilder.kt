@@ -59,3 +59,9 @@ fun IHumlaSession.stubModel(state: ServerState?): MutableStateFlow<ServerState?>
 fun IHumlaSession.stubTalkStates(states: Map<Int, TalkState> = emptyMap()): MutableStateFlow<Map<Int, TalkState>> =
     talkFlows.getOrPut(this) { MutableStateFlow(states).also { every { talkStates } returns it } }
         .also { it.value = states }
+
+/** Stubs the session's model and talk states as empty flows, unless a test stubbed them already. */
+internal fun IHumlaSession.stubSnapshotsIfAbsent() {
+    if (modelFlows[this] == null) stubModel(null)
+    if (talkFlows[this] == null) stubTalkStates()
+}

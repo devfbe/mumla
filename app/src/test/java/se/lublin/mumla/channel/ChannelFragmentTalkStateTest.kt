@@ -22,7 +22,9 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.stubAudio
+import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubModel
 import se.lublin.mumla.testing.stubState
 
 /**
@@ -48,6 +50,7 @@ class ChannelFragmentTalkStateTest {
             .commit()
         session = mockk(relaxed = true)
         audio = session.stubAudio()
+        session.stubModel(serverState(self = 1) { channel(0, "Root"); user(1, "me") })
         session.stubConnected()
         every { audio.isTalking } returns true
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()

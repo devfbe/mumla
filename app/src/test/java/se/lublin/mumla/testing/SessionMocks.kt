@@ -56,17 +56,20 @@ fun IHumlaSession.stubEvents(): MutableSharedFlow<HumlaEvent> = eventFlows.getOr
 
 fun <T : IHumlaSession> T.stubConnected(): T = apply {
     stubEvents()
+    stubSnapshotsIfAbsent()
     stubState(SessionState.Connected)
 }
 
 fun <T : IHumlaSession> T.stubDisconnected(): T = apply {
     stubEvents()
+    stubSnapshotsIfAbsent()
     stubState(SessionState.Disconnected())
 }
 
 /** Makes [session] the app's current session, as a connect would. */
 fun installSession(session: IHumlaSession) {
     session.stubEvents()
+    session.stubSnapshotsIfAbsent()
     if (stateFlows[session] == null) session.stubState(SessionState.Connected)
     SessionManager.get(ApplicationProvider.getApplicationContext<Context>()).adopt(session)
 }

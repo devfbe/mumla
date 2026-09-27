@@ -122,6 +122,7 @@ dependencies {
     implementation(libs.androidx.fragment)
     implementation(libs.androidx.media)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.viewpager2)
     implementation(libs.androidx.exifinterface)
