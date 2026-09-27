@@ -73,6 +73,9 @@ class ChannelFragment :
     /** True while a touch is down on the talk button, i.e. while this fragment holds transmission. */
     private var talkButtonHeld = false
 
+    /** True while a touch is down on the hold-to-whisper button. */
+    private var whisperHeld = false
+
     /** Our own state as last shown; null while not synchronized. */
     private var shownSelf: SelfState? = null
 
@@ -121,6 +124,7 @@ class ChannelFragment :
         val binding = FragmentChannelBinding.inflate(inflater, container, false)
         this.binding = binding
         setUpTalkButton(binding.pushtotalk)
+        setUpWhisperHoldButton(binding.targetPanelHold)
         binding.targetPanelCancel.setOnClickListener { session.stopWhispering() }
         configureInput()
         return binding.root
@@ -136,17 +140,43 @@ class ChannelFragment :
     }
 
     /**
-     * Talks while held. An accessibility service cannot hold, so its click toggles transmission
-     * instead, and a pause releases what it started.
+     * Wires [button] for a press-and-hold action: [onDown] on touch down, [onUp] on touch up, and
+     * on cancel (a parent taking the gesture over, e.g. a drawer drag or the system back gesture)
+     * [onUp] too, unless [releaseOnCancel] says otherwise — a toggle mode where release is the
+     * whole action must not perform it on an aborted gesture, just as a Button does not click on
+     * cancel. An accessibility service cannot hold, so [onAccessibilityClick] replaces the single
+     * click it sends in place of one.
      */
     @SuppressLint("ClickableViewAccessibility") // A hold is not a click; the click action is below.
-    private fun setUpTalkButton(button: View) {
-        button.setOnTouchListener { _, event -> onTalkButtonTouch(event) }
+    private fun setUpHoldButton(
+        button: View,
+        releaseOnCancel: () -> Boolean = { true },
+        onDown: () -> Unit,
+        onUp: () -> Unit,
+        onAccessibilityClick: () -> Unit,
+    ) {
+        button.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> onDown()
+                MotionEvent.ACTION_UP -> onUp()
+                MotionEvent.ACTION_CANCEL -> if (releaseOnCancel()) onUp()
+            }
+            true
+        }
         ViewCompat.replaceAccessibilityAction(button, AccessibilityActionCompat.ACTION_CLICK, null) { _, _ ->
-            toggleTalkingForAccessibility()
+            onAccessibilityClick()
             true
         }
     }
+
+    /** Talks while held; a pause releases what it started. */
+    private fun setUpTalkButton(button: View) = setUpHoldButton(
+        button,
+        releaseOnCancel = { !settings.isPushToTalkToggle },
+        onDown = { talkButtonHeld = true; pushToTalk.onKeyDown() },
+        onUp = { talkButtonHeld = false; pushToTalk.onKeyUp() },
+        onAccessibilityClick = ::toggleTalkingForAccessibility,
+    )
 
     private fun toggleTalkingForAccessibility() {
         if (shownSelf == null) return
@@ -163,26 +193,24 @@ class ChannelFragment :
         }
     }
 
-    private fun onTalkButtonTouch(event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                talkButtonHeld = true
-                pushToTalk.onKeyDown()
-            }
-            MotionEvent.ACTION_UP -> {
-                talkButtonHeld = false
-                pushToTalk.onKeyUp()
-            }
-            // A parent taking over the gesture (drawer drag, system back gesture) sends
-            // ACTION_CANCEL. In hold mode that must still release the press or transmission
-            // sticks; in toggle mode the release is the action itself, and an aborted
-            // gesture must not perform it, just as a Button does not click on cancel.
-            MotionEvent.ACTION_CANCEL -> {
-                talkButtonHeld = false
-                if (!settings.isPushToTalkToggle) pushToTalk.onKeyUp()
-            }
-        }
-        return true
+    /** Transmits to the armed whisper target while held; a pause releases what it started. */
+    private fun setUpWhisperHoldButton(button: View) = setUpHoldButton(
+        button,
+        onDown = ::startWhisperHold,
+        onUp = ::stopWhisperHold,
+        onAccessibilityClick = { if (whisperHeld) stopWhisperHold() else startWhisperHold() },
+    )
+
+    private fun startWhisperHold() {
+        whisperHeld = true
+        session.setWhisperActive(true)
+        session.setTalking(true)
+    }
+
+    private fun stopWhisperHold() {
+        whisperHeld = false
+        session.setTalking(false)
+        session.setWhisperActive(false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -288,6 +316,7 @@ class ChannelFragment :
         // A talk state set elsewhere (e.g. a headset key with the screen off) is not ours to clear.
         if (talkButtonHeld && !settings.isPushToTalkToggle) session.setTalking(false)
         talkButtonHeld = false
+        if (whisperHeld) stopWhisperHold()
     }
 
     /** Shows the panel, and announces it starting or stopping so a screen reader notices either. */
@@ -298,6 +327,7 @@ class ChannelFragment :
         shownWhisperTarget = name
         binding.targetPanel.visibility = if (name != null) View.VISIBLE else View.GONE
         if (name != null) binding.targetPanelWarning.text = getString(R.string.shout_target, name)
+        configureInput()
         @Suppress("DEPRECATION") // No view shows this for a live region to carry.
         when {
             started -> binding.root.announceForAccessibility(getString(R.string.shout_target, name))
@@ -318,6 +348,9 @@ class ChannelFragment :
             settings.isPushToTalkButtonShown &&
             settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT
         binding.pushtotalkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
+
+        val showHoldButton = shownWhisperTarget != null && settings.isHoldToWhisper
+        binding.targetPanelHold.visibility = if (showHoldButton) View.VISIBLE else View.GONE
     }
 
     private fun showUnread(tabs: TabLayout, count: Int) {
@@ -357,6 +390,7 @@ class ChannelFragment :
             Settings.INPUT_METHOD.key,
             Settings.PUSH_BUTTON_HIDE.key,
             Settings.PTT_BUTTON_HEIGHT.key,
+            Settings.HOLD_TO_WHISPER.key,
         )
     }
 }

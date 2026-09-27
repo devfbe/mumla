@@ -133,6 +133,7 @@
     <string name="shortTtsMessagesSum">Read only the domain names of links</string>
     <string name="togglePtt">Sticky Push-to-talk button</string>
     <string name="togglePttSum">Tap to start and stop transmitting instead of holding</string>
+    <string name="holdToWhisperSum">Picking a whisper target only arms it; hold the whisper button to transmit to it, while push-to-talk and voice activation keep talking normally</string>
     <string name="autoReconnect">Auto-reconnect</string>
     <string name="autoReconnectSum">Reconnect when the connection is lost</string>
     <string name="useTor">Connect via Tor</string>

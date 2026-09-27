@@ -131,6 +131,9 @@ class Settings private constructor(private val context: Context) {
 
     val isPushToTalkToggle: Boolean by pref(PTT_TOGGLE)
 
+    /** Whether picking a whisper target only arms it, transmitting only while the hold button is held. */
+    val isHoldToWhisper: Boolean by pref(HOLD_TO_WHISPER)
+
     /** Whether other apps may start and stop transmission through the talk broadcast. */
     val isExternalPushToTalkAllowed: Boolean by pref(ALLOW_EXTERNAL_PTT)
 
@@ -331,6 +334,8 @@ class Settings private constructor(private val context: Context) {
         val PUSH_BUTTON_HIDE = Pref("hidePtt", false)
 
         val PTT_TOGGLE = Pref("togglePtt", false)
+
+        val HOLD_TO_WHISPER = Pref("holdToWhisper", false)
 
         val ALLOW_EXTERNAL_PTT = Pref("allow_external_ptt", false)
 

@@ -208,6 +208,12 @@
             android:summary="@string/togglePttSum"
             android:title="@string/togglePtt"
             app:iconSpaceReserved="false"/>
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="holdToWhisper"
+            android:summary="@string/holdToWhisperSum"
+            android:title="@string/hold_to_whisper"
+            app:iconSpaceReserved="false"/>
         <CheckBoxPreference
             android:defaultValue="false"
             android:key="allow_external_ptt"

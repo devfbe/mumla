@@ -94,6 +94,7 @@ class ChannelTreeViewModel(
     private val repository: MumlaRepository,
     private val pinnedOnly: Boolean,
     showUserCount: Flow<Boolean>,
+    private val settings: Settings,
     buildDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
@@ -218,11 +219,17 @@ class ChannelTreeViewModel(
         connected?.actions?.setListening(channel, listen)
     }
 
-    /** Whispers to [channel]; false if the server has no voice target slot left. */
+    /**
+     * Whispers to [channel]; with hold-to-whisper on, only arms it, ready for the hold button.
+     * False if the server has no voice target slot left.
+     */
     fun shout(channel: Int, includeLinked: Boolean, includeSubchannels: Boolean): Boolean {
         val session = connected
         val target = session?.model?.value?.channel(channel) ?: return true
-        return session.actions.whisperTo(WhisperTargetChannel(target, includeLinked, includeSubchannels, null))
+        return session.actions.whisperTo(
+            WhisperTargetChannel(target, includeLinked, includeSubchannels, null),
+            activate = !settings.isHoldToWhisper,
+        )
     }
 
     fun kickBan(session: Int, reason: String, ban: Boolean) {
@@ -325,7 +332,13 @@ class ChannelTreeViewModel(
             val showUserCount = preferences.changes(Settings.SHOW_USER_COUNT.key)
                 .map { Settings.getInstance(app).shouldShowUserCount }
                 .onStart { emit(Settings.getInstance(app).shouldShowUserCount) }
-            return ChannelTreeViewModel(SessionManager.get(app), MumlaRepository.get(app), pinnedOnly, showUserCount)
+            return ChannelTreeViewModel(
+                SessionManager.get(app),
+                MumlaRepository.get(app),
+                pinnedOnly,
+                showUserCount,
+                Settings.getInstance(app),
+            )
         }
     }
 }

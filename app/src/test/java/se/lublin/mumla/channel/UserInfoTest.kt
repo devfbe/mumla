@@ -21,7 +21,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.flow.flowOf
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -32,8 +31,6 @@ import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.humla.testutil.idleMainLooperFor
 import se.lublin.mumla.R
-import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubActions
@@ -86,7 +83,7 @@ class UserInfoTest {
         installSession(session.stubConnected())
         val events = session.stubEvents()
         val app = ApplicationProvider.getApplicationContext<android.app.Application>()
-        val tree = ChannelTreeViewModel(SessionManager.get(app), MumlaRepository.get(app), false, flowOf(true))
+        val tree = ChannelTreeViewModel.create(app, pinnedOnly = false)
 
         val dialog = showUserInfoDialog(context, "Ann", tree.userStats(7))
         idleMainLooper()

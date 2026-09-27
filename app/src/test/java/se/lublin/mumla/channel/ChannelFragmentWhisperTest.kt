@@ -16,25 +16,34 @@
  */
 package se.lublin.mumla.channel
 
+import android.content.Context
+import android.view.MotionEvent
 import android.view.View
 import android.widget.TextView
+import androidx.core.content.edit
+import androidx.preference.PreferenceManager
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.AudioControls
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.addNow
 import se.lublin.mumla.testing.hostWith
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubActions
+import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.testing.stubModel
@@ -44,6 +53,12 @@ import se.lublin.mumla.testing.stubModel
 class ChannelFragmentWhisperTest {
     private val session: IHumlaSession = mockk(relaxed = true)
     private val actions = session.stubActions()
+    private val audio: AudioControls = session.stubAudio()
+    private val preferences =
+        PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<Context>())
+
+    @After
+    fun tearDown() = preferences.edit { clear() }
 
     private fun setUp(): ChannelFragment {
         every { actions.whisperTarget } returns null
@@ -90,5 +105,43 @@ class ChannelFragmentWhisperTest {
         fragment.requireView().findViewById<View>(R.id.target_panel_cancel).performClick()
 
         verify { actions.stopWhispering() }
+    }
+
+    @Test
+    fun theHoldButtonIsHiddenWithHoldToWhisperOff() {
+        val fragment = setUp()
+
+        whisperTo("Lobby")
+
+        val hold = fragment.requireView().findViewById<View>(R.id.target_panel_hold)
+        assertThat(hold.visibility).isEqualTo(View.GONE)
+    }
+
+    @Test
+    fun theHoldButtonAppearsOnlyOnceATargetIsArmedWithHoldToWhisperOn() {
+        preferences.edit(commit = true) { putBoolean(Settings.HOLD_TO_WHISPER.key, true) }
+        val fragment = setUp()
+        val hold = fragment.requireView().findViewById<View>(R.id.target_panel_hold)
+        assertThat(hold.visibility).isEqualTo(View.GONE)
+
+        whisperTo("Lobby")
+
+        assertThat(hold.visibility).isEqualTo(View.VISIBLE)
+    }
+
+    @Test
+    fun holdingTheButtonActivatesTheTargetAndReleasingStopsIt() {
+        preferences.edit(commit = true) { putBoolean(Settings.HOLD_TO_WHISPER.key, true) }
+        val fragment = setUp()
+        whisperTo("Lobby")
+        val hold = fragment.requireView().findViewById<View>(R.id.target_panel_hold)
+
+        hold.dispatchTouchEvent(MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0))
+        verify { actions.setWhisperActive(true) }
+        verify { audio.setTalking(true) }
+
+        hold.dispatchTouchEvent(MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_UP, 0f, 0f, 0))
+        verify { audio.setTalking(false) }
+        verify { actions.setWhisperActive(false) }
     }
 }
