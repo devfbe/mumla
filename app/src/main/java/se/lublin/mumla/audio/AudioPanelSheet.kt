@@ -27,6 +27,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
+import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -256,6 +257,11 @@ class AudioPanelSheet : BottomSheetDialogFragment() {
     companion object {
         const val TAG = "AudioPanel"
         private const val STATE_DESCRIPTION_INTERVAL_MS = 1000L
+
+        /** Opens the panel in [fragmentManager], unless it is open already. */
+        fun show(fragmentManager: FragmentManager) {
+            if (fragmentManager.findFragmentByTag(TAG) == null) AudioPanelSheet().show(fragmentManager, TAG)
+        }
 
         private val TRANSMIT_MODES = mapOf(
             R.id.audio_panel_transmit_voice to Settings.ARRAY_INPUT_METHOD_VOICE,
