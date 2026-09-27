@@ -13,8 +13,9 @@ Worktrees are banned outright (the IDE MCP servers cannot see them): creating on
 (EnterWorktree, Agent isolation "worktree", git worktree add) and editing files
 inside an existing linked worktree of this repo are always blocked.
 
-Builds and tests go through Android Studio's MCP server as well: while it is reachable, command-line
-Gradle may only run the pre-merge `verify` task (and harmless meta tasks such as `help`).
+Builds, tests and edits go through Android Studio's MCP server as well: while it is reachable,
+command-line Gradle may only run harmless meta tasks such as `help` (the pre-merge `verify` runs as a
+Studio run configuration), and Edit/Write may not touch the checkout's sources.
 """
 import datetime
 import json
@@ -46,12 +47,20 @@ STUDIO_PORT = 64342
 
 GRADLE_CALL = re.compile(r"(?:^|[\s;&|(`])(?:\./)?gradlew?(?=\s|$)(?P<args>[^;|&><\n]*)", re.M)
 GRADLE_VALUE_OPTIONS = {"--tests", "--console", "-x", "--exclude-task", "-p", "--project-dir", "--warning-mode"}
-GRADLE_ALLOWED_TASKS = {"verify", "help", "tasks", "projects", "properties", "dependencies"}
+GRADLE_ALLOWED_TASKS = {"help", "tasks", "projects", "properties", "dependencies"}
 GRADLE_HINT = (
     "Blocked by the IDE-first rule (CLAUDE.md): builds and tests go through the studio MCP "
-    "(build_project, get_run_configurations + execute_run_configuration, get_file_problems). "
-    "Gradle on the command line is only for the pre-merge `nix develop --command ./gradlew verify`."
+    "(build_project, get_run_configurations + execute_run_configuration, get_file_problems), and so "
+    "does the pre-merge check: execute_run_configuration(configurationName=\"verify\", "
+    "waitForExit=false), then wait for BUILD SUCCESSFUL/FAILED in the returned fullOutputPath."
 )
+EDIT_HINT = (
+    "Blocked by the IDE-first rule (CLAUDE.md): files of the main checkout are changed through the "
+    "studio MCP so Android Studio's editor, index and the disk never diverge: apply_patch (preferred; "
+    "fails loudly on a context mismatch), create_new_file for new files, replace_text_in_file only "
+    "with a unique oldText and replaceAll=false. Reading with Read stays allowed."
+)
+EDITING_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 
 SOURCE_EXT = re.compile(r"\.(kt|kts|java|xml|toml|gradle|pro|proto|properties)$")
 FREE_DIR = re.compile(r"/(build|\.gradle|\.cxx|\.git|\.idea|\.claude)(/|$)")
@@ -152,9 +161,10 @@ def uses_worktree(tool: str, args: dict, cwd: str) -> bool:
     return False
 
 
-def gradle_outside_verify(cmd: str) -> bool:
-    """True if a Gradle call runs tasks other than the pre-merge `verify` (or harmless meta tasks)."""
-    for match in GRADLE_CALL.finditer(strip_data(cmd)):
+def gradle_beyond_meta_tasks(cmd: str) -> bool:
+    """True if a Gradle call runs a real task rather than a harmless meta task such as `help`."""
+    command_lines = HEREDOC.sub(lambda heredoc: heredoc.group("head"), strip_data(cmd))
+    for match in GRADLE_CALL.finditer(command_lines):
         tokens = match.group("args").split()
         tasks, skip = [], False
         for token in tokens:
@@ -207,7 +217,16 @@ def main() -> int:
         print(WORKTREE_HINT, file=sys.stderr)
         return 2
 
-    if tool == "Bash" and gradle_outside_verify(args.get("command", "")):
+    edited = args.get("file_path") or args.get("notebook_path") or ""
+    if tool in EDITING_TOOLS and edited and indexed_source(edited, cwd):
+        if not port_open(STUDIO_PORT):
+            log(data, "allowed-edit-studio-down")
+            return 0
+        log(data, "blocked-edit")
+        print(EDIT_HINT, file=sys.stderr)
+        return 2
+
+    if tool == "Bash" and gradle_beyond_meta_tasks(args.get("command", "")):
         if not port_open(STUDIO_PORT):
             log(data, "allowed-gradle-studio-down")
             return 0
