@@ -151,6 +151,10 @@
     <string name="shareMessage">Join this Mumble server with Mumla. %s</string>
     <string name="status_notify_muted_and_deafened">Muted and deafened.</string>
     <string name="status_notify_muted">Muted.</string>
+    <string name="self_status_muted">Muted</string>
+    <string name="self_status_deafened">Deafened</string>
+    <string name="self_status_muted_deafened">Muted and deafened</string>
+    <string name="channel_and_status">%1$s · %2$s</string>
     <string name="close">Close</string>
     <string name="search_name">Name</string>
     <string name="search_country">Country</string>
@@ -367,7 +371,7 @@
     <string name="notification_you">You</string>
     <string name="notification_reply">Reply</string>
     <string name="notification_group_server">Server connection</string>
-    <string name="notification_channel_connection_description">Shown while connected, with buttons to mute, deafen and show the overlay.</string>
+    <string name="notification_channel_connection_description">Shown while connected, with buttons to mute, deafen and disconnect.</string>
     <string name="notification_channel_messages_description">Chat messages that arrive while you are connected.</string>
     <string name="notification_channel_reconnect_description">A lost connection, while reconnecting or when it needs you to reconnect.</string>
     <string name="pref_dynamic_colors">Dynamic colors</string>

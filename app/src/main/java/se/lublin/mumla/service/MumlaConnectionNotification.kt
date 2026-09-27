@@ -52,8 +52,11 @@ class MumlaConnectionNotification private constructor(
     contentText: String,
     private val listener: OnActionListener,
 ) {
+    /** The server's name; without one the platform shows the app's. */
+    var title: String? = null
     var customContentText: String = contentText
-    /** Mute, deafen and overlay: only meaningful while a session is up. */
+
+    /** Mute, deafen and disconnect: only meaningful while a session is up. */
     var actionsShown: Boolean = false
 
     /** Our own state, which decides whether the actions offer to mute and deafen or to undo it. */
@@ -74,7 +77,7 @@ class MumlaConnectionNotification private constructor(
             when (intent.action) {
                 BROADCAST_MUTE -> listener.onMuteToggled()
                 BROADCAST_DEAFEN -> listener.onDeafenToggled()
-                BROADCAST_OVERLAY -> listener.onOverlayToggled()
+                BROADCAST_DISCONNECT -> listener.onDisconnectRequested()
                 BROADCAST_CANCEL_RECONNECT -> listener.onReconnectCancelled()
             }
         }
@@ -107,7 +110,7 @@ class MumlaConnectionNotification private constructor(
         val filter = IntentFilter().apply {
             addAction(BROADCAST_DEAFEN)
             addAction(BROADCAST_MUTE)
-            addAction(BROADCAST_OVERLAY)
+            addAction(BROADCAST_DISCONNECT)
             addAction(BROADCAST_CANCEL_RECONNECT)
         }
         ContextCompat.registerReceiver(service, notificationReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
@@ -126,8 +129,8 @@ class MumlaConnectionNotification private constructor(
     private fun buildNotification(): Notification {
         ensureChannel()
 
-        // The app name is always shown, so no content title.
         val builder = NotificationCompat.Builder(service, CHANNEL_ID)
+            .setContentTitle(title)
             .setContentText(customContentText)
             .setSmallIcon(R.drawable.ic_stat_notify)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -148,9 +151,9 @@ class MumlaConnectionNotification private constructor(
                 broadcast(BROADCAST_DEAFEN),
             )
             builder.addAction(
-                R.drawable.ic_action_channels,
-                service.getString(R.string.overlay),
-                broadcast(BROADCAST_OVERLAY),
+                R.drawable.ic_close,
+                service.getString(R.string.disconnect),
+                broadcast(BROADCAST_DISCONNECT),
             )
         }
         if (cancelReconnectShown) {
@@ -185,7 +188,7 @@ class MumlaConnectionNotification private constructor(
     interface OnActionListener {
         fun onMuteToggled()
         fun onDeafenToggled()
-        fun onOverlayToggled()
+        fun onDisconnectRequested()
         fun onReconnectCancelled()
     }
 
@@ -195,7 +198,7 @@ class MumlaConnectionNotification private constructor(
         private const val CHANNEL_ID = NotificationChannels.CONNECTION
         private const val BROADCAST_MUTE = "b_mute"
         private const val BROADCAST_DEAFEN = "b_deafen"
-        private const val BROADCAST_OVERLAY = "b_overlay"
+        private const val BROADCAST_DISCONNECT = "b_disconnect"
 
         /** Distinct from MumlaReconnectNotification's action: both receivers can be registered at once. */
         private const val BROADCAST_CANCEL_RECONNECT = "b_foreground_cancel_reconnect"

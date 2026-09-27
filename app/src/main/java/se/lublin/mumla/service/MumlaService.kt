@@ -23,13 +23,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.net.Uri
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
-import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
@@ -60,8 +58,10 @@ import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.chat.outgoingMessageHtml
 import se.lublin.mumla.service.ipc.TalkBroadcastReceiver
 import se.lublin.mumla.session.PushToTalk
+import se.lublin.mumla.session.SelfSummary
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.session.isConnected
+import se.lublin.mumla.session.serverName
 import se.lublin.mumla.util.HtmlUtils
 import se.lublin.mumla.util.changes
 import se.lublin.mumla.util.collectEvents
@@ -183,6 +183,11 @@ class MumlaService :
             }
         }
         launch(start = CoroutineStart.UNDISPATCHED) {
+            session.model.map(SelfSummary::of).distinctUntilChanged().drop(1).collect {
+                if (session.state.value == SessionState.Connected) renderSessionState(session, SessionState.Connected)
+            }
+        }
+        launch(start = CoroutineStart.UNDISPATCHED) {
             val self = session.model.map { it?.selfSession }.distinctUntilChanged()
             combine(self, session.talkStates) { id, states -> id != null && states[id] == TalkState.TALKING }
                 .distinctUntilChanged().drop(1)
@@ -201,7 +206,10 @@ class MumlaService :
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == MumlaMessageNotification.ACTION_REPLY) onChatReply(intent)
+        when (intent?.action) {
+            MumlaMessageNotification.ACTION_REPLY -> onChatReply(intent)
+            ACTION_TOGGLE_OVERLAY -> toggleOverlay()
+        }
         handler.post(stopIfIdle)
         return START_NOT_STICKY
     }
@@ -237,16 +245,18 @@ class MumlaService :
     private fun renderSessionState(session: IHumlaSession, state: SessionState) {
         // A replaced session may still report its end before its observer is cancelled.
         if (sessions.session.value !== session) return
+        notification.title = session.serverName
         when (state) {
             SessionState.Connecting -> {
                 hideReconnectPrompt()
                 showConnectionNotification(getString(R.string.mumlaConnecting) + torSuffix())
             }
             SessionState.Connected -> {
-                val self = session.model.value?.self
+                val self = SelfSummary.of(session.model.value)
                 notification.muted = self?.isSelfMuted == true
                 notification.deafened = self?.isSelfDeafened == true
-                showConnectionNotification(connectedText(), actions = true)
+                val text = self?.text(this) ?: getString(R.string.connected)
+                showConnectionNotification(text + torSuffix(), actions = true)
             }
             is SessionState.ConnectionLost, is SessionState.Reconnecting ->
                 showConnectionNotification(getString(R.string.connection_lost_reconnecting), cancelReconnect = true)
@@ -306,21 +316,7 @@ class MumlaService :
         }
     }
 
-    private fun onSelfMuteChanged(muted: Boolean, deafened: Boolean) {
-        settings.setMutedAndDeafened(muted, deafened)
-        if (notification.isForeground) {
-            notification.muted = muted
-            notification.deafened = deafened
-            notification.customContentText = connectedText()
-            notification.show()
-        }
-    }
-
-    private fun connectedText(): String = when {
-        notification.muted && notification.deafened -> getString(R.string.status_notify_muted_and_deafened)
-        notification.muted -> getString(R.string.status_notify_muted)
-        else -> getString(R.string.connected) + torSuffix()
-    }
+    private fun onSelfMuteChanged(muted: Boolean, deafened: Boolean) = settings.setMutedAndDeafened(muted, deafened)
 
     private fun onTextMessage(session: IHumlaSession, message: Message) {
         val strippedMessage = HtmlUtils.toPlainText(message.message)
@@ -387,7 +383,7 @@ class MumlaService :
         return MumlaMessageNotification.Conversation(
             self = model?.self?.name,
             channel = model?.selfChannel?.name,
-            server = session.targetServer?.let { it.name.ifEmpty { it.host } },
+            server = session.serverName,
         )
     }
 
@@ -461,22 +457,14 @@ class MumlaService :
         sessions.connected?.let(::toggleSelfDeafen)
     }
 
-    override fun onOverlayToggled() {
-        if (channelOverlay.isShown) {
-            channelOverlay.hide()
-            return
+    override fun onDisconnectRequested() = sessions.disconnect()
+
+    /** Shows or hides the overlay; the app has obtained the permission to draw over other apps first. */
+    private fun toggleOverlay() {
+        when {
+            channelOverlay.isShown -> channelOverlay.hide()
+            sessions.connected != null && android.provider.Settings.canDrawOverlays(this) -> channelOverlay.show()
         }
-        if (!android.provider.Settings.canDrawOverlays(applicationContext)) {
-            val showSetting = Intent(
-                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName"),
-            )
-            showSetting.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(showSetting)
-            Toast.makeText(this, R.string.grant_perm_draw_over_apps, Toast.LENGTH_LONG).show()
-            return
-        }
-        channelOverlay.show()
     }
 
     /** A press on a stale notification after the reconnect succeeded is a no-op. */
@@ -491,6 +479,8 @@ class MumlaService :
 
         const val TTS_THRESHOLD = 250 // Maximum number of characters to read
 
+        private const val ACTION_TOGGLE_OVERLAY = "se.lublin.mumla.action.TOGGLE_OVERLAY"
+
         /** The preferences [onPreferenceChanged] reacts to. */
         private val OBSERVED_KEYS = setOf(Settings.INPUT_METHOD.key, Settings.HOT_CORNER.key, Settings.USE_TTS.key)
 
@@ -498,9 +488,15 @@ class MumlaService :
          * Starts the service for a session that is under way. Called while the user is looking at
          * the app (or acting on one of its notifications), when Android allows the start.
          */
-        fun start(context: Context) {
+        fun start(context: Context) = start(context, Intent(context, MumlaService::class.java))
+
+        /** Shows the overlay, or hides it if shown. Needs the permission to draw over other apps. */
+        fun toggleOverlay(context: Context) =
+            start(context, Intent(context, MumlaService::class.java).setAction(ACTION_TOGGLE_OVERLAY))
+
+        private fun start(context: Context, intent: Intent) {
             try {
-                context.startService(Intent(context, MumlaService::class.java))
+                context.startService(intent)
             } catch (e: IllegalStateException) {
                 HumlaLog.w(TAG, "The app may not start its service now", e)
             }
