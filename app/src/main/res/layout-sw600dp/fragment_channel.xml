@@ -52,42 +52,67 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <FrameLayout
+        <LinearLayout
             android:id="@+id/target_panel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp">
+            android:minHeight="48dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="?attr/colorErrorContainer"
+            android:paddingStart="12dp"
+            android:paddingEnd="4dp">
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="?attr/colorOutlineVariant"
-                android:layout_gravity="top"/>
+            <ImageView
+                android:id="@+id/target_panel_icon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="12dp"
+                android:importantForAccessibility="no"
+                app:srcCompat="@drawable/ic_action_microphone"
+                app:tint="?attr/colorOnErrorContainer"/>
 
             <TextView
                 android:id="@+id/target_panel_warning"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                tools:text="Shouting to Channel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                tools:text="Whispering to Channel"
                 android:textSize="@dimen/target_panel_text_size"
-                android:textColor="?android:textColorPrimary"
+                android:textColor="?attr/colorOnErrorContainer"
                 android:singleLine="true"
+                android:textStyle="bold"
                 android:gravity="start|center_vertical"
-                android:textStyle="italic"
-                android:padding="8dp"/>
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"/>
 
-            <ImageView
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/target_panel_hold"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:minHeight="48dp"
+                android:visibility="gone"
+                tools:visibility="visible"
+                android:text="@string/hold_to_whisper"
+                android:textColor="?attr/colorOnErrorContainer"
+                app:strokeColor="?attr/colorOnErrorContainer"/>
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/target_panel_cancel"
-                android:layout_width="48dp"
-                android:padding="12dp"
-                android:contentDescription="@string/a11y_stop_shouting"
-                android:layout_height="match_parent"
-                app:srcCompat="@drawable/ic_action_delete_dark"
-                app:tint="?android:textColorPrimary"
-                android:layout_gravity="center_vertical|end"
-                android:background="?attr/selectableItemBackgroundBorderless"/>
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:minHeight="48dp"
+                android:text="@string/a11y_stop_shouting"
+                android:textColor="?attr/colorOnErrorContainer"
+                app:icon="@drawable/ic_action_delete_dark"
+                app:iconTint="?attr/colorOnErrorContainer"
+                app:strokeColor="?attr/colorOnErrorContainer"/>
 
-        </FrameLayout>
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/pushtotalk_view"

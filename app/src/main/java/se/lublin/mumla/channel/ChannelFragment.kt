@@ -76,6 +76,9 @@ class ChannelFragment :
     /** Our own state as last shown; null while not synchronized. */
     private var shownSelf: SelfState? = null
 
+    /** The whisper target as last shown; null while not whispering. Drives the start/stop a11y announce. */
+    private var shownWhisperTarget: String? = null
+
     private val settings get() = Settings.getInstance(requireActivity())
 
     private val announcer = SelfStateAnnouncer { text ->
@@ -287,10 +290,19 @@ class ChannelFragment :
         talkButtonHeld = false
     }
 
+    /** Shows the panel, and announces it starting or stopping so a screen reader notices either. */
     private fun showWhisperTarget(name: String?) {
         val binding = binding ?: return
+        val started = shownWhisperTarget == null && name != null
+        val stopped = shownWhisperTarget != null && name == null
+        shownWhisperTarget = name
         binding.targetPanel.visibility = if (name != null) View.VISIBLE else View.GONE
         if (name != null) binding.targetPanelWarning.text = getString(R.string.shout_target, name)
+        @Suppress("DEPRECATION") // No view shows this for a live region to carry.
+        when {
+            started -> binding.root.announceForAccessibility(getString(R.string.shout_target, name))
+            stopped -> binding.root.announceForAccessibility(getString(R.string.a11y_stop_shouting))
+        }
     }
 
     /** Applies the user's interface preferences and mute state to the push-to-talk button. */
