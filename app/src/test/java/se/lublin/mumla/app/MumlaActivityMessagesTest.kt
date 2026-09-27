@@ -18,17 +18,22 @@ package se.lublin.mumla.app
 
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.mumla.ui.AppMessages
 import se.lublin.mumla.testing.launchMumlaActivity
+import se.lublin.mumla.testing.resetSnackbars
 import se.lublin.mumla.testing.snackbarText
 
 /** Messages from where there is no screen are shown by the activity that is started. */
 @RunWith(RobolectricTestRunner::class)
 class MumlaActivityMessagesTest {
     private val app = ApplicationProvider.getApplicationContext<MumlaApplication>()
+
+    @Before
+    fun setUp() = resetSnackbars()
 
     @Test
     fun aMessagePostedWhileTheActivityIsStartedIsShownAsASnackbar() {

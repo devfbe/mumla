@@ -63,6 +63,7 @@ import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.TestImages
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.snackbarAction
+import se.lublin.mumla.testing.resetSnackbars
 import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
@@ -99,6 +100,7 @@ class ChannelChatFragmentTest {
 
     @Before
     fun setUp() {
+        resetSnackbars()
         installSession(session.stubConnected())
         every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
     }

@@ -17,6 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.resetSnackbars
 import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.host
@@ -34,6 +35,7 @@ class GeneralSettingsBluetoothTest {
     private lateinit var fragment: GeneralSettingsFragment
 
     private fun open() {
+        resetSnackbars()
         activity = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
         fragment = activity.host(GeneralSettingsFragment())
     }

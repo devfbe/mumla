@@ -39,6 +39,19 @@ fun Activity.snackbarText(): String? = snackbarText(window.decorView)
 fun snackbarAction(root: View): TextView =
     root.rootView.findViewById(MaterialR.id.snackbar_action)
 
+/**
+ * Forgets any snackbar an earlier test left current. `SnackbarManager` is a process-wide singleton,
+ * and a snackbar whose activity went away with the test's looper stays current, queueing every
+ * later one behind it.
+ */
+fun resetSnackbars() {
+    val manager = Class.forName("com.google.android.material.snackbar.SnackbarManager")
+    val instance = manager.getDeclaredMethod("getInstance").apply { isAccessible = true }.invoke(null)
+    for (field in listOf("currentSnackbar", "nextSnackbar")) {
+        manager.getDeclaredField(field).apply { isAccessible = true }.set(instance, null)
+    }
+}
+
 /** The next message posted to [messages], or null if none is waiting. */
 fun nextMessage(messages: AppMessages): String? =
     runBlocking { withTimeoutOrNull(NO_MESSAGE_WAIT_MS) { messages.messages.first() } }

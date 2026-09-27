@@ -24,6 +24,7 @@ import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.resetSnackbars
 import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
@@ -91,6 +92,7 @@ class ChannelListFragmentTest {
 
     @Before
     fun setUp() {
+        resetSnackbars()
         model = session.stubModel(tree())
         talkStates = session.stubTalkStates()
         actions = session.stubActions()

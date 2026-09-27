@@ -36,6 +36,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
+import se.lublin.mumla.testing.resetSnackbars
 import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.FileProviderCache
 import se.lublin.mumla.testing.QueueingDispatcher
@@ -83,6 +84,7 @@ class ImageViewerDialogFragmentTest {
     @Before
     fun resetTheFileProviderRoots() {
         FileProviderCache.clear()
+        resetSnackbars()
     }
 
     @After
