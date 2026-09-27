@@ -139,17 +139,7 @@ class MumlaActivity :
         supportFragmentManager.setFragmentResultListener(ServerEditFragment.REQUEST_KEY, this) { _, result ->
             onServerEdited(ServerEditFragment.Result.from(result))
         }
-        lifecycleScope.launch {
-            // Fragment transactions only while started; each start begins with the current state.
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { sessions.session.collectLatest { session -> if (session != null) followEvents(session) } }
-                var previous: SessionState? = null
-                sessions.state.collect { state ->
-                    onSessionState(previous, state)
-                    previous = state
-                }
-            }
-        }
+        followSession()
         lifecycleScope.launch {
             connectRequests.requested.collect { request ->
                 when (request) {
@@ -169,6 +159,21 @@ class MumlaActivity :
         // Only on a real start, not when the activity is recreated, e.g. on rotation.
         if (savedInstanceState == null) {
             if (settings.isFirstRun) showFirstRunGuide() else StartupAction().execute(this)
+        }
+    }
+
+    /** Follows the session's events and state while started; each start begins with the current state. */
+    private fun followSession() {
+        lifecycleScope.launch {
+            // Fragment transactions only while started.
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { sessions.session.collectLatest { session -> if (session != null) followEvents(session) } }
+                var previous: SessionState? = null
+                sessions.state.collect { state ->
+                    onSessionState(previous, state)
+                    previous = state
+                }
+            }
         }
     }
 
