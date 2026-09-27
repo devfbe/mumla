@@ -20,46 +20,60 @@ package se.lublin.humla.audio.capture
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
+import se.lublin.humla.audio.capture.Aec3Param.AUDIBILITY_LOW_RENDER_LIMIT
+import se.lublin.humla.audio.capture.Aec3Param.AUDIBILITY_NORMAL_RENDER_LIMIT
+import se.lublin.humla.audio.capture.Aec3Param.DNE_ENR_THRESHOLD
+import se.lublin.humla.audio.capture.Aec3Param.DNE_TRIGGER_THRESHOLD
+import se.lublin.humla.audio.capture.Aec3Param.EP_DEFAULT_LEN
+import se.lublin.humla.audio.capture.Aec3Param.EP_NEAREND_LEN
+import se.lublin.humla.audio.capture.Aec3Param.ERLE_MAX_H
+import se.lublin.humla.audio.capture.Aec3Param.ERLE_MAX_L
+import se.lublin.humla.audio.capture.Aec3Param.NEAREND_HF_ENR_SUPPRESS
+import se.lublin.humla.audio.capture.Aec3Param.NEAREND_HF_ENR_TRANSPARENT
+import se.lublin.humla.audio.capture.Aec3Param.NEAREND_LF_ENR_SUPPRESS
+import se.lublin.humla.audio.capture.Aec3Param.NEAREND_LF_ENR_TRANSPARENT
+import se.lublin.humla.audio.capture.Aec3Param.NORMAL_HF_ENR_SUPPRESS
+import se.lublin.humla.audio.capture.Aec3Param.NORMAL_HF_ENR_TRANSPARENT
+import se.lublin.humla.audio.capture.Aec3Param.NORMAL_LF_ENR_SUPPRESS
+import se.lublin.humla.audio.capture.Aec3Param.NORMAL_LF_ENR_TRANSPARENT
+import se.lublin.humla.audio.capture.Aec3Param.SUBBAND1_HIGH
+import se.lublin.humla.audio.capture.Aec3Param.SUBBAND1_LOW
+import se.lublin.humla.audio.capture.Aec3Param.SUBBAND2_HIGH
+import se.lublin.humla.audio.capture.Aec3Param.SUBBAND2_LOW
+import se.lublin.humla.audio.capture.Aec3Param.SUBBAND_NEAREND_THRESHOLD
+import se.lublin.humla.audio.capture.Aec3Param.SUBBAND_SNR_THRESHOLD
+import se.lublin.humla.audio.capture.Aec3Param.USE_SUBBAND_NEAREND_DETECTION
+import se.lublin.humla.audio.capture.DoubleTalkRig.EchoPath
+import se.lublin.humla.audio.capture.DoubleTalkRig.Phase
+import se.lublin.humla.audio.capture.DoubleTalkRig.Scenario
+import se.lublin.humla.audio.capture.DoubleTalkRig.db
+import se.lublin.humla.audio.capture.DoubleTalkRig.dbfs
+import se.lublin.humla.audio.capture.DoubleTalkRig.log
+import se.lublin.humla.audio.capture.DoubleTalkRig.mean
+import se.lublin.humla.audio.capture.DoubleTalkRig.meanPower
 import se.lublin.humla.audio.native.RnnoiseNative
 import se.lublin.humla.audio.native.WebRtcApmNative
 import java.util.Locale
-import kotlin.math.PI
-import kotlin.math.log10
 import kotlin.math.max
-import kotlin.math.pow
-import kotlin.math.roundToInt
-import kotlin.math.sin
-import kotlin.math.sqrt
-import kotlin.random.Random
 
 /**
- * CHARACTERIZATION (double-talk bug): how much near-end speech survives the capture chain the app
- * builds for [EchoCancellationMode.WEBRTC] (real `libhumla_native.so`: AEC3 + AGC2 + high-pass,
- * optionally followed by RNNoise) while the far end is talking, and whether the app's default
- * adaptive gate opens on what is left.
+ * Double talk through the capture chain the app builds for [EchoCancellationMode.WEBRTC] (real
+ * `libhumla_native.so`: AEC3 + AGC2 + high-pass, then RNNoise), see [DoubleTalkRig]: how much
+ * near-end speech survives while the far end talks, whether the app's default adaptive gate opens
+ * on it, and how much echo gets through when only the far end talks.
  *
- * Timeline (48 kHz mono, 10 ms frames): far end only (AEC3 converges), then double talk, then near
- * end only. Three runs per chain with identical far-end reference:
- * - A: mic = echo + near + noise (what the phone records),
- * - B: mic = echo + noise (A without the near end),
- * - C: mic = near + noise, far-end reference silent (the near end as the chain passes it alone).
- * Near-end retention in a phase is `10*log10((P_A - P_B) / P_C)`.
- *
- * Prints its tables to logcat (tag [TAG]); asserts only that the chain accepted every frame.
+ * Measured on an SM-S938B (2026-09): no AEC3 configuration reachable through [Aec3Tuning] keeps
+ * the gate open on 90 % of voiced near-end frames without transmitting more echo somewhere; the
+ * gate closes because RNNoise, behind AEC3, silences the near end (AEC3 alone keeps it). See
+ * [sweepAec3Tunings] and [shippedChainInDoubleTalk].
  */
 @RunWith(AndroidJUnit4::class)
 class DoubleTalkAec3DeviceTest {
 
-    private class Scenario(val name: String, val echoGainDb: Float, val nearDbfs: Float)
-
-    private enum class Phase(val seconds: Int) { FAR_ONLY(8), DOUBLE_TALK(4), NEAR_ONLY(4) }
-
-    /**
-     * The chains measured: the two the app builds for WEBRTC echo cancellation (via
-     * [CapturePreprocessorFactory]), and two diagnostic variants that isolate AGC2 and AEC3.
-     */
+    /** The chains the app builds for WEBRTC echo cancellation, and diagnostic variants. */
     private enum class Chain(val label: String) {
         APP_APM("APM (app: AEC3+AGC2+HPF)"),
         APP_APM_RNNOISE("APM+RNNoise (app)"),
@@ -67,60 +81,159 @@ class DoubleTalkAec3DeviceTest {
         RNNOISE_ONLY("RNNoise only, no AEC (diagnostic)"),
     }
 
-    /** Per-frame output power and the gate trace of one chain run. */
-    private class Run(frames: Int) {
-        val power = DoubleArray(frames)
-        val transmit = BooleanArray(frames)
-        val floor = FloatArray(frames)
-        val threshold = FloatArray(frames)
-    }
-
+    /**
+     * CHARACTERIZATION: the four chains, per phase. Prints its tables to logcat (tag
+     * [DoubleTalkRig.TAG]); asserts only that the chain accepted every frame.
+     */
     @Test
     fun nearEndSurvivesTheWebRtcChainDuringDoubleTalk() {
         val scenarios = listOf(
-            Scenario("echo -20 dB, near -26 dBFS", echoGainDb = -20f, nearDbfs = -26f),
-            Scenario("echo -10 dB, near -26 dBFS", echoGainDb = -10f, nearDbfs = -26f),
-            Scenario("echo -10 dB, near -32 dBFS", echoGainDb = -10f, nearDbfs = -32f),
-            Scenario("echo   0 dB, near -26 dBFS", echoGainDb = 0f, nearDbfs = -26f),
-            Scenario("echo  +6 dB, near -26 dBFS", echoGainDb = 6f, nearDbfs = -26f),
+            Scenario(echoGainDb = -20f, nearDbfs = -26f, EchoPath.LINEAR),
+            Scenario(echoGainDb = -10f, nearDbfs = -26f, EchoPath.LINEAR),
+            Scenario(echoGainDb = -10f, nearDbfs = -32f, EchoPath.LINEAR),
+            Scenario(echoGainDb = 0f, nearDbfs = -26f, EchoPath.LINEAR),
+            Scenario(echoGainDb = 6f, nearDbfs = -26f, EchoPath.LINEAR),
         )
-        log("far end ${FAR_DBFS} dBFS active, echo delay ${ECHO_DELAY_MS} ms, mic noise ${NOISE_DBFS} dBFS")
+        log("far end ${DoubleTalkRig.FAR_DBFS} dBFS, echo delay ${DoubleTalkRig.ECHO_DELAY_MS} ms, " +
+            "mic noise ${DoubleTalkRig.NOISE_DBFS} dBFS; shipped AEC3: ${WebRtcApmConfig.FOR_ECHO_CANCELLATION.aec3}")
         log("VAD: app defaults, adaptive fraction 0.65, hold 250 ms, onset 2 frames")
         for (scenario in scenarios) {
-            for (chain in Chain.entries) measure(scenario, chain)
+            for (chain in Chain.entries) characterize(scenario, chain)
         }
     }
 
-    private fun measure(scenario: Scenario, chain: Chain) {
-        val frames = Phase.entries.sumOf { it.seconds } * FRAMES_PER_SECOND
-        val samples = frames * FRAME
-        val farEndStop = (Phase.FAR_ONLY.seconds + Phase.DOUBLE_TALK.seconds) * RATE
-        val nearStart = Phase.FAR_ONLY.seconds * RATE
+    /**
+     * webrtc's default config handed over as a tuning takes the injected-factory path in
+     * `humla_apm.cpp`; it must be the very canceller the built-in path creates, sample for sample.
+     * Also catches a Kotlin default that drifted from the native one.
+     */
+    @Test
+    fun defaultTuningIsBitIdenticalToNoTuning() {
+        val scenario = Scenario(echoGainDb = 0f, nearDbfs = -26f, EchoPath.NONLINEAR)
+        val mic = DoubleTalkRig.sum(
+            DoubleTalkRig.echo(scenario), DoubleTalkRig.near(scenario.nearDbfs), DoubleTalkRig.noiseFloor,
+        )
 
-        val far = speechLike(samples, f0 = 115.0, syllableHz = 4.1, seed = 1, dbfs = FAR_DBFS)
-        for (i in farEndStop until samples) far[i] = 0f
-        val near = speechLike(samples, f0 = 205.0, syllableHz = 3.3, seed = 2, dbfs = scenario.nearDbfs)
-        for (i in 0 until nearStart) near[i] = 0f
-        val echo = echoOf(far, scenario.echoGainDb)
-        val noiseFloor = whiteNoise(samples, NOISE_DBFS, seed = 3)
-        val silence = FloatArray(samples)
+        val builtIn = DoubleTalkRig.run(DoubleTalkRig.appChain(aec3 = null), DoubleTalkRig.far, mic)
+        val injected = DoubleTalkRig.run(DoubleTalkRig.appChain(aec3 = Aec3Tuning.DEFAULT), DoubleTalkRig.far, mic)
+        // A knob that changes this scenario (a raised ERLE cap does not: the measured ERLE stays below it).
+        val shorterTail = D.with(EP_DEFAULT_LEN to 0.7f)
+        val tuned = DoubleTalkRig.run(DoubleTalkRig.appChain(aec3 = shorterTail), DoubleTalkRig.far, mic)
 
-        val micA = sum(echo, near, noiseFloor)
-        val a = run(chain, far, micA)
-        val b = run(chain, far, sum(echo, noiseFloor))
-        val c = run(chain, silence, sum(near, noiseFloor))
+        assertThat(injected.hash).isEqualTo(builtIn.hash)
+        assertThat(tuned.hash).isNotEqualTo(builtIn.hash)
+    }
+
+    /**
+     * CHARACTERIZATION, asserted, reference talkers: the shipped chain over the sweep's eight
+     * scenarios, and the finding behind it. Bounds sit a few points outside what the SM-S938B
+     * measured (in brackets), so a tuning or chain change that spams echo or closes the gate
+     * further fails here; one that fixes double talk fails too, and should move the bounds.
+     */
+    @Test
+    fun shippedChainInDoubleTalk() {
+        val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) })
+        val shipped = { factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC) }
+        val apmOnly = { factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC) }
+        val nearShipped = DoubleTalkRig.runNearAlone(shipped(), NEAR_DBFS)
+        val nearApmOnly = DoubleTalkRig.runNearAlone(apmOnly(), NEAR_DBFS)
+        for (scenario in SWEEP_SCENARIOS) {
+            val m = DoubleTalkRig.measure(scenario, shipped, nearShipped)
+            logMeasurement("shipped", scenario, m)
+            // Echo only: at most 30 % of frames open (18.6 and 29.9 % on the nonlinear path).
+            assertWithMessage("false transmit on echo alone, %s", scenario.name).that(m.falseOpen).isAtMost(0.35f)
+            // Double talk: the gate still opens on some voiced near-end frames (26-62 %).
+            assertWithMessage("gate in double talk, %s", scenario.name).that(m.gateOpen).isAtLeast(0.15f)
+        }
+        // The finding: AEC3 alone passes the near end, RNNoise behind it silences it.
+        for (echoGainDb in listOf(-20f, 0f)) {
+            val scenario = Scenario(echoGainDb, NEAR_DBFS, EchoPath.LINEAR)
+            val withRnnoise = DoubleTalkRig.measure(scenario, shipped, nearShipped)
+            val withoutRnnoise = DoubleTalkRig.measure(scenario, apmOnly, nearApmOnly)
+            logMeasurement("APM only", scenario, withoutRnnoise)
+            assertWithMessage("AEC3 alone keeps the gate open, %s (99, 94 %%)", scenario.name)
+                .that(withoutRnnoise.gateOpen).isAtLeast(0.9f)
+            assertWithMessage("RNNoise behind AEC3 closes it, %s (62, 26 %%)", scenario.name)
+                .that(withRnnoise.gateOpen).isAtMost(0.75f)
+            assertWithMessage("RNNoise zeroes voiced near-end frames, %s (45, 64 %%)", scenario.name)
+                .that(withRnnoise.zeroed).isAtLeast(0.3f)
+        }
+    }
+
+    /**
+     * MEASUREMENT HARNESS: every candidate over the eight scenarios (four echo levels, linear and
+     * nonlinear path), for [SWEEP_TALKERS] talker pairs. Logs one line per candidate and scenario
+     * and a summary against the default; asserts only that every frame was taken. Takes minutes;
+     * raise [SWEEP_TALKERS] to 3 before deciding anything, single pairs swing by tens of points.
+     */
+    @Test
+    fun sweepAec3Tunings() {
+        log("candidate           scenario                         echo-in  | DT: kept  gate  zeroed | " +
+            "echo only: resid  p95   false-open (0-2 s)")
+        val nearAlone = HashMap<String, DoubleTalkRig.Run>()
+        val results = HashMap<Pair<String, String>, DoubleTalkRig.Measurement>()
+        val scenarios = (0 until SWEEP_TALKERS).flatMap { talkers ->
+            SWEEP_SCENARIOS.map { Scenario(it.echoGainDb, it.nearDbfs, it.path, talkers) }
+        }
+        for (scenario in scenarios) {
+            for (candidate in CANDIDATES) {
+                val build = candidate.chain ?: { DoubleTalkRig.appChain(candidate.tuning) }
+                val c = nearAlone.getOrPut("${candidate.name}#${scenario.talkers}") {
+                    DoubleTalkRig.runNearAlone(build(), scenario.nearDbfs, scenario.talkers)
+                }
+                val m = DoubleTalkRig.measure(scenario, build, c)
+                results[candidate.name to scenario.name] = m
+                logMeasurement(candidate.name, scenario, m)
+            }
+        }
+        log("summary over ${scenarios.size} scenarios: mean gate, mean false-open, " +
+            "scenarios with false-open > default + 2 points")
+        val base = scenarios.map { results.getValue(CANDIDATES[0].name to it.name) }
+        for (candidate in CANDIDATES) {
+            val mine = scenarios.map { results.getValue(candidate.name to it.name) }
+            val worse = mine.indices.count { mine[it].falseOpen > base[it].falseOpen + 0.02f }
+            log(
+                String.format(
+                    Locale.ROOT, "%-19s gate %4.1f%%  false-open %4.1f%%  worse in %d; min gate %3.0f%%",
+                    candidate.name, 100 * mine.map { it.gateOpen }.average(), 100 * mine.map { it.falseOpen }.average(),
+                    worse, 100 * mine.minOf { it.gateOpen },
+                ),
+            )
+        }
+    }
+
+    private fun logMeasurement(name: String, scenario: Scenario, m: DoubleTalkRig.Measurement) {
+        log(
+            String.format(
+                Locale.ROOT,
+                "%-19s %-32s %6.1f  | %+6.1f  %4.0f%%  %4.0f%%  | %6.1f %6.1f  %4.1f%% (%4.0f%%)",
+                name, scenario.name, m.echoInDbfs, m.keptDb, 100 * m.gateOpen, 100 * m.zeroed,
+                m.residualDbfs, m.residualP95Dbfs, 100 * m.falseOpen, 100 * m.falseOpenConverging,
+            ),
+        )
+    }
+
+    private fun characterize(scenario: Scenario, chain: Chain) {
+        val near = DoubleTalkRig.near(scenario.nearDbfs)
+        val echo = DoubleTalkRig.echo(scenario)
+        val noise = DoubleTalkRig.noiseFloor
+        val micA = DoubleTalkRig.sum(echo, near, noise)
+        val a = DoubleTalkRig.run(build(chain), DoubleTalkRig.far, micA)
+        val b = DoubleTalkRig.run(build(chain), DoubleTalkRig.far, DoubleTalkRig.sum(echo, noise))
+        val c = DoubleTalkRig.run(build(chain), DoubleTalkRig.silence, DoubleTalkRig.sum(near, noise))
 
         log("== ${scenario.name}, ${chain.label} ==")
         log("phase        mic-in  echo-in  out A   out B   out C   near kept  gate A   first open  floor/thr A (end)")
         var start = 0
         for (phase in Phase.entries) {
-            val end = start + phase.seconds * FRAMES_PER_SECOND
+            val end = start + phase.seconds * DoubleTalkRig.FRAMES_PER_SECOND
             val pA = mean(a.power, start, end)
             val pB = mean(b.power, start, end)
             val pC = mean(c.power, start, end)
-            val kept = if (phase == Phase.FAR_ONLY) Float.NaN else db(max(pA - pB, TINY) / max(pC, TINY))
+            val kept = if (phase == Phase.FAR_ONLY) Float.NaN else db(max(pA - pB, 1e-3) / max(pC, 1e-3))
             val open = (start until end).count { a.transmit[it] }
-            val firstOpen = (start until end).firstOrNull { a.transmit[it] }?.let { (it - start) * FRAME_MS }
+            val firstOpen = (start until end).firstOrNull { a.transmit[it] }
+                ?.let { (it - start) * DoubleTalkRig.FRAME_MS }
             log(
                 String.format(
                     Locale.ROOT,
@@ -135,27 +248,23 @@ class DoubleTalkAec3DeviceTest {
             )
             start = end
         }
-        // Frames where the near end is actually voiced (within 10 dB of its level), double talk only.
-        val dtStart = Phase.FAR_ONLY.seconds * FRAMES_PER_SECOND
-        val dtEnd = dtStart + Phase.DOUBLE_TALK.seconds * FRAMES_PER_SECOND
-        val voiced = (dtStart until dtEnd).filter { dbfs(meanPower(near, it, it + 1)) > scenario.nearDbfs - 10f }
-        val openA = voiced.count { a.transmit[it] }
-        val openC = voiced.count { c.transmit[it] }
-        val zeroA = voiced.count { a.power[it] < 1.0 }
-        val levelA = dbfs(voiced.sumOf { a.power[it] } / voiced.size)
-        val levelC = dbfs(voiced.sumOf { c.power[it] } / voiced.size)
+        val voiced = DoubleTalkRig.voicedDoubleTalkFrames(scenario.nearDbfs)
         log(
             String.format(
                 Locale.ROOT,
                 "voiced near-end frames in double talk: %d; out A %.1f dBFS vs near alone (C) %.1f dBFS; " +
                     "gate open A %.0f %% vs C %.0f %%; frames zeroed in A %d",
-                voiced.size, levelA, levelC, 100f * openA / voiced.size, 100f * openC / voiced.size, zeroA,
+                voiced.size, dbfs(voiced.sumOf { a.power[it] } / voiced.size),
+                dbfs(voiced.sumOf { c.power[it] } / voiced.size),
+                100f * voiced.count { a.transmit[it] } / voiced.size,
+                100f * voiced.count { c.transmit[it] } / voiced.size,
+                voiced.count { a.power[it] < 1.0 },
             ),
         )
     }
 
     private fun build(chain: Chain): CaptureChain {
-        val factory = CapturePreprocessorFactory(log = { Log.w(TAG, it) })
+        val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) })
         return when (chain) {
             Chain.APP_APM -> factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC)
             Chain.APP_APM_RNNOISE -> factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
@@ -169,187 +278,83 @@ class DoubleTalkAec3DeviceTest {
         }
     }
 
-    /** Runs one freshly built chain over the whole timeline, like `AudioOutput` + `CapturePipeline`. */
-    private fun run(chainKind: Chain, farEnd: FloatArray, mic: FloatArray): Run {
-        val chain = build(chainKind)
-        val apm = chain.farEndSink as WebRtcApmPreprocessor?
-        val chunker = apm?.let { FarEndFrameChunker(chain.farEndFrameSize, it) }
-        var now = 0L
-        val vad = VoiceActivityDetector(VadConfig.adaptive(onsetFrames = APP_ONSET_FRAMES)) { now }
-        val frames = mic.size / FRAME
-        val result = Run(frames)
-        val render = ShortArray(FRAME)
-        val capture = ShortArray(FRAME)
-        try {
-            for (f in 0 until frames) {
-                toPcm(farEnd, f * FRAME, render)
-                toPcm(mic, f * FRAME, capture)
-                // Per tick the far-end frame goes in before the capture frame holding its echo.
-                chunker?.push(render, FRAME)
-                chain.preprocessor.process(capture)
-                var sumSquares = 0.0
-                for (s in capture) sumSquares += s.toDouble() * s
-                result.power[f] = sumSquares / FRAME
-                result.transmit[f] = vad.isVoice(capture, FRAME, null)
-                result.floor[f] = vad.floorDbfs
-                result.threshold[f] = vad.thresholdDbfs
-                now += FRAME_MS * NANOS_PER_MS
-            }
-            if (apm != null) {
-                assertThat(apm.rejectedFrames).isEqualTo(0)
-                assertThat(apm.rejectedFarEndFrames).isEqualTo(0)
-            }
-        } finally {
-            chain.preprocessor.release()
-        }
-        return result
-    }
+    /** A tuning of the app chain, or ([chain]) a different chain around the default AEC3. */
+    private class Candidate(val name: String, val tuning: Aec3Tuning?, val chain: (() -> CaptureChain)? = null)
 
     private companion object {
-        const val TAG = "DoubleTalk"
-        const val RATE = 48_000
-        const val FRAME = 480
-        const val FRAME_MS = 10
-        const val FRAMES_PER_SECOND = 100
-        const val NANOS_PER_MS = 1_000_000L
-        const val APP_ONSET_FRAMES = 2
-        const val FAR_DBFS = -18f
-        const val NOISE_DBFS = -65f
-        const val ECHO_DELAY_MS = 60
-        const val FULL_SCALE = 32768.0
-        const val TINY = 1e-3
+        const val NEAR_DBFS = -26f
 
-        fun log(line: String) {
-            Log.i(TAG, line)
-            println(line)
+        /** Talker pairs the sweep runs; 1 for a quick look, 3 for a decision. */
+        const val SWEEP_TALKERS = 1
+
+        val SWEEP_SCENARIOS = EchoPath.entries.flatMap { path ->
+            listOf(-20f, -10f, 0f, 6f).map { Scenario(echoGainDb = it, nearDbfs = NEAR_DBFS, path) }
         }
 
-        fun db(ratio: Double): Float = (10 * log10(ratio)).toFloat()
+        val D = Aec3Tuning.DEFAULT
 
-        fun dbfs(power: Double): Float = db(max(power, TINY) / (FULL_SCALE * FULL_SCALE))
-
-        fun mean(values: DoubleArray, from: Int, to: Int): Double {
-            var sum = 0.0
-            for (i in from until to) sum += values[i]
-            return sum / (to - from)
-        }
-
-        /** Mean power of [signal] (full scale 1.0 = 32768) over frames [from, to). */
-        fun meanPower(signal: FloatArray, from: Int, to: Int): Double {
-            var sum = 0.0
-            for (i in from * FRAME until to * FRAME) {
-                val v = signal[i] * FULL_SCALE
-                sum += v * v
-            }
-            return sum / ((to - from) * FRAME)
-        }
-
-        fun toPcm(signal: FloatArray, offset: Int, out: ShortArray) {
-            for (i in out.indices) {
-                val v = (signal[offset + i] * FULL_SCALE).roundToInt()
-                out[i] = v.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-            }
-        }
-
-        fun sum(vararg signals: FloatArray): FloatArray = FloatArray(signals[0].size) { i ->
-            var v = 0f
-            for (s in signals) v += s[i]
-            v
-        }
-
-        /** Loudspeaker-to-mic path: delay, a short reflection tail, a gentle low-pass, [gainDb]. */
-        fun echoOf(far: FloatArray, gainDb: Float): FloatArray {
-            val gain = 10.0.pow(gainDb / 20.0).toFloat()
-            val d = ECHO_DELAY_MS * RATE / 1000
-            val taps = intArrayOf(d, d + 5 * RATE / 1000, d + 15 * RATE / 1000)
-            val weights = floatArrayOf(1f, 0.4f, 0.2f)
-            val out = FloatArray(far.size)
-            var lowPassed = 0f
-            for (i in far.indices) {
-                var x = 0f
-                for (t in taps.indices) if (i >= taps[t]) x += weights[t] * far[i - taps[t]]
-                lowPassed += 0.5f * (x - lowPassed)
-                out[i] = gain * lowPassed
-            }
-            return out
-        }
-
-        fun whiteNoise(samples: Int, dbfs: Float, seed: Int): FloatArray {
-            val random = Random(seed)
-            val amplitude = 10.0.pow(dbfs / 20.0).toFloat() * sqrt(3f) // uniform: rms = a/sqrt(3)
-            return FloatArray(samples) { (random.nextFloat() * 2f - 1f) * amplitude }
-        }
-
-        /** Vowel formants (F1, F2, F3) in Hz. */
-        val VOWELS = arrayOf(
-            doubleArrayOf(730.0, 1090.0, 2440.0), // a
-            doubleArrayOf(270.0, 2290.0, 3010.0), // i
-            doubleArrayOf(300.0, 870.0, 2240.0), // u
-            doubleArrayOf(530.0, 1840.0, 2480.0), // e
-            doubleArrayOf(570.0, 840.0, 2410.0), // o
+        /** Masks keep where suppression starts (enr_transparent) but fall off gradually. */
+        val SOFT = D.with(
+            NORMAL_LF_ENR_SUPPRESS to 1.5f, NORMAL_HF_ENR_SUPPRESS to 1f,
+            NEAREND_LF_ENR_SUPPRESS to 3f, NEAREND_HF_ENR_SUPPRESS to 1.5f,
         )
 
-        /**
-         * Deterministic voiced speech substitute: a harmonic source (with vibrato) shaped by a vowel's
-         * formants, one vowel per syllable at [syllableHz], raised-cosine syllable envelopes and a
-         * 300 ms pause every 2 s; harmonics stop at 3.4 kHz. Scaled so the active part is at [dbfs].
-         */
-        fun speechLike(samples: Int, f0: Double, syllableHz: Double, seed: Int, dbfs: Float): FloatArray {
-            val random = Random(seed)
-            val syllables = (samples / RATE.toDouble() * syllableHz).toInt() + 2
-            val vowel = IntArray(syllables) { random.nextInt(VOWELS.size) }
-            val pitch = DoubleArray(syllables) { 1.0 + (random.nextDouble() - 0.5) * 0.2 }
-            val out = FloatArray(samples)
-            val maxHarmonics = (3400.0 / (f0 * 0.8)).toInt()
-            val gains = DoubleArray(maxHarmonics + 1)
-            var phase = 0.0
-            var lastSyllable = -1
-            var activeEnergy = 0.0
-            var activeCount = 0
-            for (n in 0 until samples) {
-                val t = n / RATE.toDouble()
-                val syllablePos = t * syllableHz
-                val k = syllablePos.toInt()
-                val p = syllablePos - k
-                val inPause = (t % 2.0) > 1.7
-                val envelope = if (inPause || p > 0.75) 0.0 else sin(PI * p / 0.75).pow(2)
-                val f = f0 * pitch[k] * (1 + 0.03 * sin(2 * PI * 0.8 * t))
-                if (k != lastSyllable) {
-                    lastSyllable = k
-                    formantGains(f0 * pitch[k], VOWELS[vowel[k]], gains)
-                }
-                phase += 2 * PI * f / RATE
-                if (phase > 2 * PI * 1000) phase -= 2 * PI * 1000
-                val v = if (envelope > 0) harmonics(gains, phase) * envelope else 0.0
-                out[n] = v.toFloat()
-                if (envelope > 0.1) {
-                    activeEnergy += v * v
-                    activeCount++
-                }
-            }
-            val rms = sqrt(activeEnergy / max(activeCount, 1))
-            val scale = (10.0.pow(dbfs / 20.0) / rms).toFloat()
-            for (n in out.indices) out[n] *= scale
-            return out
-        }
-
-        /** Fills [gains] from index 1 for the harmonics of [f0] under [formants], zero outside 150..3400 Hz. */
-        fun formantGains(f0: Double, formants: DoubleArray, gains: DoubleArray) {
-            for (h in 1 until gains.size) {
-                val fh = h * f0
-                var g = 0.0
-                for ((i, fm) in formants.withIndex()) {
-                    val bandwidth = 80.0 + 40.0 * i
-                    g += 1.0 / (1.0 + ((fh - fm) / bandwidth).pow(2)) / (i + 1)
-                }
-                gains[h] = if (fh in 150.0..3400.0) g / sqrt(h.toDouble()) else 0.0
-            }
-        }
-
-        fun harmonics(gains: DoubleArray, phase: Double): Double {
-            var v = 0.0
-            for (h in 1 until gains.size) if (gains[h] != 0.0) v += gains[h] * sin(h * phase)
-            return v
-        }
+        /** One mechanism per candidate, then the combinations that looked best, then other chains. */
+        val CANDIDATES = listOf(
+            Candidate("default", null),
+            // Dominant near-end detector: ENR_THRESHOLD is echo/near, so a higher value enters
+            // near-end state (transparent masks) more easily; fewer trigger blocks enter it sooner.
+            Candidate("dne-eager", D.with(DNE_ENR_THRESHOLD to 1f, DNE_TRIGGER_THRESHOLD to 4f)),
+            // Near-end state lets more through (default lf 1.09/1.1, hf 0.1/0.3).
+            Candidate(
+                "nearend-open",
+                D.with(
+                    NEAREND_HF_ENR_TRANSPARENT to 0.5f, NEAREND_HF_ENR_SUPPRESS to 1.5f,
+                    NEAREND_LF_ENR_TRANSPARENT to 1.5f, NEAREND_LF_ENR_SUPPRESS to 3f,
+                ),
+            ),
+            // Normal state suppresses only when the echo is closer to the near end (default hf 0.07/0.1).
+            Candidate(
+                "normal-open",
+                D.with(
+                    NORMAL_HF_ENR_TRANSPARENT to 0.2f, NORMAL_HF_ENR_SUPPRESS to 0.4f,
+                    NORMAL_LF_ENR_TRANSPARENT to 0.4f, NORMAL_LF_ENR_SUPPRESS to 0.8f,
+                ),
+            ),
+            // Trust the linear filter more: the residual echo estimate is echo / min(ERLE, cap).
+            Candidate("erle-16/8", D.with(ERLE_MAX_L to 16f, ERLE_MAX_H to 8f)),
+            // Near end when 1-2 kHz is weaker than 125-375 Hz (a phone speaker has no bass).
+            Candidate(
+                "subband-lf",
+                D.with(
+                    USE_SUBBAND_NEAREND_DETECTION to 1f, SUBBAND1_LOW to 8f, SUBBAND1_HIGH to 16f,
+                    SUBBAND2_LOW to 1f, SUBBAND2_HIGH to 3f,
+                    SUBBAND_NEAREND_THRESHOLD to 1f, SUBBAND_SNR_THRESHOLD to 10f,
+                ),
+            ),
+            // Shorter modelled reverb tail (0.7 per block: -25 dB per 100 ms instead of -8).
+            Candidate("len.7", D.with(EP_DEFAULT_LEN to 0.7f)),
+            Candidate("len.7+nlen.7", D.with(EP_DEFAULT_LEN to 0.7f, EP_NEAREND_LEN to 0.7f)),
+            Candidate("soft-ramp", SOFT),
+            Candidate("soft+len.7", SOFT.with(EP_DEFAULT_LEN to 0.7f)),
+            // Leave more residual echo per bin before suppressing (a floor under the gain).
+            Candidate(
+                "floor-10000",
+                D.with(AUDIBILITY_NORMAL_RENDER_LIMIT to 10000f, AUDIBILITY_LOW_RENDER_LIMIT to 40000f),
+            ),
+            Candidate("chain: no RNNoise", null) { DoubleTalkRig.appChain(null, rnnoise = false) },
+            Candidate("chain: AEC3>RNN>AGC2", null) {
+                val aecOnly = WebRtcApmConfig.FOR_ECHO_CANCELLATION.copy(gainControl = false)
+                val aec = WebRtcApmPreprocessor(WebRtcApmNative, aecOnly)
+                val agc = WebRtcApmPreprocessor(
+                    WebRtcApmNative,
+                    WebRtcApmConfig(
+                        echoCancellation = false, noiseSuppression = false, gainControl = true, highPass = false,
+                    ),
+                )
+                val stages = listOf(aec, RnnoisePreprocessor(RnnoiseNative), agc)
+                CaptureChain(ChainedPreprocessor(stages), aec, aec.farEndFrameSize)
+            },
+        )
     }
 }
