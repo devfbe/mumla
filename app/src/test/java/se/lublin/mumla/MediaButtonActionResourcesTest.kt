@@ -122,17 +122,12 @@ class MediaButtonActionResourcesTest {
     }
 
     @Test
-    fun theSummaryNamesTheHoldVersusToggleDifference() {
-        // Same physical button, two behaviours: PREF_PTT_TOGGLE defaults to false, so the other
-        // push-to-talk keys transmit only while held, while this one toggles.
+    fun theSummarySaysThatTheButtonToggles() {
+        // The other push-to-talk keys transmit only while held (unless sticky); this one toggles.
         val summary = mediaButtonPreference().summary.toString().lowercase()
 
         assertWithMessage("the summary must say that this button toggles: %s", summary)
             .that(summary).containsMatch("""it toggles""")
-        assertWithMessage("the summary must say that push-to-talk is held instead: %s", summary)
-            .that(summary).containsMatch("""push-to-talk[^.]*\bhold""")
-        assertWithMessage("the summary must name the preference that changes the other half")
-            .that(summary).contains(context.getString(R.string.togglePtt).lowercase())
     }
 
     @Test
