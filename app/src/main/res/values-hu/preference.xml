@@ -18,7 +18,6 @@
     <string name="acknowledgements">Közreműködők</string>
     <string name="acknowledgementsSum">A Mumla közreműködőinek megtekintése (webes link)</string>
     <string name="licenses">Licenszek</string>
-    <string name="authentication">Hitelesítés</string>
     <string name="audioInputMethodSum">Hangátvitel aktiválása.</string>
     <string name="audioInputMethod">Átviteli mód</string>
     <string name="audioInputVolume">Mikrofon hangereje</string>
@@ -31,9 +30,7 @@
     <string name="hotCornerSum">Nyomd meg a képernyő egyik sarkát a hang továbbításához.</string>
     <string name="general">Általános</string>
     <string name="appearance">Megjelenés</string>
-    <string name="advancedAudio">Haladó</string>
     <string name="forceTcp">Csak TCP</string>
-    <string name="audio">Hang</string>
     <string name="audioSampleRate">Bemeneti mintavételezés</string>
     <string name="audioSampleRateSum">Kívánt hang mintavételezés. Néhány eszközön kevesebb lehetőség adott.</string>
     <string name="defaultUsername">Alapértelmezett felhasználónév</string>

@@ -13,11 +13,9 @@
     <string name="theme_light">Açık</string>
     <string name="theme_dark">Koyu</string>
     <string name="about">Hakkında</string>
-    <string name="authentication">Kimlik doğrulama</string>
     <string name="general">Genel</string>
     <string name="appearance">Görünüm</string>
     <string name="theme">Tema</string>
-    <string name="advancedAudio">Gelişmiş</string>
     <string name="defaultUsernameDefault">Mumla_Kullanicisi</string>
     <string name="certificateGenerateSum">Kendinden imzalı yeni bir Mumla sertifikası oluşturur. Yeni başlayanlar için tavsiye edilir.</string>
     <string name="useTor">Tor aracılığıyla bağlan</string>
@@ -73,7 +71,6 @@
     <string name="pttKeySum">Sesi iletmek için fiziksel bir düğme kullanın.</string>
     <string name="hotCorner">Bas konuş köşesi</string>
     <string name="hotCornerSum">Android genelinde sesi iletmek için bir ekran köşesine basın.</string>
-    <string name="audio">Ses</string>
     <string name="audioSampleRate">Giriş örnekleme hızı</string>
     <string name="audioSampleRateSum">Tercih edilen ses örnekleme hızı. Bazı aygıtlar daha az hızı destekler.</string>
     <string name="defaultUsernameSum">Bir sunucu eklerken veya bir genel sunucuya bağlanırken kullanılan önceden doldurulmuş ad.</string>

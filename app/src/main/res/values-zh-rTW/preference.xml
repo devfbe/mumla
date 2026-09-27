@@ -4,15 +4,12 @@
     <string name="theme_light">淺色</string>
     <string name="theme_dark">深色</string>
     <string name="about">關於</string>
-    <string name="authentication">驗證</string>
     <string name="general">一般</string>
-    <string name="advancedAudio">進階</string>
     <string name="appearance">外觀</string>
     <string name="theme">主題</string>
     <string name="inputMethodVoice">語音活動</string>
     <string name="inputMethodPtt">按鍵發話</string>
     <string name="hot_corner_none">關閉</string>
-    <string name="audio">音訊</string>
     <string name="hot_corner_top_left">↖ 左上角</string>
     <string name="hot_corner_bottom_left">↙ 左下角</string>
     <string name="hot_corner_top_right">右上角 ↗</string>

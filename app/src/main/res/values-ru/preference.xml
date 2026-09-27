@@ -17,7 +17,6 @@
     <string name="acknowledgements">Разработчики</string>
     <string name="acknowledgementsSum">Посмотреть, кто внес вклад в развитие Mumla (ссылка)</string>
     <string name="licenses">Лицензии</string>
-    <string name="authentication">Аутентификация</string>
     <string name="audioInputMethodSum">Условие для начала вещания.</string>
     <string name="audioInputMethod">Режим передачи</string>
     <string name="audioInputVolume">Громкость микрофона</string>
@@ -31,10 +30,8 @@
     <string name="general">Основные</string>
     <string name="appearance">Внешний вид</string>
     <string name="theme">Тема</string>
-    <string name="advancedAudio">Расширенные</string>
     <string name="forceTcp">Только TCP</string>
     <string name="forceTcpSum">Отключает передачу через UDP.</string>
-    <string name="audio">Аудио</string>
     <string name="audioSampleRate">Качество входного сигнала</string>
     <string name="audioSampleRateSum">Предпочитаемая частота дискретизации. Некоторые устройства поддерживают только довольно низкие частоты.</string>
     <string name="chatNotifications">Уведомления из чата</string>

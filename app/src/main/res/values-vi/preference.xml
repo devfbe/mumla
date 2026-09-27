@@ -13,7 +13,6 @@
     <string name="about">Thông tin</string>
     <string name="acknowledgements">Người đóng góp</string>
     <string name="licenses">Giấy phép</string>
-    <string name="authentication">Xác thực</string>
     <string name="audioInputMethodSum">Cách đường truyền âm thanh được kích hoạt.</string>
     <string name="audioInputVolume">Âm lượng Micro</string>
     <string name="audioInputVolumeSum">Mức độ để chuẩn hóa âm thanh.</string>
@@ -24,9 +23,7 @@
     <string name="hotCornerSum">Bấm một góc màn hình để nói.</string>
     <string name="appearance">Giao diện</string>
     <string name="theme">Chủ đề</string>
-    <string name="advancedAudio">Nâng cao</string>
     <string name="forceTcp">Chỉ sử dụng TCP</string>
-    <string name="audio">Âm thanh</string>
     <string name="audioSampleRate">Tỉ lệ lấy mẫu đầu vào</string>
     <string name="audioSampleRateSum">Tỷ lệ mẫu âm thanh ưa thích. Một số thiết bị hỗ trợ tốc độ lấy mẫu thấp hơn.</string>
     <string name="chatNotifications">Thông báo chat</string>

@@ -6,12 +6,9 @@
     <string name="about">Par lietotni</string>
     <string name="acknowledgements">Līdzautori</string>
     <string name="licenses">Licences</string>
-    <string name="authentication">Autorizācija</string>
     <string name="general">Vispārīgie</string>
     <string name="appearance">Izskats</string>
     <string name="theme">Motīvs</string>
-    <string name="advancedAudio">Papildus</string>
-    <string name="audio">Audio</string>
     <string name="acknowledgementsSum">Skatīt, kuri veicināja Mumla attīstību, deva savu artavu (saite)</string>
     <string name="version">Versija</string>
     <string name="pref_show_user_count">Rādīt kanāla lietotāju skaitu</string>
