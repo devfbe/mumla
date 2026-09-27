@@ -7,6 +7,7 @@ following third-party components. Every entry is GPLv3-compatible.
 |---|---|---|---|
 | Kotlin standard library and compiler | 2.4.20 (`kotlin` in `gradle/libs.versions.toml`) | Apache-2.0 | https://github.com/JetBrains/kotlin |
 | kotlinx-coroutines | 1.11.0 | Apache-2.0 | https://github.com/Kotlin/kotlinx.coroutines |
+| kotlinx-collections-immutable | 0.5.2 | Apache-2.0 | https://github.com/Kotlin/kotlinx.collections.immutable |
 | AndroidX (appcompat, activity, annotation, cardview, core, documentfile, exifinterface, fragment, lifecycle, media, preference, recyclerview, viewpager2, and their transitive AndroidX dependencies) | see `gradle/libs.versions.toml` | Apache-2.0 | https://developer.android.com/jetpack |
 | Coil (coil-core, coil-network-core, coil-network-okhttp) | 3.6.3 | Apache-2.0 | https://github.com/coil-kt/coil |
 | OkHttp (okhttp, okhttp-android) | 5.5.0 | Apache-2.0 | https://github.com/square/okhttp |

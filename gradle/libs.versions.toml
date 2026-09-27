@@ -4,6 +4,7 @@ agp = "9.4.1"
 # puts this one there instead of the older KGP AGP depends on.
 kotlin = "2.4.20"
 coroutines = "1.11.0"
+collections-immutable = "0.5.2"
 
 androidx-appcompat = "1.8.0"
 androidx-activity = "1.13.0"
@@ -41,6 +42,7 @@ kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", ve
 detekt-gradlePlugin = { module = "io.gitlab.arturbosch.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "collections-immutable" }
 
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
 androidx-activity = { module = "androidx.activity:activity", version.ref = "androidx-activity" }
