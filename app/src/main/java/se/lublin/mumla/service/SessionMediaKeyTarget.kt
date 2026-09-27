@@ -25,17 +25,17 @@ class SessionMediaKeyTarget(private val sessions: SessionManager) : MediaKeyTarg
         get() = sessions.connected != null
 
     override val transmitMode: TransmitMode
-        get() = checkNotNull(sessions.connected).transmitMode
+        get() = checkNotNull(sessions.connected).audio.transmitMode
 
     override val isTalking: Boolean
-        get() = sessions.connected?.isTalking == true
+        get() = sessions.connected?.audio?.isTalking == true
 
     override fun setTalking(talking: Boolean) {
-        sessions.connected?.setTalkingState(talking)
+        sessions.connected?.audio?.setTalking(talking)
     }
 
     override fun stopTalking() {
-        sessions.connected?.setTalkingState(false)
+        sessions.connected?.audio?.setTalking(false)
     }
 
     override fun toggleSelfMute() {

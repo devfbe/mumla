@@ -3,6 +3,7 @@ package se.lublin.mumla.chat
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import se.lublin.humla.model.Message
+import se.lublin.mumla.testing.textMessage
 
 class IChatMessageTest {
 
@@ -31,7 +32,7 @@ class IChatMessageTest {
             override fun visit(message: IChatMessage.TextMessage) { seen += "text" }
             override fun visit(message: IChatMessage.InfoMessage) { seen += "info" }
         }
-        IChatMessage.TextMessage(Message("x")).accept(visitor)
+        IChatMessage.TextMessage(textMessage("x")).accept(visitor)
         IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, "y").accept(visitor)
         assertThat(seen).containsExactly("text", "info").inOrder()
     }

@@ -57,6 +57,7 @@ class FakeAudioFactory : AudioHandlerFactory {
     val created = CopyOnWriteArrayList<FakeAudio>()
     val configs = CopyOnWriteArrayList<AudioConfig>()
     val sessionParams = CopyOnWriteArrayList<AudioSessionParams>()
+    val hosts = CopyOnWriteArrayList<AudioHost>()
     val createThreads = CopyOnWriteArrayList<String>()
     @Volatile var failWith: AudioException? = null
 
@@ -68,6 +69,7 @@ class FakeAudioFactory : AudioHandlerFactory {
         createThreads += Thread.currentThread().name
         configs += config
         sessionParams += params
+        hosts += host
         failWith?.let { throw it }
         return FakeAudio().also { created += it }
     }

@@ -28,8 +28,8 @@ data class SessionConfig(
     val connection: ConnectionConfig = ConnectionConfig(),
     val audio: AudioSettings = AudioSettings(),
     /**
-     * Stored local volumes by `LocalVolumes.keyOf`, read when a connection starts. Not a
-     * connection field: the session keeps its own copy current through `setLocalVolume`.
+     * Stored local volumes by `localVolumeKey`, read when the session is created. Not a connection
+     * field: the session keeps its own copy current through `SessionActions.setLocalVolume`.
      */
     val localVolumes: Map<String, Float> = emptyMap(),
     val autoReconnect: Boolean = false,
@@ -53,9 +53,9 @@ data class ConnectionConfig(
     val forceTcp: Boolean = false,
     /** Proxy through a local Orbot; implies TCP for voice. */
     val useTor: Boolean = false,
-    /** User ids muted locally on connection. */
+    /** User ids muted locally, read when the session is created. */
     val localMuteHistory: List<Int> = emptyList(),
-    /** User ids ignored locally on connection. */
+    /** User ids ignored locally, read when the session is created. */
     val localIgnoreHistory: List<Int> = emptyList(),
 )
 

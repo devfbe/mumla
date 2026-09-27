@@ -12,7 +12,8 @@ import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioException
-import se.lublin.humla.model.User
+import se.lublin.humla.model.TalkState
+import se.lublin.humla.model.UserState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.testutil.SilentLogger
 
@@ -25,7 +26,7 @@ class AudioHandlerTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val params = AudioSessionParams(
-        User(1, "me"), 72_000, HumlaUDPMessageType.UDPVoiceOpus, 0, ContinuousInputMode(),
+        UserState(1, "me", 0), 72_000, HumlaUDPMessageType.UDPVoiceOpus, 0, ContinuousInputMode(),
     )
     private val host = AudioHost(
         context,
@@ -35,8 +36,8 @@ class AudioHandlerTest {
             override fun onTalkingStateChanged(talking: Boolean) = Unit
         },
         object : AudioOutput.AudioOutputListener {
-            override fun onUserTalkStateUpdated(user: User) = Unit
-            override fun getUser(session: Int): User? = null
+            override val playbackParams: PlaybackParams = PlaybackParams.DEFAULT
+            override fun onTalkStateUpdated(session: Int, state: TalkState) = Unit
         },
     )
 

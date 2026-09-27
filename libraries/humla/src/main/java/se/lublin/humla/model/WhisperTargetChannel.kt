@@ -21,7 +21,7 @@ import se.lublin.humla.protobuf.Mumble
 
 /** A whisper to a channel, optionally with its linked channels, subchannels, or only one group. */
 class WhisperTargetChannel(
-    private val channel: IChannel,
+    private val channel: ChannelState,
     private val includeLinked: Boolean,
     private val includeSubchannels: Boolean,
     private val groupRestriction: String?,

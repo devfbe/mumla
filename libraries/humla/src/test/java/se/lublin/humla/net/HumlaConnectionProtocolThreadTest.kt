@@ -3,24 +3,18 @@ package se.lublin.humla.net
 import android.os.Handler
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.HumlaSession
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
+import se.lublin.humla.model.ServerState
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.ModelHandler
-import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.session.MAX_EVENTS_PER_SLICE
-import se.lublin.humla.session.inMainThreadSlices
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.testutil.collectOnMain
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.security.cert.X509Certificate
@@ -122,26 +116,26 @@ class HumlaConnectionProtocolThreadTest {
         assertThrows(IllegalStateException::class.java) { connection.getServerRelease() }
     }
 
+    /**
+     * The model is reduced and published on the protocol thread: a burst of five thousand channel
+     * states reaches its readers as snapshots, never as a main-looper task per frame.
+     */
     @Test
-    fun fiveThousandChannelStatesDoNotStallAMainLooperTask() {
+    fun fiveThousandChannelStatesArePublishedAsSnapshotsOffTheMainThread() {
         val tcp = connectAndEstablish()
-        val events = MutableSharedFlow<HumlaEvent>(
-            extraBufferCapacity = HumlaSession.EVENT_BUFFER,
-            onBufferOverflow = BufferOverflow.DROP_OLDEST,
-        )
-        val added = AtomicInteger()
-        val lastAdded = AtomicInteger(-1)
-        val addedOnMain = AtomicBoolean(true)
-        val collector = collectOnMain(events.inMainThreadSlices()) { event ->
-            if (event is HumlaEvent.ChannelAdded) {
-                added.incrementAndGet()
-                lastAdded.set(event.channel.id)
-                if (Looper.myLooper() != Looper.getMainLooper()) addedOnMain.set(false)
+        val publishes = AtomicInteger()
+        val latest = AtomicReference<ServerState?>()
+        val publishedOffProtocolThread = AtomicBoolean(false)
+        val publisher = object : ModelHandler.Publisher {
+            override fun post(block: () -> Unit) = connection.post(block)
+
+            override fun publish(state: ServerState) {
+                if (Thread.currentThread().name != PROTOCOL_THREAD) publishedOffProtocolThread.set(true)
+                publishes.incrementAndGet()
+                latest.set(state)
             }
         }
-        connection.addTcpHandler(ModelHandler({ events.tryEmit(it) }, null, null))
-        val processed = AtomicInteger()
-        connection.addTcpHandler { if (it is Mumble.ChannelState) { processed.incrementAndGet() } }
+        connection.addTcpHandler(ModelHandler(ServerState.empty(), {}, publisher))
         val frames = (0 until 5_000).map { i ->
             Mumble.ChannelState.newBuilder().setChannelId(i).setName("channel $i")
                 .apply { if (i > 0) parent = 0 }
@@ -149,33 +143,14 @@ class HumlaConnectionProtocolThreadTest {
         }
 
         thread(name = "fake-tcp-read") { frames.forEach { tcp.simulateMessage(HumlaTCPMessageType.ChannelState, it) } }
-        awaitUntil(timeoutMillis = 30_000, description = "protocol thread processed all frames") {
-            processed.get() == 5_000
+        awaitUntil(timeoutMillis = 30_000, description = "the last snapshot has every channel") {
+            latest.get()?.channels?.size == 5_000
         }
 
-        val probeRan = AtomicBoolean(false)
-        Handler(Looper.getMainLooper()).post { probeRan.set(true) }
-        var tasksBeforeProbe = 0
-        var eventsBeforeProbe = 0
-        while (!probeRan.get()) {
-            val before = added.get()
-            mainLooper.runOneTask()
-            if (!probeRan.get()) {
-                tasksBeforeProbe++
-                eventsBeforeProbe = maxOf(eventsBeforeProbe, added.get() - before)
-            }
-        }
-
-        // What production bounds is the slice: at most MAX_EVENTS_PER_SLICE events per main-looper
-        // task. A wall-clock assertion would be flaky on CI.
-        assertThat(tasksBeforeProbe).isAtMost(1)
-        assertThat(eventsBeforeProbe).isAtMost(MAX_EVENTS_PER_SLICE)
-        mainLooper.idle()
-        // All of them fit into the buffer, and they arrive in order on the main thread.
-        assertThat(added.get()).isEqualTo(5_000)
-        assertThat(lastAdded.get()).isEqualTo(4_999)
-        assertThat(addedOnMain.get()).isTrue()
-        collector.cancel()
+        assertThat(latest.get()!!.subchannelIds(0)).hasSize(4_999)
+        assertThat(publishes.get()).isAtMost(5_000)
+        assertThat(publishedOffProtocolThread.get()).isFalse()
+        assertThat(shadowOf(Looper.getMainLooper()).isIdle).isTrue()
     }
 
     @Test

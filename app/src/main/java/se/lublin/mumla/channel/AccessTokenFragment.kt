@@ -99,7 +99,7 @@ class AccessTokenFragment : Fragment() {
     }
 
     private fun sendTokens() {
-        SessionManager.get(requireContext()).connected?.sendAccessTokens(tokens.toList())
+        SessionManager.get(requireContext()).connected?.actions?.sendAccessTokens(tokens.toList())
     }
 
     private class TokenHolder(val binding: TokenRowBinding) : RecyclerView.ViewHolder(binding.root)

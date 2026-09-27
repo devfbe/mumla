@@ -44,12 +44,11 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.Channel
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IUser
 import se.lublin.humla.model.Message
+import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.ServerSettings
-import se.lublin.humla.model.User
+import se.lublin.humla.model.ServerState
+import se.lublin.humla.model.UserState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
@@ -70,9 +69,12 @@ import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.stubActions
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubModel
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.textMessage
 import se.lublin.mumla.testing.stubState
 
 /**
@@ -83,6 +85,8 @@ import se.lublin.mumla.testing.stubState
 class ChannelChatFragmentTest {
 
     private val session: IHumlaSession = mockk(relaxed = true)
+    private val actions = session.stubActions()
+    private val model = session.stubModel(model())
     private val chat get() = SessionManager.get(ApplicationProvider.getApplicationContext<Context>()).chat
 
     private lateinit var controller: ActivityController<ServiceHostActivity>
@@ -93,9 +97,6 @@ class ChannelChatFragmentTest {
     @Before
     fun setUp() {
         installSession(session.stubConnected())
-        every { session.sessionId } returns 7
-        every { session.sessionChannel } returns channel("Root")
-        every { session.sessionUser } returns null
     }
 
     @After
@@ -105,7 +106,7 @@ class ChannelChatFragmentTest {
 
     /** Delivered at once: the fragment collects on the immediate main dispatcher. */
     private fun selectTarget(target: ChatTarget) {
-        parent.chatTargets.select(target)
+        parent.chat.select(target)
     }
 
     /** Adds a line to the chat log the way the session's events do. */
@@ -144,11 +145,28 @@ class ChannelChatFragmentTest {
     private val editor: EditText get() = fragment.requireView().findViewById(R.id.chatTextEdit)
     private val sendButton: ImageButton get() = fragment.requireView().findViewById(R.id.chatTextSend)
 
-    private fun channel(name: String?, id: Int = 1): IChannel =
-        Channel(id, false).also { it.name = name }
+    /** Us (session 7) in [channel] (id 1), and Ann (42) in [annIn]. */
+    private fun model(
+        channel: String? = "Root",
+        settings: ServerSettings? = null,
+        self: Boolean = true,
+        annIn: Int = 1,
+    ): ServerState = ServerState.of(
+        listOf(ChannelState(0, "Server"), ChannelState(1, channel, 0), ChannelState(2, "Lounge", 0)),
+        listOfNotNull(UserState(7, "Me", 1).takeIf { self }, UserState(42, "Ann", annIn)),
+        selfSession = 7,
+        serverSettings = settings,
+    )
 
-    private fun user(name: String, session: Int = 42): IUser =
-        User(session, name)
+    /** We move into the lounge (id 2). */
+    private fun moveToTheLounge() {
+        model.value = ServerState.of(
+            listOf(ChannelState(0, "Server"), ChannelState(1, "Root", 0), ChannelState(2, "Lounge", 0)),
+            listOf(UserState(7, "Me", 2)),
+            selfSession = 7,
+        )
+        idleMainLooper()
+    }
 
     private fun info(body: String) =
         IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
@@ -198,21 +216,21 @@ class ChannelChatFragmentTest {
     @Test
     fun theHintNamesTheTargetUser() {
         launch()
-        selectTarget(ChatTarget.User(user("Ann")))
+        selectTarget(ChatTarget.User(42, "Ann"))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
     }
 
     @Test
     fun theHintNamesTheTargetChannel() {
         launch()
-        selectTarget(ChatTarget.Channel(channel("Lounge")))
+        selectTarget(ChatTarget.Channel(1, "Lounge"))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Lounge"))
     }
 
     /** No target and no session channel: nothing to name. */
     @Test
     fun theHintIsClearedWhenThereIsNothingToName() {
-        every { session.sessionChannel } returns null
+        model.value = model(self = false)
         launch()
         assertThat(editor.hint).isNull()
     }
@@ -230,31 +248,24 @@ class ChannelChatFragmentTest {
     /** The local user moved, and no target overrides the hint. */
     @Test
     fun theHintFollowsTheLocalUserIntoANewChannel() {
-        val self = user("Me", session = 7)
-        every { session.sessionUser } returns self
         launch()
-        every { session.sessionChannel } returns channel("Lounge")
-        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
+        moveToTheLounge()
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Lounge"))
     }
 
     @Test
     fun theHintDoesNotFollowSomebodyElseIntoANewChannel() {
-        every { session.sessionUser } returns user("Me", session = 7)
         launch()
-        every { session.sessionChannel } returns channel("Lounge")
-        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(user("Ann"), channel("Lounge"), channel("Root")))
+        model.value = model(annIn = 2)
+        idleMainLooper()
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
     }
 
     @Test
     fun theHintDoesNotFollowTheLocalUserWhileATargetIsSet() {
-        val self = user("Me", session = 7)
-        every { session.sessionUser } returns self
         launch()
-        selectTarget(ChatTarget.User(user("Ann")))
-        every { session.sessionChannel } returns channel("Lounge")
-        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
+        selectTarget(ChatTarget.User(42, "Ann"))
+        moveToTheLounge()
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
     }
 
@@ -274,12 +285,12 @@ class ChannelChatFragmentTest {
 
     @Test
     fun sendingTextMarksItUpAndGoesToTheSessionChannel() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         editor.setText("see http://x.example/ ok")
         sendButton.performClick()
         verify {
-            session.sendChannelTextMessage(
+            actions.sendChannelTextMessage(
                 1,
                 "see <a href=\"http://x.example/\">http://x.example/</a> ok",
                 false,
@@ -290,49 +301,49 @@ class ChannelChatFragmentTest {
 
     @Test
     fun typedMarkdownIsSentAsHtmlAndTypedHtmlIsEscaped() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         editor.setText("**hi** <b>there</b>")
         sendButton.performClick()
-        verify { session.sendChannelTextMessage(1, "<b>hi</b> &lt;b&gt;there&lt;/b&gt;", false) }
+        verify { actions.sendChannelTextMessage(1, "<b>hi</b> &lt;b&gt;there&lt;/b&gt;", false) }
     }
 
     @Test
     fun withoutMarkdownTheTextIsSentAsBefore() {
         PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
             .edit().putBoolean(Settings.MARKDOWN.key, false).commit()
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         editor.setText("**hi** <b>there</b>")
         sendButton.performClick()
-        verify { session.sendChannelTextMessage(1, "**hi** <b>there</b>", false) }
+        verify { actions.sendChannelTextMessage(1, "**hi** <b>there</b>", false) }
     }
 
     @Test
     fun sendingWithAUserTargetGoesToThatUser() {
-        every { session.sendUserTextMessage(any(), any()) } returns Message("out")
+        every { actions.sendUserTextMessage(any(), any()) } returns textMessage("out")
         launch()
-        selectTarget(ChatTarget.User(user("Ann", session = 42)))
+        selectTarget(ChatTarget.User(42, "Ann"))
         editor.setText("hi")
         sendButton.performClick()
-        verify { session.sendUserTextMessage(42, "hi") }
+        verify { actions.sendUserTextMessage(42, "hi") }
     }
 
     @Test
     fun sendingWithAChannelTargetGoesToThatChannel() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
-        selectTarget(ChatTarget.Channel(channel("Lounge", id = 9)))
+        selectTarget(ChatTarget.Channel(9, "Lounge"))
         editor.setText("hi")
         sendButton.performClick()
-        verify { session.sendChannelTextMessage(9, "hi", false) }
+        verify { actions.sendChannelTextMessage(9, "hi", false) }
     }
 
     @Test
     fun anEmptyEditorSendsNothing() {
         launch()
         sendButton.performClick()
-        verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
+        verify(exactly = 0) { actions.sendChannelTextMessage(any(), any(), any()) }
     }
 
     @Test
@@ -384,7 +395,7 @@ class ChannelChatFragmentTest {
     @Test
     fun theSessionIdSurvivesADisconnect() {
         launch()
-        every { session.sessionId } throws IllegalStateException("Not synchronized with the server")
+        session.stubState(SessionState.Disconnected())
         assertThat(fragment.sessionId()).isNotEqualTo(7)
     }
 
@@ -398,13 +409,13 @@ class ChannelChatFragmentTest {
     }
 
     /**
-     * "No session" must be a value no actor can take: `Message(String)` sets its actor to -1, so
-     * -1 would render actorless messages as the local user's.
+     * "No session" must be a value no actor can take: a message without a sender has the actor -1,
+     * so -1 would render actorless messages as the local user's.
      */
     @Test
     fun theAbsentSessionIdCannotCollideWithAMessageActor() {
         launch(withSession = false)
-        assertThat(fragment.sessionId()).isNotEqualTo(Message("server said so").actor)
+        assertThat(fragment.sessionId()).isNotEqualTo(-1)
     }
 
     private val progress: View get() = fragment.requireView().findViewById(R.id.chat_image_progress)
@@ -413,13 +424,13 @@ class ChannelChatFragmentTest {
 
     @Test
     fun aConfirmedImageIsSentAsADataUriAndTheSpinnerGoesAway() {
-        every { session.serverSettings } returns settings(0)
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        model.value = model(settings = settings(0))
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         fragment.sendImage(smallBitmap())
         val sent = slot<String>()
         drainMainUntil {
-            runCatching { verify { session.sendChannelTextMessage(any(), capture(sent), any()) } }.isSuccess
+            runCatching { verify { actions.sendChannelTextMessage(any(), capture(sent), any()) } }.isSuccess
         }
         assertThat(sent.captured).startsWith("<img src=\"data:image/jpeg;base64,")
         assertThat(progress.visibility).isEqualTo(View.GONE)
@@ -432,7 +443,7 @@ class ChannelChatFragmentTest {
         unbind()
         fragment.sendImage(smallBitmap())
         idleMainLooper()
-        verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
+        verify(exactly = 0) { actions.sendChannelTextMessage(any(), any(), any()) }
         assertThat(progress.visibility).isEqualTo(View.GONE)
     }
 
@@ -440,20 +451,20 @@ class ChannelChatFragmentTest {
     @Test
     fun aDisconnectWhileEncodingAnImageSendsNothing() {
         launch()
-        every { session.serverSettings } throws IllegalStateException("Not synchronized with the server")
+        model.value = model()
         fragment.sendImage(smallBitmap())
         drainMainUntil { progress.visibility == View.GONE }
-        verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
+        verify(exactly = 0) { actions.sendChannelTextMessage(any(), any(), any()) }
     }
 
     /** An image no quality rung can squeeze under the server's limit is reported, not sent. */
     @Test
     fun anImageThatCannotBeMadeToFitIsNotSent() {
-        every { session.serverSettings } returns settings(10)
+        model.value = model(settings = settings(10))
         launch()
         fragment.sendImage(smallBitmap())
         drainMainUntil { progress.visibility == View.GONE }
-        verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
+        verify(exactly = 0) { actions.sendChannelTextMessage(any(), any(), any()) }
     }
 
     private fun settings(imageMessageLength: Int): ServerSettings =
@@ -468,30 +479,24 @@ class ChannelChatFragmentTest {
         launch()
         val before = editor.hint.toString()
         disconnect()
-        selectTarget(ChatTarget.User(user("Ann")))
+        selectTarget(ChatTarget.User(42, "Ann"))
         assertThat(editor.hint.toString()).isEqualTo(before)
     }
 
     @Test
     fun aChannelJoinArrivingAfterTheDisconnectIsIgnored() {
-        every { session.sessionUser } returns user("Me", session = 7)
         launch()
-        val self = session.sessionUser!!
+        val before = editor.hint.toString()
         disconnect()
-        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
-    }
-
-    /** `updateChatTargetText` is public, so it may be called before the view exists. */
-    @Test
-    fun theHintIsSafeToUpdateBeforeThereIsAView() {
-        ChannelChatFragment().updateChatTargetText(null)
+        moveToTheLounge()
+        assertThat(editor.hint.toString()).isEqualTo(before)
     }
 
     @Test
     fun aTargetSelectedWhilePausedIsShownOnResumption() {
         launch()
         controller.pause()
-        selectTarget(ChatTarget.User(user("Ann")))
+        selectTarget(ChatTarget.User(42, "Ann"))
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToChannel, "Root"))
         controller.resume()
         idleMainLooper()
@@ -550,8 +555,8 @@ class ChannelChatFragmentTest {
 
     @Test
     fun theConfirmationShowsThePickedImageAndSendsOnlyOnOk() {
-        every { session.serverSettings } returns settings(0)
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        model.value = model(settings = settings(0))
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         val bitmap = smallBitmap()
         fragment.confirmImage(bitmap)
@@ -569,18 +574,18 @@ class ChannelChatFragmentTest {
 
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
         idleMainLooper()
-        verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
+        verify(exactly = 0) { actions.sendChannelTextMessage(any(), any(), any()) }
     }
 
     @Test
     fun theConfirmationSendsOnOk() {
-        every { session.serverSettings } returns settings(0)
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        model.value = model(settings = settings(0))
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         fragment.confirmImage(smallBitmap())
         idleMainLooper()
         latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        drainMainUntil { runCatching { verify { session.sendChannelTextMessage(any(), any(), any()) } }.isSuccess }
+        drainMainUntil { runCatching { verify { actions.sendChannelTextMessage(any(), any(), any()) } }.isSuccess }
     }
 
     private fun View.firstImageView(): ImageView? {
@@ -602,7 +607,7 @@ class ChannelChatFragmentTest {
         )
         root.layout(0, 0, 1080, 1920)
         assertThat(editor.isLayoutRequested).isFalse()
-        selectTarget(ChatTarget.User(user("Ann")))
+        selectTarget(ChatTarget.User(42, "Ann"))
         assertThat(editor.isLayoutRequested).isTrue()
     }
 
@@ -612,8 +617,8 @@ class ChannelChatFragmentTest {
      */
     @Test
     fun aSentMessageAppearsInTheListImmediately() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } answers {
-            Message("hi there").also { session.stubEvents().tryEmit(HumlaEvent.MessageSent(it)) }
+        every { actions.sendChannelTextMessage(any(), any(), any()) } answers {
+            textMessage("hi there").also { session.stubEvents().tryEmit(HumlaEvent.MessageSent(it)) }
         }
         launch()
         editor.setText("hi there")
@@ -655,18 +660,6 @@ class ChannelChatFragmentTest {
         assertThat(recycler.adapter).isNull()
     }
 
-    /** The session user is null until the server has named it; a join then moves nothing. */
-    @Test
-    fun aChannelJoinBeforeTheSessionUserIsKnownIsIgnored() {
-        every { session.sessionUser } returns null
-        launch()
-        val before = editor.hint.toString()
-        every { session.sessionChannel } returns channel("Lounge")
-        val self = user("Me", session = 7)
-        fragment.onSessionEvent(HumlaEvent.UserJoinedChannel(self, channel("Lounge"), channel("Root")))
-        assertThat(editor.hint.toString()).isEqualTo(before)
-    }
-
     /**
      * An exception escaping `lifecycleScope.launch` goes to the thread's uncaught-exception
      * handler, so that is where the encode's catch is checked.
@@ -677,9 +670,9 @@ class ChannelChatFragmentTest {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { _, e -> escaped += e }
         try {
-            every { session.serverSettings } returns settings(0)
+            model.value = model(settings = settings(0))
             launch()
-            every { session.serverSettings } throws IllegalStateException("Not synchronized with the server")
+            model.value = model()
             fragment.sendImage(smallBitmap())
             drainMainUntil { progress.visibility == View.GONE }
         } finally {
@@ -799,7 +792,6 @@ class ChannelChatFragmentTest {
      */
     @Test
     fun yourOwnMessagesAreAlignedToYourSideAndOtherPeoplesAreNot() {
-        every { session.sessionId } returns 7
         add(IChatMessage.TextMessage(Message(7, "Me", emptyList(), emptyList(), emptyList(), "mine")))
         add(IChatMessage.TextMessage(Message(9, "Ann", emptyList(), emptyList(), emptyList(), "theirs")))
         launch()
@@ -954,8 +946,8 @@ class ChannelChatFragmentTest {
 
     @Test
     fun theSpinnerIsUpWhileAnImageIsBeingEncoded() {
-        every { session.serverSettings } returns settings(0)
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        model.value = model(settings = settings(0))
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         assertThat(progress.visibility).isEqualTo(View.GONE)
         fragment.sendImage(smallBitmap())
@@ -965,7 +957,7 @@ class ChannelChatFragmentTest {
 
     @Test
     fun anImageThatCannotBeMadeToFitSaysSo() {
-        every { session.serverSettings } returns settings(10)
+        model.value = model(settings = settings(10))
         launch()
         fragment.sendImage(smallBitmap())
         drainMainUntil { ShadowToast.getLatestToast() != null }
@@ -1000,14 +992,14 @@ class ChannelChatFragmentTest {
      */
     @Test
     fun aHardwareEnterInTheEditorSendsTheMessage() {
-        every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         layOutHost()
         editor.requestFocus()
         editor.setText("typed")
         editor.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
         idleMainLooper()
-        verify { session.sendChannelTextMessage(any(), eq("typed"), any()) }
+        verify { actions.sendChannelTextMessage(any(), eq("typed"), any()) }
         assertThat(editor.text.toString()).isEmpty()
     }
 
@@ -1018,7 +1010,7 @@ class ChannelChatFragmentTest {
         editor.setText("typed")
         editor.onEditorAction(EditorInfo.IME_ACTION_SEND)
         idleMainLooper()
-        verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
+        verify(exactly = 0) { actions.sendChannelTextMessage(any(), any(), any()) }
         assertThat(editor.text.toString()).isEqualTo("typed")
     }
 }

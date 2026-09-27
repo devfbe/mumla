@@ -26,12 +26,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.Channel
-import se.lublin.humla.model.IMessage
-import se.lublin.humla.model.User
+import se.lublin.humla.model.Message
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.textMessage
 import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.testing.stubState
 
@@ -53,15 +52,7 @@ class SessionChatTest {
         idleMainLooper()
     }
 
-    private fun message(body: String): IMessage = object : IMessage {
-        override val actor: Int = 1
-        override val actorName: String? = "alice"
-        override val targetChannels: List<Channel> = emptyList()
-        override val targetTrees: List<Channel> = emptyList()
-        override val targetUsers: List<User> = emptyList()
-        override val message: String = body
-        override val receivedTime: Long = 0L
-    }
+    private fun message(body: String): Message = textMessage(body, actor = 1, actorName = "alice")
 
     @Test
     fun itStartsEmpty() {

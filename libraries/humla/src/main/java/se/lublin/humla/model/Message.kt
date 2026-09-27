@@ -17,33 +17,19 @@
 
 package se.lublin.humla.model
 
-import java.util.Collections
-
-/** A text message, immutable once built, so it can be read from any thread. */
-class Message(
-    override val actor: Int,
-    override val actorName: String?,
-    channels: List<Channel>,
-    trees: List<Channel>,
-    users: List<User>,
-    override val message: String,
-) : IMessage {
-    override val targetChannels: List<Channel> = Collections.unmodifiableList(channels)
-    override val targetTrees: List<Channel> = Collections.unmodifiableList(trees)
-    override val targetUsers: List<User> = Collections.unmodifiableList(users)
-    override val receivedTime: Long = System.currentTimeMillis()
-
-    /** A message with no sender and no targets. */
-    constructor(message: String) : this(-1, null, emptyList(), emptyList(), emptyList(), message)
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is Message) return false
-        return actor == other.actor && receivedTime == other.receivedTime && actorName == other.actorName &&
-            targetChannels == other.targetChannels && targetTrees == other.targetTrees &&
-            targetUsers == other.targetUsers && message == other.message
-    }
-
-    override fun hashCode(): Int =
-        listOf(actor, actorName, targetChannels, targetTrees, targetUsers, message, receivedTime).hashCode()
-}
+/**
+ * A text message, with its targets as they were when it was sent or received. Channels and users
+ * the model did not know are left out of the targets.
+ */
+data class Message(
+    /** The sender's session. Prefer [actorName]: the sender may have left the server. */
+    val actor: Int,
+    /** The sender's name, or null for a message from the server itself (or a nameless sender). */
+    val actorName: String?,
+    val targetChannels: List<ChannelState>,
+    val targetTrees: List<ChannelState>,
+    val targetUsers: List<UserState>,
+    val message: String,
+    /** When the message arrived, in milliseconds since the epoch. */
+    val receivedTime: Long = System.currentTimeMillis(),
+)

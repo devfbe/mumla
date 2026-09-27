@@ -33,11 +33,11 @@ class TalkBroadcastReceiver(
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != BROADCAST_TALK) throw UnsupportedOperationException()
         if (!allowed()) return
-        val session = sessions.connected ?: return
+        val audio = sessions.connected?.audio ?: return
         when (intent.getStringExtra(EXTRA_TALK_STATUS) ?: TALK_STATUS_TOGGLE) {
-            TALK_STATUS_ON -> session.setTalkingState(true)
-            TALK_STATUS_OFF -> session.setTalkingState(false)
-            TALK_STATUS_TOGGLE -> session.setTalkingState(!session.isTalking)
+            TALK_STATUS_ON -> audio.setTalking(true)
+            TALK_STATUS_OFF -> audio.setTalking(false)
+            TALK_STATUS_TOGGLE -> audio.setTalking(!audio.isTalking)
         }
     }
 

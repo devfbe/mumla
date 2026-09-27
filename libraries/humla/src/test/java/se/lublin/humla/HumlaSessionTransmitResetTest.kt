@@ -26,25 +26,25 @@ class HumlaSessionTransmitResetTest {
     @Test
     fun aLostConnectionClearsTheTransmitToggle() {
         val service = service()
-        service.setTalkingState(true)
-        assertThat(service.isTalking).isTrue()
+        service.audio.setTalking(true)
+        assertThat(service.audio.isTalking).isTrue()
 
         service.onConnectionDisconnected(
             HumlaException("network gone", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR),
         )
 
         // The next connection starts silent: nothing sets this back without a key press.
-        assertThat(service.isTalking).isFalse()
+        assertThat(service.audio.isTalking).isFalse()
     }
 
     @Test
     fun aCleanDisconnectClearsTheTransmitToggleToo() {
         val service = service()
-        service.setTalkingState(true)
+        service.audio.setTalking(true)
 
         service.onConnectionDisconnected(null)
 
-        assertThat(service.isTalking).isFalse()
+        assertThat(service.audio.isTalking).isFalse()
     }
 
     /**

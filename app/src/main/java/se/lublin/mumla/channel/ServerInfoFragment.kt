@@ -81,16 +81,18 @@ class ServerInfoFragment : Fragment() {
 
     private fun updateData(session: IHumlaSession) {
         val server = session.targetServer
+        val info = session.serverInfo ?: return
 
-        protocolView.text = getString(R.string.server_info_protocol, session.serverRelease)
-        osVersionView.text = getString(R.string.server_info_version, session.serverOSName, session.serverOSVersion)
-        tcpLatencyView.text = getString(R.string.server_info_latency, session.tcpLatency * MICROS_TO_MILLIS)
-        udpLatencyView.text = getString(R.string.server_info_latency, session.udpLatency * MICROS_TO_MILLIS)
+        protocolView.text = getString(R.string.server_info_protocol, info.release)
+        osVersionView.text = getString(R.string.server_info_version, info.osName, info.osVersion)
+        tcpLatencyView.text = getString(R.string.server_info_latency, info.tcpLatency * MICROS_TO_MILLIS)
+        udpLatencyView.text = getString(R.string.server_info_latency, info.udpLatency * MICROS_TO_MILLIS)
         hostView.text = getString(R.string.server_info_host, server?.srvHost, server?.srvPort)
-        maxBandwidthView.text = getString(R.string.server_info_max_bandwidth, session.maxBandwidth / KILO)
-        currentBandwidthView.text = getString(R.string.server_info_current_bandwidth, session.currentBandwidth / KILO)
+        maxBandwidthView.text = getString(R.string.server_info_max_bandwidth, info.maxBandwidth / KILO)
+        currentBandwidthView.text =
+            getString(R.string.server_info_current_bandwidth, session.audio.currentBandwidth / KILO)
         // Opus is the only codec; null means the server offers none this client can use.
-        val codecName = if (session.codec == HumlaUDPMessageType.UDPVoiceOpus) "Opus" else "<null>"
+        val codecName = if (info.codec == HumlaUDPMessageType.UDPVoiceOpus) "Opus" else "<null>"
         codecView.text = getString(R.string.server_info_codec, codecName)
     }
 }

@@ -52,12 +52,12 @@ class AccessTokenFragmentTest {
         fragment.requireView().findViewById<View>(R.id.tokenAddButton).performClick()
         drainMainUntil(description = "the added token") { shownTokens().size == 3 }
         verify { activity.database.addAccessToken(SERVER, "green") }
-        verify { session.sendAccessTokens(listOf("red", "blue", "green")) }
+        verify { session.actions.sendAccessTokens(listOf("red", "blue", "green")) }
 
         list.getChildAt(0).findViewById<View>(R.id.tokenItemDelete).performClick()
         drainMainUntil(description = "the removed token") { shownTokens() == listOf("blue", "green") }
         verify { activity.database.removeAccessToken(SERVER, "red") }
-        verify { session.sendAccessTokens(listOf("blue", "green")) }
+        verify { session.actions.sendAccessTokens(listOf("blue", "green")) }
     }
 
     private companion object {

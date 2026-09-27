@@ -1,0 +1,169 @@
+/*
+ * Copyright (C) 2026 The Mumla authors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+package se.lublin.humla.model
+
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.PersistentMap
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toPersistentList
+import kotlinx.collections.immutable.toPersistentMap
+
+/**
+ * One immutable snapshot of a server's channels and users. Readable from any thread; a newer
+ * snapshot shares everything that did not change with this one.
+ *
+ * The tree is kept as ids: a channel's subchannels in display order (position, then name), the
+ * users in a channel and its listeners by name, ignoring case.
+ */
+@Suppress("LongParameterList", "TooManyFunctions") // One persistent structure per index; the tree's read API.
+class ServerState internal constructor(
+    /** The local user's session, known from ServerSync on; null before. */
+    val selfSession: Int?,
+    internal val channelMap: PersistentMap<Int, ChannelState>,
+    internal val userMap: PersistentMap<Int, UserState>,
+    internal val children: PersistentMap<Int, PersistentList<Int>>,
+    internal val members: PersistentMap<Int, PersistentList<Int>>,
+    internal val listeners: PersistentMap<Int, PersistentList<Int>>,
+    /** The server-wide permissions: those of the root channel, see `se.lublin.humla.net.Permissions`. */
+    val permissions: Int,
+    /** The server's `ServerConfig`, or null before it arrived. */
+    val serverSettings: ServerSettings?,
+    /** What this device remembers about users; applied as they appear. */
+    val local: LocalUserSettings,
+) {
+    val channels: Map<Int, ChannelState> get() = channelMap
+    val users: Map<Int, UserState> get() = userMap
+
+    val root: ChannelState? get() = channelMap[ROOT_CHANNEL_ID]
+    val self: UserState? get() = selfSession?.let(userMap::get)
+    val selfChannel: ChannelState? get() = self?.let { channelMap[it.channel] }
+
+    fun channel(id: Int): ChannelState? = channelMap[id]
+
+    fun user(session: Int): UserState? = userMap[session]
+
+    fun subchannelIds(channel: Int): List<Int> = children[channel].orEmpty()
+
+    fun userIds(channel: Int): List<Int> = members[channel].orEmpty()
+
+    fun listenerIds(channel: Int): List<Int> = listeners[channel].orEmpty()
+
+    fun subchannels(channel: Int): List<ChannelState> = subchannelIds(channel).mapNotNull(channelMap::get)
+
+    fun usersIn(channel: Int): List<UserState> = userIds(channel).mapNotNull(userMap::get)
+
+    fun listenersOf(channel: Int): List<UserState> = listenerIds(channel).mapNotNull(userMap::get)
+
+    /** The users in [channel] and every channel below it. */
+    fun subtreeUserCount(channel: Int): Int = userIds(channel).size + subchannelIds(channel).sumOf(::subtreeUserCount)
+
+    /** The permissions in [channel]; the root's are the server-wide ones. */
+    fun permissionsIn(channel: Int): Int =
+        if (channel == ROOT_CHANNEL_ID) permissions else channelMap[channel]?.permissions ?: 0
+
+    /** [channel] and every channel below it, depth first, each parent before its subchannels. */
+    fun flatten(channel: Int = ROOT_CHANNEL_ID): List<ChannelState> = buildList {
+        fun visit(id: Int) {
+            channelMap[id]?.let(::add) ?: return
+            subchannelIds(id).forEach(::visit)
+        }
+        visit(channel)
+    }
+
+    companion object {
+        /** The id Mumble gives the root channel. */
+        const val ROOT_CHANNEL_ID = 0
+
+        /** Subchannel order: position, then name, with nameless stubs first. */
+        internal fun compareChannels(a: ChannelState?, b: ChannelState?): Int {
+            val byPosition = (a?.position ?: 0).compareTo(b?.position ?: 0)
+            return if (byPosition != 0) byPosition else (a?.name ?: "").compareTo(b?.name ?: "")
+        }
+
+        /** User and listener order: by name, ignoring case, with nameless users first. */
+        internal fun compareUsers(a: UserState?, b: UserState?): Int =
+            (a?.name ?: "").compareTo(b?.name ?: "", ignoreCase = true)
+
+        /**
+         * The snapshot of these channels and users, with the tree derived from their parents,
+         * channels and listening channels, for a client that assembles one itself.
+         */
+        fun of(
+            channels: Collection<ChannelState>,
+            users: Collection<UserState> = emptyList(),
+            selfSession: Int? = null,
+            permissions: Int = 0,
+            serverSettings: ServerSettings? = null,
+        ): ServerState {
+            val channelMap = channels.associateBy { it.id }
+            val children = channels.filter { it.parent in channelMap }.groupBy { it.parent!! }
+                .mapValues { (_, list) -> list.sortedWith(::compareChannels).map { it.id }.toPersistentList() }
+            val members = users.groupBy { it.channel }
+                .mapValues { (_, list) -> list.sortedWith(::compareUsers).map { it.session }.toPersistentList() }
+            val listeners = users.flatMap { user -> user.listening.map { it to user } }
+                .groupBy({ it.first }, { it.second })
+                .mapValues { (_, list) -> list.sortedWith(::compareUsers).map { it.session }.toPersistentList() }
+            return ServerState(
+                selfSession, channelMap.toPersistentMap(), users.associateBy { it.session }.toPersistentMap(),
+                children.toPersistentMap(), members.toPersistentMap(), listeners.toPersistentMap(),
+                permissions, serverSettings, LocalUserSettings(),
+            )
+        }
+
+        /** A server nothing is known of yet, with what this device remembers about users. */
+        fun empty(local: LocalUserSettings = LocalUserSettings()): ServerState = ServerState(
+            selfSession = null,
+            channelMap = persistentMapOf(),
+            userMap = persistentMapOf(),
+            children = persistentMapOf(),
+            members = persistentMapOf(),
+            listeners = persistentMapOf(),
+            permissions = 0,
+            serverSettings = null,
+            local = local,
+        )
+    }
+}
+
+/**
+ * What this device keeps for other users across their sessions: local mutes and message ignores
+ * of registered users by user id, and playback volumes by [localVolumeKey].
+ */
+data class LocalUserSettings(
+    val volumes: Map<String, Float> = emptyMap(),
+    val mutedUserIds: Set<Int> = emptySet(),
+    val ignoredUserIds: Set<Int> = emptySet(),
+    /** "host:port" of the server, which scopes volumes kept by name. */
+    val serverScope: String? = null,
+)
+
+/**
+ * Identifies [user] across sessions: by certificate hash when the server sent one, else by name
+ * on the server of [serverScope] ("host:port"). Null if neither is known.
+ */
+fun localVolumeKey(user: UserState, serverScope: String?): String? {
+    val hash = user.hash
+    val name = user.name
+    return when {
+        !hash.isNullOrEmpty() -> "cert:$hash"
+        name != null && serverScope != null -> "name:$serverScope:$name"
+        else -> null
+    }
+}
+
+/** The scope [localVolumeKey] keys names by on [server]. */
+val Server.localVolumeScope: String get() = "$host:$port"

@@ -28,15 +28,15 @@ class PushToTalk(private val settings: Settings, private val sessions: SessionMa
 
     /** A no-op in toggle mode, which acts on the release. */
     fun onKeyDown() {
-        val session = sessions.connected ?: return
-        if (isPushToTalk && !settings.isPushToTalkToggle) session.setTalkingState(true)
+        val audio = sessions.connected?.audio ?: return
+        if (isPushToTalk && !settings.isPushToTalkToggle) audio.setTalking(true)
     }
 
     /** Toggles talking in toggle mode, otherwise stops talking. */
     fun onKeyUp() {
-        val session = sessions.connected ?: return
+        val audio = sessions.connected?.audio ?: return
         if (!isPushToTalk) return
-        session.setTalkingState(settings.isPushToTalkToggle && !session.isTalking)
+        audio.setTalking(settings.isPushToTalkToggle && !audio.isTalking)
     }
 
     private val isPushToTalk: Boolean get() = settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT

@@ -17,44 +17,16 @@
 
 package se.lublin.mumla.servers
 
-import android.content.Context
 import android.view.MenuItem
-import kotlinx.coroutines.CoroutineScope
 import se.lublin.mumla.R
 import se.lublin.mumla.db.PublicServer
-import java.util.Locale
 
-/** The public servers' cards, which can be filtered and sorted, with "favourite" in their menu. */
+/** The public servers' cards, with their country and "favourite" in their menu. */
 class PublicServerAdapter(
-    context: Context,
-    private val servers: List<PublicServer>,
     private val listener: PublicServerAdapterMenuListener,
-    scope: CoroutineScope,
+    pings: ServerPings,
     onServerClick: (PublicServer) -> Unit,
-) : ServerAdapter<PublicServer>(context, scope, onServerClick) {
-
-    /** The servers shown, as filtered and sorted; the list catches up with this asynchronously. */
-    var shownServers: List<PublicServer> = servers
-        private set(value) {
-            field = value
-            submitList(value)
-        }
-
-    init {
-        submitList(servers)
-    }
-
-    /** Shows only servers whose upper-cased name and country contain the given queries, in list order. */
-    fun filter(queryName: String, queryCountry: String) {
-        shownServers = servers.filter { server ->
-            server.name.uppercase(Locale.US).contains(queryName) &&
-                server.country.orEmpty().uppercase(Locale.US).contains(queryCountry)
-        }
-    }
-
-    fun sort(comparator: Comparator<PublicServer>) {
-        shownServers = shownServers.sortedWith(comparator)
-    }
+) : ServerAdapter<PublicServer>(pings, onServerClick) {
 
     override val rowLayout: Int get() = R.layout.public_server_list_row
 

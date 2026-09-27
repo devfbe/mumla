@@ -20,8 +20,6 @@ import android.content.Context
 import android.view.LayoutInflater
 import androidx.appcompat.app.AlertDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.IUser
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.DialogLocalVolumeBinding
 import kotlin.math.roundToInt
@@ -32,16 +30,16 @@ private const val PERCENT = 100f
 private const val STEP_PERCENT = 5
 
 /**
- * Asks for [user]'s playback volume on this device, applying it live. OK keeps it and calls
- * [onChanged]; Cancel restores the volume the dialog started with.
+ * Asks for the playback volume on this device of the user called [name], which is [before] now.
+ * Every move of the slider goes to [preview]; OK and Reset go to [keep], Cancel restores [before].
  */
 fun showLocalVolumeDialog(
     context: Context,
-    session: IHumlaSession,
-    user: IUser,
-    onChanged: (IUser) -> Unit,
+    name: String?,
+    before: Float,
+    preview: (Float) -> Unit,
+    keep: (Float) -> Unit,
 ): AlertDialog {
-    val before = user.localVolume
     val binding = DialogLocalVolumeBinding.inflate(LayoutInflater.from(context))
     fun show(percent: Int) {
         binding.localVolumeValue.text = context.getString(R.string.local_volume_percent, percent)
@@ -51,17 +49,14 @@ fun showLocalVolumeDialog(
     show(binding.localVolumeSlider.value.roundToInt())
     binding.localVolumeSlider.addOnChangeListener { _, value, _ ->
         show(value.roundToInt())
-        session.setLocalVolume(user.session, value / PERCENT)
+        preview(value / PERCENT)
     }
     return MaterialAlertDialogBuilder(context)
-        .setTitle(context.getString(R.string.local_volume_title, user.name))
+        .setTitle(context.getString(R.string.local_volume_title, name))
         .setView(binding.root)
-        .setPositiveButton(android.R.string.ok) { _, _ -> onChanged(user) }
-        .setNeutralButton(R.string.local_volume_reset) { _, _ ->
-            session.setLocalVolume(user.session, 1f)
-            onChanged(user)
-        }
-        .setNegativeButton(android.R.string.cancel) { _, _ -> session.setLocalVolume(user.session, before) }
-        .setOnCancelListener { session.setLocalVolume(user.session, before) }
+        .setPositiveButton(android.R.string.ok) { _, _ -> keep(binding.localVolumeSlider.value / PERCENT) }
+        .setNeutralButton(R.string.local_volume_reset) { _, _ -> keep(1f) }
+        .setNegativeButton(android.R.string.cancel) { _, _ -> preview(before) }
+        .setOnCancelListener { preview(before) }
         .show()
 }

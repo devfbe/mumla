@@ -6,7 +6,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class WhisperTargetListTest {
-    private val root = Channel(0, false)
+    private val root = ChannelState(0)
     private fun target() = WhisperTargetChannel(root, false, false, null)
 
     @Test
@@ -16,23 +16,20 @@ class WhisperTargetListTest {
 
         val targets = List(30) { target() }
         for (i in 0 until 30) {
-            assertWithMessage("space before $i").that(list.spaceRemaining()).isEqualTo(30 - i)
             val id = list.append(targets[i])
             assertThat(id).isEqualTo((i + 1).toByte())
             assertThat(list[id]).isSameInstanceAs(targets[i])
         }
-        assertThat(list.spaceRemaining()).isEqualTo(0)
         assertWithMessage("full").that(list.append(targets[0])).isEqualTo((-1).toByte())
 
         list.free(5)
         assertThat(list[5]).isNull()
-        assertThat(list.spaceRemaining()).isEqualTo(1)
         val replacement = target()
         assertThat(list.append(replacement)).isEqualTo(5.toByte())
         assertThat(list[5]).isSameInstanceAs(replacement)
 
         list.clear()
-        assertThat(list.spaceRemaining()).isEqualTo(30)
+        assertThat(list.append(target())).isEqualTo(1.toByte())
     }
 
     @Test

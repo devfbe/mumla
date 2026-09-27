@@ -39,7 +39,7 @@ class HumlaSessionVadConfigTest {
 
     private fun service(): HumlaSession = testSession().also { sessions += it }
 
-    private fun inputMode(service: HumlaSession) = service.audio.activityInputMode
+    private fun inputMode(service: HumlaSession) = service.audioSession.activityInputMode
 
     @Test
     fun `the whole vad configuration reaches the live detector`() {
@@ -75,6 +75,6 @@ class HumlaSessionVadConfigTest {
 
         service.configure(SessionConfig(audio = AudioSettings(vad = VadConfig.probability(0.8f, 0.2f, 120L))))
 
-        assertThat(service.audio.config).isEqualTo(AudioConfig())
+        assertThat(service.audioSession.config).isEqualTo(AudioConfig())
     }
 }

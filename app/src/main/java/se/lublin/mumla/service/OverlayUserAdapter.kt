@@ -23,41 +23,38 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import androidx.core.view.ViewCompat
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.model.UserState
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.OverlayUserRowBinding
+import se.lublin.mumla.util.UserStatus
 import se.lublin.mumla.util.talkStateDescription
 
-/**
- * Displays the users in a single channel. Holds one snapshot of the users, refreshed in
- * [notifyDataSetChanged], so `getCount()` and `getItem(position)` always describe the same moment
- * even while the protocol thread changes the model.
- */
-class OverlayUserAdapter(
-    private val context: Context,
-    channel: IChannel,
-) : BaseAdapter() {
+/** The users of one channel, with how each of them talks. */
+class OverlayUserAdapter(private val context: Context) : BaseAdapter() {
 
-    // Copied: `Channel.users` returns an unmodifiable view of the live list.
-    private var users: List<IUser?> = channel.users.toList()
+    private var users: List<UserState> = emptyList()
+    private var talkStates: Map<Int, TalkState> = emptyMap()
+
+    fun submit(users: List<UserState>, talkStates: Map<Int, TalkState>) {
+        this.users = users
+        this.talkStates = talkStates
+        notifyDataSetChanged()
+    }
 
     override fun getCount(): Int = users.size
 
-    override fun getItem(position: Int): Any? = users[position]
+    override fun getItem(position: Int): UserState = users[position]
 
-    override fun getItemId(position: Int): Long = users[position]?.userId?.toLong() ?: -1L
+    override fun getItemId(position: Int): Long = users[position].session.toLong()
 
-    override fun notifyDataSetChanged() {
-        users = channel.users.toList()
-        super.notifyDataSetChanged()
-    }
+    override fun hasStableIds(): Boolean = true
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         val binding = convertView?.let(OverlayUserRowBinding::bind)
             ?: OverlayUserRowBinding.inflate(LayoutInflater.from(context), parent, false)
-        val user = getItem(position) as IUser
+        val user = getItem(position)
+        val talkState = talkStates[user.session]
         binding.userRowName.text = user.name
         binding.userRowState.setImageResource(
             when {
@@ -66,18 +63,11 @@ class OverlayUserAdapter(
                 user.isDeafened -> R.drawable.outline_circle_server_deafened
                 user.isMuted -> R.drawable.outline_circle_server_muted
                 user.isSuppressed -> R.drawable.outline_circle_suppressed
-                user.talkState == TalkState.TALKING -> R.drawable.outline_circle_talking_on
+                talkState == TalkState.TALKING -> R.drawable.outline_circle_talking_on
                 else -> R.drawable.outline_circle_talking_off
             }
         )
-        ViewCompat.setStateDescription(binding.root, talkStateDescription(context, user))
-
+        ViewCompat.setStateDescription(binding.root, talkStateDescription(context, UserStatus.of(user), talkState))
         return binding.root
     }
-
-    var channel: IChannel = channel
-        set(value) {
-            field = value
-            notifyDataSetChanged()
-        }
 }

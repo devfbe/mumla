@@ -3,13 +3,29 @@ package se.lublin.humla.model
 
 import se.lublin.humla.protobuf.Mumble
 
-/** A snapshot of one `ServerConfig` message. */
-class ServerSettings(msg: Mumble.ServerConfig) : IServerSettings {
-    override val allowHtml: Boolean = msg.allowHtml
-    override val messageLength: Int = msg.messageLength
-    override val imageMessageLength: Int = msg.imageMessageLength
-    override val maxBandwidth: Int = msg.maxBandwidth
-    override val maxUsers: Int = msg.maxUsers
-    override val welcomeText: String = msg.welcomeText
-    override val recordingAllowed: Boolean = !msg.hasRecordingAllowed() || msg.recordingAllowed
+/** The server's `ServerConfig`. */
+data class ServerSettings(
+    val allowHtml: Boolean,
+    val messageLength: Int,
+    val imageMessageLength: Int,
+    val maxBandwidth: Int,
+    val maxUsers: Int,
+    val welcomeText: String,
+    /**
+     * Whether the server allows clients to record. Servers that don't say so allow it. This client
+     * has no recorder, so it only reports this.
+     */
+    val recordingAllowed: Boolean,
+) {
+    internal companion object {
+        fun from(msg: Mumble.ServerConfig) = ServerSettings(
+            allowHtml = msg.allowHtml,
+            messageLength = msg.messageLength,
+            imageMessageLength = msg.imageMessageLength,
+            maxBandwidth = msg.maxBandwidth,
+            maxUsers = msg.maxUsers,
+            welcomeText = msg.welcomeText,
+            recordingAllowed = !msg.hasRecordingAllowed() || msg.recordingAllowed,
+        )
+    }
 }

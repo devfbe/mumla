@@ -28,7 +28,7 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -36,35 +36,38 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
+import se.lublin.humla.AudioControls
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
-import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.stubModel
+import se.lublin.mumla.testing.stubTalkStates
 
 /** The talk button tells accessibility services whether we are transmitting. */
 @RunWith(RobolectricTestRunner::class)
 class ChannelFragmentAccessibilityTest {
     private val preferences =
         PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<Context>())
-    private val self = FakeUser(SESSION)
     private lateinit var fragment: ChannelFragment
     private lateinit var session: IHumlaSession
+    private lateinit var audio: AudioControls
     private lateinit var controller: ActivityController<ServiceHostActivity>
-    private lateinit var events: MutableSharedFlow<HumlaEvent>
+    private lateinit var talkStates: MutableStateFlow<Map<Int, TalkState>>
 
     @Before
     fun setUp() {
         preferences.edit(commit = true) { putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT) }
         session = mockk(relaxed = true)
-        every { session.sessionId } returns SESSION
-        every { session.sessionUser } returns self
+        audio = session.stubAudio()
+        session.stubModel(serverState(self = SESSION) { channel(0, "Root"); user(SESSION, "me") })
+        talkStates = session.stubTalkStates()
         session.stubConnected()
-        events = session.stubEvents()
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
         val activity = controller.get()
         activity.bind(session)
@@ -82,14 +85,12 @@ class ChannelFragmentAccessibilityTest {
     fun theTalkButtonStatesThatWeTransmitAndStopsWhenWeDoNot() {
         assertThat(ViewCompat.getStateDescription(talkButton)).isNull()
 
-        self.state = TalkState.TALKING
-        events.tryEmit(HumlaEvent.UserTalkStateUpdated(self))
+        talkStates.value = mapOf(SESSION to TalkState.TALKING)
         idleMainLooper()
         assertThat(ViewCompat.getStateDescription(talkButton))
             .isEqualTo(fragment.getString(R.string.a11y_transmitting))
 
-        self.state = TalkState.PASSIVE
-        events.tryEmit(HumlaEvent.UserTalkStateUpdated(self))
+        talkStates.value = emptyMap()
         idleMainLooper()
         assertThat(ViewCompat.getStateDescription(talkButton)).isNull()
     }
@@ -99,23 +100,23 @@ class ChannelFragmentAccessibilityTest {
 
     @Test
     fun anAccessibilityClickStartsAndStopsTransmitting() {
-        every { session.isTalking } returns false
+        every { audio.isTalking } returns false
         assertThat(clickForAccessibility()).isTrue()
-        verify(exactly = 1) { session.setTalkingState(true) }
+        verify(exactly = 1) { audio.setTalking(true) }
 
-        every { session.isTalking } returns true
+        every { audio.isTalking } returns true
         clickForAccessibility()
-        verify(exactly = 1) { session.setTalkingState(false) }
+        verify(exactly = 1) { audio.setTalking(false) }
     }
 
     @Test
     fun whatAnAccessibilityClickStartedIsReleasedOnPause() {
-        every { session.isTalking } returns false
+        every { audio.isTalking } returns false
         clickForAccessibility()
 
         controller.pause()
 
-        verify(exactly = 1) { session.setTalkingState(false) }
+        verify(exactly = 1) { audio.setTalking(false) }
     }
 
     private companion object {

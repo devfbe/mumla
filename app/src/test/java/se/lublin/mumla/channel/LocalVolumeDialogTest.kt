@@ -20,14 +20,10 @@ import android.content.DialogInterface
 import android.widget.TextView
 import com.google.android.material.slider.Slider
 import com.google.common.truth.Truth.assertThat
-import io.mockk.mockk
-import io.mockk.verify
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.IUser
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ThemedActivity
 import se.lublin.mumla.testing.idleMainLooper
@@ -35,11 +31,12 @@ import se.lublin.mumla.testing.idleMainLooper
 @RunWith(RobolectricTestRunner::class)
 class LocalVolumeDialogTest {
     private val context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
-    private val session = mockk<IHumlaSession>(relaxed = true)
-    private val ann = FakeUser(7, "Ann").apply { localVolume = 0.5f }
-    private val changed = mutableListOf<IUser>()
+    private val previewed = mutableListOf<Float>()
+    private val kept = mutableListOf<Float>()
 
-    private fun show() = showLocalVolumeDialog(context, session, ann) { changed += it }.also { idleMainLooper() }
+    private fun show() =
+        showLocalVolumeDialog(context, "Ann", 0.5f, preview = { previewed += it }, keep = { kept += it })
+            .also { idleMainLooper() }
 
     @Test
     fun theSliderStartsAtTheCurrentVolumeAndAppliesChangesLive() {
@@ -50,12 +47,12 @@ class LocalVolumeDialogTest {
         assertThat(dialog.findViewById<TextView>(R.id.local_volume_value)!!.text.toString()).isEqualTo("50%")
 
         slider.value = 150f
-        verify { session.setLocalVolume(7, 1.5f) }
+        assertThat(previewed).containsExactly(1.5f)
         assertThat(dialog.findViewById<TextView>(R.id.local_volume_value)!!.text.toString()).isEqualTo("150%")
 
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
         idleMainLooper()
-        assertThat(changed).containsExactly(ann)
+        assertThat(kept).containsExactly(1.5f)
     }
 
     @Test
@@ -66,8 +63,8 @@ class LocalVolumeDialogTest {
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
         idleMainLooper()
 
-        verify { session.setLocalVolume(7, 0.5f) }
-        assertThat(changed).isEmpty()
+        assertThat(previewed.last()).isEqualTo(0.5f)
+        assertThat(kept).isEmpty()
     }
 
     @Test
@@ -77,7 +74,6 @@ class LocalVolumeDialogTest {
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).performClick()
         idleMainLooper()
 
-        verify { session.setLocalVolume(7, 1f) }
-        assertThat(changed).containsExactly(ann)
+        assertThat(kept).containsExactly(1f)
     }
 }

@@ -23,7 +23,6 @@ import org.junit.Test
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.SpeexJitterApi
 import se.lublin.humla.audio.native.SpeexJitterNative
-import se.lublin.humla.model.User
 import java.lang.management.ManagementFactory
 
 /**
@@ -83,7 +82,7 @@ class PlaybackAllocationTest {
     }
 
     private fun speech(session: Int) =
-        AudioOutputSpeech(User(session, "user$session"), MIX_SAMPLES, { _, _ -> }, SilentOpus(), SilentJitter())
+        AudioOutputSpeech(session, MIX_SAMPLES, { _, _ -> }, SilentOpus(), SilentJitter())
 
     @Test
     fun `decoding one talker allocates under half an object per mix`() {

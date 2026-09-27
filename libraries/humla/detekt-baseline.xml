@@ -11,7 +11,6 @@
     <ID>EmptyFunctionBlock:HumlaUDPTest.kt$HumlaUDPTest.RecordingListener${}</ID>
     <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @return true if the buffer contains audio data.</ID>
     <ID>ForbiddenComment:HumlaConnection.kt$HumlaConnection.Companion$// FIXME: assumes worst-case using TCP</ID>
-    <ID>LongMethod:ModelRaceTest.kt$ModelRaceTest$@Test fun aChannelListWalkSurvivesAServerSyncOnTheProtocolThread()</ID>
     <ID>LongParameterList:CaptureWiring.kt$CaptureWiring$( inputSampleRate: Int, inputMode: IInputMode, amplitudeBoost: Float, noise: NoiseSuppressionMode, echo: EchoCancellationMode, speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB, logger: HumlaLogger? = null, factory: CapturePreprocessorFactory? = null, newResampler: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
     <ID>LongParameterList:OpusDecoderNative.kt$OpusDecoderApi$( state: Long, data: ByteArray?, offset: Int, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int, )</ID>
     <ID>LongParameterList:OpusEncoder.kt$OpusEncoder$( sampleRate: Int, channels: Int, private val frameSize: Int, private val framesPerPacket: Int, bitrate: Int, maxBufferSize: Int, private val api: OpusEncoderApi = OpusEncoderNative, )</ID>
@@ -53,7 +52,6 @@
     <ID>TooGenericExceptionCaught:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
     <ID>TooGenericExceptionThrown:HumlaConnection.kt$HumlaConnection$throw RuntimeException("We use BouncyCastle- what? ", e)</ID>
     <ID>TooManyFunctions:AudioRouter.kt$AudioRouter</ID>
-    <ID>TooManyFunctions:Channel.kt$Channel : IChannelComparable</ID>
     <ID>TooManyFunctions:CommunicationDevices.kt$AndroidCommunicationDevices : CommunicationDevices</ID>
     <ID>TooManyFunctions:HumlaConnection.kt$HumlaConnection : TCPConnectionListenerUDPConnectionListenerMessageHandlerRegistry</ID>
     <ID>TooManyFunctions:HumlaTCP.kt$HumlaTCP : TcpTransport</ID>

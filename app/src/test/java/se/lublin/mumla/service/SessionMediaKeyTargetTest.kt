@@ -10,58 +10,61 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.IUser
+import se.lublin.humla.model.UserState
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.stubAudio
+import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubModel
 import se.lublin.mumla.testing.stubState
 
 @RunWith(RobolectricTestRunner::class)
 class SessionMediaKeyTargetTest {
     private val session = mockk<IHumlaSession>(relaxed = true).also { installSession(it.stubConnected()) }
+    private val audio = session.stubAudio()
     private val target = SessionMediaKeyTarget(SessionManager.get(ApplicationProvider.getApplicationContext<Context>()))
+
+    private fun self(muted: Boolean, deafened: Boolean) = session.stubModel(
+        serverState(self = 1) {
+            channel(0, "Root")
+            user(UserState(1, "me", 0, isSelfMuted = muted, isSelfDeafened = deafened))
+        },
+    )
 
     @Test
     fun toggleMuteMutesAnUnmutedUserKeepingDeafenOff() {
-        val self = mockk<IUser> {
-            every { isSelfMuted } returns false
-            every { isSelfDeafened } returns false
-        }
-        every { session.sessionUser } returns self
+        self(muted = false, deafened = false)
 
         target.toggleSelfMute()
 
-        verify(exactly = 1) { session.setSelfMuteDeafState(true, false) }
+        verify(exactly = 1) { session.actions.setSelfMuteDeafState(true, false) }
     }
 
     @Test
     fun toggleMuteUnmutesAMutedAndDeafenedUserAndUndeafens() {
-        val self = mockk<IUser> {
-            every { isSelfMuted } returns true
-            every { isSelfDeafened } returns true
-        }
-        every { session.sessionUser } returns self
+        self(muted = true, deafened = true)
 
         target.toggleSelfMute()
 
-        verify(exactly = 1) { session.setSelfMuteDeafState(false, false) }
+        verify(exactly = 1) { session.actions.setSelfMuteDeafState(false, false) }
     }
 
     @Test
     fun toggleMuteDoesNothingWithoutSessionUser() {
-        every { session.sessionUser } returns null
+        session.stubModel(serverState { channel(0, "Root") })
 
         target.toggleSelfMute()
 
-        verify(exactly = 0) { session.setSelfMuteDeafState(any(), any()) }
+        verify(exactly = 0) { session.actions.setSelfMuteDeafState(any(), any()) }
     }
 
     @Test
     fun stopTalkingTurnsTalkingOff() {
         target.stopTalking()
 
-        verify(exactly = 1) { session.setTalkingState(false) }
+        verify(exactly = 1) { audio.setTalking(false) }
     }
 
     /**
@@ -70,12 +73,12 @@ class SessionMediaKeyTargetTest {
      */
     @Test
     fun stopTalkingWritesTheOffStateEvenWhenAlreadyOff() {
-        every { session.isTalking } returns false
+        every { audio.isTalking } returns false
 
         target.stopTalking()
 
-        verify(exactly = 1) { session.setTalkingState(false) }
-        verify(exactly = 0) { session.isTalking }
+        verify(exactly = 1) { audio.setTalking(false) }
+        verify(exactly = 0) { audio.isTalking }
     }
 
     /** Once disconnected, nothing is written: a reconnect must not inherit a reset it did not ask for. */
@@ -85,7 +88,7 @@ class SessionMediaKeyTargetTest {
 
         target.stopTalking()
 
-        verify(exactly = 0) { session.setTalkingState(any()) }
+        verify(exactly = 0) { audio.setTalking(any()) }
         assertThat(target.isConnected).isFalse()
     }
 }

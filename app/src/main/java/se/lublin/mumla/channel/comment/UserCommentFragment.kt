@@ -19,7 +19,6 @@ package se.lublin.mumla.channel.comment
 
 import androidx.core.os.bundleOf
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.session.HumlaEvent
 
 /** Shows (and for the own user, edits) a user's comment. */
 class UserCommentFragment : AbstractCommentFragment() {
@@ -28,13 +27,11 @@ class UserCommentFragment : AbstractCommentFragment() {
     val user: Int get() = requireArguments().getInt(ARG_SESSION)
 
     override fun requestComment(session: IHumlaSession) {
-        observeComment(session) { event ->
-            (event as? HumlaEvent.UserStateUpdated)?.user?.takeIf { it.session == user }?.comment
-        }
-        session.requestComment(user)
+        observeComment(session) { it.user(user)?.comment }
+        session.actions.requestComment(user)
     }
 
-    override fun editComment(session: IHumlaSession, comment: String) = session.setUserComment(user, comment)
+    override fun editComment(session: IHumlaSession, comment: String) = session.actions.setUserComment(user, comment)
 
     companion object {
         private const val ARG_SESSION = "session"

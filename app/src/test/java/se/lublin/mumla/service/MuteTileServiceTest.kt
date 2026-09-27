@@ -30,27 +30,33 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.model.UserState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
-import se.lublin.mumla.channel.FakeUser
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubState
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
+import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.stubModel
 
 @RunWith(RobolectricTestRunner::class)
 class MuteTileServiceTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
-    private val self = FakeUser(1)
-    private val session = mockk<IHumlaSession>(relaxed = true) { every { sessionUser } returns self }
-    private lateinit var events: MutableSharedFlow<HumlaEvent>
+    private val session = mockk<IHumlaSession>(relaxed = true)
+    private val model = session.stubModel(model(muted = false))
+
+    private fun model(muted: Boolean, deafened: Boolean = false) = serverState(self = 1) {
+        channel(0, "Root")
+        user(UserState(1, "me", 0, isSelfMuted = muted, isSelfDeafened = deafened))
+    }
 
     /** The tile service, listening, with [session] as the current session if [withSession]. */
     private fun listeningTile(withSession: Boolean = true): MuteTileService {
-        events = session.stubEvents()
+        session.stubEvents()
         if (withSession) installSession(session)
         val tile = Robolectric.buildService(MuteTileService::class.java).create().get()
         tile.onStartListening()
@@ -72,8 +78,7 @@ class MuteTileServiceTest {
         val tile = listeningTile()
         assertThat(tile.qsTile.state).isEqualTo(Tile.STATE_INACTIVE)
 
-        self.selfMuted = true
-        events.tryEmit(HumlaEvent.UserStateUpdated(self))
+        model.value = model(muted = true)
         idleMainLooper()
 
         assertThat(tile.qsTile.state).isEqualTo(Tile.STATE_ACTIVE)
@@ -95,7 +100,10 @@ class MuteTileServiceTest {
     fun aNewSessionIsFollowedToo() {
         session.stubConnected()
         val tile = listeningTile()
-        val next = mockk<IHumlaSession>(relaxed = true).also { it.stubState(SessionState.Connecting) }
+        val next = mockk<IHumlaSession>(relaxed = true).also {
+            it.stubState(SessionState.Connecting)
+            it.stubModel(null)
+        }
 
         installSession(next)
         idleMainLooper()
@@ -110,7 +118,7 @@ class MuteTileServiceTest {
 
         tile.onClick()
 
-        verify { session.setSelfMuteDeafState(true, false) }
+        verify { session.actions.setSelfMuteDeafState(true, false) }
     }
 
     @Test
@@ -120,7 +128,7 @@ class MuteTileServiceTest {
 
         tile.onClick()
 
-        verify(exactly = 0) { session.setSelfMuteDeafState(any(), any()) }
+        verify(exactly = 0) { session.actions.setSelfMuteDeafState(any(), any()) }
     }
 
     @Test
@@ -133,14 +141,12 @@ class MuteTileServiceTest {
 
     @Test
     fun unmutingUndeafensAndMutingKeepsDeafness() {
-        self.selfMuted = true
-        self.selfDeafened = true
+        model.value = model(muted = true, deafened = true)
         toggleSelfMute(session)
-        verify { session.setSelfMuteDeafState(false, false) }
+        verify { session.actions.setSelfMuteDeafState(false, false) }
 
-        self.selfMuted = false
-        self.selfDeafened = false
+        model.value = model(muted = false)
         toggleSelfMute(session)
-        verify { session.setSelfMuteDeafState(true, false) }
+        verify { session.actions.setSelfMuteDeafState(true, false) }
     }
 }

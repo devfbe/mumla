@@ -14,7 +14,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowLog
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioInitializationException
-import se.lublin.humla.model.User
+import se.lublin.humla.model.TalkState
+import se.lublin.humla.model.UserState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.MessageHandlerRegistry
 import se.lublin.humla.net.TcpMessageHandler
@@ -109,12 +110,12 @@ class AudioControllerTest {
         override fun onTalkingStateChanged(talking: Boolean) = Unit
     }
     private val outputListener = object : AudioOutput.AudioOutputListener {
-        override fun onUserTalkStateUpdated(user: User) = Unit
-        override fun getUser(session: Int): User? = null
+        override val playbackParams: PlaybackParams = PlaybackParams.DEFAULT
+        override fun onTalkStateUpdated(session: Int, state: TalkState) = Unit
     }
     private val controller = newController()
     private val params = AudioSessionParams(
-        User(1, "me"), -1, HumlaUDPMessageType.UDPVoiceOpus, 0, ContinuousInputMode(),
+        UserState(1, "me", 0), -1, HumlaUDPMessageType.UDPVoiceOpus, 0, ContinuousInputMode(),
     )
 
     private fun newController(mainHandler: Handler = Handler(Looper.getMainLooper())) = AudioController(

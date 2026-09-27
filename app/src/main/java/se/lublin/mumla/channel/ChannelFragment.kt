@@ -19,7 +19,6 @@ package se.lublin.mumla.channel
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
@@ -34,44 +33,42 @@ import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.Accessibilit
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.PreferenceManager
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.launch
-import se.lublin.humla.model.IUser
-import se.lublin.humla.model.TalkState
-import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.session.SessionState
-import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.FragmentChannelBinding
 import se.lublin.mumla.session.PushToTalk
-import se.lublin.mumla.session.SessionClient
+import se.lublin.mumla.session.SelfState
 import se.lublin.mumla.session.SessionManager
-import se.lublin.mumla.session.bindClient
+import se.lublin.mumla.session.SessionViewModel
+import se.lublin.mumla.util.activityAppViewModels
 import se.lublin.mumla.util.changes
 import java.util.Locale
 
 /**
  * Holds a [ChannelListFragment] and a [ChannelChatFragment], as tabs or side by side, which share
- * the chat target through this fragment's [ChatTargetViewModel].
+ * the chat target through this fragment's [ChatViewModel].
  */
 @Suppress("TooManyFunctions") // Framework callbacks, each delegating.
 class ChannelFragment :
     Fragment(),
-    SessionClient,
     MenuProvider {
 
-    private val sessions get() = SessionManager.get(requireContext())
+    private val session by activityAppViewModels { SessionViewModel(SessionManager.get(it)) }
     private val pushToTalk get() = PushToTalk(requireContext())
 
     private var binding: FragmentChannelBinding? = null
 
     /** True while a touch is down on the talk button, i.e. while this fragment holds transmission. */
     private var talkButtonHeld = false
-    private var bound = false
+
+    /** Our own state as last shown; null while not synchronized. */
+    private var shownSelf: SelfState? = null
 
     private val settings get() = Settings.getInstance(requireActivity())
 
@@ -84,39 +81,18 @@ class ChannelFragment :
     /** True if only the user's pinned channels are shown. */
     private val isShowingPinnedChannels get() = arguments?.getBoolean(ARG_PINNED) == true
 
-    override fun onSessionEvent(event: HumlaEvent) {
-        when (event) {
-            is HumlaEvent.UserTalkStateUpdated -> onUserTalkStateUpdated(event.user)
-            is HumlaEvent.UserStateUpdated -> if (isSelf(event.user)) {
-                configureInput()
-                announcer.onMuteState(event.user.isSelfMuted, event.user.isSelfDeafened)
-            }
-            is HumlaEvent.VoiceTargetChanged -> configureTargetPanel()
-            else -> Unit
-        }
-    }
-
-    override fun onSessionState(state: SessionState) {
-        if (state != SessionState.Connected) return
-        configureTargetPanel()
+    /** Shows our own state; each synchronization starts the spoken announcements over. */
+    private fun onSelf(self: SelfState?) {
+        val previous = shownSelf
+        shownSelf = self
         configureInput()
-        announcer.reset()
-        selfUser()?.let { self ->
-            announcer.onMuteState(self.isSelfMuted, self.isSelfDeafened)
-            showTalking(self.talkState != TalkState.PASSIVE)
+        if (self == null) return
+        if (previous == null) announcer.reset()
+        announcer.onMuteState(self.isSelfMuted, self.isSelfDeafened)
+        if (previous?.isTalking != self.isTalking) {
+            binding?.pushtotalk?.isPressed = self.isTalking
+            showTalking(self.isTalking)
         }
-    }
-
-    /** Shows our talk state on the button, also when set by hot corners or a PTT toggle. */
-    private fun onUserTalkStateUpdated(user: IUser) {
-        val talkButton = binding?.pushtotalk ?: return
-        if (!isSelf(user)) return
-        val talking = when (user.talkState) {
-            TalkState.TALKING, TalkState.SHOUTING, TalkState.WHISPERING -> true
-            TalkState.PASSIVE -> false
-        }
-        talkButton.isPressed = talking
-        showTalking(talking)
     }
 
     /**
@@ -129,21 +105,11 @@ class ChannelFragment :
         announcer.onTalking(talking, announce = settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT)
     }
 
-    private fun isSelf(user: IUser): Boolean {
-        val session = sessions.connected ?: return false
-        return try {
-            user.session == session.sessionId
-        } catch (e: IllegalStateException) {
-            Log.d(TAG, "exception in isSelf: $e")
-            false
-        }
-    }
-
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val binding = FragmentChannelBinding.inflate(inflater, container, false)
         this.binding = binding
         setUpTalkButton(binding.pushtotalk)
-        binding.targetPanelCancel.setOnClickListener { cancelWhisper() }
+        binding.targetPanelCancel.setOnClickListener { session.stopWhispering() }
         configureInput()
         return binding.root
     }
@@ -171,7 +137,7 @@ class ChannelFragment :
     }
 
     private fun toggleTalkingForAccessibility() {
-        val session = sessions.connected ?: return
+        if (shownSelf == null) return
         when {
             settings.isPushToTalkToggle -> pushToTalk.onKeyUp()
             session.isTalking -> {
@@ -207,15 +173,6 @@ class ChannelFragment :
         return true
     }
 
-    private fun cancelWhisper() {
-        val session = sessions.connected ?: return
-        if (session.voiceTargetMode == VoiceTargetMode.WHISPER) {
-            val target = session.voiceTargetId
-            session.voiceTargetId = 0
-            session.unregisterWhisperTarget(target)
-        }
-    }
-
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         viewLifecycleOwner.lifecycleScope.launch {
@@ -237,14 +194,17 @@ class ChannelFragment :
                 .commit()
         }
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
-        if (!bound) {
-            bound = true
-            sessions.bindClient(this, this)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { session.self.collect(::onSelf) }
+                session.whisperTarget.collect(::showWhisperTarget)
+            }
         }
     }
 
     override fun onDestroyView() {
         announcer.reset()
+        shownSelf = null
         binding = null
         super.onDestroyView()
     }
@@ -267,20 +227,14 @@ class ChannelFragment :
         super.onPause()
         // Release only what this fragment's button holds, so a pause cannot leave it transmitting.
         // A talk state set elsewhere (e.g. a headset key with the screen off) is not ours to clear.
-        val session = sessions.connected
-        if (talkButtonHeld && session != null && !settings.isPushToTalkToggle) session.setTalkingState(false)
+        if (talkButtonHeld && !settings.isPushToTalkToggle) session.setTalking(false)
         talkButtonHeld = false
     }
 
-    private fun configureTargetPanel() {
+    private fun showWhisperTarget(name: String?) {
         val binding = binding ?: return
-        val session = sessions.connected ?: return
-        if (session.voiceTargetMode == VoiceTargetMode.WHISPER) {
-            binding.targetPanel.visibility = View.VISIBLE
-            binding.targetPanelWarning.text = getString(R.string.shout_target, session.whisperTarget?.name)
-        } else {
-            binding.targetPanel.visibility = View.GONE
-        }
+        binding.targetPanel.visibility = if (name != null) View.VISIBLE else View.GONE
+        if (name != null) binding.targetPanelWarning.text = getString(R.string.shout_target, name)
     }
 
     /** Applies the user's interface preferences and mute state to the push-to-talk button. */
@@ -291,24 +245,11 @@ class ChannelFragment :
         params.height = settings.pttButtonHeight
         binding.pushtotalk.layoutParams = params
 
-        val muted = if (sessions.connected != null) {
-            val self = selfUser()
-            self == null || self.isMuted || self.isSuppressed || self.isSelfMuted
-        } else {
-            false
-        }
+        val muted = shownSelf?.cannotTalk == true
         val showPttButton = !muted &&
             settings.isPushToTalkButtonShown &&
             settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT
         binding.pushtotalkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
-    }
-
-    /** Our own user, or null while the session has none. */
-    private fun selfUser(): IUser? = try {
-        sessions.connected?.sessionUser
-    } catch (e: IllegalStateException) {
-        Log.d(TAG, "exception in selfUser: $e")
-        null
     }
 
     private fun newListFragment() = ChannelListFragment.newInstance(isShowingPinnedChannels)
@@ -329,7 +270,6 @@ class ChannelFragment :
         fun newInstance(pinned: Boolean = false) =
             ChannelFragment().apply { arguments = bundleOf(ARG_PINNED to pinned) }
 
-        private val TAG: String = ChannelFragment::class.java.name
         private const val TAB_CHANNEL = 0
         private const val ARG_PINNED = "pinned"
         private val INPUT_PREFERENCES = setOf(

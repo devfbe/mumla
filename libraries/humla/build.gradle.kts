@@ -93,6 +93,8 @@ dependencies {
     // Flows are part of the public API.
     api(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.annotation)
+    // Persistent maps keep each model snapshot O(change) instead of O(server).
+    implementation(libs.kotlinx.collections.immutable)
     implementation(libs.minidns.hla)
     implementation(libs.minidns.android23)
 

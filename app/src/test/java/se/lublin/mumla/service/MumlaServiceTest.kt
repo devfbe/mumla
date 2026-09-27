@@ -28,11 +28,10 @@ import org.robolectric.shadows.ShadowPowerManager
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.TransmitMode
-import se.lublin.humla.model.Channel
-import se.lublin.humla.model.IMessage
+import se.lublin.humla.model.Message
+import se.lublin.humla.model.UserState
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.model.User
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
@@ -46,7 +45,10 @@ import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.createMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.stubModel
+import se.lublin.mumla.testing.stubTalkStates
 import se.lublin.mumla.testing.stubState
 import se.lublin.mumla.util.HtmlUtils
 import java.security.cert.X509Certificate
@@ -66,17 +68,16 @@ class MumlaServiceTest {
     private lateinit var service: MumlaService
     private lateinit var overlay: MumlaOverlay
     private lateinit var hotCorner: MumlaHotCorner
-    private val self = user(SELF)
     private val route = MutableStateFlow<Int?>(null)
     private val session: IHumlaSession = mockk(relaxed = true) {
-        every { sessionId } returns SELF
-        every { sessionUser } returns self
-        every { audioRoute } returns route
-        every { transmitMode } returns TransmitMode.VOICE_ACTIVITY
+        every { audio.route } returns route
+        every { audio.transmitMode } returns TransmitMode.VOICE_ACTIVITY
         every { targetServer } returns Server(1, "Home", "example.org", 64738, "me", null)
     }
     private val state = session.stubState(SessionState.Connecting)
     private val events: MutableSharedFlow<HumlaEvent> = session.stubEvents()
+    private val model = session.stubModel(model(user(SELF)))
+    private val talkStates = session.stubTalkStates()
     private var destroyed = false
 
     private fun preferences() = PreferenceManager.getDefaultSharedPreferences(app)
@@ -109,15 +110,19 @@ class MumlaServiceTest {
         if (!destroyed) controller.destroy()
     }
 
-    private fun user(session: Int, muted: Boolean = false, deafened: Boolean = false): User {
-        val u = mockk<User>(relaxed = true)
-        every { u.session } returns session
-        every { u.isSelfMuted } returns muted
-        every { u.isSelfDeafened } returns deafened
-        every { u.name } returns "user$session"
-        every { u.textureHash } returns null
-        every { u.texture } returns null
-        return u
+    private fun user(session: Int, muted: Boolean = false, deafened: Boolean = false) =
+        UserState(session, "user$session", LOBBY, isSelfMuted = muted, isSelfDeafened = deafened)
+
+    /** The server with [self] as our own user, or none, in the lobby. */
+    private fun model(self: UserState?) = serverState(self = self?.session) {
+        channel(0, "Root")
+        channel(LOBBY, "Lobby")
+        self?.let(::user)
+    }
+
+    private fun self(user: UserState?) {
+        model.value = model(user)
+        idleMainLooper()
     }
 
     private fun move(next: SessionState) {
@@ -148,15 +153,8 @@ class MumlaServiceTest {
         it.intentFilter.hasAction(TalkBroadcastReceiver.BROADCAST_TALK)
     }
 
-    private fun textMessage(body: String, actor: String? = "alice"): IMessage = object : IMessage {
-        override val actor: Int = 1
-        override val actorName: String? = actor
-        override val targetChannels: List<Channel> = emptyList()
-        override val targetTrees: List<Channel> = emptyList()
-        override val targetUsers: List<User> = emptyList()
-        override val message: String = body
-        override val receivedTime: Long = 0L
-    }
+    private fun textMessage(body: String, actor: String? = "alice") =
+        Message(1, actor, emptyList(), emptyList(), emptyList(), body, receivedTime = 0L)
 
     private val lost = DisconnectReason.Network("socket reset", null)
 
@@ -315,42 +313,66 @@ class MumlaServiceTest {
 
     @Test
     fun ourOwnMuteAndDeafenStateIsStoredAndShown() {
-        emit(HumlaEvent.UserStateUpdated(user(SELF, muted = true, deafened = false)))
+        move(SessionState.Connected)
+
+        self(user(SELF, muted = true, deafened = false))
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.status_notify_muted))
         assertThat(Settings.getInstance(app).isMuted).isTrue()
         assertThat(Settings.getInstance(app).isDeafened).isFalse()
 
-        emit(HumlaEvent.UserStateUpdated(user(SELF, muted = true, deafened = true)))
+        self(user(SELF, muted = true, deafened = true))
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.status_notify_muted_and_deafened))
         assertThat(Settings.getInstance(app).isDeafened).isTrue()
 
-        emit(HumlaEvent.UserStateUpdated(user(SELF)))
+        self(user(SELF))
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
         assertThat(Settings.getInstance(app).isMuted).isFalse()
     }
 
+    /** What the server says at synchronization is not a change: the stored state is restored instead. */
+    @Test
+    fun theStateFoundAtSynchronizationIsNotStored() {
+        Settings.getInstance(app).setMutedAndDeafened(true, false)
+
+        move(SessionState.Connected)
+
+        assertThat(Settings.getInstance(app).isMuted).isTrue()
+        verify { session.actions.setSelfMuteDeafState(true, false) }
+    }
+
     @Test
     fun deafenedWithoutMuteReadsAsConnected() {
-        emit(HumlaEvent.UserStateUpdated(user(SELF, muted = false, deafened = true)))
+        move(SessionState.Connected)
+
+        self(user(SELF, muted = false, deafened = true))
 
         assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
     }
 
     @Test
     fun somebodyElsesStateChangesNothing() {
-        emit(HumlaEvent.UserStateUpdated(user(SELF + 1, muted = true, deafened = true)))
+        move(SessionState.Connected)
 
-        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.mumlaConnecting))
+        model.value = serverState(self = SELF) {
+            channel(0, "Root")
+            channel(LOBBY, "Lobby")
+            user(user(SELF))
+            user(user(SELF + 1, muted = true, deafened = true))
+        }
+        idleMainLooper()
+
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
         assertThat(Settings.getInstance(app).isMuted).isFalse()
     }
 
     @Test
-    fun aUserStateBeforeOurSessionIsKnownChangesNothing() {
-        every { session.sessionId } throws IllegalStateException("Not synchronized with the server")
+    fun aModelWithoutOurUserChangesNothing() {
+        self(null)
+        move(SessionState.Connected)
 
-        emit(HumlaEvent.UserStateUpdated(user(SELF, muted = true)))
+        self(null)
 
-        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.mumlaConnecting))
+        assertThat(postedText(FOREGROUND_ID)).isEqualTo(app.getString(R.string.connected))
         assertThat(Settings.getInstance(app).isMuted).isFalse()
     }
 
@@ -358,7 +380,7 @@ class MumlaServiceTest {
     fun ourOwnStateOutsideTheForegroundDoesNotEnterIt() {
         move(SessionState.Disconnected())
 
-        emit(HumlaEvent.UserStateUpdated(user(SELF, muted = true)))
+        self(user(SELF, muted = true))
         emit(HumlaEvent.PermissionDenied(HumlaEvent.DenyType.OTHER, "no"))
 
         assertThat(shadowOf(notificationManager).getNotification(FOREGROUND_ID)).isNull()
@@ -538,15 +560,12 @@ class MumlaServiceTest {
     @Test
     fun anInlineReplyGoesToOurChannelAndJoinsTheNotification() {
         move(SessionState.Connected)
-        val channel = mockk<Channel>(relaxed = true)
-        every { channel.id } returns 4
-        every { session.sessionChannel } returns channel
         preferences().edit().putBoolean(Settings.CHAT_NOTIFY.key, true).commit()
         emit(HumlaEvent.TextMessage(textMessage("coming?", actor = null)))
 
         service.onStartCommand(replyIntent(" on my way "), 0, 1)
 
-        verify { session.sendChannelTextMessage(4, HtmlUtils.markupOutgoingMessage("on my way"), false) }
+        verify { session.actions.sendChannelTextMessage(LOBBY, HtmlUtils.markupOutgoingMessage("on my way"), false) }
         assertThat(postedMessages().last().text.toString()).isEqualTo("on my way")
     }
 
@@ -557,7 +576,7 @@ class MumlaServiceTest {
 
         service.onStartCommand(replyIntent("hello"), 0, 1)
 
-        verify(exactly = 0) { session.sendChannelTextMessage(any(), any(), any()) }
+        verify(exactly = 0) { session.actions.sendChannelTextMessage(any(), any(), any()) }
         assertThat(shadowOf(notificationManager).getNotification(MESSAGE_ID)).isNull()
     }
 
@@ -641,7 +660,7 @@ class MumlaServiceTest {
 
     @Test
     fun nothingIsSpokenWhileDeafened() {
-        every { session.sessionUser } returns user(SELF, muted = true, deafened = true)
+        self(user(SELF, muted = true, deafened = true))
         val tts = installTts()
 
         emit(HumlaEvent.TextMessage(textMessage("hi")))
@@ -715,34 +734,6 @@ class MumlaServiceTest {
         fresh.destroy()
     }
 
-    // Avatars
-
-    @Test
-    fun aUserWithAnUnfetchedAvatarHasItRequested() {
-        val other = user(9)
-        every { other.textureHash } returns byteArrayOf(1)
-
-        emit(HumlaEvent.UserConnected(other))
-        emit(HumlaEvent.UserStateUpdated(other))
-
-        verify(exactly = 2) { session.requestAvatar(9) }
-    }
-
-    @Test
-    fun anAvatarThatIsAlreadyThereOrDoesNotExistIsNotRequested() {
-        val fetched = user(9)
-        every { fetched.textureHash } returns byteArrayOf(1)
-        every { fetched.texture } returns byteArrayOf(2)
-        val none = user(10)
-
-        emit(HumlaEvent.UserConnected(fetched))
-        emit(HumlaEvent.UserConnected(none))
-        emit(HumlaEvent.UserStateUpdated(fetched))
-        emit(HumlaEvent.UserStateUpdated(none))
-
-        verify(exactly = 0) { session.requestAvatar(any()) }
-    }
-
     // Synchronization and its end
 
     @Test
@@ -751,7 +742,7 @@ class MumlaServiceTest {
 
         move(SessionState.Connected)
 
-        verify(exactly = 1) { session.setSelfMuteDeafState(true, true) }
+        verify(exactly = 1) { session.actions.setSelfMuteDeafState(true, true) }
     }
 
     @Test
@@ -760,14 +751,14 @@ class MumlaServiceTest {
 
         move(SessionState.Connected)
 
-        verify(exactly = 1) { session.setSelfMuteDeafState(false, true) }
+        verify(exactly = 1) { session.actions.setSelfMuteDeafState(false, true) }
     }
 
     @Test
     fun synchronizingSendsNoStateWhenNeitherIsStored() {
         move(SessionState.Connected)
 
-        verify(exactly = 0) { session.setSelfMuteDeafState(any(), any()) }
+        verify(exactly = 0) { session.actions.setSelfMuteDeafState(any(), any()) }
     }
 
     /** A reconnect synchronizes again, and the stored state is restored again. */
@@ -780,7 +771,7 @@ class MumlaServiceTest {
         move(SessionState.Reconnecting(lost))
         move(SessionState.Connected)
 
-        verify(exactly = 2) { session.setSelfMuteDeafState(true, false) }
+        verify(exactly = 2) { session.actions.setSelfMuteDeafState(true, false) }
     }
 
     /** Other apps (automation, headset helpers) send the talk broadcast: exported on purpose. */
@@ -858,33 +849,33 @@ class MumlaServiceTest {
 
     @Test
     fun muteToggleFlipsMuteAndDropsDeafenWhenUnmuting() {
-        every { session.sessionUser } returns user(SELF, muted = true, deafened = true)
+        self(user(SELF, muted = true, deafened = true))
         move(SessionState.Connected)
 
         service.onMuteToggled()
 
-        verify { session.setSelfMuteDeafState(false, false) }
+        verify { session.actions.setSelfMuteDeafState(false, false) }
     }
 
     @Test
     fun muteToggleKeepsDeafenWhenMuting() {
-        every { session.sessionUser } returns user(SELF, muted = false, deafened = true)
+        self(user(SELF, muted = false, deafened = true))
         move(SessionState.Connected)
 
         service.onMuteToggled()
 
-        verify { session.setSelfMuteDeafState(true, true) }
+        verify { session.actions.setSelfMuteDeafState(true, true) }
     }
 
     @Test
     fun deafenToggleSetsBothFromTheDeafenState() {
         move(SessionState.Connected)
         service.onDeafenToggled()
-        every { session.sessionUser } returns user(SELF, muted = true, deafened = true)
+        self(user(SELF, muted = true, deafened = true))
         service.onDeafenToggled()
 
-        verify { session.setSelfMuteDeafState(true, true) }
-        verify { session.setSelfMuteDeafState(false, false) }
+        verify { session.actions.setSelfMuteDeafState(true, true) }
+        verify { session.actions.setSelfMuteDeafState(false, false) }
     }
 
     /** A stale notification button outside a synchronized session does nothing, and throws nothing. */
@@ -893,11 +884,11 @@ class MumlaServiceTest {
         service.onMuteToggled()
         service.onDeafenToggled()
         move(SessionState.Connected)
-        every { session.sessionUser } returns null
+        self(null)
         service.onMuteToggled()
         service.onDeafenToggled()
 
-        verify(exactly = 0) { session.setSelfMuteDeafState(any(), any()) }
+        verify(exactly = 0) { session.actions.setSelfMuteDeafState(any(), any()) }
     }
 
     @Test
@@ -909,9 +900,9 @@ class MumlaServiceTest {
             .commit()
 
         service.hotCornerListener.onHotCornerDown()
-        verify { session.setTalkingState(true) }
+        verify { session.audio.setTalking(true) }
         service.hotCornerListener.onHotCornerUp()
-        verify { session.setTalkingState(false) }
+        verify { session.audio.setTalking(false) }
     }
 
     @Test
@@ -977,70 +968,71 @@ class MumlaServiceTest {
     private var clicks = 0
 
     /** All five clauses true; each test below turns exactly one of them false. */
-    private fun clickReady(): User {
+    private fun clickReady() {
         service.keyClickSound = { clicks++ }
-        every { session.transmitMode } returns TransmitMode.PUSH_TO_TALK
+        every { session.audio.transmitMode } returns TransmitMode.PUSH_TO_TALK
         preferences().edit().putBoolean(Settings.PTT_SOUND.key, true).commit()
         move(SessionState.Connected)
-        val talking = user(SELF)
-        every { talking.talkState } returns TalkState.TALKING
-        return talking
     }
 
-    private fun talk(user: User) = emit(HumlaEvent.UserTalkStateUpdated(user))
+    private fun talk(session: Int = SELF, state: TalkState = TalkState.TALKING) {
+        talkStates.value = mapOf(session to state)
+        idleMainLooper()
+    }
 
     @Test
     fun startingToTalkInPushToTalkClicks() {
-        talk(clickReady())
-        assertThat(clicks).isEqualTo(1)
+        clickReady()
+        talk()
+        talkStates.value = emptyMap()
+        idleMainLooper()
+        talk()
+        assertThat(clicks).isEqualTo(2)
     }
 
     @Test
     fun noClickWithoutASynchronizedSession() {
-        val u = clickReady()
+        clickReady()
         state.value = SessionState.Reconnecting(lost)
-        talk(u)
+        talk()
         assertThat(clicks).isEqualTo(0)
     }
 
     @Test
     fun noClickForSomebodyElse() {
         clickReady()
-        val other = user(SELF + 1)
-        every { other.talkState } returns TalkState.TALKING
-        talk(other)
+        talk(session = SELF + 1)
         assertThat(clicks).isEqualTo(0)
     }
 
     @Test
     fun noClickOutsidePushToTalk() {
-        val u = clickReady()
-        every { session.transmitMode } returns TransmitMode.VOICE_ACTIVITY
-        talk(u)
+        clickReady()
+        every { session.audio.transmitMode } returns TransmitMode.VOICE_ACTIVITY
+        talk()
         assertThat(clicks).isEqualTo(0)
     }
 
     @Test
     fun noClickWhenTheTalkStateIsNotTalking() {
-        val u = clickReady()
-        every { u.talkState } returns TalkState.PASSIVE
-        talk(u)
+        clickReady()
+        talk(state = TalkState.WHISPERING)
         assertThat(clicks).isEqualTo(0)
     }
 
     @Test
     fun noClickWhenTheSoundIsOff() {
-        val u = clickReady()
+        clickReady()
         preferences().edit().putBoolean(Settings.PTT_SOUND.key, false).commit()
-        talk(u)
+        talk()
         assertThat(clicks).isEqualTo(0)
     }
 
     @Test
     fun noClickBeforeOurSessionIsKnown() {
-        val u = clickReady()
-        every { session.sessionId } throws IllegalStateException("Not synchronized with the server")
-        talk(u)
+        self(null)
+        clickReady()
+        talk()
         assertThat(clicks).isEqualTo(0)
     }
 
@@ -1105,6 +1097,7 @@ class MumlaServiceTest {
 
     private companion object {
         const val SELF = 7
+        const val LOBBY = 4
         const val FOREGROUND_ID = 1
         const val MESSAGE_ID = 2
         const val RECONNECT_ID = 3

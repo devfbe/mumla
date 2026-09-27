@@ -21,8 +21,6 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
-import android.os.Handler
-import android.os.Looper
 import android.os.Process
 import android.util.Log
 import androidx.annotation.VisibleForTesting
@@ -30,7 +28,6 @@ import se.lublin.humla.audio.capture.FarEndFrameChunker
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
 import java.util.Arrays
@@ -42,7 +39,7 @@ private const val MS_PER_SECOND = 1000L
 
 /**
  * Decodes and mixes all users' voice streams on one playback thread, inline and without allocating
- * per mix.
+ * per mix. Plays each user as [AudioOutputListener.playbackParams] says.
  *
  * @param farEnd receives every mixed buffer as the AEC3 far-end reference, or null when the
  *               WebRTC canceller is not in the capture chain. Used only by the playback thread.
@@ -51,20 +48,24 @@ class AudioOutput(
     private val listener: AudioOutputListener,
     private val farEnd: FarEndFrameChunker?,
     /** Builds one user's decoder chain; the seam JVM tests use to run without native codecs. */
-    private val speechFactory: SpeechFactory = SpeechFactory { user, samples, talkStateListener ->
-        AudioOutputSpeech(user, samples, talkStateListener)
+    private val speechFactory: SpeechFactory = SpeechFactory { session, samples, listener, averageAvailable ->
+        AudioOutputSpeech(session, samples, listener, averageAvailable = averageAvailable)
     },
-) : Runnable, AudioOutputSpeech.TalkStateListener {
+) : Runnable {
 
     fun interface SpeechFactory {
         fun create(
-            user: User,
+            session: Int,
             requestedSamples: Int,
-            talkStateListener: AudioOutputSpeech.TalkStateListener,
+            listener: AudioOutputSpeech.Listener,
+            averageAvailable: FloatArray,
         ): AudioOutputSpeech
     }
 
     private val audioOutputs = HashMap<Int, AudioOutputSpeech>()
+
+    /** Each talker's average packet count, kept across their talk spurts; guarded by [packetLock]. */
+    private val averageAvailable = HashMap<Int, FloatArray>()
     private var audioTrack: AudioTrack? = null
     private var bufferSize = 0
     private var thread: Thread? = null
@@ -88,9 +89,7 @@ class AudioOutput(
     @Volatile
     private var loggedUnsupportedCodec = false
 
-    private val mainHandler = Handler(Looper.getMainLooper())
     private val onEnded: (AudioOutputSpeech) -> Unit = { speech ->
-        Log.v(TAG, "Deleted audio user " + speech.user.name)
         audioOutputs.remove(speech.session)
         speech.close()
     }
@@ -160,6 +159,7 @@ class AudioOutput(
         packetLock.withLock {
             mix.clear { it.close() }
             audioOutputs.clear()
+            averageAvailable.clear()
         }
         audioTrack?.release()
         audioTrack = null
@@ -248,51 +248,42 @@ class AudioOutput(
 
     /** Queues [packet] for its talker; [packet] is not kept. */
     fun queueVoiceData(packet: VoicePacket) {
-        if (!running || !isDecodable(packet.codec)) return
-
         val session = packet.session
-        val user = listener.getUser(session)
-        if (user != null && !user.isLocalMuted) {
-            val aop = packetLock.withLock {
-                audioOutputs[session] ?: try {
-                    speechFactory.create(user, bufferSize, this).also {
-                        Log.v(TAG, "Created audio user " + user.name)
-                        audioOutputs[session] = it
-                        mix.add(it)
-                    }
-                } catch (e: NativeAudioException) {
-                    Log.v(TAG, "Failed to create audio user " + user.name)
-                    e.printStackTrace()
-                    null
-                }
-            } ?: return
+        if (!running || !isDecodable(packet.codec) || listener.playbackParams.isMuted(session)) return
+        val aop = packetLock.withLock { audioOutputs[session] ?: newSpeech(session) } ?: return
 
-            aop.addFrameToBuffer(packet)
+        aop.addFrameToBuffer(packet)
 
-            synchronized(inactiveLock) {
-                woken = true
-                inactiveLock.notify()
-            }
+        synchronized(inactiveLock) {
+            woken = true
+            inactiveLock.notify()
         }
     }
 
-    override fun onTalkStateUpdated(session: Int, state: TalkState) {
-        mainHandler.post {
-            val user = listener.getUser(session)
-            if (user != null && user.talkState != state) {
-                user.talkState = state
-                listener.onUserTalkStateUpdated(user)
-            }
+    /** The decoder chain for a new talker; null if it cannot be built. Under [packetLock]. */
+    private fun newSpeech(session: Int): AudioOutputSpeech? = try {
+        val average = averageAvailable.getOrPut(session) { FloatArray(1) }
+        speechFactory.create(session, bufferSize, speechListener, average).also {
+            audioOutputs[session] = it
+            mix.add(it)
         }
+    } catch (e: NativeAudioException) {
+        Log.w(TAG, "Could not create the decoder for session $session", e)
+        null
+    }
+
+    private val speechListener = object : AudioOutputSpeech.Listener {
+        override fun onTalkStateUpdated(session: Int, state: TalkState) = listener.onTalkStateUpdated(session, state)
+
+        override fun gainOf(session: Int): Float = listener.playbackParams.volume(session)
     }
 
     interface AudioOutputListener {
-        fun onUserTalkStateUpdated(user: User)
+        /** Read for every packet and every decoded frame, so it must not allocate. */
+        val playbackParams: PlaybackParams
 
-        /**
-         * Used to set audio-related user data.
-         */
-        fun getUser(session: Int): User?
+        /** A talker's state changed; called on the playback thread, so it must neither block nor allocate. */
+        fun onTalkStateUpdated(session: Int, state: TalkState)
     }
 
     /**

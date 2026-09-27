@@ -22,7 +22,10 @@ import androidx.test.core.app.ApplicationProvider
 import io.mockk.every
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import io.mockk.mockk
+import se.lublin.humla.AudioControls
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.SessionActions
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.session.SessionManager
@@ -30,6 +33,16 @@ import java.util.WeakHashMap
 
 private val stateFlows = WeakHashMap<IHumlaSession, MutableStateFlow<SessionState>>()
 private val eventFlows = WeakHashMap<IHumlaSession, MutableSharedFlow<HumlaEvent>>()
+private val audioMocks = WeakHashMap<IHumlaSession, AudioControls>()
+private val actionMocks = WeakHashMap<IHumlaSession, SessionActions>()
+
+/** The mocked session's audio controls, as a mock of their own so their calls can be counted. */
+fun IHumlaSession.stubAudio(): AudioControls =
+    audioMocks.getOrPut(this) { mockk<AudioControls>(relaxed = true).also { every { audio } returns it } }
+
+/** The mocked session's actions, as a mock of their own so their calls can be counted. */
+fun IHumlaSession.stubActions(): SessionActions =
+    actionMocks.getOrPut(this) { mockk<SessionActions>(relaxed = true).also { every { actions } returns it } }
 
 /** The mocked session's state, stubbed as a flow the test moves; [state] now. */
 fun IHumlaSession.stubState(state: SessionState): MutableStateFlow<SessionState> =
@@ -43,17 +56,20 @@ fun IHumlaSession.stubEvents(): MutableSharedFlow<HumlaEvent> = eventFlows.getOr
 
 fun <T : IHumlaSession> T.stubConnected(): T = apply {
     stubEvents()
+    stubSnapshotsIfAbsent()
     stubState(SessionState.Connected)
 }
 
 fun <T : IHumlaSession> T.stubDisconnected(): T = apply {
     stubEvents()
+    stubSnapshotsIfAbsent()
     stubState(SessionState.Disconnected())
 }
 
 /** Makes [session] the app's current session, as a connect would. */
 fun installSession(session: IHumlaSession) {
     session.stubEvents()
+    session.stubSnapshotsIfAbsent()
     if (stateFlows[session] == null) session.stubState(SessionState.Connected)
     SessionManager.get(ApplicationProvider.getApplicationContext<Context>()).adopt(session)
 }

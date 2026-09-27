@@ -16,42 +16,15 @@
  */
 package se.lublin.humla.session
 
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IMessage
-import se.lublin.humla.model.IUser
+import se.lublin.humla.model.Message
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.util.VoiceTargetMode
 
 /**
  * Something that happened in a session, as published by `IHumlaSession.events`. Whether the session
- * is connected is its `state`, not an event.
- *
- * Model events carry the live model object, which may have changed again by the time the event is
- * collected: treat them as "re-read this", never as a delta.
+ * is connected is its `state`, and what the server holds is its `model`; events carry values only.
  */
 sealed interface HumlaEvent {
-
-    data class ChannelAdded(val channel: IChannel) : HumlaEvent
-
-    data class ChannelStateUpdated(val channel: IChannel) : HumlaEvent
-
-    data class ChannelRemoved(val channel: IChannel) : HumlaEvent
-
-    data class ChannelPermissionsUpdated(val channel: IChannel) : HumlaEvent
-
-    data class UserConnected(val user: IUser) : HumlaEvent
-
-    data class UserStateUpdated(val user: IUser) : HumlaEvent
-
-    data class UserTalkStateUpdated(val user: IUser) : HumlaEvent
-
-    /** [user] started or stopped listening to channels; see [IChannel.listeners]. */
-    data class UserListeningUpdated(val user: IUser) : HumlaEvent
-
-    data class UserJoinedChannel(val user: IUser, val newChannel: IChannel, val oldChannel: IChannel?) : HumlaEvent
-
-    /** [user] is null when the server removed a session the model never knew. */
-    data class UserRemoved(val user: IUser?, val reason: String?) : HumlaEvent
 
     /** The server refused an operation. [reason] is the server's own text, if it sent one. */
     data class PermissionDenied(val type: DenyType, val reason: String?) : HumlaEvent
@@ -77,14 +50,14 @@ sealed interface HumlaEvent {
         OTHER,
     }
 
-    /** The server's answer to `IHumlaSession.requestUserStats`. */
+    /** The server's answer to `SessionActions.requestUserStats`. */
     data class UserStatsReceived(val stats: UserStats) : HumlaEvent
 
     /** A text message from the server or another user. */
-    data class TextMessage(val message: IMessage) : HumlaEvent
+    data class TextMessage(val message: Message) : HumlaEvent
 
     /** The local user sent [message]. */
-    data class MessageSent(val message: IMessage) : HumlaEvent
+    data class MessageSent(val message: Message) : HumlaEvent
 
     data class VoiceTargetChanged(val mode: VoiceTargetMode) : HumlaEvent
 

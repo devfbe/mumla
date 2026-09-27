@@ -29,6 +29,7 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.stubState
 
 /** The talk keys act only in push-to-talk, only while connected, and hold or toggle as set. */
@@ -36,9 +37,10 @@ import se.lublin.mumla.testing.stubState
 class PushToTalkTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private var talking = false
-    private val session = mockk<IHumlaSession>(relaxed = true) {
-        every { isTalking } answers { talking }
-        every { setTalkingState(any()) } answers { talking = firstArg() }
+    private val session = mockk<IHumlaSession>(relaxed = true).also {
+        val audio = it.stubAudio()
+        every { audio.isTalking } answers { talking }
+        every { audio.setTalking(any()) } answers { talking = firstArg() }
     }
     private val keys = PushToTalk(context)
 

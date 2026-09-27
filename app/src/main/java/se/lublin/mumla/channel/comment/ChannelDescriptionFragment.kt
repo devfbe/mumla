@@ -19,17 +19,14 @@ package se.lublin.mumla.channel.comment
 
 import androidx.core.os.bundleOf
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.session.HumlaEvent
 
 class ChannelDescriptionFragment : AbstractCommentFragment() {
 
     private val channelId: Int get() = requireArguments().getInt(ARG_CHANNEL)
 
     override fun requestComment(session: IHumlaSession) {
-        observeComment(session) { event ->
-            (event as? HumlaEvent.ChannelStateUpdated)?.channel?.takeIf { it.id == channelId }?.description
-        }
-        session.requestChannelDescription(channelId)
+        observeComment(session) { it.channel(channelId)?.description }
+        session.actions.requestChannelDescription(channelId)
     }
 
     override fun editComment(session: IHumlaSession, comment: String) {

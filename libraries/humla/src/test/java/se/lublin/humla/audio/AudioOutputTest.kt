@@ -13,7 +13,7 @@ import org.robolectric.shadows.ShadowAudioTrack
 import org.robolectric.shadows.ShadowLog
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.exception.NativeAudioException
-import se.lublin.humla.model.User
+import se.lublin.humla.model.TalkState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
 import se.lublin.humla.testutil.awaitUntil
@@ -22,11 +22,9 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 class AudioOutputTest {
 
-    private val users = mapOf(SESSION to User(SESSION, "bob"))
-
     private val listener = object : AudioOutput.AudioOutputListener {
-        override fun onUserTalkStateUpdated(user: User) = Unit
-        override fun getUser(session: Int): User? = users[session]
+        override val playbackParams: PlaybackParams = PlaybackParams.DEFAULT
+        override fun onTalkStateUpdated(session: Int, state: TalkState) = Unit
     }
 
     private var output: AudioOutput? = null
@@ -43,7 +41,8 @@ class AudioOutputTest {
     }
 
     private fun startedOutput(
-        factory: AudioOutput.SpeechFactory = AudioOutput.SpeechFactory { u, n, l -> AudioOutputSpeech(u, n, l) },
+        factory: AudioOutput.SpeechFactory =
+            AudioOutput.SpeechFactory { u, n, l, a -> AudioOutputSpeech(u, n, l, averageAvailable = a) },
     ): AudioOutput {
         val o = AudioOutput(listener, null, factory)
         output = o
@@ -137,7 +136,7 @@ class AudioOutputTest {
 
     @Test
     fun `a speech that cannot be built does not leave the packet lock held`() {
-        val o = startedOutput { _, _, _ -> throw NativeAudioException("no decoder") }
+        val o = startedOutput { _, _, _, _ -> throw NativeAudioException("no decoder") }
 
         // Building the speech throws inside the critical section. On a thread of its own, because
         // the lock is reentrant -- the test thread would get it back no matter what was leaked.
@@ -156,7 +155,7 @@ class AudioOutputTest {
     @Test
     fun `legacy codec packets are dropped without a decoder and logged once`() {
         var built = 0
-        val o = startedOutput { u, samples, l ->
+        val o = startedOutput { u, samples, l, _ ->
             built++
             AudioOutputSpeech(u, samples, l, NoOpusDecoder(), FakeJitter())
         }

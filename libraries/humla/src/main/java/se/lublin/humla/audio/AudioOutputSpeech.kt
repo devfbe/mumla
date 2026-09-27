@@ -23,7 +23,6 @@ import se.lublin.humla.audio.native.SpeexJitterApi
 import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.model.User
 import se.lublin.humla.net.VoicePacket
 import java.util.Arrays
 import kotlin.math.ceil
@@ -54,19 +53,27 @@ private const val BYTE_MASK = 0xFF
  * Decodes one user's incoming Opus stream through a jitter buffer into float PCM. Each [decode]
  * leaves the next mix in [samples]; it reuses its buffers and allocates nothing per call.
  *
- * [opusApi] and [jitterApi] are the seams JVM tests use to run without native libraries; they
- * default to the `*Native` objects, which load the native library on first touch.
+ * [averageAvailable] holds the talker's average packet count across their talk spurts, which
+ * outlive this instance. [opusApi] and [jitterApi] are the seams JVM tests use to run without
+ * native libraries; they default to the `*Native` objects, which load the native library on first
+ * touch.
  */
 class AudioOutputSpeech(
-    val user: User,
+    val session: Int,
     private val requestedSamples: Int,
-    private val talkStateListener: TalkStateListener,
+    private val listener: Listener,
     private val opusApi: OpusDecoderApi = OpusDecoderNative,
     jitterApi: SpeexJitterApi = SpeexJitterNative,
+    private val averageAvailable: FloatArray = FloatArray(1),
 ) : IAudioMixerSource<FloatArray>, AutoCloseable {
 
-    fun interface TalkStateListener {
+    /** Called on the playback thread for every decoded frame: must neither block nor allocate. */
+    fun interface Listener {
+        /** Only on a change. */
         fun onTalkStateUpdated(session: Int, state: TalkState)
+
+        /** The local playback gain for [session]; 1 is unchanged. */
+        fun gainOf(session: Int): Float = 1f
     }
 
     private val decoder: IDecoder = OpusDecoder(AudioHandler.SAMPLE_RATE, 1, opusApi)
@@ -200,7 +207,7 @@ class AudioOutputSpeech(
         // decoding, based on the average # of packets available. Prevents a metallic 'twang' when
         // the user starts talking, caused by buffer underrun. The official Mumble project uses the
         // same technique.
-        if (ts == 0 && availPackets < ceil(user.averageAvailable.toDouble()).toInt()) {
+        if (ts == 0 && availPackets < ceil(averageAvailable[0].toDouble()).toInt()) {
             missCount++
             if (missCount < MAX_PREBUFFER_MISSES) {
                 Arrays.fill(out, 0f)
@@ -225,7 +232,7 @@ class AudioOutputSpeech(
             AudioHandler.FRAME_SIZE
         }
 
-        val gain = user.localVolume * frameVolume
+        val gain = listener.gainOf(session) * frameVolume
         if (gain != 1f) {
             for (i in 0 until decodedSamples) out[i] *= gain
         }
@@ -250,10 +257,10 @@ class AudioOutputSpeech(
             ucFlags = jitterBuffer.packetUserData
             takeFrame(jitterBuffer.packetLength)
 
-            if (availPackets >= user.averageAvailable) {
-                user.averageAvailable = availPackets
+            averageAvailable[0] = if (availPackets >= averageAvailable[0]) {
+                availPackets
             } else {
-                user.averageAvailable = user.averageAvailable * AVAILABLE_DECAY
+                averageAvailable[0] * AVAILABLE_DECAY
             }
         } else {
             synchronized(jitterLock) { jitterBuffer.updateDelay() }
@@ -273,7 +280,7 @@ class AudioOutputSpeech(
         }
         if (talkState != reportedState) {
             reportedState = talkState
-            talkStateListener.onTalkStateUpdated(user.session, talkState)
+            listener.onTalkStateUpdated(session, talkState)
         }
     }
 
@@ -294,9 +301,6 @@ class AudioOutputSpeech(
     private fun resizeBuffer(newSize: Int) {
         if (newSize > buffer.size) buffer = Arrays.copyOf(buffer, newSize)
     }
-
-    val session: Int
-        get() = user.session
 
     /** Frees the native decoder and jitter buffer. Must be called eventually. */
     override fun close() {

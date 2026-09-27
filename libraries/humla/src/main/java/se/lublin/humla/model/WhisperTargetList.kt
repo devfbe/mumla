@@ -50,8 +50,6 @@ class WhisperTargetList {
         takenIds = takenIds and (1 shl slot.toInt()).inv()
     }
 
-    fun spaceRemaining(): Int = (TARGET_MIN..TARGET_MAX).count { !isTaken(it) }
-
     fun clear() {
         takenIds = 0
     }

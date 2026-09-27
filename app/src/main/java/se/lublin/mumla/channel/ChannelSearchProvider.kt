@@ -23,8 +23,9 @@ import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
 import androidx.annotation.VisibleForTesting
-import se.lublin.humla.model.IChannel
-import se.lublin.humla.model.IUser
+import se.lublin.humla.model.ChannelState
+import se.lublin.humla.model.ServerState
+import se.lublin.humla.model.UserState
 import se.lublin.mumla.R
 import se.lublin.mumla.session.SessionManager
 import java.util.Locale
@@ -45,12 +46,11 @@ class ChannelSearchProvider : ContentProvider() {
         sortOrder: String?,
     ): Cursor? {
         val context = requireContext()
-        val session = SessionManager.get(context).connected ?: return null
+        val model = SessionManager.get(context).connected?.model?.value ?: return null
         val query = selectionArgs.orEmpty().joinToString(" ").lowercase(Locale.getDefault())
-        val root = session.rootChannel
         val cursor = MatrixCursor(COLUMNS)
-        channelsMatching(root, query).forEachIndexed { index, channel ->
-            val users = channel.subchannelUserCount
+        channelsMatching(model, query).forEachIndexed { index, channel ->
+            val users = model.subtreeUserCount(channel.id)
             cursor.addRow(
                 arrayOf<Any?>(
                     index, INTENT_DATA_CHANNEL, channel.name, R.drawable.ic_action_channels,
@@ -58,7 +58,7 @@ class ChannelSearchProvider : ContentProvider() {
                 ),
             )
         }
-        usersMatching(root, query).forEachIndexed { index, user ->
+        usersMatching(model, query).forEachIndexed { index, user ->
             cursor.addRow(
                 arrayOf<Any?>(
                     index, INTENT_DATA_USER, user.name, R.drawable.ic_action_user_dark,
@@ -69,25 +69,15 @@ class ChannelSearchProvider : ContentProvider() {
         return cursor
     }
 
-    /** The channels at or below [root] whose names contain the lower-case [query]. */
+    /** The channels in the tree of [model] whose names contain [query], ignoring case, in tree order. */
     @VisibleForTesting
-    internal fun channelsMatching(root: IChannel?, query: String): List<IChannel> = buildList {
-        fun visit(channel: IChannel) {
-            if (channel.name.orEmpty().lowercase().contains(query.lowercase())) add(channel)
-            channel.subchannels.forEach(::visit)
-        }
-        root?.let(::visit)
-    }
+    internal fun channelsMatching(model: ServerState, query: String): List<ChannelState> =
+        model.flatten().filter { it.name.orEmpty().contains(query, ignoreCase = true) }
 
-    /** The users at or below [root] whose names contain the lower-case [query]. */
+    /** The users in the tree of [model] whose names contain [query], ignoring case, in tree order. */
     @VisibleForTesting
-    internal fun usersMatching(root: IChannel?, query: String): List<IUser> = buildList {
-        fun visit(channel: IChannel) {
-            channel.users.filterTo(this) { it.name?.lowercase()?.contains(query.lowercase()) == true }
-            channel.subchannels.forEach(::visit)
-        }
-        root?.let(::visit)
-    }
+    internal fun usersMatching(model: ServerState, query: String): List<UserState> =
+        model.flatten().flatMap { model.usersIn(it.id) }.filter { it.name?.contains(query, ignoreCase = true) == true }
 
     override fun getType(uri: Uri): String? = null
 

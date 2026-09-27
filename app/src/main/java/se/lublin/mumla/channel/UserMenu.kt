@@ -17,55 +17,51 @@
 package se.lublin.mumla.channel
 
 import android.content.Context
-import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
-import androidx.fragment.app.FragmentManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.IUser
+import se.lublin.humla.model.ChannelState
 import se.lublin.humla.net.Permissions
 import se.lublin.mumla.R
-import se.lublin.mumla.session.isConnected
-import se.lublin.mumla.channel.comment.UserCommentFragment
 import se.lublin.mumla.ui.showConfirmDialog
-import se.lublin.mumla.util.flattenChannels
 
-/**
- * The popup menu of a user's row: moderation, comments and the local mute and ignore, after
- * which [onLocalStateChanged] runs.
- */
+/** The popup menu of a user's row: moderation, comments and the local mute, volume and ignore. */
 class UserMenu(
     private val context: Context,
-    private val user: IUser,
-    private val humlaSession: IHumlaSession,
-    private val fragmentManager: FragmentManager,
-    private val onLocalStateChanged: (IUser) -> Unit,
+    private val session: Int,
+    private val state: () -> UserMenuState?,
+    private val actions: Actions,
 ) : PermissionsPopupMenu.IOnMenuPrepareListener {
 
-    /** The session while connected; the menu acts on nothing else. */
-    private val session: IHumlaSession? get() = humlaSession.takeIf { it.isConnected }
+    /** What the items do, for the user they were picked on. */
+    @Suppress("TooManyFunctions") // One per item.
+    interface Actions : MenuPermissions {
+        fun kickBan(session: Int, reason: String, ban: Boolean)
+        fun setMuteDeaf(session: Int, mute: Boolean, deaf: Boolean)
+        fun setPrioritySpeaker(session: Int, priority: Boolean)
 
-    @Suppress("CyclomaticComplexMethod", "ReturnCount") // Guard clauses, then one rule per item.
+        /** The channels a user can be moved to, in tree order. */
+        fun channels(): List<ChannelState>
+        fun moveUser(session: Int, channel: Int)
+        fun showComment(session: Int, comment: String?, edit: Boolean)
+        fun resetComment(session: Int)
+        fun register(session: Int)
+        fun setLocalMuted(session: Int, muted: Boolean)
+        fun setLocalIgnored(session: Int, ignored: Boolean)
+        fun showLocalVolume(session: Int, name: String?)
+        fun showInfo(session: Int, name: String?)
+    }
+
+    @Suppress("CyclomaticComplexMethod") // One rule per item.
     override fun onMenuPrepare(menu: Menu, permissions: Int) {
-        val session = session ?: return
-        val self = try {
-            user.session == session.sessionId
-        } catch (e: IllegalStateException) {
-            Log.d(TAG, "exception in onMenuPrepare: $e")
-            return
-        }
-        val perms = session.permissions
-        val channel = user.channel
-        if (channel == null) {
-            Log.d(TAG, "user.channel == null in onMenuPrepare")
-            return
-        }
-        val channelPerms = if (channel.id != 0) channel.permissions else perms
-        val canMuteDeafen = channelPerms and (Permissions.WRITE or Permissions.MUTE_DEAFEN) > 0
-        val hasComment = !user.comment.isNullOrEmpty() || user.commentHash != null
+        val state = state() ?: return
+        val user = state.user
+        val self = state.isSelf
+        val perms = state.serverPermissions
+        val canMuteDeafen = state.channelPermissions and (Permissions.WRITE or Permissions.MUTE_DEAFEN) > 0
+        val hasComment = !user.comment.isNullOrEmpty() || user.hasCommentHash
 
         menu.findItem(R.id.context_kick).isVisible =
             !self && perms and (Permissions.KICK or Permissions.BAN or Permissions.WRITE) > 0
@@ -92,33 +88,26 @@ class UserMenu(
         menu.findItem(R.id.context_ignore_messages).isChecked = user.isLocalIgnored
     }
 
-    @Suppress("CyclomaticComplexMethod") // One branch per item.
+    @Suppress("CyclomaticComplexMethod", "ReturnCount") // One branch per item.
     override fun onMenuItemClick(item: MenuItem): Boolean {
+        val user = state()?.user ?: return false
         when (item.itemId) {
             R.id.context_ban, R.id.context_kick -> showKickDialog(ban = item.itemId == R.id.context_ban)
-            R.id.context_mute ->
-                session?.setMuteDeafState(user.session, !(user.isMuted || user.isSuppressed), user.isDeafened)
-            R.id.context_deafen -> session?.setMuteDeafState(user.session, user.isMuted, !user.isDeafened)
+            R.id.context_mute -> actions.setMuteDeaf(session, !(user.isMuted || user.isSuppressed), user.isDeafened)
+            R.id.context_deafen -> actions.setMuteDeaf(session, user.isMuted, !user.isDeafened)
             R.id.context_move -> showChannelMoveDialog()
-            R.id.context_priority -> session?.setPrioritySpeaker(user.session, !user.isPrioritySpeaker)
-            R.id.context_local_mute -> {
-                user.isLocalMuted = !user.isLocalMuted
-                onLocalStateChanged(user)
-            }
-            R.id.context_local_volume -> session?.let { showLocalVolumeDialog(context, it, user, onLocalStateChanged) }
-            R.id.context_ignore_messages -> {
-                user.isLocalIgnored = !user.isLocalIgnored
-                onLocalStateChanged(user)
-            }
-            R.id.context_change_comment -> showUserComment(edit = true)
-            R.id.context_view_comment -> showUserComment(edit = false)
-            R.id.context_reset_comment ->
-                context.showConfirmDialog(
-                    context.getString(R.string.confirm_reset_comment, user.name),
-                    R.string.confirm,
-                ) { session?.setUserComment(user.session, "") }
-            R.id.context_register -> session?.registerUser(user.session)
-            R.id.context_info -> showUserInfoDialog(context, humlaSession, user)
+            R.id.context_priority -> actions.setPrioritySpeaker(session, !user.isPrioritySpeaker)
+            R.id.context_local_mute -> actions.setLocalMuted(session, !user.isLocalMuted)
+            R.id.context_local_volume -> actions.showLocalVolume(session, user.name)
+            R.id.context_ignore_messages -> actions.setLocalIgnored(session, !user.isLocalIgnored)
+            R.id.context_change_comment -> actions.showComment(session, user.comment, edit = true)
+            R.id.context_view_comment -> actions.showComment(session, user.comment, edit = false)
+            R.id.context_reset_comment -> context.showConfirmDialog(
+                context.getString(R.string.confirm_reset_comment, user.name),
+                R.string.confirm,
+            ) { actions.resetComment(session) }
+            R.id.context_register -> actions.register(session)
+            R.id.context_info -> actions.showInfo(session, user.name)
             else -> return false
         }
         return true
@@ -130,34 +119,28 @@ class UserMenu(
             .setTitle(R.string.user_menu_kick)
             .setView(reasonField)
             .setPositiveButton(R.string.user_menu_kick) { _, _ ->
-                session?.kickBanUser(user.session, reasonField.text.toString(), ban)
+                actions.kickBan(session, reasonField.text.toString(), ban)
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
-    private fun showUserComment(edit: Boolean) {
-        UserCommentFragment.newInstance(user.session, user.comment, edit)
-            .show(fragmentManager, UserCommentFragment::class.java.name)
-    }
-
     private fun showChannelMoveDialog() {
-        val root = session?.rootChannel ?: return
-        val channels = flattenChannels(root)
+        val channels = actions.channels()
+        if (channels.isEmpty()) return
         MaterialAlertDialogBuilder(context)
             .setTitle(R.string.user_menu_move)
             .setItems(channels.map { it.name }.toTypedArray()) { _, which ->
-                session?.moveUserToChannel(user.session, channels[which].id)
+                actions.moveUser(session, channels[which].id)
             }
             .show()
     }
 
     fun showPopup(anchor: View) {
-        val channel = user.channel ?: return
-        PermissionsPopupMenu(context, anchor, R.menu.context_user, this, channel, humlaSession).show()
-    }
-
-    private companion object {
-        val TAG: String = UserMenu::class.java.name
+        val channel = state()?.user?.channel ?: return
+        PermissionsPopupMenu(
+            context, anchor, R.menu.context_user, this,
+            actions.permissions(channel),
+        ) { actions.requestPermissions(channel) }.show()
     }
 }
