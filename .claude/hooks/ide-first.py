@@ -12,6 +12,9 @@ appended to .claude/logs/ide-first.jsonl so repeated blocks can be audited.
 Worktrees are banned outright (the IDE MCP servers cannot see them): creating one
 (EnterWorktree, Agent isolation "worktree", git worktree add) and editing files
 inside an existing linked worktree of this repo are always blocked.
+
+Builds and tests go through Android Studio's MCP server as well: while it is reachable, command-line
+Gradle may only run the pre-merge `verify` task (and harmless meta tasks such as `help`).
 """
 import datetime
 import json
@@ -39,6 +42,16 @@ def main_checkout() -> str:
 INDEXED_ROOT = main_checkout()
 LOG = os.environ.get("IDE_FIRST_LOG") or os.path.join(INDEXED_ROOT, ".claude", "logs", "ide-first.jsonl")
 IDE_PORT = 29171
+STUDIO_PORT = 64342
+
+GRADLE_CALL = re.compile(r"(?:^|[\s;&|(`])(?:\./)?gradlew?(?=\s|$)(?P<args>[^;|&><\n]*)", re.M)
+GRADLE_VALUE_OPTIONS = {"--tests", "--console", "-x", "--exclude-task", "-p", "--project-dir", "--warning-mode"}
+GRADLE_ALLOWED_TASKS = {"verify", "help", "tasks", "projects", "properties", "dependencies"}
+GRADLE_HINT = (
+    "Blocked by the IDE-first rule (CLAUDE.md): builds and tests go through the studio MCP "
+    "(build_project, get_run_configurations + execute_run_configuration, get_file_problems). "
+    "Gradle on the command line is only for the pre-merge `nix develop --command ./gradlew verify`."
+)
 
 SOURCE_EXT = re.compile(r"\.(kt|kts|java|xml|toml|gradle|pro|proto|properties)$")
 FREE_DIR = re.compile(r"/(build|\.gradle|\.cxx|\.git|\.idea|\.claude)(/|$)")
@@ -136,9 +149,26 @@ def uses_worktree(tool: str, args: dict, cwd: str) -> bool:
     return False
 
 
-def ide_up() -> bool:
+def gradle_outside_verify(cmd: str) -> bool:
+    """True if a Gradle call runs tasks other than the pre-merge `verify` (or harmless meta tasks)."""
+    for match in GRADLE_CALL.finditer(strip_data(cmd)):
+        tokens = match.group("args").split()
+        tasks, skip = [], False
+        for token in tokens:
+            if skip:
+                skip = False
+            elif token in GRADLE_VALUE_OPTIONS:
+                skip = True
+            elif not token.startswith("-"):
+                tasks.append(token)
+        if any(task not in GRADLE_ALLOWED_TASKS for task in tasks):
+            return True
+    return False
+
+
+def port_open(port: int) -> bool:
     try:
-        with socket.create_connection(("127.0.0.1", IDE_PORT), timeout=0.3):
+        with socket.create_connection(("127.0.0.1", port), timeout=0.3):
             return True
     except OSError:
         return False
@@ -174,6 +204,14 @@ def main() -> int:
         print(WORKTREE_HINT, file=sys.stderr)
         return 2
 
+    if tool == "Bash" and gradle_outside_verify(args.get("command", "")):
+        if not port_open(STUDIO_PORT):
+            log(data, "allowed-gradle-studio-down")
+            return 0
+        log(data, "blocked-gradle")
+        print(GRADLE_HINT, file=sys.stderr)
+        return 2
+
     if tool == "Bash":
         hits = bash_hits_sources(args.get("command", ""), cwd)
     elif tool in ("Grep", "Glob"):
@@ -182,7 +220,7 @@ def main() -> int:
         hits = False
     if not hits:
         return 0
-    if not ide_up():
+    if not port_open(IDE_PORT):
         log(data, "allowed-ide-down")
         return 0
     log(data, "blocked")

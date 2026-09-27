@@ -25,9 +25,14 @@ and more accurate than shell tools:
 2. **Check every edit in the IDE.** After each batch of edits run `ide_diagnostics` with `files:`
    set to all changed files (about a second). It must show no errors before anything is built or
    tested. Never use a Gradle run as a compile check.
-3. **Build and test through the IDE.** Run single tests/classes and builds through the `studio` MCP
-   (warm daemon, incremental). Read failures with `ide_diagnostics` (`includeTestResults`,
-   `includeBuildErrors`).
+3. **Build and test through the IDE** (`studio` MCP; warm daemon, incremental):
+   - Compile: `build_project` with `filesToRebuild` (or without, for the project).
+   - Tests: `get_run_configurations` with `filePath` lists the run points of a test file;
+     `execute_run_configuration` with `filePath` + `line` runs a class or a single test.
+     Tests run in Studio's selected build variant (beta debug). The tool output is empty; read the
+     result from `<module>/build/test-results/test<Variant>UnitTest/TEST-<class>.xml`.
+   - File problems: `get_file_problems` (or `ide_diagnostics`).
+   The hook blocks command-line Gradle for anything but `verify` while Studio is reachable.
 4. **One Gradle run per task, at the end.** The pre-merge check is
    `nix develop --command ./gradlew verify` (all shipped variants assembled, all unit tests once,
    device tests built, lint, detekt). Use Gradle otherwise only when an IDE tool demonstrably cannot
