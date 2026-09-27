@@ -26,7 +26,6 @@ import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.testutil.HumlaSessionHarness
-import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.testutil.onEvents
 import se.lublin.humla.util.VoiceTargetMode
 
@@ -40,8 +39,7 @@ class HumlaSessionActionsTest {
     fun tearDown() = h.close()
 
     private fun connected() = h.connectAndSynchronize().also {
-        awaitUntil(description = "the synced snapshot") {
-            h.mainLooper.idle()
+        h.drainUntil("the synced snapshot") {
             h.session.model.value?.self != null
         }
     }

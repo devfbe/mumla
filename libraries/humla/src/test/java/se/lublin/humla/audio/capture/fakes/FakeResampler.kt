@@ -27,8 +27,6 @@ class FakeResampler(private val factor: Int) : Resampler {
     var releases = 0
         private set
 
-    val released: Boolean get() = releases > 0
-
     override fun resample(input: ShortArray, inputLength: Int, output: ShortArray): Int {
         val n = minOf(inputLength * factor, output.size)
         for (i in 0 until n) output[i] = input[i / factor]

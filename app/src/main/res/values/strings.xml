@@ -237,6 +237,9 @@
 
     <string name="app_news">What\'s New</string>
     <string name="app_news_summary">View the latest updates</string>
+    <string name="share_log">Share log</string>
+    <string name="share_log_summary">Send the app\'s recent log, for example with a bug report. Passwords, tokens and certificates are removed.</string>
+    <string name="share_log_failed">Could not write the log.</string>
     <string name="app_news_footer_on_startup">These news can be viewed again from the About page.</string>
 
     <string name="app_news_items_v3_7_0">• A lot of work was done to update Mumla for Android 15 and 16 (API 35 &amp; 36).\n

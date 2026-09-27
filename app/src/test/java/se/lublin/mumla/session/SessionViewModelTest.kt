@@ -32,10 +32,10 @@ import se.lublin.humla.model.UserState
 import se.lublin.humla.model.WhisperTarget
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.humla.util.VoiceTargetMode
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installSession
-import se.lublin.mumla.testing.serverState
+import se.lublin.mumla.testing.selfServerState
 import se.lublin.mumla.testing.stubActions
 import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.testing.stubModel
@@ -46,15 +46,10 @@ import se.lublin.mumla.testing.stubTalkStates
 class SessionViewModelTest {
     private val session = mockk<IHumlaSession>(relaxed = true)
     private val state = session.stubState(SessionState.Connecting)
-    private val model = session.stubModel(me(UserState(1, "me", 0)))
+    private val model = session.stubModel(selfServerState(UserState(1, "me", 0)))
     private val talkStates = session.stubTalkStates()
     private val actions = session.stubActions()
     private val viewModel = SessionViewModel(SessionManager.get(ApplicationProvider.getApplicationContext<Context>()))
-
-    private fun me(user: UserState) = serverState(self = 1) {
-        channel(0, "Root")
-        user(user)
-    }
 
     @Test
     fun ourStateIsKnownOnlyWhileSynchronized() {
@@ -76,7 +71,7 @@ class SessionViewModelTest {
         state.value = SessionState.Connected
         installSession(session)
 
-        model.value = me(UserState(1, "me", 0, isSelfMuted = true, isSelfDeafened = true))
+        model.value = selfServerState(UserState(1, "me", 0, isSelfMuted = true, isSelfDeafened = true))
         talkStates.value = mapOf(1 to TalkState.TALKING, 2 to TalkState.SHOUTING)
         idleMainLooper()
 
@@ -88,11 +83,11 @@ class SessionViewModelTest {
         state.value = SessionState.Connected
         installSession(session)
 
-        model.value = me(UserState(1, "me", 0, isSuppressed = true))
+        model.value = selfServerState(UserState(1, "me", 0, isSuppressed = true))
         idleMainLooper()
         assertThat(viewModel.self.value!!.cannotTalk).isTrue()
 
-        model.value = me(UserState(1, "me", 0, isMuted = true))
+        model.value = selfServerState(UserState(1, "me", 0, isMuted = true))
         idleMainLooper()
         assertThat(viewModel.self.value!!.cannotTalk).isTrue()
     }
@@ -120,7 +115,7 @@ class SessionViewModelTest {
     fun theTogglesAndWhisperingActOnTheConnectedSession() {
         state.value = SessionState.Connected
         installSession(session)
-        model.value = me(UserState(1, "me", 0, isSelfMuted = true))
+        model.value = selfServerState(UserState(1, "me", 0, isSelfMuted = true))
 
         viewModel.toggleMute()
         viewModel.toggleDeafen()

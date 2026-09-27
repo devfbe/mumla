@@ -11,10 +11,10 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.humla.IHumlaSession
 import se.lublin.mumla.testing.ServiceHostActivity
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubEvents
 

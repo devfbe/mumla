@@ -21,7 +21,6 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import java.lang.reflect.Modifier
 import se.lublin.humla.audio.capture.fakes.FakeSpeexPreprocessApi
 import se.lublin.humla.audio.capture.fakes.SpeexPreprocessorRequests as R
 
@@ -161,6 +160,7 @@ class SpeexPreprocessorTest {
         assertThat(frame[0]).isEqualTo(500.toShort())
         assertThat(probability).isEqualTo(0.73f)
         assertThat(halving.getRequests).containsExactly(R.GET_PROB)
+        assertThat(stage.rejectedFrames).isEqualTo(0)
     }
 
     @Test
@@ -190,15 +190,6 @@ class SpeexPreprocessorTest {
         assertThat(stage.rejectedFrames).isEqualTo(1)
     }
 
-    @Test
-    fun `an accepted frame is not counted as rejected`() {
-        val stage = SpeexPreprocessor(api)
-
-        stage.process(ShortArray(FRAME))
-
-        assertThat(stage.rejectedFrames).isEqualTo(0)
-    }
-
     /**
      * A refused `GET_PROB` leaves `value[0]` at 0 ("certainly not speech"), which would mute the
      * user; null means no opinion.
@@ -211,21 +202,13 @@ class SpeexPreprocessorTest {
         assertThat(stage.process(ShortArray(FRAME))).isNull()
     }
 
-    @Test
-    fun `release destroys the state exactly once`() {
-        val stage = SpeexPreprocessor(api)
-
-        stage.release()
-        stage.release()
-
-        assertThat(api.destroyed).isEqualTo(1)
-    }
-
     /** A capture thread that outlived its join timeout must not reach speex on a freed state. */
     @Test
-    fun `process after release touches nothing and returns no probability`() {
+    fun `release destroys the state exactly once and process after it touches nothing`() {
         val stage = SpeexPreprocessor(api)
         stage.release()
+        stage.release()
+        assertThat(api.destroyed).isEqualTo(1)
         val runsBefore = api.runs
         val requestsBefore = api.attemptedRequests.size
 
@@ -243,40 +226,5 @@ class SpeexPreprocessorTest {
         assertThrows(UnsupportedOperationException::class.java) {
             stage.analyzeReverseStream(ShortArray(FRAME))
         }
-    }
-
-    /**
-     * The handle lives in exactly one private field of the base, and no member mentions a long
-     * except the three callbacks, which run with the lock held.
-     */
-    @Test
-    fun `the native handle never escapes the stage`() {
-        val hierarchy = generateSequence<Class<*>>(SpeexPreprocessor::class.java) { c -> c.superclass }
-            .takeWhile { it != Any::class.java }
-            .toList()
-        assertWithMessage("the walk must reach the base class")
-            .that(hierarchy).contains(SingleHandleStage::class.java)
-
-        val longFields = hierarchy.flatMap { it.declaredFields.asList() }
-            .filter { !it.isSynthetic && mentionsLong(it.type) }
-        assertWithMessage("the handle must live in exactly one field")
-            .that(longFields.map { "${it.declaringClass.simpleName}.${it.name}" }).hasSize(1)
-        assertWithMessage("the one handle field must be the base class's private one")
-            .that(longFields.single().declaringClass).isEqualTo(SingleHandleStage::class.java)
-        assertThat(Modifier.isPrivate(longFields.single().modifiers)).isTrue()
-
-        val handleBearing = hierarchy.flatMap { it.declaredMethods.asList() }
-            .filter { !it.isSynthetic && !it.isBridge && !Modifier.isPrivate(it.modifiers) }
-            .filter { m -> mentionsLong(m.returnType) || m.parameterTypes.any { mentionsLong(it) } }
-        assertWithMessage("only the three callbacks, which run with the lock held, may carry the handle")
-            .that(handleBearing.map { it.name }.distinct())
-            .containsExactly("onCaptureFrame", "onFarEndFrame", "onReleaseHandle")
-    }
-
-    /** `long`, `java.lang.Long`, or an array of either (an out-parameter is an escape too). */
-    private fun mentionsLong(type: Class<*>): Boolean = when {
-        type == Long::class.javaPrimitiveType || type == Long::class.javaObjectType -> true
-        type.isArray -> mentionsLong(type.componentType!!)
-        else -> false
     }
 }

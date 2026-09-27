@@ -72,7 +72,7 @@ class HumlaSessionModelTest {
 
         val model = awaitModel("Ann muted at half volume") { it.user(2)!!.localVolume == 0.5f }
         assertThat(model.user(2)!!.isLocalMuted).isTrue()
-        awaitUntil(description = "the pipeline") { h.mainLooper.idle(); h.audioFactory.hosts.isNotEmpty() }
+        h.drainUntil("the pipeline") { h.audioFactory.hosts.isNotEmpty() }
         val params = h.audioFactory.hosts.single().outputListener.playbackParams
         assertThat(params.isMuted(2)).isTrue()
         assertThat(params.volume(2)).isEqualTo(0.5f)
@@ -90,7 +90,7 @@ class HumlaSessionModelTest {
     fun talkStatesArePublishedAndClearedWhenTheConnectionEnds() {
         h.connectAndSynchronize()
         awaitModel("the synced snapshot") { it.self != null }
-        awaitUntil(description = "the pipeline") { h.mainLooper.idle(); h.audioFactory.hosts.isNotEmpty() }
+        h.drainUntil("the pipeline") { h.audioFactory.hosts.isNotEmpty() }
         val output = h.audioFactory.hosts.single().outputListener
 
         Thread { output.onTalkStateUpdated(2, TalkState.SHOUTING) }.apply { start() }.join()

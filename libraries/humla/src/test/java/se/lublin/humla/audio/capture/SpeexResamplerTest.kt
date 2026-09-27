@@ -96,22 +96,13 @@ class SpeexResamplerTest {
     }
 
     @Test
-    fun `release destroys the state once`() {
-        val api = FakeSpeexResamplerApi(handle = 42L)
-        val resampler = SpeexResampler(16000, 48000, api = api)
-
-        resampler.close()
-        resampler.close()
-
-        assertThat(api.destroyed).containsExactly(42L)
-    }
-
-    @Test
-    fun `resampling after release produces no samples`() {
-        val api = FakeSpeexResamplerApi(produced = 480, fill = 5)
+    fun `release destroys the state once and resampling after it produces no samples`() {
+        val api = FakeSpeexResamplerApi(handle = 42L, produced = 480, fill = 5)
         val resampler = SpeexResampler(16000, 48000, api = api)
         val out = ShortArray(480)
         resampler.close()
+        resampler.close()
+        assertThat(api.destroyed).containsExactly(42L)
 
         val produced = resampler.resample(ShortArray(160), 160, out)
 

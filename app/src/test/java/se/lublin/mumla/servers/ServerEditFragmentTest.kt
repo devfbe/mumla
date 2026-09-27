@@ -1,7 +1,6 @@
 package se.lublin.mumla.servers
 
 import android.content.DialogInterface
-import android.os.Looper
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import com.google.common.truth.Truth.assertThat
@@ -9,8 +8,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.model.Server
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ThemedActivity
 
@@ -26,7 +25,7 @@ class ServerEditFragmentTest {
         }
         val fragment = ServerEditFragment.newInstance(server, action, ignoreTitle = false)
         fragment.show(activity.supportFragmentManager, "edit")
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         return fragment.requireDialog() as AlertDialog
     }
 
@@ -34,7 +33,7 @@ class ServerEditFragmentTest {
 
     private fun AlertDialog.confirm() {
         getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
     }
 
     @Test

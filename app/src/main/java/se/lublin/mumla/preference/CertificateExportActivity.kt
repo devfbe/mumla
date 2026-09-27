@@ -20,7 +20,6 @@ package se.lublin.mumla.preference
 import android.content.DialogInterface
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
@@ -36,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.humla.net.Pkcs12Certificates
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.DialogExportPasswordBinding
 import se.lublin.mumla.db.DatabaseCertificate
@@ -118,7 +118,7 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
         val pending = certificatePending
         val password = passwordPending
         if (uri == null || pending == null || password == null) {
-            if (uri != null) Log.w(TAG, "No pending certificate after user picked output file")
+            if (uri != null) HumlaLog.w(TAG, "No pending certificate after user picked output file")
             clearPassword()
             finish()
             return
@@ -128,7 +128,7 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
                 val stored = checkNotNull(repository.io { getCertificateData(pending.id) })
                 withContext(workDispatcher) { Pkcs12Certificates.exportWithPassword(stored, password) }
             } catch (e: Exception) {
-                Log.w(TAG, "Could not re-encrypt certificate for export", e)
+                HumlaLog.w(TAG, "Could not re-encrypt certificate for export", e)
                 null
             } finally {
                 clearPassword()
@@ -149,10 +149,10 @@ class CertificateExportActivity : AppCompatActivity(), DialogInterface.OnClickLi
                 os.buffered().use { it.write(data) }
                 null
             } catch (e: FileNotFoundException) {
-                Log.w(TAG, "FileNotFound on output file picked by user?!", e)
+                HumlaLog.w(TAG, "FileNotFound on output file picked by user?!", e)
                 R.string.externalStorageUnavailable
             } catch (e: IOException) {
-                Log.w(TAG, "Could not write exported certificate", e)
+                HumlaLog.w(TAG, "Could not write exported certificate", e)
                 R.string.error_writing_to_storage
             }
         }

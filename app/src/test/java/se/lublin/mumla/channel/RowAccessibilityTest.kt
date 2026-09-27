@@ -21,7 +21,6 @@ import android.content.Context
 import android.view.View
 import android.widget.FrameLayout
 import androidx.core.view.ViewCompat
-import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
@@ -32,10 +31,13 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.service.OverlayUserAdapter
 import se.lublin.mumla.testing.ThemedActivity
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.channelListAdapter
+import se.lublin.mumla.testing.channelRow
+import se.lublin.mumla.testing.userRow
 import se.lublin.mumla.util.UserStatus
 
 /** What the channel list and the overlay tell accessibility services about their rows. */
@@ -48,22 +50,9 @@ class RowAccessibilityTest {
         context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
     }
 
-    private val noTaps = object : ChannelListAdapter.Listener {
-        override fun onChannelClick(row: ChannelRow.Channel) = Unit
-        override fun onUserClick(row: ChannelRow.User) = Unit
-        override fun onExpandClick(row: ChannelRow.Channel) = Unit
-        override fun onJoinClick(row: ChannelRow.Channel) = Unit
-        override fun onChannelMore(anchor: View, row: ChannelRow.Channel) = Unit
-        override fun onUserMore(anchor: View, row: ChannelRow.User) = Unit
-        override fun onStopListening(row: ChannelRow.Listener) = Unit
-    }
-
-    private fun adapter(vararg rows: ChannelRow): ChannelListAdapter {
-        val config = AsyncDifferConfig.Builder(ChannelListAdapter.DIFF).setBackgroundThreadExecutor { it.run() }.build()
-        return ChannelListAdapter(context, noTaps, config).apply {
-            submitList(rows.toList())
-            idleMainLooper()
-        }
+    private fun adapter(vararg rows: ChannelRow): ChannelListAdapter = channelListAdapter(context).apply {
+        submitList(rows.toList())
+        idleMainLooper()
     }
 
     private fun ChannelListAdapter.bound(position: Int): View {
@@ -75,10 +64,9 @@ class RowAccessibilityTest {
 
     private fun View.description(id: Int) = findViewById<View>(id).contentDescription?.toString()
 
-    private fun channel(expanded: Boolean) =
-        ChannelRow.Channel(0, "Root", 0, 1, expanded, true, false, false, ChannelRow.Lock.NONE)
+    private fun channel(expanded: Boolean) = channelRow(0, "Root", userCount = 1, expanded = expanded)
 
-    private fun user(status: UserStatus = UserStatus.NONE) = ChannelRow.User(7, "user-7", 1, false, status, null)
+    private fun user(status: UserStatus = UserStatus.NONE) = userRow(7, status = status)
 
     @Test
     fun aChannelRowNamesItsButtonsAndWhatTheToggleWillDo() {

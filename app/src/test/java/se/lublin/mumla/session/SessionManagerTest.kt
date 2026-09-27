@@ -33,10 +33,10 @@ import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.collectOnMain
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.chat.SessionChat
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.testing.stubState
 

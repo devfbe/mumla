@@ -2,35 +2,15 @@ package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.testutil.FakeOpusDecoder
 
 class PlaybackMixTest {
-    /** Decodes every frame as a constant, so a mixed talker is audible in the output. */
-    private class ConstantOpus : OpusDecoderApi {
-        override fun create(sampleRate: Int, channels: Int, error: IntArray): Long = 1L
-        override fun decodeFloat(
-            state: Long,
-            data: ByteArray?,
-            offset: Int,
-            len: Int,
-            out: FloatArray,
-            frameSize: Int,
-            decodeFec: Int,
-        ): Int {
-            out.fill(0.25f, 0, AudioHandler.FRAME_SIZE)
-            return AudioHandler.FRAME_SIZE
-        }
-        override fun destroy(state: Long) = Unit
-        override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = 1
-        override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int = AudioHandler.FRAME_SIZE
-    }
-
     private val states = mutableListOf<TalkState>()
 
     /** A talker whose jitter buffer never delivers: concealment until the stream times out. */
     private fun silentTalker() = AudioOutputSpeech(
-        1, AudioHandler.FRAME_SIZE, { _, state -> states += state }, ConstantOpus(), FakeJitter(),
+        1, AudioHandler.FRAME_SIZE, { _, state -> states += state }, FakeOpusDecoder(fill = 0.25f), FakeJitter(),
     )
 
     @Test

@@ -66,21 +66,59 @@ class AudioRouterTest {
         assertThat(refusals).isEqualTo(0)
     }
 
-    /** LE Audio headsets are Bluetooth headsets to the user, whatever the platform calls them. */
-    @Test
-    fun aLeAudioHeadsetIsABluetoothHeadsetToo() {
-        phone()
-        devices.available[8] = TYPE_BLE_HEADSET
-
-        engaged()
-
-        assertThat(devices.selectedId).isEqualTo(8)
+    /**
+     * The route taken when the session starts on a phone (earpiece 1, speaker 2) with [available]
+     * devices besides, by type, and their Bluetooth [addresses].
+     */
+    private fun defaultRoute(
+        available: Map<Int, Int> = emptyMap(),
+        addresses: Map<Int, String> = emptyMap(),
+        preferred: PreferredAudioDevice? = null,
+        bluetooth: Boolean = true,
+        earpiece: Boolean = true,
+    ): Int? {
+        val devices = FakeCommunicationDevices()
+        if (earpiece) devices.available[1] = TYPE_BUILTIN_EARPIECE
+        devices.available[2] = TYPE_BUILTIN_SPEAKER
+        devices.available += available
+        devices.addresses += addresses
+        val router = AudioRouter(devices, object : AudioRouter.Listener {
+            override fun onRouteChanged(type: Int?) = Unit
+            override fun onRouteRefused() = Unit
+        })
+        router.preferred = preferred
+        router.bluetoothAutomatic = bluetooth
+        router.engage()
+        assertThat(router.activeDevice()?.id).isEqualTo(devices.selectedId)
+        return devices.selectedId
     }
 
     /**
-     * In communication mode the platform's own default is the earpiece, so the default without a
-     * headset is routed explicitly: a plugged-in headset first, then the speaker.
+     * In communication mode the platform's own default is the earpiece, so every default is routed
+     * explicitly: a saved headset that is there, even over another headset (a Bluetooth one found by
+     * its address, as its id changes on every connection); else a Bluetooth headset unless the user
+     * switched that off, LE Audio included; else a plugged-in headset; else a saved built-in device
+     * (a tablet has no earpiece, so saving one must not leave it silent); else the speaker.
      */
+    @Test
+    fun theDefaultRouteFollowsThePreferenceOrder() {
+        val earpiece = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
+        val savedHeadset = PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA")
+        val wiredAndBluetooth = mapOf(4 to TYPE_WIRED_HEADSET, 7 to TYPE_BLUETOOTH_SCO)
+
+        assertThat(defaultRoute()).isEqualTo(2)
+        assertThat(defaultRoute(mapOf(8 to TYPE_BLE_HEADSET))).isEqualTo(8)
+        assertThat(defaultRoute(mapOf(7 to TYPE_BLUETOOTH_SCO), bluetooth = false)).isEqualTo(2)
+        assertThat(defaultRoute(mapOf(4 to TYPE_WIRED_HEADSET))).isEqualTo(4)
+        assertThat(defaultRoute(preferred = earpiece)).isEqualTo(1)
+        assertThat(defaultRoute(mapOf(4 to TYPE_WIRED_HEADSET), preferred = earpiece)).isEqualTo(4)
+        assertThat(defaultRoute(preferred = earpiece, earpiece = false)).isEqualTo(2)
+        assertThat(defaultRoute(wiredAndBluetooth, mapOf(7 to "AA"), savedHeadset, bluetooth = false)).isEqualTo(7)
+        assertThat(defaultRoute(wiredAndBluetooth, mapOf(7 to "BB"), savedHeadset, bluetooth = false)).isEqualTo(4)
+        val twoBluetooth = mapOf(7 to TYPE_BLUETOOTH_SCO, 9 to TYPE_BLUETOOTH_SCO)
+        assertThat(defaultRoute(twoBluetooth, mapOf(7 to "BB", 9 to "AA"), savedHeadset)).isEqualTo(9)
+    }
+
     @Test
     fun withoutABluetoothHeadsetAPluggedInOneIsRouted() {
         phone()
@@ -91,92 +129,6 @@ class AudioRouterTest {
         assertThat(devices.selectedId).isEqualTo(4)
         assertThat(refusals).isEqualTo(0)
         assertThat(routes).containsExactly(TYPE_WIRED_HEADSET)
-    }
-
-    @Test
-    fun withoutAnyHeadsetTheSpeakerIsRouted() {
-        phone()
-
-        engaged()
-
-        assertThat(devices.selectedId).isEqualTo(2)
-        assertThat(routes).containsExactly(TYPE_BUILTIN_SPEAKER)
-    }
-
-    /** A saved built-in device replaces the speaker as the default without a headset. */
-    @Test
-    fun aSavedEarpieceIsTheDefaultWithoutAHeadset() {
-        phone()
-        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
-
-        engaged()
-
-        assertThat(devices.selectedId).isEqualTo(1)
-    }
-
-    /** ...but a headset that is there still wins over it, as with the phone app. */
-    @Test
-    fun aHeadsetWinsOverASavedBuiltInDevice() {
-        phone()
-        devices.available[4] = TYPE_WIRED_HEADSET
-        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
-
-        engaged()
-
-        assertThat(devices.selectedId).isEqualTo(4)
-    }
-
-    /** A tablet has no earpiece; saving one must not leave it silent. */
-    @Test
-    fun withoutTheSavedEarpieceTheSpeakerIsRouted() {
-        devices.available[2] = TYPE_BUILTIN_SPEAKER
-        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
-
-        engaged()
-
-        assertThat(devices.selectedId).isEqualTo(2)
-    }
-
-    /** A saved headset is taken whenever it is there, even over another headset. */
-    @Test
-    fun aSavedHeadsetIsTakenWhenTheSessionStarts() {
-        phone()
-        devices.available[4] = TYPE_WIRED_HEADSET
-        devices.available[7] = TYPE_BLUETOOTH_SCO
-        devices.addresses[7] = "AA"
-        router.preferred = PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA")
-
-        engaged(bluetooth = false)
-
-        assertThat(devices.selectedId).isEqualTo(7)
-    }
-
-    /** Bluetooth ids change on every connection, so the address tells two headsets apart. */
-    @Test
-    fun aSavedBluetoothHeadsetIsFoundByItsAddress() {
-        phone()
-        devices.available[7] = TYPE_BLUETOOTH_SCO
-        devices.addresses[7] = "BB"
-        devices.available[9] = TYPE_BLUETOOTH_SCO
-        devices.addresses[9] = "AA"
-        router.preferred = PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA")
-
-        engaged()
-
-        assertThat(devices.selectedId).isEqualTo(9)
-    }
-
-    @Test
-    fun withoutTheSavedHeadsetTheAutomaticDefaultApplies() {
-        phone()
-        devices.available[4] = TYPE_WIRED_HEADSET
-        devices.available[7] = TYPE_BLUETOOTH_SCO
-        devices.addresses[7] = "BB"
-        router.preferred = PreferredAudioDevice(TYPE_BLUETOOTH_SCO, "AA")
-
-        engaged(bluetooth = false)
-
-        assertThat(devices.selectedId).isEqualTo(4)
     }
 
     @Test
@@ -228,16 +180,6 @@ class AudioRouterTest {
 
         assertThat(devices.selectCalls).isEmpty()
         assertThat(devices.modeCalls).isEmpty()
-    }
-
-    @Test
-    fun aHeadsetIsNotTakenWhenTheUserSwitchedThatOff() {
-        phone()
-        devices.available[7] = TYPE_BLUETOOTH_SCO
-
-        engaged(bluetooth = false)
-
-        assertThat(devices.selectedId).isEqualTo(2)
     }
 
     @Test
@@ -585,15 +527,6 @@ class AudioRouterTest {
         router.apply()
 
         assertThat(router.activeDevice()?.id).isEqualTo(1)
-    }
-
-    @Test
-    fun aPluggedInHeadsetIsTheDefaultShown() {
-        phone()
-        devices.available[4] = TYPE_WIRED_HEADSET
-        engaged()
-
-        assertThat(router.activeDevice()?.id).isEqualTo(4)
     }
 
     @Test

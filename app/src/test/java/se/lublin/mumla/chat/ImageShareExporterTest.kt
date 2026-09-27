@@ -3,12 +3,14 @@ package se.lublin.mumla.chat
 import android.content.Context
 import androidx.core.content.FileProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import se.lublin.mumla.testing.FileProviderCache
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
@@ -50,52 +52,40 @@ class ImageShareExporterTest {
         assertThat(File(dir, "$keyOfA.png").exists()).isTrue()
     }
 
-    @Test
-    fun detectsCommonImageTypesByMagicBytes() {
-        assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())))
-            .isEqualTo("jpg" to "image/jpeg")
-        assertThat(ImageShareExporter.typeOf("GIF89a".toByteArray())).isEqualTo("gif" to "image/gif")
-        assertThat(ImageShareExporter.typeOf("RIFF    WEBPVP8 ".toByteArray(Charsets.ISO_8859_1)))
-            .isEqualTo("webp" to "image/webp")
-        assertThat(ImageShareExporter.typeOf("hello".toByteArray())).isEqualTo("bin" to "application/octet-stream")
-    }
-
-    // --- the magic-byte set, clause by clause ---------------------------------------------------
-
     /**
-     * Each clause of the WEBP check (`RIFF` prefix, at least 12 bytes, `WEBP` at offset 8) on its
-     * own; without the tag a `.wav` would be shared as an image.
+     * The magic-byte set clause by clause. Each clause of the WEBP check (`RIFF` prefix, at least
+     * 12 bytes, `WEBP` at offset 8) on its own: without the tag a `.wav` would be shared as an
+     * image. A prefix longer than the whole input is a miss, not an index out of bounds, and an
+     * input exactly as long as its magic is recognised.
      */
     @Test
-    fun aRiffContainerThatIsNotWebpIsNotAnImage() {
-        assertThat(ImageShareExporter.typeOf("RIFF    WAVEfmt ".toByteArray(Charsets.ISO_8859_1)))
-            .isEqualTo("bin" to "application/octet-stream")
-        assertThat(ImageShareExporter.typeOf("RIFF".toByteArray()))
-            .isEqualTo("bin" to "application/octet-stream")
-        assertThat(ImageShareExporter.typeOf("RIFF    WEBP".toByteArray(Charsets.ISO_8859_1)))
-            .isEqualTo("webp" to "image/webp")
-        assertThat(ImageShareExporter.typeOf("xIFF    WEBP".toByteArray(Charsets.ISO_8859_1)))
-            .isEqualTo("bin" to "application/octet-stream")
-    }
-
-    /** A prefix longer than the whole input must be a miss, not an index out of bounds. */
-    @Test
-    fun typesShorterThanTheirMagicAreNotImages() {
-        assertThat(ImageShareExporter.typeOf(ByteArray(0))).isEqualTo("bin" to "application/octet-stream")
-        assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte()))).isEqualTo("bin" to "application/octet-stream")
-        assertThat(ImageShareExporter.typeOf(byteArrayOf(0x89.toByte(), 0x50, 0x4E)))
-            .isEqualTo("bin" to "application/octet-stream")
-        assertThat(ImageShareExporter.typeOf("GI".toByteArray())).isEqualTo("bin" to "application/octet-stream")
-    }
-
-    /** Exactly as long as its magic, i.e. the `size >= prefix.size` boundary from below. */
-    @Test
-    fun typesExactlyAsLongAsTheirMagicAreRecognised() {
-        assertThat(ImageShareExporter.typeOf(byteArrayOf(0xFF.toByte(), 0xD8.toByte())))
-            .isEqualTo("jpg" to "image/jpeg")
-        assertThat(ImageShareExporter.typeOf("GIF".toByteArray())).isEqualTo("gif" to "image/gif")
-        assertThat(ImageShareExporter.typeOf(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)))
-            .isEqualTo("png" to "image/png")
+    fun imageTypesAreDetectedByMagicBytes() {
+        val jpg = "jpg" to "image/jpeg"
+        val gif = "gif" to "image/gif"
+        val png = "png" to "image/png"
+        val webp = "webp" to "image/webp"
+        val bin = "bin" to "application/octet-stream"
+        fun latin1(text: String) = text.toByteArray(Charsets.ISO_8859_1)
+        val cases = listOf(
+            byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()) to jpg,
+            latin1("GIF89a") to gif,
+            latin1("RIFF    WEBPVP8 ") to webp,
+            latin1("hello") to bin,
+            latin1("RIFF    WAVEfmt ") to bin,
+            latin1("RIFF") to bin,
+            latin1("RIFF    WEBP") to webp,
+            latin1("xIFF    WEBP") to bin,
+            ByteArray(0) to bin,
+            byteArrayOf(0xFF.toByte()) to bin,
+            byteArrayOf(0x89.toByte(), 0x50, 0x4E) to bin,
+            latin1("GI") to bin,
+            byteArrayOf(0xFF.toByte(), 0xD8.toByte()) to jpg,
+            latin1("GIF") to gif,
+            byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47) to png,
+        )
+        for ((bytes, expected) in cases) {
+            assertWithMessage(bytes.contentToString()).that(ImageShareExporter.typeOf(bytes)).isEqualTo(expected)
+        }
     }
 
     /**
@@ -119,8 +109,8 @@ class ImageShareExporterTest {
     }
 
     /**
-     * The provider publishes exactly one subtree; the app's HTTP cache and WebView data live one
-     * level up.
+     * The provider publishes only its share subtrees; the app's HTTP cache and WebView data live
+     * one level up.
      */
     @Test
     fun theProviderPublishesNothingButTheShareDirectory() {
@@ -158,29 +148,19 @@ class ImageShareExporterTest {
         assertThat(png).isEqualTo(untouched)
     }
 
+    /** Younger than a day is kept, and so is exactly [ImageShareExporter.MAX_AGE_MS] old: the cutoff. */
     @Test
-    fun aShareYoungerThanADayIsKept() {
+    fun aShareUpToADayOldIsKept() {
         dir.mkdirs()
         val now = 10 * ImageShareExporter.MAX_AGE_MS
-        val fresh = File(dir, "fresh.png").apply { writeBytes(TestImages.png(2, 2)) }
-        assertThat(fresh.setLastModified(now - ImageShareExporter.MAX_AGE_MS + 1)).isTrue()
+        for (margin in listOf(1L, 0L)) {
+            val kept = File(dir, "kept$margin.png").apply { writeBytes(TestImages.png(2, 2)) }
+            assertThat(kept.setLastModified(now - ImageShareExporter.MAX_AGE_MS + margin)).isTrue()
 
-        ImageShareExporter(context, nowMillis = { now }).export(sourceA, TestImages.png(4, 4))
+            ImageShareExporter(context, nowMillis = { now }).export(sourceA, TestImages.png(4, 4))
 
-        assertThat(fresh.exists()).isTrue()
-    }
-
-    /** The cutoff itself: exactly [ImageShareExporter.MAX_AGE_MS] old is still young enough. */
-    @Test
-    fun aShareExactlyAtTheCutoffIsKept() {
-        dir.mkdirs()
-        val now = 10 * ImageShareExporter.MAX_AGE_MS
-        val edge = File(dir, "edge.png").apply { writeBytes(TestImages.png(2, 2)) }
-        assertThat(edge.setLastModified(now - ImageShareExporter.MAX_AGE_MS)).isTrue()
-
-        ImageShareExporter(context, nowMillis = { now }).export(sourceA, TestImages.png(4, 4))
-
-        assertThat(edge.exists()).isTrue()
+            assertWithMessage("$margin ms younger than a day").that(kept.exists()).isTrue()
+        }
     }
 
     /**

@@ -1,11 +1,16 @@
 package se.lublin.mumla.chat
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /** Pure JVM; [ZoomState.toMatrix] needs android.graphics and is covered in [ZoomImageViewTest]. */
 class ZoomStateTest {
+    private fun assertRejected(block: () -> Unit) {
+        assertThrows(IllegalArgumentException::class.java) { block() }
+    }
+
     // View 400x400, image 200x100 -> fit scale 2, displayed 400x200.
 
     @Test
@@ -148,15 +153,15 @@ class ZoomStateTest {
      */
     @Test
     fun aViewWithoutAMeasuredSizeIsRejected() {
-        assertThrows(IllegalArgumentException::class.java) { ZoomState.fitScale(0f, 400f, 200f, 100f) }
-        assertThrows(IllegalArgumentException::class.java) { ZoomState.fitScale(400f, 0f, 200f, 100f) }
+        assertRejected { ZoomState.fitScale(0f, 400f, 200f, 100f) }
+        assertRejected { ZoomState.fitScale(400f, 0f, 200f, 100f) }
     }
 
     /** A drawable without an intrinsic size (a ColorDrawable reports -1) must not divide by zero. */
     @Test
     fun anImageWithoutASizeIsRejected() {
-        assertThrows(IllegalArgumentException::class.java) { ZoomState.fitScale(400f, 400f, 0f, 100f) }
-        assertThrows(IllegalArgumentException::class.java) { ZoomState.fitScale(400f, 400f, 200f, -1f) }
+        assertRejected { ZoomState.fitScale(400f, 400f, 0f, 100f) }
+        assertRejected { ZoomState.fitScale(400f, 400f, 200f, -1f) }
     }
 
     /**
@@ -165,45 +170,34 @@ class ZoomStateTest {
      */
     @Test
     fun aScaleOutsideTheSanityBoundCannotBeConstructed() {
-        assertThrows(IllegalArgumentException::class.java) { ZoomState(scale = 0f) }
-        assertThrows(IllegalArgumentException::class.java) { ZoomState(scale = 101f) }
-        assertThrows(IllegalArgumentException::class.java) { ZoomState(scale = Float.NaN) }
-        assertThrows(IllegalArgumentException::class.java) {
-            ZoomState().scaledBy(Float.NaN, 0f, 0f, 400f, 400f, 200f, 100f)
+        assertRejected { ZoomState(scale = 0f) }
+        assertRejected { ZoomState(scale = 101f) }
+        assertRejected { ZoomState(scale = Float.NaN) }
+        assertRejected { ZoomState().scaledBy(Float.NaN, 0f, 0f, 400f, 400f, 200f, 100f) }
+    }
+
+    /**
+     * The budget: zoom until one source pixel covers one screen pixel (1600 px of source into a
+     * 400 px view is a fit of 0.25, four zooms' worth of pixels). An image the fit already had to
+     * enlarge (every screen-sized decode) has a budget below 1 but still zooms twice; a very large
+     * source stops at the global ceiling, since the decoder dropped those pixels. The ceiling
+     * follows the limiting axis, exactly as the fit does.
+     */
+    @Test
+    fun theCeilingIsOneSourcePixelPerScreenPixelWithinBounds() {
+        val cases = listOf(
+            floatArrayOf(400f, 400f, 1600f, 1600f) to 4f,
+            floatArrayOf(400f, 400f, 1200f, 1200f) to 3f,
+            floatArrayOf(400f, 400f, 400f, 400f) to 2f, // budget exactly 1
+            floatArrayOf(400f, 400f, 10f, 10f) to 2f, // budget 0.025
+            floatArrayOf(400f, 400f, 8000f, 8000f) to 5f, // budget 20
+            // Fit 0.125 by width, budget 8, capped at 5: the height is irrelevant.
+            floatArrayOf(512f, 512f, 4096f, 1f) to 5f,
+        )
+        for ((size, ceiling) in cases) {
+            assertWithMessage(size.contentToString())
+                .that(ZoomState.maxScale(size[0], size[1], size[2], size[3])).isEqualTo(ceiling)
         }
-    }
-
-    /**
-     * The budget: zoom until one source pixel covers one screen pixel. 1600 px of source into a
-     * 400 px view is a fit of 0.25, so there are four zooms' worth of pixels in the bitmap.
-     */
-    @Test
-    fun theCeilingIsOneSourcePixelPerScreenPixel() {
-        assertThat(ZoomState.maxScale(400f, 400f, 1600f, 1600f)).isEqualTo(4f)
-        assertThat(ZoomState.maxScale(400f, 400f, 1200f, 1200f)).isEqualTo(3f)
-    }
-
-    /**
-     * An image the fit already had to enlarge (every screen-sized decode) has a budget below 1 but
-     * can still be zoomed.
-     */
-    @Test
-    fun anImageWithNoPixelsToSpareStillZoomsTwice() {
-        assertThat(ZoomState.maxScale(400f, 400f, 400f, 400f)).isEqualTo(2f) // budget exactly 1
-        assertThat(ZoomState.maxScale(400f, 400f, 10f, 10f)).isEqualTo(2f) // budget 0.025
-    }
-
-    /** And a very large source does not get its full budget: the decoder dropped those pixels. */
-    @Test
-    fun aHugeImageStopsAtTheGlobalCeiling() {
-        assertThat(ZoomState.maxScale(400f, 400f, 8000f, 8000f)).isEqualTo(5f) // budget 20
-    }
-
-    /** The ceiling follows the *limiting* axis, exactly as the fit does. */
-    @Test
-    fun theCeilingIsDecidedByTheSameAxisAsTheFit() {
-        // 4096x1 into 512x512: fit 0.125 by width, budget 8, capped at 5 -- the height is irrelevant.
-        assertThat(ZoomState.maxScale(512f, 512f, 4096f, 1f)).isEqualTo(5f)
     }
 
     /**
@@ -226,7 +220,7 @@ class ZoomStateTest {
     /** Same for the offsets: an infinite pan is a bug, not a position. */
     @Test
     fun aNonFiniteOffsetCannotBeConstructed() {
-        assertThrows(IllegalArgumentException::class.java) { ZoomState(tx = Float.NaN) }
-        assertThrows(IllegalArgumentException::class.java) { ZoomState(ty = Float.POSITIVE_INFINITY) }
+        assertRejected { ZoomState(tx = Float.NaN) }
+        assertRejected { ZoomState(ty = Float.POSITIVE_INFINITY) }
     }
 }

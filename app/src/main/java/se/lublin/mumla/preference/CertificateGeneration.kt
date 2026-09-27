@@ -18,7 +18,6 @@ package se.lublin.mumla.preference
 
 import android.content.Context
 import android.database.SQLException
-import android.util.Log
 import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineDispatcher
@@ -26,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import se.lublin.humla.net.HumlaCertificateGenerator
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.DatabaseCertificate
@@ -80,13 +80,13 @@ internal suspend fun createDefaultCertificate(
         }
         repository.io { addCertificate(name, pkcs12) }
     } catch (e: GeneralSecurityException) {
-        Log.w(TAG, "Could not generate a certificate", e)
+        HumlaLog.w(TAG, "Could not generate a certificate", e)
         null
     } catch (e: IOException) {
-        Log.w(TAG, "Could not generate a certificate", e)
+        HumlaLog.w(TAG, "Could not generate a certificate", e)
         null
     } catch (e: SQLException) {
-        Log.w(TAG, "Could not store the certificate", e)
+        HumlaLog.w(TAG, "Could not store the certificate", e)
         null
     }
     certificate?.let { Settings.getInstance(context).defaultCertificateId = it.id }

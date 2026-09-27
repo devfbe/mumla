@@ -104,52 +104,33 @@ class OutgoingImagePreparerTest {
         return counting.asCoroutineDispatcher() to runs
     }
 
+    /**
+     * Decoded at most 600 x 400, aspect ratio kept, never enlarged, never below one pixel. An image
+     * on or touching exactly one bound comes back untouched: the general fit runs the ratio through
+     * a float divide and can lose a pixel, and 600x31 and 53x400 are the smallest sizes for which a
+     * strict `<` on each axis would lose one.
+     */
     @Test
-    fun largeImagesAreBoundedToTheOutgoingSize() {
-        val bitmap = preparer.decode(TestImages.png(1200, 800))!!
-        assertThat(bitmap.width).isEqualTo(600)
-        assertThat(bitmap.height).isEqualTo(400)
-    }
-
-    @Test
-    fun aPhotographIsBoundedTheSameWayAPngIs() {
-        val bitmap = preparer.decode(TestImages.jpeg(1200, 800))!!
-        assertThat(bitmap.width).isEqualTo(600)
-        assertThat(bitmap.height).isEqualTo(400)
-    }
-
-    @Test
-    fun aTallImageIsBoundedByItsHeight() {
-        val bitmap = preparer.decode(TestImages.jpeg(800, 1200))!!
-        assertThat(bitmap.height).isEqualTo(400)
-        assertThat(bitmap.width).isEqualTo(266)
-    }
-
-    @Test
-    fun smallImagesAreNotUpscaled() {
-        val bitmap = preparer.decode(TestImages.png(100, 50))!!
-        assertThat(bitmap.width).isEqualTo(100)
-        assertThat(bitmap.height).isEqualTo(50)
-    }
-
-    /** An image exactly on the bound comes back untouched, without a round trip through the scaler. */
-    @Test
-    fun anImageExactlyOnTheBoundIsAlreadyWithinIt() {
-        val bitmap = preparer.decode(TestImages.png(600, 400))!!
-        assertThat(bitmap.width).isEqualTo(600)
-        assertThat(bitmap.height).isEqualTo(400)
-    }
-
-    /** 3000:1 fitted into 600x400 would be 0.2 px tall; the floor prevents a zero-sized decode. */
-    @Test
-    fun anExtremeAspectRatioKeepsAtLeastOnePixelOnTheShortAxis() {
-        val bitmap = preparer.decode(TestImages.png(3000, 1))!!
-        assertThat(bitmap.width).isEqualTo(600)
-        assertThat(bitmap.height).isEqualTo(1)
-
-        val tall = preparer.decode(TestImages.png(1, 3000))!!
-        assertThat(tall.width).isEqualTo(1)
-        assertThat(tall.height).isEqualTo(400)
+    fun decodedImagesFitTheBounds() {
+        val cases = listOf(
+            TestImages.png(1200, 800) to "600x400",
+            TestImages.jpeg(1200, 800) to "600x400",
+            TestImages.jpeg(800, 1200) to "266x400",
+            TestImages.png(100, 50) to "100x50",
+            TestImages.png(600, 400) to "600x400",
+            TestImages.png(3000, 1) to "600x1",
+            TestImages.png(1, 3000) to "1x400",
+            TestImages.png(600, 399) to "600x399",
+            TestImages.png(599, 400) to "599x400",
+            TestImages.png(600, 31) to "600x31",
+            TestImages.png(53, 400) to "53x400",
+            TestImages.png(601, 400) to "600x399",
+            TestImages.png(600, 401) to "598x400",
+        )
+        for ((index, case) in cases.withIndex()) {
+            val bitmap = preparer.decode(case.first)!!
+            assertThat("case $index -> ${bitmap.width}x${bitmap.height}").isEqualTo("case $index -> ${case.second}")
+        }
     }
 
     /** Aspect-ratio fit into 600 x 400, never enlarged, never below one pixel. */
@@ -174,29 +155,6 @@ class OutgoingImagePreparerTest {
             val bounded = OutgoingImagePreparer.boundedSize(source.first, source.second, 600, 400)
             assertThat("$source -> ${bounded.width to bounded.height}").isEqualTo("$source -> $target")
         }
-    }
-
-    /**
-     * An image touching exactly one bound comes back untouched; the general fit runs the ratio
-     * through a float divide and can lose a pixel. 600x31 and 53x400 are the smallest sizes for
-     * which a strict `<` on each axis would actually lose one.
-     */
-    @Test
-    fun anImageTouchingOnlyOneBoundIsLeftAlone() {
-        for ((width, height) in listOf(600 to 399, 599 to 400, 600 to 31, 53 to 400)) {
-            val bitmap = preparer.decode(TestImages.png(width, height))!!
-            assertThat("${width}x$height -> ${bitmap.width}x${bitmap.height}")
-                .isEqualTo("${width}x$height -> ${width}x$height")
-        }
-    }
-
-    @Test
-    fun onePixelOverEitherBoundIsFitted() {
-        val wide = preparer.decode(TestImages.png(601, 400))!!
-        assertThat("${wide.width}x${wide.height}").isEqualTo("600x399")
-
-        val tall = preparer.decode(TestImages.png(600, 401))!!
-        assertThat("${tall.width}x${tall.height}").isEqualTo("598x400")
     }
 
     /**
@@ -275,31 +233,22 @@ class OutgoingImagePreparerTest {
     }
 
     @Test
-    fun undecodableBytesGiveNull() {
-        assertThat(preparer.decode("definitely not an image".toByteArray())).isNull()
+    fun bytesThatAreNotAWholeImageGiveNull() {
+        val photo = TestImages.jpeg(1200, 800)
+        for (bytes in listOf("definitely not an image".toByteArray(), ByteArray(0), photo.copyOf(photo.size / 2))) {
+            assertThat(preparer.decode(bytes)).isNull()
+        }
     }
 
     @Test
-    fun noBytesGiveNull() {
-        assertThat(preparer.decode(ByteArray(0))).isNull()
-    }
-
-    @Test
-    fun aPhotographCutShortGivesNull() {
-        val whole = TestImages.jpeg(1200, 800)
-        assertThat(preparer.decode(whole.copyOf(whole.size / 2))).isNull()
-    }
-
-    @Test
-    fun aNonPositiveWidthBoundIsRejectedAtConstruction() {
-        val thrown = runCatching { OutgoingImagePreparer(context, maxWidth = 0) }.exceptionOrNull()
-        assertThat(thrown).isInstanceOf(IllegalArgumentException::class.java)
-    }
-
-    @Test
-    fun aNonPositiveHeightBoundIsRejectedAtConstruction() {
-        val thrown = runCatching { OutgoingImagePreparer(context, maxHeight = -1) }.exceptionOrNull()
-        assertThat(thrown).isInstanceOf(IllegalArgumentException::class.java)
+    fun nonPositiveBoundsAreRejectedAtConstruction() {
+        val builds = listOf(
+            { OutgoingImagePreparer(context, maxWidth = 0) },
+            { OutgoingImagePreparer(context, maxHeight = -1) },
+        )
+        for (build in builds) {
+            assertThat(runCatching(build).exceptionOrNull()).isInstanceOf(IllegalArgumentException::class.java)
+        }
     }
 
     @Test
@@ -333,32 +282,28 @@ class OutgoingImagePreparerTest {
         assertThat(closed).isTrue()
     }
 
+    /**
+     * Nothing registered (Robolectric's media provider throws FileNotFoundException), a stream that
+     * fails mid-read, an expired grant (e.g. after a process restart) that makes `openInputStream`
+     * throw SecurityException, and content that is not an image.
+     */
     @Test
-    fun aUriThatCannotBeOpenedGivesNull() = runTest {
-        // Nothing registered: Robolectric's media provider answers with a FileNotFoundException.
+    fun aUriThatDoesNotYieldAnImageGivesNull() = runTest {
         assertThat(preparer.prepare(uri("missing"))).isNull()
-    }
-
-    @Test
-    fun aUriWhoseStreamFailsMidReadGivesNull() = runTest {
-        val uri = uri("broken")
-        serve(uri) {
-            object : InputStream() {
-                override fun read(): Int = throw IOException("disk on fire")
-                override fun read(b: ByteArray, off: Int, len: Int): Int = throw IOException("disk on fire")
-            }
+        val suppliers = mapOf<String, () -> InputStream>(
+            "broken" to {
+                object : InputStream() {
+                    override fun read(): Int = throw IOException("disk on fire")
+                    override fun read(b: ByteArray, off: Int, len: Int): Int = throw IOException("disk on fire")
+                }
+            },
+            "revoked" to { throw SecurityException("Permission Denial: opening provider from ProcessRecord") },
+            "text" to { ByteArrayInputStream("definitely not an image".toByteArray()) },
+        )
+        for ((path, supplier) in suppliers) {
+            serve(uri(path), supplier)
+            assertThat(preparer.prepare(uri(path))).isNull()
         }
-        assertThat(preparer.prepare(uri)).isNull()
-    }
-
-    /** An expired grant (e.g. after a process restart) makes `openInputStream` throw `SecurityException`. */
-    @Test
-    fun aUriWhosePermissionWasRevokedGivesNull() = runTest {
-        val uri = uri("revoked")
-        shadowOf(context.contentResolver).registerInputStreamSupplier(uri) {
-            throw SecurityException("Permission Denial: opening provider from ProcessRecord")
-        }
-        assertThat(preparer.prepare(uri)).isNull()
     }
 
     /** The `null` arm of `openInputStream` (see [NullOpeningProvider]) must not become an NPE. */
@@ -369,13 +314,6 @@ class OutgoingImagePreparerTest {
         // The resolver really answers with null here, not with an exception.
         assertThat(context.contentResolver.openInputStream(uri)).isNull()
 
-        assertThat(preparer.prepare(uri)).isNull()
-    }
-
-    @Test
-    fun aUriThatHoldsSomethingOtherThanAnImageGivesNull() = runTest {
-        val uri = uri("text")
-        serve(uri) { ByteArrayInputStream("definitely not an image".toByteArray()) }
         assertThat(preparer.prepare(uri)).isNull()
     }
 

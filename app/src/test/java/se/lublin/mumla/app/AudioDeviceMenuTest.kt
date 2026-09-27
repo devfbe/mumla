@@ -34,7 +34,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.AudioControls
 import se.lublin.humla.IHumlaSession
@@ -46,6 +45,8 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.session.isConnected
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.assertUntouched
+import se.lublin.mumla.testing.offerCommunicationDevices
 import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubState
@@ -77,13 +78,7 @@ class AudioDeviceMenuTest {
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
         audioManager = app.getSystemService(AudioManager::class.java)
-        shadowOf(audioManager).setAvailableCommunicationDevices(
-            listOf(
-                platformDevice(11, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, ""),
-                platformDevice(12, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, ""),
-                platformDevice(17, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "AA", "Sony WH"),
-            ),
-        )
+        audioManager.offerCommunicationDevices()
 
         session = mockk<IHumlaSession>(relaxed = true).stubConnected()
         audio = session.stubAudio()
@@ -100,25 +95,11 @@ class AudioDeviceMenuTest {
 
     private val activity: ServiceHostActivity get() = controller.get()
 
-    /** `AudioDeviceInfoBuilder` can set neither an id nor an address. */
-    private fun platformDevice(id: Int, type: Int, address: String, name: String = "Robolectric") =
-        mockk<AudioDeviceInfo> {
-            every { this@mockk.id } returns id
-            every { this@mockk.type } returns type
-            every { this@mockk.address } returns address
-            every { productName } returns name
-        }
-
     private fun disconnected() {
         session.stubState(SessionState.Disconnected())
     }
 
     private fun tap(item: MenuItem): Boolean = chooser.onMenuItemSelected(item)
-
-    private fun assertAudioManagerUntouched() {
-        assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
-        assertThat(audioManager.communicationDevice).isNull()
-    }
 
     /** The real menu resource, inflated and prepared the way the action bar does it. */
     private fun prepared(): Menu {
@@ -325,7 +306,7 @@ class AudioDeviceMenuTest {
         assertThat(settings.preferredAudioDevice)
             .isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "AA"))
         verify(exactly = 0) { audio.selectDevice(any()) }
-        assertAudioManagerUntouched()
+        audioManager.assertUntouched()
         assertThat(activity.menuInvalidations).isGreaterThan(before)
     }
 
@@ -338,7 +319,7 @@ class AudioDeviceMenuTest {
 
         assertThat(settings.preferredAudioDevice).isNull()
         verify(exactly = 0) { audio.selectAutomaticDevice() }
-        assertAudioManagerUntouched()
+        audioManager.assertUntouched()
     }
 
     /** A tap on a session device after the connection went away, which the platform does not offer, does nothing. */
@@ -351,7 +332,7 @@ class AudioDeviceMenuTest {
 
         verify(exactly = 0) { audio.selectDevice(any()) }
         assertThat(settings.preferredAudioDevice).isNull()
-        assertAudioManagerUntouched()
+        audioManager.assertUntouched()
     }
 
     /** Nothing runs without a session, so there is no echo canceller to show. */

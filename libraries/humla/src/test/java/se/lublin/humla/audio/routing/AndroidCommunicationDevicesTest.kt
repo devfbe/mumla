@@ -35,6 +35,7 @@ import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadows.AudioDeviceInfoBuilder
 import org.robolectric.shadows.ShadowAudioManager
+import se.lublin.humla.testutil.idleMainLooper
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -154,22 +155,22 @@ class AndroidCommunicationDevicesTest {
         shadowOf(audioManager).setAvailableCommunicationDevices(emptyList())
         val invocations = AtomicInteger()
         devices.setOnChangedListener { invocations.incrementAndGet() }
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         val afterRegistration = invocations.get()
 
         val headset = sco()
         shadowOf(audioManager).addAvailableCommunicationDevice(headset, true)
         assertThat(invocations.get()).isEqualTo(afterRegistration) // posted, not run inline
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(invocations.get()).isEqualTo(afterRegistration + 1)
 
         shadowOf(audioManager).removeAvailableCommunicationDevice(headset, true)
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(invocations.get()).isEqualTo(afterRegistration + 2)
 
         devices.setOnChangedListener(null)
         shadowOf(audioManager).addAvailableCommunicationDevice(headset, true)
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(invocations.get()).isEqualTo(afterRegistration + 2)
     }
 
@@ -240,17 +241,17 @@ class AndroidCommunicationDevicesTest {
         val invocations = AtomicInteger()
         devices.setOnChangedListener { invocations.incrementAndGet() }
         // The device callback reports the devices already present on registration; flush that.
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         val registered = invocations.get()
 
         shadowOf(audioManager).callOnCommunicationDeviceChangedListeners(device)
         assertThat(invocations.get()).isEqualTo(registered) // posted, not run inline
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(invocations.get()).isEqualTo(registered + 1)
 
         devices.setOnChangedListener(null)
         shadowOf(audioManager).callOnCommunicationDeviceChangedListeners(null)
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
 
         assertThat(invocations.get()).isEqualTo(registered + 1)
     }

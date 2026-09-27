@@ -20,9 +20,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowDialog
 import se.lublin.humla.net.HumlaCertificateGenerator
 import se.lublin.humla.net.Pkcs12Certificates
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaSQLiteDatabase
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
 import java.io.ByteArrayOutputStream
 import java.io.IOException

@@ -20,7 +20,7 @@ package se.lublin.mumla.audio
 import android.app.Application
 import android.media.AudioDeviceInfo
 import androidx.test.core.app.ApplicationProvider
-import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,51 +36,33 @@ import se.lublin.mumla.R
 class AudioDeviceLabelsTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
 
-    private fun label(type: Int, name: String = "Pixel 9") =
+    private fun label(type: Int, name: String) =
         AudioDeviceLabels.label(app.resources, CommunicationDevice(1, type, name))
 
+    /**
+     * Built-in devices are named for what they are, not for the phone; a cable or USB headset by
+     * its kind; a Bluetooth one by its own name, or as a Bluetooth headset without one; anything
+     * else by its name, or as an audio device.
+     */
     @Test
-    fun builtInDevicesAreNamedForWhatTheyAreAndNotForThePhone() {
-        assertThat(label(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE))
-            .isEqualTo(app.getString(R.string.audio_device_earpiece))
-        assertThat(label(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER))
-            .isEqualTo(app.getString(R.string.audio_device_speaker))
-    }
-
-    @Test
-    fun aHeadsetOnACableIsAWiredHeadset() {
-        assertThat(label(AudioDeviceInfo.TYPE_WIRED_HEADSET))
-            .isEqualTo(app.getString(R.string.audio_device_wired))
-        assertThat(label(AudioDeviceInfo.TYPE_WIRED_HEADPHONES))
-            .isEqualTo(app.getString(R.string.audio_device_wired))
-    }
-
-    @Test
-    fun aUsbDeviceIsAUsbHeadset() {
-        assertThat(label(AudioDeviceInfo.TYPE_USB_HEADSET))
-            .isEqualTo(app.getString(R.string.audio_device_usb))
-        assertThat(label(AudioDeviceInfo.TYPE_USB_DEVICE))
-            .isEqualTo(app.getString(R.string.audio_device_usb))
-    }
-
-    @Test
-    fun aBluetoothHeadsetIsShownByItsOwnName() {
-        assertThat(label(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "Jabra Evolve")).isEqualTo("Jabra Evolve")
-        assertThat(label(AudioDeviceInfo.TYPE_BLE_HEADSET, "Pixel Buds")).isEqualTo("Pixel Buds")
-    }
-
-    @Test
-    fun anUnnamedBluetoothHeadsetIsABluetoothHeadset() {
-        assertThat(label(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, ""))
-            .isEqualTo(app.getString(R.string.audio_device_bluetooth))
-        assertThat(label(AudioDeviceInfo.TYPE_HEARING_AID, "  "))
-            .isEqualTo(app.getString(R.string.audio_device_bluetooth))
-    }
-
-    @Test
-    fun anythingElseIsShownByItsNameOrAsAnAudioDevice() {
-        assertThat(label(AudioDeviceInfo.TYPE_HDMI, "TV")).isEqualTo("TV")
-        assertThat(label(AudioDeviceInfo.TYPE_HDMI, ""))
-            .isEqualTo(app.getString(R.string.audio_device_other))
+    fun eachDeviceTypeIsLabelled() {
+        val phone = "Pixel 9"
+        val cases = listOf(
+            Triple(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, phone, app.getString(R.string.audio_device_earpiece)),
+            Triple(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, phone, app.getString(R.string.audio_device_speaker)),
+            Triple(AudioDeviceInfo.TYPE_WIRED_HEADSET, phone, app.getString(R.string.audio_device_wired)),
+            Triple(AudioDeviceInfo.TYPE_WIRED_HEADPHONES, phone, app.getString(R.string.audio_device_wired)),
+            Triple(AudioDeviceInfo.TYPE_USB_HEADSET, phone, app.getString(R.string.audio_device_usb)),
+            Triple(AudioDeviceInfo.TYPE_USB_DEVICE, phone, app.getString(R.string.audio_device_usb)),
+            Triple(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "Jabra Evolve", "Jabra Evolve"),
+            Triple(AudioDeviceInfo.TYPE_BLE_HEADSET, "Pixel Buds", "Pixel Buds"),
+            Triple(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, "", app.getString(R.string.audio_device_bluetooth)),
+            Triple(AudioDeviceInfo.TYPE_HEARING_AID, "  ", app.getString(R.string.audio_device_bluetooth)),
+            Triple(AudioDeviceInfo.TYPE_HDMI, "TV", "TV"),
+            Triple(AudioDeviceInfo.TYPE_HDMI, "", app.getString(R.string.audio_device_other)),
+        )
+        for ((type, name, expected) in cases) {
+            assertWithMessage("type $type named '$name'").that(label(type, name)).isEqualTo(expected)
+        }
     }
 }

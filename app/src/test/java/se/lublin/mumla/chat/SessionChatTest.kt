@@ -29,7 +29,7 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.Message
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.testing.textMessage
 import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.testing.stubState

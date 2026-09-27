@@ -4,21 +4,15 @@ import android.content.Context
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import org.junit.Before
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsPlatformKeysTest {
-    private lateinit var context: Context
-    private lateinit var settings: Settings
-
-    @Before
-    fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-        settings = Settings.getInstance(context)
-    }
+    private val context: Context = ApplicationProvider.getApplicationContext()
+    private val settings = Settings.getInstance(context)
 
     /** A connected Bluetooth headset is used without being asked for, as in the phone app. */
     @Test
@@ -35,25 +29,15 @@ class SettingsPlatformKeysTest {
         assertThat(Settings.getInstance(context).isBluetoothScoEnabled).isFalse()
     }
 
+    /** Unset and unknown values mean AUTO. */
     @Test
-    fun mediaButtonActionDefaultsToAuto() {
+    fun mediaButtonActionReadsTheStoredValue() {
         assertThat(settings.mediaButtonAction).isEqualTo(MediaButtonAction.AUTO)
-    }
-
-    @Test
-    fun mediaButtonActionReadsStoredValue() {
-        PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putString("media_button_action", "mute").commit()
-
-        assertThat(settings.mediaButtonAction).isEqualTo(MediaButtonAction.MUTE)
-    }
-
-    @Test
-    fun mediaButtonActionFallsBackToAutoForUnknownValue() {
-        PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putString("media_button_action", "bogus").commit()
-
-        assertThat(settings.mediaButtonAction).isEqualTo(MediaButtonAction.AUTO)
+        for ((stored, action) in listOf("mute" to MediaButtonAction.MUTE, "bogus" to MediaButtonAction.AUTO)) {
+            PreferenceManager.getDefaultSharedPreferences(context)
+                .edit().putString("media_button_action", stored).commit()
+            assertWithMessage(stored).that(settings.mediaButtonAction).isEqualTo(action)
+        }
     }
 
     @Test

@@ -18,9 +18,9 @@
 package se.lublin.humla.audio.capture
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
-import kotlin.math.pow
-import kotlin.math.roundToInt
+import se.lublin.humla.audio.frameAt
 
 /**
  * The adaptive gate: it follows a talker around the room, and a single keyboard click cannot open
@@ -29,12 +29,6 @@ import kotlin.math.roundToInt
 class AdaptiveVoiceGateTest {
     private var nowNanos = 0L
     private fun detector(config: VadConfig) = VoiceActivityDetector(config) { nowNanos }
-
-    /** A constant frame whose RMS is exactly [dbfs] relative to full scale. */
-    private fun frameAt(dbfs: Float, length: Int = 480): ShortArray {
-        val amplitude = (32768.0 * 10.0.pow(dbfs / 20.0)).roundToInt().coerceIn(0, 32767)
-        return ShortArray(length) { amplitude.toShort() }
-    }
 
     private fun advanceOneFrame() {
         nowNanos += 10_000_000L
@@ -86,35 +80,18 @@ class AdaptiveVoiceGateTest {
 
     // --- the onset requirement, which is the keyboard-click fix ------------------------------
 
-    /** A click is one frame; speech is not. */
-    @Test
-    fun `a single loud frame does not open the gate and two consecutive ones do`() {
-        val config = VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 2)
-
-        val click = detector(config)
-        click.run(-60f, 20)
-        assertThat(click.run(-20f, 1)).containsExactly(false)
-
-        val speech = detector(config)
-        speech.run(-60f, 20)
-        assertThat(speech.run(-20f, 2)).containsExactly(false, true).inOrder()
-    }
-
-    @Test
-    fun `one frame of onset is the legacy behaviour and lets the click through`() {
-        val click = detector(VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1))
-        click.run(-60f, 20)
-        assertThat(click.run(-20f, 1)).containsExactly(true)
-    }
-
-    /** A frame is 10 ms, so `onsetFrames` costs `(onsetFrames - 1) * 10 ms` at the start of a word. */
+    /**
+     * A click is one frame; speech is not. With two frames of onset a single loud frame stays shut
+     * and two open the gate; one frame is the legacy behaviour and lets the click through. A frame
+     * is 10 ms, so `onsetFrames` costs `(onsetFrames - 1) * 10 ms` at the start of a word.
+     */
     @Test
     fun `the onset requirement costs exactly one frame of speech per frame demanded`() {
         for (onset in 1..4) {
             val d = detector(VadConfig.adaptive(holdTimeMs = 0, onsetFrames = onset))
             d.run(-60f, 20)
             val opened = d.run(-20f, 8).indexOf(true)
-            assertThat(opened).isEqualTo(onset - 1)
+            assertWithMessage("onset $onset").that(opened).isEqualTo(onset - 1)
         }
     }
 

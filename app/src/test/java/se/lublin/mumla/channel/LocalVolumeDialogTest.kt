@@ -24,9 +24,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ThemedActivity
-import se.lublin.mumla.testing.idleMainLooper
 
 @RunWith(RobolectricTestRunner::class)
 class LocalVolumeDialogTest {

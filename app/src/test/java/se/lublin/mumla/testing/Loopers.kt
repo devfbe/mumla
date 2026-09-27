@@ -17,12 +17,8 @@
 
 package se.lublin.mumla.testing
 
-import android.os.Looper
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.testutil.awaitUntil
-
-/** Runs everything queued on the paused main looper. */
-fun idleMainLooper() = shadowOf(Looper.getMainLooper()).idle()
+import se.lublin.humla.testutil.idleMainLooper
 
 /**
  * Drains the main looper until [condition] holds, for work that hops to a background thread and

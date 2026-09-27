@@ -27,6 +27,7 @@ class ToggleInputModeTest {
         val mode = ToggleInputMode()
         assertThat(mode.shouldTransmit(ShortArray(480) { 32767 }, 480, 1.0f)).isFalse()
         mode.setTalkingOn(true)
+        assertThat(mode.isTalkingOn).isTrue()
         assertThat(mode.shouldTransmit(ShortArray(480), 480, 0.0f)).isTrue()
         mode.setTalkingOn(false)
         assertThat(mode.isTalkingOn).isFalse()

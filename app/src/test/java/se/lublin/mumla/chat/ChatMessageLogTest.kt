@@ -1,13 +1,12 @@
 package se.lublin.mumla.chat
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import se.lublin.mumla.testing.info
 
 class ChatMessageLogTest {
-    private fun info(body: String): IChatMessage =
-        IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
-
     @Test
     fun keepsEveryMessageUntilTheCapacityIsReached() {
         val log = ChatMessageLog()
@@ -75,24 +74,13 @@ class ChatMessageLogTest {
     }
 
     @Test
-    fun aSmallerCapacityIsHonoured() {
-        val log = ChatMessageLog(capacity = 2)
+    fun aSmallerCapacityKeepsTheNewest() {
+        for ((capacity, kept) in listOf(2 to listOf("b", "c"), 1 to listOf("c"))) {
+            val log = ChatMessageLog(capacity)
+            listOf("a", "b", "c").forEach { log.add(info(it)) }
 
-        log.add(info("a"))
-        log.add(info("b"))
-        log.add(info("c"))
-
-        assertThat(log.snapshot().map { it.body }).containsExactly("b", "c").inOrder()
-    }
-
-    @Test
-    fun aCapacityOfOneKeepsTheNewest() {
-        val log = ChatMessageLog(capacity = 1)
-
-        log.add(info("a"))
-        log.add(info("b"))
-
-        assertThat(log.snapshot().map { it.body }).containsExactly("b")
+            assertWithMessage("capacity $capacity").that(log.snapshot().map { it.body }).isEqualTo(kept)
+        }
     }
 
     @Test

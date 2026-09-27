@@ -26,20 +26,19 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.UserStats
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.testutil.idleMainLooper
+import se.lublin.humla.testutil.idleMainLooperFor
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.ThemedActivity
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubActions
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubEvents
-import android.os.Looper
 import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
@@ -103,11 +102,11 @@ class UserInfoTest {
         idleMainLooper()
         assertThat(text.text.toString()).contains("Operating system: Linux Ubuntu 24.04")
 
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+        idleMainLooperFor(Duration.ofSeconds(5))
         verify(exactly = 2) { actions.requestUserStats(7) }
 
         dialog.dismiss()
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(20))
+        idleMainLooperFor(Duration.ofSeconds(20))
         verify(exactly = 2) { actions.requestUserStats(7) }
     }
 }

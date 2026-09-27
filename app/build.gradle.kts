@@ -44,6 +44,8 @@ android {
 
         buildConfigField("long", "TIMESTAMP", "${System.currentTimeMillis()}L")
         buildConfigField("String", "VERSIONTAG", "\"${gitDescribe.split("-")[0]}\"")
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -138,6 +140,7 @@ dependencies {
     testImplementation(testFixtures(project(":libraries:humla")))
     testImplementation(libs.androidx.fragment.testing)
     testImplementation(libs.okhttp.mockwebserver)
+    androidTestImplementation(libs.bundles.android.test)
     // A manifest-only artifact: it must reach the merged debug manifest Robolectric reads.
     debugImplementation(libs.androidx.fragment.testing.manifest)
 }

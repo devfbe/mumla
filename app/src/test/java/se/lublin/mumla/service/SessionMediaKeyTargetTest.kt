@@ -14,6 +14,7 @@ import se.lublin.humla.model.UserState
 import se.lublin.humla.session.SessionState
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.selfServerState
 import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
@@ -26,12 +27,8 @@ class SessionMediaKeyTargetTest {
     private val audio = session.stubAudio()
     private val target = SessionMediaKeyTarget(SessionManager.get(ApplicationProvider.getApplicationContext<Context>()))
 
-    private fun self(muted: Boolean, deafened: Boolean) = session.stubModel(
-        serverState(self = 1) {
-            channel(0, "Root")
-            user(UserState(1, "me", 0, isSelfMuted = muted, isSelfDeafened = deafened))
-        },
-    )
+    private fun self(muted: Boolean, deafened: Boolean) =
+        session.stubModel(selfServerState(UserState(1, "me", 0, isSelfMuted = muted, isSelfDeafened = deafened)))
 
     @Test
     fun toggleMuteMutesAnUnmutedUserKeepingDeafenOff() {

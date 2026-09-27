@@ -20,7 +20,6 @@ import android.content.Context
 import android.content.DialogInterface
 import android.os.Bundle
 import android.widget.EditText
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import androidx.test.core.app.ApplicationProvider
@@ -39,12 +38,13 @@ import se.lublin.humla.net.HumlaCertificateGenerator
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.RejectType
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.ThemedActivity
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.message
 import se.lublin.mumla.testing.stubState
 import se.lublin.mumla.util.MumlaTrustStore
 import java.io.ByteArrayOutputStream
@@ -124,7 +124,7 @@ class ConnectionDialogsTest {
         show(SessionState.ConnectionLost(2_000L, 1, DisconnectReason.Network("reset", IOException("boom"))))
 
         val dialog = checkNotNull(dialog("connection_error"))
-        val message = dialog.findViewById<TextView>(android.R.id.message)!!.text.toString()
+        val message = dialog.message()
         assertThat(message).contains("reset")
         assertThat(message).contains("boom")
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()

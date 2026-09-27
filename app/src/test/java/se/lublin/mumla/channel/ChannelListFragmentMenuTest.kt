@@ -25,15 +25,15 @@ import io.mockk.mockk
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.UserState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
-import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.addUnderChatParent
+import se.lublin.mumla.testing.hostWith
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubModel
@@ -49,13 +49,9 @@ class ChannelListFragmentMenuTest {
     @Before
     fun setUp() {
         session.stubConnected()
-        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        controller.get().bind(session)
-        val parent = ChatTargetParentFragment()
-        controller.get().supportFragmentManager.beginTransaction()
-            .add(parent, "parent").commitNow()
+        controller = hostWith(session)
         fragment = ChannelListFragment.newInstance(pinned = false)
-        parent.childFragmentManager.beginTransaction().add(fragment, "list").commitNow()
+        controller.get().addUnderChatParent(fragment, "list")
     }
 
     private val activity: ServiceHostActivity get() = controller.get()

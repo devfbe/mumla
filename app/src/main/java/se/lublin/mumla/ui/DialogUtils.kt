@@ -1,12 +1,12 @@
 package se.lublin.mumla.ui
 
 import android.content.Context
-import android.util.Log
 import android.view.LayoutInflater
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.core.text.HtmlCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
@@ -96,7 +96,7 @@ private data class Version(val major: Int, val minor: Int, val patch: Int) : Com
             for (part in version.substringBefore('-').split('.').take(PARTS)) {
                 val number = part.toIntOrNull()
                 if (number == null) {
-                    Log.d("DialogUtils", "Failed to parse version string: $version")
+                    HumlaLog.d("DialogUtils", "Failed to parse version string: $version")
                     break
                 }
                 numbers += number

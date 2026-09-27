@@ -33,7 +33,7 @@ import java.io.IOException
  * Teardown cancels the coroutines' continuations, not a running export. The exported file must
  * survive dismissal: the receiving app opens it afterwards.
  *
- * `FileProvider.getUriForFile` throws for files outside `shared_image_paths.xml`, which must keep
+ * `FileProvider.getUriForFile` throws for files outside `file_provider_paths.xml`, which must keep
  * publishing [ImageShareExporter]'s directory. Fullscreen comes from `Theme.Mumla.ImageViewer`
  * (`windowIsFloating=false`). No timeout here: the image HTTP client has its own total budget.
  */

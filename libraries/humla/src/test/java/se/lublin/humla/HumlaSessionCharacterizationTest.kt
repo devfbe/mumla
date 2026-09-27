@@ -19,7 +19,8 @@ package se.lublin.humla
 
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
-import org.junit.After
+import com.google.common.truth.Truth.assertWithMessage
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -32,6 +33,8 @@ import se.lublin.humla.audio.PipelineSettings
 import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
+import se.lublin.humla.audio.capture.VadConfig
+import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
@@ -44,10 +47,12 @@ import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.session.messageRes
 import se.lublin.humla.testutil.EventRecorder
+import se.lublin.humla.testutil.Harnesses
 import se.lublin.humla.testutil.HumlaSessionHarness
-import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.testutil.testSession
+import se.lublin.humla.testutil.Sessions
+import se.lublin.humla.testutil.connectionError
 import se.lublin.humla.util.VoiceTargetMode
 
 /**
@@ -57,19 +62,15 @@ import se.lublin.humla.util.VoiceTargetMode
 @RunWith(RobolectricTestRunner::class)
 class HumlaSessionCharacterizationTest {
     private val server = Server(-1, "test", "127.0.0.1", 64738, "me", "")
-    private val sessions = mutableListOf<HumlaSession>()
-    private val harnesses = mutableListOf<HumlaSessionHarness>()
+    @get:Rule
+    internal val sessions = Sessions()
 
-    @After
-    fun tearDown() {
-        sessions.forEach { it.close() }
-        harnesses.forEach { it.close() }
-    }
+    @get:Rule
+    internal val harnesses = Harnesses()
 
-    private fun session(config: SessionConfig = SessionConfig()): HumlaSession =
-        testSession(config).also { sessions += it }
+    private fun session(config: SessionConfig = SessionConfig()): HumlaSession = sessions.start(config)
 
-    private fun harness(): HumlaSessionHarness = HumlaSessionHarness().also { harnesses += it }
+    private fun harness(): HumlaSessionHarness = harnesses.start()
 
     @Test
     fun startsDisconnectedWithNothingBuilt() {
@@ -82,21 +83,10 @@ class HumlaSessionCharacterizationTest {
         assertThat(session.audio.route.value).isNull()
     }
 
-    @Test
-    fun startsWithVoiceActivityTransmitAndNoVoiceTarget() {
-        val session = session()
-
-        assertThat(session.audio.transmitMode).isEqualTo(TransmitMode.VOICE_ACTIVITY)
-        assertThat(session.voiceTargetId).isEqualTo(0.toByte())
-        assertThat(session.actions.voiceTargetMode).isEqualTo(VoiceTargetMode.NORMAL)
-        assertThat(session.actions.whisperTarget).isNull()
-        assertThat(session.audio.isTalking).isFalse()
-    }
-
     /** SCO state comes from `AudioRouter`, not from an `ACTION_SCO_AUDIO_STATE_UPDATED` receiver. */
     @Test
     fun noScoBroadcastReceiverIsRegistered() {
-        testSession(devices = null).also { sessions += it }
+        sessions.start(devices = null)
 
         @Suppress("DEPRECATION")
         val scoReceivers = shadowOf(RuntimeEnvironment.getApplication()).registeredReceivers
@@ -124,8 +114,7 @@ class HumlaSessionCharacterizationTest {
         h.session.connect()
 
         assertThat(h.session.state.value).isEqualTo(SessionState.Connecting)
-        awaitUntil(description = "socket opened") {
-            h.mainLooper.idle()
+        h.drainUntil("socket opened") {
             h.transports.tcps.firstOrNull()?.isConnectCalled == true
         }
         assertThat(h.transports.tcps[0].connectHost).isEqualTo("127.0.0.1")
@@ -210,17 +199,6 @@ class HumlaSessionCharacterizationTest {
         assertThat(session.configure(SessionConfig(ConnectionConfig(forceTcp = true)))).isTrue()
     }
 
-    @Test
-    fun aCleanDisconnectGoesToDisconnectedAndNeverReconnects() {
-        for (autoReconnect in listOf(false, true)) {
-            val session = session(SessionConfig(autoReconnect = autoReconnect))
-
-            session.onConnectionDisconnected(null)
-
-            assertThat(session.state.value).isEqualTo(SessionState.Disconnected())
-        }
-    }
-
     /** What ended a live connection reaches the state as a typed reason, with no protocol types. */
     @Test
     fun theReasonOfAnEndedConnectionIsInTheState() {
@@ -238,30 +216,17 @@ class HumlaSessionCharacterizationTest {
         val h = harness()
         val chain = TestCertificates.leaf().chain
         h.session.connect()
-        awaitUntil(description = "socket opened") {
-            h.mainLooper.idle()
+        h.drainUntil("socket opened") {
             h.transports.tcps.firstOrNull()?.isConnectCalled == true
         }
 
         h.transports.tcps[0].simulateHandshakeFailure(chain)
-        awaitUntil(description = "the end is reported") {
-            h.mainLooper.idle()
+        h.drainUntil("the end is reported") {
             h.session.state.value is SessionState.Disconnected
         }
 
         val reason = (h.session.state.value as SessionState.Disconnected).reason
         assertThat(reason).isEqualTo(DisconnectReason.TlsUntrusted(chain.toList()))
-    }
-
-    /** A disconnect drops the voice target and empties the whisper slots. */
-    @Test
-    fun aDisconnectClearsTheVoiceTargetAndTheWhisperSlots() {
-        val session = session()
-
-        session.onConnectionDisconnected(null)
-
-        assertThat(session.voiceTargetId).isEqualTo(0.toByte())
-        assertThat(session.actions.whisperTarget).isNull()
     }
 
     /** Info is dropped before synchronization; warnings and errors are not. */
@@ -352,5 +317,47 @@ class HumlaSessionCharacterizationTest {
         session.disconnect()
         session.cancelReconnect()
         assertThat(session.state.value).isEqualTo(SessionState.Disconnected())
+    }
+
+    /**
+     * A lost connection or a clean disconnect clears the transmit toggle: the next connection
+     * starts silent, and nothing sets it back without a key press.
+     */
+    @Test
+    fun theEndOfAConnectionClearsTheTransmitToggle() {
+        for (error in listOf(connectionError(), null)) {
+            val session = session()
+            session.audio.setTalking(true)
+            assertThat(session.audio.isTalking).isTrue()
+
+            session.onConnectionDisconnected(error)
+
+            assertWithMessage("ended by $error").that(session.audio.isTalking).isFalse()
+        }
+    }
+
+    @Test
+    fun theWholeVadConfigurationReachesTheLiveDetector() {
+        val session = session()
+        assertThat(session.audioSession.activityInputMode.vadConfig).isEqualTo(VadConfig.DEFAULT)
+        val config = VadConfig.adaptive(
+            snrFraction = 0.42f, holdTimeMs = 310L, onsetFrames = 3,
+            hysteresisDb = 9f, adaptiveFloor = false, manualFloorDbfs = -52f,
+        )
+
+        session.configure(SessionConfig(audio = AudioSettings(vad = config)))
+
+        assertThat(session.audioSession.activityInputMode.vadConfig).isEqualTo(config)
+        // A live object, which is what makes a change free of a rebuild.
+        assertThat(session.audioSession.config).isEqualTo(AudioConfig())
+    }
+
+    @Test
+    fun everyVadModeTheSettingsScreenCanWriteArrivesAsThatMode() {
+        for (mode in VadMode.entries) {
+            val session = session()
+            session.configure(SessionConfig(audio = AudioSettings(vad = VadConfig(mode, 0.7f, 0.2f, 120L))))
+            assertWithMessage("$mode").that(session.audioSession.activityInputMode.vadConfig.mode).isEqualTo(mode)
+        }
     }
 }

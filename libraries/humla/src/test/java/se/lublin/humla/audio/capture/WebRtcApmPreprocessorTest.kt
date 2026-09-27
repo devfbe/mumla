@@ -21,7 +21,6 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import java.lang.reflect.Modifier
 import se.lublin.humla.audio.capture.fakes.FakeWebRtcApmApi
 
 /** The WebRTC APM as a capture stage that also takes the playback reverse stream. */
@@ -90,8 +89,11 @@ class WebRtcApmPreprocessorTest {
         val api = FakeWebRtcApmApi(levelDbfs = -35f, onCapture = { it.fill(3) })
         val frame = ShortArray(FRAME) { 500 }
 
-        val probability = WebRtcApmPreprocessor(api, ONE).process(frame)
+        val stage = WebRtcApmPreprocessor(api, ONE)
 
+        val probability = stage.process(frame)
+
+        assertThat(stage.rejectedFrames).isEqualTo(0)
         assertThat(frame[0]).isEqualTo(3.toShort())
         // -35 dBFS is 10 dB above the -45 floor, i.e. 10/21.7 of the adopted -45/-23.3 window.
         assertThat(probability).isWithin(0.0005f).of(0.4608f)
@@ -125,15 +127,6 @@ class WebRtcApmPreprocessorTest {
 
         assertThat(api.capturedLengths).isEmpty()
         assertThat(stage.rejectedFrames).isEqualTo(1)
-    }
-
-    @Test
-    fun `an accepted frame is not counted as rejected`() {
-        val stage = WebRtcApmPreprocessor(api, ONE)
-
-        stage.process(ShortArray(FRAME))
-
-        assertThat(stage.rejectedFrames).isEqualTo(0)
     }
 
     /**
@@ -192,20 +185,12 @@ class WebRtcApmPreprocessorTest {
     }
 
     @Test
-    fun `release destroys the apm exactly once`() {
-        val stage = WebRtcApmPreprocessor(api, ONE)
-
-        stage.release()
-        stage.release()
-
-        assertThat(api.destroyed).isEqualTo(1)
-    }
-
-    @Test
-    fun `process after release touches nothing and returns no probability`() {
+    fun `release destroys the apm exactly once and process after it touches nothing`() {
         val api = FakeWebRtcApmApi(levelDbfs = -20f)
         val stage = WebRtcApmPreprocessor(api, ONE)
         stage.release()
+        stage.release()
+        assertThat(api.destroyed).isEqualTo(1)
 
         assertThat(stage.process(ShortArray(FRAME))).isNull()
 
@@ -263,41 +248,5 @@ class WebRtcApmPreprocessorTest {
             .that(api.renderFrames.map { it[0].toInt() })
             .containsExactlyElementsIn(List(TICKS) { it })
             .inOrder()
-    }
-
-    /**
-     * `HandleTable::get()` cannot tell whose handle it is given, so another stage's handle could make
-     * the APM bridge process someone else's instance; this stage has two audio threads that could
-     * leak it.
-     */
-    @Test
-    fun `the native handle never escapes the stage`() {
-        val hierarchy = generateSequence<Class<*>>(WebRtcApmPreprocessor::class.java) { it.superclass }
-            .takeWhile { it != Any::class.java }
-            .toList()
-        assertWithMessage("the walk must reach the base class")
-            .that(hierarchy).contains(SingleHandleStage::class.java)
-
-        val longFields = hierarchy.flatMap { it.declaredFields.asList() }
-            .filter { !it.isSynthetic && mentionsLong(it.type) }
-        assertWithMessage("the handle must live in exactly one field")
-            .that(longFields.map { "${it.declaringClass.simpleName}.${it.name}" }).hasSize(1)
-        assertWithMessage("the one handle field must be the base class's private one")
-            .that(longFields.single().declaringClass).isEqualTo(SingleHandleStage::class.java)
-        assertThat(Modifier.isPrivate(longFields.single().modifiers)).isTrue()
-
-        val handleBearing = hierarchy.flatMap { it.declaredMethods.asList() }
-            .filter { !it.isSynthetic && !it.isBridge && !Modifier.isPrivate(it.modifiers) }
-            .filter { m -> mentionsLong(m.returnType) || m.parameterTypes.any { mentionsLong(it) } }
-        assertWithMessage("only the three callbacks, which run with the lock held, may carry the handle")
-            .that(handleBearing.map { it.name }.distinct())
-            .containsExactly("onCaptureFrame", "onFarEndFrame", "onReleaseHandle")
-    }
-
-    /** `long`, `java.lang.Long`, or an array of either (an out-parameter is an escape too). */
-    private fun mentionsLong(type: Class<*>): Boolean = when {
-        type == Long::class.javaPrimitiveType || type == Long::class.javaObjectType -> true
-        type.isArray -> mentionsLong(type.componentType!!)
-        else -> false
     }
 }

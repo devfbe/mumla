@@ -16,56 +16,25 @@ import io.mockk.slot
 import io.mockk.spyk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.audio.TransmitMode
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.Settings
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.FakeMediaKeyTarget
+import se.lublin.mumla.testing.setMediaButtonAction
 
 @RunWith(RobolectricTestRunner::class)
 class MumlaMediaSessionTest {
-    private class FakeTarget : MediaKeyTarget {
-        override var isConnected = true
-        override var transmitMode = TransmitMode.PUSH_TO_TALK
-        // Backed by a private field on purpose: `override var isTalking` would generate a JVM
-        // setTalking(Z)V that clashes with the interface's own setTalking.
-        private var talking = false
-        var stopTalkingCalls = 0
-        override val isTalking get() = talking
-        override fun setTalking(talking: Boolean) { this.talking = talking }
-        override fun stopTalking() {
-            stopTalkingCalls++
-            // Same early exit as HumlaMediaKeyTarget, so the fake can't do more than production.
-            if (!isConnected) return
-            talking = false
-        }
-        override fun toggleSelfMute() = Unit
-    }
-
-    private lateinit var context: Context
-    private lateinit var target: FakeTarget
-    private lateinit var mediaSession: MumlaMediaSession
-
-    @Before
-    fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-        target = FakeTarget()
-        mediaSession = MumlaMediaSession(context, target, Settings.getInstance(context))
-    }
+    private val context: Context = ApplicationProvider.getApplicationContext()
+    private val target = FakeMediaKeyTarget()
+    private val mediaSession = MumlaMediaSession(context, target, Settings.getInstance(context))
 
     private fun mediaButtonIntent(action: Int, keyCode: Int): Intent =
         Intent(Intent.ACTION_MEDIA_BUTTON).putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(action, keyCode))
 
-    private fun setAction(prefValue: String) {
-        PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putString(Settings.MEDIA_BUTTON_ACTION.key, prefValue).commit()
-    }
-
     private val state = MutableStateFlow<SessionState>(SessionState.Disconnected())
-
 
     @Test
     fun inactiveUntilActivated() {
@@ -93,7 +62,7 @@ class MumlaMediaSessionTest {
 
     @Test
     fun noneSettingKeepsSessionInactiveOnConnect() {
-        setAction("none")
+        setMediaButtonAction(context, "none")
         mediaSession.attach(state)
 
         state.value = SessionState.Connected
@@ -108,10 +77,10 @@ class MumlaMediaSessionTest {
         state.value = SessionState.Connected
         assertThat(mediaSession.isActive).isTrue()
 
-        setAction("none")
+        setMediaButtonAction(context, "none")
         assertThat(mediaSession.isActive).isFalse()
 
-        setAction("mute")
+        setMediaButtonAction(context, "mute")
         assertThat(mediaSession.isActive).isTrue()
     }
 
@@ -276,7 +245,7 @@ class MumlaMediaSessionTest {
         state.value = SessionState.Connected
         target.setTalking(true)
 
-        setAction("none")
+        setMediaButtonAction(context, "none")
 
         assertThat(target.stopTalkingCalls).isEqualTo(1)
         assertThat(target.isTalking).isFalse()
@@ -351,12 +320,12 @@ class MumlaMediaSessionTest {
 
     @Test
     fun switchingAwayFromNoneDoesNotStopTalking() {
-        setAction("none")
+        setMediaButtonAction(context, "none")
         mediaSession.attach(state)
         state.value = SessionState.Connected
         target.setTalking(true)
 
-        setAction("mute")
+        setMediaButtonAction(context, "mute")
 
         assertThat(mediaSession.isActive).isTrue()
         assertThat(target.stopTalkingCalls).isEqualTo(0)

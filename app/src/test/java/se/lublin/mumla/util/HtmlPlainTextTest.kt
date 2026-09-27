@@ -7,61 +7,28 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class HtmlPlainTextTest {
-
     @Test
-    fun tagsAreStrippedAndWhitespaceCollapsed() {
-        assertThat(HtmlUtils.toPlainText("  <b>hi</b>\n\n <i>there</i>  "))
-            .isEqualTo("hi there")
+    fun htmlBecomesOneLineOfPlainText() {
+        mapOf(
+            "  <b>hi</b>\n\n <i>there</i>  " to "hi there",
+            "<p>one</p><p>two<br>three</p>" to "one two three",
+            "fish &amp; chips &lt;3" to "fish & chips <3",
+            "look <img src=\"data:image/png;base64,AAAA\"/> here" to "look here",
+            "just text" to "just text",
+        ).forEach { (html, text) -> assertThat(HtmlUtils.toPlainText(html)).isEqualTo(text) }
     }
 
-    @Test
-    fun lineAndParagraphBreaksBecomeSingleSpaces() {
-        assertThat(HtmlUtils.toPlainText("<p>one</p><p>two<br>three</p>"))
-            .isEqualTo("one two three")
-    }
-
-    @Test
-    fun entitiesAreDecoded() {
-        assertThat(HtmlUtils.toPlainText("fish &amp; chips &lt;3"))
-            .isEqualTo("fish & chips <3")
-    }
-
-    @Test
-    fun imagesLeaveNoPlaceholderBehind() {
-        assertThat(HtmlUtils.toPlainText("look <img src=\"data:image/png;base64,AAAA\"/> here"))
-            .isEqualTo("look here")
-    }
-
-    @Test
-    fun plainTextIsReturnedAsIs() {
-        assertThat(HtmlUtils.toPlainText("just text")).isEqualTo("just text")
-    }
-
+    /** A link whose text is its own URL shrinks to its host; named links and host-less URLs stay. */
     @Test
     fun bareLinksAreShortenedToTheirHost() {
-        val text = HtmlUtils.toPlainTextWithShortLinks(
+        mapOf(
             "see <a href=\"https://example.org/a/b\">https://example.org/a/b</a> and " +
-                "<a href=\"https://other.org/x\">named</a>",
-        ) { host -> "[link to $host]" }
-
-        assertThat(text).isEqualTo("see [link to example.org] and named")
-    }
-
-    @Test
-    fun severalBareLinksAreEachShortened() {
-        val text = HtmlUtils.toPlainTextWithShortLinks(
-            "<a href=\"https://a.org/1\">https://a.org/1</a> <a href=\"https://b.org/2\">https://b.org/2</a>",
-        ) { host -> "<$host>" }
-
-        assertThat(text).isEqualTo("<a.org> <b.org>")
-    }
-
-    @Test
-    fun aBareLinkWithoutAHostIsKept() {
-        val text = HtmlUtils.toPlainTextWithShortLinks(
-            "<a href=\"mailto:someone\">mailto:someone</a>",
-        ) { host -> "<$host>" }
-
-        assertThat(text).isEqualTo("mailto:someone")
+                "<a href=\"https://other.org/x\">named</a>" to "see <example.org> and named",
+            "<a href=\"https://a.org/1\">https://a.org/1</a> <a href=\"https://b.org/2\">https://b.org/2</a>" to
+                "<a.org> <b.org>",
+            "<a href=\"mailto:someone\">mailto:someone</a>" to "mailto:someone",
+        ).forEach { (html, text) ->
+            assertThat(HtmlUtils.toPlainTextWithShortLinks(html) { host -> "<$host>" }).isEqualTo(text)
+        }
     }
 }

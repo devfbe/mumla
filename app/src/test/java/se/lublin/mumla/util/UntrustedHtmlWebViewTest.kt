@@ -6,7 +6,6 @@ import android.net.Uri
 import android.webkit.WebView
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -14,15 +13,8 @@ import org.robolectric.Shadows.shadowOf
 
 @RunWith(RobolectricTestRunner::class)
 class UntrustedHtmlWebViewTest {
-    private lateinit var app: Application
-    private lateinit var webView: WebView
-
-    @Before
-    fun setUp() {
-        app = ApplicationProvider.getApplicationContext()
-        webView = WebView(app)
-        webView.configureForUntrustedHtml()
-    }
+    private val app: Application = ApplicationProvider.getApplicationContext()
+    private val webView = WebView(app).apply { configureForUntrustedHtml() }
 
     @Test
     fun `network, file and content access are all blocked`() {

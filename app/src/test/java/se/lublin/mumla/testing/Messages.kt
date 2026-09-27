@@ -18,7 +18,10 @@
 package se.lublin.mumla.testing
 
 import se.lublin.humla.model.Message
+import se.lublin.mumla.chat.IChatMessage
 
 /** A text message without targets. */
 fun textMessage(body: String, actor: Int = -1, actorName: String? = null, receivedTime: Long = 0L) =
     Message(actor, actorName, emptyList(), emptyList(), emptyList(), body, receivedTime)
+
+fun info(body: String) = IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)

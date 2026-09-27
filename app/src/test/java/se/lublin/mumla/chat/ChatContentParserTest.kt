@@ -2,6 +2,7 @@ package se.lublin.mumla.chat
 
 import android.text.style.StyleSpan
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -27,16 +28,31 @@ class ChatContentParserTest {
 
     @Test
     fun bareImageHasNoText() {
-        val content = parser.parse("<img src=\"https://x.org/a.png\">") as ChatContent.Image
-        assertThat(content.source).isEqualTo("https://x.org/a.png")
-        assertThat(content.textBefore).isNull()
-        assertThat(content.textAfter).isNull()
+        for (html in listOf("<img src=\"https://x.org/a.png\">", "<img src=\"a\">")) {
+            val content = parser.parse(html) as ChatContent.Image
+            assertWithMessage(html).that(content.textBefore).isNull()
+            assertWithMessage(html).that(content.textAfter).isNull()
+        }
     }
 
+    /**
+     * The source is kept exactly as sent, whatever its scheme, and odd markup does not throw: an
+     * unquoted or single-quoted value is read, a missing or empty one is empty.
+     */
     @Test
-    fun imageSourceIsKeptAsSent() {
-        val content = parser.parse("<img src=\"data:image/jpeg;base64,%2F9j%2F4AAQ%3D\"/>") as ChatContent.Image
-        assertThat(content.source).isEqualTo("data:image/jpeg;base64,%2F9j%2F4AAQ%3D")
+    fun theImageSourceIsTheRawAttribute() {
+        mapOf(
+            "<img src=\"https://x.org/a.png\">" to "https://x.org/a.png",
+            "<img src=\"data:image/jpeg;base64,%2F9j%2F4AAQ%3D\"/>" to "data:image/jpeg;base64,%2F9j%2F4AAQ%3D",
+            "<img src=unquoted.png>" to "unquoted.png",
+            "<img src='single.png'>" to "single.png",
+            "<img>text" to "",
+            "<img src=\"\">text" to "",
+            "<img src=\"javascript:alert(1)\">" to "javascript:alert(1)",
+            "<img src=\"file:///etc/passwd\">" to "file:///etc/passwd",
+        ).forEach { (html, source) ->
+            assertWithMessage(html).that((parser.parse(html) as ChatContent.Image).source).isEqualTo(source)
+        }
     }
 
     @Test
@@ -61,48 +77,10 @@ class ChatContentParserTest {
     }
 
     @Test
-    fun unquotedAndMismatchedQuoteAttributesDoNotThrow() {
-        val content1 = parser.parse("<img src=unquoted.png>") as ChatContent.Image
-        assertThat(content1.source).isEqualTo("unquoted.png")
-
-        // Mismatched quote style: single-quoted attribute value. Must not throw.
-        val content2 = parser.parse("<img src='single.png'>") as ChatContent.Image
-        assertThat(content2.source).isEqualTo("single.png")
-    }
-
-    @Test
-    fun imgWithNoSrcAttributeDoesNotThrowAndYieldsEmptySource() {
-        val content = parser.parse("<img>text") as ChatContent.Image
-        assertThat(content.source).isEqualTo("")
-    }
-
-    @Test
-    fun imgWithEmptySrcYieldsEmptySource() {
-        val content = parser.parse("<img src=\"\">text") as ChatContent.Image
-        assertThat(content.source).isEqualTo("")
-    }
-
-    @Test
     fun severalImgTagsOnlyFirstBecomesImageContent() {
         val content = parser.parse("<img src=\"one\"><img src=\"two\"><img src=\"three\">") as ChatContent.Image
         assertThat(content.source).isEqualTo("one")
         assertThat(content.textAfter.toString()).isEqualTo("[image][image]")
-    }
-
-    @Test
-    fun nonImageSrcSchemeIsKeptRawNotInterpreted() {
-        val javascript = parser.parse("<img src=\"javascript:alert(1)\">") as ChatContent.Image
-        assertThat(javascript.source).isEqualTo("javascript:alert(1)")
-
-        val file = parser.parse("<img src=\"file:///etc/passwd\">") as ChatContent.Image
-        assertThat(file.source).isEqualTo("file:///etc/passwd")
-    }
-
-    @Test
-    fun imageOnlyMessageHasNoText() {
-        val content = parser.parse("<img src=\"a\">") as ChatContent.Image
-        assertThat(content.textBefore).isNull()
-        assertThat(content.textAfter).isNull()
     }
 
     @Test

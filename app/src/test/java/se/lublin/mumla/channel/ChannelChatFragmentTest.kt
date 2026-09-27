@@ -6,11 +6,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
-import android.os.SystemClock
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MenuItem
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
@@ -44,13 +42,13 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.model.Message
 import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.ServerState
 import se.lublin.humla.model.UserState
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.ChatAdapter
@@ -66,14 +64,17 @@ import se.lublin.mumla.chat.TestImages
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.addUnderChatParent
 import se.lublin.mumla.testing.drainMainUntil
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.info
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.layOut
 import se.lublin.mumla.testing.stubActions
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubModel
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.testing.tapThrough
 import se.lublin.mumla.testing.textMessage
 import se.lublin.mumla.testing.stubState
 
@@ -97,11 +98,13 @@ class ChannelChatFragmentTest {
     @Before
     fun setUp() {
         installSession(session.stubConnected())
+        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
     }
 
     @After
     fun tearDown() {
         if (this::controller.isInitialized) controller.close()
+        ChatImageLoaders.setForTests(null)
     }
 
     /** Delivered at once: the fragment collects on the immediate main dispatcher. */
@@ -128,16 +131,11 @@ class ChannelChatFragmentTest {
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java)
         activity = controller.create().get()
         if (!withSession) unbind()
-        parent = ChatTargetParentFragment()
-        activity.supportFragmentManager.beginTransaction()
-            .add(android.R.id.content, parent, "parent").commitNow()
         fragment = ChannelChatFragment()
-        parent.childFragmentManager.beginTransaction()
-            .add(ChatTargetParentFragment.CONTAINER_ID, fragment, "chat").commitNow()
+        parent = activity.addUnderChatParent(fragment, "chat", inContent = true)
         controller.start().resume().visible()
         idleMainLooper()
     }
-
 
     private fun itemCount(): Int = list.adapter!!.itemCount
 
@@ -145,31 +143,30 @@ class ChannelChatFragmentTest {
     private val editor: EditText get() = fragment.requireView().findViewById(R.id.chatTextEdit)
     private val sendButton: ImageButton get() = fragment.requireView().findViewById(R.id.chatTextSend)
 
-    /** Us (session 7) in [channel] (id 1), and Ann (42) in [annIn]. */
+    /** Us (session 7) in [selfIn] (1 is [channel], 2 the lounge), and Ann (42) in [annIn]. */
     private fun model(
         channel: String? = "Root",
         settings: ServerSettings? = null,
         self: Boolean = true,
-        annIn: Int = 1,
+        selfIn: Int = 1,
+        annIn: Int? = 1,
     ): ServerState = ServerState.of(
         listOf(ChannelState(0, "Server"), ChannelState(1, channel, 0), ChannelState(2, "Lounge", 0)),
-        listOfNotNull(UserState(7, "Me", 1).takeIf { self }, UserState(42, "Ann", annIn)),
+        listOfNotNull(UserState(7, "Me", selfIn).takeIf { self }, annIn?.let { UserState(42, "Ann", it) }),
         selfSession = 7,
         serverSettings = settings,
     )
 
     /** We move into the lounge (id 2). */
     private fun moveToTheLounge() {
-        model.value = ServerState.of(
-            listOf(ChannelState(0, "Server"), ChannelState(1, "Root", 0), ChannelState(2, "Lounge", 0)),
-            listOf(UserState(7, "Me", 2)),
-            selfSession = 7,
-        )
+        model.value = model(selfIn = 2, annIn = null)
         idleMainLooper()
     }
 
-    private fun info(body: String) =
-        IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
+    private fun send(text: String) {
+        editor.setText(text)
+        sendButton.performClick()
+    }
 
     @Test
     fun theSessionsChatLogIsWhatTheListShows() {
@@ -285,10 +282,8 @@ class ChannelChatFragmentTest {
 
     @Test
     fun sendingTextMarksItUpAndGoesToTheSessionChannel() {
-        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
-        editor.setText("see http://x.example/ ok")
-        sendButton.performClick()
+        send("see http://x.example/ ok")
         verify {
             actions.sendChannelTextMessage(
                 1,
@@ -301,10 +296,8 @@ class ChannelChatFragmentTest {
 
     @Test
     fun typedMarkdownIsSentAsHtmlAndTypedHtmlIsEscaped() {
-        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
-        editor.setText("**hi** <b>there</b>")
-        sendButton.performClick()
+        send("**hi** <b>there</b>")
         verify { actions.sendChannelTextMessage(1, "<b>hi</b> &lt;b&gt;there&lt;/b&gt;", false) }
     }
 
@@ -312,31 +305,21 @@ class ChannelChatFragmentTest {
     fun withoutMarkdownTheTextIsSentAsBefore() {
         PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
             .edit().putBoolean(Settings.MARKDOWN.key, false).commit()
-        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
-        editor.setText("**hi** <b>there</b>")
-        sendButton.performClick()
+        send("**hi** <b>there</b>")
         verify { actions.sendChannelTextMessage(1, "**hi** <b>there</b>", false) }
     }
 
     @Test
-    fun sendingWithAUserTargetGoesToThatUser() {
+    fun sendingWithATargetGoesToThatUserOrChannel() {
         every { actions.sendUserTextMessage(any(), any()) } returns textMessage("out")
         launch()
         selectTarget(ChatTarget.User(42, "Ann"))
-        editor.setText("hi")
-        sendButton.performClick()
-        verify { actions.sendUserTextMessage(42, "hi") }
-    }
-
-    @Test
-    fun sendingWithAChannelTargetGoesToThatChannel() {
-        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
-        launch()
+        send("hi")
         selectTarget(ChatTarget.Channel(9, "Lounge"))
-        editor.setText("hi")
-        sendButton.performClick()
-        verify { actions.sendChannelTextMessage(9, "hi", false) }
+        send("ho")
+        verify { actions.sendUserTextMessage(42, "hi") }
+        verify { actions.sendChannelTextMessage(9, "ho", false) }
     }
 
     @Test
@@ -350,8 +333,7 @@ class ChannelChatFragmentTest {
     fun aDisconnectWhileSendingIsSwallowed() {
         launch()
         session.stubState(SessionState.Disconnected())
-        editor.setText("hi")
-        sendButton.performClick()
+        send("hi")
         assertThat(editor.text.toString()).isEqualTo("hi")
     }
 
@@ -425,7 +407,6 @@ class ChannelChatFragmentTest {
     @Test
     fun aConfirmedImageIsSentAsADataUriAndTheSpinnerGoesAway() {
         model.value = model(settings = settings(0))
-        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         fragment.sendImage(smallBitmap())
         val sent = slot<String>()
@@ -556,7 +537,6 @@ class ChannelChatFragmentTest {
     @Test
     fun theConfirmationShowsThePickedImageAndSendsOnlyOnOk() {
         model.value = model(settings = settings(0))
-        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         val bitmap = smallBitmap()
         fragment.confirmImage(bitmap)
@@ -580,7 +560,6 @@ class ChannelChatFragmentTest {
     @Test
     fun theConfirmationSendsOnOk() {
         model.value = model(settings = settings(0))
-        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         fragment.confirmImage(smallBitmap())
         idleMainLooper()
@@ -600,12 +579,7 @@ class ChannelChatFragmentTest {
     @Test
     fun changingTheHintAsksForAFreshLayout() {
         launch()
-        val root = activity.findViewById<View>(android.R.id.content)
-        root.measure(
-            View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY),
-        )
-        root.layout(0, 0, 1080, 1920)
+        layOutHost()
         assertThat(editor.isLayoutRequested).isFalse()
         selectTarget(ChatTarget.User(42, "Ann"))
         assertThat(editor.isLayoutRequested).isTrue()
@@ -621,8 +595,7 @@ class ChannelChatFragmentTest {
             textMessage("hi there").also { session.stubEvents().tryEmit(HumlaEvent.MessageSent(it)) }
         }
         launch()
-        editor.setText("hi there")
-        sendButton.performClick()
+        send("hi there")
         drainMainUntil { itemCount() == 1 }
         assertThat(itemCount()).isEqualTo(1)
     }
@@ -687,24 +660,16 @@ class ChannelChatFragmentTest {
      */
     @Test
     fun theAdapterIsGivenAScopeThatDispatchesOnTheMainThread() {
-        val bitmap = smallBitmap()
-        val loader = mockk<ChatImageLoader>()
-        coEvery { loader.loadThumbnail(any(), any(), any()) } returns ImageResult.Ready(bitmap)
-        ChatImageLoaders.setForTests(loader)
-        try {
-            add(info("<img src=\"data:image/png;base64,AAAA\"/>"))
-            launch()
-            drainMainUntil { itemCount() == 1 }
-            val adapter = list.adapter as ChatAdapter
-            assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_IMAGE)
-            val holder = adapter.createViewHolder(list, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
-            adapter.bindViewHolder(holder, 0)
-            assertThat(holder.image.drawable).isNotNull()
-        } finally {
-            ChatImageLoaders.setForTests(null)
-        }
+        installThumbnailLoader(smallBitmap())
+        add(info("<img src=\"data:image/png;base64,AAAA\"/>"))
+        launch()
+        drainMainUntil { itemCount() == 1 }
+        val adapter = list.adapter as ChatAdapter
+        assertThat(adapter.getItemViewType(0)).isEqualTo(ChatAdapter.TYPE_IMAGE)
+        val holder = adapter.createViewHolder(list, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
+        adapter.bindViewHolder(holder, 0)
+        assertThat(holder.image.drawable).isNotNull()
     }
-
 
     // ---- seams: what the fragment hands the adapter, driven through a real row ---------------
 
@@ -713,14 +678,7 @@ class ChannelChatFragmentTest {
      * child ignores its visibility, and an unattached view queues its click, so row tests enter at
      * the `RecyclerView` of a laid-out window.
      */
-    private fun layOutHost() {
-        val root = activity.findViewById<View>(android.R.id.content)
-        root.measure(
-            View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY),
-        )
-        root.layout(0, 0, 1080, 1920)
-    }
+    private fun layOutHost() = activity.findViewById<View>(android.R.id.content).layOut()
 
     /** A loader that answers `Ready` without suspending, so a bound row really has a bitmap. */
     private fun installThumbnailLoader(bitmap: Bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)):
@@ -738,52 +696,28 @@ class ChannelChatFragmentTest {
     private fun imageMessage(src: String = "data:image/png;base64,AAAA", trailing: String = "") =
         info("<img src=\"$src\"/>$trailing")
 
-    /** Enters at [root] with the coordinates of [target]'s centre, the way a finger does. */
-    private fun tapThrough(root: View, target: View) {
-        var x = target.width / 2f
-        var y = target.height / 2f
-        var v: View = target
-        while (v !== root) {
-            x += v.left
-            y += v.top
-            v = v.parent as View
-        }
-        val now = SystemClock.uptimeMillis()
-        val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
-        val up = MotionEvent.obtain(now, now + 10, MotionEvent.ACTION_UP, x, y, 0)
-        root.dispatchTouchEvent(down)
-        root.dispatchTouchEvent(up)
-        down.recycle()
-        up.recycle()
-        idleMainLooper()
-    }
-
     /** Tapping an image row opens the viewer through the `onImageClicked` wire. */
     @Test
     fun tappingAPictureInTheLogOpensTheViewerOnIt() {
         val (loader, _) = installThumbnailLoader()
         // The viewer fetches the full image; this test is only about opening it.
         coEvery { loader.fetchBytes(any()) } throws ImageFetchException(ImageError.NETWORK)
-        try {
-            add(imageMessage("data:image/png;base64,TAPPED"))
-            launch()
-            drainMainUntil { itemCount() == 1 }
-            layOutHost()
-            val row = list.getChildAt(0)
-            assertThat(row).isNotNull()
-            val image = row.findViewById<ImageView>(R.id.list_chat_item_image)
-            assertThat(image.visibility).isEqualTo(View.VISIBLE)
-            assertThat(image.width).isGreaterThan(0)
+        add(imageMessage("data:image/png;base64,TAPPED"))
+        launch()
+        drainMainUntil { itemCount() == 1 }
+        layOutHost()
+        val row = list.getChildAt(0)
+        assertThat(row).isNotNull()
+        val image = row.findViewById<ImageView>(R.id.list_chat_item_image)
+        assertThat(image.visibility).isEqualTo(View.VISIBLE)
+        assertThat(image.width).isGreaterThan(0)
 
-            tapThrough(list, image)
+        tapThrough(list, image)
 
-            val viewer = fragment.parentFragmentManager
-                .findFragmentByTag(ImageViewerDialogFragment.TAG) as ImageViewerDialogFragment
-            assertThat(viewer.requireArguments().getString("source"))
-                .isEqualTo("data:image/png;base64,TAPPED")
-        } finally {
-            ChatImageLoaders.setForTests(null)
-        }
+        val viewer = fragment.parentFragmentManager
+            .findFragmentByTag(ImageViewerDialogFragment.TAG) as ImageViewerDialogFragment
+        assertThat(viewer.requireArguments().getString("source"))
+            .isEqualTo("data:image/png;base64,TAPPED")
     }
 
     /**
@@ -792,8 +726,8 @@ class ChannelChatFragmentTest {
      */
     @Test
     fun yourOwnMessagesAreAlignedToYourSideAndOtherPeoplesAreNot() {
-        add(IChatMessage.TextMessage(Message(7, "Me", emptyList(), emptyList(), emptyList(), "mine")))
-        add(IChatMessage.TextMessage(Message(9, "Ann", emptyList(), emptyList(), emptyList(), "theirs")))
+        add(IChatMessage.TextMessage(textMessage("mine", actor = 7, actorName = "Me")))
+        add(IChatMessage.TextMessage(textMessage("theirs", actor = 9, actorName = "Ann")))
         launch()
         drainMainUntil { itemCount() == 2 }
         layOutHost()
@@ -812,40 +746,31 @@ class ChannelChatFragmentTest {
     @Test
     fun theThumbnailIsAskedForAtTheDimensionResourcesBound() {
         val (_, asked) = installThumbnailLoader()
-        try {
-            add(imageMessage())
-            launch()
-            drainMainUntil { itemCount() == 1 }
-            layOutHost()
-            val expected = activity.resources.getDimensionPixelSize(R.dimen.chat_thumbnail_max)
-            assertThat(expected).isGreaterThan(0)
-            assertThat(asked).isNotEmpty()
-            assertThat(asked.first().second).isEqualTo(expected)
-            assertThat(asked.first().third).isEqualTo(expected)
-        } finally {
-            ChatImageLoaders.setForTests(null)
-        }
+        add(imageMessage())
+        launch()
+        drainMainUntil { itemCount() == 1 }
+        layOutHost()
+        val expected = activity.resources.getDimensionPixelSize(R.dimen.chat_thumbnail_max)
+        assertThat(expected).isGreaterThan(0)
+        assertThat(asked).isNotEmpty()
+        assertThat(asked.first().second).isEqualTo(expected)
+        assertThat(asked.first().third).isEqualTo(expected)
     }
 
     /** The parser the fragment builds carries the localised stand-in for a second picture. */
     @Test
     fun aSecondPictureInOneMessageIsWrittenOutAsThePlaceholder() {
         installThumbnailLoader()
-        try {
-            add(info("<img src=\"data:image/png;base64,AAAA\"/>tail<img src=\"data:image/png;base64,BBBB\"/>"))
-            launch()
-            drainMainUntil { itemCount() == 1 }
-            layOutHost()
-            val adapter = list.adapter as ChatAdapter
-            val holder = adapter.createViewHolder(list, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
-            adapter.bindViewHolder(holder, 0)
-            assertThat(holder.textAfter.text.toString())
-                .contains(activity.getString(R.string.chat_image_placeholder))
-        } finally {
-            ChatImageLoaders.setForTests(null)
-        }
+        add(info("<img src=\"data:image/png;base64,AAAA\"/>tail<img src=\"data:image/png;base64,BBBB\"/>"))
+        launch()
+        drainMainUntil { itemCount() == 1 }
+        layOutHost()
+        val adapter = list.adapter as ChatAdapter
+        val holder = adapter.createViewHolder(list, ChatAdapter.TYPE_IMAGE) as ChatAdapter.ImageHolder
+        adapter.bindViewHolder(holder, 0)
+        assertThat(holder.textAfter.text.toString())
+            .contains(activity.getString(R.string.chat_image_placeholder))
     }
-
 
     private fun registerImage(uri: Uri, bytes: ByteArray) {
         shadowOf(activity.contentResolver).registerInputStreamSupplier(uri) {
@@ -943,11 +868,9 @@ class ChannelChatFragmentTest {
         assertThat(ShadowDialog.getLatestDialog()).isNull()
     }
 
-
     @Test
     fun theSpinnerIsUpWhileAnImageIsBeingEncoded() {
         model.value = model(settings = settings(0))
-        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         assertThat(progress.visibility).isEqualTo(View.GONE)
         fragment.sendImage(smallBitmap())
@@ -992,7 +915,6 @@ class ChannelChatFragmentTest {
      */
     @Test
     fun aHardwareEnterInTheEditorSendsTheMessage() {
-        every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
         launch()
         layOutHost()
         editor.requestFocus()

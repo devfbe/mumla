@@ -15,47 +15,35 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import android.os.Looper
+import se.lublin.mumla.testing.currentScreen
+import se.lublin.mumla.testing.openScreen
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsActivityTest {
     private val activity = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
     private val preferences = PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
 
-    private fun screen(): PreferenceFragmentCompat =
-        activity.supportFragmentManager.findFragmentById(R.id.settings_container) as PreferenceFragmentCompat
-
-    private fun open(fragmentClass: Class<*>): PreferenceFragmentCompat {
-        val root = screen()
-        val entry = (0 until root.preferenceScreen.preferenceCount)
-            .map { root.preferenceScreen.getPreference(it) }
-            .single { it.fragment == fragmentClass.name }
-        root.onPreferenceTreeClick(entry)
-        shadowOf(Looper.getMainLooper()).idle()
-        return screen()
-    }
-
     private fun showDialog(fragment: PreferenceFragmentCompat, key: String): AlertDialog {
         fragment.onDisplayPreferenceDialog(requireNotNull(fragment.findPreference<Preference>(key)))
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         val dialogFragment = fragment.childFragmentManager.fragments.filterIsInstance<DialogFragment>().single()
         return dialogFragment.requireDialog() as AlertDialog
     }
 
     @Test
     fun `a screen opens on top of the index with its title, and back returns`() {
-        val general = open(GeneralSettingsFragment::class.java)
+        val general = activity.openScreen(GeneralSettingsFragment::class.java)
 
         assertThat(general).isInstanceOf(GeneralSettingsFragment::class.java)
         assertThat(activity.supportActionBar?.title).isEqualTo(activity.getString(R.string.general))
 
         activity.onBackPressedDispatcher.onBackPressed()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
 
-        assertThat(screen()).isInstanceOf(SettingsActivity.RootPreferenceFragment::class.java)
+        assertThat(activity.currentScreen()).isInstanceOf(SettingsActivity.RootPreferenceFragment::class.java)
         assertThat(activity.supportActionBar?.title).isEqualTo(activity.getString(R.string.action_settings))
         assertThat(activity.isFinishing).isFalse()
     }
@@ -69,7 +57,7 @@ class SettingsActivityTest {
 
     @Test
     fun `the slider stores the multiplied value on ok, and nothing on cancel`() {
-        val appearance = open(AppearanceSettingsFragment::class.java)
+        val appearance = activity.openScreen(AppearanceSettingsFragment::class.java)
 
         var dialog = showDialog(appearance, Settings.PTT_BUTTON_HEIGHT.key)
         val seekBar = dialog.findViewById<SeekBar>(R.id.seek_bar)!!
@@ -80,20 +68,20 @@ class SettingsActivityTest {
         assertThat(value.text.toString()).isEqualTo("$expected dp")
 
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(preferences.contains(Settings.PTT_BUTTON_HEIGHT.key)).isFalse()
 
         dialog = showDialog(appearance, Settings.PTT_BUTTON_HEIGHT.key)
         dialog.findViewById<SeekBar>(R.id.seek_bar)!!
             .onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(preferences.getInt(Settings.PTT_BUTTON_HEIGHT.key, 0)).isEqualTo(expected)
     }
 
     @Test
     fun `the key picker stores the pressed key on ok, and resets it with the neutral button`() {
-        val audio = open(AudioSettingsFragment::class.java)
+        val audio = activity.openScreen(AudioSettingsFragment::class.java)
 
         var dialog = showDialog(audio, Settings.TALK_KEY.key)
         val content = dialog.findViewById<TextView>(R.id.key_select_value_view)!!
@@ -103,12 +91,12 @@ class SettingsActivityTest {
         assertThat(content.text.toString())
             .isEqualTo(KeyEvent.keyCodeToString(KeyEvent.KEYCODE_VOLUME_UP).removePrefix("KEYCODE_"))
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(preferences.getInt(Settings.TALK_KEY.key, 0)).isEqualTo(KeyEvent.KEYCODE_VOLUME_UP)
 
         dialog = showDialog(audio, Settings.TALK_KEY.key)
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
+        idleMainLooper()
         assertThat(preferences.getInt(Settings.TALK_KEY.key, -1)).isEqualTo(0)
     }
 }

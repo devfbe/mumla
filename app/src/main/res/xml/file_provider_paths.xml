@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The FileProvider may hand out these cache subdirectories only; the cache root would also
+    publish the HTTP and WebView caches.
+-->
+<paths>
+    <cache-path name="shared_images" path="shared_images/" />
+    <cache-path name="shared_logs" path="shared_logs/" />
+</paths>

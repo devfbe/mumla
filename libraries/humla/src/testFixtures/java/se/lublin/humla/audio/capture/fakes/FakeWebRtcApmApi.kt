@@ -37,7 +37,6 @@ private const val FRAMES_PER_SECOND = 100
 internal class FakeWebRtcApmApi(
     var levelDbfs: Float = SILENCE_DBFS,
     var captureError: Int = 0,
-    var renderError: Int = 0,
     private val onCapture: (ShortArray) -> Unit = {},
     /**
      * Called for every accepted far-end frame. Sharing a list with [onCapture] makes the order of
@@ -98,7 +97,7 @@ internal class FakeWebRtcApmApi(
         if (frame.size < frameSize) return SHORT_FRAME
         renderFrames += frame.copyOf()
         onRender(frame)
-        return renderError
+        return 0
     }
 
     override fun lastCaptureLevelDbfs(handle: Long): Float {

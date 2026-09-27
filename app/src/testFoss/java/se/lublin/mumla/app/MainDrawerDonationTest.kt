@@ -11,7 +11,7 @@ import org.robolectric.Shadows.shadowOf
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ActivityMainBinding
 import se.lublin.mumla.testing.ThemedActivity
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.laidOutRows
 
 /** The foss flavor's drawer has a donation row. */
 @RunWith(RobolectricTestRunner::class)
@@ -25,21 +25,12 @@ class MainDrawerDonationTest {
 
     @Test
     fun theDonationRowOpensTheDonationLink() {
-        idleMainLooper()
-        val list = binding.leftDrawer
-        list.measure(0, 0)
-        list.layout(0, 0, WIDTH, HEIGHT)
-        val donate = (0 until list.childCount).map { list.getChildAt(it) }
+        val donate = binding.leftDrawer.laidOutRows()
             .single { (it as? TextView)?.text == activity.getString(R.string.donate_foss) }
         donate.performClick()
 
         val started = shadowOf(activity).nextStartedActivity
         assertThat(started.action).isEqualTo(Intent.ACTION_VIEW)
         assertThat(started.dataString).isEqualTo(activity.getString(R.string.donate_link_foss))
-    }
-
-    private companion object {
-        const val WIDTH = 480
-        const val HEIGHT = 4000
     }
 }

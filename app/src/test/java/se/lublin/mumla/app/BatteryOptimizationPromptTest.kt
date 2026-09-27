@@ -19,25 +19,23 @@ package se.lublin.mumla.app
 import android.app.Application
 import android.os.PowerManager
 import android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowDialog
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.testing.idleMainLooper
-import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.installSession
+import se.lublin.mumla.testing.launchMumlaActivity
+import se.lublin.mumla.testing.message
 import se.lublin.mumla.testing.stubState
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
@@ -50,15 +48,8 @@ class BatteryOptimizationPromptTest {
     private val settings = Settings.getInstance(app)
     private lateinit var activity: MumlaActivity
 
-    @Before
-    fun setUp() {
-        installDatabase(mockk(relaxed = true))
-    }
-
     private fun launch() {
-        activity = Robolectric.buildActivity(MumlaActivity::class.java).setup().get()
-        idleMainLooper()
-        ShadowDialog.getLatestDialog()?.dismiss() // the first-run guide
+        activity = launchMumlaActivity()
     }
 
     /** Makes [session] current; null stands for an ended one, as after leaving the app. */
@@ -77,7 +68,7 @@ class BatteryOptimizationPromptTest {
     private fun promptShown(): Boolean {
         val dialog = ShadowDialog.getLatestDialog() as? AlertDialog ?: return false
         return dialog.isShowing &&
-            dialog.findViewById<TextView>(android.R.id.message)?.text.toString() ==
+            dialog.message() ==
             app.getString(R.string.battery_optimization_prompt_message)
     }
 

@@ -44,6 +44,11 @@ class AudioSourcePolicyTest {
             }
         }
 
+    /**
+     * Swept over every corner: both effects at once is the one the `||`-to-`xor` mutation lives in.
+     * WebRTC echo cancellation is ours, not the platform's, but it still takes the communication
+     * source: AEC3 needs the capture and playback clocks the communication path shares.
+     */
     @Test
     fun `communication mode is needed exactly when an effect or a canceller is active`() {
         assertThat(corners).hasSize(8) // four effect corners times two cancellers
@@ -71,22 +76,4 @@ class AudioSourcePolicyTest {
             .isEqualTo(mic)
     }
 
-    /** Both effects at once is the corner the `||`-to-`xor` mutation lives in. */
-    @Test
-    fun `both android effects at once still force voice communication`() {
-        val both = AndroidAudioEffects(noiseSuppressor = true, automaticGainControl = true)
-        assertThat(AudioSourcePolicy.needsCommunicationMode(both, EchoCancellationMode.NONE)).isTrue()
-        assertThat(AudioSourcePolicy.resolve(mic, both, EchoCancellationMode.NONE)).isEqualTo(voiceComm)
-    }
-
-    /**
-     * WebRTC echo cancellation is ours, not the platform's, but it still takes the communication
-     * source: AEC3 needs the capture and playback clocks the communication path shares.
-     */
-    @Test
-    fun `webrtc echo cancellation forces voice communication`() {
-        val none = AndroidAudioEffects()
-        assertThat(AudioSourcePolicy.resolve(mic, none, EchoCancellationMode.WEBRTC)).isEqualTo(voiceComm)
-        assertThat(AudioSourcePolicy.resolve(mic, none, EchoCancellationMode.NONE)).isEqualTo(mic)
-    }
 }

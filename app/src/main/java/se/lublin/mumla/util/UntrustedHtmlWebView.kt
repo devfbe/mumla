@@ -3,10 +3,10 @@ package se.lublin.mumla.util
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import se.lublin.humla.util.HumlaLog
 
 private const val TAG = "UntrustedHtmlWebView"
 private val EXTERNAL_SCHEMES = setOf("http", "https", "mailto", "mumble")
@@ -42,7 +42,7 @@ private class ExternalLinkWebViewClient : WebViewClient() {
         try {
             view.context.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "No app to open $uri", e)
+            HumlaLog.w(TAG, "No app to open $uri", e)
         }
         return true
     }

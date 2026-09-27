@@ -73,13 +73,17 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
 
 - `app/` — the Android application (`se.lublin.mumla`), product flavors
   `foss`, `goog`, `donation`, `beta`.
-- `libraries/humla/` — the Mumble protocol implementation and audio pipeline
-  (`se.lublin.humla`); `src/Mumble.proto` is compiled to Java at build time
-  (nothing generated is checked in), crypto uses BouncyCastle, and
-  `src/main/cpp/CMakeLists.txt` builds the native codecs and audio processing
-  libraries and their JNI glue.
-- `build-logic/` — Gradle convention plugins with the Android configuration
-  shared by both modules; dependency versions live in
+- `libraries/humla-protocol/` — the platform-free half of Humla, a plain
+  Kotlin/JVM module: the Mumble protocol (`src/Mumble.proto` and
+  `src/MumbleUDP.proto` are compiled to Java at build time; nothing generated
+  is checked in), TLS/UDP transports, OCB2 crypto (BouncyCastle), the model
+  snapshots and the log facade. No `android.*` is on its classpath; its tests
+  are plain JUnit.
+- `libraries/humla/` — the Android half (`se.lublin.humla`): the session, the
+  audio pipeline and routing; `src/main/cpp/CMakeLists.txt` builds the native
+  codecs and audio processing libraries and their JNI glue.
+- `build-logic/` — Gradle convention plugins with the Android and JVM
+  configuration shared by the modules; dependency versions live in
   `gradle/libs.versions.toml`.
 - `NOTICE.md` — third-party components and licenses.
 

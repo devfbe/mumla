@@ -17,24 +17,20 @@
 
 package se.lublin.mumla.app
 
-import android.os.Looper
 import android.view.View
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.preference.PreferenceFragmentCompat
 import com.google.common.truth.Truth.assertThat
-import io.mockk.mockk
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadows.ShadowDialog
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.preference.SettingsActivity
-import se.lublin.mumla.testing.idleMainLooper
-import se.lublin.mumla.testing.installDatabase
+import se.lublin.mumla.testing.currentScreen
+import se.lublin.mumla.testing.launchMumlaActivity
 
 /** The activities draw behind the system bars and keep their controls clear of them. */
 @RunWith(RobolectricTestRunner::class)
@@ -50,10 +46,7 @@ class EdgeToEdgeTest {
 
     @Test
     fun theMainScreenPadsTheAppBarTheContentAndTheDrawer() {
-        installDatabase(mockk(relaxed = true))
-        val activity = Robolectric.buildActivity(MumlaActivity::class.java).setup().get()
-        idleMainLooper()
-        ShadowDialog.getLatestDialog()?.dismiss() // the first-run guide
+        val activity = launchMumlaActivity()
 
         activity.findViewById<View>(R.id.drawer_layout).dispatch()
 
@@ -67,9 +60,8 @@ class EdgeToEdgeTest {
     @Test
     fun theSettingsListEndsAboveTheNavigationBar() {
         val activity = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
-        shadowOf(Looper.getMainLooper()).idle()
-        val list = (activity.supportFragmentManager.findFragmentById(R.id.settings_container)
-            as PreferenceFragmentCompat).listView
+        idleMainLooper()
+        val list = activity.currentScreen().listView
 
         activity.window.decorView.dispatch()
 

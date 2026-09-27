@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 /*
  * Copyright (C) 2014 Andrew Comminos
  *
@@ -17,21 +19,10 @@
 
 plugins {
     id("mumla.android.library")
-    alias(libs.plugins.protobuf)
 }
 
 android {
     namespace = "se.lublin.humla"
-
-    sourceSets {
-        named("main") {
-            // Mumble.proto lives next to src/main, not in the plugin's default src/main/proto.
-            (this as ExtensionAware).extensions.configure<SourceDirectorySet>("proto") {
-                srcDir("src")
-                include("*.proto")
-            }
-        }
-    }
 
     externalNativeBuild {
         cmake {
@@ -43,6 +34,9 @@ android {
     testFixtures {
         enable = true
     }
+
+    // bcprov, bcpkix and bcutil each ship one; the (empty) instrumented test APK packages them.
+    packaging.resources.merges += "META-INF/LICENSE.md"
 
     defaultConfig {
         testApplicationId = "se.lublin.humla.test"
@@ -66,23 +60,15 @@ kotlin {
     explicitApi()
 }
 
-// The plugin would copy Mumble.proto into the AAR's Java resources and so into the APK; only the
-// generated classes are needed.
-tasks.configureEach {
-    if (name.endsWith("ProtoResources")) enabled = false
-}
-
-protobuf {
-    protoc {
-        artifact = libs.protobuf.protoc.get().toString()
-    }
-    generateProtoTasks {
-        all().configureEach {
-            builtins {
-                maybeCreate("java").option("lite")
-            }
-        }
-    }
+// humla-protocol is the platform-free half of this library, not a separate API: its internal
+// declarations are visible here as if they were this module's own.
+val protocol = project(":libraries:humla-protocol")
+tasks.withType<KotlinCompile>().configureEach {
+    friendPaths.from(
+        protocol.layout.buildDirectory.dir("classes/kotlin/main"),
+        protocol.layout.buildDirectory.dir("classes/kotlin/testFixtures"),
+        protocol.layout.buildDirectory.dir("libs"),
+    )
 }
 
 // Coroutine debug mode, on under -ea, renames threads while a coroutine runs; devices run without it.
@@ -91,17 +77,16 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
-    api(libs.protobuf.javalite)
-    implementation(libs.bouncycastle.prov)
-    implementation(libs.bouncycastle.pkix)
+    api(project(":libraries:humla-protocol"))
 
     // Flows are part of the public API.
     api(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.annotation)
     // Persistent maps keep each model snapshot O(change) instead of O(server).
     implementation(libs.kotlinx.collections.immutable)
-    implementation(libs.minidns.hla)
     implementation(libs.minidns.android23)
 
     testImplementation(libs.bundles.unit.test)
+    testFixturesApi(testFixtures(project(":libraries:humla-protocol")))
+    testFixturesImplementation(libs.robolectric)
 }

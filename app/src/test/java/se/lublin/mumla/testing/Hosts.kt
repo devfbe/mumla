@@ -24,12 +24,19 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
+import androidx.recyclerview.widget.RecyclerView
 import io.mockk.mockk
+import org.robolectric.Robolectric
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.channel.ChatViewModel
 import se.lublin.mumla.db.MumlaDatabase
+
+private const val TALL_LIST_WIDTH = 480
+private const val TALL_LIST_HEIGHT = 4000
 
 /** An activity in the app theme, for fragments that need nothing from their host. */
 open class ThemedActivity : AppCompatActivity() {
@@ -38,6 +45,24 @@ open class ThemedActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
     }
 }
+
+/** Lays a list out tall enough for all its rows, e.g. the drawer's, and returns the rows. */
+fun RecyclerView.laidOutRows(): List<View> {
+    idleMainLooper()
+    measure(0, 0)
+    layout(0, 0, TALL_LIST_WIDTH, TALL_LIST_HEIGHT)
+    return (0 until childCount).map(this::getChildAt)
+}
+
+/** Adds [fragment] to this activity's content view, now. */
+fun <F : Fragment> FragmentActivity.host(fragment: F): F {
+    supportFragmentManager.beginTransaction().add(android.R.id.content, fragment).commitNow()
+    return fragment
+}
+
+/** Hosts [fragment] in a new [ThemedActivity]. */
+fun <F : Fragment> hostInThemedActivity(fragment: F): F =
+    Robolectric.buildActivity(ThemedActivity::class.java).setup().get().host(fragment)
 
 /**
  * The usual host of the service-backed fragments: [bind] publishes a service to them, and a relaxed

@@ -23,6 +23,7 @@ import org.junit.Test
 import se.lublin.humla.audio.capture.CapturePreprocessorFactory
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
+import se.lublin.humla.audio.capture.Resampler
 import se.lublin.humla.audio.capture.WebRtcApmConfig
 import se.lublin.humla.audio.capture.fakes.FakeResampler
 import se.lublin.humla.audio.capture.fakes.FakeRnnoiseApi
@@ -48,6 +49,9 @@ class CaptureWiringTest {
         override fun logError(message: String) = Unit
     }
 
+    /** The native library loads in the object initialiser, so it fails as this, not an `Exception`. */
+    private fun missingLibrary() = ExceptionInInitializerError(UnsatisfiedLinkError("libhumla_native.so"))
+
     private fun factory(rnnoise: () -> se.lublin.humla.audio.native.RnnoiseApi) =
         CapturePreprocessorFactory(rnnoiseApi = rnnoise, log = { warnings += it })
 
@@ -59,16 +63,18 @@ class CaptureWiringTest {
         noise: NoiseSuppressionMode,
         echo: EchoCancellationMode,
         factory: CapturePreprocessorFactory,
-    ) = CaptureWiring.wire(48000, ContinuousInputMode(), 1f, noise, echo, logger = logger, factory = factory)
+        sampleRate: Int = 48000,
+        newResampler: (Int, Int) -> Resampler = { _, _ -> error("no resampler expected") },
+    ) = CaptureWiring.wire(
+        sampleRate, ContinuousInputMode(), 1f, noise, echo, logger = logger, factory = factory,
+        newResampler = newResampler,
+    )
 
     /** The default: one RNNoise stage and its probability on every frame. */
     @Test
     fun `the default chain denoises every frame with rnnoise`() {
         val api = FakeRnnoiseApi(probability = 0.9f, onProcess = { it.fill(11) })
-        val pipeline = CaptureWiring.wire(
-            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.RNNOISE,
-            EchoCancellationMode.NONE, logger = logger, factory = factory { api },
-        ).pipeline
+        val pipeline = wire(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.NONE, factory { api }).pipeline
 
         val frame = pipeline.process(ShortArray(FRAME) { 1000 }, FRAME)
 
@@ -78,17 +84,11 @@ class CaptureWiringTest {
         assertThat(warnings).isEmpty()
     }
 
-    /**
-     * A missing `.so` is a skipped stage, not a dead microphone. The library loads in the object
-     * initialiser, so it fails as an `ExceptionInInitializerError`, not an `Exception`.
-     */
+    /** A missing `.so` is a skipped stage, not a dead microphone. */
     @Test
     fun `a chain that cannot be built leaves capture running and says so`() {
-        val pipeline = CaptureWiring.wire(
-            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.RNNOISE,
-            EchoCancellationMode.NONE, logger = logger,
-            factory = factory { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumla_native.so")) },
-        ).pipeline
+        val pipeline = wire(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.NONE, factory { throw missingLibrary() })
+            .pipeline
 
         val frame = pipeline.process(ShortArray(FRAME) { 1234 }, FRAME)
 
@@ -101,11 +101,8 @@ class CaptureWiringTest {
     /** No stage, and no warning about a stage nobody asked for. */
     @Test
     fun `no noise suppression builds no stage and warns about nothing`() {
-        val pipeline = CaptureWiring.wire(
-            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE,
-            EchoCancellationMode.NONE, logger = logger,
-            factory = factory { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumla_native.so")) },
-        ).pipeline
+        val pipeline = wire(NoiseSuppressionMode.NONE, EchoCancellationMode.NONE, factory { throw missingLibrary() })
+            .pipeline
 
         assertThat(pipeline.process(ShortArray(FRAME) { 7 }, FRAME).probability).isNull()
         assertThat(warnings).isEmpty()
@@ -195,13 +192,9 @@ class CaptureWiringTest {
     /** The same fallback when the `.so` is missing from the device. */
     @Test
     fun `a missing apm library is a skipped stage rather than a dead microphone`() {
-        val wiring = CaptureWiring.wire(
-            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC,
-            logger = logger,
-            factory = CapturePreprocessorFactory(
-                apmApi = { throw ExceptionInInitializerError(UnsatisfiedLinkError("libhumla_native.so")) },
-                log = { warnings += it },
-            ),
+        val wiring = wire(
+            NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC,
+            CapturePreprocessorFactory(apmApi = { throw missingLibrary() }, log = { warnings += it }),
         )
 
         assertThat(wiring.farEnd).isNull()
@@ -213,10 +206,10 @@ class CaptureWiringTest {
     fun `capture at 48 kHz needs no resampler`() {
         val built = mutableListOf<Pair<Int, Int>>()
 
-        CaptureWiring.wire(
-            48000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE, EchoCancellationMode.NONE,
-            logger = logger, factory = factory { FakeRnnoiseApi() },
-        ) { from, to -> built += from to to; FakeResampler(1) }
+        wire(NoiseSuppressionMode.NONE, EchoCancellationMode.NONE, factory { FakeRnnoiseApi() }) { from, to ->
+            built += from to to
+            FakeResampler(1)
+        }
 
         assertThat(built).isEmpty()
     }
@@ -225,9 +218,8 @@ class CaptureWiringTest {
     @Test
     fun `capture below 48 kHz gets a resampler up to the codec rate`() {
         val built = mutableListOf<Pair<Int, Int>>()
-        val pipeline = CaptureWiring.wire(
-            16000, ContinuousInputMode(), 1f, NoiseSuppressionMode.NONE, EchoCancellationMode.NONE,
-            logger = logger, factory = factory { FakeRnnoiseApi() },
+        val pipeline = wire(
+            NoiseSuppressionMode.NONE, EchoCancellationMode.NONE, factory { FakeRnnoiseApi() }, sampleRate = 16000,
         ) { from, to -> built += from to to; FakeResampler(3) }.pipeline
 
         val frame = pipeline.process(ShortArray(160) { 5 }, 160)

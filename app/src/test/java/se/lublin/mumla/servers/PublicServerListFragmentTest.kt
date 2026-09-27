@@ -9,10 +9,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ServiceHostActivity
 import se.lublin.mumla.testing.drainMainUntil
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.host
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -36,7 +37,7 @@ class PublicServerListFragmentTest {
                 override fun usingProxy() = false
             }
         }
-        activity.supportFragmentManager.beginTransaction().add(android.R.id.content, fragment).commitNow()
+        activity.host(fragment)
         idleMainLooper()
         return fragment
     }

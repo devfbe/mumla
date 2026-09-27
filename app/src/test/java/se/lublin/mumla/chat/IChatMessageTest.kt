@@ -2,14 +2,16 @@ package se.lublin.mumla.chat
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.Message
+import se.lublin.humla.model.UserState
 import se.lublin.mumla.testing.textMessage
 
 class IChatMessageTest {
 
     @Test
     fun textMessageExposesUnderlyingMessage() {
-        val msg = Message(7, "alice", emptyList(), emptyList(), emptyList(), "<b>hi</b>")
+        val msg = textMessage("<b>hi</b>", actor = 7, actorName = "alice")
         val chat = IChatMessage.TextMessage(msg)
         assertThat(chat.body).isEqualTo("<b>hi</b>")
         assertThat(chat.receivedTime).isEqualTo(msg.receivedTime)
@@ -35,5 +37,18 @@ class IChatMessageTest {
         IChatMessage.TextMessage(textMessage("x")).accept(visitor)
         IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, "y").accept(visitor)
         assertThat(seen).containsExactly("text", "info").inOrder()
+    }
+
+    @Test
+    fun aMessageNeverHandsOutANullTargetList() {
+        val full = Message(
+            7, "alice", listOf(ChannelState(0, "Root")), listOf(ChannelState(0, "Sub")),
+            listOf(UserState(3, "bob", 0)), "hi",
+        )
+        for (message in listOf(full, textMessage("just a body"))) {
+            assertThat(message.targetChannels).isNotNull()
+            assertThat(message.targetTrees).isNotNull()
+            assertThat(message.targetUsers).isNotNull()
+        }
     }
 }

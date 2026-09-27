@@ -9,14 +9,12 @@ import androidx.preference.PreferenceScreen
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.mumla.preference.GeneralSettingsFragment
 import se.lublin.mumla.preference.SettingsActivity
-import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.hostInThemedActivity
 
 /**
  * The headset-button preference, checked on the settings screen the index actually launches
@@ -24,14 +22,7 @@ import se.lublin.mumla.testing.ThemedActivity
  */
 @RunWith(RobolectricTestRunner::class)
 class MediaButtonActionResourcesTest {
-    private lateinit var context: Context
-
-    @Before
-    fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-        // A ListPreference persists its default the moment it is attached, so the default test
-        // only means anything from empty preferences.
-    }
+    private val context: Context = ApplicationProvider.getApplicationContext()
 
     private fun stringArrayByName(name: String): List<String> {
         val id = context.resources.getIdentifier(name, "array", context.packageName)
@@ -39,14 +30,7 @@ class MediaButtonActionResourcesTest {
         return context.resources.getStringArray(id).toList()
     }
 
-    private fun generalScreen(): PreferenceScreen {
-        val fragment = GeneralSettingsFragment()
-        val controller = Robolectric.buildActivity(ThemedActivity::class.java).setup()
-        controller.get().supportFragmentManager.beginTransaction()
-            .add(android.R.id.content, fragment)
-            .commitNow()
-        return fragment.preferenceScreen
-    }
+    private fun generalScreen(): PreferenceScreen = hostInThemedActivity(GeneralSettingsFragment()).preferenceScreen
 
     private fun mediaButtonPreference(): ListPreference {
         val screen = generalScreen()
@@ -74,11 +58,7 @@ class MediaButtonActionResourcesTest {
 
     @Test
     fun theGeneralScreenIsReachableFromTheSettingsIndex() {
-        val index = SettingsActivity.RootPreferenceFragment()
-        val controller = Robolectric.buildActivity(ThemedActivity::class.java).setup()
-        controller.get().supportFragmentManager.beginTransaction()
-            .add(android.R.id.content, index)
-            .commitNow()
+        val index = hostInThemedActivity(SettingsActivity.RootPreferenceFragment())
 
         val screen = index.preferenceScreen
         val fragments = (0 until screen.preferenceCount).map { screen.getPreference(it).fragment }

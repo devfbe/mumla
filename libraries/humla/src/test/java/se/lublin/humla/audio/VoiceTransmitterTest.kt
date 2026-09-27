@@ -29,7 +29,8 @@ import se.lublin.humla.audio.inputmode.ToggleInputMode
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.PacketBuffer
 import se.lublin.humla.net.UdpProtocol
-import java.lang.management.ManagementFactory
+import se.lublin.humla.testutil.AllocationMeter.HALF_AN_OBJECT
+import se.lublin.humla.testutil.AllocationMeter.worstPerCall
 
 class VoiceTransmitterTest {
     /** One frame per packet; the payload is the frame's first sample. Allocation-free. */
@@ -156,8 +157,6 @@ class VoiceTransmitterTest {
     }
 
     private fun assertSendPathDoesNotAllocate(protocol: UdpProtocol) {
-        val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
-        assertThat(threads.isThreadAllocatedMemoryEnabled).isTrue()
         val silent = object : AudioHandler.AudioEncodeListener {
             var bytes = 0
             override fun onAudioEncoded(data: ByteArray, length: Int) {
@@ -168,27 +167,16 @@ class VoiceTransmitterTest {
         val transmitter = transmitter(silent)
         transmitter.udpProtocol = protocol
         val input = frame(7)
-        val self = Thread.currentThread().threadId()
-        val bytesPerFrame = { warmups: Int, iterations: Int ->
-            repeat(warmups) { transmitter.onAudioInputReceived(input, FRAME) }
-            val before = threads.getThreadAllocatedBytes(self)
-            repeat(iterations) { transmitter.onAudioInputReceived(input, FRAME) }
-            (threads.getThreadAllocatedBytes(self) - before).toDouble() / iterations
+
+        val perFrame = worstPerCall("VoiceTransmitter, $protocol", HOT_CALLS) {
+            transmitter.onAudioInputReceived(input, FRAME)
         }
-
-        val cold = bytesPerFrame(1_000, 8_000)
-        val hot = bytesPerFrame(100_000, 100_000)
-
-        println(
-            "allocation per 10 ms frame, $protocol (cold / hot): " +
-                "VoiceTransmitter ${"%.3f".format(cold)} / ${"%.3f".format(hot)} B",
-        )
-
-        assertWithMessage("the send path allocates on the capture thread").that(maxOf(cold, hot)).isLessThan(8.0)
+        assertWithMessage("the send path allocates on the capture thread").that(perFrame).isLessThan(HALF_AN_OBJECT)
         assertThat(silent.bytes).isGreaterThan(0)
     }
 
     private companion object {
         const val FRAME = 480
+        const val HOT_CALLS = 100_000
     }
 }

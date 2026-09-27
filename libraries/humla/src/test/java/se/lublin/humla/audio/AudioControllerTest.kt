@@ -1,32 +1,33 @@
 package se.lublin.humla.audio
 
-import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadows.ShadowLog
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioInitializationException
-import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.MessageHandlerRegistry
 import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.VoicePacketHandler
+import se.lublin.humla.testutil.FakeAudio
+import se.lublin.humla.testutil.FakeAudioFactory
+import se.lublin.humla.testutil.GATE_TIMEOUT_SECONDS
+import se.lublin.humla.testutil.LogRecorder
+import se.lublin.humla.testutil.NoopEncodeListener
+import se.lublin.humla.testutil.NoopOutputListener
 import se.lublin.humla.testutil.SilentLogger
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.HumlaLogger
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /**
@@ -36,52 +37,10 @@ import kotlin.concurrent.thread
  */
 @RunWith(RobolectricTestRunner::class)
 class AudioControllerTest {
+    @get:Rule
+    val log = LogRecorder()
+
     private val mainLooper = shadowOf(Looper.getMainLooper())
-
-    private class FakeAudio : ManagedAudio {
-        val shutdownCalls = AtomicInteger()
-        @Volatile var shutdownThread: Thread? = null
-
-        /**
-         * Held while the fake is inside [shutdown], to assert in the window where a synchronous
-         * controller would still be blocked. Bounded so a regression fails instead of hanging.
-         */
-        @Volatile var shutdownGate: CountDownLatch? = null
-        val targetIds = CopyOnWriteArrayList<Byte>()
-        override val tcpHandler = TcpMessageHandler {}
-        override val voiceHandler = VoicePacketHandler { }
-        override val currentBandwidth: Int = 12_345
-        override fun setVoiceTargetId(id: Byte) { targetIds += id }
-        override fun shutdown() {
-            shutdownThread = Thread.currentThread()
-            shutdownGate?.await(GATE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            shutdownCalls.incrementAndGet()
-        }
-    }
-
-    private class FakeFactory : AudioHandlerFactory {
-        val created = CopyOnWriteArrayList<FakeAudio>()
-        val createThreads = CopyOnWriteArrayList<Thread>()
-        val contexts = CopyOnWriteArrayList<Context>()
-        val loggers = CopyOnWriteArrayList<HumlaLogger>()
-        val configs = CopyOnWriteArrayList<AudioConfig>()
-        val sessionParams = CopyOnWriteArrayList<AudioSessionParams>()
-        val encodeListeners = CopyOnWriteArrayList<AudioHandler.AudioEncodeListener>()
-        val outputListeners = CopyOnWriteArrayList<AudioOutput.AudioOutputListener>()
-        @Volatile var failWith: Exception? = null
-
-        override fun create(host: AudioHost, config: AudioConfig, params: AudioSessionParams): ManagedAudio {
-            createThreads += Thread.currentThread()
-            contexts += host.context
-            loggers += host.logger
-            configs += config
-            sessionParams += params
-            encodeListeners += host.encodeListener
-            outputListeners += host.outputListener
-            failWith?.let { throw it }
-            return FakeAudio().also { created += it }
-        }
-    }
 
     private class FakeRegistry : MessageHandlerRegistry {
         val tcp = CopyOnWriteArrayList<TcpMessageHandler>()
@@ -101,25 +60,17 @@ class AudioControllerTest {
         }
     }
 
-    private val factory = FakeFactory()
+    private val factory = FakeAudioFactory()
     private val registry = FakeRegistry()
     private val listener = RecordingListener()
     private val context = RuntimeEnvironment.getApplication()
-    private val encodeListener = object : AudioHandler.AudioEncodeListener {
-        override fun onAudioEncoded(data: ByteArray, length: Int) = Unit
-        override fun onTalkingStateChanged(talking: Boolean) = Unit
-    }
-    private val outputListener = object : AudioOutput.AudioOutputListener {
-        override val playbackParams: PlaybackParams = PlaybackParams.DEFAULT
-        override fun onTalkStateUpdated(session: Int, state: TalkState) = Unit
-    }
     private val controller = newController()
     private val params = AudioSessionParams(
         UserState(1, "me", 0), -1, HumlaUDPMessageType.UDPVoiceOpus, 0, ContinuousInputMode(),
     )
 
     private fun newController(mainHandler: Handler = Handler(Looper.getMainLooper())) = AudioController(
-        AudioHost(context, SilentLogger, encodeListener, outputListener), factory, listener, mainHandler,
+        AudioHost(context, SilentLogger, NoopEncodeListener, NoopOutputListener), factory, listener, mainHandler,
     )
 
     @After
@@ -147,12 +98,13 @@ class AudioControllerTest {
         controller.start(AudioConfig(PipelineSettings(amplitudeBoost = 7f)), params, registry)
 
         awaitUntil(description = "pipeline running") { controller.isRunning }
-        assertThat(factory.createThreads).containsExactly(controller.looper.thread)
+        assertThat(factory.createThreads).containsExactly(AudioController.THREAD_NAME)
         assertThat(controller.looper.thread.name).isEqualTo(AudioController.THREAD_NAME)
-        assertThat(factory.contexts).containsExactly(context)
-        assertThat(factory.loggers).containsExactly(SilentLogger)
-        assertThat(factory.encodeListeners).containsExactly(encodeListener)
-        assertThat(factory.outputListeners).containsExactly(outputListener)
+        val host = factory.hosts.single()
+        assertThat(host.context).isSameInstanceAs(context)
+        assertThat(host.logger).isSameInstanceAs(SilentLogger)
+        assertThat(host.encodeListener).isSameInstanceAs(NoopEncodeListener)
+        assertThat(host.outputListener).isSameInstanceAs(NoopOutputListener)
         assertThat(factory.configs[0].settings.amplitudeBoost).isEqualTo(7f)
         assertThat(factory.sessionParams).containsExactly(params)
         assertThat(registry.tcp).containsExactly(factory.created[0].tcpHandler)
@@ -174,7 +126,7 @@ class AudioControllerTest {
         awaitUntil(description = "shutdown started on control thread") { audio.shutdownThread != null }
         // The test thread is here while the control thread is still inside ManagedAudio.shutdown().
         assertThat(audio.shutdownCalls.get()).isEqualTo(0)
-        assertThat(audio.shutdownThread).isSameInstanceAs(controller.looper.thread)
+        assertThat(audio.shutdownThread).isEqualTo(controller.looper.thread.name)
         // Taken inside the window: the handlers are already unregistered while the pipeline is still
         // stopping, so nothing routes a packet into a dying decoder.
         assertThat(registry.tcp).isEmpty()
@@ -294,7 +246,7 @@ class AudioControllerTest {
         assertThat(registry.tcp).isEmpty()
         assertThat(registry.udp).isEmpty()
         assertThat(controller.isRunning).isFalse()
-        assertThat(ShadowLog.getLogsForTag(AudioController.TAG).map { it.msg })
+        assertThat(log.messages(AudioController.TAG))
             .contains("Audio initialization failed")
     }
 
@@ -371,8 +323,4 @@ class AudioControllerTest {
         assertThat(registry.udp).isEmpty()
     }
 
-    private companion object {
-        /** Long enough that a caller who joins is unmistakable, short enough to fail rather than hang. */
-        const val GATE_TIMEOUT_SECONDS = 5L
-    }
 }

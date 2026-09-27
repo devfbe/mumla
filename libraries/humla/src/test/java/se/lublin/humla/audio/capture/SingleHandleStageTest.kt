@@ -46,7 +46,7 @@ class SingleHandleStageTest {
         const val MUST_STAY_BLOCKED_MS = 250L
     }
 
-    private open class TestStage(
+    internal open class TestStage(
         handle: Long = HANDLE,
         private val probability: Float? = 0.5f,
         private val onCapture: () -> Unit = {},
@@ -76,7 +76,7 @@ class SingleHandleStageTest {
     }
 
     /** A stage with no reverse stream, i.e. every stage but the APM one. */
-    private class CaptureOnlyStage : SingleHandleStage(HANDLE, "capture-only stage") {
+    internal class CaptureOnlyStage : SingleHandleStage(HANDLE, "capture-only stage") {
         override fun onCaptureFrame(handle: Long, frame: ShortArray): Float? = null
         override fun onReleaseHandle(handle: Long) = Unit
     }
@@ -92,42 +92,6 @@ class SingleHandleStageTest {
         assertThat(stage.captureHandles).containsExactly(0xBEEFL)
         assertThat(stage.farEndHandles).containsExactly(0xBEEFL)
         assertThat(stage.releasedHandles).containsExactly(0xBEEFL)
-    }
-
-    /**
-     * A handle may only go back to the bridge that issued it, so it lives in one private field and
-     * no member mentions a long (returned, taken, or in an array) except the three callbacks. The
-     * whole class chain is walked because `declaredFields`/`declaredMethods` skip inherited members.
-     * A subclass can still keep the value it passed to the constructor; see the class KDoc.
-     */
-    @Test
-    fun `the native handle never escapes its owner`() {
-        val hierarchy = listOf(SingleHandleStage::class.java, TestStage::class.java, CaptureOnlyStage::class.java)
-            .flatMap { generateSequence(it as Class<*>) { c -> c.superclass }.takeWhile { c -> c != Any::class.java } }
-            .distinct()
-        assertWithMessage("the walk must reach the base class itself")
-            .that(hierarchy).contains(SingleHandleStage::class.java)
-
-        val longFields = hierarchy.flatMap { it.declaredFields.asList() }
-            .filter { !it.isSynthetic && mentionsLong(it.type) }
-        assertWithMessage("the handle must live in exactly one field")
-            .that(longFields.map { "${it.declaringClass.simpleName}.${it.name}" }).hasSize(1)
-        assertWithMessage("the one handle field must be private")
-            .that(Modifier.isPrivate(longFields.single().modifiers)).isTrue()
-
-        val handleBearing = hierarchy.flatMap { it.declaredMethods.asList() }
-            .filter { !it.isSynthetic && !it.isBridge && !Modifier.isPrivate(it.modifiers) }
-            .filter { m -> mentionsLong(m.returnType) || m.parameterTypes.any { mentionsLong(it) } }
-        assertWithMessage("only the three callbacks, which run with the lock held, may carry the handle")
-            .that(handleBearing.map { it.name }.distinct())
-            .containsExactly("onCaptureFrame", "onFarEndFrame", "onReleaseHandle")
-    }
-
-    /** `long`, `java.lang.Long`, or an array of either (an out-parameter is an escape too). */
-    private fun mentionsLong(type: Class<*>): Boolean = when {
-        type == Long::class.javaPrimitiveType || type == Long::class.javaObjectType -> true
-        type.isArray -> mentionsLong(type.componentType!!)
-        else -> false
     }
 
     @Test

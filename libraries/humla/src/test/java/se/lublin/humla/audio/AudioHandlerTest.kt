@@ -12,9 +12,10 @@ import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioException
-import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.UserState
 import se.lublin.humla.net.HumlaUDPMessageType
+import se.lublin.humla.testutil.NoopEncodeListener
+import se.lublin.humla.testutil.NoopOutputListener
 import se.lublin.humla.testutil.SilentLogger
 
 /**
@@ -31,14 +32,8 @@ class AudioHandlerTest {
     private val host = AudioHost(
         context,
         SilentLogger,
-        object : AudioHandler.AudioEncodeListener {
-            override fun onAudioEncoded(data: ByteArray, length: Int) = Unit
-            override fun onTalkingStateChanged(talking: Boolean) = Unit
-        },
-        object : AudioOutput.AudioOutputListener {
-            override val playbackParams: PlaybackParams = PlaybackParams.DEFAULT
-            override fun onTalkStateUpdated(session: Int, state: TalkState) = Unit
-        },
+        NoopEncodeListener,
+        NoopOutputListener,
     )
 
     private fun create(config: AudioConfig) = DefaultAudioHandlerFactory.create(host, config, params)

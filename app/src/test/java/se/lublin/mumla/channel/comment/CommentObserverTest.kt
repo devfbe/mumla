@@ -10,8 +10,8 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.UserState
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.testing.ServiceHostActivity
-import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubModel
@@ -46,27 +46,22 @@ class CommentObserverTest {
     }
 
     @Test
-    fun aUserCommentStopsWaitingWhenTheDialogClosesWithoutAReply() {
-        val fragment = UserCommentFragment.newInstance(7, comment = null, editing = false)
-        show(fragment)
-        assertThat(listeners).isEqualTo(1)
-        verify { session.actions.requestComment(7) }
+    fun aCommentOrDescriptionStopsWaitingWhenTheDialogClosesWithoutAReply() {
+        val requests = listOf<Pair<DialogFragment, () -> Unit>>(
+            UserCommentFragment.newInstance(7, comment = null, editing = false) to
+                { session.actions.requestComment(7) },
+            ChannelDescriptionFragment.newInstance(3, description = null) to
+                { session.actions.requestChannelDescription(3) },
+        )
+        for ((fragment, request) in requests) {
+            show(fragment)
+            assertThat(listeners).isEqualTo(1)
+            verify { request() }
 
-        close(fragment)
+            close(fragment)
 
-        assertThat(listeners).isEqualTo(0)
-    }
-
-    @Test
-    fun aChannelDescriptionStopsWaitingWhenTheDialogClosesWithoutAReply() {
-        val fragment = ChannelDescriptionFragment.newInstance(3, description = null)
-        show(fragment)
-        assertThat(listeners).isEqualTo(1)
-        verify { session.actions.requestChannelDescription(3) }
-
-        close(fragment)
-
-        assertThat(listeners).isEqualTo(0)
+            assertThat(listeners).isEqualTo(0)
+        }
     }
 
     @Test

@@ -1,7 +1,9 @@
 package se.lublin.mumla.channel
 
+import android.content.Context
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -12,7 +14,6 @@ import io.mockk.verify
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.AudioControls
@@ -21,6 +22,8 @@ import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.addNow
+import se.lublin.mumla.testing.hostWith
 import se.lublin.mumla.testing.stubAudio
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
@@ -38,26 +41,21 @@ class ChannelFragmentTalkStateTest {
     private lateinit var audio: AudioControls
     private lateinit var controller: ActivityController<ServiceHostActivity>
     private lateinit var fragment: ChannelFragment
+    private val preferences =
+        PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<Context>())
 
     @Before
     fun setUp() {
-        PreferenceManager
-            .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
-            .edit()
-            // Voice activity (the default) hides the talk view, and `touch` dispatches straight at
-            // the view regardless, so push-to-talk must be set explicitly.
-            .putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT)
-            .commit()
+        // Voice activity (the default) hides the talk view, and `touch` dispatches straight at the
+        // view regardless, so push-to-talk must be set explicitly.
+        preferences.edit(commit = true) { putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT) }
         session = mockk(relaxed = true)
         audio = session.stubAudio()
         session.stubModel(serverState(self = 1) { channel(0, "Root"); user(1, "me") })
         session.stubConnected()
         every { audio.isTalking } returns true
-        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        controller.get().bind(session)
-        fragment = ChannelFragment()
-        controller.get().supportFragmentManager.beginTransaction()
-            .add(fragment, "channel").commitNow()
+        controller = hostWith(session)
+        fragment = controller.get().addNow(ChannelFragment(), "channel")
     }
 
     private val talkButton: View get() = fragment.requireView().findViewById(R.id.pushtotalk)
@@ -67,9 +65,7 @@ class ChannelFragmentTalkStateTest {
      * whole action.
      */
     private fun setPushToTalkToggle(toggle: Boolean) {
-        PreferenceManager
-            .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
-            .edit().putBoolean(Settings.PTT_TOGGLE.key, toggle).commit()
+        preferences.edit(commit = true) { putBoolean(Settings.PTT_TOGGLE.key, toggle) }
     }
 
     /** Forgets what the session was told so far, so what follows is checked on its own. */
@@ -172,9 +168,7 @@ class ChannelFragmentTalkStateTest {
     fun hidingTheTalkButtonTakesItAwayInPushToTalkMode() {
         val talkView: View = fragment.requireView().findViewById(R.id.pushtotalk_view)
 
-        PreferenceManager
-            .getDefaultSharedPreferences(ApplicationProvider.getApplicationContext<android.content.Context>())
-            .edit().putBoolean(Settings.PUSH_BUTTON_HIDE.key, true).commit()
+        preferences.edit(commit = true) { putBoolean(Settings.PUSH_BUTTON_HIDE.key, true) }
 
         assertThat(talkView.visibility).isEqualTo(View.GONE)
     }

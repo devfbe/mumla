@@ -13,8 +13,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.assertOwnImmutableBroadcast
 
 /**
  * The prompt shown when a session ended with an error: what it says and what its three intents
@@ -117,10 +118,8 @@ class MumlaReconnectNotificationTest {
         show("socket reset")
 
         val n = posted()!!
-        for (pending in listOf(n.deleteIntent, n.actions.single().actionIntent).map { shadowOf(it) }) {
-            assertThat(pending.isBroadcast).isTrue()
-            assertThat(pending.isImmutable).isTrue()
-            assertThat(pending.savedIntent.`package`).isEqualTo(context.packageName)
+        for (intent in listOf(n.deleteIntent, n.actions.single().actionIntent)) {
+            assertOwnImmutableBroadcast(intent, context.packageName)
         }
     }
 

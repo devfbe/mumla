@@ -27,7 +27,6 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
-import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
@@ -39,12 +38,16 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.GraphicsMode
 import se.lublin.humla.model.Bytes
 import se.lublin.humla.model.TalkState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.drawable.CircleDrawable
 import se.lublin.mumla.testing.ThemedActivity
+import se.lublin.mumla.testing.channelListAdapter
+import se.lublin.mumla.testing.channelRow
+import se.lublin.mumla.testing.layOut
+import se.lublin.mumla.testing.userRow
 import se.lublin.mumla.util.UserStatus
 import java.io.ByteArrayOutputStream
-import java.util.concurrent.Executor
 
 /** How the channel list binds its rows, repaints talk states and reports taps. */
 @RunWith(RobolectricTestRunner::class)
@@ -64,15 +67,13 @@ class ChannelListAdapterTest {
         override fun onStopListening(row: ChannelRow.Listener) { taps += "stop" to row.id }
     }
 
-    private val direct = Executor { it.run() }
     private lateinit var adapter: ChannelListAdapter
     private lateinit var list: RecyclerView
 
     @Before
     fun setUp() {
         context = Robolectric.buildActivity(ThemedActivity::class.java).setup().get()
-        val config = AsyncDifferConfig.Builder(ChannelListAdapter.DIFF).setBackgroundThreadExecutor(direct).build()
-        adapter = ChannelListAdapter(context, listener, config)
+        adapter = channelListAdapter(context, listener)
         list = RecyclerView(context).apply {
             layoutManager = LinearLayoutManager(context)
             adapter = this@ChannelListAdapterTest.adapter
@@ -81,40 +82,13 @@ class ChannelListAdapterTest {
 
     private fun show(vararg rows: ChannelRow) {
         adapter.submitList(rows.toList())
-        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        idleMainLooper()
         layOut()
     }
 
-    private fun layOut() {
-        list.measure(
-            View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY),
-        )
-        list.layout(0, 0, WIDTH, HEIGHT)
-    }
+    private fun layOut() = list.layOut(WIDTH, HEIGHT)
 
     private fun row(id: Long): View = list.findViewHolderForItemId(id)!!.itemView
-
-    @Suppress("LongParameterList") // One per field, all defaulted.
-    private fun channel(
-        id: Int,
-        name: String? = "channel-$id",
-        depth: Int = 0,
-        userCount: Int? = 0,
-        expanded: Boolean = true,
-        expandable: Boolean = true,
-        isOwn: Boolean = false,
-        isLinked: Boolean = false,
-        lock: ChannelRow.Lock = ChannelRow.Lock.NONE,
-    ) = ChannelRow.Channel(id, name, depth, userCount, expanded, expandable, isOwn, isLinked, lock)
-
-    private fun user(
-        session: Int,
-        depth: Int = 1,
-        isSelf: Boolean = false,
-        status: UserStatus = UserStatus.NONE,
-        avatar: Bytes? = null,
-    ) = ChannelRow.User(session, "user-$session", depth, isSelf, status, avatar)
 
     private fun View.text(id: Int) = findViewById<TextView>(id).text.toString()
 
@@ -123,7 +97,7 @@ class ChannelListAdapterTest {
 
     @Test
     fun aChannelRowShowsItsNameCountAndIndentation() {
-        show(channel(1, "Lounge", depth = 2, userCount = 5))
+        show(channelRow(1, "Lounge", depth = 2, userCount = 5))
 
         val row = row(ChannelRow.CHANNEL_ID_MASK or 1L)
         assertThat(row.text(R.id.channel_row_name)).isEqualTo("Lounge")
@@ -133,7 +107,7 @@ class ChannelListAdapterTest {
 
     @Test
     fun theCountIsHiddenWhenTheRowCarriesNone() {
-        show(channel(1, userCount = null))
+        show(channelRow(1, userCount = null))
 
         assertThat(row(ChannelRow.CHANNEL_ID_MASK or 1L).findViewById<View>(R.id.channel_row_count).visibility)
             .isEqualTo(View.GONE)
@@ -142,10 +116,10 @@ class ChannelListAdapterTest {
     @Test
     fun theChannelNameIsBoldForOursAndItalicForALinkedOne() {
         show(
-            channel(1, isOwn = true),
-            channel(2, isLinked = true),
-            channel(3, isOwn = true, isLinked = true),
-            channel(4),
+            channelRow(1, isOwn = true),
+            channelRow(2, isLinked = true),
+            channelRow(3, isOwn = true, isLinked = true),
+            channelRow(4),
         )
 
         fun style(id: Int) = row(ChannelRow.CHANNEL_ID_MASK or id.toLong())
@@ -156,7 +130,7 @@ class ChannelListAdapterTest {
 
     @Test
     fun theExpandToggleShowsWhetherTheRowIsOpenAndHidesWithoutAnythingToOpen() {
-        show(channel(1, expanded = true), channel(2, expanded = false), channel(3, expandable = false))
+        show(channelRow(1, expanded = true), channelRow(2, expanded = false), channelRow(3, expandable = false))
 
         fun toggle(id: Int) =
             row(ChannelRow.CHANNEL_ID_MASK or id.toLong()).findViewById<ImageView>(R.id.channel_row_expand)
@@ -168,7 +142,7 @@ class ChannelListAdapterTest {
 
     @Test
     fun onlyARestrictedChannelShowsALockThatSaysWhetherItCanBeEntered() {
-        show(channel(1), channel(2, lock = ChannelRow.Lock.OPEN), channel(3, lock = ChannelRow.Lock.CLOSED))
+        show(channelRow(1), channelRow(2, lock = ChannelRow.Lock.OPEN), channelRow(3, lock = ChannelRow.Lock.CLOSED))
 
         fun lock(id: Int) =
             row(ChannelRow.CHANNEL_ID_MASK or id.toLong()).findViewById<ImageView>(R.id.channel_row_lock)
@@ -179,7 +153,7 @@ class ChannelListAdapterTest {
 
     @Test
     fun aUserRowShowsItsNameBoldOnlyForUsAndIsIndented() {
-        show(user(1, depth = 1), user(2, depth = 3, isSelf = true))
+        show(userRow(1, depth = 1), userRow(2, depth = 3, isSelf = true))
 
         val other = row(ChannelRow.USER_ID_MASK or 1L)
         val self = row(ChannelRow.USER_ID_MASK or 2L)
@@ -206,7 +180,7 @@ class ChannelListAdapterTest {
 
     @Test
     fun tappingARowOrItsButtonsReportsTheRowAndALongPressIsTheOverflowButton() {
-        show(channel(1), user(2))
+        show(channelRow(1), userRow(2))
         val channel = row(ChannelRow.CHANNEL_ID_MASK or 1L)
         val user = row(ChannelRow.USER_ID_MASK or 2L)
 
@@ -234,13 +208,13 @@ class ChannelListAdapterTest {
     @Test
     fun theIconShowsTheStateOfHighestPriorityThenTalkingThenTheAvatar() {
         show(
-            user(1, status = UserStatus.SELF_DEAFENED),
-            user(2, status = UserStatus.DEAFENED),
-            user(3, status = UserStatus.SELF_MUTED),
-            user(4, status = UserStatus.MUTED),
-            user(5, status = UserStatus.SUPPRESSED),
-            user(6),
-            user(7),
+            userRow(1, status = UserStatus.SELF_DEAFENED),
+            userRow(2, status = UserStatus.DEAFENED),
+            userRow(3, status = UserStatus.SELF_MUTED),
+            userRow(4, status = UserStatus.MUTED),
+            userRow(5, status = UserStatus.SUPPRESSED),
+            userRow(6),
+            userRow(7),
         )
         adapter.setTalkStates(mapOf(5 to TalkState.TALKING, 6 to TalkState.WHISPERING))
         layOut()
@@ -261,7 +235,7 @@ class ChannelListAdapterTest {
         val png = ByteArrayOutputStream().also {
             Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, it)
         }.toByteArray()
-        show(user(1, avatar = Bytes.of(png)), user(2, avatar = Bytes.of(byteArrayOf(1, 2, 3))))
+        show(userRow(1, avatar = Bytes.of(png)), userRow(2, avatar = Bytes.of(byteArrayOf(1, 2, 3))))
 
         assertThat(iconOf(1)).isInstanceOf(CircleDrawable::class.java)
         assertThat(resourceOf(iconOf(2))).isEqualTo(R.drawable.outline_circle_talking_off)
@@ -269,7 +243,7 @@ class ChannelListAdapterTest {
 
     @Test
     fun aTalkStateChangeRepaintsTheIconInPlaceWithoutTouchingTheList() {
-        show(channel(1), user(2), user(3))
+        show(channelRow(1), userRow(2), userRow(3))
         var notifications = 0
         adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
             override fun onChanged() { notifications++ }
@@ -297,7 +271,7 @@ class ChannelListAdapterTest {
     /** A row kept off screen without being bound again catches up when it comes back. */
     @Test
     fun aRowThatMissedATalkStateChangeCatchesUpWhenItComesBack() {
-        show(user(2))
+        show(userRow(2))
         val holder = adapter.onCreateViewHolder(list, R.layout.channel_user_row)
         adapter.onBindViewHolder(holder, 0)
 
@@ -319,7 +293,7 @@ class ChannelListAdapterTest {
 
     @Test
     fun aChangedRowIsRebuiltAndAnUnchangedOneIsLeftAlone() {
-        show(channel(1), user(2))
+        show(channelRow(1), userRow(2))
         val changed = mutableListOf<Pair<Int, Boolean>>()
         adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
             override fun onItemRangeChanged(positionStart: Int, itemCount: Int) {
@@ -331,12 +305,12 @@ class ChannelListAdapterTest {
             }
         })
 
-        show(channel(1), user(2, status = UserStatus.MUTED))
+        show(channelRow(1), userRow(2, status = UserStatus.MUTED))
         assertThat(changed).containsExactly(1 to true)
         assertThat(resourceOf(iconOf(2))).isEqualTo(R.drawable.outline_circle_server_muted)
 
         changed.clear()
-        show(channel(1, name = "renamed"), user(2, status = UserStatus.MUTED))
+        show(channelRow(1, name = "renamed"), userRow(2, status = UserStatus.MUTED))
         assertThat(changed).containsExactly(0 to false)
         assertThat(adapter.positionOf(ChannelRow.USER_ID_MASK or 2L)).isEqualTo(1)
         assertThat(adapter.positionOf(ChannelRow.USER_ID_MASK or 99L)).isEqualTo(-1)

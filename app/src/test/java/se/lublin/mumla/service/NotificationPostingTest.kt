@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -67,24 +68,22 @@ class NotificationPostingTest {
             .contains(context.packageName + DYNAMIC_RECEIVER_PERMISSION)
     }
 
-    @Test
-    fun `a chat message is posted on api 31 although the permission cannot be held`() {
-        assumeBelowTiramisu()
-        denyPostNotifications()
-
-        showMessage()
-
-        assertThat(postedNotifications()).hasSize(1)
+    /** Shows each kind of notification afresh and checks whether it reached the manager. */
+    private fun assertEachKindIsPosted(posted: Boolean) {
+        val kinds = listOf<Pair<String, () -> Unit>>("message" to { showMessage() }, "reconnect" to { showReconnect() })
+        for ((kind, show) in kinds) {
+            notificationManager.cancelAll()
+            show()
+            assertWithMessage(kind).that(postedNotifications()).hasSize(if (posted) 1 else 0)
+        }
     }
 
     @Test
-    fun `a reconnect prompt is posted on api 31 although the permission cannot be held`() {
+    fun `notifications are posted on api 31 although the permission cannot be held`() {
         assumeBelowTiramisu()
         denyPostNotifications()
 
-        showReconnect()
-
-        assertThat(postedNotifications()).hasSize(1)
+        assertEachKindIsPosted(true)
     }
 
     @Test
@@ -98,43 +97,19 @@ class NotificationPostingTest {
     }
 
     @Test
-    fun `a chat message is posted on api 33 when the permission is granted`() {
+    fun `notifications are posted on api 33 when the permission is granted`() {
         assumeTiramisuOrLater()
         grantPostNotifications()
 
-        showMessage()
-
-        assertThat(postedNotifications()).hasSize(1)
+        assertEachKindIsPosted(true)
     }
 
     @Test
-    fun `a reconnect prompt is posted on api 33 when the permission is granted`() {
-        assumeTiramisuOrLater()
-        grantPostNotifications()
-
-        showReconnect()
-
-        assertThat(postedNotifications()).hasSize(1)
-    }
-
-    @Test
-    fun `a chat message is dropped on api 33 when the permission is denied`() {
+    fun `notifications are dropped on api 33 when the permission is denied`() {
         assumeTiramisuOrLater()
         denyPostNotifications()
 
-        showMessage()
-
-        assertThat(postedNotifications()).isEmpty()
-    }
-
-    @Test
-    fun `a reconnect prompt is dropped on api 33 when the permission is denied`() {
-        assumeTiramisuOrLater()
-        denyPostNotifications()
-
-        showReconnect()
-
-        assertThat(postedNotifications()).isEmpty()
+        assertEachKindIsPosted(false)
     }
 
     private fun assumeBelowTiramisu() =

@@ -29,7 +29,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
-import android.util.Log
 import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
@@ -54,6 +53,7 @@ import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.NoticeFormatter
@@ -494,7 +494,7 @@ class MumlaService :
             try {
                 context.startService(Intent(context, MumlaService::class.java))
             } catch (e: IllegalStateException) {
-                Log.w(TAG, "The app may not start its service now", e)
+                HumlaLog.w(TAG, "The app may not start its service now", e)
             }
         }
     }

@@ -1,6 +1,5 @@
 package se.lublin.mumla.channel
 
-import android.view.View
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -13,7 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.shadows.ShadowToast
@@ -24,19 +22,24 @@ import se.lublin.humla.model.Server
 import se.lublin.humla.model.ServerState
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
+import se.lublin.mumla.testing.addUnderChatParent
+import se.lublin.mumla.testing.channelRow
 import se.lublin.mumla.testing.drainMainUntil
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.hostWith
 import se.lublin.mumla.testing.installDatabase
+import se.lublin.mumla.testing.layOut
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubActions
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubModel
 import se.lublin.mumla.testing.stubState
 import se.lublin.mumla.testing.stubTalkStates
+import se.lublin.mumla.testing.userRow
 
 /**
  * The channel list screen over a mocked session: its rows across disconnects, following us, the
@@ -92,12 +95,9 @@ class ChannelListFragmentTest {
         talkStates = session.stubTalkStates()
         actions = session.stubActions()
         session.stubConnected()
-        controller = Robolectric.buildActivity(ServiceHostActivity::class.java).setup()
-        controller.get().bind(session)
-        parent = ChatTargetParentFragment()
-        controller.get().supportFragmentManager.beginTransaction().add(parent, "parent").commitNow()
+        controller = hostWith(session)
         fragment = ChannelListFragment.newInstance(pinned = false)
-        parent.childFragmentManager.beginTransaction().add(fragment, "list").commitNow()
+        parent = controller.get().addUnderChatParent(fragment, "list")
         drainMainUntil { listAdapter.itemCount > 0 }
     }
 
@@ -129,19 +129,11 @@ class ChannelListFragmentTest {
 
     @Test
     fun talkStatesReachTheList() {
-        channelView.measure(
-            View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(4000, View.MeasureSpec.EXACTLY),
-        )
-        channelView.layout(0, 0, 1000, 4000)
+        channelView.layOut(1000, 4000)
 
         talkStates.value = mapOf(200 to TalkState.TALKING)
         idleMainLooper()
-        channelView.measure(
-            View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(4000, View.MeasureSpec.EXACTLY),
-        )
-        channelView.layout(0, 0, 1000, 4000)
+        channelView.layOut(1000, 4000)
 
         val row = channelView.findViewHolderForItemId(ChannelRow.USER_ID_MASK or 200L)!!.itemView
         assertThat(androidx.core.view.ViewCompat.getStateDescription(row))
@@ -194,10 +186,8 @@ class ChannelListFragmentTest {
         installDatabase(controller.get().database)
         every { controller.get().database.getPinnedChannels(any()) } returns listOf(2)
 
-        val pinned = ChatTargetParentFragment()
-        controller.get().supportFragmentManager.beginTransaction().add(pinned, "pinned-parent").commitNow()
         val pinnedList = ChannelListFragment.newInstance(true)
-        pinned.childFragmentManager.beginTransaction().add(pinnedList, "pinned-list").commitNow()
+        controller.get().addUnderChatParent(pinnedList, "pinned-list", parentTag = "pinned-parent")
 
         val view = pinnedList.requireView().findViewById<RecyclerView>(R.id.channelUsers)
         drainMainUntil { (view.adapter as ChannelListAdapter).itemCount > 0 }
@@ -229,12 +219,6 @@ class ChannelListFragmentTest {
 
         verify { actions.setListening(3, false) }
     }
-
-    private fun channelRow(id: Int, name: String = "channel-$id") =
-        ChannelRow.Channel(id, name, 0, null, true, true, false, false, ChannelRow.Lock.NONE)
-
-    private fun userRow(session: Int) =
-        ChannelRow.User(session, "user-$session", 1, false, se.lublin.mumla.util.UserStatus.NONE, null)
 
     /**
      * Only a set target that is this row's channel with an open action mode means "tapped the open

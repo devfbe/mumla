@@ -21,7 +21,6 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
-import android.util.Log
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
@@ -47,6 +46,7 @@ import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.inMainThreadSlices
+import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
@@ -180,7 +180,7 @@ class MumlaActivity :
     }
 
     private fun onBadUrl(e: Exception) {
-        Log.w(TAG, "Could not parse the mumble:// URL", e)
+        HumlaLog.w(TAG, "Could not parse the mumble:// URL", e)
         Toast.makeText(this, getString(R.string.mumble_url_parse_failed), Toast.LENGTH_LONG).show()
     }
 

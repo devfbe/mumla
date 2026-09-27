@@ -6,26 +6,24 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowAudioTrack
-import org.robolectric.shadows.ShadowLog
-import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.exception.NativeAudioException
-import se.lublin.humla.model.TalkState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
+import se.lublin.humla.testutil.FakeOpusDecoder
+import se.lublin.humla.testutil.LogRecorder
+import se.lublin.humla.testutil.NoopOutputListener
 import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class AudioOutputTest {
-
-    private val listener = object : AudioOutput.AudioOutputListener {
-        override val playbackParams: PlaybackParams = PlaybackParams.DEFAULT
-        override fun onTalkStateUpdated(session: Int, state: TalkState) = Unit
-    }
+    @get:Rule
+    val log = LogRecorder()
 
     private var output: AudioOutput? = null
 
@@ -44,10 +42,10 @@ class AudioOutputTest {
         factory: AudioOutput.SpeechFactory =
             AudioOutput.SpeechFactory { u, n, l, a -> AudioOutputSpeech(u, n, l, averageAvailable = a) },
     ): AudioOutput {
-        val o = AudioOutput(listener, null, factory)
+        val o = AudioOutput(NoopOutputListener, null, factory)
         output = o
         o.startPlaying(AudioManager.STREAM_MUSIC)
-        awaitTrue("the playback thread to start") { o.isPlaying }
+        awaitUntil(description = "the playback thread to start") { o.isPlaying }
         return o
     }
 
@@ -75,11 +73,11 @@ class AudioOutputTest {
 
     @Test
     fun `the log line names both sizes with their units`() {
-        ShadowLog.clear()
+        log.clear()
 
         startedOutput()
 
-        assertThat(ShadowLog.getLogsForTag(AudioOutput::class.java.name).map { it.msg })
+        assertThat(log.messages(AudioOutput::class.java.name))
             .contains("Mixing 5760 samples per write into a 11520-byte track (system minimum 11520 bytes)")
     }
 
@@ -87,7 +85,7 @@ class AudioOutputTest {
     fun `an unusable system minimum is an initialization error`() {
         ShadowAudioTrack.setMinBufferSize(0) // getMinBufferSize answers ERROR for it
 
-        val o = AudioOutput(listener, null)
+        val o = AudioOutput(NoopOutputListener, null)
         val thrown = runCatching { o.startPlaying(AudioManager.STREAM_MUSIC) }.exceptionOrNull()
 
         assertThat(thrown).isInstanceOf(se.lublin.humla.exception.AudioInitializationException::class.java)
@@ -120,7 +118,7 @@ class AudioOutputTest {
     fun `stopping straight after starting stops the playback thread`() {
         // AudioHandler.shutdown can follow initialize before the playback thread has run a line.
         repeat(20) { round ->
-            val o = AudioOutput(listener, null)
+            val o = AudioOutput(NoopOutputListener, null)
             val thread = o.startPlaying(AudioManager.STREAM_MUSIC)!!
 
             runBounded("stopPlaying in round $round") { o.stopPlaying() }
@@ -157,9 +155,9 @@ class AudioOutputTest {
         var built = 0
         val o = startedOutput { u, samples, l, _ ->
             built++
-            AudioOutputSpeech(u, samples, l, NoOpusDecoder(), FakeJitter())
+            AudioOutputSpeech(u, samples, l, FakeOpusDecoder(), FakeJitter())
         }
-        ShadowLog.clear()
+        log.clear()
 
         for (type in listOf(
             HumlaUDPMessageType.UDPVoiceCELTAlpha,
@@ -171,7 +169,7 @@ class AudioOutputTest {
         }
 
         assertThat(built).isEqualTo(0)
-        assertThat(ShadowLog.getLogsForTag(AudioOutput::class.java.name).filter { it.msg.startsWith("Dropping") })
+        assertThat(log.messages(AudioOutput::class.java.name).filter { it.startsWith("Dropping") })
             .hasSize(1)
 
         // The same talker's Opus stream still plays.
@@ -205,29 +203,6 @@ class AudioOutputTest {
         t.join(TimeUnit.SECONDS.toMillis(5))
         assertWithMessage("$what did not return within 5 s").that(t.isAlive).isFalse()
         failure?.let { throw it }
-    }
-
-    private fun awaitTrue(what: String, condition: () -> Boolean) =
-        awaitUntil(description = what, condition = condition)
-
-    private class NoOpusDecoder : OpusDecoderApi {
-        override fun create(sampleRate: Int, channels: Int, error: IntArray): Long {
-            error[0] = 0
-            return 1L
-        }
-        override fun decodeFloat(
-            state: Long,
-            data: ByteArray?,
-            offset: Int,
-            len: Int,
-            out: FloatArray,
-            frameSize: Int,
-            decodeFec: Int,
-        ): Int =
-            AudioHandler.FRAME_SIZE
-        override fun destroy(state: Long) = Unit
-        override fun packetGetNbFrames(packet: ByteArray, len: Int): Int = 1
-        override fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int = AudioHandler.FRAME_SIZE
     }
 
     private companion object {

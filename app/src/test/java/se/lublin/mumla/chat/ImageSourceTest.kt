@@ -11,6 +11,22 @@ class ImageSourceTest {
 
     private fun remote(url: String) = ImageSource.Remote(url.toHttpUrl())
 
+    private fun assertUnsupported(vararg sources: String) {
+        for (source in sources) {
+            assertWithMessage(source).that(ImageSource.parse(source)).isEqualTo(ImageSource.Unsupported)
+        }
+    }
+
+    /** Bytes [block] allocates on this thread. */
+    private fun allocatedBy(block: () -> Unit): Long {
+        val threads = ManagementFactory.getThreadMXBean() as ThreadMXBean
+        assertWithMessage("this JVM must account per-thread allocation for the measurement")
+            .that(threads.isThreadAllocatedMemoryEnabled).isTrue()
+        val before = threads.currentThreadAllocatedBytes
+        block()
+        return threads.currentThreadAllocatedBytes - before
+    }
+
     @Test
     fun parsesPercentEncodedDataUri() {
         val source = ImageSource.parse("data:image/jpeg;base64,%2F9g%3D") as ImageSource.Data
@@ -32,14 +48,12 @@ class ImageSourceTest {
 
     @Test
     fun dataUriWithoutBase64IsUnsupported() {
-        assertThat(ImageSource.parse("data:image/png,abc")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("data:image/png;base64")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("data:image/png,abc", "data:image/png;base64")
     }
 
     @Test
     fun otherSchemesAreUnsupported() {
-        assertThat(ImageSource.parse("file:///etc/passwd")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("javascript:alert(1)")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("file:///etc/passwd", "javascript:alert(1)")
     }
 
     // Hostile input: the parser hands the raw src attribute through unchecked, so every dangerous
@@ -56,27 +70,25 @@ class ImageSourceTest {
 
     @Test
     fun caseVariantsOfDangerousSchemesAreUnsupported() {
-        assertThat(ImageSource.parse("FILE:///etc/passwd")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("JavaScript:alert(1)")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("JAVASCRIPT:alert(1)")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("Content://settings/secure")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("FTP://x/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported(
+            "FILE:///etc/passwd", "JavaScript:alert(1)", "JAVASCRIPT:alert(1)", "Content://settings/secure",
+            "FTP://x/a.png",
+        )
     }
 
     @Test
     fun surroundingWhitespaceDoesNotSmuggleAScheme() {
-        assertThat(ImageSource.parse("  \t\n file:///etc/passwd \r\n ")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("\n javascript:alert(1)")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("\u000B\u000Cjavascript:alert(1)")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported(
+            "  \t\n file:///etc/passwd \r\n ", "\n javascript:alert(1)", "\u000B\u000Cjavascript:alert(1)",
+        )
     }
 
     @Test
     fun controlCharactersDoNotSmuggleAScheme() {
         // NUL and friends are not whitespace, so they are not trimmed and the prefix never matches.
-        assertThat(ImageSource.parse("\u0000javascript:alert(1)")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("java\u0000script:alert(1)")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("ht\ttp://x/a.png")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("ht\u0000tp://x/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported(
+            "\u0000javascript:alert(1)", "java\u0000script:alert(1)", "ht\ttp://x/a.png", "ht\u0000tp://x/a.png",
+        )
     }
 
     @Test
@@ -92,28 +104,24 @@ class ImageSourceTest {
     @Test
     fun schemeRelativeUrlIsUnsupported() {
         // There is no base URL for a chat message, so "//host/a.png" cannot be resolved safely.
-        assertThat(ImageSource.parse("//evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("/a.png")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("a.png")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("//evil.example/a.png", "/a.png", "a.png")
         // A missing slash is repaired as browsers do; the host is still explicit.
         assertThat(ImageSource.parse("http:/x/a.png")).isEqualTo(remote("http://x/a.png"))
-        assertThat(ImageSource.parse("httpx://x/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("httpx://x/a.png")
     }
 
     @Test
     fun nonImageDataUriIsUnsupported() {
-        assertThat(ImageSource.parse("data:text/html;base64,PGI+aGk8L2I+")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("data:application/javascript;base64,YWxlcnQoMSk="))
-            .isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("data:;base64,YQ==")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("data:,hello")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported(
+            "data:text/html;base64,PGI+aGk8L2I+", "data:application/javascript;base64,YWxlcnQoMSk=",
+            "data:;base64,YQ==", "data:,hello",
+        )
     }
 
     @Test
     fun invalidBase64PayloadIsUnsupported() {
         // A dangling unit cannot be decoded at all.
-        assertThat(ImageSource.parse("data:image/png;base64,Q")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("data:image/png;base64,/9g=Q")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("data:image/png;base64,Q", "data:image/png;base64,/9g=Q")
     }
 
     @Test
@@ -137,44 +145,40 @@ class ImageSourceTest {
             .isEqualTo(remote("http://user:pass@example.org/a.png"))
         assertThat(ImageSource.parse("https://example.org:8443/a.png"))
             .isEqualTo(remote("https://example.org:8443/a.png"))
-        assertThat(ImageSource.parse("http://example.org:0/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("http://example.org:0/a.png")
     }
 
     @Test
     fun emptyAndWhitespaceOnlySourcesAreUnsupported() {
-        assertThat(ImageSource.parse("")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("   \t\n ")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("", "   \t\n ")
     }
 
     @Test
     fun percentEncodingCannotTurnAForeignSchemeIntoASupportedOne() {
         // Percent decoding runs only after the data:image prefix matched, so it can never
         // promote another scheme, and a remote URL is never decoded at all.
-        assertThat(ImageSource.parse("%64ata:image/png;base64,YQ==")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("%66ile:///etc/passwd")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("%64ata:image/png;base64,YQ==", "%66ile:///etc/passwd")
         assertThat(ImageSource.parse("https://x/%2E%2E/a.png")).isEqualTo(remote("https://x/%2E%2E/a.png"))
     }
 
     @Test
     fun unicodeThatCaseFoldsOntoAsciiIsNoScheme() {
         // 'ſ' (long s) uppercases to 'S'; "httpſ://" is still not https.
-        assertThat(ImageSource.parse("http\u017F://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("http\u017F://evil.example/a.png")
     }
 
     @Test
     fun lookalikeCharactersThatDoNotCaseFoldAreUnsupported() {
         // Fullwidth latin, Cyrillic and Greek lookalikes are simply different characters.
-        assertThat(ImageSource.parse("\uFF48\uFF54\uFF54\uFF50://evil.example/a.png"))
-            .isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("http\u0455://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("\u0440ttp://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("d\u0430ta:image/png;base64,YQ==")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported(
+            "\uFF48\uFF54\uFF54\uFF50://evil.example/a.png", "http\u0455://evil.example/a.png",
+            "\u0440ttp://evil.example/a.png", "d\u0430ta:image/png;base64,YQ==",
+        )
     }
 
     @Test
     fun authoritiesWithoutAHostAreUnsupported() {
-        assertThat(ImageSource.parse("http://@:8080/a.png")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("http://user:pass@/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertUnsupported("http://@:8080/a.png", "http://user:pass@/a.png")
     }
 
     // The length cap exists to stop allocations inside this parser.
@@ -187,13 +191,8 @@ class ImageSourceTest {
     fun anOversizedSourceIsRefusedWithoutAllocatingACopyOfIt() {
         // The '%' is what makes percentDecode do its work instead of returning the input unchanged.
         val source = "data:image/png;base64,%41" + "A".repeat(ImageSource.MAX_SOURCE_LENGTH)
-        val threads = ManagementFactory.getThreadMXBean() as ThreadMXBean
-        assertWithMessage("this JVM must account per-thread allocation for the measurement below")
-            .that(threads.isThreadAllocatedMemoryEnabled).isTrue()
-
-        val before = threads.currentThreadAllocatedBytes
-        val parsed = ImageSource.parse(source)
-        val allocated = threads.currentThreadAllocatedBytes - before
+        lateinit var parsed: ImageSource
+        val allocated = allocatedBy { parsed = ImageSource.parse(source) }
 
         assertThat(parsed).isEqualTo(ImageSource.TooLarge)
         // A tenth of a mebibyte: the refusing path allocates almost nothing (about 7 KB), while any
@@ -214,13 +213,8 @@ class ImageSourceTest {
         val head = "data:image/png;base64,%41"
         val atCap = head + "A".repeat(ImageSource.MAX_SOURCE_LENGTH - head.length)
         assertThat(atCap.length).isEqualTo(ImageSource.MAX_SOURCE_LENGTH)
-        val threads = ManagementFactory.getThreadMXBean() as ThreadMXBean
-        assertWithMessage("this JVM must account per-thread allocation for the measurement below")
-            .that(threads.isThreadAllocatedMemoryEnabled).isTrue()
-
-        val before = threads.currentThreadAllocatedBytes
-        val parsed = ImageSource.parse(atCap)
-        val perParse = threads.currentThreadAllocatedBytes - before
+        lateinit var parsed: ImageSource
+        val perParse = allocatedBy { parsed = ImageSource.parse(atCap) }
 
         assertThat(parsed).isInstanceOf(ImageSource.Data::class.java)
         // About 10 MB per parse.

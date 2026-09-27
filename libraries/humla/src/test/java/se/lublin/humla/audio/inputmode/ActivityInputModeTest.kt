@@ -22,10 +22,9 @@ import org.junit.Test
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
+import se.lublin.humla.audio.constant
 
 class ActivityInputModeTest {
-    private fun constant(value: Int, size: Int = 480) = ShortArray(size) { value.toShort() }
-
     @Test
     fun `legacy float constructor is amplitude mode with the slider as start threshold`() {
         val mode = ActivityInputMode(0.7f)

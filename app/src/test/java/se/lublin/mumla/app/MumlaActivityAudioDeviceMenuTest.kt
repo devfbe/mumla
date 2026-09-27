@@ -32,24 +32,24 @@ import io.mockk.verify
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadows.ShadowDialog
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.routing.CommunicationDevice
 import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.ChannelFragment
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
-import se.lublin.mumla.testing.idleMainLooper
+import se.lublin.mumla.testing.assertUntouched
+import se.lublin.mumla.testing.launchMumlaActivity
+import se.lublin.mumla.testing.offerCommunicationDevices
+import se.lublin.mumla.testing.platformDevice
 import se.lublin.mumla.testing.stubAudio
-import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.installSession
 import se.lublin.mumla.testing.stubState
 
@@ -74,8 +74,7 @@ class MumlaActivityAudioDeviceMenuTest {
 
     @Before
     fun setUp() {
-        installDatabase(mockk(relaxed = true))
-        shadowOf(audioManager).setAvailableCommunicationDevices(
+        audioManager.offerCommunicationDevices(
             listOf(
                 platformDevice(11, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE),
                 platformDevice(12, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER),
@@ -87,20 +86,10 @@ class MumlaActivityAudioDeviceMenuTest {
         )
     }
 
-    /** `AudioDeviceInfoBuilder` can set neither an id nor an address. */
-    private fun platformDevice(id: Int, type: Int) = mockk<AudioDeviceInfo> {
-        every { this@mockk.id } returns id
-        every { this@mockk.type } returns type
-        every { address } returns ""
-        every { productName } returns "Robolectric"
-    }
-
     /** Starts the activity on the drawer screen [screen], with the session current unless [bind] is false. */
     private fun launch(screen: Int, bind: Boolean = true) {
         val intent = Intent(app, MumlaActivity::class.java).putExtra(MainScreen.EXTRA_SCREEN, screen)
-        activity = Robolectric.buildActivity(MumlaActivity::class.java, intent).setup().get()
-        idleMainLooper()
-        ShadowDialog.getLatestDialog()?.dismiss() // the first-run guide
+        activity = launchMumlaActivity(intent)
         if (bind) installSession(session)
         idleMainLooper()
     }
@@ -169,8 +158,7 @@ class MumlaActivityAudioDeviceMenuTest {
         assertThat(consumed).isTrue()
         assertThat(settings.preferredAudioDevice).isEqualTo(PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER))
         verify(exactly = 0) { audio.selectDevice(any()) }
-        assertThat(audioManager.mode).isEqualTo(AudioManager.MODE_NORMAL)
-        assertThat(audioManager.communicationDevice).isNull()
+        audioManager.assertUntouched()
     }
 
     /** Where it stood in the channel list's menu: after search, the list's items before it. */

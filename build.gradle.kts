@@ -18,8 +18,9 @@
 import com.android.build.api.dsl.CommonExtension
 import com.android.build.api.dsl.LibraryExtension
 
-// AGP 9 compiles Kotlin itself; never apply org.jetbrains.kotlin.android. Putting KGP on the
-// classpath only raises the Kotlin version AGP's built-in Kotlin uses.
+// AGP 9 compiles Kotlin itself; never apply org.jetbrains.kotlin.android. KGP on the classpath
+// raises the Kotlin version AGP's built-in Kotlin uses and provides org.jetbrains.kotlin.jvm for
+// the plain JVM modules.
 buildscript {
     dependencies {
         classpath(libs.kotlin.gradlePlugin)
