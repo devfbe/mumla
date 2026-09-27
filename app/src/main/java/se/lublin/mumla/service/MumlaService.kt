@@ -194,7 +194,7 @@ class MumlaService :
         serviceScope.cancel()
         handler.removeCallbacks(stopIfIdle)
         notification.hide()
-        hideReconnectPrompt()
+        reconnectPrompt.hide()
         unregisterTalkReceiver()
         // Null-checked: built last in onCreate, so an earlier throw leaves it null.
         mediaSession?.detach()

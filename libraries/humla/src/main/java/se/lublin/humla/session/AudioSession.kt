@@ -46,7 +46,7 @@ import se.lublin.humla.net.MessageHandlerRegistry
  */
 internal class AudioSession(
     host: AudioHost,
-    factory: () -> AudioHandlerFactory,
+    factory: AudioHandlerFactory,
     devices: CommunicationDevices,
     mainHandler: Handler,
     settings: AudioSettings,

@@ -118,7 +118,7 @@ class AudioControllerTest {
     )
 
     private fun newController(mainHandler: Handler = Handler(Looper.getMainLooper())) = AudioController(
-        AudioHost(context, SilentLogger, encodeListener, outputListener), { factory }, listener, mainHandler,
+        AudioHost(context, SilentLogger, encodeListener, outputListener), factory, listener, mainHandler,
     )
 
     @After

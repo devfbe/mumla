@@ -35,7 +35,7 @@ import se.lublin.humla.net.MessageHandlerRegistry
  */
 class AudioController(
     private val host: AudioHost,
-    private val factory: () -> AudioHandlerFactory,
+    private val factory: AudioHandlerFactory,
     private val onFailed: (String) -> Unit,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
 ) {
@@ -124,7 +124,7 @@ class AudioController(
 
     private fun create(s: Session) {
         try {
-            val audio = factory().create(host, s.config, s.params)
+            val audio = factory.create(host, s.config, s.params)
             s.registry.addTcpHandler(audio.tcpHandler)
             s.registry.addVoiceHandler(audio.voiceHandler)
             running = Running(audio, s.registry)

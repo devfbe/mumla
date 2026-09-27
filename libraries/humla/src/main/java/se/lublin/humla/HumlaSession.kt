@@ -76,6 +76,7 @@ import se.lublin.humla.session.disconnectReasonOf
 import se.lublin.humla.util.HumlaLogger
 import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * One session with a server, as a plain object: the connection with its automatic reconnects
@@ -183,7 +184,7 @@ class HumlaSession(
 
     internal val audio = AudioSession(
         AudioHost(context, logger, audioInputListener, audioOutputListener),
-        { audioFactory },
+        audioFactory,
         // One instance per session, so a platform refusal is reported once rather than on every
         // route decision.
         communicationDevices ?: AndroidCommunicationDevices(
@@ -206,7 +207,8 @@ class HumlaSession(
     override val targetServer: Server? get() = config.connection.server
 
     init {
-        AndroidUsingLinkProperties.setup(context)
+        // minidns keeps one process-wide list of lookup mechanisms, which every setup appends to.
+        if (dnsLookupInstalled.compareAndSet(false, true)) AndroidUsingLinkProperties.setup(context.applicationContext)
     }
 
     override fun connect() {
@@ -568,6 +570,7 @@ class HumlaSession(
 
     companion object {
         private const val TAG = "HumlaSession"
+        private val dnsLookupInstalled = AtomicBoolean()
 
         /** Events a collector may fall behind before the oldest are dropped. */
         const val EVENT_BUFFER = 8_192
