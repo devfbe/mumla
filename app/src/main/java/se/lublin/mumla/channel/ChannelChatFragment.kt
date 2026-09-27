@@ -157,6 +157,16 @@ class ChannelChatFragment : Fragment(), MenuProvider {
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
     }
 
+    override fun onResume() {
+        super.onResume()
+        chat.setShown(true)
+    }
+
+    override fun onPause() {
+        chat.setShown(false)
+        super.onPause()
+    }
+
     override fun onDestroyView() {
         chatList.adapter = null
         super.onDestroyView()

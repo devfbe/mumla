@@ -135,4 +135,47 @@ class SessionChatTest {
         idleMainLooper()
         assertThat(chat.messages.value).isEmpty()
     }
+
+    @Test
+    fun receivedMessagesCountAsUnreadWhileTheChatIsNotShown() {
+        emit(
+            HumlaEvent.TextMessage(message("one")),
+            HumlaEvent.MessageSent(message("mine")),
+            HumlaEvent.LogMessage(HumlaEvent.Level.WARNING, "a notice"),
+            HumlaEvent.TextMessage(message("two")),
+        )
+
+        assertThat(chat.unread.value).isEqualTo(2)
+    }
+
+    @Test
+    fun showingTheChatReadsEverythingAndNothingCountsWhileShown() {
+        emit(HumlaEvent.TextMessage(message("one")))
+
+        chat.setShown(true)
+        assertThat(chat.unread.value).isEqualTo(0)
+        emit(HumlaEvent.TextMessage(message("two")))
+        assertThat(chat.unread.value).isEqualTo(0)
+
+        chat.setShown(false)
+        emit(HumlaEvent.TextMessage(message("three")))
+        assertThat(chat.unread.value).isEqualTo(1)
+    }
+
+    @Test
+    fun theUnreadCountStartsOverWithTheLog() {
+        emit(HumlaEvent.TextMessage(message("one")))
+        chat.clear()
+        assertThat(chat.unread.value).isEqualTo(0)
+
+        emit(HumlaEvent.TextMessage(message("two")))
+        chat.follow(mockk<IHumlaSession>(relaxed = true).also { it.stubState(SessionState.Connected); it.stubEvents() })
+        assertThat(chat.unread.value).isEqualTo(0)
+
+        chat.follow(session)
+        emit(HumlaEvent.TextMessage(message("three")))
+        state.value = SessionState.Disconnected()
+        idleMainLooper()
+        assertThat(chat.unread.value).isEqualTo(0)
+    }
 }

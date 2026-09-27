@@ -155,6 +155,10 @@
     <string name="self_status_deafened">Deafened</string>
     <string name="self_status_muted_deafened">Muted and deafened</string>
     <string name="channel_and_status">%1$s · %2$s</string>
+    <plurals name="unread_messages">
+        <item quantity="one">%d unread message</item>
+        <item quantity="other">%d unread messages</item>
+    </plurals>
     <string name="close">Close</string>
     <string name="search_name">Name</string>
     <string name="search_country">Country</string>

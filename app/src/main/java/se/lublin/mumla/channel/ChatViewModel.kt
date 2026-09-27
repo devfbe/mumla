@@ -77,6 +77,12 @@ class ChatViewModel(
 
     val messages: StateFlow<List<IChatMessage>> get() = sessions.chat.messages
 
+    /** Messages received since the chat tab was last shown. */
+    val unread: StateFlow<Int> get() = sessions.chat.unread
+
+    /** Whether the chat is on screen; see [se.lublin.mumla.chat.SessionChat.setShown]. */
+    fun setShown(shown: Boolean) = sessions.chat.setShown(shown)
+
     private val selected = MutableStateFlow<ChatTarget?>(null)
 
     /** The target the user picked; null means our current channel. */

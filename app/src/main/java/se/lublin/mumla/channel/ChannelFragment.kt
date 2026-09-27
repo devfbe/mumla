@@ -34,6 +34,7 @@ import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -64,6 +65,7 @@ class ChannelFragment :
     MenuProvider {
 
     private val session by activityAppViewModels { SessionViewModel(SessionManager.get(it)) }
+    private val chat by viewModels<ChatViewModel> { ChatViewModel.Factory }
     private val pushToTalk get() = PushToTalk(requireContext())
 
     private var binding: FragmentChannelBinding? = null
@@ -194,6 +196,11 @@ class ChannelFragment :
             styleTabs(tabs)
             pager.adapter = TabsAdapter()
             TabLayoutMediator(tabs, pager) { tab, position -> tab.text = tabTitle(position) }.attach()
+            viewLifecycleOwner.lifecycleScope.launch {
+                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    chat.unread.collect { showUnread(tabs, it) }
+                }
+            }
         } else {
             childFragmentManager.beginTransaction()
                 .replace(R.id.list_fragment, newListFragment())
@@ -301,6 +308,18 @@ class ChannelFragment :
         binding.pushtotalkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
     }
 
+    private fun showUnread(tabs: TabLayout, count: Int) {
+        val tab = tabs.getTabAt(TAB_CHAT) ?: return
+        if (count == 0) {
+            tab.removeBadge()
+            return
+        }
+        tab.orCreateBadge.apply {
+            number = count
+            setContentDescriptionQuantityStringsResource(R.plurals.unread_messages)
+        }
+    }
+
     private fun newListFragment() = ChannelListFragment.newInstance(isShowingPinnedChannels)
 
     private fun tabTitle(position: Int): String =
@@ -320,6 +339,7 @@ class ChannelFragment :
             ChannelFragment().apply { arguments = bundleOf(ARG_PINNED to pinned) }
 
         private const val TAB_CHANNEL = 0
+        private const val TAB_CHAT = 1
         private const val ARG_PINNED = "pinned"
         private val INPUT_PREFERENCES = setOf(
             Settings.INPUT_METHOD.key,

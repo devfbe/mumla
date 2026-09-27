@@ -8,6 +8,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.common.truth.Truth.assertThat
 import io.mockk.mockk
 import io.mockk.verify
+import com.google.android.material.tabs.TabLayout
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,6 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.UserState
+import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.ServiceHostActivity
@@ -23,7 +25,9 @@ import se.lublin.mumla.testing.channelRow
 import se.lublin.mumla.testing.hostWith
 import se.lublin.mumla.testing.serverState
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.testing.stubModel
+import se.lublin.mumla.testing.textMessage
 
 /**
  * The channel screen's tabs: its menu has its own items first, then those of the shown tab, and
@@ -121,6 +125,41 @@ class ChannelFragmentTabsTest {
         activity.onMenuItemSelected(Window.FEATURE_OPTIONS_PANEL, menu.findItem(R.id.menu_mute_button))
 
         verify { session.actions.setSelfMuteDeafState(true, false) }
+    }
+
+    private fun chatTab() =
+        fragment.requireView().findViewById<TabLayout>(R.id.channel_tabs).getTabAt(1)!!
+
+    private fun receive(body: String) {
+        session.stubEvents().tryEmit(HumlaEvent.TextMessage(textMessage(body, actor = 2, actorName = "alice")))
+        idleMainLooper()
+    }
+
+    @Test
+    fun `messages received on the channel tab are counted on the chat tab`() {
+        receive("one")
+        receive("two")
+
+        val badge = chatTab().badge!!
+        assertThat(badge.isVisible).isTrue()
+        assertThat(badge.number).isEqualTo(2)
+        assertThat(badge.contentDescription.toString()).isEqualTo(
+            controller.get().resources.getQuantityString(R.plurals.unread_messages, 2, 2),
+        )
+    }
+
+    @Test
+    fun `showing the chat tab clears the count, and nothing counts while it is shown`() {
+        receive("one")
+
+        showTab(1)
+        assertThat(chatTab().badge).isNull()
+        receive("two")
+        assertThat(chatTab().badge).isNull()
+
+        showTab(0)
+        receive("three")
+        assertThat(chatTab().badge!!.number).isEqualTo(1)
     }
 
     @Test
