@@ -39,17 +39,12 @@ class FakeAudio : ManagedAudio {
     /** Held shut, [shutdown] parks in it - the only way to observe an asynchronous teardown. */
     @Volatile var shutdownGate: CountDownLatch? = null
 
-    // Not a `var warningListener`: its generated `setWarningListener` would clash with the
-    // interface method of that name.
-    @Volatile private var warningListenerField: ((String) -> Unit)? = null
-    val warningListener: ((String) -> Unit)? get() = warningListenerField
     val targetIds = CopyOnWriteArrayList<Byte>()
 
     override val tcpHandler = TcpMessageHandler {}
     override val voiceHandler = VoicePacketHandler { }
     override val currentBandwidth: Int = FAKE_BANDWIDTH
     override fun setVoiceTargetId(id: Byte) { targetIds += id }
-    override fun setWarningListener(listener: ((String) -> Unit)?) { warningListenerField = listener }
 
     override fun shutdown() {
         shutdownThread = Thread.currentThread().name

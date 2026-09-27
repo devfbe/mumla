@@ -92,7 +92,7 @@ internal class SessionStateMachine(
         return true
     }
 
-    /** User asked to disconnect (or the service is going away). */
+    /** User asked to disconnect (or the session is being closed). */
     fun disconnectRequested(): Boolean {
         if (current is SessionState.Disconnected) return false
         attempt = 0

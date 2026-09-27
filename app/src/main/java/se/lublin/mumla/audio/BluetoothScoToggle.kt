@@ -25,18 +25,17 @@ import se.lublin.mumla.Settings
 
 /**
  * The decision behind the "Use Bluetooth headset automatically" setting. It writes only
- * [Settings.BLUETOOTH_SCO.key]; the service reads it and does the routing.
+ * [Settings.BLUETOOTH_SCO.key]; `SessionSettings` hands it to the session, which does the routing.
  *
  * The preference is the single source of truth for the user's wish, because the SCO link itself is
- * torn down on every disconnect (auto-reconnect included); `MumlaService` re-reads it on every
- * synchronization.
+ * torn down on every disconnect (auto-reconnect included); the session routes by the wish again on
+ * every synchronization.
  *
  * Turning it on asks for `BLUETOOTH_CONNECT` first ([Result.PermissionNeeded]), and the wish is
  * stored by [onPermissionAnswered] whatever the answer was: the platform does not annotate
  * `startBluetoothSco()`/`setCommunicationDevice` as requiring it, so a denial must not take a working
- * headset away. Devices that are stricter than the annotations are handled by the caller of
- * `enableBluetoothSco()`, which reports a `SecurityException` in the chat log. Turning it off never
- * needs anything.
+ * headset away. On devices that are stricter than the annotations the session reports the
+ * `SecurityException` in the chat log. Turning it off never needs anything.
  */
 class BluetoothScoToggle(
     private val context: Context,

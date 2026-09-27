@@ -341,7 +341,7 @@ class MumlaMediaSessionTest {
         state.value = SessionState.Connected
         target.setTalking(true)
 
-        target.isConnected = false // as HumlaService already has it when the state changes
+        target.isConnected = false // as the session already has it when the state changes
         state.value = SessionState.Disconnected()
 
         assertThat(mediaSession.isActive).isFalse()

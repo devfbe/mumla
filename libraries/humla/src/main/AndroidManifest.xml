@@ -26,11 +26,6 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
-      HumlaService is not declared as a component here: the app declares its own subclass and
-      configures it through the in-process binder, so a declaration of the base class would only
-      be an exported attack surface.
-    -->
-    <!--
       No <application> element: backup posture (android:allowBackup, android:dataExtractionRules)
       is owned by the app module's manifest, since a single boolean/resource attribute can only
       have one value in the merged manifest. Declaring allowBackup here as well risked a stale

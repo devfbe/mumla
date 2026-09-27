@@ -56,8 +56,8 @@ internal class AudioSession(
         /** The platform refused a route the router asked for. */
         fun onRouteRefused()
 
-        /** A pipeline could not start, or reported a problem while running. */
-        fun onAudioWarning(message: String)
+        /** A pipeline could not start; [message] says why. */
+        fun onAudioFailed(message: String)
     }
 
     var settings: AudioSettings = settings
@@ -92,18 +92,7 @@ internal class AudioSession(
     }
 
     /** One controller and one thread for the life of this object; [release] quits it. */
-    val controller = AudioController(
-        host,
-        factory,
-        object : AudioController.Listener {
-            override fun onAudioStarted() = Unit
-
-            override fun onAudioFailed(message: String) = listener.onAudioWarning(message)
-
-            override fun onAudioWarning(message: String) = listener.onAudioWarning(message)
-        },
-        mainHandler,
-    )
+    val controller = AudioController(host, factory, listener::onAudioFailed, mainHandler)
 
     val isTalking: Boolean get() = toggleInputMode.isTalkingOn
 

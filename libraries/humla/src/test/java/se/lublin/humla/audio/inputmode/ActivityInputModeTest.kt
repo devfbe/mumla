@@ -33,9 +33,8 @@ class ActivityInputModeTest {
         assertThat(mode.shouldTransmit(constant(3277), 480, null)).isTrue()
     }
 
-    /** `HumlaService` starts with a zero threshold and adjusts it later through `setThreshold`. */
     @Test
-    fun `the call HumlaService makes is a zero-threshold amplitude detector`() {
+    fun `a zero threshold is an amplitude detector that transmits all but digital silence`() {
         val mode = ActivityInputMode(0f)
         assertThat(mode.vadConfig).isEqualTo(VadConfig(VadMode.AMPLITUDE, 0f, 0f, 250L))
         // A zero threshold transmits on anything that is not digital silence.

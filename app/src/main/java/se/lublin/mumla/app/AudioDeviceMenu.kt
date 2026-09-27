@@ -105,8 +105,8 @@ class AudioDeviceMenu(
         session?.audioDevices ?: listCommunicationDevices(activity.getSystemService(AudioManager::class.java))
 
     /**
-     * Saves the tapped entry; with a session it also takes effect now. Saved first, so the service
-     * already routes by the new preference when the session call arrives. Without a session nothing
+     * Saves the tapped entry; with a session it also takes effect now. Saved first, so the session
+     * already routes by the new preference when the explicit choice arrives. Without a session nothing
      * is routed: that would put the phone in call mode and duck other apps.
      */
     private fun choose(itemId: Int) {
@@ -123,7 +123,7 @@ class AudioDeviceMenu(
         activity.invalidateMenu()
     }
 
-    /** Flips the echo canceller of the active device's kind; the service applies it live and on every routing. */
+    /** Flips the echo canceller of the active device's kind; the session applies it live and on every routing. */
     private fun toggleEchoCancellation() {
         val session = session() ?: return
         val active = session.activeAudioDevice ?: return

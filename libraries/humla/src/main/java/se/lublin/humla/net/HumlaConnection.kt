@@ -62,7 +62,7 @@ private const val NANOS_PER_MICRO = 1000
  * All work of the connection runs in one [CoroutineScope], created with the connection and
  * cancelled by [disconnect]. Resolution, parsing, dispatch, voice routing, pings and transport
  * callbacks run strictly in order on the single "humla-protocol" thread; [HumlaConnectionListener]
- * callbacks are posted to [mainHandler], the service's main thread. [sendTCPMessage] and
+ * callbacks are posted to [mainHandler], the session's thread. [sendTCPMessage] and
  * [sendUDPMessage] may be called from any thread. State flags are only ever set, never cleared;
  * the cancelled scope closes [isConnected]/[isSynchronized].
  */

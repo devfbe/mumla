@@ -195,7 +195,7 @@ class HumlaSession(
         object : AudioSession.Listener {
             override fun onRouteRefused() = warnOnce(context.getString(R.string.audio_route_refused))
 
-            override fun onAudioWarning(message: String) = warn(message)
+            override fun onAudioFailed(message: String) = warn(message)
         },
     )
 

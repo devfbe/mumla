@@ -291,19 +291,6 @@ class HumlaSessionAudioTest {
     }
 
     @Test
-    fun anAudioWarningReachesTheChatLog() {
-        val h = start()
-        h.connectAndSynchronize()
-        audioUp(h)
-
-        h.audioFactory.created[0].warningListener!!.invoke("microphone silenced by the system")
-        awaitUntil(description = "the warning reaches the chat log") {
-            h.mainLooper.idle()
-            h.warnings.contains("microphone silenced by the system")
-        }
-    }
-
-    @Test
     fun aConnectionWarningReachesTheChatLog() {
         val h = start()
         h.connectAndSynchronize()
