@@ -21,6 +21,7 @@ import android.content.DialogInterface
 import android.os.Bundle
 import android.text.InputType
 import android.widget.EditText
+import android.widget.FrameLayout
 import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
@@ -45,83 +46,95 @@ import java.security.cert.X509Certificate
 
 private const val ARG_TITLE = "title"
 private const val ARG_MESSAGE = "message"
-private const val ARG_KIND = "kind"
+private const val ARG_INPUT = "input"
 private const val ARG_SERVER = "server"
 private const val ARG_CERTIFICATE = "certificate"
 private const val ARG_CHANGED = "changed"
 
-/** A progress dialog while connecting; cancelling it reports [REQUEST_CANCELLED]. */
-class ConnectingDialogFragment : DialogFragment() {
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(requireArguments().getString(ARG_TITLE))
-            .setView(R.layout.dialog_progress)
-            .create()
-
-    override fun onCancel(dialog: DialogInterface) {
-        super.onCancel(dialog)
-        setFragmentResult(REQUEST_CANCELLED, Bundle.EMPTY)
-    }
-
-    companion object {
-        const val REQUEST_CANCELLED = "connecting_cancelled"
-
-        fun newInstance(title: String) = ConnectingDialogFragment().apply { arguments = bundleOf(ARG_TITLE to title) }
-    }
-}
-
-/** Why a connection failed; its button reports [REQUEST_KEY] with one of the [Action]s. */
+/**
+ * Why a connection to a server failed, with a field for the name or password if changing it may
+ * help. Its buttons report [REQUEST_KEY] with an [Action] and the server to retry, as entered.
+ */
 class ConnectionErrorDialogFragment : DialogFragment() {
-    enum class Kind { RECONNECTING, WRONG_PASSWORD, OTHER }
-
-    enum class Action { CANCEL_RECONNECT, RECONNECT_WITH_PASSWORD, ACKNOWLEDGE }
+    enum class Action { RETRY, EDIT, CLOSE }
 
     init {
         isCancelable = false
     }
 
+    private val input get() = FailureInput.valueOf(requireNotNull(requireArguments().getString(ARG_INPUT)))
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val args = requireArguments()
+        val field = inputField(input)
         val builder = MaterialAlertDialogBuilder(requireContext())
             .setTitle(args.getString(ARG_TITLE))
             .setMessage(args.getString(ARG_MESSAGE))
-        when (Kind.valueOf(requireNotNull(args.getString(ARG_KIND)))) {
-            Kind.RECONNECTING -> builder.setPositiveButton(R.string.cancel_reconnect) { _, _ ->
-                report(Action.CANCEL_RECONNECT)
-            }
-            Kind.WRONG_PASSWORD -> {
-                val passwordField = EditText(requireContext()).apply {
-                    id = R.id.connection_password
-                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                    setHint(R.string.password)
-                }
-                builder.setView(passwordField)
-                    .setPositiveButton(R.string.reconnect) { _, _ ->
-                        report(Action.RECONNECT_WITH_PASSWORD, passwordField.text.toString())
-                    }
-                    .setNegativeButton(android.R.string.cancel) { _, _ -> report(Action.ACKNOWLEDGE) }
-            }
-            Kind.OTHER -> builder.setPositiveButton(android.R.string.ok) { _, _ -> report(Action.ACKNOWLEDGE) }
+            .setPositiveButton(R.string.retry) { _, _ -> report(Action.RETRY, field?.text?.toString()) }
+            .setNeutralButton(R.string.edit_server) { _, _ -> report(Action.EDIT, null) }
+            .setNegativeButton(R.string.close) { _, _ -> report(Action.CLOSE, null) }
+        if (field != null) {
+            val padding = resources.getDimensionPixelSize(R.dimen.padding_medium)
+            builder.setView(FrameLayout(requireContext()).apply {
+                setPadding(padding, 0, padding, 0)
+                addView(field)
+            })
         }
         return builder.create()
     }
 
-    private fun report(action: Action, password: String? = null) {
-        setFragmentResult(REQUEST_KEY, bundleOf(RESULT_ACTION to action.name, RESULT_PASSWORD to password))
+    private fun inputField(input: FailureInput): EditText? {
+        val (type, hint) = when (input) {
+            FailureInput.NONE -> return null
+            FailureInput.USERNAME -> InputType.TYPE_CLASS_TEXT to R.string.server_username
+            FailureInput.PASSWORD ->
+                (InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD) to R.string.password
+        }
+        return EditText(requireContext()).apply {
+            id = R.id.connection_input
+            inputType = type
+            setHint(hint)
+        }
+    }
+
+    /** Reports [action] for the server, with the name or password changed to [entered] if there is a field. */
+    private fun report(action: Action, entered: String?) {
+        val server = requireNotNull(requireArguments().getServer(ARG_SERVER))
+        val retried = when {
+            entered == null -> server
+            input == FailureInput.USERNAME -> server.copy(username = entered.trim().ifEmpty { server.username })
+            else -> server.copy(password = entered)
+        }
+        setFragmentResult(
+            REQUEST_KEY,
+            bundleOf(RESULT_ACTION to action.name, ARG_INPUT to input.name).apply { putServer(ARG_SERVER, retried) },
+        )
     }
 
     /** What the dialog shows, to tell whether a new one would differ. */
     val content: String
-        get() = listOf(ARG_KIND, ARG_TITLE, ARG_MESSAGE).joinToString("|") { arguments?.getString(it).orEmpty() }
+        get() = listOf(ARG_INPUT, ARG_TITLE, ARG_MESSAGE).joinToString("|") { arguments?.getString(it).orEmpty() }
+
+    /** The choice a [REQUEST_KEY] result reports: [action] on [server], whose [input] the user may have changed. */
+    data class Result(val action: Action, val server: Server, val input: FailureInput) {
+        companion object {
+            fun from(bundle: Bundle) = Result(
+                Action.valueOf(requireNotNull(bundle.getString(RESULT_ACTION))),
+                requireNotNull(bundle.getServer(ARG_SERVER)),
+                FailureInput.valueOf(requireNotNull(bundle.getString(ARG_INPUT))),
+            )
+        }
+    }
 
     companion object {
         const val REQUEST_KEY = "connection_error"
-        const val RESULT_ACTION = "action"
-        const val RESULT_PASSWORD = "password"
+        private const val RESULT_ACTION = "action"
 
-        fun newInstance(kind: Kind, title: String, message: String) = ConnectionErrorDialogFragment().apply {
-            arguments = bundleOf(ARG_KIND to kind.name, ARG_TITLE to title, ARG_MESSAGE to message)
-        }
+        fun newInstance(title: String, message: String, input: FailureInput, server: Server) =
+            ConnectionErrorDialogFragment().apply {
+                arguments = bundleOf(ARG_TITLE to title, ARG_MESSAGE to message, ARG_INPUT to input.name)
+                    .apply { putServer(ARG_SERVER, server) }
+            }
     }
 }
 

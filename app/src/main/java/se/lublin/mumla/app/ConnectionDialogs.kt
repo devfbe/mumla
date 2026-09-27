@@ -20,14 +20,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.DialogFragment
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.DisconnectReason
-import se.lublin.humla.session.RejectType
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.util.HumlaLog
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.app.ConnectionErrorDialogFragment.Action
-import se.lublin.mumla.app.ConnectionErrorDialogFragment.Kind
-import se.lublin.mumla.chat.NoticeFormatter
+import se.lublin.mumla.servers.ServerEditFragment
 import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.ui.MessageDialogFragment
 import se.lublin.mumla.ui.showSnackbar
@@ -37,9 +35,9 @@ import java.security.GeneralSecurityException
 import java.security.cert.X509Certificate
 
 /**
- * The dialogs that tell the user how a connection goes, as fragments of [activity] so that they
+ * The dialogs that tell the user why a connection failed, as fragments of [activity] so that they
  * survive configuration changes. Create it in `onCreate`: it registers for the dialogs' results.
- * Main thread only.
+ * Progress is not a dialog; [ConnectionBanner] shows it. Main thread only.
  */
 class ConnectionDialogs(
     private val activity: AppCompatActivity,
@@ -48,7 +46,7 @@ class ConnectionDialogs(
     private val sessions: SessionManager,
 ) {
     interface Listener {
-        /** Connects to [server] again, e.g. after its certificate was trusted. */
+        /** Connects to [server] again, e.g. after its certificate was trusted or with another name. */
         fun reconnect(server: Server)
 
         /** Connects to [server] again with the password the user just entered. */
@@ -59,18 +57,9 @@ class ConnectionDialogs(
 
     private val torSuffix get() = if (settings.isTorEnabled) " (Tor)" else ""
 
-    private val notices = NoticeFormatter(activity)
-
     init {
-        fragments.setFragmentResultListener(ConnectingDialogFragment.REQUEST_CANCELLED, activity) { _, _ ->
-            sessions.disconnect()
-            activity.showSnackbar(R.string.cancelled)
-        }
         fragments.setFragmentResultListener(ConnectionErrorDialogFragment.REQUEST_KEY, activity) { _, result ->
-            onErrorAction(
-                Action.valueOf(requireNotNull(result.getString(ConnectionErrorDialogFragment.RESULT_ACTION))),
-                result.getString(ConnectionErrorDialogFragment.RESULT_PASSWORD).orEmpty(),
-            )
+            onErrorAction(ConnectionErrorDialogFragment.Result.from(result))
         }
         fragments.setFragmentResultListener(CertificateTrustDialogFragment.REQUEST_KEY, activity) { _, result ->
             val (server, certificate) = CertificateTrustDialogFragment.parseResult(result)
@@ -78,96 +67,70 @@ class ConnectionDialogs(
         }
     }
 
-    /** Whether the connecting or error dialog is up. */
+    /** Whether the error dialog is up. */
     val isShowing: Boolean
-        get() = fragments.findFragmentByTag(TAG_CONNECTING) != null || fragments.findFragmentByTag(TAG_ERROR) != null
+        get() = fragments.findFragmentByTag(TAG_ERROR) != null
 
     /**
-     * Shows the connecting, error or certificate dialog the session's state calls for, and
-     * dismisses the others. A dialog that is up already and would look the same stays, e.g. one
-     * restored after rotation.
+     * Shows the error or certificate dialog the session's state calls for, or dismisses the error
+     * dialog. One that is up already and would look the same stays, e.g. one restored after rotation.
      */
     fun update() {
         if (fragments.isStateSaved) return
-        val errorShown = sessions.errorShown.value
-        when (val state = sessions.currentState) {
-            SessionState.Connecting, is SessionState.Reconnecting -> {
-                dismiss(TAG_ERROR)
-                if (fragments.findFragmentByTag(TAG_CONNECTING) == null) {
-                    // The port is left out: the SRV lookup that may change it comes later.
-                    val host = sessions.session.value?.targetServer?.host
-                    val title = activity.getString(R.string.connecting_to_server, host) + torSuffix
-                    ConnectingDialogFragment.newInstance(title).showNow(fragments, TAG_CONNECTING)
-                }
-            }
-            is SessionState.ConnectionLost -> {
-                dismiss(TAG_CONNECTING)
-                if (errorShown) dismiss(TAG_ERROR) else showError(state.reason, reconnecting = true)
-            }
-            is SessionState.Disconnected -> {
-                dismiss(TAG_CONNECTING)
-                val reason = state.reason
-                when {
-                    reason == null || errorShown -> dismiss(TAG_ERROR)
-                    reason is DisconnectReason.TlsUntrusted -> offerTrust(reason.chain, changed = false)
-                    reason is DisconnectReason.TlsCertificateChanged -> offerTrust(reason.chain, changed = true)
-                    else -> showError(reason, reconnecting = false)
-                }
-            }
-            SessionState.Connected -> {
-                dismiss(TAG_CONNECTING)
-                dismiss(TAG_ERROR)
-            }
+        val reason = (sessions.currentState as? SessionState.Disconnected)?.reason
+        when {
+            reason == null || sessions.errorShown.value -> dismissError()
+            reason is DisconnectReason.TlsUntrusted -> offerTrust(reason.chain, changed = false)
+            reason is DisconnectReason.TlsCertificateChanged -> offerTrust(reason.chain, changed = true)
+            else -> showError(reason)
         }
     }
 
-    private fun dismiss(tag: String) {
-        (fragments.findFragmentByTag(tag) as? DialogFragment)?.dismissNow()
+    private fun dismissError() {
+        (fragments.findFragmentByTag(TAG_ERROR) as? DialogFragment)?.dismissNow()
     }
 
-    private fun showError(reason: DisconnectReason?, reconnecting: Boolean) {
-        val message = reason?.let(notices::disconnectReason)
-        val title = activity.getString(R.string.connectionRefused) + torSuffix
-        val dialog = when {
-            message != null && reconnecting -> ConnectionErrorDialogFragment.newInstance(
-                Kind.RECONNECTING,
-                title,
-                message + "\n\n" + activity.getString(
-                    R.string.attempting_reconnect,
-                    (reason as? DisconnectReason.Network)?.cause?.message ?: "unknown",
-                ),
-            )
-            reason.isWrongPassword -> ConnectionErrorDialogFragment.newInstance(
-                Kind.WRONG_PASSWORD,
-                activity.getString(R.string.invalid_password),
-                message.orEmpty(),
-            )
-            else -> ConnectionErrorDialogFragment.newInstance(
-                Kind.OTHER,
-                title,
-                message ?: activity.getString(R.string.unknown),
-            )
-        }
+    private fun showError(reason: DisconnectReason) {
+        val server = sessions.session.value?.targetServer ?: return
+        val (failure, detail) = connectionFailureUi(reason)
+        val message = listOfNotNull(activity.getString(failure.message), detail).joinToString("\n\n")
+        val dialog = ConnectionErrorDialogFragment.newInstance(
+            activity.getString(failure.title) + torSuffix,
+            message,
+            failure.input,
+            server,
+        )
         val shown = fragments.findFragmentByTag(TAG_ERROR) as? ConnectionErrorDialogFragment
         if (shown?.content == dialog.content) return
         shown?.dismissNow()
         dialog.showNow(fragments, TAG_ERROR)
     }
 
-    private fun onErrorAction(action: Action, password: String) {
-        when (action) {
-            Action.CANCEL_RECONNECT -> sessions.cancelReconnect()
-            Action.RECONNECT_WITH_PASSWORD -> {
-                val server = sessions.session.value?.targetServer ?: return
-                listener.reconnectWithPassword(server.copy(password = password))
-            }
-            Action.ACKNOWLEDGE -> sessions.markErrorShown()
+    private fun onErrorAction(result: ConnectionErrorDialogFragment.Result) {
+        sessions.markErrorShown()
+        val server = result.server
+        when (result.action) {
+            Action.RETRY ->
+                if (result.input == FailureInput.PASSWORD) {
+                    listener.reconnectWithPassword(server)
+                } else {
+                    listener.reconnect(server)
+                }
+            Action.EDIT -> editServer(server)
+            Action.CLOSE -> Unit
         }
+    }
+
+    /** Opens the editor for [server]: a saved one is saved again, any other connected to. */
+    private fun editServer(server: Server) {
+        if (fragments.isStateSaved) return
+        val action = if (server.isSaved) ServerEditFragment.Action.EDIT else ServerEditFragment.Action.CONNECT
+        ServerEditFragment.newInstance(server, action, ignoreTitle = !server.isSaved).show(fragments, TAG_EDIT)
     }
 
     /** Offers once to trust the server's certificate, which is unknown or, if [changed], not the pinned one. */
     private fun offerTrust(chain: List<X509Certificate>, changed: Boolean) {
-        dismiss(TAG_ERROR)
+        dismissError()
         sessions.markErrorShown()
         val server = sessions.session.value?.targetServer ?: return
         val certificate = chain.firstOrNull() ?: return
@@ -213,13 +176,9 @@ class ConnectionDialogs(
 
     private companion object {
         const val TAG = "ConnectionDialogs"
-        const val TAG_CONNECTING = "connecting"
         const val TAG_ERROR = "connection_error"
         const val TAG_CERTIFICATE = "certificate"
+        const val TAG_EDIT = "server_edit"
         const val TAG_PERMISSION_DENIED = "permission_denied"
-
-        val DisconnectReason?.isWrongPassword: Boolean
-            get() = this is DisconnectReason.Rejected &&
-                type in setOf(RejectType.WRONG_USER_PASSWORD, RejectType.WRONG_SERVER_PASSWORD)
     }
 }
