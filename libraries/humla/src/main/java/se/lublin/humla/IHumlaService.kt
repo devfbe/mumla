@@ -2,12 +2,12 @@ package se.lublin.humla
 
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import se.lublin.humla.exception.HumlaDisconnectedException
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
-import se.lublin.humla.util.HumlaDisconnectedException
-import se.lublin.humla.util.HumlaException
 
 /**
  * What clients of a [HumlaService] use. Not thread-safe: call it from the main thread. Unless
@@ -41,7 +41,6 @@ interface IHumlaService {
     /** The error that ended the last connection, or null if it ended cleanly or none was made yet. */
     val connectionError: HumlaException?
 
-    /** True while the service will try to reconnect. */
     val isReconnecting: Boolean
 
     /** The server that Humla is connected to, was connected to, or will connect to. */
@@ -66,6 +65,5 @@ interface IHumlaService {
     /** Disconnects, or does nothing if no connection is active. */
     fun disconnect()
 
-    /** Cancels any future reconnection attempts. */
     fun cancelReconnect()
 }

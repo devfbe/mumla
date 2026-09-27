@@ -17,8 +17,6 @@
 
 package se.lublin.humla.net
 
-import se.lublin.humla.protocol.TcpMessageHandler
-import se.lublin.humla.protocol.VoicePacketHandler
 
 /**
  * Registration of protocol message handlers, implemented by [HumlaConnection].

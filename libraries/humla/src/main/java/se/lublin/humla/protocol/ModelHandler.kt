@@ -25,6 +25,7 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.User
 import se.lublin.humla.model.UserStats
+import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.session.HumlaEvent
 import java.util.concurrent.ConcurrentHashMap

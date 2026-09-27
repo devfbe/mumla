@@ -25,14 +25,16 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.audio.AudioController
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.net.HumlaTCPMessageType
 import se.lublin.humla.net.UdpProtocol
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.session.AudioController
+import se.lublin.humla.testutil.FAKE_BANDWIDTH
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
+import se.lublin.humla.util.Constants
 import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
@@ -60,8 +62,6 @@ class HumlaServiceAudioTest {
             h.audioFactory.created.size == count
         }
 
-    // ---------------------------------------------------------------- the pipeline's lifecycle
-
     @Test
     fun audioIsBuiltOnTheControlThreadWithTheSessionUser() {
         val h = start()
@@ -71,7 +71,7 @@ class HumlaServiceAudioTest {
         assertThat(h.audioFactory.createThreads.single()).isEqualTo(AudioController.THREAD_NAME)
         assertThat(h.audioFactory.sessionParams[0].self.name).isEqualTo("me")
         assertThat(h.audioFactory.sessionParams[0].maxBandwidth).isEqualTo(72_000)
-        assertThat(h.service.currentBandwidth).isEqualTo(12_345)
+        assertThat(h.service.currentBandwidth).isEqualTo(FAKE_BANDWIDTH)
     }
 
     /** The voice format the server's Version picked reaches the pipeline, before any voice is sent. */
@@ -85,7 +85,7 @@ class HumlaServiceAudioTest {
         h.synchronize(tcp)
 
         audioUp(h)
-        assertThat(h.service.getConnection()!!.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
+        assertThat(h.service.connection!!.udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
         assertThat(h.audioFactory.sessionParams[0].udpProtocol).isEqualTo(UdpProtocol.PROTOBUF)
     }
 
@@ -114,11 +114,11 @@ class HumlaServiceAudioTest {
         h.service.setTalkingState(true)
         assertThat(
             (h.audioFactory.sessionParams[0].inputMode as se.lublin.humla.audio.inputmode.ToggleInputMode)
-                .isTalkingOn()
+                .isTalkingOn
         ).isTrue()
     }
 
-    private fun inputModeOf(h: HumlaServiceHarness): Any = h.service.mInputMode
+    private fun inputModeOf(h: HumlaServiceHarness): Any = h.service.inputMode
 
     /**
      * A voice target set while the socket is up but before synchronization reaches the pipeline
@@ -223,9 +223,9 @@ class HumlaServiceAudioTest {
 
         h.failConnection(
             0,
-            se.lublin.humla.util.HumlaException(
+            se.lublin.humla.exception.HumlaException(
                 "gone",
-                se.lublin.humla.util.HumlaException.HumlaDisconnectReason.CONNECTION_ERROR,
+                se.lublin.humla.exception.HumlaException.HumlaDisconnectReason.CONNECTION_ERROR,
             ),
         )
 
@@ -251,7 +251,7 @@ class HumlaServiceAudioTest {
         awaitUntil(description = "the control thread ended") { !controller.thread.isAlive }
     }
 
-    private fun controllerOf(h: HumlaServiceHarness): AudioController = h.service.mAudioController
+    private fun controllerOf(h: HumlaServiceHarness): AudioController = h.service.audioController
 
     /**
      * A disconnect between the server's sync and its delivery on the main looper: no pipeline is
@@ -271,8 +271,6 @@ class HumlaServiceAudioTest {
         assertThat(h.service.connectionState)
             .isNotEqualTo(HumlaService.ConnectionState.CONNECTED)
     }
-
-    // ---------------------------------------------------------------- problems are visible
 
     @Test
     fun audioCreationFailureIsLoggedAsAWarning() {
@@ -315,8 +313,6 @@ class HumlaServiceAudioTest {
         }
     }
 
-    // ---------------------------------------------------------------- the settings that rebuild
-
     @Test
     fun changingAnAudioSettingWhileConnectedRebuildsThePipeline() {
         val h = start()
@@ -345,7 +341,7 @@ class HumlaServiceAudioTest {
         val sourceInUse = h.audioFactory.configs[0].audioSource
 
         h.configure { copy(audioSource = sourceInUse) }
-        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == 12_345 }
+        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == FAKE_BANDWIDTH }
 
         assertThat(h.audioFactory.created).hasSize(1)
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
@@ -362,7 +358,7 @@ class HumlaServiceAudioTest {
         audioUp(h)
 
         h.configure { copy(vadConfig = VadConfig.amplitude(0.8f, 120L)) }
-        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == 12_345 }
+        awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == FAKE_BANDWIDTH }
 
         assertThat(h.audioFactory.created).hasSize(1)
         assertThat(h.audioFactory.created[0].shutdownCalls.get()).isEqualTo(0)
@@ -384,8 +380,6 @@ class HumlaServiceAudioTest {
         assertThat(h.service.getAudioConfigForTest().halfDuplexRequested).isFalse()
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
     }
-
-    // ---------------------------------------------------------------- voice targets
 
     /**
      * The target reaches the running pipeline and the session behind it, so the next rebuild keeps

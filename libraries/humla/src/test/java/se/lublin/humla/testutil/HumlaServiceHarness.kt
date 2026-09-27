@@ -24,16 +24,16 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowLooper
 import se.lublin.humla.HumlaService
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.FakeTcpTransport
 import se.lublin.humla.net.FakeTransports
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.net.HumlaTCPMessageType
+import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.session.ReconnectPolicy
-import se.lublin.humla.session.SessionConfig
-import se.lublin.humla.util.HumlaException
 import se.lublin.humla.session.HumlaEvent
+import se.lublin.humla.session.SessionConfig
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -91,19 +91,13 @@ class HumlaServiceHarness(
         mainLooper.idle()
         awaitUntil(description = "nothing of the connection left behind") {
             mainLooper.idle()
-            service.getConnection()?.isTerminated != false
+            service.connection?.isTerminated != false
         }
     }
 
     /** Reconfigures the service the way MumlaService does, before or during a session. */
     fun configure(change: SessionConfig.() -> SessionConfig) {
         service.configure(service.sessionConfig.change())
-        mainLooper.idle()
-    }
-
-    /** Waits until something has been posted to the main looper, then runs it. */
-    fun drainMainWhenPosted() {
-        awaitUntil(description = "a task on the main looper") { !mainLooper.isIdle }
         mainLooper.idle()
     }
 
@@ -119,7 +113,7 @@ class HumlaServiceHarness(
         // `connected` is set before that callback is posted to the main looper.
         awaitUntil(description = "connection $index established") {
             mainLooper.idle()
-            service.getConnection()?.isConnected == true &&
+            service.connection?.isConnected == true &&
                 tcp.sent.contains(HumlaTCPMessageType.Authenticate)
         }
         return tcp
@@ -167,7 +161,7 @@ class HumlaServiceHarness(
             Mumble.ServerSync.newBuilder().setSession(session).setMaxBandwidth(72_000).build().toByteArray(),
         )
         awaitUntil(description = "server sync parsed") {
-            service.getConnection()?.isSynchronized == true
+            service.connection?.isSynchronized == true
         }
     }
 
@@ -180,7 +174,7 @@ class HumlaServiceHarness(
 
     /** Fails connection [index] the way a dropped socket does, including the late close report. */
     fun failConnection(index: Int, error: HumlaException) {
-        val connection = service.getConnection()
+        val connection = service.connection
         transports.tcps[index].simulateFailure(error)
         awaitUntil(description = "connection $index torn down") {
             mainLooper.idle()

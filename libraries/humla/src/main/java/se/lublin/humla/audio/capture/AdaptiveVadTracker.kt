@@ -17,6 +17,8 @@
 
 package se.lublin.humla.audio.capture
 
+private const val MS_PER_SECOND = 1000f
+
 /**
  * Tracks the noise floor and recent speech peak (dBFS) and puts the transmit threshold at a fraction
  * of the gap between them: distance attenuates the talker but not the room, so the gap stays
@@ -54,7 +56,7 @@ class AdaptiveVadTracker(
      * @param learnFloor false while the user pins the floor by hand (the speech peak still moves).
      */
     fun update(levelDbfs: Float, transmitting: Boolean, frameMs: Float, learnFloor: Boolean = true) {
-        val seconds = frameMs / 1000f
+        val seconds = frameMs / MS_PER_SECOND
         if (!transmitting && learnFloor) {
             val step = if (levelDbfs > floorDbfs) floorRiseDbPerSecond else floorFallDbPerSecond
             val room = levelDbfs - floorDbfs

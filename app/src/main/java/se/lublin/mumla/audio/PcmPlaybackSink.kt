@@ -39,7 +39,6 @@ interface PcmPlaybackSink {
 }
 
 fun interface PcmPlaybackSinkFactory {
-    @Throws(AudioInitializationException::class)
     fun open(audioStream: Int, sampleRate: Int): PcmPlaybackSink
 }
 
@@ -58,7 +57,6 @@ class AndroidAudioTrackSink internal constructor(private val track: AudioTrack) 
     override fun release() = track.release()
 
     class Factory : PcmPlaybackSinkFactory {
-        @Throws(AudioInitializationException::class)
         override fun open(audioStream: Int, sampleRate: Int): PcmPlaybackSink {
             val minBufferSize = AudioTrack.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,

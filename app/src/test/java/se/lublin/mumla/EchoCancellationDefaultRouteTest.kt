@@ -24,7 +24,7 @@ import org.junit.Test
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.AudioSourcePolicy
 import se.lublin.humla.audio.capture.EchoCancellationMode
-import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.audio.routing.AudioDeviceCategory
 
 /**
  * The echo canceller is on by default on the speaker and the earpiece. Every canceller asks for

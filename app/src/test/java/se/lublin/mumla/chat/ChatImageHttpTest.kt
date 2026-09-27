@@ -72,8 +72,6 @@ class ChatImageHttpTest {
         assertThat(client().get(url("/a.png"))).hasLength(16)
     }
 
-    // Destinations.
-
     @Test
     fun aNameThatResolvesIntoTheLanIsRefusedWithoutAConnection() {
         server.enqueue(image())
@@ -126,8 +124,6 @@ class ChatImageHttpTest {
         assertThat(server.requestCount).isEqualTo(0)
     }
 
-    // Redirects.
-
     @Test
     fun aRedirectToAnAllowedHostOfTheSameSchemeIsFollowed() {
         server.enqueue(redirect(url("/b.png").toString()))
@@ -173,8 +169,6 @@ class ChatImageHttpTest {
         assertThat(server.requestCount).isEqualTo(6)
     }
 
-    // Size.
-
     @Test
     fun aDeclaredLengthOverTheCapIsRefusedBeforeTheBodyIsRead() {
         server.enqueue(image(101))
@@ -206,8 +200,6 @@ class ChatImageHttpTest {
         assertThat(DEFAULT_MAX_IMAGE_BYTES).isEqualTo(5L * 1024 * 1024)
     }
 
-    // The gate.
-
     /** Under Tor (or with external images off) nothing is resolved and nothing is sent. */
     @Test
     fun whileTheGateIsClosedNothingIsResolvedOrSent() {
@@ -228,8 +220,6 @@ class ChatImageHttpTest {
         assertThat(client.refusal(url("/a.png"))).isEqualTo(ImageError.EXTERNAL_DISABLED)
         assertThat(server.requestCount).isEqualTo(1)
     }
-
-    // Headers, cookies and configuration.
 
     @Test
     fun theUserAgentIsMumlaAndNoCookiesAreKept() {

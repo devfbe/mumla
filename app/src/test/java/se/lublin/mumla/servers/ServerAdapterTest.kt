@@ -1,10 +1,8 @@
 package se.lublin.mumla.servers
 
 import android.content.Context
-import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
-import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.view.ContextThemeWrapper
@@ -20,7 +18,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
-import se.lublin.mumla.databinding.ServerListRowBinding
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -51,13 +48,7 @@ class ServerAdapterTest {
         context, scope, { clicked += it }, pinger, dispatcher,
         pingsAllowed ?: { !se.lublin.mumla.Settings.getInstance(context).isTorEnabled },
     ) {
-        override fun createHolder(inflater: LayoutInflater, parent: ViewGroup): ServerViewHolder {
-            val binding = ServerListRowBinding.inflate(inflater, parent, false)
-            return ServerViewHolder(
-                binding.root, binding.serverRowName, binding.serverRowVersionStatus, binding.serverRowUsercount,
-                binding.serverRowLatency, binding.serverRowPingProgress, binding.serverRowMore,
-            )
-        }
+        override val rowLayout: Int get() = R.layout.server_list_row
 
         override val popupMenuResource: Int get() = R.menu.popup_favourite_server
         override fun onPopupItemClick(server: Server, menuItem: MenuItem) = false

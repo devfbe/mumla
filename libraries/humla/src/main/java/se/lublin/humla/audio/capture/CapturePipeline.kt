@@ -17,7 +17,6 @@
 
 package se.lublin.humla.audio.capture
 
-import se.lublin.humla.audio.inputmode.IInputMode
 
 /**
  * Result of one pipeline pass. Owned and reused by the pipeline (as is [samples]), so every field is
@@ -47,7 +46,7 @@ class CaptureFrame internal constructor(val samples: ShortArray) {
  * tail, and the detector gets the resampler's actual count (0 is legal and yields
  * [VoiceActivityDetector.NO_SIGNAL]).
  */
-class CapturePipeline @JvmOverloads constructor(
+class CapturePipeline(
     resampler: Resampler?,
     private val preprocessor: CapturePreprocessor,
     private val inputMode: IInputMode,
@@ -98,11 +97,11 @@ class CapturePipeline @JvmOverloads constructor(
         val old = this.resampler
         this.resampler = resampler
         shortFrameLogged = false
-        if (old !== resampler) old?.release()
+        if (old !== resampler) old?.close()
     }
 
     fun release() {
-        resampler?.release()
+        resampler?.close()
         resampler = null
         preprocessor.release()
     }

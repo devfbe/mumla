@@ -19,6 +19,8 @@ package se.lublin.humla.audio
 
 import android.util.Log
 
+private const val TAG = "PlaybackMix"
+
 /**
  * The talkers being played and one mix of them, decoded inline on the playback thread. Reuses its
  * lists, so a mix allocates nothing. Not thread-safe: `AudioOutput` guards it with its packet lock.
@@ -67,9 +69,5 @@ internal class PlaybackMix(private val mixer: IAudioMixer<FloatArray, ShortArray
         speeches.forEach(onRemoved)
         speeches.clear()
         sources.clear()
-    }
-
-    private companion object {
-        const val TAG = "PlaybackMix"
     }
 }

@@ -4,7 +4,6 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -17,8 +16,8 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.User
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
-import se.lublin.humla.protocol.AudioHandler
 import se.lublin.humla.testutil.awaitUntil
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class AudioOutputTest {
@@ -49,7 +48,7 @@ class AudioOutputTest {
         val o = AudioOutput(listener, null, factory)
         output = o
         o.startPlaying(AudioManager.STREAM_MUSIC)
-        awaitTrue("the playback thread to start") { o.isPlaying() }
+        awaitTrue("the playback thread to start") { o.isPlaying }
         return o
     }
 
@@ -93,7 +92,7 @@ class AudioOutputTest {
         val thrown = runCatching { o.startPlaying(AudioManager.STREAM_MUSIC) }.exceptionOrNull()
 
         assertThat(thrown).isInstanceOf(se.lublin.humla.exception.AudioInitializationException::class.java)
-        assertThat(o.isPlaying()).isFalse()
+        assertThat(o.isPlaying).isFalse()
     }
 
     // --- track attributes ------------------------------------------------------------------------
@@ -129,7 +128,7 @@ class AudioOutputTest {
             thread.join(TimeUnit.SECONDS.toMillis(5))
 
             assertWithMessage("playback thread alive after stop, round $round").that(thread.isAlive).isFalse()
-            assertThat(o.isPlaying()).isFalse()
+            assertThat(o.isPlaying).isFalse()
             assertThat(o.playbackTrack()).isNull()
         }
     }
@@ -151,7 +150,7 @@ class AudioOutputTest {
         // producer still owns parks it forever.
         runBounded("stopPlaying after the failed packet") { o.stopPlaying() }
         output = null
-        assertThat(o.isPlaying()).isFalse()
+        assertThat(o.isPlaying).isFalse()
     }
 
     @Test

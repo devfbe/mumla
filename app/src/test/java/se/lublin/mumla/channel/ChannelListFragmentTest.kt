@@ -1,13 +1,12 @@
 package se.lublin.mumla.channel
 
-import android.os.Bundle
+import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,8 +65,7 @@ class ChannelListFragmentTest {
         parent = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(parent, "parent").commitNow()
-        fragment = ChannelListFragment()
-        fragment.arguments = Bundle().apply { putBoolean("pinned", false) }
+        fragment = ChannelListFragment.newInstance(pinned = false)
         parent.childFragmentManager.beginTransaction().add(fragment, "list").commitNow()
     }
 
@@ -178,11 +176,14 @@ class ChannelListFragmentTest {
             PreferenceManager.getDefaultSharedPreferences(controller.get())
         val changes = countChanges()
 
-        fragment.onSharedPreferenceChanged(preferences, "some.other.preference")
+        preferences.edit { putBoolean("some.other.preference", true) }
+        idleMainLooper()
 
         assertThat(changes()).isEqualTo(0)
 
-        fragment.onSharedPreferenceChanged(preferences, Settings.PREF_SHOW_USER_COUNT)
+        val shown = Settings.getInstance(controller.get()).shouldShowUserCount
+        preferences.edit { putBoolean(Settings.SHOW_USER_COUNT.key, !shown) }
+        idleMainLooper()
 
         assertThat(changes()).isEqualTo(1)
     }
@@ -198,8 +199,8 @@ class ChannelListFragmentTest {
         val pinned = ChatTargetParentFragment()
         controller.get().supportFragmentManager.beginTransaction()
             .add(whole, "whole-parent").add(pinned, "pinned-parent").commitNow()
-        val wholeList = ChannelListFragment().apply { arguments = Bundle().apply { putBoolean("pinned", false) } }
-        val pinnedList = ChannelListFragment().apply { arguments = Bundle().apply { putBoolean("pinned", true) } }
+        val wholeList = ChannelListFragment.newInstance(false)
+        val pinnedList = ChannelListFragment.newInstance(true)
         whole.childFragmentManager.beginTransaction().add(wholeList, "whole-list").commitNow()
         pinned.childFragmentManager.beginTransaction().add(pinnedList, "pinned-list").commitNow()
         idleMainLooper()

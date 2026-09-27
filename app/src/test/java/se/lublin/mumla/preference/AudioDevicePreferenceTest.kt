@@ -32,7 +32,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 
@@ -82,7 +82,7 @@ class AudioDevicePreferenceTest {
     }
 
     private fun AudioSettingsFragment.device() =
-        requireNotNull(findPreference<ListPreference>(Settings.PREF_AUDIO_DEVICE))
+        requireNotNull(findPreference<ListPreference>(Settings.AUDIO_DEVICE.key))
 
     private fun ListPreference.labels() = entries.map { it.toString() }
 

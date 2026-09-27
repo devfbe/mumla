@@ -22,9 +22,11 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
-import se.lublin.humla.Constants
 import se.lublin.humla.audio.capture.VadConfig
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.model.Server
+import se.lublin.humla.util.Constants
 import java.lang.reflect.Modifier
 
 /** Whether changing one field of a [SessionConfig] needs a reconnect to take effect. */

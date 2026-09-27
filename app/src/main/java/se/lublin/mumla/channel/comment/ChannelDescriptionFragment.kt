@@ -17,13 +17,13 @@
 
 package se.lublin.mumla.channel.comment
 
+import androidx.core.os.bundleOf
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.HumlaEvent
 
-/** Shows a channel's description. Argument "channel": the channel id. */
 class ChannelDescriptionFragment : AbstractCommentFragment() {
 
-    private val channelId: Int get() = requireArguments().getInt("channel")
+    private val channelId: Int get() = requireArguments().getInt(ARG_CHANNEL)
 
     override fun requestComment(service: IHumlaService) {
         if (!service.isConnected) return
@@ -35,5 +35,14 @@ class ChannelDescriptionFragment : AbstractCommentFragment() {
 
     override fun editComment(service: IHumlaService, comment: String) {
         // Channel descriptions cannot be edited here yet.
+    }
+
+    companion object {
+        private const val ARG_CHANNEL = "channel"
+
+        /** The description of [channelId]; [description] is null until it is fetched. */
+        fun newInstance(channelId: Int, description: String?) = ChannelDescriptionFragment().apply {
+            arguments = bundleOf(ARG_CHANNEL to channelId, ARG_COMMENT to description, ARG_EDITING to false)
+        }
     }
 }

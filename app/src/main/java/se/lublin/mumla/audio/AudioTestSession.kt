@@ -20,6 +20,7 @@ package se.lublin.mumla.audio
 import android.media.AudioManager
 import android.media.MediaRecorder
 import android.util.Log
+import se.lublin.humla.audio.AudioHandler
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.AudioSourcePolicy
@@ -36,8 +37,9 @@ import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.inputmode.ActivityInputMode
-import se.lublin.humla.exception.AudioInitializationException
-import se.lublin.humla.protocol.AudioHandler
+
+/** Capture runs in 10 ms frames. */
+private const val FRAMES_PER_SECOND = 100
 
 /**
  * One frame's worth of everything the level meter draws. Levels are dBFS; `null` means the mode
@@ -99,7 +101,6 @@ class AudioTestSession(
     /** Forgets what the tracker has learned, which is the screen's "measure again". */
     fun recalibrate() = detector.recalibrate()
 
-    @Throws(AudioInitializationException::class)
     fun start() {
         check(thread == null) { "already started" }
         // Route capture exactly like the service will, or the preview calibrates a different setup.
@@ -112,9 +113,8 @@ class AudioTestSession(
         )
         try {
             val chain = preprocessorFactory.create(noiseSuppression, echoCancellation, speexNoiseSuppressDb)
-            val resampler =
-                if (src.sampleRate != AudioHandler.SAMPLE_RATE) resamplerFactory(src.sampleRate, AudioHandler.SAMPLE_RATE)
-                else null
+            val rate = AudioHandler.SAMPLE_RATE
+            val resampler = if (src.sampleRate != rate) resamplerFactory(src.sampleRate, rate) else null
             val pipe = CapturePipeline(
                 resampler, chain.preprocessor, ActivityInputMode(detector), 1f, AudioHandler.FRAME_SIZE,
             )
@@ -135,7 +135,7 @@ class AudioTestSession(
     private fun loop(src: PcmCaptureSource, snk: PcmPlaybackSink?, pipe: CapturePipeline) {
         src.start()
         snk?.play()
-        val frameSize = src.sampleRate / 100
+        val frameSize = src.sampleRate / FRAMES_PER_SECOND
         val buffer = ShortArray(frameSize)
         val silence = ShortArray(AudioHandler.FRAME_SIZE)
         var count = 0
@@ -173,7 +173,7 @@ class AudioTestSession(
             VadMode.AMPLITUDE -> {
                 // The legacy slider is a score on the 96 dB curve; this is that score as a level,
                 // so the mark the user drags and the mark the meter draws are the same number.
-                val threshold = (vadConfig.startThreshold - 1f) * 96f
+                val threshold = VoiceActivityDetector.scoreToDbfs(vadConfig.startThreshold)
                 MeterReading(
                     levelDbfs = level,
                     floorDbfs = null,

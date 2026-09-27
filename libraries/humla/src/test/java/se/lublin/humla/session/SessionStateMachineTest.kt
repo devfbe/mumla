@@ -2,7 +2,7 @@ package se.lublin.humla.session
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 
 class SessionStateMachineTest {
     private val error = HumlaException("socket closed", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
@@ -54,7 +54,8 @@ class SessionStateMachineTest {
         machine.lost(autoReconnect = true, error = error)
         assertThat(machine.reconnectTimerFired()).isTrue()
         assertThat(machine.current).isEqualTo(SessionState.Reconnecting(error))
-        assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(4_000L, 2, error))
+        assertThat(machine.lost(autoReconnect = true, error = error))
+            .isEqualTo(SessionState.ConnectionLost(4_000L, 2, error))
     }
 
     @Test
@@ -85,7 +86,8 @@ class SessionStateMachineTest {
             machine.reconnectTimerFired()
         }
         assertThat(machine.synchronized()).isTrue()
-        assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))
+        assertThat(machine.lost(autoReconnect = true, error = error))
+            .isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))
     }
 
     @Test
@@ -99,7 +101,8 @@ class SessionStateMachineTest {
         assertThat(machine.connectivityRestored()).isTrue()
         assertThat(machine.current).isEqualTo(SessionState.ConnectionLost(0L, 0, error))
         machine.reconnectTimerFired()
-        assertThat(machine.lost(autoReconnect = true, error = error)).isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))
+        assertThat(machine.lost(autoReconnect = true, error = error))
+            .isEqualTo(SessionState.ConnectionLost(2_000L, 1, error))
     }
 
     @Test

@@ -4,7 +4,7 @@ import android.os.Looper
 import com.google.protobuf.MessageLite
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import java.security.cert.X509Certificate
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
@@ -75,10 +75,10 @@ class FakeTcpTransport(private val scope: CoroutineScope) : TcpTransport {
     }
 
     fun simulateConnected() = post { it.onTCPConnectionEstablished() }
-    fun simulateMessage(type: HumlaTCPMessageType, data: ByteArray) = post { it.onTCPMessageReceived(type, data.size, data) }
+    fun simulateMessage(type: HumlaTCPMessageType, data: ByteArray) =
+        post { it.onTCPMessageReceived(type, data.size, data) }
     fun simulateFailure(e: HumlaException) = post { it.onTCPConnectionFailed(e) }
     fun simulateHandshakeFailure(chain: Array<X509Certificate>) = post { it.onTLSHandshakeFailed(chain) }
-    fun simulateCertificateChanged(chain: Array<X509Certificate>) = post { it.onTLSCertificateChanged(chain) }
 
     /**
      * The read loop's finally block reporting the closed socket. Called **directly**, not through
@@ -144,7 +144,11 @@ class FakeTransports : HumlaConnection.TransportFactory {
     override fun createTcp(socketFactory: HumlaSSLSocketFactory, scope: CoroutineScope): TcpTransport =
         FakeTcpTransport(scope).also { tcps += it }
 
-    override fun createUdp(cryptState: CryptState, listener: HumlaUDP.UDPConnectionListener, scope: CoroutineScope): UdpTransport =
+    override fun createUdp(
+        cryptState: CryptState,
+        listener: HumlaUDP.UDPConnectionListener,
+        scope: CoroutineScope,
+    ): UdpTransport =
         FakeUdpTransport(scope, listener, cryptState).also { udps += it }
 }
 
@@ -165,12 +169,19 @@ class RecordingConnectionListener : HumlaConnection.HumlaConnectionListener {
     /** One entry per callback: the looper it ran on. */
     val callbackLoopers = CopyOnWriteArrayList<Looper?>()
 
-    val allOnMainLooper: Boolean get() = callbackLoopers.isNotEmpty() && callbackLoopers.all { it == Looper.getMainLooper() }
+    val allOnMainLooper: Boolean
+        get() = callbackLoopers.isNotEmpty() && callbackLoopers.all { it == Looper.getMainLooper() }
 
     override fun onConnectionEstablished() { record("established"); established.incrementAndGet() }
     override fun onConnectionSynchronized() { record("synchronized"); synchronizedCount.incrementAndGet() }
-    override fun onConnectionHandshakeFailed(chain: Array<X509Certificate>) { record("handshakeFailed"); handshakeFailures += chain }
-    override fun onConnectionCertificateChanged(chain: Array<X509Certificate>) { record("certificateChanged"); certificateChanges += chain }
+    override fun onConnectionHandshakeFailed(chain: Array<X509Certificate>) {
+        record("handshakeFailed")
+        handshakeFailures += chain
+    }
+    override fun onConnectionCertificateChanged(chain: Array<X509Certificate>) {
+        record("certificateChanged")
+        certificateChanges += chain
+    }
     override fun onConnectionDisconnected(e: HumlaException?) { record("disconnected"); disconnects += e }
     override fun onConnectionWarning(warning: ConnectionWarning) { record("warning:$warning"); warnings += warning }
 

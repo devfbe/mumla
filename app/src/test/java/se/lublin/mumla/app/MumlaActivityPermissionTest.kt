@@ -41,6 +41,8 @@ import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.stubConnected
+import se.lublin.mumla.ui.ServerRequest
+import se.lublin.mumla.ui.ServiceViewModel
 
 /** How MumlaActivity gets the permissions a connection needs. */
 @RunWith(RobolectricTestRunner::class)

@@ -62,4 +62,14 @@
     <color name="ripple_talk_state_suppressed">#ff669900</color>
     <color name="ripple_talk_state_server_muted">#ff0099cc</color>
     <color name="ripple_talk_state_server_deafened">#ff0099cc</color>
+    <!-- The voice gate level meter (LevelMeterView). -->
+    <color name="level_meter_silent_zone">#30808080</color>
+    <color name="level_meter_hold_zone">#40ff9800</color>
+    <color name="level_meter_voice_zone">#404caf50</color>
+    <color name="level_meter_idle_level">#ff607d8b</color>
+    <color name="level_meter_hold_level">#ffff9800</color>
+    <color name="level_meter_voice_level">#ff4caf50</color>
+    <color name="level_meter_floor">#ff78909c</color>
+    <color name="level_meter_speech">#ff039be5</color>
+    <color name="level_meter_threshold">#ff2e7d32</color>
 </resources>

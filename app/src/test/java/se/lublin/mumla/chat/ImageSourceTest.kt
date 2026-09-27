@@ -103,7 +103,8 @@ class ImageSourceTest {
     @Test
     fun nonImageDataUriIsUnsupported() {
         assertThat(ImageSource.parse("data:text/html;base64,PGI+aGk8L2I+")).isEqualTo(ImageSource.Unsupported)
-        assertThat(ImageSource.parse("data:application/javascript;base64,YWxlcnQoMSk=")).isEqualTo(ImageSource.Unsupported)
+        assertThat(ImageSource.parse("data:application/javascript;base64,YWxlcnQoMSk="))
+            .isEqualTo(ImageSource.Unsupported)
         assertThat(ImageSource.parse("data:;base64,YQ==")).isEqualTo(ImageSource.Unsupported)
         assertThat(ImageSource.parse("data:,hello")).isEqualTo(ImageSource.Unsupported)
     }
@@ -163,7 +164,8 @@ class ImageSourceTest {
     @Test
     fun lookalikeCharactersThatDoNotCaseFoldAreUnsupported() {
         // Fullwidth latin, Cyrillic and Greek lookalikes are simply different characters.
-        assertThat(ImageSource.parse("\uFF48\uFF54\uFF54\uFF50://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
+        assertThat(ImageSource.parse("\uFF48\uFF54\uFF54\uFF50://evil.example/a.png"))
+            .isEqualTo(ImageSource.Unsupported)
         assertThat(ImageSource.parse("http\u0455://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
         assertThat(ImageSource.parse("\u0440ttp://evil.example/a.png")).isEqualTo(ImageSource.Unsupported)
         assertThat(ImageSource.parse("d\u0430ta:image/png;base64,YQ==")).isEqualTo(ImageSource.Unsupported)

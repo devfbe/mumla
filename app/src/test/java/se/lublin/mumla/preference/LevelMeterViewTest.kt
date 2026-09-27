@@ -20,6 +20,7 @@ package se.lublin.mumla.preference
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -94,9 +95,9 @@ class LevelMeterViewTest {
         val shadow = org.robolectric.Shadows.shadowOf(view)
         for ((name, write) in writes) {
             shadow.clearWasInvalidated()
-            assertThat(shadow.wasInvalidated()).isFalse()
+            assertWithMessage(name).that(shadow.wasInvalidated()).isFalse()
             write()
-            assertThat(shadow.wasInvalidated()).isTrue()
+            assertWithMessage(name).that(shadow.wasInvalidated()).isTrue()
         }
         assertThat(writes.map { it.first }).hasSize(7)
     }
@@ -115,7 +116,8 @@ class LevelMeterViewTest {
             android.view.View.MeasureSpec.makeMeasureSpec(20, android.view.View.MeasureSpec.EXACTLY),
         )
         view.layout(0, 0, 200, 20)
-        view.draw(android.graphics.Canvas(android.graphics.Bitmap.createBitmap(200, 20, android.graphics.Bitmap.Config.ARGB_8888)))
+        val bitmap = android.graphics.Bitmap.createBitmap(200, 20, android.graphics.Bitmap.Config.ARGB_8888)
+        view.draw(android.graphics.Canvas(bitmap))
         assertThat(view.level).isEqualTo(0.5f)
         assertThat(view.floorMark).isEqualTo(0.3f)
     }

@@ -6,6 +6,8 @@ import androidx.core.content.withStyledAttributes
 import androidx.preference.DialogPreference
 import se.lublin.mumla.R
 
+private const val DEFAULT_MAX = 100
+
 /**
  * An int preference picked on a slider from `min` to `max`. The stored value is the slider's
  * multiplied by `multiplier`; `android:text` is a suffix shown after it.
@@ -33,9 +35,5 @@ class SeekBarDialogPreference(context: Context, attrs: AttributeSet?) : DialogPr
             defaultValue = getInt(R.styleable.SeekBarDialogPreference_android_defaultValue, 0)
         }
         dialogLayoutResource = R.layout.dialog_seekbar_preference
-    }
-
-    private companion object {
-        const val DEFAULT_MAX = 100
     }
 }

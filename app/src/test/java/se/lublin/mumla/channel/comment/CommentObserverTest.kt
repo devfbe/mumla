@@ -1,6 +1,5 @@
 package se.lublin.mumla.channel.comment
 
-import android.os.Bundle
 import androidx.fragment.app.DialogFragment
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
@@ -27,8 +26,7 @@ class CommentObserverTest {
 
     private val listeners: Int get() = events.subscriptionCount.value
 
-    private fun show(fragment: DialogFragment, args: Bundle) {
-        fragment.arguments = args
+    private fun show(fragment: DialogFragment) {
         fragment.show(activity.supportFragmentManager, "comment")
         idleMainLooper()
     }
@@ -40,8 +38,8 @@ class CommentObserverTest {
 
     @Test
     fun aUserCommentStopsListeningWhenTheDialogClosesWithoutAReply() {
-        val fragment = UserCommentFragment()
-        show(fragment, Bundle().apply { putInt("session", 7) })
+        val fragment = UserCommentFragment.newInstance(7, comment = null, editing = false)
+        show(fragment)
         assertThat(listeners).isEqualTo(1)
 
         close(fragment)
@@ -51,8 +49,8 @@ class CommentObserverTest {
 
     @Test
     fun aChannelDescriptionStopsListeningWhenTheDialogClosesWithoutAReply() {
-        val fragment = ChannelDescriptionFragment()
-        show(fragment, Bundle().apply { putInt("channel", 3) })
+        val fragment = ChannelDescriptionFragment.newInstance(3, description = null)
+        show(fragment)
         assertThat(listeners).isEqualTo(1)
 
         close(fragment)
@@ -62,8 +60,8 @@ class CommentObserverTest {
 
     @Test
     fun theReplyStopsTheListeningAndClosingAfterwardsIsHarmless() {
-        val fragment = UserCommentFragment()
-        show(fragment, Bundle().apply { putInt("session", 7) })
+        val fragment = UserCommentFragment.newInstance(7, comment = null, editing = false)
+        show(fragment)
         val user = mockk<IUser> {
             every { session } returns 7
             every { comment } returns "hello"
@@ -79,8 +77,8 @@ class CommentObserverTest {
 
     @Test
     fun anotherUsersStateKeepsTheListening() {
-        val fragment = UserCommentFragment()
-        show(fragment, Bundle().apply { putInt("session", 7) })
+        val fragment = UserCommentFragment.newInstance(7, comment = null, editing = false)
+        show(fragment)
         val other = mockk<IUser> {
             every { session } returns 8
             every { comment } returns "not yours"

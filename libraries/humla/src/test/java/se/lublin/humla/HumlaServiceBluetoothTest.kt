@@ -25,19 +25,19 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import se.lublin.humla.session.AndroidCommunicationDevicesTest
-import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.AndroidCommunicationDevicesTest
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.PreferredAudioDevice
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.HumlaException
 import java.util.concurrent.TimeUnit
 
 /**
  * The user's wish for a Bluetooth headset and the route the platform actually holds are separate:
  * the wish survives everything the route does not. Routing goes through
- * [se.lublin.humla.session.AudioRouter] over [se.lublin.humla.session.CommunicationDevices].
+ * [se.lublin.humla.audio.routing.AudioRouter] over [se.lublin.humla.audio.routing.CommunicationDevices].
  */
 @RunWith(RobolectricTestRunner::class)
 class HumlaServiceBluetoothTest {
@@ -53,8 +53,6 @@ class HumlaServiceBluetoothTest {
 
     private fun connectionError() =
         HumlaException("socket reset", HumlaException.HumlaDisconnectReason.CONNECTION_ERROR)
-
-    // ---------------------------------------------------------------- wanted vs active
 
     @Test
     fun theWishAndTheRouteAreDifferentQuestions() {
@@ -111,8 +109,6 @@ class HumlaServiceBluetoothTest {
 
         assertThat(h.warnings).isEmpty()
     }
-
-    // ---------------------------------------------------------------- the route across a session
 
     /**
      * The route is dropped with every connection, the wish is not, and a synchronized session
@@ -193,8 +189,6 @@ class HumlaServiceBluetoothTest {
 
         assertThat(h.devices.clearCalls).isEqualTo(0)
     }
-
-    // ---------------------------------------------------------------- the chooser
 
     private fun HumlaServiceHarness.phone() {
         devices!!.available[1] = AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
@@ -336,12 +330,13 @@ class HumlaServiceBluetoothTest {
 
         h.service.selectAudioDevice(1)
 
-        awaitUntil(description = "audio rebuilt for the earpiece") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
+        awaitUntil(description = "audio rebuilt for the earpiece") {
+            h.mainLooper.idle()
+            h.audioFactory.created.size == 2
+        }
         assertThat(h.audioFactory.configs[1].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
         assertThat(h.audioFactory.configs[1].playbackStream).isEqualTo(AudioManager.STREAM_VOICE_CALL)
     }
-
-    // ---------------------------------------------------------------- the route and the pipeline
 
     @Test
     fun theScoRouteBecomingActiveRebuildsThePipelineOffTheMainThread() {
@@ -356,7 +351,7 @@ class HumlaServiceBluetoothTest {
         awaitUntil(description = "audio rebuilt for sco") { h.mainLooper.idle(); h.audioFactory.created.size == 2 }
         assertThat(h.audioFactory.configs[1].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
         assertThat(h.audioFactory.createThreads.distinct())
-            .containsExactly(se.lublin.humla.session.AudioController.THREAD_NAME)
+            .containsExactly(se.lublin.humla.audio.AudioController.THREAD_NAME)
     }
 
     /** The system taking the route away is the same event as us taking it: one rebuild, no more. */
@@ -385,10 +380,8 @@ class HumlaServiceBluetoothTest {
 
         val withPlatform = HumlaServiceHarness(devices = null).also { harnesses += it }
         assertThat(withPlatform.service.communicationDevices)
-            .isInstanceOf(se.lublin.humla.session.AndroidCommunicationDevices::class.java)
+            .isInstanceOf(se.lublin.humla.audio.routing.AndroidCommunicationDevices::class.java)
     }
-
-    // ---------------------------------------------------------------- echo cancellation
 
     /** The canceller follows the routed device: on for the phone's own speakers, off on a headset. */
     @Test
@@ -439,8 +432,6 @@ class HumlaServiceBluetoothTest {
 
         assertThat(h.service.isEchoCancellationEnabled).isFalse()
     }
-
-    // ---------------------------------------------------------------- the platform refusing
 
     /**
      * An OEM that enforces `BLUETOOTH_CONNECT` on `android.media` gets a caught `SecurityException`,

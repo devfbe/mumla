@@ -25,10 +25,6 @@ class OpusEncoderTest {
             settings[request] = value
             return 0
         }
-        override fun ctlGetInt(state: Long, request: Int, value: IntArray): Int {
-            value[0] = 40000
-            return 0
-        }
         override fun destroy(state: Long) {
             destroys++
         }
@@ -92,8 +88,8 @@ class OpusEncoderTest {
         val fake = FakeOpus()
         val encoder = OpusEncoder(48000, 1, 480, 2, 40000, 1024, fake)
 
-        encoder.destroy()
-        encoder.destroy()
+        encoder.close()
+        encoder.close()
 
         // A second opus_encoder_destroy on the same raw pointer is a native double free.
         assertThat(fake.destroys).isEqualTo(1)

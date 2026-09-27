@@ -56,23 +56,26 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.app.ServiceClient
-import se.lublin.mumla.app.ServiceViewModel
-import se.lublin.mumla.app.bindClient
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatContentParser
 import se.lublin.mumla.chat.ChatImageLoaders
+import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImageEncoder
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.outgoingMessageHtml
 import se.lublin.mumla.databinding.FragmentChatBinding
-import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.ui.ServiceClient
+import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.bindClient
+
+/** The image preview takes at most a third of the screen height. */
+private const val PREVIEW_SCREEN_FRACTION = 3
 
 /**
  * The chat tab: a [RecyclerView] of [IChatMessage]s plus the compose row. Parsing and rendering
@@ -303,7 +306,7 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
             setImageBitmap(bitmap)
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
-            maxHeight = resources.displayMetrics.heightPixels / 3
+            maxHeight = resources.displayMetrics.heightPixels / PREVIEW_SCREEN_FRACTION
             contentDescription = getString(R.string.image_confirm_send)
         }
         MaterialAlertDialogBuilder(requireContext())
@@ -357,12 +360,10 @@ class ChannelChatFragment : Fragment(), ServiceClient, MenuProvider {
     }
 
     /** Sends what the user typed, formatted as the settings say. */
-    @Throws(HumlaDisconnectedException::class)
     private fun sendMessage(message: String) {
         sendHtml(outgoingMessageHtml(message, Settings.getInstance(requireContext()).isMarkdownEnabled))
     }
 
-    @Throws(HumlaDisconnectedException::class)
     private fun sendHtml(html: String) {
         val service = service
         if (service == null) {

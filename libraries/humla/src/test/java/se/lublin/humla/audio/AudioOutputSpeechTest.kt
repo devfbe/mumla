@@ -2,13 +2,12 @@ package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
-import java.nio.ByteBuffer
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
 import se.lublin.humla.net.VoicePacket
-import se.lublin.humla.protocol.AudioHandler
+import java.nio.ByteBuffer
 
 class AudioOutputSpeechTest {
 
@@ -185,8 +184,8 @@ class AudioOutputSpeechTest {
             jitter,
         )
 
-        speech.destroy()
-        speech.destroy()
+        speech.close()
+        speech.close()
 
         // AudioOutputSpeech has no guard of its own: it relies on the ones in OpusDecoder and
         // SpeexJitterBuffer, so it is the pair that has to stay idempotent.

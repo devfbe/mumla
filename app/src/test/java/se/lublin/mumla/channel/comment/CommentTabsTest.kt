@@ -1,6 +1,5 @@
 package se.lublin.mumla.channel.comment
 
-import android.os.Bundle
 import android.webkit.WebView
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
@@ -28,12 +27,7 @@ class CommentTabsTest {
         .also { it.bind(mumla) }
 
     private fun show(editing: Boolean): AlertDialog {
-        val fragment = UserCommentFragment()
-        fragment.arguments = Bundle().apply {
-            putInt("session", 7)
-            putString("comment", "<b>hi</b>")
-            putBoolean("editing", editing)
-        }
+        val fragment = UserCommentFragment.newInstance(7, "<b>hi</b>", editing)
         fragment.show(activity.supportFragmentManager, "comment")
         idleMainLooper()
         return fragment.requireDialog() as AlertDialog

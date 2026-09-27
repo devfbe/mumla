@@ -22,6 +22,7 @@ import android.util.AttributeSet
 import android.widget.TextView
 import androidx.preference.Preference
 import androidx.preference.PreferenceViewHolder
+import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.mumla.R
 import se.lublin.mumla.audio.MeterReading
 import kotlin.math.roundToInt
@@ -34,7 +35,7 @@ class InputLevelMeterPreference(context: Context, attrs: AttributeSet?) : Prefer
     private var meter: LevelMeterView? = null
     private var caption: TextView? = null
     private var reading: MeterReading? = null
-    private var hysteresisDb: Float = 6f
+    private var hysteresisDb: Float = VadConfig.DEFAULT_HYSTERESIS_DB
 
     /** The sentence shown instead of a reading, if any. */
     var message: String? = null

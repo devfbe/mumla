@@ -2,4 +2,6 @@
 <resources>
     <!-- The chooser's "Automatic" entry, added by AudioDeviceMenu. -->
     <item name="menu_audio_device_automatic" type="id"/>
+    <!-- The password field of the wrong-password dialog, so that its text survives recreation. -->
+    <item name="connection_password" type="id"/>
 </resources>

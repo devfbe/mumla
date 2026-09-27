@@ -9,7 +9,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 import se.lublin.mumla.Settings
 
 @RunWith(RobolectricTestRunner::class)
@@ -53,7 +53,7 @@ class MediaKeyHandlerTest {
 
     private fun setAction(prefValue: String) {
         PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putString(Settings.PREF_MEDIA_BUTTON_ACTION, prefValue).commit()
+            .edit().putString(Settings.MEDIA_BUTTON_ACTION.key, prefValue).commit()
     }
 
     private fun press(keyCode: Int): Boolean {

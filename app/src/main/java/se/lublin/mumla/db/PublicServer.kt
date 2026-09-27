@@ -26,7 +26,6 @@ import se.lublin.humla.model.Server
 class PublicServer(
     name: String?,
     val ca: String?,
-    val continentCode: String?,
     val country: String?,
     val countryCode: String?,
     ip: String,

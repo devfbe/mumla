@@ -19,9 +19,10 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.menu.MenuBuilder
-import androidx.fragment.app.Fragment
+import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.every
@@ -32,9 +33,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import se.lublin.mumla.Settings
-import androidx.test.core.app.ApplicationProvider
-import androidx.preference.PreferenceManager
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -46,6 +44,7 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowToast
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.Channel
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IUser
@@ -53,18 +52,18 @@ import se.lublin.humla.model.Message
 import se.lublin.humla.model.ServerSettings
 import se.lublin.humla.model.User
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
+import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatImageLoader
 import se.lublin.mumla.chat.ChatImageLoaders
+import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.ImageError
 import se.lublin.mumla.chat.ImageFetchException
 import se.lublin.mumla.chat.ImageResult
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.TestImages
-import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.ChatTargetParentFragment
 import se.lublin.mumla.testing.ServiceHostActivity
@@ -75,7 +74,7 @@ import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
 
 /**
- * Driven through a real host: an `Activity` whose [se.lublin.mumla.app.ServiceViewModel] holds the
+ * Driven through a real host: an `Activity` whose [se.lublin.mumla.ui.ServiceViewModel] holds the
  * service, and a parent `Fragment` that holds the chat target.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -106,14 +105,12 @@ class ChannelChatFragmentTest {
         if (this::controller.isInitialized) controller.close()
     }
 
-    // ---- harness ----------------------------------------------------------------------------
-
-    /** Brings the host up with [withService] already bound, then attaches the fragment. */
     /** Delivered at once: the fragment collects on the immediate main dispatcher. */
     private fun selectTarget(target: ChatTarget) {
         parent.chatTargets.select(target)
     }
 
+    /** Brings the host up with [withService] already bound, then attaches the fragment. */
     private fun launch(withService: IMumlaService? = service) {
         controller = Robolectric.buildActivity(ServiceHostActivity::class.java)
         activity = controller.create().get()
@@ -143,8 +140,6 @@ class ChannelChatFragmentTest {
 
     private fun info(body: String) =
         IChatMessage.InfoMessage(IChatMessage.InfoMessage.Type.INFO, body)
-
-    // ---- the list ---------------------------------------------------------------------------
 
     @Test
     fun theBoundMessageLogIsWhatTheListShows() {
@@ -181,8 +176,6 @@ class ChannelChatFragmentTest {
         log.value += info("late")
         idleMainLooper()
     }
-
-    // ---- the compose hint -------------------------------------------------------------------
 
     @Test
     fun theHintNamesTheSessionChannelWithNoTarget() {
@@ -253,8 +246,6 @@ class ChannelChatFragmentTest {
         assertThat(editor.hint.toString()).isEqualTo(activity.getString(R.string.messageToUser, "Ann"))
     }
 
-    // ---- the compose row --------------------------------------------------------------------
-
     /**
      * `android:enabled="false"` on an `ImageButton` is inert (see `ChatLayoutTest`), and the text
      * watcher only fires on a change, so the initial state has to be set in code.
@@ -297,7 +288,7 @@ class ChannelChatFragmentTest {
     @Test
     fun withoutMarkdownTheTextIsSentAsBefore() {
         PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
-            .edit().putBoolean(Settings.PREF_MARKDOWN, false).commit()
+            .edit().putBoolean(Settings.MARKDOWN.key, false).commit()
         every { session.sendChannelTextMessage(any(), any(), any()) } returns Message("out")
         launch()
         editor.setText("**hi** <b>there</b>")
@@ -341,8 +332,6 @@ class ChannelChatFragmentTest {
         assertThat(editor.text.toString()).isEqualTo("hi")
     }
 
-    // ---- the viewer -------------------------------------------------------------------------
-
     private fun openViewers(): Int =
         fragment.parentFragmentManager.fragments.count { it is ImageViewerDialogFragment }
 
@@ -359,7 +348,6 @@ class ChannelChatFragmentTest {
         assertThat(openViewers()).isEqualTo(1)
     }
 
-    /** Once the viewer is gone, the next tap opens one again. */
     @Test
     fun theViewerOpensAgainAfterItIsDismissed() {
         launch()
@@ -373,8 +361,6 @@ class ChannelChatFragmentTest {
         idleMainLooper()
         assertThat(openViewers()).isEqualTo(1)
     }
-
-    // ---- the session id ---------------------------------------------------------------------
 
     @Test
     fun theSessionIdIsTheLiveOneWhileConnected() {
@@ -408,8 +394,6 @@ class ChannelChatFragmentTest {
         launch(withService = null)
         assertThat(fragment.sessionId()).isNotEqualTo(Message("server said so").actor)
     }
-
-    // ---- the outgoing image path ------------------------------------------------------------
 
     private val progress: View get() = fragment.requireView().findViewById(R.id.chat_image_progress)
 
@@ -518,7 +502,6 @@ class ChannelChatFragmentTest {
         verify { service.clearMessageLog() }
     }
 
-    // ---- storage permission ------------------------------------------------------------------
     private fun tapUpload() {
         val button = fragment.requireView().findViewById<ImageButton>(R.id.chatImageSend)
         // performClick ignores isEnabled and visibility, so the state is asserted explicitly.
@@ -557,7 +540,6 @@ class ChannelChatFragmentTest {
         assertThat(startedAction()).isEqualTo(Intent.ACTION_GET_CONTENT)
     }
 
-    // ---- confirmation dialog -----------------------------------------------------------------
     private fun latestDialog(): AlertDialog = ShadowDialog.getLatestDialog() as AlertDialog
 
     @Test
@@ -866,7 +848,6 @@ class ChannelChatFragmentTest {
     }
 
 
-    // ---- pick -> prepare -> confirm ----------------------------------------------------------
     private fun registerImage(uri: Uri, bytes: ByteArray) {
         shadowOf(activity.contentResolver).registerInputStreamSupplier(uri) {
             java.io.ByteArrayInputStream(bytes)
@@ -964,8 +945,6 @@ class ChannelChatFragmentTest {
     }
 
 
-    // ---- misc ---------------------------------------------------------------------------------
-
     @Test
     fun theSpinnerIsUpWhileAnImageIsBeingEncoded() {
         every { session.serverSettings } returns settings(0)
@@ -977,7 +956,6 @@ class ChannelChatFragmentTest {
         drainMainUntil { progress.visibility == View.GONE }
     }
 
-    /** An image no quality rung fits is reported. */
     @Test
     fun anImageThatCannotBeMadeToFitSaysSo() {
         every { session.serverSettings } returns settings(10)

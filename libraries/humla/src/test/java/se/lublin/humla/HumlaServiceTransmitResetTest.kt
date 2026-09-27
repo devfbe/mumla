@@ -6,7 +6,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.inputmode.ToggleInputMode
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 /**
  * The push-to-talk toggle must not survive a lost connection: [ToggleInputMode] lives as long as
  * the service, so otherwise an auto-reconnect would resume sending without a key press.
@@ -54,11 +54,11 @@ class HumlaServiceTransmitResetTest {
         val frame = ShortArray(480)
 
         mode.setTalkingOn(true)
-        assertThat(mode.isTalkingOn()).isTrue()
+        assertThat(mode.isTalkingOn).isTrue()
         assertThat(mode.shouldTransmit(frame, frame.size, null)).isTrue()
 
         mode.setTalkingOn(false)
-        assertThat(mode.isTalkingOn()).isFalse()
+        assertThat(mode.isTalkingOn).isFalse()
         assertThat(mode.shouldTransmit(frame, frame.size, null)).isFalse()
     }
 }

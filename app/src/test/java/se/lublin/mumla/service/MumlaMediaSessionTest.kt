@@ -15,15 +15,15 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.spyk
-import kotlinx.coroutines.flow.MutableStateFlow
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.humla.Constants
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.util.Constants
 import se.lublin.mumla.Settings
 import se.lublin.mumla.testing.idleMainLooper
 
@@ -63,7 +63,7 @@ class MumlaMediaSessionTest {
 
     private fun setAction(prefValue: String) {
         PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putString(Settings.PREF_MEDIA_BUTTON_ACTION, prefValue).commit()
+            .edit().putString(Settings.MEDIA_BUTTON_ACTION.key, prefValue).commit()
     }
 
     private val state = MutableStateFlow<SessionState>(SessionState.Disconnected())
@@ -309,7 +309,7 @@ class MumlaMediaSessionTest {
         target.setTalking(true)
 
         PreferenceManager.getDefaultSharedPreferences(context)
-            .edit().putBoolean(Settings.PREF_BLUETOOTH_SCO, true).commit()
+            .edit().putBoolean(Settings.BLUETOOTH_SCO.key, true).commit()
 
         assertThat(mediaSession.isActive).isTrue()
         assertThat(mediaSession.sessionToken).isEqualTo(token)

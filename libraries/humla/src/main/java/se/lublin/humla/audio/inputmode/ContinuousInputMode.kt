@@ -17,6 +17,8 @@
 
 package se.lublin.humla.audio.inputmode
 
+import se.lublin.humla.audio.capture.IInputMode
+
 /** An input mode that always transmits audio. */
 class ContinuousInputMode : IInputMode {
     override fun shouldTransmit(pcm: ShortArray, length: Int, vadProbability: Float?): Boolean = true

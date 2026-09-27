@@ -18,7 +18,6 @@
 package se.lublin.humla
 
 import android.content.Context
-import android.content.Intent
 import android.net.ConnectivityManager
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
@@ -28,6 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowNetwork
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.model.WhisperTargetList
 import se.lublin.humla.protobuf.Mumble
@@ -35,7 +35,6 @@ import se.lublin.humla.session.ClientCertificate
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.HumlaException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -70,8 +69,6 @@ class HumlaServiceSessionTest {
         harness.mainLooper.idle()
     }
 
-    // ---------------------------------------------------------------- the happy path
-
     @Test
     fun connectWalksDisconnectedToConnectingToConnected() {
         val h = start()
@@ -97,13 +94,13 @@ class HumlaServiceSessionTest {
         val h = start()
         h.connectAndSynchronize()
 
-        val connection = h.service.getConnection()
+        val connection = h.service.connection
         h.service.connect()
         h.mainLooper.idle()
 
         // `getConnection()` rather than `transports.tcps.size`: a transport appears on the
         // protocol thread only later, so a size check would pass either way.
-        assertThat(h.service.getConnection()).isSameInstanceAs(connection)
+        assertThat(h.service.connection).isSameInstanceAs(connection)
         assertThat(h.service.sessionState.value).isEqualTo(SessionState.Connected)
         assertThat(h.transports.tcps).hasSize(1)
     }
@@ -184,7 +181,7 @@ class HumlaServiceSessionTest {
 
         h.service.connect()
         h.mainLooper.idle()
-        val connection = h.service.getConnection()!!
+        val connection = h.service.connection!!
 
         assertThat(connection.forceTcp).isEqualTo(true)
         assertThat(connection.useTor).isEqualTo(false)
@@ -204,10 +201,8 @@ class HumlaServiceSessionTest {
         h.service.connect()
         h.mainLooper.idle()
 
-        assertThat(h.service.getConnection()!!.useTor).isEqualTo(true)
+        assertThat(h.service.connection!!.useTor).isEqualTo(true)
     }
-
-    // ---------------------------------------------------------------- loss and backoff
 
     @Test
     fun aConnectionErrorWithAutoReconnectEntersConnectionLostAndKeepsTheWakeLock() {
@@ -388,12 +383,12 @@ class HumlaServiceSessionTest {
         val h = start(autoReconnect = true)
         h.connectAndSynchronize()
         h.failConnection(0, connectionError())
-        val connection = h.service.getConnection()
+        val connection = h.service.connection
 
         h.service.cancelReconnect()
         h.mainLooper.idleFor(100, TimeUnit.MILLISECONDS) // the post fires in here
 
-        assertThat(h.service.getConnection()).isSameInstanceAs(connection)
+        assertThat(h.service.connection).isSameInstanceAs(connection)
         assertThat(h.service.sessionState.value)
             .isInstanceOf(SessionState.Disconnected::class.java)
         assertThat(h.transports.tcps).hasSize(1)
@@ -550,8 +545,6 @@ class HumlaServiceSessionTest {
             .isNotEqualTo((-1).toByte())
     }
 
-    // ---------------------------------------------------------------- connectivity
-
     /**
      * Without connectivity the service does **not** burn attempts: it registers the network
      * callback and waits. Idling a full minute past the backoff shows nothing was queued at all.
@@ -674,15 +667,13 @@ class HumlaServiceSessionTest {
 
         h.service.connect() // Connecting, and the callback is still registered
         h.mainLooper.idle()
-        val connection = h.service.getConnection()
+        val connection = h.service.connection
         callback.onAvailable(ShadowNetwork.newInstance(1))
         h.mainLooper.idle()
 
         assertThat(networkCallbacks()).isEmpty()
-        assertThat(h.service.getConnection()).isSameInstanceAs(connection)
+        assertThat(h.service.connection).isSameInstanceAs(connection)
     }
-
-    // ---------------------------------------------------------------- the missing server
 
     /**
      * A connect without a configured server is reported as a failed attempt instead of crashing on

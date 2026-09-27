@@ -25,9 +25,9 @@ import org.robolectric.annotation.GraphicsMode
 import se.lublin.humla.HumlaService
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.Server
 import se.lublin.humla.model.TalkState
-import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.mumla.R
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
@@ -44,8 +44,6 @@ import java.util.concurrent.TimeUnit
  */
 @RunWith(RobolectricTestRunner::class)
 class ChannelListAdapterRebuildTest {
-    /** The row layouts resolve theme attributes, so they need a themed context, not the app one. */
-
     private companion object {
         /** Tall enough for every row of [smallTree] to be laid out at once. */
         const val WIDTH_PX = 1000
@@ -53,6 +51,7 @@ class ChannelListAdapterRebuildTest {
         const val SERVER_ID = 42L
     }
 
+    /** The row layouts resolve theme attributes, so they need a themed context, not the app one. */
     private lateinit var context: Context
     private lateinit var session: IHumlaSession
     private lateinit var service: IHumlaService
@@ -406,7 +405,7 @@ class ChannelListAdapterRebuildTest {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
 
-        ids.getValue(0).addSubchannel(newcomerBelowRoot(root, ids))
+        ids.getValue(0).addSubchannel(newcomerBelowRoot(root))
         adapter.updateChannels()
 
         assertThat(adapter.getChannelPosition(5)).isNotEqualTo(-1)
@@ -417,7 +416,7 @@ class ChannelListAdapterRebuildTest {
         val (root, ids) = smallTree()
         val adapter = adapterOver(root, ids)
 
-        ids.getValue(0).addSubchannel(newcomerBelowRoot(root, ids))
+        ids.getValue(0).addSubchannel(newcomerBelowRoot(root))
         adapter.updateChannels()
 
         assertThat(adapter.getUserPosition(400)).isNotEqualTo(-1)
@@ -458,7 +457,6 @@ class ChannelListAdapterRebuildTest {
         assertThat(expandToggleOf(adapter, 3).isEnabled).isFalse()
     }
 
-    /** Which way the chevron points. */
     @Test
     fun theExpandToggleChevronShowsWhetherTheRowIsOpen() {
         val (root, ids) = smallTree()
@@ -522,7 +520,7 @@ class ChannelListAdapterRebuildTest {
 
     /**
      * A null in `getUsers()` gets no row but is still counted, matching
-     * `Channel.subchannelUserCount` (`mUsers.size()`).
+     * `Channel.subchannelUserCount` (`_users.size()`).
      */
     @Test
     fun aUserTheModelHasNotFilledInYetIsCountedButGetsNoRow() {
@@ -944,14 +942,13 @@ class ChannelListAdapterRebuildTest {
         return bytes.toByteArray()
     }
 
-    private fun newcomerBelowRoot(root: FakeChannel, ids: Map<Int, FakeChannel>): FakeChannel {
+    private fun newcomerBelowRoot(root: FakeChannel): FakeChannel {
         val newcomer = FakeChannel(5, counters = root.counters)
         newcomer.addUser(FakeUser(400))
         byId[5] = newcomer
         return newcomer
     }
 
-    /** A bound row, by list position. */
     private fun rowOf(adapter: ChannelListAdapter, position: Int): View {
         val parent = recyclerView()
         val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(position))

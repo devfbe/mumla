@@ -18,7 +18,6 @@
 package se.lublin.mumla.channel
 
 import android.annotation.SuppressLint
-import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -28,28 +27,32 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.os.bundleOf
 import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import kotlinx.coroutines.launch
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.HumlaDisconnectedException
 import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.app.ServiceClient
-import se.lublin.mumla.app.ServiceViewModel
-import se.lublin.mumla.app.bindClient
 import se.lublin.mumla.databinding.FragmentChannelBinding
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.ui.ServiceClient
+import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.util.changes
 import java.util.Locale
 
 /**
@@ -60,7 +63,6 @@ import java.util.Locale
 class ChannelFragment :
     Fragment(),
     ServiceClient,
-    SharedPreferences.OnSharedPreferenceChangeListener,
     MenuProvider {
 
     private val serviceModel: ServiceViewModel by activityViewModels()
@@ -81,7 +83,7 @@ class ChannelFragment :
     }
 
     /** True if only the user's pinned channels are shown. */
-    private val isShowingPinnedChannels get() = arguments?.getBoolean("pinned") == true
+    private val isShowingPinnedChannels get() = arguments?.getBoolean(ARG_PINNED) == true
 
     override fun onServiceEvent(event: HumlaEvent) {
         when (event) {
@@ -221,8 +223,10 @@ class ChannelFragment :
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        PreferenceManager.getDefaultSharedPreferences(requireActivity())
-            .registerOnSharedPreferenceChangeListener(this)
+        viewLifecycleOwner.lifecycleScope.launch {
+            PreferenceManager.getDefaultSharedPreferences(requireContext()).changes(INPUT_PREFERENCES)
+                .collect { configureInput() }
+        }
 
         val binding = requireNotNull(binding)
         val pager = binding.channelViewPager
@@ -275,12 +279,6 @@ class ChannelFragment :
         talkButtonHeld = false
     }
 
-    override fun onDestroy() {
-        PreferenceManager.getDefaultSharedPreferences(requireActivity())
-            .unregisterOnSharedPreferenceChangeListener(this)
-        super.onDestroy()
-    }
-
     private fun configureTargetPanel() {
         val binding = binding ?: return
         val session = service?.takeIf { it.isConnected }?.session ?: return
@@ -324,13 +322,7 @@ class ChannelFragment :
         null
     }
 
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
-        if (key in INPUT_PREFERENCES) configureInput()
-    }
-
-    private fun newListFragment() = ChannelListFragment().apply {
-        arguments = Bundle().apply { putBoolean("pinned", isShowingPinnedChannels) }
-    }
+    private fun newListFragment() = ChannelListFragment.newInstance(isShowingPinnedChannels)
 
     private fun tabTitle(position: Int): String =
         getString(if (position == TAB_CHANNEL) R.string.channel else R.string.chat).uppercase(Locale.getDefault())
@@ -340,16 +332,21 @@ class ChannelFragment :
         override fun getItemCount(): Int = 2
 
         override fun createFragment(position: Int): Fragment =
-            if (position == TAB_CHANNEL) newListFragment() else ChannelChatFragment().apply { arguments = Bundle() }
+            if (position == TAB_CHANNEL) newListFragment() else ChannelChatFragment()
     }
 
-    private companion object {
-        val TAG: String = ChannelFragment::class.java.name
-        const val TAB_CHANNEL = 0
-        val INPUT_PREFERENCES = setOf(
-            Settings.PREF_INPUT_METHOD,
-            Settings.PREF_PUSH_BUTTON_HIDE_KEY,
-            Settings.PREF_PTT_BUTTON_HEIGHT,
+    companion object {
+        /** The channel list and chat, with [pinned] showing only the pinned channels. */
+        fun newInstance(pinned: Boolean = false) =
+            ChannelFragment().apply { arguments = bundleOf(ARG_PINNED to pinned) }
+
+        private val TAG: String = ChannelFragment::class.java.name
+        private const val TAB_CHANNEL = 0
+        private const val ARG_PINNED = "pinned"
+        private val INPUT_PREFERENCES = setOf(
+            Settings.INPUT_METHOD.key,
+            Settings.PUSH_BUTTON_HIDE.key,
+            Settings.PTT_BUTTON_HEIGHT.key,
         )
     }
 }

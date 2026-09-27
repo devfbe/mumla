@@ -2,6 +2,7 @@ package se.lublin.mumla.service
 
 import android.Manifest
 import android.app.Application
+import android.media.AudioDeviceInfo
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -12,12 +13,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import android.media.AudioDeviceInfo
 import se.lublin.humla.net.HumlaConnection
 import se.lublin.humla.testutil.FakeCommunicationDevices
 import se.lublin.humla.testutil.testConnection
 import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.Settings
+import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.testing.createMumlaService
 
 /**
@@ -49,7 +50,7 @@ class MumlaServiceBluetoothTest {
     }
 
     /**
-     * A synchronized connection. mModelHandler stays null, so the superclass hook returns before
+     * A synchronized connection. modelHandler stays null, so the superclass hook returns before
      * building an AudioHandler and skips engaging the router; that is done here instead.
      */
     private fun connect() {
@@ -159,8 +160,8 @@ class MumlaServiceBluetoothTest {
         settings.isBluetoothScoEnabled = false
         connect()
 
-        preferences().edit().putBoolean(Settings.PREF_PTT_SOUND, true).commit()
-        service.onSharedPreferenceChanged(preferences(), Settings.PREF_PTT_SOUND)
+        preferences().edit().putBoolean(Settings.PTT_SOUND.key, true).commit()
+        service.onPreferenceChanged(Settings.PTT_SOUND.key)
 
         assertThat(receiver.selectCalls.size).isEqualTo(0)
         assertThat(receiver.clearCalls).isEqualTo(0)

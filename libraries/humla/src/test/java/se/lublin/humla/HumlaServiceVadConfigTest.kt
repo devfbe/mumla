@@ -22,9 +22,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import se.lublin.humla.audio.AudioConfig
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
-import se.lublin.humla.session.AudioConfig
 import se.lublin.humla.session.SessionConfig
 
 /** The configured VAD settings reach the running microphone configuration. */
@@ -34,7 +34,7 @@ class HumlaServiceVadConfigTest {
         Robolectric.buildService(HumlaService::class.java).create().get()
 
     private fun inputMode(service: HumlaService) =
-        service.mActivityInputMode
+        service.activityInputMode
 
     @Test
     fun `the whole vad configuration reaches the live detector`() {

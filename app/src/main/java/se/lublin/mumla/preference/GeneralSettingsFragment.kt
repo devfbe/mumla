@@ -9,7 +9,7 @@ import androidx.preference.CheckBoxPreference
 import androidx.preference.Preference
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.channel.BluetoothScoToggle
+import se.lublin.mumla.audio.BluetoothScoToggle
 import se.lublin.mumla.util.BatteryOptimization
 import se.lublin.mumla.util.Orbot
 
@@ -22,7 +22,7 @@ class GeneralSettingsFragment : MumlaPreferenceFragment(R.xml.settings_general) 
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             // The answer does not decide the wish (see BluetoothScoToggle); the box follows it.
             bluetoothToggle.onPermissionAnswered()
-            findPreference<CheckBoxPreference>(Settings.PREF_BLUETOOTH_SCO)?.isChecked =
+            findPreference<CheckBoxPreference>(Settings.BLUETOOTH_SCO.key)?.isChecked =
                 bluetoothToggle.isEnabled
             if (!granted) {
                 Toast.makeText(requireContext(), R.string.bluetooth_perm_denied, Toast.LENGTH_LONG)
@@ -47,7 +47,7 @@ class GeneralSettingsFragment : MumlaPreferenceFragment(R.xml.settings_general) 
         }
 
         val useOrbotPreference: Preference =
-            requireNotNull(preferenceScreen.findPreference(Settings.PREF_USE_TOR))
+            requireNotNull(preferenceScreen.findPreference(Settings.USE_TOR.key))
         useOrbotPreference.isEnabled = Orbot.isInstalled(requireContext())
 
         bluetoothToggle = BluetoothScoToggle(
@@ -55,7 +55,7 @@ class GeneralSettingsFragment : MumlaPreferenceFragment(R.xml.settings_general) 
             Settings.getInstance(requireContext()),
         )
         val bluetoothPreference: CheckBoxPreference =
-            requireNotNull(preferenceScreen.findPreference(Settings.PREF_BLUETOOTH_SCO))
+            requireNotNull(preferenceScreen.findPreference(Settings.BLUETOOTH_SCO.key))
         bluetoothPreference.setOnPreferenceChangeListener { _, newValue ->
             when (bluetoothToggle.request(newValue as Boolean)) {
                 BluetoothScoToggle.Result.Enabled, BluetoothScoToggle.Result.Disabled -> true

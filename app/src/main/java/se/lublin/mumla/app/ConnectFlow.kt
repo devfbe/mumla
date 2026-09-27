@@ -17,10 +17,10 @@
 package se.lublin.mumla.app
 
 import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -43,8 +43,12 @@ import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.ui.showConfirmDialog
+import se.lublin.mumla.ui.showMessageDialog
 import se.lublin.mumla.util.Orbot
 import se.lublin.mumla.util.isPortOpen
+
+private const val TOR_PROBE_TIMEOUT_MS = 2000
 
 /**
  * Connects [activity] to servers: gets the permissions a session needs, confirms leaving the
@@ -184,9 +188,5 @@ class ConnectFlow(
 
     private fun showMessage(message: String) {
         activity.showMessageDialog(message)
-    }
-
-    private companion object {
-        const val TOR_PROBE_TIMEOUT_MS = 2000
     }
 }

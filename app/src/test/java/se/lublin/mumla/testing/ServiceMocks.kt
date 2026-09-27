@@ -21,10 +21,9 @@ import io.mockk.every
 import kotlinx.coroutines.flow.MutableSharedFlow
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.exception.HumlaDisconnectedException
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.HumlaDisconnectedException
 
-/** Stubs a service mock as connected, handing out [session]. */
 fun <T : IHumlaService> T.stubConnected(session: IHumlaSession): T = apply {
     every { isConnected } returns true
     every { this@stubConnected.session } returns session

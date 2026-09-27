@@ -32,7 +32,14 @@ interface SpeexResamplerApi {
      * `inLen[0]` and `outLen[0]` are clamped to `input.size` and `out.size` before speex sees
      * them, and come back as the counts actually consumed and produced.
      */
-    fun processInt(state: Long, channelIndex: Int, input: ShortArray, inLen: IntArray, out: ShortArray, outLen: IntArray): Int
+    fun processInt(
+        state: Long,
+        channelIndex: Int,
+        input: ShortArray,
+        inLen: IntArray,
+        out: ShortArray,
+        outLen: IntArray,
+    ): Int
 
     /** Releases [state]; 0 is a no-op. */
     fun destroy(state: Long)
@@ -44,6 +51,13 @@ object SpeexResamplerNative : SpeexResamplerApi {
     }
 
     external override fun init(channels: Int, inRate: Int, outRate: Int, quality: Int, error: IntArray?): Long
-    external override fun processInt(state: Long, channelIndex: Int, input: ShortArray, inLen: IntArray, out: ShortArray, outLen: IntArray): Int
+    external override fun processInt(
+        state: Long,
+        channelIndex: Int,
+        input: ShortArray,
+        inLen: IntArray,
+        out: ShortArray,
+        outLen: IntArray,
+    ): Int
     external override fun destroy(state: Long)
 }

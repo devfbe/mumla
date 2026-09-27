@@ -163,7 +163,8 @@ class ManifestAuditTest {
 
     private companion object {
         val LEFT_RIGHT = Regex(
-            """android:(layout_)?(margin|padding)(Left|Right)=|android:layout_(alignParent|to|align)(Left|Right)(Of)?=|""" +
+            """android:(layout_)?(margin|padding)(Left|Right)=|""" +
+                """android:layout_(alignParent|to|align)(Left|Right)(Of)?=|""" +
                 """android:drawable(Left|Right)=|android:(layout_)?gravity="[^"]*\b(left|right)\b""",
         )
     }

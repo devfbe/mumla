@@ -17,7 +17,6 @@
   ~ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   -->
 
-<!-- An overlay over a user's avatar to indicate that they're deafened. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="oval">

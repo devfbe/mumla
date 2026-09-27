@@ -19,7 +19,7 @@ class MumlaServiceMediaSessionWiringTest {
     fun aConnectedServiceHoldsAMediaSessionAndGivesItUpWhenDestroyed() {
         val controller = createMumlaService()
         val service = controller.get()
-        val mediaSession = service.mMediaSession!!
+        val mediaSession = service.mediaSession!!
         assertThat(mediaSession.isActive).isFalse()
 
         service.testStateMachine.apply { connectRequested(); synchronized() }

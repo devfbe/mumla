@@ -17,10 +17,10 @@
 package se.lublin.mumla.preference
 
 import android.content.res.Resources
-import se.lublin.humla.session.CommunicationDevice
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.CommunicationDevice
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.mumla.R
-import se.lublin.mumla.channel.AudioDeviceLabels
+import se.lublin.mumla.audio.AudioDeviceLabels
 
 /**
  * The audio device setting's entries: "Automatic" (a null device), the [available] devices, and the

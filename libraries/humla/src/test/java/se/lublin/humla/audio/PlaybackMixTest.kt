@@ -5,7 +5,6 @@ import org.junit.Test
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
-import se.lublin.humla.protocol.AudioHandler
 
 class PlaybackMixTest {
     /** Decodes every frame as a constant, so a mixed talker is audible in the output. */

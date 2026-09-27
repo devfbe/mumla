@@ -40,7 +40,6 @@ import se.lublin.humla.model.IMessage
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ListChatItemBinding
 import se.lublin.mumla.databinding.ListChatItemImageBinding
-import se.lublin.mumla.service.IChatMessage
 import java.text.DateFormat
 import java.util.Date
 

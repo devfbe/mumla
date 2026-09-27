@@ -32,8 +32,6 @@ class RnnoisePreprocessorTest {
 
     private val api = FakeRnnoiseApi()
 
-    // ------------------------------------------------------------------ construction
-
     @Test
     fun `construction creates exactly one denoiser`() {
         RnnoisePreprocessor(api)
@@ -49,8 +47,6 @@ class RnnoisePreprocessorTest {
 
         assertThat(failure).hasMessageThat().contains("rnnoise")
     }
-
-    // ------------------------------------------------------------------ the frame path
 
     @Test
     fun `process denoises in place and reports the model probability`() {
@@ -116,8 +112,6 @@ class RnnoisePreprocessorTest {
         assertThat(stage.rejectedFrames).isEqualTo(0)
     }
 
-    // ------------------------------------------------------------------ life cycle
-
     @Test
     fun `release destroys the denoiser exactly once`() {
         val stage = RnnoisePreprocessor(api)
@@ -154,8 +148,6 @@ class RnnoisePreprocessorTest {
             stage.analyzeReverseStream(ShortArray(FRAME))
         }
     }
-
-    // ------------------------------------------------------------------ handle ownership
 
     /**
      * The handle lives in exactly one private field of the base, and no member mentions a long

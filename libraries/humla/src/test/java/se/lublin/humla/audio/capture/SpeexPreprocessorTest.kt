@@ -36,8 +36,6 @@ class SpeexPreprocessorTest {
 
     private val api = FakeSpeexPreprocessApi()
 
-    // ------------------------------------------------------------------ construction
-
     @Test
     fun `creates the state for 10 ms frames at 48 kHz`() {
         SpeexPreprocessor(api)
@@ -60,8 +58,6 @@ class SpeexPreprocessorTest {
 
         assertThat(failure).hasMessageThat().contains("speex")
     }
-
-    // ------------------------------------------------------------------ the control calls
 
     @Test
     fun `enables denoise, never agc or dereverb`() {
@@ -110,8 +106,6 @@ class SpeexPreprocessorTest {
         ).inOrder()
     }
 
-    // ------------------------------------------------------------------ noise suppression
-
     @Test
     fun `applies each supported noise suppression level in dB`() {
         for (db in SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB) {
@@ -152,8 +146,6 @@ class SpeexPreprocessorTest {
         assertThat(api.created).isEqualTo(0)
         assertThat(api.createdWith).isNull()
     }
-
-    // ------------------------------------------------------------------ the frame path
 
     @Test
     fun `process runs speex on the frame and reports its probability as a fraction`() {
@@ -219,8 +211,6 @@ class SpeexPreprocessorTest {
         assertThat(stage.process(ShortArray(FRAME))).isNull()
     }
 
-    // ------------------------------------------------------------------ life cycle
-
     @Test
     fun `release destroys the state exactly once`() {
         val stage = SpeexPreprocessor(api)
@@ -254,8 +244,6 @@ class SpeexPreprocessorTest {
             stage.analyzeReverseStream(ShortArray(FRAME))
         }
     }
-
-    // ------------------------------------------------------------------ handle ownership
 
     /**
      * The handle lives in exactly one private field of the base, and no member mentions a long

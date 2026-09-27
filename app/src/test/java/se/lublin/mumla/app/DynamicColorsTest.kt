@@ -60,7 +60,7 @@ class DynamicColorsTest {
     @Test
     fun turningTheSettingOnThemesTheNextActivityFromTheWallpaper() {
         val brand = primaryOfNewActivity()
-        preferences.edit { putBoolean(Settings.PREF_DYNAMIC_COLORS, true) }
+        preferences.edit { putBoolean(Settings.DYNAMIC_COLORS.key, true) }
 
         assertThat(primaryOfNewActivity()).isNotEqualTo(brand)
     }

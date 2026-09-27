@@ -20,7 +20,6 @@ package se.lublin.mumla.preference
 
 import android.Manifest
 import android.content.Context
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -31,42 +30,46 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import kotlinx.coroutines.launch
 import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.PcmCaptureSourceFactory
 import se.lublin.humla.audio.capture.VadMode
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.listCommunicationDevices
 import se.lublin.humla.exception.AudioInitializationException
-import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.listCommunicationDevices
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.AndroidAudioTrackSink
 import se.lublin.mumla.audio.AudioTestSession
-import se.lublin.mumla.audio.MeterReading
 import se.lublin.mumla.audio.PcmPlaybackSinkFactory
+import se.lublin.mumla.service.SessionSettings
+import se.lublin.mumla.util.changes
 
 /** The audio settings screen; the decisions live in [AudioSettingsPolicy], this is the wiring. */
 open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio) {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         super.onCreatePreferences(savedInstanceState, rootKey)
 
-        val inputPreference = requireNotNull(findPreference<ListPreference>(Settings.PREF_INPUT_METHOD))
+        val inputPreference = requireNotNull(findPreference<ListPreference>(Settings.INPUT_METHOD.key))
         inputPreference.setOnPreferenceChangeListener { _, newValue ->
             updateAudioDependents(preferenceScreen, newValue as String)
             true
         }
 
         // Scan each sample rate and mark the ones this device cannot open.
-        val inputQualityPreference = requireNotNull(findPreference<ListPreference>(Settings.PREF_INPUT_RATE))
+        val inputQualityPreference = requireNotNull(findPreference<ListPreference>(Settings.INPUT_RATE.key))
         inputQualityPreference.entries = inputQualityPreference.entryValues.map { value ->
             val rate = value.toString().toInt()
             val supported =
@@ -74,24 +77,24 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             "${rate}Hz" + if (supported) "" else " (unsupported)"
         }.toTypedArray()
 
-        findPreference<CheckBoxPreference>(Settings.PREF_ANDROID_NOISE_SUPPRESSOR)
+        findPreference<CheckBoxPreference>(Settings.ANDROID_NOISE_SUPPRESSOR.key)
             ?.let { markAvailability(it, NoiseSuppressor.isAvailable()) }
-        findPreference<CheckBoxPreference>(Settings.PREF_ANDROID_AGC)
+        findPreference<CheckBoxPreference>(Settings.ANDROID_AGC.key)
             ?.let { markAvailability(it, AutomaticGainControl.isAvailable()) }
 
-        val noisePref = requireNotNull(findPreference<ListPreference>(Settings.PREF_NOISE_SUPPRESSION_METHOD))
+        val noisePref = requireNotNull(findPreference<ListPreference>(Settings.NOISE_SUPPRESSION_METHOD.key))
         noisePref.setOnPreferenceChangeListener { _, newValue ->
             applyNoiseDependents(NoiseSuppressionMode.fromPreferenceValue(newValue as String))
             true
         }
         applyNoiseDependents(NoiseSuppressionMode.fromPreferenceValue(noisePref.value))
 
-        val vadModePref = requireNotNull(findPreference<ListPreference>(Settings.PREF_VAD_MODE))
+        val vadModePref = requireNotNull(findPreference<ListPreference>(Settings.VAD_MODE.key))
         vadModePref.setOnPreferenceChangeListener { _, newValue ->
             applyVadDependents(VadMode.fromPreferenceValue(newValue as String))
             true
         }
-        findPreference<CheckBoxPreference>(Settings.PREF_VAD_ADAPTIVE_FLOOR)
+        findPreference<CheckBoxPreference>(Settings.VAD_ADAPTIVE_FLOOR.key)
             ?.setOnPreferenceChangeListener { _, newValue ->
                 applyFloorDependents(currentVadMode(), newValue as Boolean)
                 true
@@ -100,7 +103,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
 
         // The preprocessor runs before the detector, so the classic slider now measures a
         // processed frame; the summary says so.
-        findPreference<Preference>(Settings.PREF_THRESHOLD)?.summary =
+        findPreference<Preference>(Settings.THRESHOLD.key)?.summary =
             getString(R.string.detectionThresholdSum) + "\n\n" + getString(R.string.detectionThresholdMigration)
 
         findPreference<Preference>(KEY_RECALIBRATE)?.setOnPreferenceClickListener {
@@ -108,7 +111,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             true
         }
 
-        findPreference<ListPreference>(Settings.PREF_AUDIO_DEVICE)?.apply {
+        findPreference<ListPreference>(Settings.AUDIO_DEVICE.key)?.apply {
             setOnPreferenceClickListener {
                 refreshAudioDevices()
                 false
@@ -123,13 +126,11 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         updateAudioDependents(preferenceScreen, inputPreference.value)
     }
 
-    // ---------------------------------------------------------------- the audio device
-
     private var audioDeviceChoices: AudioDeviceChoices? = null
 
     /** Lists the devices there now, read without routing, and shows the saved choice. */
     private fun refreshAudioDevices() {
-        val preference = findPreference<ListPreference>(Settings.PREF_AUDIO_DEVICE) ?: return
+        val preference = findPreference<ListPreference>(Settings.AUDIO_DEVICE.key) ?: return
         val context = context ?: return
         val choices = AudioDeviceChoices.of(
             resources,
@@ -151,24 +152,22 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         refreshAudioDevices()
     }
 
-    // ---------------------------------------------------------------- the live meter
-
     private var session: AudioTestSession? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    /**
-     * Restarts a running preview whenever a setting it was built from changes; keyed on
-     * [SessionSettings.AUDIO_KEYS] so it tracks the same settings as the service.
-     */
-    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key != null && key in se.lublin.mumla.service.SessionSettings.AUDIO_KEYS && isTesting()) restartSession()
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // A running preview is rebuilt from the same settings the service reconfigures from.
+        val preferences = preferenceManager.sharedPreferences ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            preferences.changes(SessionSettings.AUDIO_KEYS).collect { if (isTesting) restartSession() }
+        }
     }
 
     override fun onResume() {
         super.onResume()
         // A headset may have come or gone, or the toolbar chooser saved another device.
         refreshAudioDevices()
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefsListener)
         // The test takes the microphone and may switch to communication mode, which quietens
         // other apps' audio, so it only runs while the user asks for it.
         findPreference<SwitchPreferenceCompat>(KEY_TEST)?.setOnPreferenceChangeListener { _, newValue ->
@@ -181,7 +180,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             true
         }
         findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.setOnPreferenceChangeListener { _, newValue ->
-            if (isTesting()) restartSession(loopback = newValue as Boolean)
+            if (isTesting) restartSession(loopback = newValue as Boolean)
             true
         }
         // Nothing runs until asked; this shows the idle hint.
@@ -189,7 +188,6 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     }
 
     override fun onPause() {
-        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(prefsListener)
         // This session's AudioRecord silences the service's capture, so release it first.
         stopSession()
         // Neither switch is persisted; reset them so they agree with the stopped session.
@@ -198,7 +196,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         super.onPause()
     }
 
-    private fun isTesting(): Boolean = findPreference<SwitchPreferenceCompat>(KEY_TEST)?.isChecked ?: false
+    private val isTesting: Boolean get() = findPreference<SwitchPreferenceCompat>(KEY_TEST)?.isChecked ?: false
 
     private fun restartSession(
         loopback: Boolean = findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.isChecked ?: false,
@@ -250,7 +248,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
 
     /** The mode as stored, which is what [Settings] will read. */
     protected fun currentVadMode(): VadMode =
-        VadMode.fromPreferenceValue(findPreference<ListPreference>(Settings.PREF_VAD_MODE)?.value)
+        VadMode.fromPreferenceValue(findPreference<ListPreference>(Settings.VAD_MODE.key)?.value)
 
     private fun markAvailability(pref: CheckBoxPreference, available: Boolean) {
         if (available) return
@@ -260,7 +258,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     }
 
     private fun applyNoiseDependents(mode: NoiseSuppressionMode) {
-        findPreference<Preference>(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB)?.isVisible =
+        findPreference<Preference>(Settings.SPEEX_NOISE_SUPPRESS_DB.key)?.isVisible =
             AudioSettingsPolicy.speexDepthVisible(mode)
     }
 
@@ -270,22 +268,22 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
      */
     protected open fun applyVadDependents(mode: VadMode) {
         val dependents = AudioSettingsPolicy.vadDependents(mode)
-        findPreference<Preference>(Settings.PREF_VAD_SENSITIVITY)?.isVisible = dependents.adaptive
-        findPreference<Preference>(Settings.PREF_VAD_ADAPTIVE_FLOOR)?.isVisible = dependents.adaptive
-        findPreference<Preference>(Settings.PREF_THRESHOLD)?.isVisible = dependents.amplitude
-        findPreference<Preference>(Settings.PREF_VAD_START)?.isVisible = dependents.probability
-        findPreference<Preference>(Settings.PREF_VAD_STOP)?.isVisible = dependents.probability
+        findPreference<Preference>(Settings.VAD_SENSITIVITY.key)?.isVisible = dependents.adaptive
+        findPreference<Preference>(Settings.VAD_ADAPTIVE_FLOOR.key)?.isVisible = dependents.adaptive
+        findPreference<Preference>(Settings.THRESHOLD.key)?.isVisible = dependents.amplitude
+        findPreference<Preference>(Settings.VAD_START.key)?.isVisible = dependents.probability
+        findPreference<Preference>(Settings.VAD_STOP.key)?.isVisible = dependents.probability
         // "Measure again" only means something where something is being measured.
         findPreference<Preference>(KEY_RECALIBRATE)?.isVisible = dependents.adaptive
         applyFloorDependents(
             mode,
-            findPreference<CheckBoxPreference>(Settings.PREF_VAD_ADAPTIVE_FLOOR)?.isChecked
-                ?: Settings.DEFAULT_VAD_ADAPTIVE_FLOOR,
+            findPreference<CheckBoxPreference>(Settings.VAD_ADAPTIVE_FLOOR.key)?.isChecked
+                ?: Settings.VAD_ADAPTIVE_FLOOR.default,
         )
     }
 
     private fun applyFloorDependents(mode: VadMode, adaptiveFloor: Boolean) {
-        findPreference<Preference>(Settings.PREF_VAD_FLOOR_DB)?.isVisible =
+        findPreference<Preference>(Settings.VAD_FLOOR_DB.key)?.isVisible =
             AudioSettingsPolicy.manualFloorVisible(mode, adaptiveFloor)
     }
 

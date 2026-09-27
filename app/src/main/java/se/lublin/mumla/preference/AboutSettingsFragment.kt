@@ -5,11 +5,14 @@ import androidx.preference.Preference
 import se.lublin.mumla.BuildConfig
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.app.showAllNewsDialog
+import se.lublin.mumla.ui.showAllNewsDialog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+
+private const val VERSION_KEY = "version"
+private const val SHOW_NEWS_KEY = "showNews"
 
 class AboutSettingsFragment : MumlaPreferenceFragment(R.xml.settings_about) {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -39,10 +42,5 @@ class AboutSettingsFragment : MumlaPreferenceFragment(R.xml.settings_about) {
             }
             "donation" -> append("\n*) ${getString(R.string.donation_thanks)}")
         }
-    }
-
-    private companion object {
-        const val VERSION_KEY = "version"
-        const val SHOW_NEWS_KEY = "showNews"
     }
 }

@@ -48,7 +48,6 @@ object SpeexJitterNative : SpeexJitterApi {
     const val JITTER_BUFFER_MISSING = 1
 
     /** libspeex called this `INCOMPLETE`. */
-    const val JITTER_BUFFER_INSERTION = 2
     const val JITTER_BUFFER_INTERNAL_ERROR = -1
     const val JITTER_BUFFER_BAD_ARGUMENT = -2
     const val JITTER_BUFFER_SET_MARGIN = 0
@@ -61,7 +60,15 @@ object SpeexJitterNative : SpeexJitterApi {
 
     external override fun init(stepSize: Int): Long
     external override fun destroy(handle: Long)
-    external override fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)
+    external override fun put(
+        handle: Long,
+        data: ByteArray,
+        len: Int,
+        timestamp: Int,
+        span: Int,
+        sequence: Int,
+        userData: Int,
+    )
     external override fun get(handle: Long, out: ByteArray, desiredSpan: Int, meta: IntArray): Int
     external override fun pointerTimestamp(handle: Long): Int
     external override fun tick(handle: Long)

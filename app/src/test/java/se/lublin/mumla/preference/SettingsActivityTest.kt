@@ -71,7 +71,7 @@ class SettingsActivityTest {
     fun `the slider stores the multiplied value on ok, and nothing on cancel`() {
         val appearance = open(AppearanceSettingsFragment::class.java)
 
-        var dialog = showDialog(appearance, Settings.PREF_PTT_BUTTON_HEIGHT)
+        var dialog = showDialog(appearance, Settings.PTT_BUTTON_HEIGHT.key)
         val seekBar = dialog.findViewById<SeekBar>(R.id.seek_bar)!!
         val value = dialog.findViewById<TextView>(R.id.seek_bar_value_view)!!
         assertThat(value.text.toString()).isEqualTo("150 dp")
@@ -81,21 +81,21 @@ class SettingsActivityTest {
 
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
         shadowOf(Looper.getMainLooper()).idle()
-        assertThat(preferences.contains(Settings.PREF_PTT_BUTTON_HEIGHT)).isFalse()
+        assertThat(preferences.contains(Settings.PTT_BUTTON_HEIGHT.key)).isFalse()
 
-        dialog = showDialog(appearance, Settings.PREF_PTT_BUTTON_HEIGHT)
+        dialog = showDialog(appearance, Settings.PTT_BUTTON_HEIGHT.key)
         dialog.findViewById<SeekBar>(R.id.seek_bar)!!
             .onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
         shadowOf(Looper.getMainLooper()).idle()
-        assertThat(preferences.getInt(Settings.PREF_PTT_BUTTON_HEIGHT, 0)).isEqualTo(expected)
+        assertThat(preferences.getInt(Settings.PTT_BUTTON_HEIGHT.key, 0)).isEqualTo(expected)
     }
 
     @Test
     fun `the key picker stores the pressed key on ok, and resets it with the neutral button`() {
         val audio = open(AudioSettingsFragment::class.java)
 
-        var dialog = showDialog(audio, Settings.PREF_PUSH_KEY)
+        var dialog = showDialog(audio, Settings.TALK_KEY.key)
         val content = dialog.findViewById<TextView>(R.id.key_select_value_view)!!
         assertThat(content.text.toString()).isEqualTo(activity.getString(R.string.no_ptt_key))
         val root = content.rootView.findFocus()
@@ -104,11 +104,11 @@ class SettingsActivityTest {
             .isEqualTo(KeyEvent.keyCodeToString(KeyEvent.KEYCODE_VOLUME_UP).removePrefix("KEYCODE_"))
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
         shadowOf(Looper.getMainLooper()).idle()
-        assertThat(preferences.getInt(Settings.PREF_PUSH_KEY, 0)).isEqualTo(KeyEvent.KEYCODE_VOLUME_UP)
+        assertThat(preferences.getInt(Settings.TALK_KEY.key, 0)).isEqualTo(KeyEvent.KEYCODE_VOLUME_UP)
 
-        dialog = showDialog(audio, Settings.PREF_PUSH_KEY)
+        dialog = showDialog(audio, Settings.TALK_KEY.key)
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).performClick()
         shadowOf(Looper.getMainLooper()).idle()
-        assertThat(preferences.getInt(Settings.PREF_PUSH_KEY, -1)).isEqualTo(0)
+        assertThat(preferences.getInt(Settings.TALK_KEY.key, -1)).isEqualTo(0)
     }
 }

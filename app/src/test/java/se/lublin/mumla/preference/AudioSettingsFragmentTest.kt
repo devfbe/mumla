@@ -34,7 +34,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import se.lublin.humla.session.AudioDeviceCategory
+import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.audio.TestCaptureSource
@@ -149,7 +149,7 @@ class AudioSettingsFragmentTest {
         openAudio()
 
         PreferenceManager.getDefaultSharedPreferences(app).edit()
-            .putString(Settings.PREF_VAD_MODE, "amplitude").commit()
+            .putString(Settings.VAD_MODE.key, "amplitude").commit()
         idle()
 
         assertThat(capture.request).isNull()
@@ -164,7 +164,7 @@ class AudioSettingsFragmentTest {
         val first = capture.request
 
         PreferenceManager.getDefaultSharedPreferences(app).edit()
-            .putString(Settings.PREF_VAD_MODE, "amplitude").commit()
+            .putString(Settings.VAD_MODE.key, "amplitude").commit()
         idle()
 
         assertThat(capture.request).isNotSameInstanceAs(first)

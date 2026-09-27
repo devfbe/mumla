@@ -37,9 +37,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import se.lublin.humla.IHumlaSession
-import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.CommunicationDevice
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.CommunicationDevice
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.service.IMumlaService
@@ -269,8 +269,6 @@ class AudioDeviceMenuTest {
         assertThat(menu.choices().map { it.itemId }).containsExactly(R.id.menu_audio_device_automatic)
     }
 
-    // --- without a connection -----------------------------------------------------------------
-
     /** Without a session the chooser lists what the platform offers for calls, never the session. */
     @Test
     fun withoutAConnectionTheChooserListsThePlatformsDevices() {
@@ -380,7 +378,6 @@ class AudioDeviceMenuTest {
         assertThat(prepared().echo().isChecked).isTrue()
     }
 
-    /** Tapping it writes the override for this kind of device. */
     @Test
     fun tappingTheEchoSwitchRemembersTheChoiceForThisKindOfDevice() {
         val settings = Settings.getInstance(app)

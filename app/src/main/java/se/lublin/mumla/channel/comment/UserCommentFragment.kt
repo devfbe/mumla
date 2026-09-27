@@ -17,13 +17,14 @@
 
 package se.lublin.mumla.channel.comment
 
+import androidx.core.os.bundleOf
 import se.lublin.humla.IHumlaService
 import se.lublin.humla.session.HumlaEvent
 
-/** Shows (and for the own user, edits) a user's comment. Argument "session": the user's session. */
+/** Shows (and for the own user, edits) a user's comment. */
 class UserCommentFragment : AbstractCommentFragment() {
 
-    val session: Int get() = requireArguments().getInt("session")
+    val session: Int get() = requireArguments().getInt(ARG_SESSION)
 
     override fun requestComment(service: IHumlaService) {
         if (!service.isConnected) return
@@ -36,5 +37,14 @@ class UserCommentFragment : AbstractCommentFragment() {
     override fun editComment(service: IHumlaService, comment: String) {
         if (!service.isConnected) return
         service.session.setUserComment(session, comment)
+    }
+
+    companion object {
+        private const val ARG_SESSION = "session"
+
+        /** The comment of the user with [session]; [comment] is null until it is fetched. */
+        fun newInstance(session: Int, comment: String?, editing: Boolean) = UserCommentFragment().apply {
+            arguments = bundleOf(ARG_SESSION to session, ARG_COMMENT to comment, ARG_EDITING to editing)
+        }
     }
 }

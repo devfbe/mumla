@@ -21,6 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
+import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
 import se.lublin.mumla.app.DrawerAdapter
 import se.lublin.mumla.app.MumlaActivity
@@ -81,8 +82,6 @@ class MumlaConnectionNotificationTest {
         it.intentFilter.hasAction("b_mute")
     }
 
-
-    // ---- what the notification shows -------------------------------------------------------
 
     @Test
     fun showPutsTheServiceInTheForegroundWithTheContentText() {
@@ -148,7 +147,7 @@ class MumlaConnectionNotificationTest {
         val content = shadowOf(shadowOf(service).lastForegroundNotification.contentIntent)
         assertThat(content.isActivity).isTrue()
         assertThat(content.savedIntent.component?.className).isEqualTo(MumlaActivity::class.java.name)
-        assertThat(content.savedIntent.getIntExtra(MumlaActivity.EXTRA_DRAWER_FRAGMENT, -1))
+        assertThat(content.savedIntent.getIntExtra(MainScreen.EXTRA_SCREEN, -1))
             .isEqualTo(DrawerAdapter.ITEM_SERVER)
         assertThat(content.isImmutable).isTrue()
     }
@@ -197,8 +196,6 @@ class MumlaConnectionNotificationTest {
             assertThat(pending.savedIntent.`package`).isEqualTo(service.packageName)
         }
     }
-
-    // ---- what the buttons reach -------------------------------------------------------------
 
     /** Fires each button's own PendingIntent, i.e. both halves of the wiring at once. */
     @Test
@@ -389,8 +386,6 @@ class MumlaConnectionNotificationTest {
         assertThat(shadowOf(service).isForegroundStopped).isFalse()
         assertThat(ourReceivers()).hasSize(1)
     }
-
-    // ---- the foreground service type --------------------------------------------------------
 
     @Test
     fun onAndroid14AndLaterTheForegroundIsTypedAsMicrophone() {

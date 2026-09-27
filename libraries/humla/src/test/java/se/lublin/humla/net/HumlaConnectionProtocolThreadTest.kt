@@ -10,18 +10,17 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import se.lublin.humla.HumlaService
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
 import se.lublin.humla.protocol.ModelHandler
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.MAX_EVENTS_PER_SLICE
 import se.lublin.humla.session.inMainThreadSlices
-import se.lublin.humla.testutil.collectOnMain
 import se.lublin.humla.testutil.awaitUntil
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.testutil.collectOnMain
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.security.cert.X509Certificate
@@ -63,7 +62,9 @@ class HumlaConnectionProtocolThreadTest {
     private fun connectAndEstablish(forceTcp: Boolean = true): FakeTcpTransport {
         connection.setForceTCP(forceTcp)
         connection.connect(server)
-        awaitUntil(description = "tcp connect") { transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null }
+        awaitUntil(description = "tcp connect") {
+            transports.tcps.isNotEmpty() && transports.tcps[0].connectThread != null
+        }
         val tcp = transports.tcps[0]
         tcp.simulateConnected()
         awaitOnMain("onConnectionEstablished delivered") { listener.established.get() == 1 }
@@ -110,7 +111,10 @@ class HumlaConnectionProtocolThreadTest {
         val handlerThreads = CopyOnWriteArrayList<String>()
         connection.addTcpHandler { if (it is Mumble.Version) { handlerThreads += Thread.currentThread().name } }
 
-        tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())
+        tcp.simulateMessage(
+            HumlaTCPMessageType.Version,
+            Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray(),
+        )
 
         awaitUntil { handlerThreads.isNotEmpty() }
         assertThat(handlerThreads).containsExactly(PROTOCOL_THREAD)
@@ -139,11 +143,15 @@ class HumlaConnectionProtocolThreadTest {
         val processed = AtomicInteger()
         connection.addTcpHandler { if (it is Mumble.ChannelState) { processed.incrementAndGet() } }
         val frames = (0 until 5_000).map { i ->
-            Mumble.ChannelState.newBuilder().setChannelId(i).setName("channel $i").apply { if (i > 0) parent = 0 }.build().toByteArray()
+            Mumble.ChannelState.newBuilder().setChannelId(i).setName("channel $i")
+                .apply { if (i > 0) parent = 0 }
+                .build().toByteArray()
         }
 
         thread(name = "fake-tcp-read") { frames.forEach { tcp.simulateMessage(HumlaTCPMessageType.ChannelState, it) } }
-        awaitUntil(timeoutMillis = 30_000, description = "protocol thread processed all frames") { processed.get() == 5_000 }
+        awaitUntil(timeoutMillis = 30_000, description = "protocol thread processed all frames") {
+            processed.get() == 5_000
+        }
 
         val probeRan = AtomicBoolean(false)
         Handler(Looper.getMainLooper()).post { probeRan.set(true) }
@@ -204,7 +212,10 @@ class HumlaConnectionProtocolThreadTest {
     @Test
     fun serverRejectEndsTheConnectionOnceWithTheRejectReason() {
         val tcp = connectAndEstablish()
-        val reject = Mumble.Reject.newBuilder().setType(Mumble.Reject.RejectType.WrongServerPW).setReason("wrong password").build()
+        val reject = Mumble.Reject.newBuilder()
+            .setType(Mumble.Reject.RejectType.WrongServerPW)
+            .setReason("wrong password")
+            .build()
 
         tcp.simulateMessage(HumlaTCPMessageType.Reject, reject.toByteArray())
         awaitUntil { tcp.disconnectCalls == 1 }
@@ -258,7 +269,10 @@ class HumlaConnectionProtocolThreadTest {
         // Park the protocol thread so the frame is provably queued ahead of the teardown.
         val gate = CountDownLatch(1)
         connection.protocolHandler.post { gate.await() }
-        tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())
+        tcp.simulateMessage(
+            HumlaTCPMessageType.Version,
+            Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray(),
+        )
 
         connection.disconnect()
         gate.countDown()
@@ -275,8 +289,14 @@ class HumlaConnectionProtocolThreadTest {
         connection.addTcpHandler { if (it is Mumble.Version) { error("handler is broken") } }
         connection.addTcpHandler { if (it is Mumble.TextMessage) { survivors.incrementAndGet() } }
 
-        tcp.simulateMessage(HumlaTCPMessageType.Version, Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray())
-        tcp.simulateMessage(HumlaTCPMessageType.TextMessage, Mumble.TextMessage.newBuilder().setMessage("still here").build().toByteArray())
+        tcp.simulateMessage(
+            HumlaTCPMessageType.Version,
+            Mumble.Version.newBuilder().setRelease("1.4.0").build().toByteArray(),
+        )
+        tcp.simulateMessage(
+            HumlaTCPMessageType.TextMessage,
+            Mumble.TextMessage.newBuilder().setMessage("still here").build().toByteArray(),
+        )
 
         awaitUntil(description = "the protocol thread kept working after a handler threw") { survivors.get() == 1 }
         mainLooper.idle()

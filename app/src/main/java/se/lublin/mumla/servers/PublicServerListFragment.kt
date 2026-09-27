@@ -42,14 +42,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.lublin.mumla.R
-import se.lublin.mumla.app.showConfirmDialog
 import se.lublin.mumla.Settings
-import se.lublin.mumla.app.ServerRequest
-import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.databinding.DialogServerSearchBinding
 import se.lublin.mumla.databinding.FragmentPublicServerListBinding
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
+import se.lublin.mumla.ui.ServerRequest
+import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.showConfirmDialog
 import java.util.Locale
 
 /** Displays the public servers, which can be sorted, filtered, matched, favourited and joined. */
@@ -161,7 +161,6 @@ class PublicServerListFragment :
 
     /** Looks for an empty, nearby server in [countryCode] (anywhere when null) and offers to join it. */
     private fun findOptimalServer(countryCode: String?) {
-        // The servers shown, as filtered and sorted.
         val candidates = serverAdapter?.shownServers.orEmpty()
         val progressDialog = MaterialAlertDialogBuilder(requireActivity())
             .setMessage(R.string.server_match_progress)
@@ -182,24 +181,20 @@ class PublicServerListFragment :
     private fun showMatchResult(response: ServerInfoResponse?) {
         val server = response?.server as PublicServer?
         if (response != null && server != null) {
-            MaterialAlertDialogBuilder(requireActivity())
-                .setTitle(R.string.server_match_found)
-                .setMessage(
-                    getString(
-                        R.string.server_match_info,
-                        server.name,
-                        server.host,
-                        server.port,
-                        response.currentUsers,
-                        response.maximumUsers,
-                        response.versionString,
-                        server.country,
-                        response.latency,
-                    ),
-                )
-                .setPositiveButton(R.string.connect) { _, _ -> connect(server) }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+            val info = getString(
+                R.string.server_match_info,
+                server.name,
+                server.host,
+                server.port,
+                response.currentUsers,
+                response.maximumUsers,
+                response.versionString,
+                server.country,
+                response.latency,
+            )
+            requireActivity().showConfirmDialog(info, R.string.connect, getString(R.string.server_match_found)) {
+                connect(server)
+            }
         } else {
             requireActivity().showConfirmDialog(
                 getString(R.string.server_match_expand_country),

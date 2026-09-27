@@ -29,7 +29,7 @@ import java.util.Collections
  * arriving. The UI redraws on the next `ChannelAdded` event, so a half-built subtree is only a frame
  * late.
  */
-class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false) : IChannel, Comparable<Channel> {
+class Channel(id: Int = 0, temporary: Boolean = false) : IChannel, Comparable<Channel> {
     override val id: Int = id
     @Volatile override var position = 0
     @Volatile override var isTemporary = temporary
@@ -40,48 +40,48 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     @Volatile override var permissions = 0
     @Volatile override var isEnterRestricted = false
     @Volatile override var canEnter = true
-    private val mSubchannels = ArrayList<Channel>() // guarded by this
-    private val mUsers = ArrayList<User>() // guarded by this
-    private val mLinks = ArrayList<Channel>() // guarded by this
-    private val mListeners = ArrayList<User>() // guarded by this
+    private val _subchannels = ArrayList<Channel>() // guarded by this
+    private val _users = ArrayList<User>() // guarded by this
+    private val _links = ArrayList<Channel>() // guarded by this
+    private val _listeners = ArrayList<User>() // guarded by this
 
     /** @see User.setChannel */
     @Synchronized
     internal fun addUser(user: User) {
-        for (i in mUsers.indices) {
-            if (user.compareTo(mUsers[i]) <= 0) {
-                mUsers.add(i, user)
+        for (i in _users.indices) {
+            if (user.compareTo(_users[i]) <= 0) {
+                _users.add(i, user)
                 return
             }
         }
-        mUsers.add(user)
+        _users.add(user)
     }
 
     /** @see User.setChannel */
     @Synchronized
     internal fun removeUser(user: User) {
-        mUsers.remove(user)
+        _users.remove(user)
     }
 
     override val users: List<User>
-        @Synchronized get() = Collections.unmodifiableList(ArrayList(mUsers))
+        @Synchronized get() = Collections.unmodifiableList(ArrayList(_users))
 
     override val listeners: List<User>
-        @Synchronized get() = Collections.unmodifiableList(ArrayList(mListeners))
+        @Synchronized get() = Collections.unmodifiableList(ArrayList(_listeners))
 
     /** Adds [user] as a listener at its sorted position; a present listener is not added twice. */
     @Synchronized
     fun addListener(user: User) {
-        if (user in mListeners) return
-        val index = mListeners.indexOfFirst { user <= it }
-        if (index < 0) mListeners.add(user) else mListeners.add(index, user)
+        if (user in _listeners) return
+        val index = _listeners.indexOfFirst { user <= it }
+        if (index < 0) _listeners.add(user) else _listeners.add(index, user)
     }
 
     @Synchronized
-    fun removeListener(user: User): Boolean = mListeners.remove(user)
+    fun removeListener(user: User): Boolean = _listeners.remove(user)
 
     override val subchannels: List<Channel>
-        @Synchronized get() = Collections.unmodifiableList(ArrayList(mSubchannels))
+        @Synchronized get() = Collections.unmodifiableList(ArrayList(_subchannels))
 
     /**
      * Inserts [channel] at its sorted position. A null channel is ignored: the server can name a
@@ -91,39 +91,39 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
     @Synchronized
     fun addSubchannel(channel: Channel?) {
         if (channel == null) return
-        for (i in mSubchannels.indices) {
-            if (channel.compareTo(mSubchannels[i]) <= 0) {
-                mSubchannels.add(i, channel)
+        for (i in _subchannels.indices) {
+            if (channel.compareTo(_subchannels[i]) <= 0) {
+                _subchannels.add(i, channel)
                 return
             }
         }
-        mSubchannels.add(channel)
+        _subchannels.add(channel)
     }
 
     @Synchronized
     fun removeSubchannel(channel: Channel?) {
-        if (channel != null) mSubchannels.remove(channel)
+        if (channel != null) _subchannels.remove(channel)
     }
 
     override val links: List<Channel>
-        @Synchronized get() = Collections.unmodifiableList(ArrayList(mLinks))
+        @Synchronized get() = Collections.unmodifiableList(ArrayList(_links))
 
     /** @see addSubchannel for why a null channel is ignored rather than rejected. */
     @Synchronized
     fun addLink(channel: Channel?) {
         if (channel == null) return
-        for (i in mLinks.indices) {
-            if (channel.compareTo(mLinks[i]) <= 0) {
-                mLinks.add(i, channel)
+        for (i in _links.indices) {
+            if (channel.compareTo(_links[i]) <= 0) {
+                _links.add(i, channel)
                 return
             }
         }
-        mLinks.add(channel)
+        _links.add(channel)
     }
 
     @Synchronized
     fun removeLink(channel: Channel?) {
-        if (channel != null) mLinks.remove(channel)
+        if (channel != null) _links.remove(channel)
     }
 
     /**
@@ -132,7 +132,7 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
      */
     @Synchronized
     fun setLinks(links: Collection<Channel?>) {
-        mLinks.clear()
+        _links.clear()
         for (link in links) addLink(link)
     }
 
@@ -146,8 +146,8 @@ class Channel @JvmOverloads constructor(id: Int = 0, temporary: Boolean = false)
             val direct: Int
             val children: List<Channel>
             synchronized(this) {
-                direct = mUsers.size
-                children = ArrayList(mSubchannels)
+                direct = _users.size
+                children = ArrayList(_subchannels)
             }
             return direct + children.sumOf { it.subchannelUserCount }
         }

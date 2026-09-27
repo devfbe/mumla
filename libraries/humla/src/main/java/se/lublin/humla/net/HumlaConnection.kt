@@ -25,12 +25,17 @@ import androidx.annotation.VisibleForTesting
 import com.google.protobuf.ByteString
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.MessageLite
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.protobuf.Mumble
-import se.lublin.humla.protocol.TcpMessageHandler
-import se.lublin.humla.protocol.VoicePacketHandler
-import se.lublin.humla.session.ReconnectPolicy
-import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
 import java.net.ConnectException
@@ -45,14 +50,11 @@ import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.android.asCoroutineDispatcher
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+
+/** A tunnelled dummy packet; its arrival tells the server to tunnel voice over TCP from now on. */
+private const val FORCE_TCP_PACKET_BYTES = 3
+
+private const val NANOS_PER_MICRO = 1000
 
 /**
  * One connection to a Mumble server. Single-use.
@@ -64,7 +66,7 @@ import kotlinx.coroutines.launch
  * [sendUDPMessage] may be called from any thread. State flags are only ever set, never cleared;
  * the cancelled scope closes [isConnected]/[isSynchronized].
  */
-class HumlaConnection @JvmOverloads constructor(
+class HumlaConnection(
     private val listener: HumlaConnectionListener,
     private val transports: TransportFactory = DefaultTransportFactory(),
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
@@ -143,7 +145,6 @@ class HumlaConnection @JvmOverloads constructor(
     /** Guards [connectCalled] and [teardownStarted] against a racing connect/disconnect. */
     private val lifecycleLock = Any()
 
-    // Authentication
     @VisibleForTesting
     internal var certificate: ByteArray? = null
         private set
@@ -160,7 +161,6 @@ class HumlaConnection @JvmOverloads constructor(
     internal var trustStoreFormat: String? = null
         private set
 
-    // Networking and protocols
     @Volatile private var tcp: TcpTransport? = null
     @Volatile private var udp: UdpTransport? = null
     @Volatile private var usingUdp = true
@@ -188,7 +188,6 @@ class HumlaConnection @JvmOverloads constructor(
     private var lastWarning: ConnectionWarning? = null
     private var lastWarnedMicros = 0L
 
-    // Latency
     @Volatile private var udpLatency = 0L
     @Volatile private var tcpLatency = 0L
 
@@ -225,7 +224,6 @@ class HumlaConnection @JvmOverloads constructor(
     /** The server-lacks-Opus warning is shown once per connection; protocol thread only. */
     private var noOpusWarned = false
 
-    // Session
     @Volatile private var sessionId = 0
 
     // Message handlers (the protocol thread iterates; any thread may add or remove)
@@ -450,7 +448,7 @@ class HumlaConnection @JvmOverloads constructor(
     val isUsingUdp: Boolean get() = usingUdp
 
     /** Microseconds since connect(). */
-    val elapsed: Long get() = (nanoClock() - startTimestamp) / 1000
+    val elapsed: Long get() = (nanoClock() - startTimestamp) / NANOS_PER_MICRO
 
     override fun addTcpHandler(handler: TcpMessageHandler) {
         tcpHandlers.add(handler)
@@ -513,7 +511,6 @@ class HumlaConnection @JvmOverloads constructor(
         return value
     }
 
-    /** True if TCP is manually forced or Tor is enabled. */
     fun shouldForceTCP(): Boolean = forceTcp || useTor
 
     /**
@@ -584,8 +581,10 @@ class HumlaConnection @JvmOverloads constructor(
         mainHandler.post { if (!disconnectReported) listener.callback() }
     }
 
+    private fun certificateError(message: String, cause: Exception) =
+        HumlaException(message, cause, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+
     /** [peerHost] is the host the user entered, which the server certificate must match. */
-    @Throws(HumlaException::class)
     private fun createSocketFactory(peerHost: String): HumlaSSLSocketFactory {
         try {
             var keyStore: KeyStore? = null
@@ -597,15 +596,15 @@ class HumlaConnection @JvmOverloads constructor(
                 keyStore, certificatePassword, trustStorePath, trustStorePassword, trustStoreFormat, peerHost
             )
         } catch (e: KeyManagementException) {
-            throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not recover keys from certificate", e)
         } catch (e: KeyStoreException) {
-            throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not recover keys from certificate", e)
         } catch (e: UnrecoverableKeyException) {
-            throw HumlaException("Could not recover keys from certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not recover keys from certificate", e)
         } catch (e: IOException) {
-            throw HumlaException("Could not read certificate file", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not read certificate file", e)
         } catch (e: CertificateException) {
-            throw HumlaException("Could not read certificate", e, HumlaException.HumlaDisconnectReason.OTHER_ERROR)
+            throw certificateError("Could not read certificate", e)
         } catch (e: NoSuchAlgorithmException) {
             // Never happens: BouncyCastle ships with the app and provides every algorithm used here.
             throw RuntimeException("We use BouncyCastle- what? ", e)
@@ -640,7 +639,7 @@ class HumlaConnection @JvmOverloads constructor(
     /** Asks the server to tunnel future voice packets over TCP. */
     private fun enableForceTCP() {
         val utb = Mumble.UDPTunnel.newBuilder()
-        utb.packet = ByteString.copyFrom(ByteArray(3))
+        utb.packet = ByteString.copyFrom(ByteArray(FORCE_TCP_PACKET_BYTES))
         sendTCPMessage(utb.build(), HumlaTCPMessageType.UDPTunnel)
     }
 
@@ -772,7 +771,6 @@ class HumlaConnection @JvmOverloads constructor(
         /** [e] is null for a clean disconnect. Exactly once per started connection, and last. */
         fun onConnectionDisconnected(e: HumlaException?)
 
-        /** Called if the user should be notified of a connection-related warning. */
         fun onConnectionWarning(warning: ConnectionWarning)
     }
 
@@ -797,21 +795,22 @@ class HumlaConnection @JvmOverloads constructor(
         }
 
         /** Message types that aren't shown in logcat, for annoying types like UDPTunnel. */
-        @JvmField
         val UNLOGGED_MESSAGES: Set<HumlaTCPMessageType> =
             setOf(HumlaTCPMessageType.UDPTunnel, HumlaTCPMessageType.Ping)
 
-        // Tor connection details
         const val TOR_HOST = "localhost"
         const val TOR_PORT = 9050
 
         /** Bandwidth in bps for audio with these parameters, including packet overhead. */
-        @JvmStatic
         fun calculateAudioBandwidth(bitrate: Int, framesPerPacket: Int): Int {
             // FIXME: assumes worst-case using TCP
-            var overhead = 20 + 8 + 4 + 1 + 2 + 12 + framesPerPacket
-            overhead *= (800 / framesPerPacket)
-            return overhead + bitrate
+            val overheadBytes = PACKET_OVERHEAD_BYTES + framesPerPacket
+            return overheadBytes * (BITS_PER_BYTE * FRAMES_PER_SECOND / framesPerPacket) + bitrate
         }
+
+        /** As desktop Mumble counts it: IP 20, UDP 8, crypt 4, header 1, sequence 2, TCP 12. */
+        private const val PACKET_OVERHEAD_BYTES = 20 + 8 + 4 + 1 + 2 + 12
+        private const val BITS_PER_BYTE = 8
+        private const val FRAMES_PER_SECOND = 100
     }
 }

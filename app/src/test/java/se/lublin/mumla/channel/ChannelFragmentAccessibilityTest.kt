@@ -61,7 +61,7 @@ class ChannelFragmentAccessibilityTest {
 
     @Before
     fun setUp() {
-        preferences.edit(commit = true) { putString(Settings.PREF_INPUT_METHOD, Settings.ARRAY_INPUT_METHOD_PTT) }
+        preferences.edit(commit = true) { putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT) }
         session = mockk(relaxed = true)
         every { session.sessionId } returns SESSION
         every { session.sessionUser } returns self

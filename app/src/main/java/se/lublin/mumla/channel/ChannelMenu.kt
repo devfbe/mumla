@@ -17,7 +17,6 @@
 package se.lublin.mumla.channel
 
 import android.content.Context
-import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -33,9 +32,9 @@ import se.lublin.humla.model.WhisperTargetChannel
 import se.lublin.humla.net.Permissions
 import se.lublin.humla.util.VoiceTargetMode
 import se.lublin.mumla.R
-import se.lublin.mumla.app.showConfirmDialog
 import se.lublin.mumla.channel.comment.ChannelDescriptionFragment
 import se.lublin.mumla.db.PinnedChannels
+import se.lublin.mumla.ui.showConfirmDialog
 
 /** The popup menu of a channel's row: join, edit, pin, link, shout and so on. */
 class ChannelMenu(
@@ -114,22 +113,12 @@ class ChannelMenu(
     }
 
     private fun showEditor(adding: Boolean) {
-        val editor = ChannelEditFragment()
-        editor.arguments = Bundle().apply {
-            if (adding) putInt("parent", channel.id) else putInt("channel", channel.id)
-            putBoolean("adding", adding)
-        }
-        editor.show(fragmentManager, "ChannelAdd")
+        ChannelEditFragment.newInstance(channel.id, adding).show(fragmentManager, "ChannelAdd")
     }
 
     private fun showDescription() {
-        val fragment = ChannelDescriptionFragment()
-        fragment.arguments = Bundle().apply {
-            putInt("channel", channel.id)
-            putString("comment", channel.description)
-            putBoolean("editing", false)
-        }
-        fragment.show(fragmentManager, ChannelDescriptionFragment::class.java.name)
+        ChannelDescriptionFragment.newInstance(channel.id, channel.description)
+            .show(fragmentManager, ChannelDescriptionFragment::class.java.name)
     }
 
     /** Asks which channels to include, then whispers to them. */

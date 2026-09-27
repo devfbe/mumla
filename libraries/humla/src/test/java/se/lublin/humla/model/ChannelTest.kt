@@ -267,7 +267,7 @@ class ChannelTest {
     /**
      * `getSubchannelUserCount` reads both lists and then recurses, so it would hold a lock while
      * calling into another [Channel] if it were simply `@Synchronized`. Two signals:
-     * - an **exception**: an unlocked copy of `mSubchannels` can include a slot a removal already
+     * - an **exception**: an unlocked copy of `_subchannels` can include a slot a removal already
      *   nulled, and the recursion dereferences it;
      * - a **double count**: a copy taken mid-shift of an insert holds one subchannel twice. This
      *   only fires with many subchannels, and not on every run, so both signals are reported

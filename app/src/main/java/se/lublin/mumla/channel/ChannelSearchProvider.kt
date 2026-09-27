@@ -52,7 +52,7 @@ class ChannelSearchProvider : ContentProvider() {
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            service = (binder as MumlaService.MumlaBinder).getService()
+            service = (binder as MumlaService.MumlaBinder).service
             bound.countDown()
         }
 

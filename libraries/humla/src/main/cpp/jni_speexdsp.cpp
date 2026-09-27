@@ -98,9 +98,6 @@ bool preprocessRequestAllowed(jint request) {
     }
 }
 
-
-// ---- resampler ----
-
 jlong resamplerInit(JNIEnv* env, jobject, jint channels, jint inRate, jint outRate, jint quality, jintArray error) noexcept {
     // speex_resampler_init accepts it, but then every processInt would be out of range.
     if (channels <= 0) {
@@ -156,8 +153,6 @@ void resamplerDestroy(JNIEnv*, jobject, jlong state) noexcept {
     speex_resampler_destroy(h->state);
     delete h;
 }
-
-// ---- jitter buffer ----
 
 jlong jitterInit(JNIEnv*, jobject, jint stepSize) noexcept {
     JitterBuffer* jb = jitter_buffer_init(stepSize);
@@ -247,8 +242,6 @@ jint jitterUpdateDelay(JNIEnv*, jobject, jlong handle) noexcept {
     // The packet and start_offset arguments are unused by libspeexdsp's implementation.
     return jitter_buffer_update_delay(jb, nullptr, nullptr);
 }
-
-// ---- preprocessor ----
 
 // Returns 0 on failure (the Kotlin wrapper then disables the preprocessor). A non-positive frame
 // size would be accepted by speex but could never satisfy preprocessRun.

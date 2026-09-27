@@ -31,7 +31,6 @@ class PacketBuffer(private val buffer: ByteBuffer) {
     /** The number of bytes written or read so far. */
     fun size(): Int = buffer.position()
 
-    /** The number of bytes this packet can hold. */
     fun capacity(): Int = buffer.limit()
 
     /** The number of bytes left to read or write. */
@@ -52,18 +51,6 @@ class PacketBuffer(private val buffer: ByteBuffer) {
 
     /** Reads one byte, unsigned. */
     fun next(): Int = buffer.get().toInt() and BYTE_MASK
-
-    /**
-     * A slice of the next [size] bytes, skipped in this buffer.
-     * @throws BufferUnderflowException if fewer bytes are left.
-     */
-    fun bufferBlock(size: Int): ByteBuffer {
-        if (size > buffer.remaining()) throw BufferUnderflowException()
-        val block = buffer.slice()
-        block.limit(size)
-        skip(size)
-        return block
-    }
 
     /** A copy of the next [size] bytes. */
     fun dataBlock(size: Int): ByteArray {

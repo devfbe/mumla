@@ -29,8 +29,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
 import se.lublin.humla.audio.capture.VadConfig
-import se.lublin.humla.session.AudioDeviceCategory
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.testutil.testActivityInputMode
 import se.lublin.humla.testutil.testRouter
 import se.lublin.mumla.R
@@ -53,24 +53,22 @@ class MumlaServiceAudioPreferencesTest {
         service = createMumlaService().get()
     }
 
-    /** Preferences land in an immutable [se.lublin.humla.session.AudioConfig]. */
+    /** Preferences land in an immutable [se.lublin.humla.audio.AudioConfig]. */
     private fun audioConfig() = service.getAudioConfigForTest()
 
     private fun vadConfig(): VadConfig = service.testActivityInputMode.vadConfig
 
-    private fun change(key: String) = service.onSharedPreferenceChanged(prefs, key)
-
-    // --- the voice gate -----------------------------------------------------------------------
+    private fun change(key: String) = service.onPreferenceChanged(key)
 
     @Test
     fun `every voice gate preference reaches the running detector`() {
         val writes: Map<String, SharedPreferences.Editor.() -> Unit> = mapOf(
-            Settings.PREF_VAD_MODE to { putString(Settings.PREF_VAD_MODE, "adaptive") },
-            Settings.PREF_VAD_SENSITIVITY to { putInt(Settings.PREF_VAD_SENSITIVITY, 31) },
-            Settings.PREF_VAD_HOLD_MS to { putInt(Settings.PREF_VAD_HOLD_MS, 410) },
-            Settings.PREF_VAD_ONSET_FRAMES to { putString(Settings.PREF_VAD_ONSET_FRAMES, "4") },
-            Settings.PREF_VAD_ADAPTIVE_FLOOR to { putBoolean(Settings.PREF_VAD_ADAPTIVE_FLOOR, false) },
-            Settings.PREF_VAD_FLOOR_DB to { putInt(Settings.PREF_VAD_FLOOR_DB, 61) },
+            Settings.VAD_MODE.key to { putString(Settings.VAD_MODE.key, "adaptive") },
+            Settings.VAD_SENSITIVITY.key to { putInt(Settings.VAD_SENSITIVITY.key, 31) },
+            Settings.VAD_HOLD_MS.key to { putInt(Settings.VAD_HOLD_MS.key, 410) },
+            Settings.VAD_ONSET_FRAMES.key to { putString(Settings.VAD_ONSET_FRAMES.key, "4") },
+            Settings.VAD_ADAPTIVE_FLOOR.key to { putBoolean(Settings.VAD_ADAPTIVE_FLOOR.key, false) },
+            Settings.VAD_FLOOR_DB.key to { putInt(Settings.VAD_FLOOR_DB.key, 61) },
         )
         for ((key, write) in writes) {
             prefs.edit().apply(write).commit()
@@ -88,36 +86,34 @@ class MumlaServiceAudioPreferencesTest {
 
     @Test
     fun `the legacy threshold slider still reaches the detector in amplitude mode`() {
-        prefs.edit().putString(Settings.PREF_VAD_MODE, "amplitude").putInt(Settings.PREF_THRESHOLD, 81).commit()
-        change(Settings.PREF_THRESHOLD)
+        prefs.edit().putString(Settings.VAD_MODE.key, "amplitude").putInt(Settings.THRESHOLD.key, 81).commit()
+        change(Settings.THRESHOLD.key)
         assertThat(vadConfig().startThreshold).isWithin(0.001f).of(0.81f)
     }
 
     @Test
     fun `the probability sliders reach the detector in probability mode`() {
         prefs.edit()
-            .putString(Settings.PREF_VAD_MODE, "probability")
-            .putInt(Settings.PREF_VAD_START, 77)
-            .putInt(Settings.PREF_VAD_STOP, 22)
+            .putString(Settings.VAD_MODE.key, "probability")
+            .putInt(Settings.VAD_START.key, 77)
+            .putInt(Settings.VAD_STOP.key, 22)
             .commit()
-        change(Settings.PREF_VAD_START)
+        change(Settings.VAD_START.key)
         assertThat(vadConfig().startThreshold).isWithin(0.001f).of(0.77f)
         assertThat(vadConfig().stopThreshold).isWithin(0.001f).of(0.22f)
     }
 
-    // --- the preprocessor chain ----------------------------------------------------------------
-
     @Test
     fun `the noise suppression method reaches the audio config`() {
-        prefs.edit().putString(Settings.PREF_NOISE_SUPPRESSION_METHOD, "speex").commit()
-        change(Settings.PREF_NOISE_SUPPRESSION_METHOD)
+        prefs.edit().putString(Settings.NOISE_SUPPRESSION_METHOD.key, "speex").commit()
+        change(Settings.NOISE_SUPPRESSION_METHOD.key)
         assertThat(audioConfig().noiseSuppression).isEqualTo("speex")
     }
 
     @Test
     fun `the speex suppression depth reaches the audio config`() {
-        prefs.edit().putString(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB, "-35").commit()
-        change(Settings.PREF_SPEEX_NOISE_SUPPRESS_DB)
+        prefs.edit().putString(Settings.SPEEX_NOISE_SUPPRESS_DB.key, "-35").commit()
+        change(Settings.SPEEX_NOISE_SUPPRESS_DB.key)
         assertThat(audioConfig().speexNoiseSuppressDb).isEqualTo(-35)
     }
 
@@ -127,11 +123,11 @@ class MumlaServiceAudioPreferencesTest {
         val router = service.testRouter
         val earpiece = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
         Settings.getInstance(service).preferredAudioDevice = earpiece
-        change(Settings.PREF_AUDIO_DEVICE)
+        change(Settings.AUDIO_DEVICE.key)
         assertThat(router.preferred).isEqualTo(earpiece)
 
         Settings.getInstance(service).preferredAudioDevice = null
-        change(Settings.PREF_AUDIO_DEVICE)
+        change(Settings.AUDIO_DEVICE.key)
         assertThat(router.preferred).isNull()
     }
 
@@ -159,18 +155,16 @@ class MumlaServiceAudioPreferencesTest {
         for (ns in listOf(false, true)) {
             for (agc in listOf(false, true)) {
                 prefs.edit()
-                    .putBoolean(Settings.PREF_ANDROID_NOISE_SUPPRESSOR, ns)
-                    .putBoolean(Settings.PREF_ANDROID_AGC, agc)
+                    .putBoolean(Settings.ANDROID_NOISE_SUPPRESSOR.key, ns)
+                    .putBoolean(Settings.ANDROID_AGC.key, agc)
                     .commit()
-                change(Settings.PREF_ANDROID_NOISE_SUPPRESSOR)
-                change(Settings.PREF_ANDROID_AGC)
+                change(Settings.ANDROID_NOISE_SUPPRESSOR.key)
+                change(Settings.ANDROID_AGC.key)
                 assertThat(audioConfig().androidNoiseSuppressor).isEqualTo(ns)
                 assertThat(audioConfig().androidAgc).isEqualTo(agc)
             }
         }
     }
-
-    // --- pin the set ---------------------------------------------------------------------------
 
     /**
      * Every `android:key` in the audio settings XML is either turned into an extra by
@@ -210,14 +204,14 @@ class MumlaServiceAudioPreferencesTest {
     @Test
     fun `only an audio key reconfigures the session`() {
         val settings = Settings.getInstance(service)
-        prefs.edit().putBoolean(Settings.PREF_HALF_DUPLEX, true).commit()
+        prefs.edit().putBoolean(Settings.HALF_DUPLEX.key, true).commit()
         val before = service.sessionConfig
 
-        for (key in listOf(Settings.PREF_USE_TTS, Settings.PREF_HOT_CORNER_KEY, Settings.PREF_PTT_SOUND, "nonsense")) {
+        for (key in listOf(Settings.USE_TTS.key, Settings.HOT_CORNER.key, Settings.PTT_SOUND.key, "nonsense")) {
             change(key)
             assertThat(service.sessionConfig).isSameInstanceAs(before)
         }
-        change(Settings.PREF_HALF_DUPLEX)
+        change(Settings.HALF_DUPLEX.key)
         assertThat(service.sessionConfig).isEqualTo(SessionSettings.withAudioSettings(before, settings))
         assertThat(service.sessionConfig.halfDuplex).isTrue()
     }

@@ -26,6 +26,7 @@ import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.ListDrawerHeaderBinding
 import se.lublin.mumla.databinding.ListDrawerItemBinding
@@ -75,7 +76,7 @@ class DrawerAdapter(private val onClick: (DrawerRow) -> Unit) :
 
     companion object {
         const val HEADER_CONNECTED_SERVER = 0
-        const val ITEM_SERVER = 1
+        const val ITEM_SERVER = MainScreen.CHANNELS
         const val ITEM_PINNED_CHANNELS = 2
         const val ITEM_INFO = 3
         const val ITEM_ACCESS_TOKENS = 4
@@ -99,7 +100,6 @@ class DrawerAdapter(private val onClick: (DrawerRow) -> Unit) :
     }
 }
 
-/** A row of the navigation drawer. */
 sealed interface DrawerRow {
     /** Tells rows apart across updates. */
     val key: String

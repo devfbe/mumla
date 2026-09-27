@@ -12,6 +12,13 @@ import android.view.ScaleGestureDetector
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.os.BundleCompat
 
+/** Requested double-tap zoom; [ZoomState.scaledBy] may cap it at the image's ceiling. */
+private const val DOUBLE_TAP_SCALE = 2.5f
+private const val KEY_SUPER = "super"
+private const val KEY_SCALE = "scale"
+private const val KEY_TX = "tx"
+private const val KEY_TY = "ty"
+
 /**
  * An ImageView with pinch-zoom, drag and double-tap; the arithmetic lives in [ZoomState].
  *
@@ -186,14 +193,5 @@ class ZoomImageView @JvmOverloads constructor(
         val ih = d.intrinsicHeight.toFloat()
         state = state.clamped(vw, vh, iw, ih)
         imageMatrix = state.toMatrix(vw, vh, iw, ih)
-    }
-
-    private companion object {
-        /** Requested double-tap zoom; [ZoomState.scaledBy] may cap it at the image's ceiling. */
-        const val DOUBLE_TAP_SCALE = 2.5f
-        const val KEY_SUPER = "super"
-        const val KEY_SCALE = "scale"
-        const val KEY_TX = "tx"
-        const val KEY_TY = "ty"
     }
 }

@@ -25,7 +25,6 @@ import se.lublin.humla.audio.capture.fakes.FakePreprocessor
 import se.lublin.humla.audio.capture.fakes.FakeResampler
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
-import se.lublin.humla.audio.inputmode.IInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
 
 class CapturePipelineTest {
@@ -122,7 +121,9 @@ class CapturePipelineTest {
         pipeline.process(constant(300, 300), 300)
 
         assertThat(mode.lengths).containsExactly(480, 300).inOrder()
-        assertWithMessage("0.55409 would be the padding dragging the level down, 0.91097 the previous frame's tail holding it up")
+        assertWithMessage(
+            "0.55409 would be the padding dragging the level down, 0.91097 the previous frame's tail holding it up",
+        )
             .that(mode.scores[1]).isWithin(1e-4f).of(0.57535f)
     }
 
@@ -162,7 +163,9 @@ class CapturePipelineTest {
     @Test
     fun `a swapped resampler gets its own short-frame log`() {
         val logs = mutableListOf<String>()
-        val pipeline = CapturePipeline(FakeResampler(1), FakePreprocessor(), ContinuousInputMode(), log = { logs += it })
+        val pipeline = CapturePipeline(
+            FakeResampler(1), FakePreprocessor(), ContinuousInputMode(), log = { logs += it },
+        )
 
         pipeline.process(constant(7, 100), 100)
         pipeline.process(constant(7, 100), 100)
@@ -389,7 +392,7 @@ class CapturePipelineTest {
             return n
         }
 
-        override fun release() = Unit
+        override fun close() = Unit
     }
 
     /** Always transmits and records the length, and the level, it was asked to judge. */

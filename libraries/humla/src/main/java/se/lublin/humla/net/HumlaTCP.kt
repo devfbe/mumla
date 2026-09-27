@@ -29,7 +29,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import se.lublin.humla.util.HumlaException
+import se.lublin.humla.exception.HumlaException
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
@@ -40,7 +40,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLSocket
 
-/** One framed Mumble TCP message. */
 class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
 
 /**
@@ -79,7 +78,6 @@ class HumlaTCP(
         this.listener = listener
     }
 
-    @Throws(ConnectException::class)
     override fun connect(host: String, port: Int, useTor: Boolean) {
         if (!connectCalled.compareAndSet(false, true)) throw ConnectException("HumlaTCP is single-use")
         running = true
@@ -272,8 +270,6 @@ class HumlaTCP(
          * Reads one frame: int16 type, int32 length, payload. Returns null (payload consumed) for
          * a type this client does not know, so the stream stays in sync.
          */
-        @JvmStatic
-        @Throws(IOException::class)
         fun readFrame(input: DataInputStream): TcpFrame? {
             val messageType = input.readShort().toInt()
             val length = input.readInt()

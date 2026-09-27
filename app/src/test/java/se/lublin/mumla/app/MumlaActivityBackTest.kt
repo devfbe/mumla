@@ -35,6 +35,7 @@ import se.lublin.mumla.R
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.testing.idleMainLooper
 import se.lublin.mumla.testing.installDatabase
+import se.lublin.mumla.ui.ServiceViewModel
 
 /** Back asks before leaving a connected server, and only then: predictive back works otherwise. */
 @RunWith(RobolectricTestRunner::class)

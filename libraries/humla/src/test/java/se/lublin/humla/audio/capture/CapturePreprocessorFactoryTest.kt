@@ -42,8 +42,6 @@ class CapturePreprocessorFactoryTest {
     private val logs = mutableListOf<String>()
     private val factory = CapturePreprocessorFactory({ speex }, { rnnoise }, { apm }, { logs += it })
 
-    // ------------------------------------------------------------------ off is off
-
     /**
      * Off must be the [NoopPreprocessor] object itself: a stage with neutral parameters would still
      * hold native state and take a lock per frame, which the frame contents cannot reveal.
@@ -83,8 +81,6 @@ class CapturePreprocessorFactoryTest {
 
         assertThat(chain.preprocessor).isSameInstanceAs(NoopPreprocessor)
     }
-
-    // ------------------------------------------------------------------ the composition rule
 
     @Test
     fun `webrtc echo runs before rnnoise and the probability comes from rnnoise`() {
@@ -194,8 +190,6 @@ class CapturePreprocessorFactoryTest {
         assertThat(rnnoise.destroyed).isEqualTo(1)
         assertThat(apm.destroyed).isEqualTo(1)
     }
-
-    // ------------------------------------------------------------------ a stage that will not come up
 
     @Test
     fun `a stage whose native state fails is skipped and logged, the rest keeps working`() {

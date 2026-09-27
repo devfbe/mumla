@@ -27,7 +27,6 @@ enum class NoiseSuppressionMode(val preferenceValue: String) {
     RNNOISE("rnnoise");
 
     companion object {
-        @JvmStatic
         fun fromPreferenceValue(value: String?): NoiseSuppressionMode =
             entries.firstOrNull { it.preferenceValue == value } ?: SPEEX
     }
@@ -42,7 +41,6 @@ enum class EchoCancellationMode(val preferenceValue: String) {
     WEBRTC("webrtc");
 
     companion object {
-        @JvmStatic
         fun fromPreferenceValue(value: String?): EchoCancellationMode =
             entries.firstOrNull { it.preferenceValue == value } ?: NONE
     }

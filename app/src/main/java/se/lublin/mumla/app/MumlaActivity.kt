@@ -20,7 +20,6 @@ package se.lublin.mumla.app
 import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
-import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
@@ -42,10 +41,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
+import se.lublin.humla.model.MumbleURLParser
 import se.lublin.humla.model.Server
 import se.lublin.humla.session.HumlaEvent
-import se.lublin.humla.util.MumbleURLParser
 import se.lublin.mumla.BuildConfig
+import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.channel.AccessTokenFragment
@@ -55,28 +55,36 @@ import se.lublin.mumla.chat.NoticeFormatter
 import se.lublin.mumla.databinding.ActivityMainBinding
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.db.MumlaRepository
-import se.lublin.mumla.preference.generateDefaultCertificate
 import se.lublin.mumla.preference.SettingsActivity
+import se.lublin.mumla.preference.generateDefaultCertificate
 import se.lublin.mumla.servers.FavouriteServerListFragment
 import se.lublin.mumla.servers.PublicServerListFragment
 import se.lublin.mumla.servers.ServerEditFragment
 import se.lublin.mumla.service.IMumlaService
 import se.lublin.mumla.service.MumlaService
+import se.lublin.mumla.ui.ServerRequest
+import se.lublin.mumla.ui.ServiceClient
+import se.lublin.mumla.ui.ServiceViewModel
+import se.lublin.mumla.ui.bindClient
+import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.util.Edge
+import se.lublin.mumla.util.changes
 import se.lublin.mumla.util.padForSystemBars
 import java.net.MalformedURLException
 import java.security.cert.X509Certificate
 
+private const val TAG = "MumlaActivity"
+private const val FALLBACK_SCREEN = DrawerAdapter.ITEM_FAVOURITES
+
 /**
  * The main screen: a drawer to pick between the server lists and the connected server's
- * screens, which it binds [MumlaService] for while resumed.
+ * screens, which it binds [MumlaService] for while started.
  */
 @Suppress("TooManyFunctions") // Framework callbacks, each delegating to the classes that do the work.
 class MumlaActivity :
     AppCompatActivity(),
     ServiceClient,
-    ConnectionDialogs.Listener,
-    SharedPreferences.OnSharedPreferenceChangeListener {
+    ConnectionDialogs.Listener {
 
     private val serviceModel: ServiceViewModel by viewModels()
     private val service: IMumlaService? get() = serviceModel.service.value
@@ -96,7 +104,7 @@ class MumlaActivity :
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            serviceModel.attach((binder as? MumlaService.MumlaBinder)?.getService())
+            serviceModel.attach((binder as? MumlaService.MumlaBinder)?.service)
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -119,14 +127,17 @@ class MumlaActivity :
         onBackPressedDispatcher.addCallback(this, backCallback)
 
         setStayAwake(settings.shouldStayAwake)
-        PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener(this)
+        lifecycleScope.launch {
+            PreferenceManager.getDefaultSharedPreferences(this@MumlaActivity).changes(Settings.STAY_AWAKE.key)
+                .collect { setStayAwake(settings.shouldStayAwake) }
+        }
 
         drawer = MainDrawer(
             this, binding.drawerLayout, binding.leftDrawer, binding.toolbar,
             serverName = ::connectedServerName,
             onItemSelected = ::showDrawerFragment,
         )
-        dialogs = ConnectionDialogs(this, settings, this)
+        dialogs = ConnectionDialogs(this, settings, this) { service }
         connectFlow = ConnectFlow(this, settings) { service }
         batteryPrompt = BatteryOptimizationPrompt(this, settings)
         addMenuProvider(AudioDeviceMenu(this, settings) { service?.takeIf { it.isConnected }?.session })
@@ -148,7 +159,7 @@ class MumlaActivity :
         }
 
         if (savedInstanceState == null) {
-            showDrawerFragment(intent?.getIntExtra(EXTRA_DRAWER_FRAGMENT, FALLBACK_SCREEN) ?: FALLBACK_SCREEN)
+            showDrawerFragment(intent?.getIntExtra(MainScreen.EXTRA_SCREEN, FALLBACK_SCREEN) ?: FALLBACK_SCREEN)
         }
         if (intent?.action == Intent.ACTION_VIEW) offerServerFromUrl(intent.dataString)
 
@@ -183,26 +194,21 @@ class MumlaActivity :
         drawer.syncState()
     }
 
-    override fun onResume() {
-        super.onResume()
+    override fun onStart() {
+        super.onStart()
         // Changed in the settings screen, which recreates only itself.
         if (settings.isDynamicColorEnabled != themedWithDynamicColors) recreate()
         bindService(Intent(this, MumlaService::class.java), connection, 0)
     }
 
-    override fun onPause() {
-        super.onPause()
-        dialogs.dismiss()
+    override fun onStop() {
+        super.onStop()
         batteryPrompt.dismiss()
         serviceModel.attach(null)
         unbindService(connection)
     }
 
-    override fun onDestroy() {
-        PreferenceManager.getDefaultSharedPreferences(this).unregisterOnSharedPreferenceChangeListener(this)
-        super.onDestroy()
-    }
-
+    /** Suppresses the service's notifications while the activity is visible, which it is while bound. */
     override fun onServiceBound(service: IMumlaService) {
         boundService = service
         service.setSuppressNotifications(true)
@@ -244,11 +250,7 @@ class MumlaActivity :
         val server = service.targetServer
         val certificate = chain.firstOrNull()
         if (server == null || certificate == null) return
-        if (changed) {
-            dialogs.showCertificateChanged(server, certificate)
-        } else {
-            dialogs.showUntrustedCertificate(server, certificate)
-        }
+        dialogs.showUntrustedCertificate(server, certificate, changed)
     }
 
     private fun onConnectionChanged(service: IMumlaService) {
@@ -348,7 +350,6 @@ class MumlaActivity :
             .show()
     }
 
-    /** Shows the screen of the drawer row [id]. */
     private fun showDrawerFragment(id: Int) {
         if (id == DrawerAdapter.ITEM_SETTINGS) {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -363,9 +364,8 @@ class MumlaActivity :
     }
 
     private fun drawerFragment(id: Int): Fragment? = when (id) {
-        DrawerAdapter.ITEM_SERVER -> ChannelFragment()
-        DrawerAdapter.ITEM_PINNED_CHANNELS ->
-            ChannelFragment().apply { arguments = Bundle().apply { putBoolean("pinned", true) } }
+        DrawerAdapter.ITEM_SERVER -> ChannelFragment.newInstance()
+        DrawerAdapter.ITEM_PINNED_CHANNELS -> ChannelFragment.newInstance(pinned = true)
         DrawerAdapter.ITEM_INFO -> ServerInfoFragment()
         DrawerAdapter.ITEM_ACCESS_TOKENS -> service?.targetServer?.id?.let(AccessTokenFragment::newInstance)
         DrawerAdapter.ITEM_FAVOURITES -> FavouriteServerListFragment()
@@ -379,10 +379,6 @@ class MumlaActivity :
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
-        if (key == Settings.PREF_STAY_AWAKE) setStayAwake(settings.shouldStayAwake)
     }
 
     override fun reconnect(server: Server) = connectFlow.connect(server)
@@ -408,13 +404,5 @@ class MumlaActivity :
             repository.io(save)
             showDrawerFragment(DrawerAdapter.ITEM_FAVOURITES)
         }
-    }
-
-    companion object {
-        private const val TAG = "MumlaActivity"
-        private const val FALLBACK_SCREEN = DrawerAdapter.ITEM_FAVOURITES
-
-        /** The `DrawerAdapter.ITEM_*` id of the screen to show when the activity is created. */
-        const val EXTRA_DRAWER_FRAGMENT = "drawer_fragment"
     }
 }

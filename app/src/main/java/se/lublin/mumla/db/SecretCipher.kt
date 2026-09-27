@@ -28,12 +28,12 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+private const val AES_KEY_BITS = 256
+
 /** Authenticated encryption of small secrets. Both calls throw when the key is unusable. */
 interface SecretCipher {
-    @Throws(GeneralSecurityException::class)
     fun encrypt(plain: ByteArray): ByteArray
 
-    @Throws(GeneralSecurityException::class)
     fun decrypt(sealed: ByteArray): ByteArray
 }
 
@@ -69,7 +69,7 @@ object KeystoreSecretCipher : SecretCipher {
                     KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                         .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                         .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                        .setKeySize(256)
+                        .setKeySize(AES_KEY_BITS)
                         .build()
                 )
                 generateKey()

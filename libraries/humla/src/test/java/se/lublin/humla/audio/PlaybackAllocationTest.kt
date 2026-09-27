@@ -19,13 +19,12 @@ package se.lublin.humla.audio
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import java.lang.management.ManagementFactory
 import org.junit.Test
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.SpeexJitterApi
 import se.lublin.humla.audio.native.SpeexJitterNative
 import se.lublin.humla.model.User
-import se.lublin.humla.protocol.AudioHandler
+import java.lang.management.ManagementFactory
 
 /**
  * The playback thread decodes and mixes every talker once per mix, so a per-mix allocation risks a

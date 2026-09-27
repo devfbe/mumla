@@ -18,13 +18,10 @@
 package se.lublin.mumla.servers
 
 import android.content.Context
-import android.view.LayoutInflater
 import android.view.MenuItem
-import android.view.ViewGroup
 import kotlinx.coroutines.CoroutineScope
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
-import se.lublin.mumla.databinding.ServerListRowBinding
 
 /** The favourite servers' cards, with edit, share and delete in their menu. */
 class FavouriteServerAdapter(
@@ -34,20 +31,7 @@ class FavouriteServerAdapter(
     onServerClick: (Server) -> Unit,
 ) : ServerAdapter<Server>(context, scope, onServerClick) {
 
-    override fun createHolder(inflater: LayoutInflater, parent: ViewGroup): ServerViewHolder {
-        val binding = ServerListRowBinding.inflate(inflater, parent, false)
-        return ServerViewHolder(
-            binding.root,
-            name = binding.serverRowName,
-            version = binding.serverRowVersionStatus,
-            users = binding.serverRowUsercount,
-            latency = binding.serverRowLatency,
-            progress = binding.serverRowPingProgress,
-            more = binding.serverRowMore,
-            user = binding.serverRowUser,
-            address = binding.serverRowAddress,
-        )
-    }
+    override val rowLayout: Int get() = R.layout.server_list_row
 
     override val popupMenuResource: Int get() = R.menu.popup_favourite_server
 

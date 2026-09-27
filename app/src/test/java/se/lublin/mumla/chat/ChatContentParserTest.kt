@@ -54,8 +54,6 @@ class ChatContentParserTest {
             .isEqualTo("https://a.org")
     }
 
-    // --- Hostile / malformed input coverage ---
-
     @Test
     fun unterminatedAndNestedTagsDoNotThrow() {
         val content = parser.parse("<b>bold <i>italic <u>under") as ChatContent.Text

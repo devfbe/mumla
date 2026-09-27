@@ -20,12 +20,13 @@ package se.lublin.humla.audio.encoder
 import java.nio.BufferOverflowException
 import java.nio.BufferUnderflowException
 import java.util.Arrays
+import se.lublin.humla.audio.native.NativeHandle
 import se.lublin.humla.audio.native.OpusEncoderApi
 import se.lublin.humla.audio.native.OpusEncoderNative
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.PacketBuffer
 
-class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor(
+class OpusEncoder(
     sampleRate: Int,
     channels: Int,
     private val frameSize: Int,
@@ -37,28 +38,29 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
     private val buffer = ByteArray(maxBufferSize)
     private val audioBuffer = ShortArray(framesPerPacket * frameSize)
 
-    // Stateful
     override var bufferedFrames = 0
         private set
     override var encodedLength = 0
         private set
     private var terminated = false
 
-    private var state: Long
-    private var destroyed = false
+    private val state: NativeHandle
 
     init {
         val error = intArrayOf(0)
-        state = api.create(sampleRate, channels, OpusEncoderNative.OPUS_APPLICATION_VOIP, error)
+        state = NativeHandle(
+            { api.create(sampleRate, channels, OpusEncoderNative.OPUS_APPLICATION_VOIP, error) },
+            api::destroy,
+        )
         if (error[0] < 0) throw NativeAudioException("Opus encoder initialization failed with error: ${error[0]}")
-        api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_VBR_REQUEST, 0)
-        api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_BITRATE_REQUEST, bitrate)
-        api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_INBAND_FEC_REQUEST, 1)
-        api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_PACKET_LOSS_PERC_REQUEST, EXPECTED_PACKET_LOSS_PERCENT)
-        api.ctlSetInt(state, OpusEncoderNative.OPUS_SET_DTX_REQUEST, 0)
+        val handle = state.value
+        api.ctlSetInt(handle, OpusEncoderNative.OPUS_SET_VBR_REQUEST, 0)
+        api.ctlSetInt(handle, OpusEncoderNative.OPUS_SET_BITRATE_REQUEST, bitrate)
+        api.ctlSetInt(handle, OpusEncoderNative.OPUS_SET_INBAND_FEC_REQUEST, 1)
+        api.ctlSetInt(handle, OpusEncoderNative.OPUS_SET_PACKET_LOSS_PERC_REQUEST, EXPECTED_PACKET_LOSS_PERCENT)
+        api.ctlSetInt(handle, OpusEncoderNative.OPUS_SET_DTX_REQUEST, 0)
     }
 
-    @Throws(NativeAudioException::class)
     override fun encode(input: ShortArray, inputSize: Int): Int {
         if (bufferedFrames >= framesPerPacket) throw BufferOverflowException()
         if (inputSize != frameSize) {
@@ -70,14 +72,13 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
         return if (bufferedFrames == framesPerPacket) encodePacket() else 0
     }
 
-    @Throws(NativeAudioException::class)
     private fun encodePacket(): Int {
         if (bufferedFrames < framesPerPacket) {
             // If encoding is done before enough frames are buffered, fill rest of packet.
             Arrays.fill(audioBuffer, frameSize * bufferedFrames, audioBuffer.size, 0.toShort())
             bufferedFrames = framesPerPacket
         }
-        val result = api.encode(state, audioBuffer, frameSize * bufferedFrames, buffer, buffer.size)
+        val result = api.encode(state.value, audioBuffer, frameSize * bufferedFrames, buffer, buffer.size)
         if (result < 0) throw NativeAudioException("Opus encoding failed with error: $result")
         encodedLength = result
         return result
@@ -89,7 +90,6 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
     override val isTerminator: Boolean
         get() = terminated
 
-    @Throws(BufferUnderflowException::class)
     override fun getEncodedData(packetBuffer: PacketBuffer) {
         if (!isReady) throw BufferUnderflowException()
         packetBuffer.append(buffer, encodedLength)
@@ -98,27 +98,14 @@ class OpusEncoder @JvmOverloads @Throws(NativeAudioException::class) constructor
         terminated = false
     }
 
-    @Throws(NativeAudioException::class)
     override fun terminate() {
         terminated = true
         if (bufferedFrames > 0 && !isReady) {
-            // Perform encode operation on remaining audio if available.
             encodePacket()
         }
     }
 
-    fun getBitrate(): Int {
-        val value = intArrayOf(0)
-        api.ctlGetInt(state, OpusEncoderNative.OPUS_GET_BITRATE_REQUEST, value)
-        return value[0]
-    }
-
-    override fun destroy() {
-        if (destroyed) return
-        destroyed = true
-        api.destroy(state)
-        state = 0L
-    }
+    override fun close() = state.close()
 
     companion object {
         /** Loss rate the encoder plans its in-band FEC for; higher spends more bits on redundancy. */

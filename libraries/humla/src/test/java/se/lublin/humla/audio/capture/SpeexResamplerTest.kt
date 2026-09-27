@@ -100,8 +100,8 @@ class SpeexResamplerTest {
         val api = FakeSpeexResamplerApi(handle = 42L)
         val resampler = SpeexResampler(16000, 48000, api = api)
 
-        resampler.release()
-        resampler.release()
+        resampler.close()
+        resampler.close()
 
         assertThat(api.destroyed).containsExactly(42L)
     }
@@ -111,7 +111,7 @@ class SpeexResamplerTest {
         val api = FakeSpeexResamplerApi(produced = 480, fill = 5)
         val resampler = SpeexResampler(16000, 48000, api = api)
         val out = ShortArray(480)
-        resampler.release()
+        resampler.close()
 
         val produced = resampler.resample(ShortArray(160), 160, out)
 

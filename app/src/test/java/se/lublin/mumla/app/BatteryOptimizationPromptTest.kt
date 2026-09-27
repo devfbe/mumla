@@ -41,6 +41,7 @@ import se.lublin.mumla.testing.installDatabase
 import se.lublin.mumla.testing.stubConnected
 import se.lublin.mumla.testing.stubDisconnected
 import se.lublin.mumla.testing.stubEvents
+import se.lublin.mumla.ui.ServiceViewModel
 
 /** MumlaActivity offers the battery optimisation exemption once, after a connection succeeds. */
 @RunWith(RobolectricTestRunner::class)

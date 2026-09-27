@@ -33,6 +33,12 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.security.GeneralSecurityException
 
+/** The encryption header alone is four bytes; anything this short carries no voice. */
+private const val MIN_DATAGRAM_BYTES = 5
+
+/** How long decryption may fail before a crypt resync is requested, and how often. */
+private const val RESYNC_AFTER_MICROS = 5_000_000
+
 /**
  * Receives and sends OCB-AES encrypted voice datagrams over the UDP connection to a Mumble server.
  *
@@ -41,12 +47,10 @@ import java.security.GeneralSecurityException
  *
  * Single-use: [connect] may be called once; UDP recovery creates a new transport.
  *
- * @param cryptState Cryptographic state provider.
- * @param listener Callback target.
  * @param scope The connection's scope; its dispatcher delivers the callbacks.
  * @param socketFactory Creates the datagram socket the loops run on.
  */
-class HumlaUDP @JvmOverloads constructor(
+class HumlaUDP(
     private val cryptState: CryptState,
     private val listener: UDPConnectionListener,
     private val scope: CoroutineScope,
@@ -59,7 +63,6 @@ class HumlaUDP @JvmOverloads constructor(
     @Volatile private var stopRequested = false
     private var job: Job? = null
 
-    /** Unbounded queue of outgoing packets to be sent. */
     private val sendQueue = Channel<DatagramPacket>(Channel.UNLIMITED)
 
     override val isRunning: Boolean get() = connected
@@ -118,7 +121,7 @@ class HumlaUDP @JvmOverloads constructor(
             Log.d(TAG, "CryptState invalid, discarding packet")
             return
         }
-        if (length < 5) {
+        if (length < MIN_DATAGRAM_BYTES) {
             Log.d(TAG, "Packet too short, discarding")
             return
         }
@@ -126,7 +129,10 @@ class HumlaUDP @JvmOverloads constructor(
             val buffer = cryptState.decrypt(data, length)
             if (buffer != null) {
                 post { listener.onUDPDataReceived(buffer) }
-            } else if (cryptState.lastGoodElapsed > 5000000 && cryptState.lastRequestElapsed > 5000000) {
+            } else if (
+                cryptState.lastGoodElapsed > RESYNC_AFTER_MICROS &&
+                cryptState.lastRequestElapsed > RESYNC_AFTER_MICROS
+            ) {
                 cryptState.resetLastRequestTime()
                 post { listener.resyncCryptState() }
                 Log.d(TAG, "Packet failed to decrypt, discarding and requesting crypt state resync")

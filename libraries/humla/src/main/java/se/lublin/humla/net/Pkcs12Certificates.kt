@@ -34,14 +34,11 @@ import org.bouncycastle.pkcs.jcajce.JcaPKCS12SafeBagBuilder
 import org.bouncycastle.pkcs.jcajce.JcePKCS12MacCalculatorBuilder
 import org.bouncycastle.pkcs.jcajce.JcePKCSPBEOutputEncryptorBuilder
 import java.io.ByteArrayInputStream
-import java.io.IOException
 import java.io.InputStream
 import java.security.KeyStore
 import java.security.KeyStoreException
 import java.security.MessageDigest
-import java.security.NoSuchAlgorithmException
 import java.security.PrivateKey
-import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 
 /**
@@ -58,13 +55,9 @@ object Pkcs12Certificates {
      */
     private val PROVIDER = BouncyCastleProvider()
 
-    @JvmStatic
-    @Throws(KeyStoreException::class, IOException::class, NoSuchAlgorithmException::class, CertificateException::class)
     fun load(pkcs12: ByteArray, password: String?): KeyStore =
         load(ByteArrayInputStream(pkcs12), password?.toCharArray() ?: CharArray(0))
 
-    @JvmStatic
-    @Throws(KeyStoreException::class, IOException::class, NoSuchAlgorithmException::class, CertificateException::class)
     fun load(input: InputStream, password: CharArray): KeyStore {
         val store = KeyStore.getInstance("PKCS12", PROVIDER)
         store.load(input, password)
@@ -72,7 +65,6 @@ object Pkcs12Certificates {
     }
 
     /** True if [bytes] parse as a PKCS#12 PFX structure, whether or not its password is known. */
-    @JvmStatic
     fun isPkcs12(bytes: ByteArray): Boolean = try {
         Pfx.getInstance(ASN1Primitive.fromByteArray(bytes))
         true
@@ -88,8 +80,6 @@ object Pkcs12Certificates {
      * AES-256-CBC shrouded key bags, certificates in PBES2 AES-256-CBC encrypted data, and a
      * SHA-256 MAC, the layout OpenSSL 3 writes by default.
      */
-    @JvmStatic
-    @Throws(KeyStoreException::class, IOException::class, NoSuchAlgorithmException::class, CertificateException::class)
     fun exportWithPassword(stored: ByteArray, password: CharArray): ByteArray {
         require(password.isNotEmpty()) { "an export needs a password" }
         val source = load(stored, null)

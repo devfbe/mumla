@@ -18,7 +18,6 @@
 package se.lublin.humla.net
 
 import com.google.protobuf.MessageLite
-import java.net.ConnectException
 
 /**
  * The TCP control channel to a Mumble server as seen by [HumlaConnection].
@@ -31,7 +30,6 @@ interface TcpTransport {
     fun setTCPConnectionListener(listener: HumlaTCP.TCPConnectionListener?)
 
     /** Opens the connection. A second call is refused with a ConnectException. */
-    @Throws(ConnectException::class)
     fun connect(host: String, port: Int, useTor: Boolean)
     fun sendMessage(message: MessageLite, messageType: HumlaTCPMessageType)
     fun sendMessage(data: ByteArray, length: Int, messageType: HumlaTCPMessageType)

@@ -18,11 +18,8 @@
 package se.lublin.humla
 
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
-import android.net.ConnectivityManager
-import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -33,20 +30,20 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
+import se.lublin.humla.audio.AudioConfig
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
+import se.lublin.humla.exception.HumlaDisconnectedException
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.ConnectionWarning
-import se.lublin.humla.session.AudioConfig
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaServiceHarness
 import se.lublin.humla.testutil.onEvents
-import se.lublin.humla.util.HumlaDisconnectedException
-import se.lublin.humla.util.HumlaException
-import java.util.concurrent.TimeUnit
+import se.lublin.humla.util.Constants
 
 /**
  * Characterization of [HumlaService] without a live connection: lifecycle, configuration, and the
@@ -67,21 +64,7 @@ class HumlaServiceCharacterizationTest {
         return controller.get()
     }
 
-    /** The input mode in force. */
-    private fun inputMode(service: HumlaService): Any = service.mInputMode
-
-    /**
-     * A service that cancels every connection attempt on `Connecting`, which a main-thread
-     * collector sees inline, so `connect()` can be driven without opening a socket.
-     */
-    private fun cancellingService(): HumlaService = service().also { service ->
-        service.onEvents { if (it == HumlaEvent.Connecting) service.disconnect() }
-    }
-
-    private fun connectivityManager() = RuntimeEnvironment.getApplication()
-        .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-    // ---------------------------------------------------------------- lifecycle and initial state
+    private fun inputMode(service: HumlaService): Any = service.inputMode
 
     /** A fresh service is disconnected and has no session; `session` gates the binder API. */
     @Test
@@ -92,10 +75,10 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.isConnected).isFalse()
         assertThat(service.isReconnecting).isFalse()
         assertThat(service.connectionError).isNull()
-        assertThat(service.getConnection()).isNull()
+        assertThat(service.connection).isNull()
         assertThat(service.targetServer).isNull()
-        assertThat(service.isSynchronized()).isFalse()
-        assertThat(service.isConnectionEstablished()).isFalse()
+        assertThat(service.isSynchronized).isFalse()
+        assertThat(service.isConnectionEstablished).isFalse()
         assertThrows(HumlaDisconnectedException::class.java) { service.session }
     }
 
@@ -142,10 +125,8 @@ class HumlaServiceCharacterizationTest {
 
         val binder = service.onBind(Intent()) as HumlaService.HumlaBinder
 
-        assertThat(binder.getService()).isSameInstanceAs(service)
+        assertThat(binder.service).isSameInstanceAs(service)
     }
-
-    // ---------------------------------------------------------------- start and configure
 
     /** A start command only keeps the service started; connecting goes through the binder. */
     @Test
@@ -155,7 +136,7 @@ class HumlaServiceCharacterizationTest {
         for (intent in listOf(null, Intent(), Intent().setAction("se.lublin.humla.CONNECT"))) {
             assertThat(service.onStartCommand(intent, 0, 0)).isEqualTo(Service.START_NOT_STICKY)
         }
-        assertThat(service.getConnection()).isNull()
+        assertThat(service.connection).isNull()
         assertThat(service.targetServer).isNull()
     }
 
@@ -178,7 +159,7 @@ class HumlaServiceCharacterizationTest {
 
         assertThat(stateInsideOnConnecting).containsExactly(HumlaService.ConnectionState.CONNECTING)
         assertThat(serverInsideOnConnecting).containsExactly("127.0.0.1")
-        assertThat(service.getConnection()).isNotNull()
+        assertThat(service.connection).isNotNull()
     }
 
     /** Every audio setting lands in its [AudioConfig] field; the VAD config reaches a live object instead. */
@@ -263,7 +244,7 @@ class HumlaServiceCharacterizationTest {
         service.setTalkingState(true)
 
         val mode = inputMode(service) as ToggleInputMode
-        assertThat(mode.isTalkingOn()).isTrue()
+        assertThat(mode.isTalkingOn).isTrue()
         assertThat(service.isTalking).isTrue()
     }
 
@@ -276,8 +257,6 @@ class HumlaServiceCharacterizationTest {
 
         assertThat(service.sessionConfig.accessTokens).isEqualTo(listOf("a", "b"))
     }
-
-    // ---------------------------------------------------------------- disconnection
 
     /**
      * `onConnectionDisconnected` over its input space: the error, its reason, and `autoReconnect`.
@@ -329,8 +308,6 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.whisperTarget).isNull()
     }
 
-    // ---------------------------------------------------------------- logging
-
     /** `logInfo` is dropped before synchronization; `logWarning` and `logError` are not. */
     @Test
     fun onlyInfoLoggingIsSuppressedBeforeSynchronization() {
@@ -377,7 +354,6 @@ class HumlaServiceCharacterizationTest {
         assertThat(warnings[0]).isNotEmpty()
     }
 
-    /** A cancelled collector hears nothing further. */
     @Test
     fun aCancelledCollectorStopsHearingWarnings() {
         val service = service()
@@ -390,8 +366,6 @@ class HumlaServiceCharacterizationTest {
         assertThat(recorder.of<HumlaEvent.LogMessage>().map { it.text }).containsExactly("first")
     }
 
-    // ---------------------------------------------------------------- voice targets
-
     /** Freeing a slot that was never taken is harmless, and whispering is off while disconnected. */
     @Test
     fun unregisteringAWhisperTargetThatWasNeverRegisteredIsHarmless() {
@@ -403,8 +377,6 @@ class HumlaServiceCharacterizationTest {
         assertThat(service.voiceTargetMode)
             .isEqualTo(se.lublin.humla.util.VoiceTargetMode.NORMAL)
     }
-
-    // ---------------------------------------------------------------- the session API, disconnected
 
     /** Every session call fails with the same, explicit error while disconnected. */
     @Test

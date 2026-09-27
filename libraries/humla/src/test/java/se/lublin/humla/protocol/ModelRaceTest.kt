@@ -46,7 +46,6 @@ import kotlin.concurrent.thread
  */
 class ModelRaceTest {
 
-    /** The number of channel frames fed. */
     private val channelFrames = 500
     private val userFrames = 1_500
     private val churnFrames = 3_000

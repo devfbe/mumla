@@ -74,7 +74,11 @@ class MumlaReconnectNotification(
             )
             builder.setOngoing(true)
         } else {
-            builder.addAction(R.drawable.ic_action_move, context.getString(R.string.reconnect), broadcast(BROADCAST_RECONNECT))
+            builder.addAction(
+                R.drawable.ic_action_move,
+                context.getString(R.string.reconnect),
+                broadcast(BROADCAST_RECONNECT),
+            )
         }
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)

@@ -19,6 +19,8 @@ package se.lublin.humla.audio.capture
 
 import se.lublin.humla.audio.native.RnnoiseApi
 
+private const val WHAT = "the rnnoise denoiser"
+
 /**
  * xiph RNNoise as a capture stage: 48 kHz, 480-sample frames, denoised in place; its probability
  * comes from a speech model rather than a level.
@@ -47,8 +49,4 @@ class RnnoisePreprocessor(private val api: RnnoiseApi) : SingleHandleStage(api.c
     }
 
     override fun onReleaseHandle(handle: Long) = api.destroy(handle)
-
-    private companion object {
-        const val WHAT = "the rnnoise denoiser"
-    }
 }

@@ -23,7 +23,8 @@ class TcpFrameReaderTest {
         return bytes.toByteArray()
     }
 
-    private fun stream(vararg frames: ByteArray) = DataInputStream(ByteArrayInputStream(frames.reduce { a, b -> a + b }))
+    private fun stream(vararg frames: ByteArray) =
+        DataInputStream(ByteArrayInputStream(frames.reduce { a, b -> a + b }))
 
     /** Hands out at most one byte per read(), the way a slow TCP socket does. */
     private class Dribbling(source: InputStream) : FilterInputStream(source) {

@@ -7,7 +7,6 @@ se/lublin/humla/audio/native/OpusDecoderNative destroy (J)V
 se/lublin/humla/audio/native/OpusDecoderNative packetGetNbFrames ([BI)I
 se/lublin/humla/audio/native/OpusDecoderNative packetGetSamplesPerFrame ([BI)I
 se/lublin/humla/audio/native/OpusEncoderNative create (III[I)J
-se/lublin/humla/audio/native/OpusEncoderNative ctlGetInt (JI[I)I
 se/lublin/humla/audio/native/OpusEncoderNative ctlSetInt (JII)I
 se/lublin/humla/audio/native/OpusEncoderNative destroy (J)V
 se/lublin/humla/audio/native/OpusEncoderNative encode (J[SI[BI)I

@@ -18,7 +18,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.GraphicsMode
 import se.lublin.mumla.Settings
-import java.io.IOException
 import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.security.MessageDigest
@@ -63,8 +62,6 @@ class ChatImageLoaderTest {
 
     private fun ImageResult.size(): Pair<Int, Int> =
         (this as ImageResult.Ready).bitmap.let { it.width to it.height }
-
-    // Thumbnails.
 
     @Test
     fun aThumbnailFitsTheBoundsKeepsTheAspectRatioAndIsNeverEnlarged() = runBlocking {
@@ -184,8 +181,6 @@ class ChatImageLoaderTest {
         assertThat(server.requestCount).isEqualTo(0)
     }
 
-    // The viewer's path.
-
     @Test
     fun fetchBytesReturnsExactlyWhatWasServed() = runBlocking {
         val png = TestImages.png(40, 40)
@@ -224,8 +219,6 @@ class ChatImageLoaderTest {
         assertThat(loader.decodeFull("nope".toByteArray(), 640, 940))
             .isEqualTo(ImageResult.Failed(ImageError.MALFORMED))
     }
-
-    // The production wiring.
 
     /** The process-wide loader refuses a loopback `<img src>` without the server ever being asked. */
     @Test

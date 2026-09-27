@@ -19,7 +19,7 @@ package se.lublin.humla.audio
 import se.lublin.humla.exception.NativeAudioException
 
 /** A native voice decoder producing float PCM. */
-interface IDecoder {
+interface IDecoder : AutoCloseable {
     /**
      * Decodes [length] bytes of [input] from [offset] into [output], which holds at least
      * [frameSize] samples. A null [input] asks for loss concealment.
@@ -27,7 +27,4 @@ interface IDecoder {
      * @throws NativeAudioException if decoding failed.
      */
     fun decodeFloat(input: ByteArray?, offset: Int, length: Int, output: FloatArray, frameSize: Int): Int
-
-    /** Frees native resources. The decoder must not be called afterwards. */
-    fun destroy()
 }

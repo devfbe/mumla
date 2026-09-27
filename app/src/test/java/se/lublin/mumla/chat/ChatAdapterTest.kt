@@ -38,7 +38,6 @@ import se.lublin.humla.model.Channel
 import se.lublin.humla.model.Message
 import se.lublin.humla.model.User
 import se.lublin.mumla.R
-import se.lublin.mumla.service.IChatMessage
 import se.lublin.mumla.testing.idleMainLooper
 import java.util.Collections
 import kotlin.coroutines.CoroutineContext
@@ -577,8 +576,6 @@ class ChatAdapterTest {
         // Only the row the holder now shows was fetched: the abandoned one cannot land here.
         assertThat(fetched).containsExactly(url)
     }
-
-    // The snapshot and the submit ordering.
 
     @Test
     fun theDifferOnlyEverAsksAboutTheContentsOfOneAndTheSameInstance() = runTest {

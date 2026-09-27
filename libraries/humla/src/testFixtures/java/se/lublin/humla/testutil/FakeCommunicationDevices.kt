@@ -17,8 +17,8 @@
 
 package se.lublin.humla.testutil
 
-import se.lublin.humla.session.CommunicationDevice
-import se.lublin.humla.session.CommunicationDevices
+import se.lublin.humla.audio.routing.CommunicationDevice
+import se.lublin.humla.audio.routing.CommunicationDevices
 
 /**
  * The communication-device seam as a map of ids to types, able to express every input the router

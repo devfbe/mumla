@@ -17,35 +17,29 @@
 
 package se.lublin.humla.audio
 
+import se.lublin.humla.audio.native.NativeHandle
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.OpusDecoderNative
 import se.lublin.humla.exception.NativeAudioException
 
-class OpusDecoder @JvmOverloads @Throws(NativeAudioException::class) constructor(
+class OpusDecoder(
     sampleRate: Int,
     channels: Int,
     private val api: OpusDecoderApi = OpusDecoderNative,
 ) : IDecoder {
-    private var state: Long
-    private var destroyed = false
+    private val state: NativeHandle
 
     init {
         val error = intArrayOf(0)
-        state = api.create(sampleRate, channels, error)
+        state = NativeHandle({ api.create(sampleRate, channels, error) }, api::destroy)
         if (error[0] < 0) throw NativeAudioException("Opus decoder initialization failed with error: ${error[0]}")
     }
 
-    @Throws(NativeAudioException::class)
     override fun decodeFloat(input: ByteArray?, offset: Int, length: Int, output: FloatArray, frameSize: Int): Int {
-        val result = api.decodeFloat(state, input, offset, length, output, frameSize, 0)
+        val result = api.decodeFloat(state.value, input, offset, length, output, frameSize, 0)
         if (result < 0) throw NativeAudioException("Opus decoding failed with error: $result")
         return result
     }
 
-    override fun destroy() {
-        if (destroyed) return
-        destroyed = true
-        api.destroy(state)
-        state = 0L
-    }
+    override fun close() = state.close()
 }

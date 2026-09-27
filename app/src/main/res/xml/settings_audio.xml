@@ -162,7 +162,7 @@
 
         <se.lublin.mumla.preference.SeekBarDialogPreference
             app:multiplier="10"
-            android:defaultValue="250"
+            android:defaultValue="25"
             android:key="vad_hold_ms"
             app:min="0"
             app:max="200"

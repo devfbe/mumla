@@ -32,10 +32,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
-import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.databinding.FragmentTokensBinding
 import se.lublin.mumla.databinding.TokenRowBinding
 import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.ui.ServiceViewModel
 
 /** Edits the access tokens stored for a server, and sends them to it while connected. */
 class AccessTokenFragment : Fragment() {

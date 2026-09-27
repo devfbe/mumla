@@ -92,8 +92,6 @@ class AndroidAudioRecordSourceTest {
         ShadowAudioRecord.setSourceProvider { reader }
     }
 
-    // ------------------------------------------------------------------ opening
-
     @Test
     fun `opens at the requested rate and reports it`() {
         val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE))
@@ -145,8 +143,6 @@ class AndroidAudioRecordSourceTest {
         assertThat(source.record.preferredDevice).isNull()
     }
 
-    // ------------------------------------------------------------------ the effects
-
     @Test
     fun `no effects are attached when none were asked for`() {
         val source = open(CaptureRequest(MediaRecorder.AudioSource.MIC, RATE))
@@ -183,7 +179,6 @@ class AndroidAudioRecordSourceTest {
         assertThat(source.effects.single().enabled).isTrue()
     }
 
-    /** Both effects requested at once must both be attached. */
     @Test
     fun `both effects at once are both attached`() {
         makeAvailable(AudioEffect.EFFECT_TYPE_NS)
@@ -239,8 +234,6 @@ class AndroidAudioRecordSourceTest {
         assertThat(source.record.state).isEqualTo(AudioRecord.STATE_INITIALIZED)
     }
 
-    // ------------------------------------------------------------------ the frame path
-
     @Test
     fun `read delegates to the recorder and reports the count`() {
         feed(value = 7, count = 300)
@@ -268,8 +261,6 @@ class AndroidAudioRecordSourceTest {
         assertThat(buffer[FRAME - 1]).isEqualTo(5.toShort())
         assertThat(buffer[FRAME]).isEqualTo(0.toShort())
     }
-
-    // ------------------------------------------------------------------ teardown
 
     /**
      * Without the released flag this reads -3 or crashes natively; -100 lets the capture loop tell

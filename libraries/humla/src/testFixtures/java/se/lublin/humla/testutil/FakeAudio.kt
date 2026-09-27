@@ -17,20 +17,19 @@
 
 package se.lublin.humla.testutil
 
-import android.content.Context
-import se.lublin.humla.audio.AudioOutput
+import se.lublin.humla.audio.AudioConfig
+import se.lublin.humla.audio.AudioHandlerFactory
+import se.lublin.humla.audio.AudioHost
+import se.lublin.humla.audio.AudioSessionParams
+import se.lublin.humla.audio.ManagedAudio
 import se.lublin.humla.exception.AudioException
-import se.lublin.humla.protocol.AudioHandler
-import se.lublin.humla.protocol.TcpMessageHandler
-import se.lublin.humla.protocol.VoicePacketHandler
-import se.lublin.humla.session.AudioConfig
-import se.lublin.humla.session.AudioHandlerFactory
-import se.lublin.humla.session.AudioSessionParams
-import se.lublin.humla.session.ManagedAudio
-import se.lublin.humla.util.HumlaLogger
+import se.lublin.humla.net.TcpMessageHandler
+import se.lublin.humla.net.VoicePacketHandler
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
+
+const val FAKE_BANDWIDTH = 12_345
 
 /** A pipeline that opens no device; shared by the service tests. */
 class FakeAudio : ManagedAudio {
@@ -48,7 +47,7 @@ class FakeAudio : ManagedAudio {
 
     override val tcpHandler = TcpMessageHandler {}
     override val voiceHandler = VoicePacketHandler { }
-    override val currentBandwidth: Int = 12_345
+    override val currentBandwidth: Int = FAKE_BANDWIDTH
     override fun setVoiceTargetId(id: Byte) { targetIds += id }
     override fun setWarningListener(listener: ((String) -> Unit)?) { warningListenerField = listener }
 
@@ -67,12 +66,9 @@ class FakeAudioFactory : AudioHandlerFactory {
     @Volatile var failWith: AudioException? = null
 
     override fun create(
-        context: Context,
-        logger: HumlaLogger,
+        host: AudioHost,
         config: AudioConfig,
         params: AudioSessionParams,
-        encodeListener: AudioHandler.AudioEncodeListener,
-        outputListener: AudioOutput.AudioOutputListener,
     ): ManagedAudio {
         createThreads += Thread.currentThread().name
         configs += config

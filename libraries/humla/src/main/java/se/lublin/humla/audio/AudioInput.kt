@@ -27,7 +27,6 @@ import se.lublin.humla.audio.capture.CaptureRequest
 import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.PcmCaptureSource
-import se.lublin.humla.exception.AudioInitializationException
 
 /**
  * Owns the capture thread and pumps 10 ms frames from a [PcmCaptureSource] to [listener].
@@ -44,7 +43,6 @@ class AudioInput(
 ) {
     /** Opens an [AndroidAudioRecordSource] for [audioSource] at [targetSampleRate]. */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    @Throws(AudioInitializationException::class)
     constructor(
         listener: AudioInputListener,
         audioSource: Int,
@@ -132,7 +130,7 @@ class AudioInput(
     }
 
     /** Whether capture is *meant* to be running. A timed-out join leaves this false and a thread alive. */
-    fun isRecording(): Boolean = recording
+    val isRecording: Boolean get() = recording
 
     private fun loop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)

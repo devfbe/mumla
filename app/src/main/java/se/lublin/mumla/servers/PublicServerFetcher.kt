@@ -23,11 +23,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
-import se.lublin.humla.Constants
+import se.lublin.humla.util.Constants
 import se.lublin.mumla.db.PublicServer
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+
+private const val MUMBLE_PUBLIC_URL = "https://mumble.info/list2.cgi"
 
 /** Downloads the public Mumble server list. */
 class PublicServerFetcher(
@@ -81,7 +83,7 @@ class PublicServerFetcher(
         val ip = attr("ip")
         val server = if (port != null && ip != null) {
             PublicServer(
-                attr("name"), attr("ca"), attr("continent_code"), attr("country"),
+                attr("name"), attr("ca"), attr("country"),
                 attr("country_code"), ip, port, attr("region"), attr("url"),
             )
         } else {
@@ -89,9 +91,5 @@ class PublicServerFetcher(
         }
         parser.nextTag()
         return server
-    }
-
-    private companion object {
-        const val MUMBLE_PUBLIC_URL = "https://mumble.info/list2.cgi"
     }
 }

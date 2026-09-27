@@ -17,9 +17,6 @@
 
 package se.lublin.humla.audio
 
-import java.util.Arrays
-import kotlin.math.ceil
-import kotlin.math.sin
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.audio.native.OpusDecoderNative
 import se.lublin.humla.audio.native.SpeexJitterApi
@@ -28,7 +25,30 @@ import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.model.User
 import se.lublin.humla.net.VoicePacket
-import se.lublin.humla.protocol.AudioHandler
+import java.util.Arrays
+import kotlin.math.ceil
+import kotlin.math.sin
+
+private const val JITTER_MARGIN_FRAMES = 10
+
+/** How many frames of silence may be played while the jitter buffer fills at the start of a talk spurt. */
+private const val MAX_PREBUFFER_MISSES = 20
+
+/** Consecutive frames without a packet after which the stream counts as ended. */
+private const val MAX_MISSES_ALIVE = 10
+
+/** Per packet, the decay of the average packet count the prebuffering aims for. */
+private const val AVAILABLE_DECAY = 0.99f
+
+/** Larger than any voice packet the jitter buffer holds. */
+private const val MAX_PACKET_BYTES = 4096
+
+/** Behind the opus frame in the jitter buffer: the volume adjustment (float bits) and the terminator flag. */
+private const val TRAILER_BYTES = Int.SIZE_BYTES + 1
+
+/** The user data after the stream ended. */
+private const val PASSIVE_FLAGS = 0xFF
+private const val BYTE_MASK = 0xFF
 
 /**
  * Decodes one user's incoming Opus stream through a jitter buffer into float PCM. Each [decode]
@@ -37,13 +57,13 @@ import se.lublin.humla.protocol.AudioHandler
  * [opusApi] and [jitterApi] are the seams JVM tests use to run without native libraries; they
  * default to the `*Native` objects, which load the native library on first touch.
  */
-class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) constructor(
+class AudioOutputSpeech(
     val user: User,
-    private var requestedSamples: Int,
+    private val requestedSamples: Int,
     private val talkStateListener: TalkStateListener,
     private val opusApi: OpusDecoderApi = OpusDecoderNative,
     jitterApi: SpeexJitterApi = SpeexJitterNative,
-) : IAudioMixerSource<FloatArray> {
+) : IAudioMixerSource<FloatArray>, AutoCloseable {
 
     fun interface TalkStateListener {
         fun onTalkStateUpdated(session: Int, state: TalkState)
@@ -52,9 +72,8 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
     private val decoder: IDecoder = OpusDecoder(AudioHandler.SAMPLE_RATE, 1, opusApi)
     private val jitterBuffer: SpeexJitterBuffer
     private val jitterLock = Any()
-    private val audioBufferSize = AudioHandler.FRAME_SIZE * 12
+    private val audioBufferSize = AudioHandler.FRAME_SIZE * AudioHandler.MAX_PACKET_FRAMES
 
-    // State-specific
     private var buffer: FloatArray
     private val out: FloatArray
     private val fadeOut = FloatArray(AudioHandler.FRAME_SIZE)
@@ -100,7 +119,7 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
         }
 
         jitterBuffer = SpeexJitterBuffer(AudioHandler.FRAME_SIZE, jitterApi)
-        jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_SET_MARGIN, 10 * AudioHandler.FRAME_SIZE)
+        jitterBuffer.control(SpeexJitterNative.JITTER_BUFFER_SET_MARGIN, JITTER_MARGIN_FRAMES * AudioHandler.FRAME_SIZE)
     }
 
     /**
@@ -183,7 +202,7 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
         // same technique.
         if (ts == 0 && availPackets < ceil(user.averageAvailable.toDouble()).toInt()) {
             missCount++
-            if (missCount < 20) {
+            if (missCount < MAX_PREBUFFER_MISSES) {
                 Arrays.fill(out, 0f)
                 return AudioHandler.FRAME_SIZE
             }
@@ -234,12 +253,12 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
             if (availPackets >= user.averageAvailable) {
                 user.averageAvailable = availPackets
             } else {
-                user.averageAvailable = user.averageAvailable * 0.99f
+                user.averageAvailable = user.averageAvailable * AVAILABLE_DECAY
             }
         } else {
             synchronized(jitterLock) { jitterBuffer.updateDelay() }
             missCount++
-            if (missCount > 10) nextAlive = false
+            if (missCount > MAX_MISSES_ALIVE) nextAlive = false
         }
     }
 
@@ -276,29 +295,12 @@ class AudioOutputSpeech @JvmOverloads @Throws(NativeAudioException::class) const
         if (newSize > buffer.size) buffer = Arrays.copyOf(buffer, newSize)
     }
 
-    /** Sets the number of samples each [decode] prepares. */
-    fun setRequestedSamples(samples: Int) {
-        requestedSamples = samples
-    }
-
     val session: Int
         get() = user.session
 
-    /** Cleans up all native resources linked to this instance. MUST be called eventually. */
-    fun destroy() {
-        decoder.destroy()
-        jitterBuffer.destroy()
-    }
-
-    private companion object {
-        /** Larger than any voice packet the jitter buffer holds. */
-        const val MAX_PACKET_BYTES = 4096
-
-        /** Behind the opus frame in the jitter buffer: the volume adjustment (float bits) and the terminator flag. */
-        const val TRAILER_BYTES = Int.SIZE_BYTES + 1
-
-        /** The user data after the stream ended. */
-        const val PASSIVE_FLAGS = 0xFF
-        const val BYTE_MASK = 0xFF
+    /** Frees the native decoder and jitter buffer. Must be called eventually. */
+    override fun close() {
+        decoder.close()
+        jitterBuffer.close()
     }
 }

@@ -32,7 +32,6 @@ enum class VadMode(val preferenceValue: String) {
     ADAPTIVE("adaptive");
 
     companion object {
-        @JvmStatic
         fun fromPreferenceValue(value: String?): VadMode =
             entries.firstOrNull { it.preferenceValue == value } ?: AMPLITUDE
     }
@@ -59,10 +58,14 @@ data class VadConfig(
 ) {
     init {
         require(startThreshold in 0f..1f) { "startThreshold out of range: $startThreshold" }
-        require(stopThreshold in 0f..startThreshold) { "stopThreshold must be within [0, startThreshold]: $stopThreshold" }
+        require(stopThreshold in 0f..startThreshold) {
+            "stopThreshold must be within [0, startThreshold]: $stopThreshold"
+        }
         require(holdTimeMs in 0L..MAX_HOLD_MS) { "holdTimeMs must be within [0, $MAX_HOLD_MS]: $holdTimeMs" }
         require(snrFraction in 0f..1f) { "snrFraction out of range: $snrFraction" }
-        require(hysteresisDb in 0f..96f) { "hysteresisDb out of range: $hysteresisDb" }
+        require(hysteresisDb in 0f..VoiceActivityDetector.SCORE_RANGE_DB.toFloat()) {
+            "hysteresisDb out of range: $hysteresisDb"
+        }
         require(onsetFrames >= 1) { "onsetFrames must be at least one: $onsetFrames" }
         require(manualFloorDbfs in AdaptiveVadTracker.MIN_FLOOR_DBFS..AdaptiveVadTracker.MAX_FLOOR_DBFS) {
             "manualFloorDbfs out of range: $manualFloorDbfs"
@@ -80,8 +83,6 @@ data class VadConfig(
         const val MAX_HOLD_MS = Long.MAX_VALUE / 1_000_000L
 
         /** Legacy single slider: stop = start - 0.15. */
-        @JvmStatic
-        @JvmOverloads
         fun amplitude(
             threshold: Float,
             holdTimeMs: Long = DEFAULT_HOLD_MS,
@@ -94,8 +95,6 @@ data class VadConfig(
             )
         }
 
-        @JvmStatic
-        @JvmOverloads
         fun probability(
             start: Float = 0.6f,
             stop: Float = 0.3f,
@@ -103,8 +102,6 @@ data class VadConfig(
             onsetFrames: Int = DEFAULT_ONSET_FRAMES,
         ): VadConfig = VadConfig(VadMode.PROBABILITY, start, stop, holdTimeMs, onsetFrames = onsetFrames)
 
-        @JvmStatic
-        @JvmOverloads
         fun adaptive(
             snrFraction: Float = AdaptiveVadTracker.DEFAULT_FRACTION,
             holdTimeMs: Long = DEFAULT_HOLD_MS,
@@ -121,7 +118,6 @@ data class VadConfig(
             manualFloorDbfs = manualFloorDbfs,
         )
 
-        @JvmField
         val DEFAULT: VadConfig = probability()
     }
 }

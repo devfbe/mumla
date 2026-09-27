@@ -17,11 +17,12 @@
 
 package se.lublin.humla.audio.capture
 
+import se.lublin.humla.audio.native.NativeHandle
 import se.lublin.humla.audio.native.SpeexResamplerApi
 import se.lublin.humla.audio.native.SpeexResamplerNative
 
 /** Mono sample-rate converter. */
-interface Resampler {
+interface Resampler : AutoCloseable {
     /**
      * Converts [inputLength] samples of [input] into [output].
      *
@@ -31,7 +32,7 @@ interface Resampler {
     fun resample(input: ShortArray, inputLength: Int, output: ShortArray): Int
 
     /** Frees native resources; the instance must not be used afterwards. Idempotent. */
-    fun release()
+    override fun close()
 }
 
 /**
@@ -42,33 +43,28 @@ interface Resampler {
  * `outLen`, so the preset `outLen[0] = output.size` would otherwise report a full frame and resend
  * the previous frame's stale buffer contents.
  */
-class SpeexResampler @JvmOverloads constructor(
+class SpeexResampler(
     inputRate: Int,
     outputRate: Int,
     quality: Int = DEFAULT_QUALITY,
     private val api: SpeexResamplerApi = SpeexResamplerNative,
 ) : Resampler {
-    private var state: Long = api.init(1, inputRate, outputRate, quality, null)
+    private val state = NativeHandle({ api.init(1, inputRate, outputRate, quality, null) }, api::destroy)
     private val inLength = IntArray(1)
     private val outLength = IntArray(1)
 
     init {
-        check(state != 0L) { "speex_resampler_init($inputRate -> $outputRate) failed" }
+        check(state.value != 0L) { "speex_resampler_init($inputRate -> $outputRate) failed" }
     }
 
     override fun resample(input: ShortArray, inputLength: Int, output: ShortArray): Int {
         inLength[0] = inputLength
         outLength[0] = output.size
-        val error = api.processInt(state, 0, input, inLength, output, outLength)
+        val error = api.processInt(state.value, 0, input, inLength, output, outLength)
         return if (error == RESAMPLER_ERR_SUCCESS) outLength[0] else 0
     }
 
-    override fun release() {
-        if (state != 0L) {
-            api.destroy(state)
-            state = 0L
-        }
-    }
+    override fun close() = state.close()
 
     companion object {
         /** Speex resampler quality (0-10). */

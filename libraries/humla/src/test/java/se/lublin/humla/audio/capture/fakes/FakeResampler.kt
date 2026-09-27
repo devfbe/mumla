@@ -35,7 +35,7 @@ class FakeResampler(private val factor: Int) : Resampler {
         return n
     }
 
-    override fun release() {
+    override fun close() {
         releases++
     }
 }
@@ -53,5 +53,5 @@ class FailingResampler : Resampler {
         return 0
     }
 
-    override fun release() = Unit
+    override fun close() = Unit
 }

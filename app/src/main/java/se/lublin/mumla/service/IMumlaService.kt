@@ -2,6 +2,7 @@ package se.lublin.mumla.service
 
 import kotlinx.coroutines.flow.StateFlow
 import se.lublin.humla.IHumlaService
+import se.lublin.mumla.chat.IChatMessage
 
 /** Mumla's additions to [IHumlaService]. */
 interface IMumlaService : IHumlaService {

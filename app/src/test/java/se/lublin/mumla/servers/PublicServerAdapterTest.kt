@@ -13,7 +13,7 @@ import se.lublin.mumla.db.PublicServer
 @RunWith(RobolectricTestRunner::class)
 class PublicServerAdapterTest {
     private fun server(name: String, country: String?) =
-        PublicServer(name, null, null, country, null, "$name.example", 64738, null, null)
+        PublicServer(name, null, country, null, "$name.example", 64738, null, null)
 
     private val servers = listOf(server("Bravo", "Sweden"), server("alpha", "Norway"), server("Charlie", null))
     private val adapter = PublicServerAdapter(

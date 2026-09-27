@@ -20,6 +20,8 @@ package se.lublin.humla.audio.capture.fakes
 import se.lublin.humla.audio.native.SpeexPreprocessApi
 import se.lublin.humla.audio.native.SpeexPreprocessNative
 
+private const val VOICE_PROBABILITY_PERCENT = 50
+
 /**
  * A [SpeexPreprocessApi] that behaves like `jni_speexdsp.cpp`, including the `-1`s the bridge
  * produces on its own:
@@ -70,7 +72,7 @@ class FakeSpeexPreprocessApi(
         runs++
         if (frame.size < frameSize) return -1
         onRun(frame)
-        return if (probability >= 50) 1 else 0
+        return if (probability >= VOICE_PROBABILITY_PERCENT) 1 else 0
     }
 
     override fun ctlInt(state: Long, request: Int, value: IntArray): Int {
@@ -114,12 +116,6 @@ object SpeexPreprocessorRequests {
     const val SET_NOISE_SUPPRESS = SpeexPreprocessNative.SPEEX_PREPROCESS_SET_NOISE_SUPPRESS // 18
     const val GET_PROB = SpeexPreprocessNative.SPEEX_PREPROCESS_GET_PROB                // 45
     const val SET_AGC_TARGET = SpeexPreprocessNative.SPEEX_PREPROCESS_SET_AGC_TARGET    // 46
-
-    /**
-     * `SPEEX_PREPROCESS_SET_PROB_CONTINUE`, a literal because `SpeexPreprocessNative` deliberately
-     * does not declare it: it is not on the bridge's allow list.
-     */
-    const val SET_PROB_CONTINUE = 16
 
     val ALLOWED = setOf(
         SET_DENOISE, SET_AGC, SET_VAD, SET_DEREVERB, SET_PROB_START,

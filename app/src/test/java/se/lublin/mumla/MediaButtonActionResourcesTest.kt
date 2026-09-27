@@ -50,10 +50,10 @@ class MediaButtonActionResourcesTest {
 
     private fun mediaButtonPreference(): ListPreference {
         val screen = generalScreen()
-        val preference = screen.findPreference<Preference>(Settings.PREF_MEDIA_BUTTON_ACTION)
+        val preference = screen.findPreference<Preference>(Settings.MEDIA_BUTTON_ACTION.key)
         assertWithMessage(
             "no preference with key '%s' on the general settings screen",
-            Settings.PREF_MEDIA_BUTTON_ACTION
+            Settings.MEDIA_BUTTON_ACTION.key
         ).that(preference).isNotNull()
         assertThat(preference).isInstanceOf(ListPreference::class.java)
         return preference as ListPreference
@@ -67,7 +67,7 @@ class MediaButtonActionResourcesTest {
         assertWithMessage("no PreferenceCategory with key 'controls_settings'")
             .that(category).isNotNull()
         assertThat(category).isInstanceOf(PreferenceCategory::class.java)
-        assertThat((category as PreferenceGroup).findPreference<Preference>(Settings.PREF_MEDIA_BUTTON_ACTION))
+        assertThat((category as PreferenceGroup).findPreference<Preference>(Settings.MEDIA_BUTTON_ACTION.key))
             .isNotNull()
         assertThat(category.title.toString()).isNotEmpty()
     }
@@ -120,9 +120,9 @@ class MediaButtonActionResourcesTest {
         val preference = mediaButtonPreference()
 
         // Two sources of one default: `android:defaultValue` in the XML and
-        // Settings.DEFAULT_MEDIA_BUTTON_ACTION, which is what every reader outside this screen
+        // Settings.MEDIA_BUTTON_ACTION.default, which is what every reader outside this screen
         // gets. A mismatch is invisible at runtime because fromPrefValue() falls back to AUTO.
-        assertThat(preference.value).isEqualTo(Settings.DEFAULT_MEDIA_BUTTON_ACTION)
+        assertThat(preference.value).isEqualTo(Settings.MEDIA_BUTTON_ACTION.default)
         assertThat(stringArrayByName("mediaButtonActionValues")).contains(preference.value)
         assertThat(Settings.getInstance(context).mediaButtonAction)
             .isEqualTo(MediaButtonAction.fromPrefValue(preference.value))

@@ -18,12 +18,9 @@
 package se.lublin.mumla.servers
 
 import android.content.Context
-import android.view.LayoutInflater
 import android.view.MenuItem
-import android.view.ViewGroup
 import kotlinx.coroutines.CoroutineScope
 import se.lublin.mumla.R
-import se.lublin.mumla.databinding.PublicServerListRowBinding
 import se.lublin.mumla.db.PublicServer
 import java.util.Locale
 
@@ -55,25 +52,11 @@ class PublicServerAdapter(
         }
     }
 
-    /** Sorts the shown servers. */
     fun sort(comparator: Comparator<PublicServer>) {
         shownServers = shownServers.sortedWith(comparator)
     }
 
-    override fun createHolder(inflater: LayoutInflater, parent: ViewGroup): ServerViewHolder {
-        val binding = PublicServerListRowBinding.inflate(inflater, parent, false)
-        return ServerViewHolder(
-            binding.root,
-            name = binding.serverRowName,
-            version = binding.serverRowVersionStatus,
-            users = binding.serverRowUsercount,
-            latency = binding.serverRowLatency,
-            progress = binding.serverRowPingProgress,
-            more = binding.serverRowMore,
-            address = binding.serverRowAddress,
-            location = binding.serverRowLocation,
-        )
-    }
+    override val rowLayout: Int get() = R.layout.public_server_list_row
 
     override fun onBindServer(holder: ServerViewHolder, server: PublicServer) {
         holder.location?.text = server.country

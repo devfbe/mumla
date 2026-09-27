@@ -14,12 +14,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.Server
 import se.lublin.humla.net.HumlaConnection
-import se.lublin.humla.session.ReconnectPolicy
+import se.lublin.humla.net.ReconnectPolicy
 import se.lublin.humla.session.SessionConfig
-import se.lublin.humla.util.HumlaException
 import se.lublin.mumla.R
+import se.lublin.mumla.chat.ChatMessageLog
 import se.lublin.mumla.testing.createMumlaService
 import java.time.Duration
 
@@ -129,8 +130,6 @@ class MumlaServiceForegroundTest {
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
     }
 
-    // ---- the chat log across the session --------------------------------------------------------
-
     private fun log() = service.messageLog.value.map { it.body }
 
     @Test
@@ -174,8 +173,6 @@ class MumlaServiceForegroundTest {
         assertThat(service.messageLog.value.first().body).isEqualTo("m1")
     }
 
-    // ---- the reconnect prompt -------------------------------------------------------------------
-
     private fun reconnectPrompt(): Notification? =
         shadowOf(service.getSystemService(android.app.NotificationManager::class.java)).getNotification(3)
 
@@ -212,8 +209,6 @@ class MumlaServiceForegroundTest {
         assertThat(shadowOf(service).isForegroundStopped).isTrue()
         assertThat(reconnectPrompt()).isNull() // the user asked for this; nothing to report
     }
-
-    // ---- cancelling from the foreground notification --------------------------------------------
 
     private fun foregroundActions(): List<String> =
         shadowOf(service.getSystemService(android.app.NotificationManager::class.java))
@@ -289,8 +284,6 @@ class MumlaServiceForegroundTest {
         assertThat(reconnectPrompt()).isNotNull()
     }
 
-    // ---- a refused start ------------------------------------------------------------------------
-
     @Test
     fun aRefusedForegroundStartBecomesAWarningAndAPromptInsteadOfACrash() {
         org.robolectric.Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
@@ -331,20 +324,18 @@ class MumlaServiceForegroundTest {
         assertThat(log()).containsExactly(service.getString(R.string.foreground_start_failed))
     }
 
-    // ---- half duplex ----------------------------------------------------------------------------
-
     /** Half duplex follows the transmit mode in force, so a half-duplex write alone is enough. */
     @Test
     fun aHalfDuplexPreferenceChangeTakesEffectInPushToTalk() {
         val preferences = PreferenceManager.getDefaultSharedPreferences(service)
         preferences.edit()
-            .putString(se.lublin.mumla.Settings.PREF_INPUT_METHOD, se.lublin.mumla.Settings.ARRAY_INPUT_METHOD_PTT)
+            .putString(se.lublin.mumla.Settings.INPUT_METHOD.key, se.lublin.mumla.Settings.ARRAY_INPUT_METHOD_PTT)
             .commit()
 
-        preferences.edit().putBoolean(se.lublin.mumla.Settings.PREF_HALF_DUPLEX, true).commit()
+        preferences.edit().putBoolean(se.lublin.mumla.Settings.HALF_DUPLEX.key, true).commit()
         assertThat(service.getAudioConfigForTest().halfDuplex).isTrue()
 
-        preferences.edit().putBoolean(se.lublin.mumla.Settings.PREF_HALF_DUPLEX, false).commit()
+        preferences.edit().putBoolean(se.lublin.mumla.Settings.HALF_DUPLEX.key, false).commit()
         assertThat(service.getAudioConfigForTest().halfDuplex).isFalse()
     }
 
@@ -363,14 +354,14 @@ class MumlaServiceForegroundTest {
     fun theSettingsInForceAtStartAreTheOnesUsed() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationProvider.getApplicationContext())
         prefs.edit()
-            .putBoolean(se.lublin.mumla.Settings.PREF_USE_TTS, true)
-            .putBoolean(se.lublin.mumla.Settings.PREF_PTT_SOUND, true)
-            .putBoolean(se.lublin.mumla.Settings.PREF_SHORT_TTS_MESSAGES, true)
+            .putBoolean(se.lublin.mumla.Settings.USE_TTS.key, true)
+            .putBoolean(se.lublin.mumla.Settings.PTT_SOUND.key, true)
+            .putBoolean(se.lublin.mumla.Settings.SHORT_TTS_MESSAGES.key, true)
             .commit()
         val fresh = createMumlaService().get()
-        assertThat(fresh.mTTS).isNotNull()
-        assertThat(fresh.mPTTSoundEnabled).isTrue()
-        assertThat(fresh.mShortTtsMessagesEnabled).isTrue()
+        assertThat(fresh.tts).isNotNull()
+        assertThat(fresh.pttSoundEnabled).isTrue()
+        assertThat(fresh.shortTtsMessagesEnabled).isTrue()
         fresh.onDestroy()
     }
 }

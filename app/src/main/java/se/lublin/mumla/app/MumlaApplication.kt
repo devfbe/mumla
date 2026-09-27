@@ -11,23 +11,27 @@ import androidx.preference.PreferenceManager
 import com.google.android.material.color.DynamicColors
 import com.google.android.material.color.DynamicColorsOptions
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 import se.lublin.mumla.Settings
-import se.lublin.mumla.Settings.Companion.PREF_LANGUAGE
-import se.lublin.mumla.Settings.Companion.PREF_THEME
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.MumlaSQLiteDatabase
+import se.lublin.mumla.util.ApplicationScope
+import se.lublin.mumla.util.changes
 
-class MumlaApplication : Application(), SharedPreferences.OnSharedPreferenceChangeListener {
+class MumlaApplication :
+    Application(),
+    MumlaRepository.Owner,
+    ApplicationScope.Owner {
 
-    /** For work that must outlive the screen that started it. */
-    val scope: CoroutineScope = MainScope()
+    override val scope: CoroutineScope = MainScope()
 
     @Volatile
     private var installedRepository: MumlaRepository? = null
 
     /** The single database of the process, opened on first use and never closed. */
-    val repository: MumlaRepository
+    override val repository: MumlaRepository
         get() = installedRepository ?: synchronized(this) {
             installedRepository ?: MumlaRepository(MumlaSQLiteDatabase(this)).also { installedRepository = it }
         }
@@ -43,7 +47,10 @@ class MumlaApplication : Application(), SharedPreferences.OnSharedPreferenceChan
         DebugStrictMode.install()
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         applyTheme(preferences)
-        preferences.registerOnSharedPreferenceChangeListener(this)
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            preferences.changes(Settings.LANGUAGE.key, Settings.THEME.key)
+                .collect { key -> onPreferenceChanged(preferences, key) }
+        }
         // Decided per activity creation, so a changed setting applies to recreated activities.
         DynamicColors.applyToActivitiesIfAvailable(
             this,
@@ -53,29 +60,29 @@ class MumlaApplication : Application(), SharedPreferences.OnSharedPreferenceChan
         )
     }
 
-    override fun onSharedPreferenceChanged(preferences: SharedPreferences, key: String?) {
+    private fun onPreferenceChanged(preferences: SharedPreferences, key: String) {
         when (key) {
-            PREF_LANGUAGE -> {
-                val language = preferences.getString(PREF_LANGUAGE, "system")
+            Settings.LANGUAGE.key -> {
+                val language = preferences.getString(Settings.LANGUAGE.key, "system")
                 setApplicationLocales(
                     if (language == "system") LocaleListCompat.getEmptyLocaleList()
                     else LocaleListCompat.forLanguageTags(language),
                 )
             }
-            PREF_THEME -> applyTheme(preferences)
+            Settings.THEME.key -> applyTheme(preferences)
         }
     }
 
     private companion object {
         /** Unknown (older) values fall back to the system theme, which is written back. */
         fun applyTheme(preferences: SharedPreferences) {
-            when (preferences.getString(PREF_THEME, "system")) {
+            when (preferences.getString(Settings.THEME.key, "system")) {
                 "forceLight" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
                 "forceDark" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
                 "system" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
                 else -> {
                     AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-                    preferences.edit { putString(PREF_THEME, "system") }
+                    preferences.edit { putString(Settings.THEME.key, "system") }
                 }
             }
         }

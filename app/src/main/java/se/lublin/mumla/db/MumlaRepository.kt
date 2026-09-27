@@ -24,7 +24,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import se.lublin.mumla.app.MumlaApplication
 
 /**
  * The app's one [MumlaDatabase]. UI code goes through [io] so that queries run off the main thread;
@@ -45,8 +44,12 @@ class MumlaRepository(
 
     val pinnedChannels = PinnedChannels(this, scope)
 
+    /** Implemented by the Application, which owns the process's repository. */
+    interface Owner {
+        val repository: MumlaRepository
+    }
+
     companion object {
-        /** The application's repository. */
-        fun get(context: Context): MumlaRepository = (context.applicationContext as MumlaApplication).repository
+        fun get(context: Context): MumlaRepository = (context.applicationContext as Owner).repository
     }
 }

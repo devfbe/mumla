@@ -38,8 +38,8 @@ class SpeexJitterBufferTest {
         val fake = FakeJitter()
         val buffer = SpeexJitterBuffer(480, fake)
 
-        buffer.destroy()
-        buffer.destroy()
+        buffer.close()
+        buffer.close()
 
         // A second jitter_buffer_destroy on the same raw pointer is a native double free.
         assertThat(fake.destroys).isEqualTo(1)

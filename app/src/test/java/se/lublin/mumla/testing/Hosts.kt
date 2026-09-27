@@ -28,10 +28,10 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import io.mockk.mockk
 import se.lublin.mumla.R
-import se.lublin.mumla.app.ServiceViewModel
 import se.lublin.mumla.channel.ChatTargetViewModel
 import se.lublin.mumla.db.MumlaDatabase
 import se.lublin.mumla.service.IMumlaService
+import se.lublin.mumla.ui.ServiceViewModel
 
 /** An activity in the app theme, for fragments that need nothing from their host. */
 open class ThemedActivity : AppCompatActivity() {

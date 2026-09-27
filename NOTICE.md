@@ -7,7 +7,12 @@ following third-party components. Every entry is GPLv3-compatible.
 |---|---|---|---|
 | Kotlin standard library and compiler | 2.4.20 (`kotlin` in `gradle/libs.versions.toml`) | Apache-2.0 | https://github.com/JetBrains/kotlin |
 | kotlinx-coroutines | 1.11.0 | Apache-2.0 | https://github.com/Kotlin/kotlinx.coroutines |
-| AndroidX (appcompat, activity, core, fragment, preference, recyclerview, cardview, documentfile, exifinterface) | see `gradle/libs.versions.toml` | Apache-2.0 | https://developer.android.com/jetpack |
+| AndroidX (appcompat, activity, annotation, cardview, core, documentfile, exifinterface, fragment, lifecycle, media, preference, recyclerview, viewpager2, and their transitive AndroidX dependencies) | see `gradle/libs.versions.toml` | Apache-2.0 | https://developer.android.com/jetpack |
+| Coil (coil-core, coil-network-core, coil-network-okhttp) | 3.6.3 | Apache-2.0 | https://github.com/coil-kt/coil |
+| OkHttp (okhttp, okhttp-android) | 5.5.0 | Apache-2.0 | https://github.com/square/okhttp |
+| Okio (pulled in by OkHttp and Coil) | 3.18.1 | Apache-2.0 | https://github.com/square/okio |
+| kotlinx-serialization-core (pulled in by Coil) | 1.7.3 | Apache-2.0 | https://github.com/Kotlin/kotlinx.serialization |
+| Annotation-only artifacts pulled in transitively: JetBrains annotations, JSpecify, Error Prone annotations, Guava `listenablefuture` (empty stub) | 23.0.0 / 1.0.0 / 2.15.0 / 1.0 | Apache-2.0 | https://github.com/JetBrains/java-annotations, https://github.com/jspecify/jspecify, https://github.com/google/error-prone, https://github.com/google/guava |
 | Material Components for Android | 1.14.0 | Apache-2.0 | https://github.com/material-components/material-components-android |
 | Material Design icons (`headset_mic`, as the vector `app/src/main/res/drawable/ic_action_audio_device.xml`) | path data as published | Apache-2.0 | https://github.com/google/material-design-icons |
 | MiniDNS | 1.1.1 | LGPL-2.1-or-later / Apache-2.0 / WTFPL (tri-licensed) | https://github.com/MiniDNS/minidns |

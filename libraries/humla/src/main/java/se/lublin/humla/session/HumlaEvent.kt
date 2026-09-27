@@ -16,11 +16,11 @@
  */
 package se.lublin.humla.session
 
+import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.model.IChannel
 import se.lublin.humla.model.IMessage
 import se.lublin.humla.model.IUser
 import se.lublin.humla.model.UserStats
-import se.lublin.humla.util.HumlaException
 import se.lublin.humla.util.VoiceTargetMode
 import java.security.cert.X509Certificate
 
@@ -114,7 +114,6 @@ sealed interface HumlaEvent {
     /** A notice whose text is already final: server text or a message of the library's own. */
     data class LogMessage(override val level: Level, val text: String) : Notice
 
-    /** [user] connected to the server. */
     data class UserJoinedServer(val user: String?) : Notice {
         override val level get() = Level.INFO
     }

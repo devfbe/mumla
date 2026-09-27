@@ -28,15 +28,16 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.service.MumlaService
 import se.lublin.mumla.service.SessionSettings
+import se.lublin.mumla.util.ApplicationScope
 
 /**
  * Starts [MumlaService] and has it connect to [server] with the user's settings. The work runs in
  * the application scope, so it completes even if the screen that asked goes away.
  */
 fun startServerConnect(context: Context, server: Server): Job {
-    val app = context.applicationContext as MumlaApplication
+    val app = context.applicationContext
     val settings = Settings.getInstance(app)
-    return app.scope.launch {
+    return ApplicationScope.of(app).launch {
         val config = MumlaRepository.get(app).io { SessionSettings.forServer(app, settings, this, server) }
         val intent = Intent(app, MumlaService::class.java)
         // Started, not only bound, so the session outlives every client.
@@ -45,7 +46,7 @@ fun startServerConnect(context: Context, server: Server): Job {
             intent,
             object : ServiceConnection {
                 override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                    (binder as? MumlaService.MumlaBinder)?.getService()?.run {
+                    (binder as? MumlaService.MumlaBinder)?.service?.run {
                         configure(config)
                         connect()
                     }

@@ -26,6 +26,8 @@ import java.security.cert.X509Certificate
 import java.util.Locale
 import javax.net.ssl.X509TrustManager
 
+private const val BYTE_MASK = 0xFF
+
 /** Thrown when a host with a pinned certificate presents a different, not system-trusted one. */
 class CertificateChangedException(val host: String) :
     CertificateException("The certificate of $host differs from the one trusted before")
@@ -40,17 +42,14 @@ enum class TrustFailure { NONE, UNTRUSTED, CHANGED }
  */
 object CertificatePins {
     /** Lower-case hex SHA-256 of the DER encoding. */
-    @JvmStatic
     fun fingerprint(certificate: X509Certificate): String =
         MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
-            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+            .joinToString("") { "%02x".format(it.toInt() and BYTE_MASK) }
 
     /** The trust store alias for [host]: lower case, without a trailing dot. */
-    @JvmStatic
     fun aliasFor(host: String): String = HostnameMatcher.normalize(host)
 
     /** Pins stored for [host] in [trustStore]; aliases are compared case-insensitively. */
-    @JvmStatic
     fun forHost(trustStore: KeyStore?, host: String): Set<String> {
         if (trustStore == null) return emptySet()
         val wanted = aliasFor(host)
@@ -71,11 +70,9 @@ object HostnameMatcher {
     internal fun normalize(host: String): String = host.trim().trimEnd('.').lowercase(Locale.ROOT)
 
     /** True for IPv4 and IPv6 literals, which are matched against IP SANs and never sent as SNI. */
-    @JvmStatic
     fun isIpLiteral(host: String): Boolean = host.contains(':') || IPV4.matches(host)
 
     /** Whether [certificate] names [host]. The subject CN is not consulted. */
-    @JvmStatic
     fun matches(host: String, certificate: X509Certificate): Boolean {
         val names = try {
             certificate.subjectAlternativeNames ?: return false

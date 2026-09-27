@@ -17,7 +17,6 @@
 package se.lublin.mumla.channel
 
 import android.content.Context
-import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -30,8 +29,8 @@ import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.IUser
 import se.lublin.humla.net.Permissions
 import se.lublin.mumla.R
-import se.lublin.mumla.app.showConfirmDialog
 import se.lublin.mumla.channel.comment.UserCommentFragment
+import se.lublin.mumla.ui.showConfirmDialog
 import se.lublin.mumla.util.flattenChannels
 
 /**
@@ -138,13 +137,8 @@ class UserMenu(
     }
 
     private fun showUserComment(edit: Boolean) {
-        val fragment = UserCommentFragment()
-        fragment.arguments = Bundle().apply {
-            putInt("session", user.session)
-            putString("comment", user.comment)
-            putBoolean("editing", edit)
-        }
-        fragment.show(fragmentManager, UserCommentFragment::class.java.name)
+        UserCommentFragment.newInstance(user.session, user.comment, edit)
+            .show(fragmentManager, UserCommentFragment::class.java.name)
     }
 
     private fun showChannelMoveDialog() {

@@ -35,9 +35,9 @@ import kotlinx.coroutines.MainScope
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
-import se.lublin.mumla.channel.ChannelAdapter
 import se.lublin.mumla.databinding.OverlayBinding
 import se.lublin.mumla.util.collectEvents
+import se.lublin.mumla.util.dp
 
 /** An onscreen interactive overlay displaying the users in the current channel. */
 class MumlaOverlay(private val service: MumlaService) {
@@ -48,7 +48,7 @@ class MumlaOverlay(private val service: MumlaService) {
     private val overlayList: ListView = binding.overlayList
     private val talkButton: ImageView = binding.overlayTalk
     private val overlayParams: WindowManager.LayoutParams
-    private var channelAdapter: ChannelAdapter? = null
+    private var userAdapter: OverlayUserAdapter? = null
 
     /** Collects the service's events while the overlay is shown. */
     private var events: Job? = null
@@ -61,10 +61,9 @@ class MumlaOverlay(private val service: MumlaService) {
         binding.overlayClose.setOnClickListener { hide() }
         setPushToTalkShown(Settings.getInstance(service).inputMethod == Settings.ARRAY_INPUT_METHOD_PTT)
 
-        val density = service.resources.displayMetrics.density
         overlayParams = WindowManager.LayoutParams(
-            (DEFAULT_WIDTH * density).toInt(),
-            (DEFAULT_HEIGHT * density).toInt(),
+            service.resources.dp(DEFAULT_WIDTH_DP).toInt(),
+            service.resources.dp(DEFAULT_HEIGHT_DP).toInt(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
@@ -77,7 +76,7 @@ class MumlaOverlay(private val service: MumlaService) {
     }
 
     private fun onServiceEvent(event: HumlaEvent) {
-        val adapter = channelAdapter ?: return
+        val adapter = userAdapter ?: return
         when (event) {
             is HumlaEvent.UserTalkStateUpdated -> adapter.notifyDataSetChanged()
             is HumlaEvent.UserStateUpdated -> {
@@ -91,7 +90,7 @@ class MumlaOverlay(private val service: MumlaService) {
         }
     }
 
-    private fun onUserJoinedChannel(adapter: ChannelAdapter, event: HumlaEvent.UserJoinedChannel) {
+    private fun onUserJoinedChannel(adapter: OverlayUserAdapter, event: HumlaEvent.UserJoinedChannel) {
         val selfSession = try {
             service.sessionId
         } catch (e: IllegalStateException) {
@@ -101,7 +100,7 @@ class MumlaOverlay(private val service: MumlaService) {
         val sessionChannel = service.sessionChannel ?: return
         if (event.user.session == selfSession) {
             // Session user has changed channels
-            adapter.setChannel(sessionChannel)
+            adapter.channel = sessionChannel
         } else if (event.newChannel.id == sessionChannel.id || event.oldChannel?.id == sessionChannel.id) {
             adapter.notifyDataSetChanged()
         }
@@ -123,7 +122,7 @@ class MumlaOverlay(private val service: MumlaService) {
         if (isShown) return
         val channel = service.sessionChannel ?: return
         isShown = true
-        channelAdapter = ChannelAdapter(service, channel).also { overlayList.adapter = it }
+        userAdapter = OverlayUserAdapter(service, channel).also { overlayList.adapter = it }
         events = collectEvents(MainScope(), service, ::onServiceEvent)
         windowManager.addView(overlayView, overlayParams)
     }
@@ -134,7 +133,7 @@ class MumlaOverlay(private val service: MumlaService) {
         events?.cancel()
         events = null
         overlayList.adapter = null
-        channelAdapter = null
+        userAdapter = null
         try {
             windowManager.removeView(overlayView)
         } catch (e: IllegalArgumentException) {
@@ -212,7 +211,7 @@ class MumlaOverlay(private val service: MumlaService) {
 
     companion object {
         private val TAG: String = MumlaOverlay::class.java.name
-        const val DEFAULT_WIDTH = 200
-        const val DEFAULT_HEIGHT = 240
+        private const val DEFAULT_WIDTH_DP = 200f
+        private const val DEFAULT_HEIGHT_DP = 240f
     }
 }

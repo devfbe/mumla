@@ -23,6 +23,11 @@ import androidx.core.text.HtmlCompat
 import java.io.ByteArrayOutputStream
 import java.net.URI
 
+/** A percent escape, `%XX`. */
+private const val ESCAPE_LENGTH = 3
+private const val HEX_RADIX = 16
+private const val NIBBLE_BITS = 4
+
 object HtmlUtils {
     /** Tries to get the link's hostname, returns null if not a valid URL. */
     fun getHostnameFromLink(link: String): String? {
@@ -85,7 +90,7 @@ object HtmlUtils {
             val byte = if (c == '%' && i + 2 < input.length) hexByte(input[i + 1], input[i + 2]) else null
             if (byte != null) {
                 pending.write(byte)
-                i += 3
+                i += ESCAPE_LENGTH
             } else {
                 flush()
                 out.append(c)
@@ -102,8 +107,8 @@ object HtmlUtils {
             .replace("\n", "<br>")
 
     private fun hexByte(hi: Char, lo: Char): Int? {
-        val h = Character.digit(hi, 16)
-        val l = Character.digit(lo, 16)
-        return if (h < 0 || l < 0) null else (h shl 4) or l
+        val h = Character.digit(hi, HEX_RADIX)
+        val l = Character.digit(lo, HEX_RADIX)
+        return if (h < 0 || l < 0) null else (h shl NIBBLE_BITS) or l
     }
 }

@@ -15,16 +15,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-@file:Suppress("DEPRECATION") // se.lublin.humla.Constants is deprecated; TRANSMIT_* has no successor yet.
+@file:Suppress("DEPRECATION") // se.lublin.humla.util.Constants is deprecated; TRANSMIT_* has no successor yet.
 
 package se.lublin.humla.session
 
 import android.media.AudioManager
 import android.media.MediaRecorder
-import se.lublin.humla.Constants
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.VadConfig
+import se.lublin.humla.audio.routing.AudioDeviceCategory
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.model.Server
+import se.lublin.humla.util.Constants
 
 /**
  * Everything a client configures a session with, handed to `HumlaService.configure` as a whole.

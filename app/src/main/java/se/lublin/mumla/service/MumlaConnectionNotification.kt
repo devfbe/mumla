@@ -33,9 +33,8 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import se.lublin.mumla.MainScreen
 import se.lublin.mumla.R
-import se.lublin.mumla.app.DrawerAdapter
-import se.lublin.mumla.app.MumlaActivity
 
 /**
  * The ongoing notification that keeps the service in the foreground.
@@ -134,9 +133,21 @@ class MumlaConnectionNotification private constructor(
             .setOnlyAlertOnce(true)
 
         if (actionsShown) {
-            builder.addAction(R.drawable.ic_action_microphone, service.getString(R.string.mute), broadcast(BROADCAST_MUTE))
-            builder.addAction(R.drawable.ic_action_audio, service.getString(R.string.deafen), broadcast(BROADCAST_DEAFEN))
-            builder.addAction(R.drawable.ic_action_channels, service.getString(R.string.overlay), broadcast(BROADCAST_OVERLAY))
+            builder.addAction(
+                R.drawable.ic_action_microphone,
+                service.getString(R.string.mute),
+                broadcast(BROADCAST_MUTE),
+            )
+            builder.addAction(
+                R.drawable.ic_action_audio,
+                service.getString(R.string.deafen),
+                broadcast(BROADCAST_DEAFEN),
+            )
+            builder.addAction(
+                R.drawable.ic_action_channels,
+                service.getString(R.string.overlay),
+                broadcast(BROADCAST_OVERLAY),
+            )
         }
         if (cancelReconnectShown) {
             builder.addAction(
@@ -146,8 +157,7 @@ class MumlaConnectionNotification private constructor(
             )
         }
 
-        val channelListIntent = Intent(service, MumlaActivity::class.java)
-            .putExtra(MumlaActivity.EXTRA_DRAWER_FRAGMENT, DrawerAdapter.ITEM_SERVER)
+        val channelListIntent = MainScreen.intent(service, MainScreen.CHANNELS)
         // FLAG_CANCEL_CURRENT so the extra is always delivered: extras are not part of a
         // PendingIntent's identity, and MumlaMessageNotification uses the same request code.
         builder.setContentIntent(

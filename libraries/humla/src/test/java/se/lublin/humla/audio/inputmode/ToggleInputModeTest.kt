@@ -28,8 +28,8 @@ class ToggleInputModeTest {
         assertThat(mode.shouldTransmit(ShortArray(480) { 32767 }, 480, 1.0f)).isFalse()
         mode.setTalkingOn(true)
         assertThat(mode.shouldTransmit(ShortArray(480), 480, 0.0f)).isTrue()
-        mode.toggleTalkingOn()
-        assertThat(mode.isTalkingOn()).isFalse()
+        mode.setTalkingOn(false)
+        assertThat(mode.isTalkingOn).isFalse()
         assertThat(mode.shouldTransmit(ShortArray(480) { 32767 }, 480, 1.0f)).isFalse()
     }
 

@@ -29,8 +29,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
-import se.lublin.humla.session.AudioRouter
-import se.lublin.humla.session.PreferredAudioDevice
+import se.lublin.humla.audio.routing.AudioRouter
+import se.lublin.humla.audio.routing.PreferredAudioDevice
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.testutil.FakeCommunicationDevices
 import se.lublin.humla.testutil.testRouter
@@ -53,7 +53,7 @@ class MumlaServiceAudioRouteTest {
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
         PreferenceManager.getDefaultSharedPreferences(app).edit()
-            .putBoolean(Settings.PREF_BLUETOOTH_SCO, false).commit()
+            .putBoolean(Settings.BLUETOOTH_SCO.key, false).commit()
     }
 
     private fun create() {
@@ -67,7 +67,7 @@ class MumlaServiceAudioRouteTest {
 
     private fun router(): AudioRouter = service.testRouter
 
-    private fun proximityLock(): PowerManager.WakeLock? = service.mProximityLock
+    private fun proximityLock(): PowerManager.WakeLock? = service.proximityLock
 
     private fun proximityLockHeld(): Boolean {
         val lock = proximityLock()
