@@ -136,10 +136,32 @@ class MumlaActivity :
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setHomeButtonEnabled(true)
 
-        supportFragmentManager.setFragmentResultListener(ServerEditFragment.REQUEST_KEY, this) { _, result ->
+        followFragmentRequests()
+        followSession()
+
+        if (savedInstanceState == null) {
+            showDrawerFragment(intent?.getIntExtra(MainScreen.EXTRA_SCREEN, FALLBACK_SCREEN) ?: FALLBACK_SCREEN)
+            // A recreated activity has the link's dialog back already.
+            if (intent?.action == Intent.ACTION_VIEW) offerServerFromUrl(intent.dataString)
+        }
+
+        volumeControlStream = Settings.PLAYBACK_STREAM
+
+        // Only on a real start, not when the activity is recreated, e.g. on rotation.
+        if (savedInstanceState == null) {
+            if (settings.isFirstRun) showFirstRunGuide() else StartupAction().execute(this)
+        }
+    }
+
+    /** Carries out what the fragments and their dialogs ask for. */
+    private fun followFragmentRequests() {
+        val fragments = supportFragmentManager
+        fragments.setFragmentResultListener(ServerEditFragment.REQUEST_KEY, this) { _, result ->
             onServerEdited(ServerEditFragment.Result.from(result))
         }
-        followSession()
+        fragments.setFragmentResultListener(FavouriteServerListFragment.REQUEST_BROWSE_PUBLIC, this) { _, _ ->
+            showDrawerFragment(DrawerAdapter.ITEM_PUBLIC)
+        }
         lifecycleScope.launch {
             connectRequests.requested.collect { request ->
                 when (request) {
@@ -147,18 +169,6 @@ class MumlaActivity :
                     is ServerRequest.Public -> connectFlow.connectToPublic(request.server)
                 }
             }
-        }
-
-        if (savedInstanceState == null) {
-            showDrawerFragment(intent?.getIntExtra(MainScreen.EXTRA_SCREEN, FALLBACK_SCREEN) ?: FALLBACK_SCREEN)
-        }
-        if (intent?.action == Intent.ACTION_VIEW) offerServerFromUrl(intent.dataString)
-
-        volumeControlStream = Settings.PLAYBACK_STREAM
-
-        // Only on a real start, not when the activity is recreated, e.g. on rotation.
-        if (savedInstanceState == null) {
-            if (settings.isFirstRun) showFirstRunGuide() else StartupAction().execute(this)
         }
     }
 
@@ -177,12 +187,11 @@ class MumlaActivity :
         }
     }
 
-    /** Offers to connect to the server a mumble:// [url] names. */
+    /** Offers to save and connect to the server a mumble:// [url] names. */
     private fun offerServerFromUrl(url: String?) {
         try {
             val server = MumbleURLParser.parseURL(url)
-            ServerEditFragment.newInstance(server, ServerEditFragment.Action.CONNECT, true)
-                .show(supportFragmentManager, "url_edit")
+            ServerEditFragment.newInstance(server, ServerEditFragment.Mode.LINK).show(supportFragmentManager, "url_edit")
         } catch (e: MalformedURLException) {
             onBadUrl(e)
         } catch (e: NumberFormatException) {
@@ -402,6 +411,9 @@ class MumlaActivity :
             ServerEditFragment.Action.ADD -> saveThenShowFavourites { addServer(server) }
             ServerEditFragment.Action.EDIT -> saveThenShowFavourites { updateServer(server) }
             ServerEditFragment.Action.CONNECT -> connectFlow.connect(server)
+            ServerEditFragment.Action.ADD_AND_CONNECT -> lifecycleScope.launch {
+                connectFlow.connect(repository.io { addServer(server) })
+            }
         }
     }
 

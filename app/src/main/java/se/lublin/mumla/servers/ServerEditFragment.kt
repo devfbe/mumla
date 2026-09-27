@@ -19,11 +19,15 @@ package se.lublin.mumla.servers
 import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
-import android.view.View
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
+import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
@@ -32,8 +36,9 @@ import se.lublin.mumla.util.getServer
 import se.lublin.mumla.util.putServer
 
 /**
- * Edits a server's address and credentials. A valid entry is delivered as a fragment result
- * under [REQUEST_KEY] to the fragment manager showing the dialog; read it with [Result.from].
+ * Edits a server's address and credentials for the purpose its [Mode] names. A valid entry is
+ * delivered as a fragment result under [REQUEST_KEY] to the fragment manager showing the dialog;
+ * read it with [Result.from].
  */
 class ServerEditFragment : DialogFragment() {
 
@@ -42,11 +47,13 @@ class ServerEditFragment : DialogFragment() {
     private val server: Server?
         get() = requireArguments().getServer(ARG_SERVER)
 
-    private val action: Action get() = Action.valueOf(requireArguments().getString(ARG_ACTION)!!)
+    private val mode: Mode get() = Mode.valueOf(requireArguments().getString(ARG_MODE)!!)
+
+    private val defaultUsername: String get() = Settings.getInstance(requireContext()).defaultUsername
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         binding = DialogServerEditBinding.inflate(layoutInflater)
-        binding.serverEditUsername.hint = Settings.getInstance(requireContext()).defaultUsername
+        binding.serverEditUsernameLayout.placeholderText = defaultUsername
         server?.let { old ->
             binding.serverEditName.setText(old.name)
             binding.serverEditHost.setText(old.host)
@@ -54,36 +61,40 @@ class ServerEditFragment : DialogFragment() {
             binding.serverEditUsername.setText(old.username)
             binding.serverEditPassword.setText(old.password)
         }
-        if (requireArguments().getBoolean(ARG_IGNORE_TITLE)) {
-            binding.serverEditNameTitle.visibility = View.GONE
-            binding.serverEditName.visibility = View.GONE
-        }
-        val actionName = when (action) {
-            Action.ADD -> getString(R.string.add)
-            Action.EDIT -> getString(android.R.string.ok)
-            Action.CONNECT -> getString(R.string.connect)
-        }
-        return MaterialAlertDialogBuilder(requireActivity())
-            .setPositiveButton(actionName, null)
+        binding.serverEditNameLayout.isVisible = mode != Mode.CONNECT
+        clearErrorOnEdit(binding.serverEditHost, binding.serverEditHostLayout)
+        clearErrorOnEdit(binding.serverEditPort, binding.serverEditPortLayout)
+        val builder = MaterialAlertDialogBuilder(requireActivity())
+            .setTitle(mode.title)
+            .setPositiveButton(mode.primary.label, null)
             .setNegativeButton(android.R.string.cancel, null)
             .setView(binding.root)
-            .create()
+        mode.secondary?.let { builder.setNeutralButton(it.label, null) }
+        return builder.create()
+    }
+
+    private fun clearErrorOnEdit(field: TextInputEditText, layout: TextInputLayout) {
+        field.doAfterTextChanged { layout.error = null }
     }
 
     override fun onStart() {
         super.onStart()
-        // Replaces the positive button's listener so that an invalid entry does not dismiss.
-        (requireDialog() as AlertDialog).getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
-            if (validate()) {
-                setFragmentResult(REQUEST_KEY, Result(action, createServer()).toBundle())
-                dismiss()
-            }
+        // Replaces the buttons' listeners so that an invalid entry does not dismiss.
+        val dialog = requireDialog() as AlertDialog
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener { confirm(mode.primary.action) }
+        mode.secondary?.let { choice ->
+            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setOnClickListener { confirm(choice.action) }
         }
     }
 
+    private fun confirm(action: Action) {
+        if (!validate()) return
+        setFragmentResult(REQUEST_KEY, Result(action, createServer()).toBundle())
+        dismiss()
+    }
+
     private fun createServer(): Server {
-        val username = binding.serverEditUsername.text.toString().trim()
-            .ifEmpty { binding.serverEditUsername.hint.toString() }
+        val username = binding.serverEditUsername.text.toString().trim().ifEmpty { defaultUsername }
         return Server(
             id = server?.id ?: Server.NOT_SAVED,
             label = binding.serverEditName.text.toString().trim(),
@@ -95,19 +106,45 @@ class ServerEditFragment : DialogFragment() {
         )
     }
 
-    /** Shows an error on the first invalid field, if any; returns whether all are valid. */
+    /** Shows an error on each invalid field, clears the others'; returns whether all are valid. */
     private fun validate(): Boolean {
         val port = binding.serverEditPort.text.toString()
-        when {
-            binding.serverEditHost.text.isEmpty() -> binding.serverEditHost.error = getString(R.string.invalid_host)
-            port.isNotEmpty() && port.toIntOrNull() !in 1..MAX_PORT ->
-                binding.serverEditPort.error = getString(R.string.invalid_port_range)
-            else -> return true
-        }
-        return false
+        val portValid = port.isEmpty() || port.toIntOrNull() in 1..MAX_PORT
+        val hostError = R.string.invalid_host.takeIf { binding.serverEditHost.text.isNullOrBlank() }
+        val portError = R.string.invalid_port_range.takeUnless { portValid }
+        binding.serverEditHostLayout.error = hostError?.let(::getString)
+        binding.serverEditPortLayout.error = portError?.let(::getString)
+        return hostError == null && portError == null
     }
 
-    enum class Action { CONNECT, EDIT, ADD }
+    /** What the user chose to do with the entered server. */
+    enum class Action { CONNECT, EDIT, ADD, ADD_AND_CONNECT }
+
+    /** A dialog button: its [label], and the [action] it confirms. */
+    data class Choice(val action: Action, @param:StringRes val label: Int)
+
+    /** What the dialog is for: its [title], its [primary] button and an optional [secondary] one. */
+    enum class Mode(@param:StringRes val title: Int, val primary: Choice, val secondary: Choice? = null) {
+        /** A new server, to save or just to connect to. */
+        ADD(
+            R.string.server_add,
+            Choice(Action.ADD, R.string.save),
+            Choice(Action.CONNECT, R.string.server_connect_only),
+        ),
+
+        /** A saved server. */
+        EDIT(R.string.edit_server, Choice(Action.EDIT, R.string.save)),
+
+        /** An unsaved server to connect to, without a label. */
+        CONNECT(R.string.connect, Choice(Action.CONNECT, R.string.connect)),
+
+        /** A server from a mumble:// link. */
+        LINK(
+            R.string.connect,
+            Choice(Action.ADD_AND_CONNECT, R.string.server_save_and_connect),
+            Choice(Action.CONNECT, R.string.server_connect_only),
+        ),
+    }
 
     /** What the user confirmed: [server] to [action]. */
     data class Result(val action: Action, val server: Server) {
@@ -128,18 +165,14 @@ class ServerEditFragment : DialogFragment() {
         const val REQUEST_KEY = "server_edit"
         private const val ARG_SERVER = "server"
         private const val ARG_ACTION = "action"
-        private const val ARG_IGNORE_TITLE = "ignore_title"
+        private const val ARG_MODE = "mode"
         private const val MAX_PORT = 65535
 
-        /**
-         * A dialog to [action] a server, prefilled from [server] if given. With [ignoreTitle] the
-         * name field is hidden, as for a quick connect.
-         */
-        fun newInstance(server: Server?, action: Action, ignoreTitle: Boolean) = ServerEditFragment().apply {
+        /** A dialog for [mode], prefilled from [server] if given. */
+        fun newInstance(server: Server?, mode: Mode) = ServerEditFragment().apply {
             arguments = Bundle().apply {
                 server?.let { putServer(ARG_SERVER, it) }
-                putString(ARG_ACTION, action.name)
-                putBoolean(ARG_IGNORE_TITLE, ignoreTitle)
+                putString(ARG_MODE, mode.name)
             }
         }
     }

@@ -124,8 +124,8 @@ class ConnectionDialogs(
     /** Opens the editor for [server]: a saved one is saved again, any other connected to. */
     private fun editServer(server: Server) {
         if (fragments.isStateSaved) return
-        val action = if (server.isSaved) ServerEditFragment.Action.EDIT else ServerEditFragment.Action.CONNECT
-        ServerEditFragment.newInstance(server, action, ignoreTitle = !server.isSaved).show(fragments, TAG_EDIT)
+        val mode = if (server.isSaved) ServerEditFragment.Mode.EDIT else ServerEditFragment.Mode.CONNECT
+        ServerEditFragment.newInstance(server, mode).show(fragments, TAG_EDIT)
     }
 
     /** Offers once to trust the server's certificate, which is unknown or, if [changed], not the pinned one. */
