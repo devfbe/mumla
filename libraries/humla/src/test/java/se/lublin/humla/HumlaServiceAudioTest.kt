@@ -104,10 +104,8 @@ class HumlaServiceAudioTest {
         audioUp(h)
 
         val config = h.audioFactory.configs[0]
-        assertThat(config.targetBitrate).isEqualTo(24_000)
-        assertThat(config.transmitMode).isEqualTo(TransmitMode.PUSH_TO_TALK)
+        assertThat(config.settings.bitrate).isEqualTo(24_000)
         assertThat(config.halfDuplex).isTrue()
-        assertThat(config.halfDuplexRequested).isTrue()
         // By identity: the toggle the capture loop consults is the toggle a key press writes.
         assertThat(h.audioFactory.sessionParams[0].inputMode)
             .isSameInstanceAs(inputModeOf(h))
@@ -322,7 +320,7 @@ class HumlaServiceAudioTest {
         h.configure { copy(audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION) }
 
         audioUp(h, count = 2)
-        assertThat(h.audioFactory.configs[1].audioSource)
+        assertThat(h.audioFactory.configs[1].settings.audioSource)
             .isEqualTo(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
         awaitUntil(description = "the old pipeline is gone") {
             h.audioFactory.created[0].shutdownCalls.get() == 1
@@ -338,7 +336,7 @@ class HumlaServiceAudioTest {
         val h = start()
         h.connectAndSynchronize()
         audioUp(h)
-        val sourceInUse = h.audioFactory.configs[0].audioSource
+        val sourceInUse = h.audioFactory.configs[0].settings.audioSource
 
         h.configure { copy(audioSource = sourceInUse) }
         awaitUntil(description = "the reconfigure was processed") { h.service.currentBandwidth == FAKE_BANDWIDTH }
@@ -377,7 +375,6 @@ class HumlaServiceAudioTest {
 
         // Both directions: the flag is what the caller wrote, not a constant.
         h.configure { copy(halfDuplex = false) }
-        assertThat(h.service.getAudioConfigForTest().halfDuplexRequested).isFalse()
         assertThat(h.service.getAudioConfigForTest().halfDuplex).isFalse()
     }
 

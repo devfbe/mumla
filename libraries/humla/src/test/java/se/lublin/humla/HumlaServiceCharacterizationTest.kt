@@ -31,7 +31,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 import se.lublin.humla.audio.AudioConfig
+import se.lublin.humla.audio.PipelineSettings
 import se.lublin.humla.audio.TransmitMode
+import se.lublin.humla.audio.capture.AndroidAudioEffects
+import se.lublin.humla.audio.capture.EchoCancellationMode
+import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.audio.inputmode.ToggleInputMode
@@ -187,24 +191,23 @@ class HumlaServiceCharacterizationTest {
 
         assertThat(service.getAudioConfigForTest()).isEqualTo(
             AudioConfig(
-                amplitudeBoost = 1.5f,
-                inputSampleRate = 16_000,
-                targetBitrate = 24_000,
-                audioSource = 7,
-                audioStream = 3,
-                targetFramesPerPacket = 4,
-                preprocessorEnabled = true,
-                noiseSuppression = "rnnoise",
-                speexNoiseSuppressDb = -40,
-                androidNoiseSuppressor = true,
-                androidAgc = true,
-                transmitMode = TransmitMode.PUSH_TO_TALK,
-                halfDuplexRequested = true,
+                PipelineSettings(
+                    audioStream = 3,
+                    audioSource = 7,
+                    inputSampleRate = 16_000,
+                    bitrate = 24_000,
+                    framesPerPacket = 4,
+                    amplitudeBoost = 1.5f,
+                    noiseSuppression = NoiseSuppressionMode.RNNOISE,
+                    speexNoiseSuppressDb = -40,
+                    androidEffects = AndroidAudioEffects(noiseSuppressor = true, automaticGainControl = true),
+                ),
+                halfDuplex = true,
+                // The route decides these.
+                routedDeviceType = null,
+                echoCancellation = EchoCancellationMode.NONE,
             )
         )
-        // The fields no setting writes: the route decides them.
-        assertThat(service.getAudioConfigForTest().routedDeviceType).isNull()
-        assertThat(service.getAudioConfigForTest().echoCancellation).isFalse()
     }
 
     /** The transmit mode picks one of the three input modes by identity. */

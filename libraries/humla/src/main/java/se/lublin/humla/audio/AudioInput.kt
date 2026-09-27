@@ -47,7 +47,7 @@ class AudioInput(
         listener: AudioInputListener,
         audioSource: Int,
         targetSampleRate: Int,
-        echoCancellationMethod: String,
+        echo: EchoCancellationMode,
         effects: AndroidAudioEffects = AndroidAudioEffects(),
     ) : this(
         listener,
@@ -56,7 +56,7 @@ class AudioInput(
                 audioSource = audioSource,
                 targetSampleRate = targetSampleRate,
                 effects = effects,
-                echo = EchoCancellationMode.fromPreferenceValue(echoCancellationMethod),
+                echo = echo,
             ),
         ),
     )

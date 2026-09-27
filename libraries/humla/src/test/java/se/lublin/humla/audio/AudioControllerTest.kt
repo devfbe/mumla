@@ -151,7 +151,7 @@ class AudioControllerTest {
 
     @Test
     fun startCreatesAudioOnTheControlThreadAndRegistersItsHandlers() {
-        controller.start(AudioConfig(amplitudeBoost = 7f), params, registry)
+        controller.start(AudioConfig(PipelineSettings(amplitudeBoost = 7f)), params, registry)
 
         awaitUntil(description = "pipeline running") { controller.isRunning }
         assertThat(factory.createThreads).containsExactly(controller.looper.thread)
@@ -160,7 +160,7 @@ class AudioControllerTest {
         assertThat(factory.loggers).containsExactly(SilentLogger)
         assertThat(factory.encodeListeners).containsExactly(encodeListener)
         assertThat(factory.outputListeners).containsExactly(outputListener)
-        assertThat(factory.configs[0].amplitudeBoost).isEqualTo(7f)
+        assertThat(factory.configs[0].settings.amplitudeBoost).isEqualTo(7f)
         assertThat(factory.sessionParams).containsExactly(params)
         assertThat(registry.tcp).containsExactly(factory.created[0].tcpHandler)
         assertThat(registry.udp).containsExactly(factory.created[0].voiceHandler)
@@ -206,12 +206,12 @@ class AudioControllerTest {
         startAndAwaitRunning()
         val newInputMode = ContinuousInputMode()
 
-        controller.reconfigure(AudioConfig(amplitudeBoost = 2f), newInputMode)
+        controller.reconfigure(AudioConfig(PipelineSettings(amplitudeBoost = 2f)), newInputMode)
 
         awaitUntil(description = "second pipeline") { factory.created.size == 2 }
         idleControlThread()
         assertThat(factory.created[0].shutdownCalls.get()).isEqualTo(1)
-        assertThat(factory.configs[1].amplitudeBoost).isEqualTo(2f)
+        assertThat(factory.configs[1].settings.amplitudeBoost).isEqualTo(2f)
         assertThat(factory.sessionParams[1].inputMode).isSameInstanceAs(newInputMode)
         assertThat(factory.sessionParams[1].self).isSameInstanceAs(params.self)
         assertThat(registry.tcp).containsExactly(factory.created[1].tcpHandler)
@@ -224,7 +224,7 @@ class AudioControllerTest {
      */
     @Test
     fun reconfigureRebuildsOnlyWhenTheConfigOrTheInputModeReallyDiffers() {
-        val config = AudioConfig(amplitudeBoost = 5f)
+        val config = AudioConfig(PipelineSettings(amplitudeBoost = 5f))
         val inputMode = ContinuousInputMode()
         controller.start(config, params.copy(inputMode = inputMode), registry)
         awaitUntil(description = "pipeline running") { controller.isRunning }
@@ -235,23 +235,23 @@ class AudioControllerTest {
         assertThat(factory.created).hasSize(1)
 
         // different config, same input mode
-        controller.reconfigure(config.copy(amplitudeBoost = 6f), inputMode)
+        controller.reconfigure(AudioConfig(PipelineSettings(amplitudeBoost = 6f)), inputMode)
         awaitUntil(description = "rebuilt for the config") { factory.created.size == 2 }
 
         // same as the last reconfigure, same input mode: compares against the config reconfigure()
         // stored, not the one start() stored.
-        controller.reconfigure(config.copy(amplitudeBoost = 6f), inputMode)
+        controller.reconfigure(AudioConfig(PipelineSettings(amplitudeBoost = 6f)), inputMode)
         idleControlThread()
         assertThat(factory.created).hasSize(2)
 
         // same config, different input mode
-        controller.reconfigure(config.copy(amplitudeBoost = 6f), ContinuousInputMode())
+        controller.reconfigure(AudioConfig(PipelineSettings(amplitudeBoost = 6f)), ContinuousInputMode())
         awaitUntil(description = "rebuilt for the input mode") { factory.created.size == 3 }
     }
 
     @Test
     fun reconfigureAndVoiceTargetBeforeStartCreateNothingAndLeaveTheControlThreadUsable() {
-        controller.reconfigure(AudioConfig(amplitudeBoost = 9f), ContinuousInputMode())
+        controller.reconfigure(AudioConfig(PipelineSettings(amplitudeBoost = 9f)), ContinuousInputMode())
         controller.setVoiceTargetId(3)
 
         idleControlThread()
@@ -260,7 +260,7 @@ class AudioControllerTest {
         // The control thread must have survived both no-ops.
         startAndAwaitRunning()
         assertThat(factory.configs).hasSize(1)
-        assertThat(factory.configs[0].amplitudeBoost).isEqualTo(1f)
+        assertThat(factory.configs[0].settings.amplitudeBoost).isEqualTo(1f)
         assertThat(factory.sessionParams[0].targetId).isEqualTo(0.toByte())
     }
 
@@ -269,7 +269,7 @@ class AudioControllerTest {
         val first = startAndAwaitRunning()
         val secondRegistry = FakeRegistry()
 
-        controller.start(AudioConfig(amplitudeBoost = 4f), params, secondRegistry)
+        controller.start(AudioConfig(PipelineSettings(amplitudeBoost = 4f)), params, secondRegistry)
 
         awaitUntil(description = "second pipeline") { factory.created.size == 2 }
         idleControlThread()
@@ -285,7 +285,7 @@ class AudioControllerTest {
         val audio = startAndAwaitRunning()
 
         controller.setVoiceTargetId(5)
-        controller.reconfigure(AudioConfig(amplitudeBoost = 3f), ContinuousInputMode())
+        controller.reconfigure(AudioConfig(PipelineSettings(amplitudeBoost = 3f)), ContinuousInputMode())
 
         awaitUntil(description = "second pipeline") { factory.created.size == 2 }
         assertThat(audio.targetIds).containsExactly(5.toByte())
@@ -318,7 +318,7 @@ class AudioControllerTest {
         awaitUntil(description = "first attempt") { factory.createThreads.size == 1 }
         factory.failWith = null
 
-        controller.reconfigure(AudioConfig(amplitudeBoost = 2f), ContinuousInputMode())
+        controller.reconfigure(AudioConfig(PipelineSettings(amplitudeBoost = 2f)), ContinuousInputMode())
 
         idleControlThread()
         assertThat(factory.createThreads).hasSize(1)

@@ -44,8 +44,12 @@ import se.lublin.humla.audio.AudioHost
 import se.lublin.humla.audio.AudioOutput
 import se.lublin.humla.audio.AudioSessionParams
 import se.lublin.humla.audio.DefaultAudioHandlerFactory
+import se.lublin.humla.audio.PipelineSettings
 import se.lublin.humla.audio.TransmitMode
+import se.lublin.humla.audio.capture.AndroidAudioEffects
+import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.IInputMode
+import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 import se.lublin.humla.audio.inputmode.ActivityInputMode
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
@@ -166,7 +170,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
     var reconnectPolicy: ReconnectPolicy = ReconnectPolicy()
 
     /** Test seam: builds the audio pipeline. */
-    var audioFactory: AudioHandlerFactory = DefaultAudioHandlerFactory()
+    var audioFactory: AudioHandlerFactory = DefaultAudioHandlerFactory
 
     /** A test may set a fake before [onCreate]; otherwise [onCreate] creates the Android one. */
     var communicationDevices: CommunicationDevices? = null
@@ -604,21 +608,19 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         }
 
         audioConfig = audioConfig.copy(
-            amplitudeBoost = config.amplitudeBoost,
-            transmitMode = config.transmitMode,
-            inputSampleRate = config.inputSampleRate,
-            targetBitrate = config.inputQuality,
-            audioSource = config.audioSource,
-            audioStream = config.audioStream,
-            targetFramesPerPacket = config.framesPerPacket,
-            // Stored as requested; AudioConfig.halfDuplex applies it against the mode in force.
-            halfDuplexRequested = config.halfDuplex,
-            preprocessorEnabled = config.preprocessorEnabled,
-            noiseSuppression = config.noiseSuppressionMethod,
+            settings = PipelineSettings(
+                audioStream = config.audioStream,
+                audioSource = config.audioSource,
+                inputSampleRate = config.inputSampleRate,
+                bitrate = config.inputQuality,
+                framesPerPacket = config.framesPerPacket,
+                amplitudeBoost = config.amplitudeBoost,
+                noiseSuppression = NoiseSuppressionMode.fromPreferenceValue(config.noiseSuppressionMethod),
+                speexNoiseSuppressDb = config.speexNoiseSuppressDb,
+                androidEffects = AndroidAudioEffects(config.androidNoiseSuppressor, config.androidAgc),
+            ),
+            halfDuplex = config.halfDuplex && config.transmitMode == TransmitMode.PUSH_TO_TALK,
             echoCancellation = echoCancellationFor(audioConfig.routedDeviceType),
-            speexNoiseSuppressDb = config.speexNoiseSuppressDb,
-            androidNoiseSuppressor = config.androidNoiseSuppressor,
-            androidAgc = config.androidAgc,
         )
         // Unconditional: AudioController skips a config equal by value and an input mode equal
         // by identity.
@@ -644,9 +646,10 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
      * The echo canceller for a routed device of [type]: the user's override for its kind of
      * device, else the kind's default. No route, no canceller - nothing plays that could echo.
      */
-    private fun echoCancellationFor(type: Int?): Boolean {
-        val category = AudioDeviceCategory.of(type ?: return false)
-        return sessionConfig.echoCancellationOverrides[category] ?: category.echoCancellationByDefault
+    private fun echoCancellationFor(type: Int?): EchoCancellationMode {
+        val category = AudioDeviceCategory.of(type ?: return EchoCancellationMode.NONE)
+        val enabled = sessionConfig.echoCancellationOverrides[category] ?: category.echoCancellationByDefault
+        return if (enabled) EchoCancellationMode.WEBRTC else EchoCancellationMode.NONE
     }
 
     /**
@@ -798,7 +801,7 @@ open class HumlaService : Service(), IHumlaService, IHumlaSession,
         get() = router.availableDevices()
 
     override val isEchoCancellationEnabled: Boolean
-        get() = audioConfig.echoCancellation
+        get() = audioConfig.echoCancellation != EchoCancellationMode.NONE
 
     override val activeAudioDevice: CommunicationDevice?
         get() = router.activeDevice()
