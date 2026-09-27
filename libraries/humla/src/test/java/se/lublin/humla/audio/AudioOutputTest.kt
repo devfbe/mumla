@@ -10,6 +10,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAudioTrack
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.net.HumlaUDPMessageType
@@ -21,6 +22,7 @@ import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
+@Config(shadows = [RecordingAudioTrack::class])
 class AudioOutputTest {
     @get:Rule
     val log = LogRecorder()
@@ -30,6 +32,7 @@ class AudioOutputTest {
     @Before
     fun setUp() {
         ShadowAudioTrack.setMinBufferSize(DEVICE_MIN_BUFFER_BYTES)
+        trackEvents.clear()
     }
 
     @After
@@ -60,15 +63,19 @@ class AudioOutputTest {
     }
 
     @Test
-    fun `the mix is sized in samples and capped at twelve frames`() {
-        assertThat(AudioOutput.playbackBuffer(11520))
-            .isEqualTo(AudioOutput.PlaybackBuffer(mixSamples = 5760, trackBytes = 11520))
-        // A small minimum mixes less than twelve frames, but never more than the minimum holds.
-        assertThat(AudioOutput.playbackBuffer(3840))
-            .isEqualTo(AudioOutput.PlaybackBuffer(mixSamples = 1920, trackBytes = 3840))
-        // A large minimum is honoured in full; the mix stays at twelve frames.
-        assertThat(AudioOutput.playbackBuffer(40000))
-            .isEqualTo(AudioOutput.PlaybackBuffer(mixSamples = AudioHandler.FRAME_SIZE * 12, trackBytes = 40000))
+    fun `the mix is one frame whatever the system minimum`() {
+        for (minimum in listOf(960, 3840, DEVICE_MIN_BUFFER_BYTES, 40000)) {
+            assertWithMessage("mix for a minimum of $minimum bytes")
+                .that(AudioOutput.playbackBuffer(minimum).mixSamples).isEqualTo(AudioHandler.FRAME_SIZE)
+        }
+    }
+
+    @Test
+    fun `the track holds the system minimum in full and at least four mixes`() {
+        assertThat(AudioOutput.playbackBuffer(DEVICE_MIN_BUFFER_BYTES).trackBytes).isEqualTo(DEVICE_MIN_BUFFER_BYTES)
+        assertThat(AudioOutput.playbackBuffer(40000).trackBytes).isEqualTo(40000)
+        assertThat(AudioOutput.playbackBuffer(960).trackBytes)
+            .isEqualTo(4 * AudioHandler.FRAME_SIZE * BYTES_PER_SAMPLE)
     }
 
     @Test
@@ -78,7 +85,7 @@ class AudioOutputTest {
         startedOutput()
 
         assertThat(log.messages(AudioOutput::class.java.name))
-            .contains("Mixing 5760 samples per write into a 11520-byte track (system minimum 11520 bytes)")
+            .contains("Mixing 480 samples per write into a 11520-byte track (system minimum 11520 bytes)")
     }
 
     @Test
@@ -113,6 +120,42 @@ class AudioOutputTest {
     }
 
     // --- start and stop -------------------------------------------------------------------------
+
+    /** Keeps the next talk spurt's writes blocking from its first mix, so its packets are pulled in real time. */
+    @Test
+    fun `a new track is filled with silence before it pauses`() {
+        val track = startedOutput().playbackTrack()!!
+
+        awaitUntil(description = "the idle track to pause") { Pause in trackEvents }
+
+        val beforePause = trackEvents.takeWhile { it != Pause }.filterIsInstance<Write>()
+        assertThat(beforePause.all { it.silent }).isTrue()
+        assertThat(beforePause.sumOf { it.samples }).isAtLeast(track.bufferSizeInFrames)
+        assertThat(trackEvents).doesNotContain(Flush)
+    }
+
+    @Test
+    fun `the end of a talk spurt plays out behind a track of silence and is never flushed`() {
+        val o = startedOutput { u, n, l, a ->
+            AudioOutputSpeech(u, n, l, FakeOpusDecoder(fill = 0.5f), SpeexJitterModel(), a)
+        }
+        val track = o.playbackTrack()!!
+        awaitUntil(description = "the idle track to pause") { Pause in trackEvents }
+
+        o.queueVoiceData(voicePacket(terminator = true))
+
+        awaitUntil(description = "the track to pause after the talk spurt") {
+            val events = trackEvents.toList()
+            val lastAudio = events.indexOfLast { it is Write && !it.silent }
+            lastAudio >= 0 && Pause in events.subList(lastAudio, events.size)
+        }
+        val events = trackEvents.toList()
+        val lastAudio = events.indexOfLast { it is Write && !it.silent }
+        val tail = events.subList(lastAudio + 1, events.size).takeWhile { it != Pause }
+        assertThat(tail.all { it is Write && it.silent }).isTrue()
+        assertThat(tail.sumOf { (it as Write).samples }).isAtLeast(track.bufferSizeInFrames)
+        assertThat(events).doesNotContain(Flush)
+    }
 
     @Test
     fun `stopping straight after starting stops the playback thread`() {
@@ -180,13 +223,19 @@ class AudioOutputTest {
     // --- helpers --------------------------------------------------------------------------------
 
     /** One decoded packet of [codec] from [session] with a two-byte opus frame. */
-    private fun voicePacket(codec: HumlaUDPMessageType = HumlaUDPMessageType.UDPVoiceOpus, session: Int = SESSION) =
+    private fun voicePacket(
+        codec: HumlaUDPMessageType = HumlaUDPMessageType.UDPVoiceOpus,
+        session: Int = SESSION,
+        terminator: Boolean = false,
+    ) =
         VoicePacket().apply {
             this.codec = codec
             this.session = session
             data = byteArrayOf(0x01, 0x02)
             opusOffset = 0
             opusLength = 2
+            frameNumber = FIRST_FRAME
+            isTerminator = terminator
         }
 
     private fun runBounded(what: String, block: () -> Unit) {
@@ -208,6 +257,7 @@ class AudioOutputTest {
     private companion object {
         const val SESSION = 7
         const val BYTES_PER_SAMPLE = 2
+        const val FIRST_FRAME = 100L
 
         /** What the device in the bug report answers for 48 kHz mono 16-bit, in bytes. */
         const val DEVICE_MIN_BUFFER_BYTES = 11520

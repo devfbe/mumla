@@ -623,9 +623,10 @@ public class HumlaSession internal constructor(
         override fun stopWhispering() {
             val id = armedWhisperId
             if (id <= 0) return
-            voiceTargetId = 0
             whisperTargetList.free(id)
             armedWhisperId = 0
+            // Last: the change it publishes must already find the target gone.
+            voiceTargetId = 0
         }
     }
 

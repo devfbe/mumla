@@ -77,7 +77,8 @@ HEREDOC = re.compile(
 )
 DATA_SINK = re.compile(r"\b(cat|tee|git)\b")
 SCRIPT_RUNNER = re.compile(r"\b(python3?|perl|bash|sh|zsh|awk|gawk|sed|ruby|node)\b")
-PATH_TOKEN = re.compile(r"[\w.~/+@*-]*[/.][\w.~/+@*-]*")
+# Not right after `$`, `{` or a word character: `$S/ui.xml` names a variable's directory, not `S/ui.xml`.
+PATH_TOKEN = re.compile(r"(?<![\w${.~/+@*-])[\w.~/+@*-]*[/.][\w.~/+@*-]*")
 
 WORKTREE_HINT = (
     "Blocked: worktrees are not used in this project. Android Studio and its MCP servers index only "
