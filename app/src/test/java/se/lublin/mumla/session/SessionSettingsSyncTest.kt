@@ -196,14 +196,7 @@ class SessionSettingsSyncTest {
             "audio_loopback_test" to "not persisted: the settings screen's own monitor switch",
             "audio_test_microphone" to "not persisted: the settings screen's own meter switch",
             "vad_recalibrate" to "not persisted: restarts the settings screen's own measurement",
-            "ptt_settings" to "a PreferenceCategory, not a setting",
-            "talkKey" to "read by the overlay and the PTT button, not by the audio chain",
-            "hotCorner" to "read by MumlaService's hot corner, in its own case",
-            "hidePtt" to "read by the channel fragment when it builds the PTT button",
-            "togglePtt" to "read by the PTT button when it handles a press",
-            "holdToWhisper" to "read by the channel fragment and tree view model when arming a whisper target",
-            "allow_external_ptt" to "read by the talk broadcast receiver on each broadcast",
-            "ptt_sound" to "read by MumlaService when our talk state changes",
+            "advanced_audio" to "a PreferenceCategory, not a setting",
         )
 
         val keys = mutableSetOf<String>()

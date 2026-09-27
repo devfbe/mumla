@@ -19,47 +19,30 @@
 
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-    <ListPreference
-        android:key="theme"
-        android:defaultValue="system"
-        android:entries="@array/themeNames"
-        android:entryValues="@array/themeValues"
-        app:useSimpleSummaryProvider="true"
-        android:title="@string/theme"
-        app:iconSpaceReserved="false" />
-
     <SwitchPreferenceCompat
-        android:key="dynamic_colors"
-        android:defaultValue="false"
-        android:title="@string/pref_dynamic_colors"
-        android:summary="@string/pref_dynamic_colors_summary"
+        android:defaultValue="true"
+        android:key="autoReconnect"
+        android:summary="@string/autoReconnectSum"
+        android:title="@string/autoReconnect"
         app:iconSpaceReserved="false" />
 
-    <ListPreference
-        app:key="language"
-        app:defaultValue="system"
-        app:title="@string/language"
-        app:useSimpleSummaryProvider="true"
-        app:iconSpaceReserved="false" />
-
-    <SwitchPreferenceCompat
-        android:key="show_user_count"
-        android:defaultValue="false"
-        android:title="@string/pref_show_user_count"
-        android:summary="@string/pref_show_user_count_summary"
+    <Preference
+        android:key="battery_optimization"
+        android:persistent="false"
+        android:title="@string/battery_optimization_title"
         app:iconSpaceReserved="false" />
 
     <SwitchPreferenceCompat
         android:defaultValue="false"
-        android:key="startUpInPinnedMode"
-        android:summary="@string/pref_start_upIn_pinned_mode_sum"
-        android:title="@string/pref_start_up_in_pinned_mode"
+        android:key="forceTcp"
+        android:summary="@string/forceTcpSum"
+        android:title="@string/forceTcp"
         app:iconSpaceReserved="false" />
 
     <SwitchPreferenceCompat
-        android:key="stay_awake"
         android:defaultValue="false"
-        android:title="@string/stay_awake"
-        android:summary="@string/stay_awake_sum"
+        android:key="useTor"
+        android:summary="@string/useTorSum"
+        android:title="@string/useTor"
         app:iconSpaceReserved="false" />
 </PreferenceScreen>

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  ~ Copyright (C) 2014 Andrew Comminos
+  ~
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  -->
+
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <!-- android:defaultValue must equal Settings.DEFAULT_MEDIA_BUTTON_ACTION: only this
+         screen writes the XML default; every other reader falls back to the constant. -->
+    <ListPreference
+        android:defaultValue="auto"
+        android:entries="@array/mediaButtonActionNames"
+        android:entryValues="@array/mediaButtonActionValues"
+        android:key="media_button_action"
+        android:summary="@string/mediaButtonActionSum"
+        android:title="@string/mediaButtonAction"
+        app:iconSpaceReserved="false"/>
+
+    <ListPreference
+        android:key="controlBarPosition"
+        android:defaultValue="bottom"
+        android:entries="@array/controlBarPositionNames"
+        android:entryValues="@array/controlBarPositionValues"
+        app:useSimpleSummaryProvider="true"
+        android:title="@string/controlBarPosition"
+        app:iconSpaceReserved="false"/>
+
+    <se.lublin.mumla.preference.SliderPreference
+        android:key="pttButtonHeight"
+        android:title="@string/pttButtonHeight"
+        android:summary="@string/pttButtonHeightSum"
+        app:min="150"
+        app:max="1000"
+        app:valueStep="10"
+        android:defaultValue="150"
+        app:valueFormat="@string/unitDp"
+        app:iconSpaceReserved="false"/>
+
+    <!-- Only used in push-to-talk mode; ControlsSettingsFragment disables it in the others. -->
+    <PreferenceCategory android:title="@string/pttSettings"
+        android:key="ptt_settings"
+        app:iconSpaceReserved="false">
+        <se.lublin.mumla.preference.KeySelectDialogPreference
+            android:key="talkKey"
+            android:summary="@string/pttKeySum"
+            android:title="@string/pttKey"
+            app:iconSpaceReserved="false"/>
+
+        <ListPreference
+            android:defaultValue="none"
+            android:entries="@array/hotCornerNames"
+            android:entryValues="@array/hotCornerValues"
+            android:key="hotCorner"
+            android:summary="@string/hotCornerSum"
+            android:title="@string/hotCorner"
+            app:iconSpaceReserved="false"/>
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="togglePtt"
+            android:summary="@string/togglePttSum"
+            android:title="@string/togglePtt"
+            app:iconSpaceReserved="false"/>
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="hidePtt"
+            android:summary="@string/hidePttSum"
+            android:title="@string/hidePtt"
+            app:iconSpaceReserved="false"/>
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="holdToWhisper"
+            android:summary="@string/holdToWhisperSum"
+            android:title="@string/hold_to_whisper"
+            app:iconSpaceReserved="false"/>
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="ptt_sound"
+            android:summary="@string/pttSoundSum"
+            android:title="@string/pttSound"
+            app:iconSpaceReserved="false"/>
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="half_duplex"
+            android:title="@string/halfDuplex"
+            android:summary="@string/halfDuplexSum"
+            app:iconSpaceReserved="false"/>
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="allow_external_ptt"
+            android:summary="@string/allowExternalPttSum"
+            android:title="@string/allowExternalPtt"
+            app:iconSpaceReserved="false"/>
+    </PreferenceCategory>
+</PreferenceScreen>

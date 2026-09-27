@@ -19,47 +19,38 @@
 
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-    <ListPreference
-        android:key="theme"
-        android:defaultValue="system"
-        android:entries="@array/themeNames"
-        android:entryValues="@array/themeValues"
-        app:useSimpleSummaryProvider="true"
-        android:title="@string/theme"
+    <SwitchPreferenceCompat
+        android:defaultValue="true"
+        android:key="chatNotify"
+        android:summary="@string/chatNotificationsSum"
+        android:title="@string/chatNotifications"
         app:iconSpaceReserved="false" />
 
     <SwitchPreferenceCompat
-        android:key="dynamic_colors"
-        android:defaultValue="false"
-        android:title="@string/pref_dynamic_colors"
-        android:summary="@string/pref_dynamic_colors_summary"
-        app:iconSpaceReserved="false" />
-
-    <ListPreference
-        app:key="language"
-        app:defaultValue="system"
-        app:title="@string/language"
-        app:useSimpleSummaryProvider="true"
-        app:iconSpaceReserved="false" />
-
-    <SwitchPreferenceCompat
-        android:key="show_user_count"
-        android:defaultValue="false"
-        android:title="@string/pref_show_user_count"
-        android:summary="@string/pref_show_user_count_summary"
+        android:defaultValue="true"
+        android:key="useTts"
+        android:summary="@string/useTtsSum"
+        android:title="@string/useTts"
         app:iconSpaceReserved="false" />
 
     <SwitchPreferenceCompat
         android:defaultValue="false"
-        android:key="startUpInPinnedMode"
-        android:summary="@string/pref_start_upIn_pinned_mode_sum"
-        android:title="@string/pref_start_up_in_pinned_mode"
+        android:key="shortTtsMessages"
+        android:summary="@string/shortTtsMessagesSum"
+        android:title="@string/shortTtsMessages"
         app:iconSpaceReserved="false" />
 
     <SwitchPreferenceCompat
-        android:key="stay_awake"
-        android:defaultValue="false"
-        android:title="@string/stay_awake"
-        android:summary="@string/stay_awake_sum"
+        android:defaultValue="true"
+        android:key="markdown_messages"
+        android:summary="@string/markdownMessagesSum"
+        android:title="@string/markdownMessages"
+        app:iconSpaceReserved="false" />
+
+    <SwitchPreferenceCompat
+        android:defaultValue="true"
+        android:key="load_images"
+        android:summary="@string/loadImagesSum"
+        android:title="@string/loadImages"
         app:iconSpaceReserved="false" />
 </PreferenceScreen>

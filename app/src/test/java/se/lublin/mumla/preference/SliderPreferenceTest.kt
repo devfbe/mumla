@@ -35,6 +35,7 @@ import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.testing.SETTINGS_SCREENS
 import se.lublin.mumla.testing.openScreen
 import se.lublin.mumla.testing.rowOf
 
@@ -77,8 +78,8 @@ class SliderPreferenceTest {
     @Test
     fun `a stored value off the steps or out of range is shown near it and kept until moved`() {
         preferences.edit { putInt(Settings.PTT_BUTTON_HEIGHT.key, 5000) }
-        val appearance = activity.openScreen(AppearanceSettingsFragment::class.java)
-        val slider = appearance.rowOf(Settings.PTT_BUTTON_HEIGHT.key).findViewById<Slider>(R.id.slider)
+        val controls = activity.openScreen(ControlsSettingsFragment::class.java)
+        val slider = controls.rowOf(Settings.PTT_BUTTON_HEIGHT.key).findViewById<Slider>(R.id.slider)
         slider.draw(Canvas(Bitmap.createBitmap(CANVAS_SIZE, CANVAS_SIZE, Bitmap.Config.ARGB_8888)))
 
         assertThat(slider.value).isEqualTo(1000f)
@@ -88,8 +89,8 @@ class SliderPreferenceTest {
     @Test
     fun `a stored value between two steps does not break the slider`() {
         preferences.edit { putInt(Settings.PTT_BUTTON_HEIGHT.key, 154) }
-        val appearance = activity.openScreen(AppearanceSettingsFragment::class.java)
-        val slider = appearance.rowOf(Settings.PTT_BUTTON_HEIGHT.key).findViewById<Slider>(R.id.slider)
+        val controls = activity.openScreen(ControlsSettingsFragment::class.java)
+        val slider = controls.rowOf(Settings.PTT_BUTTON_HEIGHT.key).findViewById<Slider>(R.id.slider)
         slider.draw(Canvas(Bitmap.createBitmap(CANVAS_SIZE, CANVAS_SIZE, Bitmap.Config.ARGB_8888)))
 
         assertThat(slider.value).isEqualTo(150f)
@@ -98,7 +99,7 @@ class SliderPreferenceTest {
 
     @Test
     fun `every slider takes its unit from a string resource`() {
-        for (screen in SCREENS) {
+        for (screen in SETTINGS_SCREENS) {
             val parser = app.resources.getXml(screen)
             while (parser.next() != XmlPullParser.END_DOCUMENT) {
                 if (parser.eventType != XmlPullParser.START_TAG) continue
@@ -131,9 +132,5 @@ class SliderPreferenceTest {
         const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
         const val APP_NS = "http://schemas.android.com/apk/res-auto"
         const val CANVAS_SIZE = 200
-        val SCREENS = listOf(
-            R.xml.settings_general, R.xml.settings_audio, R.xml.settings_appearance,
-            R.xml.settings_authentication, R.xml.settings_about,
-        )
     }
 }

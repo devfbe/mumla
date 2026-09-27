@@ -3,8 +3,6 @@ package se.lublin.mumla
 import android.content.Context
 import androidx.preference.ListPreference
 import androidx.preference.Preference
-import androidx.preference.PreferenceCategory
-import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceScreen
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -12,7 +10,7 @@ import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import se.lublin.mumla.preference.GeneralSettingsFragment
+import se.lublin.mumla.preference.ControlsSettingsFragment
 import se.lublin.mumla.preference.SettingsActivity
 import se.lublin.mumla.testing.hostInThemedActivity
 
@@ -30,13 +28,13 @@ class MediaButtonActionResourcesTest {
         return context.resources.getStringArray(id).toList()
     }
 
-    private fun generalScreen(): PreferenceScreen = hostInThemedActivity(GeneralSettingsFragment()).preferenceScreen
+    private fun controlsScreen(): PreferenceScreen = hostInThemedActivity(ControlsSettingsFragment()).preferenceScreen
 
     private fun mediaButtonPreference(): ListPreference {
-        val screen = generalScreen()
+        val screen = controlsScreen()
         val preference = screen.findPreference<Preference>(Settings.MEDIA_BUTTON_ACTION.key)
         assertWithMessage(
-            "no preference with key '%s' on the general settings screen",
+            "no preference with key '%s' on the controls screen",
             Settings.MEDIA_BUTTON_ACTION.key
         ).that(preference).isNotNull()
         assertThat(preference).isInstanceOf(ListPreference::class.java)
@@ -44,25 +42,12 @@ class MediaButtonActionResourcesTest {
     }
 
     @Test
-    fun theHeadsetButtonPreferenceSitsInTheControlsCategory() {
-        val screen = generalScreen()
-
-        val category = screen.findPreference<Preference>("controls_settings")
-        assertWithMessage("no PreferenceCategory with key 'controls_settings'")
-            .that(category).isNotNull()
-        assertThat(category).isInstanceOf(PreferenceCategory::class.java)
-        assertThat((category as PreferenceGroup).findPreference<Preference>(Settings.MEDIA_BUTTON_ACTION.key))
-            .isNotNull()
-        assertThat(category.title.toString()).isNotEmpty()
-    }
-
-    @Test
-    fun theGeneralScreenIsReachableFromTheSettingsIndex() {
+    fun theControlsScreenIsReachableFromTheSettingsIndex() {
         val index = hostInThemedActivity(SettingsActivity.RootPreferenceFragment())
 
         val screen = index.preferenceScreen
         val fragments = (0 until screen.preferenceCount).map { screen.getPreference(it).fragment }
-        assertThat(fragments).contains(GeneralSettingsFragment::class.java.name)
+        assertThat(fragments).contains(ControlsSettingsFragment::class.java.name)
     }
 
     @Test

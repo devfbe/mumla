@@ -24,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.xmlpull.v1.XmlPullParser
+import se.lublin.mumla.testing.SETTINGS_SCREENS
 
 /**
  * The settings screens and [Settings] agree: every key a screen gives a default is a [Pref] with
@@ -60,11 +61,7 @@ class SettingsDefaultsTest {
 
     @Test
     fun everyScreenDefaultIsThePrefsDefault() {
-        val screens = listOf(
-            R.xml.settings_general, R.xml.settings_audio, R.xml.settings_appearance,
-            R.xml.settings_authentication, R.xml.settings_about,
-        )
-        val mismatches = screens.flatMap { screen ->
+        val mismatches = SETTINGS_SCREENS.flatMap { screen ->
             defaults(screen).mapNotNull { (key, value) ->
                 if (key in UNSET_BY_DESIGN) return@mapNotNull null
                 val pref = prefs[key] ?: return@mapNotNull "$key: no Pref"

@@ -13,13 +13,13 @@ import se.lublin.mumla.testing.hostInThemedActivity
 
 /** "Connect via Tor" is greyed out unless the Orbot package is installed. */
 @RunWith(RobolectricTestRunner::class)
-class GeneralSettingsOrbotTest {
+class ConnectionSettingsOrbotTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
 
     private fun torPreference(): Preference {
-        val fragment = hostInThemedActivity(GeneralSettingsFragment())
+        val fragment = hostInThemedActivity(ConnectionSettingsFragment())
         return requireNotNull(fragment.preferenceScreen.findPreference("useTor")) {
-            "no preference with key 'useTor' on the general settings screen"
+            "no preference with key 'useTor' on the connection settings screen"
         }
     }
 

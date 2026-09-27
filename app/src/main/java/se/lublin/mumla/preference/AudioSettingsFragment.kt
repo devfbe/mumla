@@ -44,6 +44,8 @@ import se.lublin.mumla.util.changes
 
 /** The audio settings screen; the decisions live in [AudioSettingsPolicy], this is the wiring. */
 open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio) {
+    private val bluetoothSwitch = BluetoothScoSwitch(this)
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         super.onCreatePreferences(savedInstanceState, rootKey)
 
@@ -54,6 +56,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         }
 
         labelAudioFormats()
+        bluetoothSwitch.bind()
 
         findPreference<SwitchPreferenceCompat>(Settings.ANDROID_NOISE_SUPPRESSOR.key)
             ?.let { markAvailability(it, NoiseSuppressor.isAvailable()) }
@@ -256,10 +259,9 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     }
 
     private fun updateAudioDependents(screen: PreferenceScreen, inputMethod: String) {
-        requireNotNull(screen.findPreference<PreferenceCategory>("ptt_settings")).isEnabled =
-            Settings.ARRAY_INPUT_METHOD_PTT == inputMethod
-        requireNotNull(screen.findPreference<PreferenceCategory>("vad_settings")).isEnabled =
-            Settings.ARRAY_INPUT_METHOD_VOICE == inputMethod
+        val voice = Settings.ARRAY_INPUT_METHOD_VOICE == inputMethod
+        requireNotNull(screen.findPreference<PreferenceCategory>("vad_settings")).isEnabled = voice
+        VAD_TUNING_KEYS.forEach { screen.findPreference<Preference>(it)?.isEnabled = voice }
     }
 
     private companion object {
@@ -270,5 +272,11 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
 
         /** The length of one audio frame; a packet holds a whole number of them. */
         private const val FRAME_MS = 10
+
+        /** The detector's settings in the advanced section, which only voice activity uses. */
+        private val VAD_TUNING_KEYS = listOf(
+            Settings.VAD_ADAPTIVE_FLOOR.key, Settings.VAD_FLOOR_DB.key,
+            Settings.VAD_ONSET_FRAMES.key, Settings.VAD_HOLD_MS.key,
+        )
     }
 }

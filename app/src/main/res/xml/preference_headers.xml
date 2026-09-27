@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <androidx.preference.PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
-    <Preference app:key="general_settings"
-        app:title="@string/general"
-        app:fragment="se.lublin.mumla.preference.GeneralSettingsFragment"
+    <Preference app:key="audio_settings"
+        app:title="@string/speakingAndAudio"
+        app:fragment="se.lublin.mumla.preference.AudioSettingsFragment"
+        app:iconSpaceReserved="false" />
+    <Preference app:key="controls_settings"
+        app:title="@string/controls"
+        app:fragment="se.lublin.mumla.preference.ControlsSettingsFragment"
+        app:iconSpaceReserved="false" />
+    <Preference app:key="chat_settings"
+        app:title="@string/chatAndNotifications"
+        app:fragment="se.lublin.mumla.preference.ChatSettingsFragment"
+        app:iconSpaceReserved="false" />
+    <Preference app:key="connection_settings"
+        app:title="@string/connection"
+        app:fragment="se.lublin.mumla.preference.ConnectionSettingsFragment"
         app:iconSpaceReserved="false" />
     <Preference app:key="authentication_settings"
-        app:title="@string/authentication"
+        app:title="@string/accountAndCertificates"
         app:fragment="se.lublin.mumla.preference.AuthenticationSettingsFragment"
-        app:iconSpaceReserved="false" />
-    <Preference app:key="audio_settings"
-        app:title="@string/audio"
-        app:fragment="se.lublin.mumla.preference.AudioSettingsFragment"
         app:iconSpaceReserved="false" />
     <Preference app:key="appearance_settings"
         app:title="@string/appearance"

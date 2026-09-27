@@ -25,6 +25,12 @@ import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.preference.SettingsActivity
 
+/** The XML of every settings screen, in the order of the index. */
+val SETTINGS_SCREENS = listOf(
+    R.xml.settings_audio, R.xml.settings_controls, R.xml.settings_chat, R.xml.settings_connection,
+    R.xml.settings_authentication, R.xml.settings_appearance, R.xml.settings_about,
+)
+
 /** The settings screen shown now. */
 fun SettingsActivity.currentScreen(): PreferenceFragmentCompat =
     supportFragmentManager.findFragmentById(R.id.settings_container) as PreferenceFragmentCompat

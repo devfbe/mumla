@@ -36,10 +36,10 @@ class SettingsActivityTest {
 
     @Test
     fun `a screen opens on top of the index with its title, and back returns`() {
-        val general = activity.openScreen(GeneralSettingsFragment::class.java)
+        val connection = activity.openScreen(ConnectionSettingsFragment::class.java)
 
-        assertThat(general).isInstanceOf(GeneralSettingsFragment::class.java)
-        assertThat(activity.supportActionBar?.title).isEqualTo(activity.getString(R.string.general))
+        assertThat(connection).isInstanceOf(ConnectionSettingsFragment::class.java)
+        assertThat(activity.supportActionBar?.title).isEqualTo(activity.getString(R.string.connection))
 
         activity.onBackPressedDispatcher.onBackPressed()
         idleMainLooper()
@@ -58,8 +58,8 @@ class SettingsActivityTest {
 
     @Test
     fun `a slider shows its value with the unit and stores a moved thumb as it is shown`() {
-        val appearance = activity.openScreen(AppearanceSettingsFragment::class.java)
-        val row = appearance.rowOf(Settings.PTT_BUTTON_HEIGHT.key)
+        val controls = activity.openScreen(ControlsSettingsFragment::class.java)
+        val row = controls.rowOf(Settings.PTT_BUTTON_HEIGHT.key)
         val value = row.findViewById<TextView>(R.id.slider_value)
         assertThat(value.text.toString()).isEqualTo(activity.getString(R.string.unitDp, 150))
 
@@ -72,10 +72,25 @@ class SettingsActivityTest {
     }
 
     @Test
-    fun `the key picker stores the pressed key on ok, and resets it with the neutral button`() {
-        val audio = activity.openScreen(AudioSettingsFragment::class.java)
+    fun `the push-to-talk controls apply only in push-to-talk mode, as chosen on the audio screen`() {
+        val controls = activity.openScreen(ControlsSettingsFragment::class.java)
+        // A category always reads as disabled; its rows show whether it is.
+        val hotCorner = requireNotNull(controls.findPreference<Preference>(Settings.HOT_CORNER.key))
+        assertThat(hotCorner.isEnabled).isFalse()
+        assertThat(controls.findPreference<Preference>(Settings.PTT_BUTTON_HEIGHT.key)?.isEnabled).isTrue()
 
-        var dialog = showDialog(audio, Settings.TALK_KEY.key)
+        preferences.edit().putString(Settings.INPUT_METHOD.key, Settings.ARRAY_INPUT_METHOD_PTT).commit()
+        controls.onPause()
+        controls.onResume()
+
+        assertThat(hotCorner.isEnabled).isTrue()
+    }
+
+    @Test
+    fun `the key picker stores the pressed key on ok, and resets it with the neutral button`() {
+        val controls = activity.openScreen(ControlsSettingsFragment::class.java)
+
+        var dialog = showDialog(controls, Settings.TALK_KEY.key)
         val content = dialog.findViewById<TextView>(R.id.key_select_value_view)!!
         assertThat(content.text.toString()).isEqualTo(activity.getString(R.string.no_ptt_key))
         val root = content.rootView.findFocus()
@@ -86,7 +101,7 @@ class SettingsActivityTest {
         idleMainLooper()
         assertThat(preferences.getInt(Settings.TALK_KEY.key, 0)).isEqualTo(KeyEvent.KEYCODE_VOLUME_UP)
 
-        dialog = showDialog(audio, Settings.TALK_KEY.key)
+        dialog = showDialog(controls, Settings.TALK_KEY.key)
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).performClick()
         idleMainLooper()
         assertThat(preferences.getInt(Settings.TALK_KEY.key, -1)).isEqualTo(0)
