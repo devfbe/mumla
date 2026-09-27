@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "jetbrains-index": {
+      "type": "http",
+      "url": "http://127.0.0.1:29171/index-mcp/streamable-http"
+    }
+  }
+}
