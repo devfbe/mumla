@@ -176,8 +176,12 @@ class ChannelTreeViewModel(
         )
     }
 
-    fun userMenuState(session: Int): UserMenuState? {
-        val model = current
+    fun userMenuState(session: Int): UserMenuState? = userMenuStateOf(current, session)
+
+    /** [session]'s menu state, live; null once they are gone from the model. */
+    fun userMenuStateFlow(session: Int): Flow<UserMenuState?> = model.map { userMenuStateOf(it, session) }
+
+    private fun userMenuStateOf(model: ServerState?, session: Int): UserMenuState? {
         val user = model?.user(session) ?: return null
         return UserMenuState(
             user = user,
@@ -263,11 +267,6 @@ class ChannelTreeViewModel(
         }
     }
 
-    /** Plays [session] at [volume] on this device, live, without storing it. */
-    fun previewLocalVolume(session: Int, volume: Float) {
-        connected?.actions?.setLocalVolume(session, volume)
-    }
-
     /** Plays [session] at [volume] on this device and stores it for anyone of the same identity. */
     fun setLocalVolume(session: Int, volume: Float) {
         val (humla, user) = userOf(session) ?: return
@@ -275,8 +274,6 @@ class ChannelTreeViewModel(
         val key = localVolumeKey(user, humla.targetServer?.localVolumeScope) ?: return
         repository.launchIo { setLocalVolume(key, volume) }
     }
-
-    fun localVolume(session: Int): Float = current?.user(session)?.localVolume ?: 1f
 
     /** [channel]'s description, or null while only its hash is known. */
     fun description(channel: Int): String? = current?.channel(channel)?.description

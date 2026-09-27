@@ -59,7 +59,7 @@ class ChannelListFragment :
     MenuProvider,
     ChannelListAdapter.Listener,
     ChannelMenu.Actions,
-    UserMenu.Actions {
+    UserActionsSheet.Actions {
 
     private val tree by appViewModels { ChannelTreeViewModel.create(it, requireArguments().getBoolean(ARG_PINNED)) }
     private val chat by parentChatViewModel()
@@ -186,7 +186,7 @@ class ChannelListFragment :
         ChannelMenu(requireContext(), row.channel, { tree.channelMenuState(row.channel) }, this).showPopup(anchor)
 
     override fun onUserMore(anchor: View, row: ChannelRow.User) =
-        UserMenu(requireContext(), row.session, { tree.userMenuState(row.session) }, this).showPopup(anchor)
+        UserActionsSheet.newInstance(row.session).show(childFragmentManager, "UserActions")
 
     override fun onStopListening(row: ChannelRow.Listener) = tree.setListening(row.channel, false)
 
@@ -262,13 +262,7 @@ class ChannelListFragment :
 
     override fun setLocalIgnored(session: Int, ignored: Boolean) = tree.setLocalIgnored(session, ignored)
 
-    override fun showLocalVolume(session: Int, name: String?) {
-        showLocalVolumeDialog(
-            requireContext(), name, tree.localVolume(session),
-            preview = { tree.previewLocalVolume(session, it) },
-            keep = { tree.setLocalVolume(session, it) },
-        )
-    }
+    override fun setLocalVolume(session: Int, volume: Float) = tree.setLocalVolume(session, volume)
 
     override fun showInfo(session: Int, name: String?) {
         showUserInfoDialog(requireContext(), name, tree.userStats(session))

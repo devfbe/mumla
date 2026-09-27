@@ -32,3 +32,11 @@ inline fun <reified VM : ViewModel> Fragment.appViewModels(crossinline create: (
 /** The activity's view model, shared by its fragments, made from the application on first use. */
 inline fun <reified VM : ViewModel> Fragment.activityAppViewModels(crossinline create: (Application) -> VM): Lazy<VM> =
     activityViewModels { viewModelFactory { initializer { create(requireActivity().application) } } }
+
+/**
+ * The nearest parent fragment's view model of this type, assumed to already exist there (e.g. a
+ * child [androidx.fragment.app.DialogFragment] reading its host's [appViewModels]). Never creates
+ * one of its own: the parent must have made it first.
+ */
+inline fun <reified VM : ViewModel> Fragment.parentViewModels(): Lazy<VM> =
+    viewModels(ownerProducer = { requireParentFragment() })
