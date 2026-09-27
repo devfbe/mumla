@@ -35,6 +35,9 @@ android {
         enable = true
     }
 
+    // bcprov, bcpkix and bcutil each ship one; the (empty) instrumented test APK packages them.
+    packaging.resources.merges += "META-INF/LICENSE.md"
+
     defaultConfig {
         testApplicationId = "se.lublin.humla.test"
         consumerProguardFiles("consumer-rules.pro")
