@@ -52,6 +52,17 @@
         <item>forceDark</item>
     </string-array>
 
+    <string-array name="controlBarPositionNames">
+        <item>@string/controlBarPositionBottom</item>
+        <item>@string/controlBarPositionTop</item>
+    </string-array>
+
+    <!-- Must stay in lockstep with Settings.ARRAY_CONTROL_BAR_*. -->
+    <string-array name="controlBarPositionValues">
+        <item>bottom</item>
+        <item>top</item>
+    </string-array>
+
     <string-array name="hotCornerNames">
         <item>@string/hot_corner_none</item>
         <item>@string/hot_corner_top_left</item>

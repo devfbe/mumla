@@ -140,6 +140,18 @@ class SettingsTest {
     }
 
     @Test
+    fun `the control bar is at the bottom unless moved to the top`() {
+        assertThat(settings.isControlBarAtBottom).isTrue()
+
+        settings.isControlBarAtBottom = false
+
+        assertThat(prefs.getString("controlBarPosition", null)).isEqualTo("top")
+        assertThat(Settings.getInstance(context).isControlBarAtBottom).isFalse()
+        prefs.edit().putString("controlBarPosition", "bottom").commit()
+        assertThat(settings.isControlBarAtBottom).isTrue()
+    }
+
+    @Test
     fun `external images load by default but never while Tor is on`() {
         assertThat(settings.shouldLoadExternalImages).isTrue()
         prefs.edit().putBoolean("useTor", true).commit()

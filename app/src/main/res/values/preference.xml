@@ -142,6 +142,9 @@
     <string name="inputQualitySum">Preferred bitrate in bits per second</string>
     <string name="pttButtonHeight">Push-to-talk button height</string>
     <string name="pttButtonHeightSum">Height of the push-to-talk button</string>
+    <string name="controlBarPosition">Control bar position</string>
+    <string name="controlBarPositionTop">Top</string>
+    <string name="controlBarPositionBottom">Bottom</string>
     <string name="pressKey">Press a physical key to use it for push-to-talk.</string>
     <string name="pressKeyInfo">The app must be open to use this (due to Android restrictions).</string>
     <string name="loadImagesSum">Downloads and shows pictures in chat.</string>
