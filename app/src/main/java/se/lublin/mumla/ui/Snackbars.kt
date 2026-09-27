@@ -37,17 +37,31 @@ import kotlinx.coroutines.launch
 import se.lublin.mumla.R
 
 /**
- * Shows [text] at the bottom of [view]'s window; [action] labels a button that runs [onAction].
- * With an action, accessibility services get the time they need to reach it.
+ * Shows [text] at the bottom of [view]'s window, above [anchor] if given; [action] labels a button
+ * that runs [onAction]. With an action, accessibility services get the time they need to reach it.
  */
-fun showSnackbar(view: View, text: CharSequence, @StringRes action: Int = 0, onAction: () -> Unit = {}): Snackbar =
+fun showSnackbar(
+    view: View,
+    text: CharSequence,
+    @StringRes action: Int = 0,
+    anchor: View? = null,
+    onAction: () -> Unit = {},
+): Snackbar =
     Snackbar.make(view, text, Snackbar.LENGTH_LONG).apply {
         if (action != 0) setAction(action) { onAction() }
+        anchor?.let { anchorView = it }
         show()
     }
 
+/** Above the push-to-talk button while it is shown, so a snackbar never covers it. */
 fun Activity.showSnackbar(text: CharSequence, @StringRes action: Int = 0, onAction: () -> Unit = {}): Snackbar =
-    showSnackbar(findViewById(android.R.id.content), text, action, onAction)
+    showSnackbar(
+        findViewById(android.R.id.content),
+        text,
+        action,
+        findViewById<View>(R.id.pushtotalk_view)?.takeIf { it.isShown },
+        onAction,
+    )
 
 fun Activity.showSnackbar(@StringRes text: Int, @StringRes action: Int = 0, onAction: () -> Unit = {}): Snackbar =
     showSnackbar(getString(text), action, onAction)
