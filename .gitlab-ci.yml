@@ -40,8 +40,10 @@ build:
     - nix develop "$DEVSHELL" --command ctest --test-dir build/native-tests --output-on-failure --no-tests=error
     # Every lint variant is named: bare `lint` only covers betaDebug. detekt fails only on
     # findings missing from a module's detekt-baseline.xml.
+    # assembleAndroidTest compiles the on-device smoke tests; running them needs a device.
     - nix develop "$DEVSHELL" --command ./gradlew --console=plain assembleFossDebug assembleGoogDebug test
-        lintFossDebug lintGoogDebug lintDonationDebug lintBetaDebug :libraries:humla:lintDebug detekt
+        assembleAndroidTest lintFossDebug lintGoogDebug lintDonationDebug lintBetaDebug :libraries:humla:lintDebug
+        detekt
   after_script:
     # Export the dev shell closure so the next pipeline does not rebuild the SDK/NDK.
     - nix copy --to "file://$CI_PROJECT_DIR/.nix-cache" "$DEVSHELL" || true
