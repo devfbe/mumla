@@ -16,7 +16,6 @@
  */
 package se.lublin.humla.net
 
-import androidx.annotation.VisibleForTesting
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 
@@ -167,7 +166,6 @@ internal class CryptState {
     }
 
     /** @return false if the input looks like the XEX* forgery, whose last block decrypts to delta ^ len. */
-    @VisibleForTesting
     internal fun ocbDecrypt(
         encrypted: ByteArray,
         plain: ByteArray,
@@ -225,7 +223,6 @@ internal class CryptState {
      *        refusing it: digital silence produces such blocks.
      * @return false if a critical block was found and not modified.
      */
-    @VisibleForTesting
     @Suppress("LongParameterList")
     internal fun ocbEncrypt(
         plain: ByteArray,

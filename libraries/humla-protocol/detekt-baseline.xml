@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
+    <ID>CyclomaticComplexMethod:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
+    <ID>EmptyFunctionBlock:HumlaUDPTest.kt$HumlaUDPTest.RecordingListener${}</ID>
+    <ID>LongParameterList:UdpHealthMonitor.kt$UdpHealthMonitor$( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, )</ID>
+    <ID>ReturnCount:HumlaUDP.kt$HumlaUDP$override fun sendMessage(data: ByteArray, length: Int)</ID>
+    <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$fun decodeAsServer(packet: ByteArray): Long?</ID>
+    <ID>ReturnCount:MumbleLegacyPingDecoder.kt$MumbleLegacyPingDecoder$private fun readVarint(b: ByteArray): Long?</ID>
+    <ID>ReturnCount:ServerTrust.kt$HostnameMatcher$fun matches(host: String, certificate: X509Certificate): Boolean</ID>
+    <ID>ReturnCount:ServerTrust.kt$HostnameMatcher$private fun matchesDnsName(host: String, pattern: String?): Boolean</ID>
+    <ID>ReturnCount:UdpHealthMonitor.kt$UdpHealthMonitor$fun onTcpPing(nowMicros: Long, localGood: Int, remoteGood: Int, usingUdp: Boolean): Decision</ID>
+    <ID>ReturnCount:UdpHealthMonitor.kt$UdpHealthMonitor$private fun decide( nowMicros: Long, usingUdp: Boolean, first: Sample, localDelta: Int, remoteDelta: Int, carriesBothWays: Boolean, ): Decision</ID>
+    <ID>SwallowedException:HumlaSSLSocketFactoryHandshakeTest.kt$HumlaSSLSocketFactoryHandshakeTest$e: Exception</ID>
+    <ID>SwallowedException:HumlaSSLSocketFactoryTrustStoreTest.kt$HumlaSSLSocketFactoryTrustStoreTest$e: IOException</ID>
+    <ID>SwallowedException:HumlaUDPTest.kt$HumlaUDPTest$e: SocketTimeoutException</ID>
+    <ID>SwallowedException:Pkcs12Certificates.kt$Pkcs12Certificates$e: Exception</ID>
+    <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: CertificateParsingException</ID>
+    <ID>SwallowedException:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
+    <ID>SwallowedException:UdpPing.kt$UdpPing$e: BufferUnderflowException</ID>
+    <ID>TooGenericExceptionCaught:HumlaConnection.kt$HumlaConnection$e: RuntimeException</ID>
+    <ID>TooGenericExceptionCaught:Pkcs12Certificates.kt$Pkcs12Certificates$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ServerTrust.kt$HostnameMatcher$e: Exception</ID>
+    <ID>TooManyFunctions:FakeTransports.kt$FakeTcpTransport : TcpTransport</ID>
+    <ID>TooManyFunctions:HumlaTCP.kt$HumlaTCP : TcpTransport</ID>
+  </CurrentIssues>
+</SmellBaseline>

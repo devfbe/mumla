@@ -20,6 +20,7 @@ package se.lublin.humla.net
 import com.google.common.truth.Truth.assertThat
 import com.google.protobuf.MessageLite
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import se.lublin.humla.model.Server
@@ -86,6 +87,7 @@ internal class ConnectionHarness(
     }
 
     /** Moves virtual time on by [millis], running everything that comes due. */
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun advanceBy(millis: Long) {
         scheduler.advanceTimeBy(millis)
         runCurrent()

@@ -84,6 +84,7 @@ import se.lublin.humla.session.SessionState
 import se.lublin.humla.session.SessionWakeLock
 import se.lublin.humla.session.TalkStates
 import se.lublin.humla.session.disconnectReasonOf
+import se.lublin.humla.session.messageRes
 import se.lublin.humla.util.HumlaLog
 import se.lublin.humla.util.HumlaLogger
 import se.lublin.humla.util.VoiceTargetMode

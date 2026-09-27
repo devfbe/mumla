@@ -6,12 +6,12 @@ import android.os.HandlerThread
 import android.os.Looper
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadows.ShadowLog
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.model.TalkState
@@ -20,6 +20,7 @@ import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.MessageHandlerRegistry
 import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.VoicePacketHandler
+import se.lublin.humla.testutil.LogRecorder
 import se.lublin.humla.testutil.SilentLogger
 import se.lublin.humla.testutil.awaitUntil
 import se.lublin.humla.util.HumlaLogger
@@ -36,6 +37,9 @@ import kotlin.concurrent.thread
  */
 @RunWith(RobolectricTestRunner::class)
 class AudioControllerTest {
+    @get:Rule
+    val log = LogRecorder()
+
     private val mainLooper = shadowOf(Looper.getMainLooper())
 
     private class FakeAudio : ManagedAudio {
@@ -294,7 +298,7 @@ class AudioControllerTest {
         assertThat(registry.tcp).isEmpty()
         assertThat(registry.udp).isEmpty()
         assertThat(controller.isRunning).isFalse()
-        assertThat(ShadowLog.getLogsForTag(AudioController.TAG).map { it.msg })
+        assertThat(log.messages(AudioController.TAG))
             .contains("Audio initialization failed")
     }
 

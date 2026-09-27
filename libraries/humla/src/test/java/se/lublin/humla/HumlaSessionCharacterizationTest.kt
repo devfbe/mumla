@@ -44,6 +44,7 @@ import se.lublin.humla.session.DisconnectReason
 import se.lublin.humla.session.HumlaEvent
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
+import se.lublin.humla.session.messageRes
 import se.lublin.humla.testutil.EventRecorder
 import se.lublin.humla.testutil.HumlaSessionHarness
 import se.lublin.humla.testutil.awaitUntil

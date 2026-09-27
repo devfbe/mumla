@@ -16,7 +16,6 @@
  */
 package se.lublin.humla.net
 
-import androidx.annotation.VisibleForTesting
 import se.lublin.humla.util.HumlaLog
 import java.io.FileInputStream
 import java.net.InetAddress
@@ -40,7 +39,7 @@ import javax.net.ssl.X509TrustManager
  * @param peerHost The host name the user entered: certificates are verified against it, it is sent
  *        as SNI and it selects the pins, even when an SRV record points the connection at another host.
  */
-internal class HumlaSSLSocketFactory @VisibleForTesting internal constructor(
+internal class HumlaSSLSocketFactory internal constructor(
     keystore: KeyStore?,
     keystorePassword: String?,
     trustStore: KeyStore?,
@@ -117,7 +116,6 @@ internal class HumlaSSLSocketFactory @VisibleForTesting internal constructor(
         }
 
         /** Loads the trust store file at [path], closing it on every path: this runs once per connection attempt. */
-        @VisibleForTesting
         internal fun loadTrustStore(path: String, password: String, format: String): KeyStore {
             val trustStore = KeyStore.getInstance(format)
             FileInputStream(path).use { trustStore.load(it, password.toCharArray()) }

@@ -17,7 +17,6 @@
 
 package se.lublin.humla.net
 
-import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +67,6 @@ internal class HumlaUDP(
     override val isRunning: Boolean get() = connected
 
     /** True once every coroutine of this transport has finished. */
-    @VisibleForTesting
     internal val isFinished: Boolean get() = job?.isCompleted ?: true
 
     override fun connect(host: String, port: Int) {

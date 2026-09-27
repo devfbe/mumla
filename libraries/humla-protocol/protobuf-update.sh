@@ -12,7 +12,7 @@ cd "$cwd"
 
 cat <<EOF >"$protof"
 // This is $protof from the Mumble repository at $describe (branch $branch).
-// Java classes are generated at build time (protobuf-gradle-plugin, see libraries/humla/build.gradle.kts).
+// Java classes are generated at build time (protobuf-gradle-plugin, see libraries/humla-protocol/build.gradle.kts).
 // NOTE: java compile options added at the bottom of this file.
 //
 EOF

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Andrew Comminos
+ * Copyright (C) 2026 The Mumla authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,22 +15,20 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-pluginManagement {
-    includeBuild("build-logic")
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
+package se.lublin.humla.util
+
+import android.util.Log
+import se.lublin.humla.util.HumlaLog.Level
+
+/** Sends [HumlaLog] lines to logcat. */
+public object AndroidLogSink : HumlaLog.Sink {
+    override fun log(level: Level, tag: String, message: String, error: Throwable?) {
+        when (level) {
+            Level.VERBOSE -> Log.v(tag, message, error)
+            Level.DEBUG -> Log.d(tag, message, error)
+            Level.INFO -> Log.i(tag, message, error)
+            Level.WARN -> Log.w(tag, message, error)
+            Level.ERROR -> Log.e(tag, message, error)
+        }
     }
 }
-
-dependencyResolutionManagement {
-    repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-
-rootProject.name = "mumla"
-include(":libraries:humla-protocol", ":libraries:humla", ":app")

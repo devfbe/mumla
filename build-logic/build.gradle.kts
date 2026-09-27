@@ -6,6 +6,7 @@ dependencies {
     // compileOnly: the plugins themselves are put on the build classpath once, by the root build script.
     compileOnly(libs.android.gradlePlugin)
     compileOnly(libs.detekt.gradlePlugin)
+    compileOnly(libs.kotlin.gradlePlugin)
 }
 
 gradlePlugin {
@@ -17,6 +18,10 @@ gradlePlugin {
         register("androidLibrary") {
             id = "mumla.android.library"
             implementationClass = "MumlaAndroidLibraryPlugin"
+        }
+        register("jvmLibrary") {
+            id = "mumla.jvm.library"
+            implementationClass = "MumlaJvmLibraryPlugin"
         }
     }
 }

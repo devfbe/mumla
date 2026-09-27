@@ -1,5 +1,5 @@
 // This is src/MumbleUDP.proto from the Mumble repository at 330c356e (branch master).
-// Java classes are generated at build time (protobuf-gradle-plugin, see libraries/humla/build.gradle.kts).
+// Java classes are generated at build time (protobuf-gradle-plugin, see libraries/humla-protocol/build.gradle.kts).
 // NOTE: java compile options added at the bottom of this file.
 //
 // Copyright The Mumble Developers. All rights reserved.

@@ -17,19 +17,13 @@
 
 package se.lublin.humla.net
 
-import se.lublin.humla.R
-
-/**
- * Connection-level warnings the session reports for the chat log; each maps to a string resource.
- *
- * The consumer resolves the text, so the protocol needs no Context.
- */
-internal enum class ConnectionWarning(val messageRes: Int) {
-    UDP_UNAVAILABLE(R.string.udp_warning_unavailable),
-    UDP_SEND_FAILED(R.string.udp_warning_send_failed),
-    UDP_RECEIVE_FAILED(R.string.udp_warning_receive_failed),
-    UDP_PING_TIMEOUT(R.string.udp_warning_ping_timeout),
-    UDP_RESTORED(R.string.udp_warning_restored),
-    UDP_THREAD_FAILED(R.string.udp_warning_thread_failed),
-    NO_OPUS(R.string.codec_warning_no_opus),
+/** Connection-level warnings for the chat log; the session resolves each to its text. */
+internal enum class ConnectionWarning {
+    UDP_UNAVAILABLE,
+    UDP_SEND_FAILED,
+    UDP_RECEIVE_FAILED,
+    UDP_PING_TIMEOUT,
+    UDP_RESTORED,
+    UDP_THREAD_FAILED,
+    NO_OPUS,
 }

@@ -30,7 +30,7 @@ class ServerReducerScaleTest {
 
     private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
 
-    private fun allocated(): Long = threads.getThreadAllocatedBytes(Thread.currentThread().id)
+    private fun allocated(): Long = threads.getThreadAllocatedBytes(Thread.currentThread().threadId())
 
     @Test
     fun aFiveThousandChannelSyncAndTheMovesAfterItStayCheap() {

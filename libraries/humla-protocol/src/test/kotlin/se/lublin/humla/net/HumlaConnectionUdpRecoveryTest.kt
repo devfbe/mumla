@@ -1,12 +1,12 @@
 package se.lublin.humla.net
 
 import com.google.common.truth.Truth.assertThat
-import org.junit.After
+import org.junit.Rule
 import org.junit.Test
 import se.lublin.humla.protobuf.Mumble
+import se.lublin.humla.testutil.LogRecorder
 import se.lublin.humla.util.HumlaLog
 import java.io.IOException
-import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * What the decisions of [UdpHealthMonitor] do to the voice route, the pings and their statistics,
@@ -16,12 +16,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * wait; the ping interval and the restart delays run on the harness's virtual time.
  */
 class HumlaConnectionUdpRecoveryTest {
-    private val errors = CopyOnWriteArrayList<String>()
-
-    @After
-    fun tearDown() {
-        HumlaLog.resetSink()
-    }
+    @get:Rule
+    val log = LogRecorder()
 
     /** Built without a policy, so the production default is what the backoff test measures. */
     private fun harness(
@@ -199,9 +195,7 @@ class HumlaConnectionUdpRecoveryTest {
         val h = harness()
         h.establish()
         h.synchronizeAndTakeFirstPing()
-        HumlaLog.sink = HumlaLog.Sink { priority, _, message, _ ->
-            if (priority >= android.util.Log.ERROR) errors += message
-        }
+        log.clear()
 
         h.atSeconds(5)
         val udp = h.udps.single()
@@ -210,7 +204,7 @@ class HumlaConnectionUdpRecoveryTest {
         h.datagram(udp, byteArrayOf(0x20, 0xFC.toByte())) // varint -1: no ping of ours says that
         h.feedPings(listOf(16L), good = 5)
 
-        assertThat(errors).isEmpty()
+        assertThat(log.lines.filter { it.level == HumlaLog.Level.ERROR }).isEmpty()
         assertThat(h.connection.latency!!.udpMicros).isEqualTo(0L)
         assertThat(h.listener.warnings).containsExactly(ConnectionWarning.UDP_PING_TIMEOUT)
         h.close()

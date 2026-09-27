@@ -6,21 +6,25 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowAudioTrack
-import org.robolectric.shadows.ShadowLog
 import se.lublin.humla.audio.native.OpusDecoderApi
 import se.lublin.humla.exception.NativeAudioException
 import se.lublin.humla.model.TalkState
 import se.lublin.humla.net.HumlaUDPMessageType
 import se.lublin.humla.net.VoicePacket
+import se.lublin.humla.testutil.LogRecorder
 import se.lublin.humla.testutil.awaitUntil
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class AudioOutputTest {
+    @get:Rule
+    val log = LogRecorder()
+
 
     private val listener = object : AudioOutput.AudioOutputListener {
         override val playbackParams: PlaybackParams = PlaybackParams.DEFAULT
@@ -75,11 +79,11 @@ class AudioOutputTest {
 
     @Test
     fun `the log line names both sizes with their units`() {
-        ShadowLog.clear()
+        log.clear()
 
         startedOutput()
 
-        assertThat(ShadowLog.getLogsForTag(AudioOutput::class.java.name).map { it.msg })
+        assertThat(log.messages(AudioOutput::class.java.name))
             .contains("Mixing 5760 samples per write into a 11520-byte track (system minimum 11520 bytes)")
     }
 
@@ -159,7 +163,7 @@ class AudioOutputTest {
             built++
             AudioOutputSpeech(u, samples, l, NoOpusDecoder(), FakeJitter())
         }
-        ShadowLog.clear()
+        log.clear()
 
         for (type in listOf(
             HumlaUDPMessageType.UDPVoiceCELTAlpha,
@@ -171,7 +175,7 @@ class AudioOutputTest {
         }
 
         assertThat(built).isEqualTo(0)
-        assertThat(ShadowLog.getLogsForTag(AudioOutput::class.java.name).filter { it.msg.startsWith("Dropping") })
+        assertThat(log.messages(AudioOutput::class.java.name).filter { it.startsWith("Dropping") })
             .hasSize(1)
 
         // The same talker's Opus stream still plays.

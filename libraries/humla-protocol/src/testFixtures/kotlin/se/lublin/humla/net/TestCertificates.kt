@@ -19,26 +19,47 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
+private const val KEY_BITS = 2048
+private const val DAY_MILLIS = 86_400_000L
+private const val CA_VALID_DAYS = 365
+private const val LEAF_VALID_DAYS = 30
+
 /** Certificates for trust tests: a private CA standing in for the system store, and leaves. */
 object TestCertificates {
     class Issued(val keyPair: KeyPair, val certificate: X509Certificate, val chain: Array<X509Certificate>)
 
     private val serial = AtomicLong(1)
 
-    private fun keyPair(): KeyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+    private fun keyPair(): KeyPair =
+        KeyPairGenerator.getInstance("RSA").apply { initialize(KEY_BITS) }.generateKeyPair()
+
+    /** Signed by [signer], or self-signed without one; valid from a day ago for [validDays]. */
+    private fun issue(
+        subject: X500Name,
+        keyPair: KeyPair,
+        signer: Issued?,
+        validDays: Int,
+        extend: JcaX509v3CertificateBuilder.() -> Unit,
+    ): X509Certificate {
+        val issuer = signer?.let { X500Name(it.certificate.subjectX500Principal.name) } ?: subject
+        val signingKey = (signer?.keyPair ?: keyPair).private
+        val now = System.currentTimeMillis()
+        val builder = JcaX509v3CertificateBuilder(
+            issuer, BigInteger.valueOf(serial.getAndIncrement()), Date(now - DAY_MILLIS),
+            Date(now + DAY_MILLIS * validDays), subject, keyPair.public,
+        ).apply(extend)
+        return JcaX509CertificateConverter().getCertificate(
+            builder.build(JcaContentSignerBuilder("SHA256withRSA").build(signingKey))
+        )
+    }
 
     val ca: Issued by lazy {
         val kp = keyPair()
         val name = X500Name("CN=Test Root CA")
-        val builder = JcaX509v3CertificateBuilder(
-            name, BigInteger.valueOf(serial.getAndIncrement()), Date(System.currentTimeMillis() - 86_400_000),
-            Date(System.currentTimeMillis() + 86_400_000L * 365), name, kp.public,
-        )
-            .addExtension(Extension.basicConstraints, true, BasicConstraints(true))
-            .addExtension(Extension.keyUsage, true, KeyUsage(KeyUsage.keyCertSign or KeyUsage.cRLSign))
-        val cert = JcaX509CertificateConverter().getCertificate(
-            builder.build(JcaContentSignerBuilder("SHA256withRSA").build(kp.private))
-        )
+        val cert = issue(name, kp, signer = null, CA_VALID_DAYS) {
+            addExtension(Extension.basicConstraints, true, BasicConstraints(true))
+            addExtension(Extension.keyUsage, true, KeyUsage(KeyUsage.keyCertSign or KeyUsage.cRLSign))
+        }
         Issued(kp, cert, arrayOf(cert))
     }
 
@@ -51,20 +72,13 @@ object TestCertificates {
     ): Issued {
         val kp = keyPair()
         val subject = X500Name("CN=$cn")
-        val issuer = if (selfSigned) subject else X500Name(ca.certificate.subjectX500Principal.name)
-        val builder = JcaX509v3CertificateBuilder(
-            issuer, BigInteger.valueOf(serial.getAndIncrement()), Date(System.currentTimeMillis() - 86_400_000),
-            Date(System.currentTimeMillis() + 86_400_000L * 30), subject, kp.public,
-        )
         val names = dnsNames.map { GeneralName(GeneralName.dNSName, it) } +
             ipAddresses.map { GeneralName(GeneralName.iPAddress, it) }
-        if (names.isNotEmpty()) {
-            builder.addExtension(Extension.subjectAlternativeName, false, GeneralNames(names.toTypedArray()))
+        val cert = issue(subject, kp, signer = if (selfSigned) null else ca, LEAF_VALID_DAYS) {
+            if (names.isNotEmpty()) {
+                addExtension(Extension.subjectAlternativeName, false, GeneralNames(names.toTypedArray()))
+            }
         }
-        val signingKey = if (selfSigned) kp.private else ca.keyPair.private
-        val cert = JcaX509CertificateConverter().getCertificate(
-            builder.build(JcaContentSignerBuilder("SHA256withRSA").build(signingKey))
-        )
         return Issued(kp, cert, if (selfSigned) arrayOf(cert) else arrayOf(cert, ca.certificate))
     }
 

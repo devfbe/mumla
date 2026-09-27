@@ -51,6 +51,8 @@ build:
       - app/build/outputs/apk/
       - app/build/reports/
       - libraries/humla/build/reports/
+      - libraries/humla-protocol/build/reports/
       - app/build/test-results/
       - libraries/humla/build/test-results/
+      - libraries/humla-protocol/build/test-results/
     expire_in: 3 months

@@ -17,7 +17,6 @@
 
 package se.lublin.humla.net
 
-import androidx.annotation.VisibleForTesting
 import com.google.protobuf.MessageLite
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -71,7 +70,6 @@ internal class HumlaTCP(
     override val isRunning: Boolean get() = running
 
     /** True once every coroutine of this transport has finished. */
-    @VisibleForTesting
     internal val isFinished: Boolean get() = job?.isCompleted ?: true
 
     override fun setTCPConnectionListener(listener: TCPConnectionListener?) {
