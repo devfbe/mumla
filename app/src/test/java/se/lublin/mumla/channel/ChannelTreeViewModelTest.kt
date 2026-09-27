@@ -246,12 +246,14 @@ class ChannelTreeViewModelTest {
     }
 
     @Test
-    fun aKeptVolumeIsStoredByCertificateElseByName() {
+    fun aKeptVolumeIsStoredByCertificateElseByNameAndAPreviewIsNot() {
         model.value = tree(ann = UserState(2, "Ann", 1))
         val tree = viewModel()
 
+        tree.previewLocalVolume(3, 0.5f)
         tree.setLocalVolume(3, 1.5f)
 
+        verify { actions.setLocalVolume(3, 0.5f) }
         verify { actions.setLocalVolume(3, 1.5f) }
         verify(exactly = 1) { database.setLocalVolume(any(), any()) }
         verify { database.setLocalVolume("name:example.org:64738:Bob", 1.5f) }

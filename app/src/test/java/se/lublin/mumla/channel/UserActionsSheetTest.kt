@@ -16,10 +16,15 @@
  */
 package se.lublin.mumla.channel
 
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.isVisible
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
@@ -97,6 +102,19 @@ class UserActionsSheetTest {
             .first { it.findViewById<TextView>(R.id.user_action_title).text == title }
     }
 
+    /** Lays [sheet]'s slider out with a real width, so touch and key input compute a real value. */
+    private fun layOutSlider(sheet: UserActionsSheet): Slider {
+        val slider = sheet.requireView().findViewById<Slider>(R.id.user_actions_volume_slider)
+        slider.measure(
+            View.MeasureSpec.makeMeasureSpec(SLIDER_WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(SLIDER_HEIGHT, View.MeasureSpec.EXACTLY),
+        )
+        slider.layout(0, 0, SLIDER_WIDTH, SLIDER_HEIGHT)
+        return slider
+    }
+
+    private fun motionEvent(action: Int, x: Float) = MotionEvent.obtain(0, 0, action, x, SLIDER_HEIGHT / 2f, 0)
+
     @Test
     fun theSheetOpensFromTheRowsMoreButtonAndShowsTheName() {
         val sheet = show(2)
@@ -122,16 +140,47 @@ class UserActionsSheetTest {
         assertThat(sheet.requireView().findViewById<View>(R.id.user_actions_volume_section).isVisible).isFalse()
     }
 
+    /**
+     * A preview and a stored volume both go through the same [SessionActions.setLocalVolume], so
+     * only the database write tells them apart (see `ChannelTreeViewModel.setLocalVolume`).
+     */
+    private fun recordedVolumeWrites(): MutableList<Float> {
+        val writes = mutableListOf<Float>()
+        every { controller.get().database.setLocalVolume(any(), any()) } answers { writes += secondArg<Float>() }
+        return writes
+    }
+
     @Test
-    fun draggingTheSliderSetsTheVolumeLive() {
+    fun draggingTheSliderPreviewsLiveWithoutPersistingUntilReleased() {
         val sheet = show(2)
         assertThat(sheet.requireView().findViewById<View>(R.id.user_actions_volume_section).isVisible).isTrue()
+        val slider = layOutSlider(sheet)
+        val writes = recordedVolumeWrites()
 
-        val slider = sheet.requireView().findViewById<Slider>(R.id.user_actions_volume_slider)
-        slider.value = 150f
+        slider.dispatchTouchEvent(motionEvent(MotionEvent.ACTION_DOWN, 10f))
+        slider.dispatchTouchEvent(motionEvent(MotionEvent.ACTION_MOVE, 150f))
         idleMainLooper()
 
-        verify { actions.setLocalVolume(2, 1.5f) }
+        verify(atLeast = 1) { actions.setLocalVolume(2, any()) } // the live preview, not yet stored
+        assertThat(writes).isEmpty()
+
+        slider.dispatchTouchEvent(motionEvent(MotionEvent.ACTION_UP, 150f))
+        drainMainUntil { writes.isNotEmpty() }
+
+        assertThat(writes).hasSize(1)
+    }
+
+    @Test
+    fun aKeyboardMoveOfTheSliderPersistsDirectly() {
+        val sheet = show(2)
+        val slider = layOutSlider(sheet)
+        val writes = recordedVolumeWrites()
+
+        slider.requestFocus()
+        slider.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+        drainMainUntil { writes.isNotEmpty() }
+
+        assertThat(writes).hasSize(1)
     }
 
     @Test
@@ -164,8 +213,42 @@ class UserActionsSheetTest {
         verify { actions.setLocalIgnored(2, true) }
     }
 
+    /**
+     * A state change that leaves the visible actions the same (only a switch's state changes)
+     * updates the existing row views rather than rebuilding them, so TalkBack keeps its focus.
+     */
+    @Test
+    fun rowsUpdateInPlaceWhenOnlyTheirCheckedStateChanges() {
+        val sheet = show(2)
+        val deafenRow = rowWithTitle(sheet, R.string.user_menu_deafen)
+        val switch = deafenRow.findViewById<MaterialSwitch>(R.id.user_action_switch)
+        assertThat(switch.isChecked).isFalse()
+
+        model.value = tree(ann = UserState(2, "Ann", 0, isMuted = true, isDeafened = true, comment = "brb"))
+        idleMainLooper()
+
+        assertThat(rowWithTitle(sheet, R.string.user_menu_deafen)).isSameInstanceAs(deafenRow)
+        assertThat(switch.isChecked).isTrue()
+    }
+
+    @Test
+    fun aCheckableRowExposesSwitchSemanticsToTalkBack() {
+        val sheet = show(2)
+        // Ann (session 2) is muted in the fixture, so the mute row starts checked.
+        val muteRow = rowWithTitle(sheet, R.string.user_menu_mute)
+
+        val info = AccessibilityNodeInfoCompat.obtain()
+        ViewCompat.onInitializeAccessibilityNodeInfo(muteRow, info)
+
+        assertThat(info.className).isEqualTo("android.widget.Switch")
+        assertThat(info.isCheckable).isTrue()
+        assertThat(info.isChecked).isTrue()
+    }
+
     private companion object {
         const val SERVER = 42L
         const val TAG = "UserActions"
+        const val SLIDER_WIDTH = 600
+        const val SLIDER_HEIGHT = 50
     }
 }
