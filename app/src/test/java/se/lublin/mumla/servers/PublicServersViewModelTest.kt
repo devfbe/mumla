@@ -46,7 +46,8 @@ class PublicServersViewModelTest {
             .also { idleMainLooper() }
     }
 
-    private fun PublicServersViewModel.shown() = (state.value as PublicServersViewModel.State.Shown).servers.map { it.name }
+    private fun PublicServersViewModel.shown() =
+        (state.value as PublicServersViewModel.State.Shown).servers.map { it.name }
 
     @Test
     fun `the downloaded servers are shown with the countries to choose from`() {
@@ -143,8 +144,9 @@ class PublicServersViewModelTest {
     @Test
     fun `a retry after a failed download downloads again`() {
         val fetcher = mockk<PublicServerFetcher> { coEvery { fetch() } returnsMany listOf(null, servers) }
-        val list = PublicServersViewModel(repository, fetcher, { false }, SavedStateHandle(), pinger(), Dispatchers.Unconfined)
-            .also { idleMainLooper() }
+        val list = PublicServersViewModel(
+            repository, fetcher, { false }, SavedStateHandle(), pinger(), Dispatchers.Unconfined,
+        ).also { idleMainLooper() }
         assertThat(list.state.value).isEqualTo(PublicServersViewModel.State.DownloadFailed)
 
         list.retry()

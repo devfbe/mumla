@@ -85,7 +85,8 @@ class PublicServerListFragmentTest {
     private fun PublicServerListFragment.shownNames() =
         (grid().adapter as PublicServerAdapter).currentList.map { it.name }
 
-    private fun PublicServerListFragment.visible(id: Int) = requireView().findViewById<View>(id).visibility == View.VISIBLE
+    private fun PublicServerListFragment.visible(id: Int) =
+        requireView().findViewById<View>(id).visibility == View.VISIBLE
 
     private fun PublicServerListFragment.chips() =
         requireView().findViewById<ChipGroup>(R.id.server_country_chips).children.map { it as Chip }.toList()
@@ -151,8 +152,9 @@ class PublicServerListFragmentTest {
         drainMainUntil(description = "the filtered list") { fragment.shownNames() == listOf("alpha") }
 
         search.setText("nothing like it")
-        drainMainUntil(description = "the empty state") { fragment.visible(R.id.server_list_empty) }
-        assertThat(fragment.shownNames()).isEmpty()
+        drainMainUntil(description = "the empty state") {
+            fragment.visible(R.id.server_list_empty) && fragment.shownNames().isEmpty()
+        }
     }
 
     @Test
@@ -235,7 +237,8 @@ class PublicServerListFragmentTest {
         latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
 
         drainMainUntil(description = "the match") {
-            ShadowDialog.getLatestDialog()?.findViewById<TextView>(android.R.id.message)?.text?.contains("Empty") == true
+            val message = ShadowDialog.getLatestDialog()?.findViewById<TextView>(android.R.id.message)
+            message?.text?.contains("Empty") == true
         }
         assertThat(latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).text.toString())
             .isEqualTo(activity.getString(R.string.connect))

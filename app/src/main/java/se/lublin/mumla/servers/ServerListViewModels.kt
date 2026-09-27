@@ -177,7 +177,7 @@ class PublicServersViewModel(
             download.value = State.Loading
             viewModelScope.launch {
                 val servers = fetcher.fetch()
-                download.value = if (servers == null) State.DownloadFailed else State.Shown(servers, countriesOf(servers))
+                download.value = servers?.let { State.Shown(it, countriesOf(it)) } ?: State.DownloadFailed
             }
         }
     }
