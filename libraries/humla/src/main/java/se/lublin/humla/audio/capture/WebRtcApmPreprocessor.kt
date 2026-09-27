@@ -19,12 +19,17 @@ package se.lublin.humla.audio.capture
 
 import se.lublin.humla.audio.native.WebRtcApmApi
 
-/** How the APM is configured for one chain (the sample rate belongs to the stage). */
+/**
+ * How the APM is configured for one chain (the sample rate belongs to the stage).
+ *
+ * @param aec3 the echo canceller's configuration; null is webrtc's built-in default.
+ */
 internal data class WebRtcApmConfig(
     val echoCancellation: Boolean,
     val noiseSuppression: Boolean,
     val gainControl: Boolean,
     val highPass: Boolean = true,
+    val aec3: Aec3Tuning? = null,
 ) {
     companion object {
         /** AEC3, AGC2 and high-pass on; APM noise suppression off so the user's setting stays authoritative. */
@@ -76,6 +81,7 @@ internal class WebRtcApmPreprocessor private constructor(
             UNUSED_NOISE_SUPPRESSION_LEVEL,
             config.gainControl,
             config.highPass,
+            config.aec3?.toArray(),
         ),
         sampleRate,
     )

@@ -121,6 +121,7 @@ class CaptureThreadAllocationTest {
             noiseSuppressionLevel: Int,
             gainControl: Boolean,
             highPass: Boolean,
+            aec3Tuning: FloatArray?,
         ): Long = 1L
         override fun frameSize(handle: Long): Int = FRAME_SIZE
         override fun processCapture(handle: Long, frame: ShortArray): Int = 0

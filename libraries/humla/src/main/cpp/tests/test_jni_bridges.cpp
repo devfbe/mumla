@@ -43,7 +43,7 @@ static int failures = 0;
 #define RN_PROCESS RN("processFrame", jfloat (*)(JNIEnv*, jobject, jlong, jshortArray) noexcept)
 #define RN_DESTROY RN("destroy", void (*)(JNIEnv*, jobject, jlong) noexcept)
 #define APM_CREATE \
-    APM("create", jlong (*)(JNIEnv*, jobject, jint, jboolean, jboolean, jint, jboolean, jboolean) noexcept)
+    APM("create", jlong (*)(JNIEnv*, jobject, jint, jboolean, jboolean, jint, jboolean, jboolean, jfloatArray) noexcept)
 #define APM_FRAME_SIZE APM("frameSize", jint (*)(JNIEnv*, jobject, jlong) noexcept)
 #define APM_CAPTURE APM("processCapture", jint (*)(JNIEnv*, jobject, jlong, jshortArray) noexcept)
 #define APM_RENDER APM("processRender", jint (*)(JNIEnv*, jobject, jlong, jshortArray) noexcept)
@@ -134,11 +134,31 @@ static void test_rnnoise(Env& env) {
 static void test_apm_arguments(Env& env) {
     JNIEnv* e = env.get();
 
-    CHECK(APM_CREATE(e, nullptr, 44100, JNI_TRUE, JNI_FALSE, 0, JNI_FALSE, JNI_TRUE) == 0,
+    CHECK(APM_CREATE(e, nullptr, 44100, JNI_TRUE, JNI_FALSE, 0, JNI_FALSE, JNI_TRUE, nullptr) == 0,
           "apm create rejects 44.1 kHz");
     CHECK(APM_FRAME_SIZE(e, nullptr, 0) == 0, "apm frameSize of a null handle is 0");
 
-    jlong h = APM_CREATE(e, nullptr, kRate, JNI_TRUE, JNI_TRUE, 2, JNI_TRUE, JNI_TRUE);
+    /* The AEC3 tuning array must have exactly one value per parameter: a short one would be read
+     * past its end, a long one would mean the two sides disagree about the layout. */
+    {
+        Array<jfloat> shorter(HUMLA_AEC3_PARAM_COUNT - 1), longer(HUMLA_AEC3_PARAM_COUNT + 1);
+        humla_apm_aec3_defaults(longer.data());  // valid values, so only the length is wrong
+        CHECK(APM_CREATE(e, nullptr, kRate, JNI_TRUE, JNI_FALSE, 0, JNI_FALSE, JNI_TRUE,
+                         shorter.as<jfloatArray>()) == 0,
+              "apm create refuses an AEC3 tuning one value short");
+        CHECK(APM_CREATE(e, nullptr, kRate, JNI_TRUE, JNI_FALSE, 0, JNI_FALSE, JNI_TRUE,
+                         longer.as<jfloatArray>()) == 0,
+              "apm create refuses an AEC3 tuning one value long");
+
+        Array<jfloat> defaults(HUMLA_AEC3_PARAM_COUNT);
+        humla_apm_aec3_defaults(defaults.data());
+        jlong tuned = APM_CREATE(e, nullptr, kRate, JNI_TRUE, JNI_FALSE, 0, JNI_FALSE, JNI_TRUE,
+                                 defaults.as<jfloatArray>());
+        CHECK(tuned != 0, "apm create accepts a full AEC3 tuning");
+        APM_DESTROY(e, nullptr, tuned);
+    }
+
+    jlong h = APM_CREATE(e, nullptr, kRate, JNI_TRUE, JNI_TRUE, 2, JNI_TRUE, JNI_TRUE, nullptr);
     CHECK(h != 0, "apm create succeeds at 48 kHz with every stage on");
     if (h == 0) return;
     CHECK(APM_FRAME_SIZE(e, nullptr, h) == kFrame, "apm frameSize is 10 ms worth of samples");
@@ -210,7 +230,7 @@ struct AecResult {
 static AecResult run_aec_through_jni(Env& env, bool mismatched) {
     JNIEnv* e = env.get();
     AecResult r;
-    jlong h = APM_CREATE(e, nullptr, kRate, JNI_TRUE, JNI_FALSE, 0, JNI_FALSE, JNI_TRUE);
+    jlong h = APM_CREATE(e, nullptr, kRate, JNI_TRUE, JNI_FALSE, 0, JNI_FALSE, JNI_TRUE, nullptr);
     if (h == 0) {
         r.err = -1;
         return r;

@@ -111,6 +111,37 @@ static aec_result run_aec(order_t order) {
     return r;
 }
 
+/* 4 s of echo (-6 dB, 30 ms) with an unrelated near-end talker from 2 s on, through AEC3 created
+ * with `tuning` (NULL: webrtc's default). Returns an FNV-1a hash of every output sample, and the
+ * output energy of the double-talk half in *dt_energy; 0 if the APM could not be created. */
+static uint32_t run_tuned(const float *tuning, double *dt_energy) {
+    humla_apm_config cfg = {1, 0, 0, 0, 1, tuning};
+    humla_apm *apm = humla_apm_create(kRate, &cfg);
+    if (!apm) return 0;
+    uint32_t far = 12345u, near = 999u, hash = 2166136261u;
+    enum { kEchoDelay = 3 };
+    int16_t echo[kEchoDelay][kFrame];
+    memset(echo, 0, sizeof echo);
+    *dt_energy = 0;
+    for (int n = 0; n < 400; n++) {
+        int16_t render[kFrame], capture[kFrame];
+        for (int i = 0; i < kFrame; i++) render[i] = noise_from(&far);
+        for (int i = 0; i < kFrame; i++) {
+            int v = echo[n % kEchoDelay][i] / 2 + (n >= 200 ? noise_from(&near) / 2 : 0);
+            capture[i] = (int16_t)v;
+        }
+        memcpy(echo[n % kEchoDelay], render, sizeof render);
+        humla_apm_process_render(apm, render);
+        humla_apm_process_capture(apm, capture);
+        for (int i = 0; i < kFrame; i++) {
+            hash = (hash ^ (uint16_t)capture[i]) * 16777619u;
+        }
+        if (n >= 200) *dt_energy += energy(capture, kFrame);
+    }
+    humla_apm_destroy(apm);
+    return hash;
+}
+
 int main(void) {
     /* ---- 1. Argument validation. ---- */
     humla_apm_config ns_only = {0, 1, 2, 0, 1};
@@ -220,6 +251,54 @@ int main(void) {
               "process_render does not change the reported capture level");
         humla_apm_destroy(a);
     }
+
+    /* ---- 5. AEC3 tuning. ----
+     * webrtc's defaults passed back in must give the very same canceller as no tuning at all (the
+     * app's default path stays what it was), and a tuning must actually reach the suppressor. */
+    float tuning[HUMLA_AEC3_PARAM_COUNT];
+    humla_apm_aec3_defaults(tuning);
+    CHECK(tuning[HUMLA_AEC3_NORMAL_HF_ENR_SUPPRESS] == 0.1f, "defaults: normal hf enr_suppress is 0.1");
+    CHECK(tuning[HUMLA_AEC3_DNE_HOLD_DURATION] == 50.f, "defaults: dominant near-end hold is 50 blocks");
+    CHECK(tuning[HUMLA_AEC3_FILTER_REFINED_LENGTH_BLOCKS] == 13.f, "defaults: refined filter is 13 blocks");
+    CHECK(tuning[HUMLA_AEC3_EP_ECHO_CAN_SATURATE] == 1.f, "defaults: booleans read as 1");
+    CHECK(tuning[HUMLA_AEC3_COMFORT_NOISE_FLOOR_DBFS] < -96.f, "defaults: the last parameter is written");
+
+    double e_null = 0, e_defaults = 0, e_tuned = 0;
+    uint32_t h_null = run_tuned(NULL, &e_null);
+    uint32_t h_defaults = run_tuned(tuning, &e_defaults);
+    CHECK(h_null != 0 && h_defaults != 0, "AEC3 is created with and without a tuning");
+    CHECK(h_null == h_defaults, "webrtc's defaults as a tuning give bit-identical output to no tuning");
+
+    float transparent[HUMLA_AEC3_PARAM_COUNT];
+    memcpy(transparent, tuning, sizeof tuning);
+    transparent[HUMLA_AEC3_NORMAL_LF_ENR_TRANSPARENT] = 50.f;
+    transparent[HUMLA_AEC3_NORMAL_LF_ENR_SUPPRESS] = 60.f;
+    transparent[HUMLA_AEC3_NORMAL_HF_ENR_TRANSPARENT] = 50.f;
+    transparent[HUMLA_AEC3_NORMAL_HF_ENR_SUPPRESS] = 60.f;
+    uint32_t h_tuned = run_tuned(transparent, &e_tuned);
+    printf("double-talk output: default %.1f dB, transparent normal masks %.1f dB\n",
+           to_db(e_null), to_db(e_tuned));
+    CHECK(h_tuned != 0 && h_tuned != h_null, "a tuning changes the output");
+    CHECK(e_tuned > e_null, "more transparent masks let more through in double talk");
+
+    humla_apm_config tuned_cfg = {1, 0, 0, 0, 1, NULL};
+    float bad[HUMLA_AEC3_PARAM_COUNT];
+    memcpy(bad, tuning, sizeof tuning);
+    bad[HUMLA_AEC3_DNE_ENR_THRESHOLD] = NAN;
+    tuned_cfg.aec3_tuning = bad;
+    CHECK(humla_apm_create(kRate, &tuned_cfg) == NULL, "a NaN in the tuning is refused");
+    memcpy(bad, tuning, sizeof tuning);
+    bad[HUMLA_AEC3_NEAREND_HF_ENR_TRANSPARENT] = bad[HUMLA_AEC3_NEAREND_HF_ENR_SUPPRESS];
+    CHECK(humla_apm_create(kRate, &tuned_cfg) == NULL,
+          "a masking pair with enr_transparent not below enr_suppress is refused");
+    memcpy(bad, tuning, sizeof tuning);
+    bad[HUMLA_AEC3_FILTER_REFINED_LENGTH_BLOCKS] = -1.f;
+    CHECK(humla_apm_create(kRate, &tuned_cfg) == NULL, "a negative filter length is refused");
+    humla_apm_config ns_tuned = {0, 1, 2, 0, 1, bad};
+    humla_apm *ignored = humla_apm_create(kRate, &ns_tuned);
+    CHECK(ignored != NULL, "without echo cancellation the tuning is not read");
+    humla_apm_destroy(ignored);
+    humla_apm_aec3_defaults(NULL); /* must not crash */
 
     printf("%s\n", failures ? "FAILED" : "OK");
     return failures ? 1 : 0;

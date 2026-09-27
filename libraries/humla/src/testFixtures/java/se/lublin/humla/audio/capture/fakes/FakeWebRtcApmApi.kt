@@ -17,6 +17,7 @@
 
 package se.lublin.humla.audio.capture.fakes
 
+import se.lublin.humla.audio.capture.Aec3Tuning
 import se.lublin.humla.audio.capture.WebRtcApmConfig
 import se.lublin.humla.audio.native.WebRtcApmApi
 
@@ -70,9 +71,10 @@ internal class FakeWebRtcApmApi(
         noiseSuppressionLevel: Int,
         gainControl: Boolean,
         highPass: Boolean,
+        aec3Tuning: FloatArray?,
     ): Long {
         createdWith = sampleRate to WebRtcApmConfig(
-            echoCancellation, noiseSuppression, gainControl, highPass,
+            echoCancellation, noiseSuppression, gainControl, highPass, aec3Tuning?.let(Aec3Tuning::fromArray),
         )
         if (failCreate || sampleRate !in SUPPORTED_RATES) return 0L
         frameSize = sampleRate / FRAMES_PER_SECOND

@@ -29,8 +29,12 @@ internal interface WebRtcApmApi {
     /**
      * @param sampleRate 8000, 16000, 32000 or 48000; any other rate returns 0.
      * @param noiseSuppressionLevel 0 low .. 3 very high; out-of-range values are clamped.
+     * @param aec3Tuning null for webrtc's default AEC3, else one value per `Aec3Param` (see
+     *   `Aec3Tuning.toArray`); another length, a non-finite value or a masking pair out of order
+     *   returns 0. Only read here, and ignored without [echoCancellation].
      * @return a handle, or 0 on failure.
      */
+    @Suppress("LongParameterList") // mirrors the flat JNI signature; WebRtcApmConfig is the structured side
     fun create(
         sampleRate: Int,
         echoCancellation: Boolean,
@@ -38,6 +42,7 @@ internal interface WebRtcApmApi {
         noiseSuppressionLevel: Int,
         gainControl: Boolean,
         highPass: Boolean,
+        aec3Tuning: FloatArray?,
     ): Long
 
     /** Samples per 10 ms frame at [handle]'s rate; 0 for a released handle. */
@@ -81,6 +86,7 @@ internal object WebRtcApmNative : WebRtcApmApi {
         noiseSuppressionLevel: Int,
         gainControl: Boolean,
         highPass: Boolean,
+        aec3Tuning: FloatArray?,
     ): Long
 
     external override fun frameSize(handle: Long): Int

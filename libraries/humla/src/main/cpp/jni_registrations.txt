@@ -28,7 +28,7 @@ se/lublin/humla/audio/native/SpeexPreprocessNative run (J[S)I
 se/lublin/humla/audio/native/SpeexResamplerNative destroy (J)V
 se/lublin/humla/audio/native/SpeexResamplerNative init (IIII[I)J
 se/lublin/humla/audio/native/SpeexResamplerNative processInt (JI[S[I[S[I)I
-se/lublin/humla/audio/native/WebRtcApmNative create (IZZIZZ)J
+se/lublin/humla/audio/native/WebRtcApmNative create (IZZIZZ[F)J
 se/lublin/humla/audio/native/WebRtcApmNative destroy (J)V
 se/lublin/humla/audio/native/WebRtcApmNative frameSize (J)I
 se/lublin/humla/audio/native/WebRtcApmNative lastCaptureLevelDbfs (J)F
