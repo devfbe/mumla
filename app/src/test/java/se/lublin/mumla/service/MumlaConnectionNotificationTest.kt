@@ -195,6 +195,39 @@ class MumlaConnectionNotificationTest {
         for (action in actions) assertOwnImmutableBroadcast(action.actionIntent, service.packageName)
     }
 
+    @Test
+    fun whileMutedAndDeafenedTheActionsOfferToUndoBoth() {
+        val notification = MumlaConnectionNotification.create(service, "Connected", listener)
+        notification.configure("Connected", actions = true)
+        notification.muted = true
+        notification.deafened = true
+        notification.show()
+
+        val actions = posted().actions
+        assertThat(actions.take(2).map { it.title.toString() }).containsExactly(
+            service.getString(R.string.unmute),
+            service.getString(R.string.undeafen),
+        ).inOrder()
+        assertThat(actions.take(2).map { it.icon }).containsExactly(
+            R.drawable.ic_action_microphone_muted,
+            R.drawable.ic_action_audio_muted,
+        ).inOrder()
+    }
+
+    @Test
+    fun theActionLabelsFollowAStateChange() {
+        val notification = MumlaConnectionNotification.create(service, "Connected", listener)
+        notification.configure("Connected", actions = true)
+        notification.show()
+        notification.muted = true
+        notification.show()
+
+        assertThat(posted().actions.take(2).map { it.title.toString() }).containsExactly(
+            service.getString(R.string.unmute),
+            service.getString(R.string.deafen),
+        ).inOrder()
+    }
+
     /** Fires each button's own PendingIntent, i.e. both halves of the wiring at once. */
     @Test
     fun eachActionReachesItsOwnCallback() {

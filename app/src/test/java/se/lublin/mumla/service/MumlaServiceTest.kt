@@ -322,6 +322,26 @@ class MumlaServiceTest {
         assertThat(Settings.getInstance(app).isMuted).isFalse()
     }
 
+    @Test
+    fun theActionsOfferToUndoOurOwnMuteAndDeafness() {
+        move(SessionState.Connected)
+
+        self(user(SELF, muted = true, deafened = true))
+        assertThat(postedActions()).containsAtLeast(app.getString(R.string.unmute), app.getString(R.string.undeafen))
+
+        self(user(SELF))
+        assertThat(postedActions()).containsAtLeast(app.getString(R.string.mute), app.getString(R.string.deafen))
+    }
+
+    @Test
+    fun aSessionSynchronizedMutedOffersToUnmute() {
+        self(user(SELF, muted = true, deafened = true))
+
+        move(SessionState.Connected)
+
+        assertThat(postedActions()).containsAtLeast(app.getString(R.string.unmute), app.getString(R.string.undeafen))
+    }
+
     /** What the server says at synchronization is not a change: the stored state is restored instead. */
     @Test
     fun theStateFoundAtSynchronizationIsNotStored() {

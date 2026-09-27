@@ -242,8 +242,12 @@ class MumlaService :
                 hideReconnectPrompt()
                 showConnectionNotification(getString(R.string.mumlaConnecting) + torSuffix())
             }
-            SessionState.Connected ->
-                showConnectionNotification(getString(R.string.connected) + torSuffix(), actions = true)
+            SessionState.Connected -> {
+                val self = session.model.value?.self
+                notification.muted = self?.isSelfMuted == true
+                notification.deafened = self?.isSelfDeafened == true
+                showConnectionNotification(connectedText(), actions = true)
+            }
             is SessionState.ConnectionLost, is SessionState.Reconnecting ->
                 showConnectionNotification(getString(R.string.connection_lost_reconnecting), cancelReconnect = true)
             is SessionState.Disconnected -> {
@@ -305,13 +309,17 @@ class MumlaService :
     private fun onSelfMuteChanged(muted: Boolean, deafened: Boolean) {
         settings.setMutedAndDeafened(muted, deafened)
         if (notification.isForeground) {
-            notification.customContentText = when {
-                muted && deafened -> getString(R.string.status_notify_muted_and_deafened)
-                muted -> getString(R.string.status_notify_muted)
-                else -> getString(R.string.connected)
-            }
+            notification.muted = muted
+            notification.deafened = deafened
+            notification.customContentText = connectedText()
             notification.show()
         }
+    }
+
+    private fun connectedText(): String = when {
+        notification.muted && notification.deafened -> getString(R.string.status_notify_muted_and_deafened)
+        notification.muted -> getString(R.string.status_notify_muted)
+        else -> getString(R.string.connected) + torSuffix()
     }
 
     private fun onTextMessage(session: IHumlaSession, message: Message) {

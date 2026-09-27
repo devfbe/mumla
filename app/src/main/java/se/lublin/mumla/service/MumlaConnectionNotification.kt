@@ -56,6 +56,10 @@ class MumlaConnectionNotification private constructor(
     /** Mute, deafen and overlay: only meaningful while a session is up. */
     var actionsShown: Boolean = false
 
+    /** Our own state, which decides whether the actions offer to mute and deafen or to undo it. */
+    var muted: Boolean = false
+    var deafened: Boolean = false
+
     /** "Cancel reconnect", for ConnectionLost and Reconnecting. */
     var cancelReconnectShown: Boolean = false
 
@@ -134,13 +138,13 @@ class MumlaConnectionNotification private constructor(
 
         if (actionsShown) {
             builder.addAction(
-                R.drawable.ic_action_microphone,
-                service.getString(R.string.mute),
+                if (muted) R.drawable.ic_action_microphone_muted else R.drawable.ic_action_microphone,
+                service.getString(if (muted) R.string.unmute else R.string.mute),
                 broadcast(BROADCAST_MUTE),
             )
             builder.addAction(
-                R.drawable.ic_action_audio,
-                service.getString(R.string.deafen),
+                if (deafened) R.drawable.ic_action_audio_muted else R.drawable.ic_action_audio,
+                service.getString(if (deafened) R.string.undeafen else R.string.deafen),
                 broadcast(BROADCAST_DEAFEN),
             )
             builder.addAction(
